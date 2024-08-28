@@ -54,12 +54,26 @@ class Decarad(SCLinacObject):
         self.number = number
         self._pv_prefix = "RADM:SYS0:{num}00:".format(num=self.number)
         self.power_control_pv = self.pv_addr("HVCTRL")
+        self._power_control_pv_obj: Optional[PV] = None
+
         self.power_status_pv = self.pv_addr("HVSTATUS")
         self.voltage_readback_pv = self.pv_addr("HVMON")
 
         self.heads: Dict[int, DecaradHead] = {
             head: DecaradHead(number=head, decarad=self) for head in range(1, 11)
         }
+
+    @property
+    def power_control_pv_obj(self) -> PV:
+        if not self._power_control_pv_obj:
+            self._power_control_pv_obj = PV(self.power_control_pv)
+        return self._power_control_pv_obj
+
+    def turn_on(self):
+        self.power_control_pv_obj.put(0)
+
+    def turn_off(self):
+        self.power_control_pv_obj.put(1)
 
     @property
     def pv_prefix(self):

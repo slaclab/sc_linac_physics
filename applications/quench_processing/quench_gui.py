@@ -18,7 +18,7 @@ from lcls_tools.common.frontend.plotting.util import (
     WaveformPlotUpdater,
 )
 from pydm import Display
-from pydm.widgets import PyDMWaveformPlot, PyDMTimePlot
+from pydm.widgets import PyDMWaveformPlot, PyDMTimePlot, PyDMLabel
 from qtpy.QtCore import Signal
 
 from applications.quench_processing.quench_linac import (
@@ -68,8 +68,12 @@ class QuenchGUI(Display):
         self.step_size_spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.stop_amp_spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.step_time_spinbox: QDoubleSpinBox = QDoubleSpinBox()
-        self.create_processing_spinboxes()
 
+        self.decarad_on_button: QPushButton = QPushButton("Decarad On")
+        self.decarad_off_button: QPushButton = QPushButton("Decarad Off")
+        self.decarad_status_readback: PyDMLabel = PyDMLabel()
+
+        self.create_processing_spinboxes()
         self.add_controls()
 
         self.current_cm: Optional[QuenchCryomodule] = None
@@ -132,7 +136,16 @@ class QuenchGUI(Display):
             QLabel("Time Between Steps (s):"), time_row, 0
         )
         processing_controls_layout.addWidget(self.step_time_spinbox, time_row, 1)
+
+        decarad_controls_groupbox: QGroupBox = QGroupBox("Decarad Controls")
+        decarad_controls_layout: QHBoxLayout = QHBoxLayout()
+        decarad_controls_groupbox.setLayout(decarad_controls_layout)
+        decarad_controls_layout.addWidget(self.decarad_on_button)
+        decarad_controls_layout.addWidget(self.decarad_off_button)
+        decarad_controls_layout.addWidget(self.decarad_status_readback)
+
         self.controls_vlayout.addWidget(self.rf_controls.rf_control_groupbox)
+        self.controls_vlayout.addWidget(decarad_controls_groupbox)
         self.controls_vlayout.addWidget(processing_controls_groupbox)
         self.controls_vlayout.addWidget(self.start_button)
         self.controls_vlayout.addWidget(self.abort_button)
@@ -182,6 +195,8 @@ class QuenchGUI(Display):
             self.rf_controls.rf_off_button.clicked,
             self.start_button.clicked,
             self.abort_button.clicked,
+            self.decarad_on_button.clicked,
+            self.decarad_off_button.clicked,
         ]:
             self.clear_connections(signal)
 
@@ -191,6 +206,13 @@ class QuenchGUI(Display):
         for head in self.current_decarad.heads.values():
             channels.append((head.dose_rate_pv, None))
         self.timeplot_updater.updatePlot("LIVE_SIGNALS", channels)
+
+        self.clear_connections(self.decarad_on_button.clicked)
+        self.clear_connections(self.decarad_off_button.clicked)
+
+        self.decarad_on_button.clicked.connect(self.current_decarad.turn_on)
+        self.decarad_off_button.clicked.connect(self.current_decarad.turn_off)
+        self.decarad_status_readback.channel = self.current_decarad.power_status_pv
 
     def update_cm(self):
         if self.current_cav:
