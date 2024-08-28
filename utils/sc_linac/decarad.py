@@ -1,6 +1,5 @@
 from typing import Dict, Optional
 
-import requests
 from lcls_tools.common.controls.pyepics.utils import PV
 
 from utils.sc_linac.linac_utils import SCLinacObject, DECARAD_BACKGROUND_READING
@@ -17,8 +16,8 @@ class DecaradHead(SCLinacObject):
         # Adds leading 0 to numbers with less than 2 digits
         self._pv_prefix = self.decarad.pv_addr("{:02d}:".format(self.number))
 
-        self.dose_rate_pv: str = self.pv_addr("GAMMAAVE")
-        self._dose_rate_pv_obj: Optional[PV] = None
+        self.avg_dose_rate_pv: str = self.pv_addr("GAMMAAVE")
+        self._avg_dose_rate_pv_obj: Optional[PV] = None
 
         self.counter = 0
 
@@ -27,24 +26,14 @@ class DecaradHead(SCLinacObject):
         return self._pv_prefix
 
     @property
-    def dose_rate_pv_obj(self) -> PV:
-        if not self._dose_rate_pv_obj:
-            self._dose_rate_pv_obj = PV(self.dose_rate_pv)
-        return self._dose_rate_pv_obj.get()
+    def avg_dose_rate_pv_obj(self) -> PV:
+        if not self._avg_dose_rate_pv_obj:
+            self._avg_dose_rate_pv_obj = PV(self.avg_dose_rate_pv)
+        return self._avg_dose_rate_pv_obj.get()
 
     @property
-    def avg_dose(self) -> float:
-        # try to do averaging of the last 60 points to account for signal noise
-        try:
-            return max(self.dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING, 0)
-
-        # return the most recent value if we can't average for whatever reason
-        except (AttributeError, requests.exceptions.ConnectionError):
-            return self.normalized_dose
-
-    @property
-    def normalized_dose(self) -> float:
-        return max(self.dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING, 0)
+    def normalized_avg_dose(self) -> float:
+        return max(self.avg_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING, 0)
 
 
 class Decarad(SCLinacObject):
@@ -81,8 +70,4 @@ class Decarad(SCLinacObject):
 
     @property
     def max_avg_dose(self):
-        return max([head.avg_dose for head in self.heads.values()])
-
-    @property
-    def max_dose(self):
-        return max([head.dose_rate_pv_obj.value for head in self.heads.values()])
+        return max([head.normalized_avg_dose for head in self.heads.values()])
