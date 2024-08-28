@@ -1,0 +1,72 @@
+{
+    "08/01/22 18:26:03": {
+        "Start Time": "08/01/22 18:26:03",
+        "Cavity Amplitudes": {
+            "1": 16.6,
+            "2": 16.6,
+            "4": 16.6
+        },
+        "Calculated Adjusted Heat Load": 63.365786888734476,
+        "Calculated Raw Heat Load": 109.56712511166526,
+        "Calculated Adjustment": -46.20133822293079,
+        "Calculated Q0": 12867574254.502596,
+        "Calibration Used": "08/01/22 16:36:07"
+    },
+    "08/01/22 19:21:10": {
+        "Start Time": "08/01/22 19:21:10",
+        "Cavity Amplitudes": {
+            "1": 16.6,
+            "2": 16.6,
+            "4": 16.6
+        },
+        "Calculated Adjusted Heat Load": 60.51130296167287,
+        "Calculated Raw Heat Load": 112.8431805942712,
+        "Calculated Adjustment": -52.331877632598335,
+        "Calculated Q0": 13491557046.633326,
+        "Calibration Used": "08/01/22 16:36:07"
+    },
+    "08/01/22 22:26:20": {
+        "Start Time": "08/01/22 22:26:20",
+        "Cavity Amplitudes": {
+            "1": 16.6,
+            "4": 16.6,
+            "5": 16.6,
+            "6": 16.6,
+            "7": 16.6,
+            "8": 16.6
+        },
+        "Calculated Adjusted Heat Load": -15.588639801977578,
+        "Calculated Raw Heat Load": 82.00601920160183,
+        "Calculated Adjustment": -97.59465900357941,
+        "Calculated Q0": -106549739171.6776,
+        "Calibration Used": "08/01/22 16:36:07"
+    },
+    "11/18/22 14:23:13": {
+        "Start Time": "11/18/22 14:23:13",
+        "Cavity Amplitudes": {
+            "1": 16.6,
+            "5": 16.6,
+            "6": 15.5,
+            "7": 16.5
+        },
+        "Calculated Adjusted Heat Load": 33.0608246535201,
+        "Calculated Raw Heat Load": 85.26189072166376,
+        "Calculated Adjustment": -52.20106606814366,
+        "Calculated Q0": 31790129742.768993,
+        "Calibration Used": "11/18/22 12:48:01"
+    },
+    "11/18/22 15:04:37": {
+        "Start Time": "11/18/22 15:04:37",
+        "Cavity Amplitudes": {
+            "1": 16.6,
+            "5": 16.6,
+            "6": 15.5,
+            "7": 16.5
+        },
+        "Calculated Adjusted Heat Load": 35.84310042267465,
+        "Calculated Raw Heat Load": 88.80324397908636,
+        "Calculated Adjustment": -52.96014355641171,
+        "Calculated Q0": 29322460745.428795,
+        "Calibration Used": "11/18/22 12:48:01"
+    }
+}
