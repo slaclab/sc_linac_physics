@@ -234,7 +234,7 @@ class TestCavity(TestCase):
 
     def test_scale_factor_high_hl(self):
         hl_cavity = next(cavity_iterator.hl_iterator)
-        val = randint(CAVITY_SCALE_UPPER_LIMIT_HL, CAVITY_SCALE_UPPER_LIMIT_HL * 2)
+        val = randint(CAVITY_SCALE_UPPER_LIMIT_HL + 1, CAVITY_SCALE_UPPER_LIMIT_HL * 2)
         hl_cavity._measured_scale_factor_pv_obj = make_mock_pv(get_val=val)
         self.assertFalse(hl_cavity.measured_scale_factor_in_tolerance)
 
