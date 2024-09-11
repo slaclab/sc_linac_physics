@@ -1,6 +1,6 @@
 from unittest import TestCase, mock
 
-from lcls_tools.superconducting.sc_linac import Machine
+from utils.sc_linac.linac import Machine
 
 builtin_open = open  # save the unpatched version
 
