@@ -1,6 +1,10 @@
+from collections import OrderedDict
+from datetime import timedelta, datetime
 from unittest import TestCase, mock
-
 from lcls_tools.superconducting.sc_linac import Machine
+from displays.cavity_display.backend.backend_cavity import BackendCavity
+from displays.cavity_display.backend.fault import FaultCounter
+
 
 builtin_open = open  # save the unpatched version
 
@@ -146,33 +150,105 @@ csv_cm_row = [
 
 
 def mock_open(*args, **kwargs):
-    data = [",".join(csv_keys), ",".join(csv_rack_row)]
+    data = [
+        ",".join(csv_keys),
+        ",".join(csv_rack_row),
+        ",".join(csv_all_row),
+        ",".join(csv_ssa_row),
+        ",".join(csv_cryo_row),
+        ",".join(csv_cm_row),
+    ]
     # mocked open for path "foo"
     return mock.mock_open(read_data="\n".join(data))(*args, **kwargs)
 
 
-# These import states try to read from faults.csv which causes an error
-with mock.patch("builtins.open", mock_open):
-    from displays.cavity_display.backend.backend_cavity import BackendCavity
-
-    DISPLAY_MACHINE = Machine(
-        cavity_class=BackendCavity,
-    )
-
-
 class TestBackendCavity(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.mock_open_patcher = mock.patch("builtins.open", mock_open) # We are setting up the mock for the test class. (Replacing the open func)
+        cls.mock_open_patcher.start()
+        # Create display Machine
+        cls.DISPLAY_MACHINE = Machine(cavity_class=BackendCavity)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.mock_open_patcher.stop() # Stops patcher when we finish all tests
+
+    def setUp(self):
+        self.cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
+        self.cavity1 = self.cm01.cavities[1]
+        self.cavity5 = self.cm01.cavities[5]
+        self.cavity1.rack.rack_name = 'A'
+
+        # Need additonal setup for running through fault tests
+
+        self.cavity1.create_faults = mock.Mock()
+        self.cavity1.number = 1
+        self.cavity1.status_pv = "STATUS_PV"
+        self.cavity1.severity_pv = "SEVERITY_PV"
+        self.cavity1.description_pv = "DESCRIPTION_PV"
+
     def test_create_faults_rack(self):
-        cm01 = DISPLAY_MACHINE.cryomodules["01"]
+        cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
         cavity1: BackendCavity = cm01.cavities[1]
         cavity5: BackendCavity = cm01.cavities[5]
 
-        self.assertEqual(len(cavity1.faults.values()), 1)
-        self.assertEqual(
-            len(cavity5.faults.values()), 0, msg="Rack B cavity created Rack A fault"
-        )
+        # Asserting cav1 only has 5 fault.
+        self.assertEqual(len(cavity1.faults.values()), 5)
+        # Asserting cav5 only has 4 fault.
+        self.assertEqual(len(cavity5.faults.values()), 4)
+
+        # Maybe an assertion to confirm cav5 has no rack faults?
+
+        # WIP
+
+    def test_create_faults(self):
+        self.skipTest("not yet implemented")
 
     def test_get_fault_counts(self):
-        self.skipTest("not yet implemented")
+        # Setup
+        cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
+        cavity1 = cm01.cavities[1]
+        # Making Mock fault objects w/ values
+        mock_faults = [
+            mock.Mock(pv = mock.Mock(pvname = "PV1"), get_fault_count_over_time_range = mock.Mock(return_value=FaultCounter(fault_count=5, ok_count=3, invalid_count=0))),
+            mock.Mock(pv = mock.Mock(pvname = "PV2"), get_fault_count_over_time_range = mock.Mock(return_value=FaultCounter(fault_count=3, ok_count=5, invalid_count=1))),
+            mock.Mock(pv = mock.Mock(pvname = "PV3"), get_fault_count_over_time_range = mock.Mock(return_value=FaultCounter(fault_count=0, ok_count=8, invalid_count=0))),
 
-    def test_run_through_faults(self):
-        self.skipTest("not yet implemented")
+        ]
+        # Now need to replace cavity.faults w/ our mock faults.
+        cavity1.faults = OrderedDict((i, fault) for i, fault in enumerate(mock_faults))
+        # Test
+        start_time = datetime.now()
+        end_time = start_time + timedelta(minutes=1)
+        # Calling function we are testing w/ our time range.
+        result = cavity1.get_fault_counts(start_time, end_time)
+
+        # Our assertions
+        self.assertIsInstance(result, dict) # 1. results needs to be an instance of dict
+        self.assertEqual(len(result), 3) # 2. Need to verify the result has 3 entries
+        self.assertEqual(result["PV1"], FaultCounter(fault_count=5, ok_count=3, invalid_count=0)) # Making sure FaultCounter obj in the result match each PV
+        self.assertEqual(result['PV2'], FaultCounter(fault_count=3, ok_count=5, invalid_count=1))
+        self.assertEqual(result['PV3'], FaultCounter(fault_count=0, ok_count=8, invalid_count=0))
+
+
+        # 4. Need to verify get_fault_count_over_time_range was called for each fault
+        for fault in mock_faults:
+            fault.get_fault_count_over_time_range.assert_called_once_with(start_time=start_time, end_time=end_time)
+
+    @mock.patch('displays.cavity_display.backend.backend_cavity.caput')
+    def test_run_through_faults(self, mock_caput):
+        # 1st part we're testing is: No faults
+        self.cavity1.faults = OrderedDict()
+        # Calling method
+        self.cavity1.run_through_faults()
+
+        mock_caput.assert_any_call("STATUS_PV", "1")
+        mock_caput.assert_any_call("SEVERITY_PV", 0)
+        mock_caput.assert_any_call("DESCRIPTION_PV", " ")
+
+        # 2nd part im thinking testing: We have 1 fault
+
+        # 3rd part im thinking testing: Invalid PV
+
+        # WIP
