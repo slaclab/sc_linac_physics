@@ -22,6 +22,7 @@ from lcls_tools.common.frontend.plotting.util import (
 from matplotlib import pyplot as plt
 from pydm import Display
 from pydm.widgets import PyDMWaveformPlot, PyDMTimePlot, PyDMLabel
+from pydm.widgets.timeplot import updateMode
 from qtpy.QtCore import Signal
 
 from applications.quench_processing.quench_linac import (
@@ -97,6 +98,7 @@ class QuenchGUI(Display):
         self.amp_rad_timeplot.title = "Amplitude & Radiation"
         self.amp_rad_timeplot.showLegend = True
         self.amp_rad_timeplot.setTimeSpan(60 * 60)
+        self.amp_rad_timeplot.updateMode = updateMode.AtFixedRate
 
         self.timeplot_params: Dict[str, TimePlotParams] = {
             "LIVE_SIGNALS": TimePlotParams(plot=self.amp_rad_timeplot)
@@ -231,9 +233,9 @@ class QuenchGUI(Display):
                 y_channel=channel,
                 useArchiveData=True,
                 color=rga_color,
-                yAxisName="Amplitude"
-                if channel == self.current_cav.aact_pv
-                else "Radiation",
+                yAxisName=(
+                    "Amplitude" if channel == self.current_cav.aact_pv else "Radiation"
+                ),
             )
 
     def update_decarad(self):

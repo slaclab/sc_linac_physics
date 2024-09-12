@@ -7,6 +7,7 @@ from caproto.server import (
 )
 from simulacrum import Service
 
+from utils.sc_linac.decarad import Decarad
 from utils.sc_linac.linac_utils import LINAC_TUPLES, LINAC_CM_DICT, L1BHL
 from utils.simulation.auto_setup_service import (
     AutoSetupCMPVGroup,
@@ -22,6 +23,7 @@ from utils.simulation.cryo_service import (
     CryoPVGroup,
 )
 from utils.simulation.cryomodule_service import CryomodulePVGroup, HOMPVGroup
+from utils.simulation.decarad_service import DecaradPVGroup, DecaradHeadPVGroup
 from utils.simulation.fault_service import (
     CavFaultPVGroup,
     PPSPVGroup,
@@ -50,6 +52,12 @@ class SCLinacPhysicsService(Service):
         rackA = range(1, 5)
         self.add_pvs(PPSPVGroup(prefix="PPS:SYSW:1:"))
         self.add_pvs(AutoSetupGlobalPVGroup(prefix="ACCL:SYS0:SC:"))
+
+        for i in [1, 2]:
+            decarad = Decarad(i)
+            self.add_pvs(DecaradPVGroup(decarad.pv_prefix))
+            for head in decarad.heads.values():
+                self.add_pvs(DecaradHeadPVGroup(head.pv_prefix))
 
         for linac_idx, (linac_name, cm_list) in enumerate(LINAC_TUPLES):
             linac_prefix = f"ACCL:{linac_name}:1:"
