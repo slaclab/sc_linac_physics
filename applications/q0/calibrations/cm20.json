@@ -1,0 +1,50 @@
+{
+    "08/02/22 17:21:19": {
+        "Start Time": "08/02/22 17:21:19",
+        "Calculated Heat vs dll/dt Slope": -0.00010680681157335827,
+        "Calculated Adjustment": 0.008309449138607074,
+        "Total Reference Heater Setpoint": 68.0,
+        "Total Reference Heater Readback": 68.0,
+        "JT Valve Position": 52.6
+    },
+    "08/03/22 15:01:00": {
+        "Start Time": "08/03/22 15:01:00",
+        "Calculated Heat vs dll/dt Slope": -0.00011019207070415857,
+        "Calculated Adjustment": 0.0015740633970340312,
+        "Total Reference Heater Setpoint": 48.0,
+        "Total Reference Heater Readback": 47.9,
+        "JT Valve Position": 47.4
+    },
+    "08/03/22 20:59:42": {
+        "Start Time": "08/03/22 20:59:42",
+        "Calculated Heat vs dll/dt Slope": -7.593848068253001e-05,
+        "Calculated Adjustment": 0.0018358655000383379,
+        "Total Reference Heater Setpoint": 48.0,
+        "Total Reference Heater Readback": 48.0,
+        "JT Valve Position": 47.4
+    },
+    "10/26/22 09:38:12": {
+        "Start Time": "10/26/22 09:38:12",
+        "Calculated Heat vs dll/dt Slope": -0.00010512405838800422,
+        "Calculated Adjustment": 0.004770853642152255,
+        "Total Reference Heater Setpoint": 30.0,
+        "Total Reference Heater Readback": 30.0,
+        "JT Valve Position": 41.5
+    },
+    "11/17/22 17:14:50": {
+        "Start Time": "11/17/22 17:14:50",
+        "Calculated Heat vs dll/dt Slope": -9.398665989346626e-05,
+        "Calculated Adjustment": 0.004404139748798053,
+        "Total Reference Heater Setpoint": 48.0,
+        "Total Reference Heater Readback": 48.0,
+        "JT Valve Position": 39.5
+    },
+    "11/17/22 18:41:32": {
+        "Start Time": "11/17/22 18:41:32",
+        "Calculated Heat vs dll/dt Slope": -9.188868217111633e-05,
+        "Calculated Adjustment": 0.00406673609271278,
+        "Total Reference Heater Setpoint": 48.0,
+        "Total Reference Heater Readback": 48.0,
+        "JT Valve Position": 39.5
+    }
+}

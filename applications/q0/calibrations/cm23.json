@@ -1,0 +1,50 @@
+{
+    "11/18/22 12:42:29": {
+        "Start Time": "11/18/22 12:42:29",
+        "Calculated Heat vs dll/dt Slope": -0.0001035237291113956,
+        "Calculated Adjustment": 0.006107885617025962,
+        "Total Reference Heater Setpoint": 48.0,
+        "Total Reference Heater Readback": 48.0,
+        "JT Valve Position": 45.0
+    },
+    "01/19/23 09:04:45": {
+        "Start Time": "01/19/23 09:04:45",
+        "Calculated Heat vs dll/dt Slope": -0.00012186900803024214,
+        "Calculated Adjustment": 0.009635034480859332,
+        "Total Reference Heater Setpoint": 70.9,
+        "Total Reference Heater Readback": 70.9,
+        "JT Valve Position": 47.1
+    },
+    "01/19/23 10:25:03": {
+        "Start Time": "01/19/23 10:25:03",
+        "Calculated Heat vs dll/dt Slope": -0.00011929634893255646,
+        "Calculated Adjustment": 0.009092116195161773,
+        "Total Reference Heater Setpoint": 70.9,
+        "Total Reference Heater Readback": 70.9,
+        "JT Valve Position": 47.1
+    },
+    "01/19/23 11:29:30": {
+        "Start Time": "01/19/23 11:29:30",
+        "Calculated Heat vs dll/dt Slope": -0.000121493382260159,
+        "Calculated Adjustment": 0.009504324964505947,
+        "Total Reference Heater Setpoint": 70.9,
+        "Total Reference Heater Readback": 70.9,
+        "JT Valve Position": 47.1
+    },
+    "01/19/23 12:35:14": {
+        "Start Time": "01/19/23 12:35:14",
+        "Calculated Heat vs dll/dt Slope": 0.001080081520374059,
+        "Calculated Adjustment": -0.1710554582374046,
+        "Total Reference Heater Setpoint": 70.9,
+        "Total Reference Heater Readback": 70.9,
+        "JT Valve Position": 47.1
+    },
+    "01/19/23 14:48:03": {
+        "Start Time": "01/19/23 14:48:03",
+        "Calculated Heat vs dll/dt Slope": -0.00010875306740398457,
+        "Calculated Adjustment": 0.007973379461988322,
+        "Total Reference Heater Setpoint": 70.9,
+        "Total Reference Heater Readback": 70.9,
+        "JT Valve Position": 47.1
+    }
+}

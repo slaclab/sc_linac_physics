@@ -1,0 +1,64 @@
+{
+    "08/04/22 20:08:42": {
+        "Start Time": "08/04/22 20:08:42",
+        "Cavity Amplitudes": {
+            "1": 16.5,
+            "2": 16.6,
+            "3": 16.6,
+            "5": 16.6,
+            "7": 16.6
+        },
+        "Calculated Adjusted Heat Load": 62.78447829339585,
+        "Calculated Raw Heat Load": 103.09047116450917,
+        "Calculated Adjustment": -40.30599287111332,
+        "Calculated Q0": 21682798851.38391,
+        "Calibration Used": "08/04/22 16:52:36"
+    },
+    "08/04/22 20:44:07": {
+        "Start Time": "08/04/22 20:44:07",
+        "Cavity Amplitudes": {
+            "1": 16.5,
+            "2": 16.6,
+            "3": 16.6,
+            "5": 16.6,
+            "7": 16.6
+        },
+        "Calculated Adjusted Heat Load": 61.603496509730746,
+        "Calculated Raw Heat Load": 102.93098243562179,
+        "Calculated Adjustment": -41.32748592589104,
+        "Calculated Q0": 22080043615.80709,
+        "Calibration Used": "08/04/22 16:52:36"
+    },
+    "11/17/22 23:18:09": {
+        "Start Time": "11/17/22 23:18:09",
+        "Cavity Amplitudes": {
+            "1": 16.5,
+            "2": 16.6,
+            "3": 16.6,
+            "4": 15.8,
+            "5": 16.6,
+            "7": 16.6
+        },
+        "Calculated Adjusted Heat Load": 58.409127831746545,
+        "Calculated Raw Heat Load": 107.91873578012428,
+        "Calculated Adjustment": -49.509607948377734,
+        "Calculated Q0": 27593605301.358704,
+        "Calibration Used": "11/17/22 16:36:47"
+    },
+    "11/17/22 23:54:35": {
+        "Start Time": "11/17/22 23:54:35",
+        "Cavity Amplitudes": {
+            "1": 16.5,
+            "2": 16.6,
+            "3": 16.6,
+            "4": 15.8,
+            "5": 16.6,
+            "7": 16.6
+        },
+        "Calculated Adjusted Heat Load": 55.155319920570676,
+        "Calculated Raw Heat Load": 105.25006083637419,
+        "Calculated Adjustment": -50.09474091580351,
+        "Calculated Q0": 29185949317.206196,
+        "Calibration Used": "11/17/22 16:36:47"
+    }
+}
