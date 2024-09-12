@@ -187,6 +187,15 @@ class QuenchGUI(Display):
         self.step_time_spinbox.setMinimum(0.1)
         self.step_time_spinbox.setValue(30)
 
+    def process(self):
+        self.current_cav.decarad = self.current_decarad
+        self.current_cav.quench_process(
+            start_amp=self.start_amp_spinbox.value(),
+            end_amp=self.stop_amp_spinbox.value(),
+            step_time=self.step_time_spinbox.value(),
+            step_size=self.step_size_spinbox.value(),
+        )
+
     @staticmethod
     def clear_connections(signal: Signal):
         try:
@@ -279,7 +288,8 @@ class QuenchGUI(Display):
         self.rf_controls.srf_max_spinbox.channel = self.current_cav.srf_max_pv
         self.rf_controls.srf_max_readback_label.channel = self.current_cav.srf_max_pv
 
-        self.start_button.clicked.connect(self.current_cav.quench_process)
+        # TODO launch a QThread
+        self.start_button.clicked.connect(self.process)
         self.abort_button.clicked.connect(self.current_cav.request_abort)
 
         self.update_timeplot()
