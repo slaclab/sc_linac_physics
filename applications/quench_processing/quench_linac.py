@@ -12,7 +12,7 @@ from utils.sc_linac.cavity import Cavity
 from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.decarad import Decarad
 from utils.sc_linac.linac import Machine
-from utils.sc_linac.linac_utils import QuenchError, CavityAbortError
+from utils.sc_linac.linac_utils import QuenchError
 
 LOADED_Q_CHANGE_FOR_QUENCH = 0.6
 MAX_WAIT_TIME_FOR_QUENCH = 20 * 60
@@ -31,17 +31,17 @@ class QuenchCavity(Cavity):
         self.reverse_power_pv = self.pv_addr("REV:PWRMEAN")
 
         self.fault_waveform_pv = self.pv_addr("CAV:FLTAWF")
-        self._fault_waveform_pv_obj: PV = None
+        self._fault_waveform_pv_obj: Optional[PV] = None
 
         self.decay_ref_pv = self.pv_addr("DECAYREFWF")
 
         self.fault_time_waveform_pv = self.pv_addr("CAV:FLTTWF")
-        self._fault_time_waveform_pv_obj: PV = None
+        self._fault_time_waveform_pv_obj: Optional[PV] = None
 
         self.srf_max_pv = self.pv_addr("ADES_MAX_SRF")
         self.pre_quench_amp = None
-        self._quench_bypass_rbck_pv: PV = None
-        self._current_q_loaded_pv_obj: PV = None
+        self._quench_bypass_rbck_pv: Optional[PV] = None
+        self._current_q_loaded_pv_obj: Optional[PV] = None
 
         self.decarad: Optional[Decarad] = None
 
@@ -102,7 +102,7 @@ class QuenchCavity(Cavity):
         self,
         end_amp: float = 21,
         step_size: float = 0.2,
-        step_time: int = 30,
+        step_time: float = 30,
     ):
         self.reset_interlocks()
         while not self.is_quenched and self.ades < end_amp:
@@ -110,10 +110,11 @@ class QuenchCavity(Cavity):
             self.wait(step_time)
             self.ades = min(self.ades + step_size, end_amp)
 
-    def wait(self, seconds: int):
-        for _ in range(seconds):
+    def wait(self, seconds: float):
+        for _ in range(int(seconds)):
             self.check_abort()
             sleep(1)
+        sleep(seconds - int(seconds))
 
     def wait_for_quench(self) -> Optional[float]:
         if not self.is_quenched:
@@ -121,11 +122,14 @@ class QuenchCavity(Cavity):
             return None
         self.reset_interlocks()
         start = datetime.datetime.now()
+        sleep(1)
+        print(f"{datetime.datetime.now()} Waiting for {self} to quench")
         while (
             not self.is_quenched
             and (datetime.datetime.now() - start).total_seconds()
             < MAX_WAIT_TIME_FOR_QUENCH
         ):
+            self.check_abort()
             sleep(1)
         return (datetime.datetime.now() - start).total_seconds()
 
@@ -139,52 +143,52 @@ class QuenchCavity(Cavity):
         start_amp: float = 5,
         end_amp: float = 21,
         step_size: float = 0.2,
-        step_time: int = 30,
+        step_time: float = 30,
     ):
         self.turn_off()
         self.ades = start_amp
         self.set_sela_mode()
         self.turn_on()
 
-        try:
-            if end_amp > self.ades_max:
-                print(f"{end_amp} above AMAX, ramping to {self.ades_max} instead")
-                end_amp = self.ades_max
+        if end_amp > self.ades_max:
+            print(f"{end_amp} above AMAX, ramping to {self.ades_max} instead")
+            end_amp = self.ades_max
 
-            while self.ades < end_amp:
-                self.check_abort()
+        while self.ades < end_amp:
+            self.check_abort()
 
-                self.walk_to_quench(
-                    end_amp=end_amp,
-                    step_size=step_size,
-                    step_time=step_time,
-                )
+            print(f"Walking {self} to quench")
+            self.walk_to_quench(
+                end_amp=end_amp,
+                step_size=step_size,
+                step_time=step_time,
+            )
 
-                if self.is_quenched:
-                    attempt = 0
-                    running_times = []
+            if self.is_quenched:
+                print(f"Detected quench for {self}")
+                attempt = 0
+                running_times = []
+                time_to_quench = self.wait_for_quench()
+                running_times.append(time_to_quench)
+
+                # if time_to_quench >= MAX_WAIT_TIME_FOR_QUENCH, the cavity was
+                # stable
+                while (
+                    time_to_quench < MAX_WAIT_TIME_FOR_QUENCH
+                    and attempt < MAX_QUENCH_RETRIES
+                ):
+                    self.check_abort()
                     time_to_quench = self.wait_for_quench()
                     running_times.append(time_to_quench)
+                    attempt += 1
 
-                    # if time_to_quench >= MAX_WAIT_TIME_FOR_QUENCH, the cavity was
-                    # stable
-                    while (
-                        time_to_quench < MAX_WAIT_TIME_FOR_QUENCH
-                        and attempt < MAX_QUENCH_RETRIES
-                    ):
-                        self.check_abort()
-                        time_to_quench = self.wait_for_quench()
-                        running_times.append(time_to_quench)
-                        attempt += 1
-
-                    if (
-                        attempt >= MAX_QUENCH_RETRIES
-                        and not running_times[-1] > running_times[0]
-                    ):
-                        raise QuenchError("Quench processing failed")
-        except (QuenchError, CavityAbortError) as e:
-            print(e)
-            self.turn_off()
+                if (
+                    attempt >= MAX_QUENCH_RETRIES
+                    and not running_times[-1] > running_times[0]
+                ):
+                    print(f"Attempt: {attempt}")
+                    print(f"Running times: {running_times}")
+                    raise QuenchError("Quench processing failed")
 
     def validate_quench(self, wait_for_update: bool = False):
         """
