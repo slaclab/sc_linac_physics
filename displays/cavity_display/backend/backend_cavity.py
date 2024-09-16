@@ -1,8 +1,8 @@
-from collections import OrderedDict
-from datetime import datetime
-from typing import Dict
+from collections import OrderedDict, defaultdict
 
+from datetime import datetime
 from epics import caput
+from typing import Dict
 
 from displays.cavity_display.backend.fault import Fault, FaultCounter, PVInvalidError
 from displays.cavity_display.utils.utils import (
@@ -18,9 +18,9 @@ from utils.sc_linac.cavity import Cavity
 
 class BackendCavity(Cavity):
     def __init__(
-        self,
-        cavity_num,
-        rack_object,
+            self,
+            cavity_num,
+            rack_object,
     ):
         super(BackendCavity, self).__init__(
             cavity_num=cavity_num, rack_object=rack_object
@@ -75,7 +75,7 @@ class BackendCavity(Cavity):
                 )
 
                 if (cm_type == "1.3" and self.cryomodule.is_harmonic_linearizer) or (
-                    cm_type == "3.9" and not self.cryomodule.is_harmonic_linearizer
+                        cm_type == "3.9" and not self.cryomodule.is_harmonic_linearizer
                 ):
                     continue
                 pv = prefix + suffix
@@ -119,14 +119,20 @@ class BackendCavity(Cavity):
             )
 
     def get_fault_counts(
-        self, start_time: datetime, end_time: datetime
+            self, start_time: datetime, end_time: datetime
     ) -> Dict[str, FaultCounter]:
-        result: Dict[str, FaultCounter] = {}
+        result: Dict[str, FaultCounter] = defaultdict(FaultCounter)
 
+        """
+        Using max function to get the maximum fault or invalid count for duplicate TLCs
+            i.e. MGT tlc has three PVs associated with it (X, Y, and Q) but we
+            only want the fault and invalid count for whichever PV had the
+            greatest number of faults
+        """
         for fault in self.faults.values():
-            result[fault.pv.pvname] = fault.get_fault_count_over_time_range(
+            result[fault.tlc] = max(result[fault.tlc], fault.get_fault_count_over_time_range(
                 start_time=start_time, end_time=end_time
-            )
+            ))
 
         return result
 
