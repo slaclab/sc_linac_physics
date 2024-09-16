@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Union
 
 from lcls_tools.common.controls.pyepics.utils import PV
-from lcls_tools.common.data_analysis.archiver import (
+from lcls_tools.common.data.archiver import (
     ArchiveDataHandler,
     ArchiverValue,
     get_data_at_time,
