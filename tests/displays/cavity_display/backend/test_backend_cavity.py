@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from datetime import timedelta, datetime
 from unittest import TestCase, mock
-from lcls_tools.superconducting.sc_linac import Machine
+from utils.sc_linac.linac import Machine
 from displays.cavity_display.backend.backend_cavity import BackendCavity
 from displays.cavity_display.backend.fault import FaultCounter
 
@@ -165,14 +165,16 @@ def mock_open(*args, **kwargs):
 class TestBackendCavity(TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.mock_open_patcher = mock.patch("builtins.open", mock_open) # We are setting up the mock for the test class. (Replacing the open func)
+        # We are setting up the mock for the test class. (Replacing the open func)
+        cls.mock_open_patcher = mock.patch("builtins.open", mock_open)
         cls.mock_open_patcher.start()
         # Create display Machine
         cls.DISPLAY_MACHINE = Machine(cavity_class=BackendCavity)
 
     @classmethod
     def tearDownClass(cls):
-        cls.mock_open_patcher.stop() # Stops patcher when we finish all tests
+        # Stops patcher when we finish all tests
+        cls.mock_open_patcher.stop()
 
     def setUp(self):
         self.cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
@@ -207,8 +209,7 @@ class TestBackendCavity(TestCase):
 
     def test_get_fault_counts(self):
         # Setup
-        cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
-        cavity1 = cm01.cavities[1]
+        cavity1 = self.cm01.cavities[1]
         # Making Mock fault objects w/ values
         mock_faults = [
             mock.Mock(pv = mock.Mock(pvname = "PV1"), get_fault_count_over_time_range = mock.Mock(return_value=FaultCounter(fault_count=5, ok_count=3, invalid_count=0))),
@@ -225,9 +226,12 @@ class TestBackendCavity(TestCase):
         result = cavity1.get_fault_counts(start_time, end_time)
 
         # Our assertions
-        self.assertIsInstance(result, dict) # 1. results needs to be an instance of dict
-        self.assertEqual(len(result), 3) # 2. Need to verify the result has 3 entries
-        self.assertEqual(result["PV1"], FaultCounter(fault_count=5, ok_count=3, invalid_count=0)) # Making sure FaultCounter obj in the result match each PV
+        # 1. results needs to be an instance of dict
+        self.assertIsInstance(result, dict)
+        # 2. Need to verify the result has 3 entries
+        self.assertEqual(len(result), 3)
+        # Making sure FaultCounter obj in the result match each PV
+        self.assertEqual(result["PV1"], FaultCounter(fault_count=5, ok_count=3, invalid_count=0))
         self.assertEqual(result['PV2'], FaultCounter(fault_count=3, ok_count=5, invalid_count=1))
         self.assertEqual(result['PV3'], FaultCounter(fault_count=0, ok_count=8, invalid_count=0))
 
