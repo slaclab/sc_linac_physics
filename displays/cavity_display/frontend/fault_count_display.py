@@ -18,6 +18,7 @@ from displays.cavity_display.frontend.cavity_widget import (
     PURPLE_FILL_COLOR,
     DARK_GRAY_COLOR
 )
+
 from utils.sc_linac.linac import Machine
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 

@@ -12,12 +12,10 @@ from pydm import Display
 from pydm.utilities import IconFont
 from pydm.widgets import PyDMByteIndicator, PyDMLabel
 
-from displays.cavity_display.frontend.decoder import DecoderDisplay
-from displays.cavity_display.frontend.gui_machine import GUIMachine
-from displays.cavity_display.frontend.utils import make_line
-#TODO Fix this import statement. It'll probably be end up being from utils.sc_linac...
+from frontend.decoder import DecoderDisplay
+from frontend.gui_machine import GUIMachine
+from frontend.utils import make_line
 from lcls_tools.common.frontend.display.util import showDisplay
-
 
 
 class CavityDisplayGUI(Display):
