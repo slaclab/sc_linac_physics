@@ -4,165 +4,155 @@ from unittest.mock import MagicMock
 
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from utils.sc_linac.linac import CavityIterator
+from utils.sc_linac.linac import MACHINE
 from utils.sc_linac.linac_utils import (
     StepperAbortError,
     STEPPER_ON_LIMIT_SWITCH_VALUE,
     DEFAULT_STEPPER_MAX_STEPS,
     DEFAULT_STEPPER_SPEED,
 )
-
-cavity_iterator = CavityIterator()
+from utils.sc_linac.stepper import StepperTuner
 
 
 class TestStepperTuner(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.non_hl_iterator = MACHINE.non_hl_iterator
+        cls.hl_iterator = MACHINE.hl_iterator
+        cls.step_scale = -0.00589677
+
     def setUp(self):
-        self.step_scale = -0.00589677
+        self.stepper: StepperTuner = next(self.non_hl_iterator).stepper_tuner
+        print(f"Testing {self.stepper}")
 
     def test_pv_prefix(self):
-        cavity = next(cavity_iterator.non_hl_iterator)
-        self.assertEqual(cavity.stepper_tuner.pv_prefix, cavity.pv_prefix + "STEP:")
+        self.assertEqual(
+            self.stepper.pv_prefix, self.stepper.cavity.pv_prefix + "STEP:"
+        )
 
     def test_hz_per_microstep(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._hz_per_microstep_pv_obj = make_mock_pv(get_val=self.step_scale)
-        self.assertEqual(stepper.hz_per_microstep, abs(self.step_scale))
+        self.stepper._hz_per_microstep_pv_obj = make_mock_pv(get_val=self.step_scale)
+        self.assertEqual(self.stepper.hz_per_microstep, abs(self.step_scale))
 
     def test_check_abort(self):
-        cavity = next(cavity_iterator.non_hl_iterator)
-        cavity.check_abort = MagicMock()
+        self.stepper.cavity.check_abort = MagicMock()
 
-        stepper = cavity.stepper_tuner
-        stepper.abort = MagicMock()
-        stepper.abort_flag = False
+        self.stepper.abort = MagicMock()
+        self.stepper.abort_flag = False
         try:
-            stepper.check_abort()
-            cavity.check_abort.assert_called()
+            self.stepper.check_abort()
+            self.stepper.cavity.check_abort.assert_called()
         except StepperAbortError:
-            self.fail(f"{stepper} abort called unexpectedly")
+            self.fail(f"{self.stepper} abort called unexpectedly")
 
-        stepper.abort_flag = True
+        self.stepper.abort_flag = True
         self.assertRaises(
             StepperAbortError,
-            stepper.check_abort,
+            self.stepper.check_abort,
         )
 
     def test_abort(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._abort_pv_obj = make_mock_pv()
-        stepper.abort()
-        stepper._abort_pv_obj.put.assert_called_with(1)
+        self.stepper._abort_pv_obj = make_mock_pv()
+        self.stepper.abort()
+        self.stepper._abort_pv_obj.put.assert_called_with(1)
 
     def test_move_positive(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._move_pos_pv_obj = make_mock_pv()
-        stepper.move_positive()
-        stepper._move_pos_pv_obj.put.assert_called_with(1)
+        self.stepper._move_pos_pv_obj = make_mock_pv()
+        self.stepper.move_positive()
+        self.stepper._move_pos_pv_obj.put.assert_called_with(1)
 
     def test_move_negative(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._move_neg_pv_obj = make_mock_pv()
-        stepper.move_negative()
-        stepper._move_neg_pv_obj.put.assert_called_with(1)
+        self.stepper._move_neg_pv_obj = make_mock_pv()
+        self.stepper.move_negative()
+        self.stepper._move_neg_pv_obj.put.assert_called_with(1)
 
     def test_step_des(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
         step_des = randint(0, 10000000)
-        stepper._step_des_pv_obj = make_mock_pv(get_val=step_des)
-        self.assertEqual(stepper.step_des, step_des)
+        self.stepper._step_des_pv_obj = make_mock_pv(get_val=step_des)
+        self.assertEqual(self.stepper.step_des, step_des)
 
     def test_motor_moving(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._motor_moving_pv_obj = make_mock_pv(get_val=1)
-        self.assertTrue(stepper.motor_moving)
+        self.stepper._motor_moving_pv_obj = make_mock_pv(get_val=1)
+        self.assertTrue(self.stepper.motor_moving)
 
-        stepper._motor_moving_pv_obj = make_mock_pv(get_val=0)
-        self.assertFalse(stepper.motor_moving)
+        self.stepper._motor_moving_pv_obj = make_mock_pv(get_val=0)
+        self.assertFalse(self.stepper.motor_moving)
 
     def test_reset_signed_steps(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._reset_signed_pv_obj = make_mock_pv()
-        stepper.reset_signed_steps()
-        stepper._reset_signed_pv_obj.put.assert_called_with(0)
+        self.stepper._reset_signed_pv_obj = make_mock_pv()
+        self.stepper.reset_signed_steps()
+        self.stepper._reset_signed_pv_obj.put.assert_called_with(0)
 
     def test_on_limit_switch_a(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._limit_switch_a_pv_obj = make_mock_pv(
+        self.stepper._limit_switch_a_pv_obj = make_mock_pv(
             get_val=STEPPER_ON_LIMIT_SWITCH_VALUE
         )
-        stepper._limit_switch_b_pv_obj = make_mock_pv(
+        self.stepper._limit_switch_b_pv_obj = make_mock_pv(
             get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1
         )
-        self.assertTrue(stepper.on_limit_switch)
+        self.assertTrue(self.stepper.on_limit_switch)
 
     def test_on_limit_switch_b(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._limit_switch_a_pv_obj = make_mock_pv(
+        self.stepper._limit_switch_a_pv_obj = make_mock_pv(
             get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1
         )
-        stepper._limit_switch_b_pv_obj = make_mock_pv(
+        self.stepper._limit_switch_b_pv_obj = make_mock_pv(
             get_val=STEPPER_ON_LIMIT_SWITCH_VALUE
         )
-        self.assertTrue(stepper.on_limit_switch)
+        self.assertTrue(self.stepper.on_limit_switch)
 
     def test_on_limit_switch_neither(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._limit_switch_a_pv_obj = make_mock_pv(
+        self.stepper._limit_switch_a_pv_obj = make_mock_pv(
             get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1
         )
-        stepper._limit_switch_b_pv_obj = make_mock_pv(
+        self.stepper._limit_switch_b_pv_obj = make_mock_pv(
             get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1
         )
-        self.assertFalse(stepper.on_limit_switch)
+        self.assertFalse(self.stepper.on_limit_switch)
 
     def test_max_steps(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
         max_steps = randint(0, 10000000)
-        stepper._max_steps_pv_obj = make_mock_pv(get_val=max_steps)
-        self.assertEqual(stepper.max_steps, max_steps)
+        self.stepper._max_steps_pv_obj = make_mock_pv(get_val=max_steps)
+        self.assertEqual(self.stepper.max_steps, max_steps)
 
     def test_speed(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
         speed = randint(0, 10000000)
-        stepper._speed_pv_obj = make_mock_pv(get_val=speed)
-        self.assertEqual(stepper.speed, speed)
+        self.stepper._speed_pv_obj = make_mock_pv(get_val=speed)
+        self.assertEqual(self.stepper.speed, speed)
 
     def test_restore_defaults(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper._max_steps_pv_obj = make_mock_pv()
-        stepper._speed_pv_obj = make_mock_pv()
+        self.stepper._max_steps_pv_obj = make_mock_pv()
+        self.stepper._speed_pv_obj = make_mock_pv()
 
-        stepper.restore_defaults()
-        stepper._max_steps_pv_obj.put.assert_called_with(DEFAULT_STEPPER_MAX_STEPS)
-        stepper._speed_pv_obj.put.assert_called_with(DEFAULT_STEPPER_SPEED)
+        self.stepper.restore_defaults()
+        self.stepper._max_steps_pv_obj.put.assert_called_with(DEFAULT_STEPPER_MAX_STEPS)
+        self.stepper._speed_pv_obj.put.assert_called_with(DEFAULT_STEPPER_SPEED)
 
     def test_move(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
         num_steps = randint(-DEFAULT_STEPPER_MAX_STEPS, 0)
-        stepper.check_abort = MagicMock()
-        stepper._max_steps_pv_obj = make_mock_pv()
-        stepper._speed_pv_obj = make_mock_pv()
-        stepper._step_des_pv_obj = make_mock_pv()
-        stepper.issue_move_command = MagicMock()
-        stepper.restore_defaults = MagicMock()
+        self.stepper.check_abort = MagicMock()
+        self.stepper._max_steps_pv_obj = make_mock_pv()
+        self.stepper._speed_pv_obj = make_mock_pv()
+        self.stepper._step_des_pv_obj = make_mock_pv()
+        self.stepper.issue_move_command = MagicMock()
+        self.stepper.restore_defaults = MagicMock()
 
-        stepper.move(num_steps=num_steps)
-        stepper.check_abort.assert_called()
-        stepper._max_steps_pv_obj.put.assert_called_with(DEFAULT_STEPPER_MAX_STEPS)
-        stepper._speed_pv_obj.put.assert_called_with(DEFAULT_STEPPER_SPEED)
-        stepper._step_des_pv_obj.put.assert_called_with(abs(num_steps))
-        stepper.issue_move_command.assert_called_with(num_steps, check_detune=True)
-        stepper.restore_defaults.assert_called()
+        self.stepper.move(num_steps=num_steps)
+        self.stepper.check_abort.assert_called()
+        self.stepper._max_steps_pv_obj.put.assert_called_with(DEFAULT_STEPPER_MAX_STEPS)
+        self.stepper._speed_pv_obj.put.assert_called_with(DEFAULT_STEPPER_SPEED)
+        self.stepper._step_des_pv_obj.put.assert_called_with(abs(num_steps))
+        self.stepper.issue_move_command.assert_called_with(num_steps, check_detune=True)
+        self.stepper.restore_defaults.assert_called()
 
     def test_issue_move_command(self):
-        stepper = next(cavity_iterator.non_hl_iterator).stepper_tuner
-        stepper.move_positive = MagicMock()
-        stepper._motor_moving_pv_obj = make_mock_pv(get_val=0)
-        stepper._limit_switch_a_pv_obj = make_mock_pv(get_val=0)
-        stepper._limit_switch_b_pv_obj = make_mock_pv(get_val=0)
+        self.stepper.move_positive = MagicMock()
+        self.stepper._motor_moving_pv_obj = make_mock_pv(get_val=0)
+        self.stepper._limit_switch_a_pv_obj = make_mock_pv(get_val=0)
+        self.stepper._limit_switch_b_pv_obj = make_mock_pv(get_val=0)
 
-        stepper.issue_move_command(randint(1000, 10000))
-        stepper.move_positive.assert_called()
-        stepper._motor_moving_pv_obj.get.assert_called()
-        stepper._limit_switch_a_pv_obj.get.assert_called()
-        stepper._limit_switch_b_pv_obj.get.assert_called()
+        self.stepper.issue_move_command(randint(1000, 10000))
+        self.stepper.move_positive.assert_called()
+        self.stepper._motor_moving_pv_obj.get.assert_called()
+        self.stepper._limit_switch_a_pv_obj.get.assert_called()
+        self.stepper._limit_switch_b_pv_obj.get.assert_called()
