@@ -1,9 +1,8 @@
 import argparse
 from time import sleep
 
-from lcls_tools.superconducting.sc_linac_utils import LINAC_CM_DICT
-
 from setup_linac import SETUP_MACHINE, SetupCryomodule
+from utils.sc_linac.linac_utils import LINAC_CM_DICT
 
 
 def setup_cryomodule(cryomodule_object: SetupCryomodule):

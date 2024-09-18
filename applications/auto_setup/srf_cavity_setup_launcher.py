@@ -1,9 +1,8 @@
 import argparse
 
-from lcls_tools.superconducting.sc_linac_utils import ALL_CRYOMODULES
-
 from applications.auto_setup.setup_cavity import SetupCavity
 from setup_linac import SETUP_MACHINE
+from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 def main():

@@ -1,15 +1,7 @@
-from lcls_tools.superconducting.sc_linac import (
-    Cryomodule,
-    Linac,
-    Machine,
-)
-
 from applications.auto_setup.setup_cavity import SetupCavity
 from applications.auto_setup.setup_linac_object import SetupLinacObject
-
-STATUS_READY_VALUE = 0
-STATUS_RUNNING_VALUE = 1
-STATUS_ERROR_VALUE = 2
+from utils.sc_linac.cryomodule import Cryomodule
+from utils.sc_linac.linac import Linac, Machine
 
 
 class SetupCryomodule(Cryomodule, SetupLinacObject):

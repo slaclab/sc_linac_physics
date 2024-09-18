@@ -18,7 +18,6 @@ from edmbutton import PyDMEDMDisplayButton
 from epics import camonitor
 from lcls_tools.common.controls.pyepics.utils import PV
 from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
-from lcls_tools.superconducting import sc_linac_utils
 from pydm import Display
 from pydm.widgets import PyDMLabel
 from pydm.widgets.analog_indicator import PyDMAnalogIndicator
@@ -26,6 +25,7 @@ from pydm.widgets.display_format import DisplayFormat
 
 from applications.auto_setup.setup_cavity import SetupCavity
 from setup_linac import SETUP_MACHINE, SetupCryomodule, SetupLinac
+from utils.sc_linac import linac_utils
 
 
 @dataclasses.dataclass
@@ -361,7 +361,7 @@ class SetupGUI(Display):
                 Linac(
                     f"L{linac_idx}B",
                     linac_idx,
-                    sc_linac_utils.LINAC_TUPLES[linac_idx][1],
+                    linac_utils.LINAC_TUPLES[linac_idx][1],
                     settings=self.settings,
                     parent=self,
                 )
@@ -369,9 +369,7 @@ class SetupGUI(Display):
 
         self.linac_widgets.insert(
             2,
-            Linac(
-                "L1BHL", 1, sc_linac_utils.L1BHL, settings=self.settings, parent=self
-            ),
+            Linac("L1BHL", 1, linac_utils.L1BHL, settings=self.settings, parent=self),
         )
 
         self.linac_aact_pvs: List[PV] = [

@@ -1,7 +1,8 @@
 from typing import Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
-from lcls_tools.superconducting.sc_linac_utils import SCLinacObject
+
+from utils.sc_linac.linac_utils import SCLinacObject
 
 
 class SetupLinacObject(SCLinacObject):

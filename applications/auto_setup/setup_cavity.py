@@ -3,16 +3,15 @@ from typing import Optional
 
 from epics.ca import CASeverityException
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
-from lcls_tools.superconducting import sc_linac_utils
-from lcls_tools.superconducting.sc_cavity import Cavity
-from lcls_tools.superconducting.sc_linac_utils import RF_MODE_SELA
 
-from applications.auto_setup.setup_linac import (
-    STATUS_RUNNING_VALUE,
+from applications.auto_setup.setup_linac_object import SetupLinacObject
+from applications.auto_setup.setup_utils import (
     STATUS_READY_VALUE,
+    STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,
 )
-from applications.auto_setup.setup_linac_object import SetupLinacObject
+from utils.sc_linac import linac_utils
+from utils.sc_linac.cavity import Cavity
 
 
 class SetupCavity(Cavity, SetupLinacObject):
@@ -105,7 +104,7 @@ class SetupCavity(Cavity, SetupLinacObject):
     def check_abort(self):
         if self.abort_requested:
             self.clear_abort()
-            raise sc_linac_utils.CavityAbortError(f"Abort requested for {self}")
+            raise linac_utils.CavityAbortError(f"Abort requested for {self}")
 
     def shut_down(self):
         if self.script_is_running:
@@ -125,7 +124,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.progress = 100
             self.status = STATUS_READY_VALUE
             self.status_message = f"{self} RF and SSA off"
-        except (CASeverityException, sc_linac_utils.CavityAbortError) as e:
+        except (CASeverityException, linac_utils.CavityAbortError) as e:
             self.status = STATUS_ERROR_VALUE
             self.clear_abort()
             self.status_message = str(e)
@@ -195,7 +194,7 @@ class SetupCavity(Cavity, SetupLinacObject):
                 self.progress = 80
 
                 if not self.is_on or (
-                    self.is_on and self.rf_mode != sc_linac_utils.RF_MODE_SELAP
+                    self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP
                 ):
                     self.ades = min(5, self.acon)
 
@@ -225,20 +224,20 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.progress = 100
             self.status = STATUS_READY_VALUE
         except (
-            sc_linac_utils.StepperError,
-            sc_linac_utils.DetuneError,
-            sc_linac_utils.SSACalibrationError,
+            linac_utils.StepperError,
+            linac_utils.DetuneError,
+            linac_utils.SSACalibrationError,
             PVInvalidError,
-            sc_linac_utils.QuenchError,
-            sc_linac_utils.CavityQLoadedCalibrationError,
-            sc_linac_utils.CavityScaleFactorCalibrationError,
-            sc_linac_utils.SSAFaultError,
-            sc_linac_utils.StepperAbortError,
-            sc_linac_utils.CavityHWModeError,
-            sc_linac_utils.CavityFaultError,
-            sc_linac_utils.CavityAbortError,
+            linac_utils.QuenchError,
+            linac_utils.CavityQLoadedCalibrationError,
+            linac_utils.CavityScaleFactorCalibrationError,
+            linac_utils.SSAFaultError,
+            linac_utils.StepperAbortError,
+            linac_utils.CavityHWModeError,
+            linac_utils.CavityFaultError,
+            linac_utils.CavityAbortError,
             CASeverityException,
-            sc_linac_utils.CavityCharacterizationError,
+            linac_utils.CavityCharacterizationError,
         ) as e:
             self.status = STATUS_ERROR_VALUE
             self.clear_abort()
