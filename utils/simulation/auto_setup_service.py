@@ -31,6 +31,13 @@ class AutoSetupPVGroup(PVGroup):
     off_status: PvpropertyBoolEnum = pvproperty(name="OFFSTS")
     off_timestamp: PvpropertyBoolEnum = pvproperty(name="OFFTS")
 
+    note: PvpropertyChar = pvproperty(
+        name="NOTE",
+        value="This is as long of a "
+        "sentence as I can type "
+        "in order to test wrapping",
+    )
+
     abort: PvpropertyEnum = pvproperty(
         name="ABORT",
         dtype=ChannelType.ENUM,
