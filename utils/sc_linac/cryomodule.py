@@ -86,6 +86,9 @@ class Cryomodule(SCLinacObject):
             + self.linac.insulating_vacuum_pvs
         )
 
+    def __str__(self):
+        return f"{self.linac.name} CM{self.name}"
+
     @property
     def is_harmonic_linearizer(self):
         return self.name in ["H1", "H2"]
