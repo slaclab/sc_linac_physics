@@ -12,6 +12,7 @@ from applications.auto_setup.setup_utils import (
 )
 from utils.sc_linac import linac_utils
 from utils.sc_linac.cavity import Cavity
+from utils.sc_linac.linac_utils import RF_MODE_SELA
 
 
 class SetupCavity(Cavity, SetupLinacObject):
@@ -159,67 +160,10 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.reset_interlocks()
             self.progress = 15
 
-            if self.ssa_cal_requested:
-                self.status_message = f"Running {self} SSA Calibration"
-                self.turn_off()
-                self.progress = 20
-                self.ssa.calibrate(self.ssa.drive_max)
-                self.status_message = f"{self} SSA Calibrated"
-
-            self.progress = 25
-            self.check_abort()
-
-            if self.auto_tune_requested:
-                self.status_message = f"Tuning {self} to Resonance"
-                self.move_to_resonance(use_sela=False)
-                self.status_message = f"{self} Tuned to Resonance"
-
-            self.progress = 50
-            self.check_abort()
-
-            if self.cav_char_requested:
-                self.status_message = f"Running {self} Cavity Characterization"
-                self.characterize()
-                self.progress = 60
-                self.calc_probe_q_pv_obj.put(1)
-                self.progress = 70
-                self.status_message = f"{self} Characterized"
-
-            self.progress = 75
-            self.check_abort()
-
-            if self.rf_ramp_requested:
-                self.status_message = f"Ramping {self} to {self.acon}"
-                self.piezo.enable_feedback()
-                self.progress = 80
-
-                if not self.is_on or (
-                    self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP
-                ):
-                    self.ades = min(5, self.acon)
-
-                self.turn_on()
-                self.progress = 85
-
-                self.check_abort()
-
-                self.set_sela_mode()
-
-                while self.rf_mode != RF_MODE_SELA:
-                    self.check_abort()
-                    self.status_message = "Waiting for cavity to be in SELA"
-                    sleep(0.5)
-
-                self.walk_amp(self.acon, 0.1)
-                self.progress = 90
-
-                self.status_message = f"Centering {self} piezo"
-                self.move_to_resonance(use_sela=True)
-                self.progress = 95
-
-                self.set_selap_mode()
-
-                self.status_message = f"{self} Ramped Up to {self.acon} MV"
+            self.request_ssa_cal()
+            self.request_auto_tune()
+            self.request_characterization()
+            self.request_ramp()
 
             self.progress = 100
             self.status = STATUS_READY_VALUE
@@ -242,3 +186,66 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.status = STATUS_ERROR_VALUE
             self.clear_abort()
             self.status_message = str(e)
+
+    def request_ramp(self):
+        if self.rf_ramp_requested:
+            self.status_message = f"Ramping {self} to {self.acon}"
+            self.piezo.enable_feedback()
+            self.progress = 80
+
+            if not self.is_on or (
+                self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP
+            ):
+                self.ades = min(5, self.acon)
+
+            self.turn_on()
+            self.progress = 85
+
+            self.check_abort()
+
+            self.set_sela_mode()
+
+            while self.rf_mode != RF_MODE_SELA:
+                self.check_abort()
+                self.status_message = "Waiting for cavity to be in SELA"
+                sleep(0.5)
+
+            self.walk_amp(self.acon, 0.1)
+            self.progress = 90
+
+            self.status_message = f"Centering {self} piezo"
+            self.move_to_resonance(use_sela=True)
+            self.progress = 95
+
+            self.set_selap_mode()
+
+            self.status_message = f"{self} Ramped Up to {self.acon} MV"
+
+    def request_characterization(self):
+        if self.cav_char_requested:
+            self.status_message = f"Running {self} Cavity Characterization"
+            self.characterize()
+            self.progress = 60
+            self.calc_probe_q_pv_obj.put(1)
+            self.progress = 70
+            self.status_message = f"{self} Characterized"
+        self.progress = 75
+        self.check_abort()
+
+    def request_auto_tune(self):
+        if self.auto_tune_requested:
+            self.status_message = f"Tuning {self} to Resonance"
+            self.move_to_resonance(use_sela=False)
+            self.status_message = f"{self} Tuned to Resonance"
+        self.progress = 50
+        self.check_abort()
+
+    def request_ssa_cal(self):
+        if self.ssa_cal_requested:
+            self.status_message = f"Running {self} SSA Calibration"
+            self.turn_off()
+            self.progress = 20
+            self.ssa.calibrate(self.ssa.drive_max)
+            self.status_message = f"{self} SSA Calibrated"
+        self.progress = 25
+        self.check_abort()

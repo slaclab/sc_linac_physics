@@ -1,3 +1,4 @@
+import random
 from random import choice, randint
 from unittest import TestCase
 from unittest.mock import MagicMock
@@ -11,7 +12,7 @@ from applications.auto_setup.setup_utils import (
     STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,
 )
-from utils.sc_linac.linac_utils import CavityAbortError
+from utils.sc_linac.linac_utils import CavityAbortError, RF_MODE_SELA
 
 
 class TestSetupCavity(TestCase):
@@ -98,3 +99,147 @@ class TestSetupCavity(TestCase):
 
     def test_setup(self):
         self.skipTest("Not yet implemented")
+
+    def test_request_ssa_cal_false(self):
+        self.cavity._ssa_cal_requested_pv_obj = make_mock_pv(get_val=False)
+        self.cavity._progress_pv_obj = make_mock_pv()
+        self.cavity.check_abort = MagicMock()
+        self.cavity._status_msg_pv_obj = make_mock_pv()
+        self.cavity.turn_off = MagicMock()
+        self.cavity.ssa.calibrate = MagicMock()
+
+        self.cavity.request_ssa_cal()
+        self.cavity._ssa_cal_requested_pv_obj.get.assert_called()
+        self.cavity.turn_off.assert_not_called()
+        self.cavity.ssa.calibrate.assert_not_called()
+        self.cavity._progress_pv_obj.put.assert_called()
+        self.cavity.check_abort.assert_called()
+
+    def test_request_ssa_cal_true(self):
+        self.cavity._ssa_cal_requested_pv_obj = make_mock_pv(get_val=True)
+        self.cavity._progress_pv_obj = make_mock_pv()
+        self.cavity.check_abort = MagicMock()
+        self.cavity._status_msg_pv_obj = make_mock_pv()
+        self.cavity.turn_off = MagicMock()
+        self.cavity.ssa.calibrate = MagicMock()
+        self.cavity.ssa._saved_drive_max_pv_obj = make_mock_pv()
+
+        self.cavity.request_ssa_cal()
+        self.cavity._ssa_cal_requested_pv_obj.get.assert_called()
+        self.cavity.turn_off.assert_called()
+        self.cavity.ssa.calibrate.assert_called()
+        self.cavity.ssa._saved_drive_max_pv_obj.get.assert_called()
+        self.cavity._status_msg_pv_obj.put.assert_called()
+        self.cavity._progress_pv_obj.put.assert_called()
+        self.cavity.check_abort.assert_called()
+
+    def test_request_auto_tune_false(self):
+        self.cavity._auto_tune_requested_pv_obj = make_mock_pv(get_val=False)
+        self.cavity.move_to_resonance = MagicMock()
+        self.cavity._progress_pv_obj = make_mock_pv()
+        self.cavity.check_abort = MagicMock()
+
+        self.cavity.request_auto_tune()
+        self.cavity._auto_tune_requested_pv_obj.get.assert_called()
+        self.cavity.move_to_resonance.assert_not_called()
+        self.cavity._progress_pv_obj.put.assert_called()
+        self.cavity.check_abort.assert_called()
+
+    def test_request_auto_tune_true(self):
+        self.cavity._auto_tune_requested_pv_obj = make_mock_pv(get_val=True)
+        self.cavity.move_to_resonance = MagicMock()
+        self.cavity._progress_pv_obj = make_mock_pv()
+        self.cavity.check_abort = MagicMock()
+        self.cavity._status_msg_pv_obj = make_mock_pv()
+
+        self.cavity.request_auto_tune()
+        self.cavity._auto_tune_requested_pv_obj.get.assert_called()
+        self.cavity.move_to_resonance.assert_called_with(use_sela=False)
+        self.cavity._status_msg_pv_obj.put.assert_called()
+        self.cavity._progress_pv_obj.put.assert_called()
+        self.cavity.check_abort.assert_called()
+
+    def test_request_characterization_false(self):
+        self.cavity._cav_char_requested_pv_obj = make_mock_pv(get_val=False)
+        self.cavity._progress_pv_obj = make_mock_pv()
+        self.cavity.check_abort = MagicMock()
+        self.cavity.characterize = MagicMock()
+        self.cavity._calc_probe_q_pv_obj = make_mock_pv()
+        self.cavity._status_msg_pv_obj = make_mock_pv()
+
+        self.cavity.request_characterization()
+        self.cavity._cav_char_requested_pv_obj.get.assert_called()
+        self.cavity.characterize.assert_not_called()
+        self.cavity._calc_probe_q_pv_obj.put.assert_not_called()
+        self.cavity._cav_char_requested_pv_obj.get.assert_called()
+        self.cavity._progress_pv_obj.put.assert_called()
+        self.cavity.check_abort.assert_called()
+
+    def test_request_characterization_true(self):
+        self.cavity._cav_char_requested_pv_obj = make_mock_pv(get_val=True)
+        self.cavity._progress_pv_obj = make_mock_pv()
+        self.cavity.check_abort = MagicMock()
+        self.cavity.characterize = MagicMock()
+        self.cavity._calc_probe_q_pv_obj = make_mock_pv()
+        self.cavity._status_msg_pv_obj = make_mock_pv()
+
+        self.cavity.request_characterization()
+        self.cavity._cav_char_requested_pv_obj.get.assert_called()
+        self.cavity.characterize.assert_called()
+        self.cavity._calc_probe_q_pv_obj.put.assert_called()
+        self.cavity._cav_char_requested_pv_obj.get.assert_called()
+        self.cavity._progress_pv_obj.put.assert_called()
+        self.cavity.check_abort.assert_called()
+        self.cavity._status_msg_pv_obj.put.assert_called()
+
+    def test_request_ramp_false(self):
+        self.cavity._rf_ramp_requested_pv_obj = make_mock_pv(get_val=False)
+        self.cavity.piezo.enable_feedback = MagicMock()
+        self.cavity._ades_pv_obj = make_mock_pv()
+        self.cavity.turn_on = MagicMock()
+        self.cavity.set_sela_mode = MagicMock()
+        self.cavity.walk_amp = MagicMock()
+        self.cavity.move_to_resonance = MagicMock()
+        self.cavity.set_selap_mode = MagicMock()
+
+        self.cavity.request_ramp()
+        self.cavity._rf_ramp_requested_pv_obj.get.assert_called()
+        self.cavity.piezo.enable_feedback.assert_not_called()
+        self.cavity._ades_pv_obj.put.assert_not_called()
+        self.cavity.turn_on.assert_not_called()
+        self.cavity.set_sela_mode.assert_not_called()
+        self.cavity.walk_amp.assert_not_called()
+        self.cavity.move_to_resonance.assert_not_called()
+        self.cavity.set_selap_mode.assert_not_called()
+
+    def test_request_ramp_true(self):
+        acon = random.uniform(5, 21)
+        self.cavity._rf_ramp_requested_pv_obj = make_mock_pv(get_val=True)
+        self.cavity.piezo.enable_feedback = MagicMock()
+        self.cavity._ades_pv_obj = make_mock_pv()
+        self.cavity.turn_on = MagicMock()
+        self.cavity.set_sela_mode = MagicMock()
+        self.cavity.walk_amp = MagicMock()
+        self.cavity.move_to_resonance = MagicMock()
+        self.cavity.set_selap_mode = MagicMock()
+        self.cavity._status_msg_pv_obj = make_mock_pv()
+        self.cavity._progress_pv_obj = make_mock_pv()
+        self.cavity._rf_state_pv_obj = make_mock_pv(get_val=0)
+        self.cavity._acon_pv_obj = make_mock_pv(get_val=acon)
+        self.cavity.check_abort = MagicMock()
+        self.cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_SELA)
+
+        self.cavity.request_ramp()
+        self.cavity._rf_ramp_requested_pv_obj.get.assert_called()
+        self.cavity.piezo.enable_feedback.assert_called()
+        self.cavity._acon_pv_obj.get.assert_called()
+        self.cavity._ades_pv_obj.put.assert_called()
+        self.cavity.turn_on.assert_called()
+        self.cavity.set_sela_mode.assert_called()
+        self.cavity.walk_amp.assert_called_with(acon, 0.1)
+        self.cavity.move_to_resonance.assert_called_with(use_sela=True)
+        self.cavity.set_selap_mode.assert_called()
+        self.cavity._status_msg_pv_obj.put.assert_called()
+        self.cavity._progress_pv_obj.put.assert_called()
+        self.cavity.check_abort.assert_called()
+        self.cavity._rf_mode_pv_obj.get.assert_called()
