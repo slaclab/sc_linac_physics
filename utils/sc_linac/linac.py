@@ -5,9 +5,9 @@
 ################################################################################
 from typing import Dict, List, Type
 
+from utils.sc_linac import linac_utils
 from utils.sc_linac.cavity import Cavity
 from utils.sc_linac.cryomodule import Cryomodule
-from utils.sc_linac import linac_utils
 from utils.sc_linac.magnet import Magnet
 from utils.sc_linac.piezo import Piezo
 from utils.sc_linac.rack import Rack
@@ -118,33 +118,23 @@ class Machine:
                 )
             )
 
+        non_hl_cavities = []
+        hl_cavities = []
+
         self.cryomodules: Dict[str, Cryomodule] = {}
         for linac in self.linacs:
             for cm_name, cm_obj in linac.cryomodules.items():
                 self.cryomodules[cm_name] = cm_obj
-
-
-MACHINE = Machine()
-
-
-class CavityIterator:
-    def __init__(self, cavity_class=Cavity):
-        self.machine: Machine = Machine(cavity_class=cavity_class)
-
-        non_hl_cavities = []
-        hl_cavities = []
-
-        for non_hl_cm_num in range(1, 36):
-            cm_obj: Cryomodule = self.machine.cryomodules[f"{non_hl_cm_num:02d}"]
-            for cavity_obj in cm_obj.cavities.values():
-                non_hl_cavities.append(cavity_obj)
-
-        for i in range(1, 3):
-            hl_obj: Cryomodule = self.machine.cryomodules[f"H{i}"]
-            for hl_cavity_obj in hl_obj.cavities.values():
-                hl_cavities.append(hl_cavity_obj)
+                for cav_ob in cm_obj.cavities.values():
+                    if cm_obj.is_harmonic_linearizer:
+                        hl_cavities.append(cav_ob)
+                    else:
+                        non_hl_cavities.append(cav_ob)
 
         # TODO handle hitting end of list
         self.non_hl_iterator = iter(non_hl_cavities)
         self.hl_iterator = iter(hl_cavities)
         self.all_iterator = iter(non_hl_cavities + hl_cavities)
+
+
+MACHINE = Machine()
