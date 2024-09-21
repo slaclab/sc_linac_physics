@@ -99,7 +99,7 @@ class FaultCountDisplay(Display):
 
         """
         result is a dictionary with:
-            key = fault pv string
+            key = fault TLC string i.e. "BCS"
             value = FaultCounter(fault_count=0, ok_count=1, invalid_count=0) <-- Example
         """
         result: Dict[str, FaultCounter] = cavity.get_fault_counts(

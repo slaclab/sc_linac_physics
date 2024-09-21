@@ -2,7 +2,7 @@ import dataclasses
 from datetime import datetime
 from typing import Union
 
-from lcls_tools.common.controls.pyepics.utils import PV
+from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 from lcls_tools.common.data.archiver import (
     ArchiveDataHandler,
     ArchiverValue,
@@ -37,27 +37,22 @@ class FaultCounter:
         return self.sum_fault_count == other.sum_fault_count
 
 
-class PVInvalidError(Exception):
-    def __init__(self, message):
-        super(PVInvalidError, self).__init__(message)
-
-
 class Fault:
     def __init__(
-            self,
-            tlc,
-            severity,
-            pv,
-            ok_value,
-            fault_value,
-            long_description,
-            short_description,
-            button_level,
-            button_command,
-            macros,
-            button_text,
-            button_macro,
-            action,
+        self,
+        tlc,
+        severity,
+        pv,
+        ok_value,
+        fault_value,
+        long_description,
+        short_description,
+        button_level,
+        button_command,
+        macros,
+        button_text,
+        button_macro,
+        action,
     ):
         self.tlc = tlc
         self.severity = int(severity)
@@ -117,7 +112,7 @@ class Fault:
         return self.is_faulted(archiver_value)
 
     def get_fault_count_over_time_range(
-            self, start_time: datetime, end_time: datetime
+        self, start_time: datetime, end_time: datetime
     ) -> FaultCounter:
         result = get_values_over_time_range(
             pv_list=[self.pv.pvname], start_time=start_time, end_time=end_time
