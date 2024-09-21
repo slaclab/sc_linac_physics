@@ -5,6 +5,7 @@ from unittest import TestCase, mock
 
 from displays.cavity_display.backend.backend_cavity import BackendCavity
 from displays.cavity_display.backend.fault import FaultCounter
+from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.linac import Machine
 
 builtin_open = open  # save the unpatched version
@@ -179,9 +180,9 @@ class TestBackendCavity(TestCase):
         cls.mock_open_patcher.stop()
 
     def setUp(self):
-        self.cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
-        self.cavity1 = self.cm01.cavities[1]
-        self.cavity5 = self.cm01.cavities[5]
+        self.cm01: Cryomodule = self.DISPLAY_MACHINE.cryomodules["01"]
+        self.cavity1: BackendCavity = self.cm01.cavities[1]
+        self.cavity5: BackendCavity = self.cm01.cavities[5]
         self.cavity1.rack.rack_name = "A"
 
         # Need additonal setup for running through fault tests
@@ -193,7 +194,7 @@ class TestBackendCavity(TestCase):
         self.cavity1.description_pv = "DESCRIPTION_PV"
 
     def test_create_faults_rack(self):
-        cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
+        cm01: Cryomodule = self.DISPLAY_MACHINE.cryomodules["01"]
         cavity1: BackendCavity = cm01.cavities[1]
         cavity5: BackendCavity = cm01.cavities[5]
 
