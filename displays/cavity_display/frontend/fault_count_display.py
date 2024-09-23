@@ -1,3 +1,5 @@
+from typing import Dict
+
 import pyqtgraph as pg
 from PyQt5.QtCore import QDateTime
 from PyQt5.QtWidgets import (
@@ -7,18 +9,17 @@ from PyQt5.QtWidgets import (
     QDateTimeEdit,
     QPushButton,
     QLabel,
-    QCheckBox
+    QCheckBox,
 )
 from pydm import Display
-from typing import Dict
 
 from displays.cavity_display.backend.backend_cavity import BackendCavity
+from displays.cavity_display.backend.fault import FaultCounter
 from displays.cavity_display.frontend.cavity_widget import (
     RED_FILL_COLOR,
     PURPLE_FILL_COLOR,
-    DARK_GRAY_COLOR
+    DARK_GRAY_COLOR,
 )
-
 from utils.sc_linac.linac import Machine
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
@@ -87,8 +88,9 @@ class FaultCountDisplay(Display):
         self.plot_button.clicked.connect(self.update_plot)
 
     def get_data(self):
-        cavity: BackendCavity = DISPLAY_MACHINE.cryomodules[self.cm_combo_box.currentText()].cavities[
-            int(self.cav_combo_box.currentText())]
+        cavity: BackendCavity = DISPLAY_MACHINE.cryomodules[
+            self.cm_combo_box.currentText()
+        ].cavities[int(self.cav_combo_box.currentText())]
 
         self.num_of_faults = []
         self.num_of_invalids = []
@@ -102,12 +104,10 @@ class FaultCountDisplay(Display):
             key = fault TLC string i.e. "BCS"
             value = FaultCounter(fault_count=0, ok_count=1, invalid_count=0) <-- Example
         """
-        result: Dict[str, FaultCounter] = cavity.get_fault_counts(
-            start, end
-        )
+        result: Dict[str, FaultCounter] = cavity.get_fault_counts(start, end)
 
         for tlc, counter_obj in result.items():
-            if self.pot_checkbox.isChecked() and tlc == 'POT':
+            if self.pot_checkbox.isChecked() and tlc == "POT":
                 continue
             else:
                 self.y_data.append(tlc)
@@ -125,10 +125,21 @@ class FaultCountDisplay(Display):
             y_vals_ints.append(idy)
 
         # Create pyqt5graph bar graph for faults, then stack invalid faults on same bars
-        bargraph = pg.BarGraphItem(x0=0, y=y_vals_ints, height=0.6, width=self.num_of_faults, brush=RED_FILL_COLOR)
+        bargraph = pg.BarGraphItem(
+            x0=0,
+            y=y_vals_ints,
+            height=0.6,
+            width=self.num_of_faults,
+            brush=RED_FILL_COLOR,
+        )
         self.plot_window.addItem(bargraph)
-        bargraph = pg.BarGraphItem(x0=self.num_of_faults, y=y_vals_ints, height=0.6, width=self.num_of_invalids,
-                                   brush=PURPLE_FILL_COLOR)
+        bargraph = pg.BarGraphItem(
+            x0=self.num_of_faults,
+            y=y_vals_ints,
+            height=0.6,
+            width=self.num_of_invalids,
+            brush=PURPLE_FILL_COLOR,
+        )
 
         ax = self.plot_window.getAxis("left")
         ax.setTicks([ticks])
