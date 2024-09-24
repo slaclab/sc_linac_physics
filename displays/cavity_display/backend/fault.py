@@ -20,7 +20,7 @@ class FaultCounter:
     invalid_count: int = 0
 
     @property
-    def sum_fault_count(self):
+    def sum_fault_count(self) -> int:
         return self.fault_count + self.invalid_count
 
     @property
@@ -30,10 +30,10 @@ class FaultCounter:
         except ZeroDivisionError:
             return 1
 
-    def __gt__(self, other):
+    def __gt__(self, other) -> bool:
         return self.sum_fault_count > other.sum_fault_count
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return self.sum_fault_count == other.sum_fault_count
 
 
