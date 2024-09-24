@@ -1,9 +1,10 @@
 from collections import OrderedDict
 from datetime import timedelta, datetime
 from unittest import TestCase, mock
-from utils.sc_linac.linac import Machine
+
 from displays.cavity_display.backend.backend_cavity import BackendCavity
 from displays.cavity_display.backend.fault import FaultCounter
+from utils.sc_linac.linac import Machine
 
 builtin_open = open  # save the unpatched version
 
@@ -160,6 +161,7 @@ def mock_open(*args, **kwargs):
     # mocked open for path "foo"
     return mock.mock_open(read_data="\n".join(data))(*args, **kwargs)
 
+
 # Comment
 class TestBackendCavity(TestCase):
     @classmethod
@@ -179,7 +181,7 @@ class TestBackendCavity(TestCase):
         self.cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
         self.cavity1 = self.cm01.cavities[1]
         self.cavity5 = self.cm01.cavities[5]
-        self.cavity1.rack.rack_name = 'A'
+        self.cavity1.rack.rack_name = "A"
 
         # Need additonal setup for running through fault tests
 
@@ -208,13 +210,33 @@ class TestBackendCavity(TestCase):
 
     def test_get_fault_counts(self):
         # Setup
-        cavity1 = self.cm01.cavities[1]
+        cavity1: BackendCavity = self.cm01.cavities[1]
         # Making Mock fault objects w/ values
         mock_faults = [
-            mock.Mock(pv = mock.Mock(pvname = "PV1"), get_fault_count_over_time_range = mock.Mock(return_value=FaultCounter(fault_count=5, ok_count=3, invalid_count=0))),
-            mock.Mock(pv = mock.Mock(pvname = "PV2"), get_fault_count_over_time_range = mock.Mock(return_value=FaultCounter(fault_count=3, ok_count=5, invalid_count=1))),
-            mock.Mock(pv = mock.Mock(pvname = "PV3"), get_fault_count_over_time_range = mock.Mock(return_value=FaultCounter(fault_count=0, ok_count=8, invalid_count=0))),
-
+            mock.Mock(
+                pv="PV1",
+                get_fault_count_over_time_range=mock.Mock(
+                    return_value=FaultCounter(
+                        fault_count=5, ok_count=3, invalid_count=0
+                    )
+                ),
+            ),
+            mock.Mock(
+                pv="PV2",
+                get_fault_count_over_time_range=mock.Mock(
+                    return_value=FaultCounter(
+                        fault_count=3, ok_count=5, invalid_count=1
+                    )
+                ),
+            ),
+            mock.Mock(
+                pv="PV3",
+                get_fault_count_over_time_range=mock.Mock(
+                    return_value=FaultCounter(
+                        fault_count=0, ok_count=8, invalid_count=0
+                    )
+                ),
+            ),
         ]
         # Now need to replace cavity.faults w/ our mock faults.
         cavity1.faults = OrderedDict((i, fault) for i, fault in enumerate(mock_faults))
@@ -230,16 +252,23 @@ class TestBackendCavity(TestCase):
         # 2. Need to verify the result has 3 entries
         self.assertEqual(len(result), 3)
         # Making sure FaultCounter obj in the result match each PV
-        self.assertEqual(result["PV1"], FaultCounter(fault_count=5, ok_count=3, invalid_count=0))
-        self.assertEqual(result['PV2'], FaultCounter(fault_count=3, ok_count=5, invalid_count=1))
-        self.assertEqual(result['PV3'], FaultCounter(fault_count=0, ok_count=8, invalid_count=0))
-
+        self.assertEqual(
+            result["PV1"], FaultCounter(fault_count=5, ok_count=3, invalid_count=0)
+        )
+        self.assertEqual(
+            result["PV2"], FaultCounter(fault_count=3, ok_count=5, invalid_count=1)
+        )
+        self.assertEqual(
+            result["PV3"], FaultCounter(fault_count=0, ok_count=8, invalid_count=0)
+        )
 
         # 4. Need to verify get_fault_count_over_time_range was called for each fault
         for fault in mock_faults:
-            fault.get_fault_count_over_time_range.assert_called_once_with(start_time=start_time, end_time=end_time)
+            fault.get_fault_count_over_time_range.assert_called_once_with(
+                start_time=start_time, end_time=end_time
+            )
 
-    @mock.patch('displays.cavity_display.backend.backend_cavity.caput')
+    @mock.patch("displays.cavity_display.backend.backend_cavity.caput")
     def test_run_through_faults(self, mock_caput):
         # 1st part we're testing is: No faults
         self.cavity1.faults = OrderedDict()

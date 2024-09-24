@@ -124,7 +124,7 @@ class BackendCavity(Cavity):
         result: Dict[str, FaultCounter] = {}
 
         for fault in self.faults.values():
-            result[fault.pv.pvname] = fault.get_fault_count_over_time_range(
+            result[fault.pv] = fault.get_fault_count_over_time_range(
                 start_time=start_time, end_time=end_time
             )
 
