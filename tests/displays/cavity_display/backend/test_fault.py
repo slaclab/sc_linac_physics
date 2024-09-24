@@ -46,21 +46,3 @@ class TestFaultCounter(TestCase):
             self.assertTrue(self.fault_counter == self.fault_counter2)
         else:
             self.assertFalse(self.fault_counter == self.fault_counter2)
-
-
-class TestFault(TestCase):
-    def test_is_currently_faulted(self):
-
-        self.fail()
-
-    def test_is_faulted(self):
-
-        self.fail()
-
-    def test_was_faulted(self):
-
-        self.fail()
-
-    def test_get_fault_count_over_time_range(self):
-
-        self.fail()
