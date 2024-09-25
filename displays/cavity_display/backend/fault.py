@@ -69,12 +69,12 @@ class Fault:
 
         self.pv: PV = PV(pv, connection_timeout=PV_TIMEOUT)
 
-    def is_currently_faulted(self):
+    def is_currently_faulted(self) -> bool:
         # returns "TRUE" if faulted
         # returns "FALSE" if not faulted
         return self.is_faulted(self.pv)
 
-    def is_faulted(self, obj: Union[PV, ArchiverValue]):
+    def is_faulted(self, obj: Union[PV, ArchiverValue]) -> bool:
         """
         Dug through the pyepics source code to find the severity values:
         class AlarmSeverity(DefaultIntEnum):
@@ -105,7 +105,7 @@ class Fault:
                 " 'OK if equal to' parameter"
             )
 
-    def was_faulted(self, time: datetime):
+    def was_faulted(self, time: datetime) -> bool:
         archiver_value: ArchiverValue = get_data_at_time(
             pv_list=[self.pv.pvname], time_requested=time
         )[self.pv.pvname]
