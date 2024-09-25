@@ -29,7 +29,7 @@ class DecaradHead(SCLinacObject):
     def avg_dose_rate_pv_obj(self) -> PV:
         if not self._avg_dose_rate_pv_obj:
             self._avg_dose_rate_pv_obj = PV(self.avg_dose_rate_pv)
-        return self._avg_dose_rate_pv_obj.get()
+        return self._avg_dose_rate_pv_obj
 
     @property
     def normalized_avg_dose(self) -> float:

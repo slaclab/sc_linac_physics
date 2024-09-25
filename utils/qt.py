@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import QPushButton, QVBoxLayout, QGroupBox, QGridLayout, QLabel
-from pydm.widgets import PyDMEnumComboBox, PyDMSpinbox, PyDMLabel
-from pydm.widgets.enum_button import PyDMEnumButton
+from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtWidgets import QPushButton, QGroupBox, QGridLayout, QLabel, QMessageBox
+from pydm.widgets import PyDMLabel, PyDMEnumComboBox, PyDMSpinbox
 
 
 class RFControls:
@@ -48,3 +48,28 @@ class RFControls:
         control_groupbox_layout.addWidget(self.srf_max_spinbox, max_row, 1)
         control_groupbox_layout.addWidget(self.srf_max_readback_label, max_row, 2)
 
+
+class Worker(QThread):
+    finished = pyqtSignal(str)
+    progress = pyqtSignal(int)
+    error = pyqtSignal(str)
+    status = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.finished.connect(print)
+        self.progress.connect(print)
+        self.error.connect(print)
+        self.status.connect(print)
+
+    def terminate(self) -> None:
+        self.error.emit("Thread termination requested")
+        super().terminate()
+
+
+def make_error_popup(title, message: str):
+    popup = QMessageBox()
+    popup.setIcon(QMessageBox.Critical)
+    popup.setWindowTitle(title)
+    popup.setText(message)
+    popup.exec()

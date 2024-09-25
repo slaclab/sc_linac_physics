@@ -1,6 +1,7 @@
 from typing import Dict, Optional
 
 import numpy as np
+from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -16,7 +17,6 @@ from epics import camonitor_clear
 from lcls_tools.common.frontend.plotting.util import (
     WaveformPlotParams,
     TimePlotParams,
-    TimePlotUpdater,
     WaveformPlotUpdater,
 )
 from matplotlib import pyplot as plt
@@ -30,10 +30,11 @@ from applications.quench_processing.quench_linac import (
     QuenchCavity,
     QuenchCryomodule,
 )
+from applications.quench_processing.quench_worker import QuenchWorker
+from utils.qt import RFControls
 from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.decarad import Decarad
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
-from utils.widgets.rf_controls import RFControls
 
 
 class QuenchGUI(Display):
@@ -67,6 +68,7 @@ class QuenchGUI(Display):
         self.rf_controls = RFControls()
         self.start_button: QPushButton = QPushButton("Start Processing")
         self.abort_button: QPushButton = QPushButton("Abort Processing")
+        self.status_label: QLabel = QLabel()
 
         self.start_amp_spinbox: QDoubleSpinBox = QDoubleSpinBox()
         self.step_size_spinbox: QDoubleSpinBox = QDoubleSpinBox()
@@ -106,7 +108,6 @@ class QuenchGUI(Display):
 
         plot_vlayout.addWidget(self.amp_rad_timeplot)
 
-        self.timeplot_updater: TimePlotUpdater = TimePlotUpdater(self.timeplot_params)
         self.waveform_updater: WaveformPlotUpdater = WaveformPlotUpdater(
             self.waveform_plot_params
         )
@@ -120,6 +121,8 @@ class QuenchGUI(Display):
 
         self.update_cm()
         self.update_decarad()
+
+        self.quench_worker: Optional[QuenchWorker] = None
 
     def add_controls(self):
         processing_controls_groupbox: QGroupBox = QGroupBox("Processing Controls")
@@ -157,6 +160,7 @@ class QuenchGUI(Display):
         self.controls_vlayout.addWidget(processing_controls_groupbox)
         self.controls_vlayout.addWidget(self.start_button)
         self.controls_vlayout.addWidget(self.abort_button)
+        self.controls_vlayout.addWidget(self.status_label)
 
     def add_selectors(self):
         input_groupbox: QGroupBox = QGroupBox()
@@ -187,14 +191,38 @@ class QuenchGUI(Display):
         self.step_time_spinbox.setMinimum(0.1)
         self.step_time_spinbox.setValue(30)
 
+    @pyqtSlot(str)
+    def handle_status(self, message):
+        self.status_label.setStyleSheet("color: blue;")
+        self.status_label.setText(message)
+
+    @pyqtSlot(str)
+    def handle_error(self, message):
+        self.status_label.setStyleSheet("color: red;")
+        self.status_label.setText(message)
+        self.start_button.setEnabled(True)
+
+    @pyqtSlot(str)
+    def handle_finished(self, message):
+        self.status_label.setStyleSheet("color: green;")
+        self.status_label.setText(message)
+        self.start_button.setEnabled(True)
+
     def process(self):
+        self.start_button.setEnabled(False)
         self.current_cav.decarad = self.current_decarad
-        self.current_cav.quench_process(
+        self.quench_worker = QuenchWorker(
+            cavity=self.current_cav,
             start_amp=self.start_amp_spinbox.value(),
             end_amp=self.stop_amp_spinbox.value(),
             step_time=self.step_time_spinbox.value(),
             step_size=self.step_size_spinbox.value(),
         )
+        self.quench_worker.status.connect(self.handle_status)
+        self.quench_worker.error.connect(self.handle_error)
+        self.quench_worker.finished.connect(self.handle_finished)
+
+        self.quench_worker.start()
 
     @staticmethod
     def clear_connections(signal: Signal):

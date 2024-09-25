@@ -4,14 +4,13 @@ from functools import partial
 from typing import Dict, Optional
 
 import numpy as np
-from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QRadioButton,
 )
 from epics import caget, caput
@@ -21,6 +20,7 @@ from urllib3.exceptions import ConnectTimeoutError
 
 import q0_utils
 from q0_linac import Q0Cavity, Q0Cryomodule
+from utils.qt import Worker
 from utils.sc_linac.linac_utils import CavityAbortError
 
 DEFAULT_LL_DROP = 4
@@ -31,24 +31,6 @@ DEFAULT_NUM_CAL_POINTS = 5
 DEFAULT_POST_RF_HEAT = 24
 DEFAULT_JT_START_DELTA = timedelta(hours=24)
 DEFAULT_LL_BUFFER_SIZE = 10
-
-
-class Worker(QThread):
-    finished = pyqtSignal(str)
-    progress = pyqtSignal(int)
-    error = pyqtSignal(str)
-    status = pyqtSignal(str)
-
-    def __init__(self):
-        super().__init__()
-        self.finished.connect(print)
-        self.progress.connect(print)
-        self.error.connect(print)
-        self.status.connect(print)
-
-    def terminate(self) -> None:
-        self.error.emit("Thread termination requested")
-        super().terminate()
 
 
 class CryoParamSetupWorker(Worker):
@@ -210,14 +192,6 @@ class CalibrationWorker(Worker):
             q0_utils.Q0AbortError,
         ) as e:
             self.error.emit(str(e))
-
-
-def make_error_popup(title, message: str):
-    popup = QMessageBox()
-    popup.setIcon(QMessageBox.Critical)
-    popup.setWindowTitle(title)
-    popup.setText(message)
-    popup.exec()
 
 
 class CavAmpControl:
