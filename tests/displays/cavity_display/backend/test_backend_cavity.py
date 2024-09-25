@@ -267,10 +267,11 @@ class TestBackendCavity(TestCase):
 
         # Edge Case for Empty Fault
         cavity1.faults = OrderedDict()
-        empty_result = cavity1.get_fault_counts(start_time, end_time)
+        empty_result: DefaultDict[str, FaultCounter] = cavity1.get_fault_counts(
+            start_time, end_time
+        )
+        self.assertEqual(len(empty_result), 0)
 
-        # Do your asserts here
-        # assert empty by length = 0
         # 4. Need to verify get_fault_count_over_time_range was called for each fault
         for fault in mock_faults:
             fault.get_fault_count_over_time_range.assert_called_once_with(
