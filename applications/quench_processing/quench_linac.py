@@ -52,16 +52,6 @@ class QuenchCavity(Cavity):
         return self._current_q_loaded_pv_obj
 
     @property
-    def hw_mode_pv_obj(self) -> PV:
-        if not self._hw_mode_pv_obj:
-            self._hw_mode_pv_obj = PV(self.hw_mode_pv)
-        return self._hw_mode_pv_obj
-
-    @property
-    def hw_mode(self):
-        return self.hw_mode_pv_obj.get()
-
-    @property
     def quench_latch_pv_obj(self) -> PV:
         if not self._quench_latch_pv_obj:
             self._quench_latch_pv_obj = PV(self.quench_latch_pv)
@@ -212,8 +202,8 @@ class QuenchCavity(Cavity):
             print(f"Waiting 0.1s to give {self} waveforms a chance to update")
             sleep(0.1)
 
-        time_data = self.fault_time_waveform_pv_obj.value
-        fault_data = self.fault_waveform_pv_obj.value
+        time_data = self.fault_time_waveform_pv_obj.get()
+        fault_data = self.fault_waveform_pv_obj.get()
         time_0 = 0
 
         # Look for time 0 (quench). These waveforms capture data beforehand
