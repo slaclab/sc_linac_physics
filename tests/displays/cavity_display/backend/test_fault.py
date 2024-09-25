@@ -1,21 +1,23 @@
 from unittest import TestCase, mock
-from unittest.mock import MagicMock
-
+from unittest.mock import MagicMock, patch
 from lcls_tools.common.controls.pyepics.utils import (
     make_mock_pv,
     EPICS_INVALID_VAL,
     PVInvalidError,
 )
-from lcls_tools.common.data.archiver import ArchiverValue
+from lcls_tools.common.data.archiver import ArchiverValue, ArchiveDataHandler
 
 archiver_value = ArchiverValue()
-archive_mock = MagicMock(return_value={"PV": archiver_value})
-with mock.patch("lcls_tools.common.data.archiver.get_data_at_time", archive_mock):
-    from displays.cavity_display.backend.fault import Fault
+get_data_at_time_mock = MagicMock(return_value={"PV": archiver_value})
+get_values_over_time_range_mock = MagicMock(return_value={"PV": ArchiveDataHandler([archiver_value])})
 
+@patch.multiple('lcls_tools.common.data.archiver',
+                get_data_at_time=get_data_at_time_mock,
+                get_values_over_time_range=get_values_over_time_range_mock)
 
 class TestFault(TestCase):
     def setUp(self):
+        from displays.cavity_display.backend.fault import Fault, FaultCounter
         self.fault = Fault(severity=0)
 
     def test_pv_obj(self):
@@ -63,3 +65,8 @@ class TestFault(TestCase):
     def test_get_fault_count_over_time_range(self):
 
         self.skipTest("Not yet implemented")
+    # Double checking that the patch.multiple is working.
+    def test_mocks_are_applied(self):
+        from lcls_tools.common.data.archiver import get_data_at_time, get_values_over_time_range
+        self.assertEqual(get_data_at_time, get_data_at_time_mock)
+        self.assertEqual(get_values_over_time_range, get_values_over_time_range_mock)
