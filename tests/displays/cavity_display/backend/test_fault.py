@@ -6,6 +6,7 @@ from lcls_tools.common.controls.pyepics.utils import (
     PVInvalidError,
 )
 from lcls_tools.common.data.archiver import ArchiverValue, ArchiveDataHandler
+from datetime import datetime
 
 archiver_value = ArchiverValue()
 get_data_at_time_mock = MagicMock(return_value={"PV": archiver_value})
@@ -56,11 +57,12 @@ class TestFault(TestCase):
         pv: MagicMock = make_mock_pv()
         self.assertRaises(Exception, self.fault.is_faulted, pv)
 
-    # def test_was_faulted(self):
-    #     self.fault.pv = "PV"
-    #     self.fault.is_faulted = MagicMock()
-    #     self.fault.was_faulted(datetime.now())
-    #     self.fault.is_faulted.assert_called_with(archiver_value)
+    @patch('displays.cavity_display.backend.fault.get_data_at_time', get_data_at_time_mock)
+    def test_was_faulted(self):
+        self.fault.pv = "PV"
+        self.fault.is_faulted = MagicMock()
+        self.fault.was_faulted(datetime.now())
+        self.fault.is_faulted.assert_called_with(archiver_value)
 
     def test_get_fault_count_over_time_range(self):
 
