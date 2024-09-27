@@ -37,8 +37,8 @@ from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 class QuenchGUI(Display):
     quench_signal = Signal(int)
 
-    def __init__(self, parent=None, args=None):
-        super().__init__(parent=parent, args=args)
+    def __init__(self):
+        super().__init__()
         self.setWindowTitle("Quench Processing")
         self.main_vlayout: QVBoxLayout = QVBoxLayout()
         self.setLayout(self.main_vlayout)

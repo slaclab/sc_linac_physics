@@ -18,6 +18,7 @@ app = QApplication(sys.argv)
 class TestQuenchGUI(TestCase):
     @classmethod
     def setUpClass(cls):
+        print("Testing Quench GUI")
         cls.test_num = 0
         cls.non_hl_iterator = QUENCH_MACHINE.non_hl_iterator
 
@@ -39,6 +40,10 @@ class TestQuenchGUI(TestCase):
 
     def tearDown(self) -> None:
         app.closeAllWindows()
+
+    @classmethod
+    def tearDownClass(cls):
+        print("Done testing quench gui")
 
     def test_handle_status(self):
         self.gui.handle_status(self.msg)
