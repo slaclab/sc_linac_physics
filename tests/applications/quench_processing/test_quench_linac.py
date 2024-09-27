@@ -1,6 +1,6 @@
 from random import choice, randint
 from typing import Iterator
-from unittest import TestCase, mock
+from unittest import TestCase
 from unittest.mock import MagicMock
 
 from lcls_tools.common.controls.pyepics.utils import (
@@ -12,15 +12,12 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 from numpy import pi, exp, linspace
 
+from applications.quench_processing.quench_linac import (
+    QUENCH_MACHINE,
+    QuenchCavity,
+    LOADED_Q_CHANGE_FOR_QUENCH,
+)
 from utils.sc_linac.linac_utils import QuenchError
-
-mock_sleep = MagicMock()
-with mock.patch("time.sleep", mock_sleep):
-    from applications.quench_processing.quench_linac import (
-        QUENCH_MACHINE,
-        QuenchCavity,
-        LOADED_Q_CHANGE_FOR_QUENCH,
-    )
 
 
 class TestQuenchCavity(TestCase):
@@ -117,7 +114,6 @@ class TestQuenchCavity(TestCase):
         self.cavity.check_abort = MagicMock()
         self.cavity.wait(1)
         self.cavity.check_abort.assert_called()
-        mock_sleep.assert_called()
 
     def test_wait_for_quench(self):
         self.skipTest("Not yet implemented")

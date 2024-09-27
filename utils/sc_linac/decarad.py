@@ -52,6 +52,9 @@ class Decarad(SCLinacObject):
             head: DecaradHead(number=head, decarad=self) for head in range(1, 11)
         }
 
+    def __eq__(self, other):
+        return isinstance(other, Decarad) and other.number == self.number
+
     @property
     def power_control_pv_obj(self) -> PV:
         if not self._power_control_pv_obj:

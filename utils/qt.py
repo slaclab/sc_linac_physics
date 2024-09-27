@@ -1,5 +1,9 @@
+from typing import List
+
+import numpy as np
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import QPushButton, QGroupBox, QGridLayout, QLabel, QMessageBox
+from matplotlib import pyplot as plt
 from pydm.widgets import PyDMLabel, PyDMEnumComboBox, PyDMSpinbox
 
 
@@ -73,3 +77,8 @@ def make_error_popup(title, message: str):
     popup.setWindowTitle(title)
     popup.setText(message)
     popup.exec()
+
+
+def make_rainbow(num_colors) -> List[List[int]]:
+    colormap = plt.cm.gist_rainbow
+    return colormap(np.linspace(0, 1, num_colors), bytes=True)

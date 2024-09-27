@@ -1,6 +1,5 @@
 from typing import Dict, Optional
 
-import numpy as np
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
@@ -13,13 +12,11 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QDoubleSpinBox,
 )
-from epics import camonitor_clear
 from lcls_tools.common.frontend.plotting.util import (
     WaveformPlotParams,
     TimePlotParams,
     WaveformPlotUpdater,
 )
-from matplotlib import pyplot as plt
 from pydm import Display
 from pydm.widgets import PyDMWaveformPlot, PyDMTimePlot, PyDMLabel
 from pydm.widgets.timeplot import updateMode
@@ -31,7 +28,7 @@ from applications.quench_processing.quench_linac import (
     QuenchCryomodule,
 )
 from applications.quench_processing.quench_worker import QuenchWorker
-from utils.qt import RFControls
+from utils.qt import RFControls, make_rainbow
 from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.decarad import Decarad
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
@@ -211,6 +208,10 @@ class QuenchGUI(Display):
     def process(self):
         self.start_button.setEnabled(False)
         self.current_cav.decarad = self.current_decarad
+        self.make_quench_worker()
+        self.quench_worker.start()
+
+    def make_quench_worker(self):
         self.quench_worker = QuenchWorker(
             cavity=self.current_cav,
             start_amp=self.start_amp_spinbox.value(),
@@ -222,14 +223,11 @@ class QuenchGUI(Display):
         self.quench_worker.error.connect(self.handle_error)
         self.quench_worker.finished.connect(self.handle_finished)
 
-        self.quench_worker.start()
-
     @staticmethod
     def clear_connections(signal: Signal):
         try:
             signal.disconnect()
         except TypeError:
-            print(f"No connections to remove for {signal}")
             pass
 
     def clear_all_connections(self):
@@ -260,12 +258,11 @@ class QuenchGUI(Display):
         for head in self.current_decarad.heads.values():
             channels.append(head.avg_dose_rate_pv)
 
-        colormap = plt.cm.gist_rainbow
-        colors = colormap(np.linspace(0, 1, len(channels)), bytes=True)
+        colors = make_rainbow(len(channels))
 
         for idx, channel in enumerate(channels):
-            color = colors[idx]
-            rga_color = QColor(color[0], color[1], color[2], color[3])
+            r, g, b, alpha = colors[idx]
+            rga_color = QColor(r, g, b, alpha)
             self.amp_rad_timeplot.addYChannel(
                 y_channel=channel,
                 useArchiveData=True,
@@ -289,8 +286,6 @@ class QuenchGUI(Display):
         self.decarad_voltage_readback.channel = self.current_decarad.voltage_readback_pv
 
     def update_cm(self):
-        if self.current_cav:
-            camonitor_clear(self.current_cav.quench_latch_pv)
 
         self.clear_all_connections()
 
@@ -316,7 +311,6 @@ class QuenchGUI(Display):
         self.rf_controls.srf_max_spinbox.channel = self.current_cav.srf_max_pv
         self.rf_controls.srf_max_readback_label.channel = self.current_cav.srf_max_pv
 
-        # TODO launch a QThread
         self.start_button.clicked.connect(self.process)
         self.abort_button.clicked.connect(self.current_cav.request_abort)
 
