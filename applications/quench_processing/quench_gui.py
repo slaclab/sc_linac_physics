@@ -17,7 +17,7 @@ from lcls_tools.common.frontend.plotting.util import (
     TimePlotParams,
     WaveformPlotUpdater,
 )
-from pydm import Display, data_plugins
+from pydm import Display
 from pydm.widgets import PyDMWaveformPlot, PyDMTimePlot, PyDMLabel
 from pydm.widgets.timeplot import updateMode
 from qtpy.QtCore import Signal
@@ -32,8 +32,6 @@ from utils.qt import RFControls, make_rainbow
 from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.decarad import Decarad
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
-
-data_plugins
 
 
 class QuenchGUI(Display):

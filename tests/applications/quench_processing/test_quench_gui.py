@@ -1,5 +1,4 @@
 import sys
-import unittest
 from random import choice
 from unittest import TestCase
 from unittest.mock import MagicMock, call
@@ -14,7 +13,6 @@ from utils.qt import make_rainbow
 from utils.sc_linac.decarad import Decarad
 
 
-@unittest.skip("pydm display seems to be causing problems with unittest discover")
 class TestQuenchGUI(TestCase):
     @classmethod
     def setUpClass(cls):
