@@ -82,3 +82,11 @@ def make_error_popup(title, message: str):
 def make_rainbow(num_colors) -> List[List[int]]:
     colormap = plt.cm.gist_rainbow
     return colormap(np.linspace(0, 1, num_colors), bytes=True)
+
+
+def highlight_text(r, g, b, text):
+    """
+    taken from stack overflow
+    https://stackoverflow.com/questions/70519979/printing-with-rgb-background
+    """
+    return f"\033[48;2;{r};{g};{b}m{text}\033[0m"
