@@ -12,6 +12,11 @@ from applications.quench_processing.quench_worker import QuenchWorker
 from utils.qt import make_rainbow
 from utils.sc_linac.decarad import Decarad
 
+if not QApplication.instance():
+    app = QApplication(sys.argv)
+else:
+    app = QApplication.instance()
+
 
 class TestQuenchGUI(TestCase):
     @classmethod
@@ -19,7 +24,6 @@ class TestQuenchGUI(TestCase):
         print("Testing Quench GUI")
         cls.test_num = 0
         cls.non_hl_iterator = QUENCH_MACHINE.non_hl_iterator
-        cls.app = QApplication(sys.argv)
 
     def setUp(self):
         self.gui = QuenchGUI()
@@ -38,7 +42,7 @@ class TestQuenchGUI(TestCase):
         self.msg = msg
 
     def tearDown(self) -> None:
-        self.app.closeAllWindows()
+        app.closeAllWindows()
 
     @classmethod
     def tearDownClass(cls):
