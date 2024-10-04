@@ -8,7 +8,6 @@ from pydm import Display
 from pyqtgraph import PlotWidget, plot
 
 import q0_gui_utils
-import utils.qt
 from q0_gui_utils import CalibrationWorker
 from q0_linac import Q0Cryomodule, Q0_CRYOMODULES
 from q0_utils import ValveParams
