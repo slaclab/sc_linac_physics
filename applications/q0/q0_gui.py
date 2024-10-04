@@ -12,6 +12,7 @@ import utils.qt
 from q0_gui_utils import CalibrationWorker
 from q0_linac import Q0Cryomodule, Q0_CRYOMODULES
 from q0_utils import ValveParams
+from utils.qt import make_error_popup
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
@@ -299,7 +300,7 @@ class Q0GUI(Display):
             self.selectedCM, heater_setpoint=self.ui.ref_heat_spinbox.value()
         )
         self.cryo_param_setup_worker.error.connect(
-            partial(utils.qt.make_error_popup, "Cryo Setup Error")
+            partial(make_error_popup, "Cryo Setup Error")
         )
         self.cryo_param_setup_worker.start()
 
@@ -363,7 +364,7 @@ class Q0GUI(Display):
             desired_amplitudes=self.desiredCavityAmplitudes,
         )
         self.q0_meas_worker.error.connect(
-            partial(utils.qt.make_error_popup, "Q0 Measurement Error")
+            partial(make_error_popup, "Q0 Measurement Error")
         )
         self.q0_meas_worker.error.connect(self.selectedCM.shut_off)
         self.q0_meas_worker.finished.connect(self.handle_rf_status)
