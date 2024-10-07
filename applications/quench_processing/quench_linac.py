@@ -111,9 +111,6 @@ class QuenchCavity(Cavity):
         sleep(seconds - int(seconds))
 
     def wait_for_quench(self) -> Optional[float]:
-        if not self.is_quenched:
-            print("cannot process unquenched cavity")
-            return None
         # wait 1s before resetting just in case
         sleep(1)
         self.reset_interlocks()
