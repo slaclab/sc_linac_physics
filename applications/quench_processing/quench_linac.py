@@ -186,7 +186,7 @@ class QuenchCavity(Cavity):
                     time_to_quench < MAX_WAIT_TIME_FOR_QUENCH
                     and attempt < MAX_QUENCH_RETRIES
                 ):
-                    self.check_abort()
+                    super().check_abort()
                     time_to_quench = self.wait_for_quench()
                     running_times.append(time_to_quench)
                     attempt += 1
@@ -201,7 +201,7 @@ class QuenchCavity(Cavity):
                     raise QuenchError("Quench processing failed")
 
         while self.wait_for_quench() < QUENCH_STABLE_TIME:
-            self.check_abort()
+            super().check_abort()
 
     def validate_quench(self, wait_for_update: bool = False):
         """
