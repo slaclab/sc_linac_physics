@@ -2,7 +2,11 @@ from typing import Dict, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-from utils.sc_linac.linac_utils import SCLinacObject, DECARAD_BACKGROUND_READING
+from utils.sc_linac.linac_utils import (
+    SCLinacObject,
+    DECARAD_BACKGROUND_READING_AVG,
+    DECARAD_BACKGROUND_READING_RAW,
+)
 
 
 class DecaradHead(SCLinacObject):
@@ -41,11 +45,11 @@ class DecaradHead(SCLinacObject):
 
     @property
     def normalized_avg_dose(self) -> float:
-        return max(self.avg_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING, 0)
+        return max(self.avg_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING_AVG, 0)
 
     @property
     def normalized_raw_dose(self) -> float:
-        return max(self.raw_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING, 0)
+        return max(self.raw_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING_RAW, 0)
 
 
 class Decarad(SCLinacObject):
