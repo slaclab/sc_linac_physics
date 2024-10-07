@@ -256,7 +256,7 @@ class QuenchGUI(Display):
 
         channels = [self.current_cav.aact_pv]
         for head in self.current_decarad.heads.values():
-            channels.append(head.avg_dose_rate_pv)
+            channels.append(head.raw_dose_rate_pv)
 
         colors = make_rainbow(len(channels))
 
@@ -286,7 +286,6 @@ class QuenchGUI(Display):
         self.decarad_voltage_readback.channel = self.current_decarad.voltage_readback_pv
 
     def update_cm(self):
-
         self.clear_all_connections()
 
         self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[
