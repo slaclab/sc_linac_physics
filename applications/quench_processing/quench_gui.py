@@ -182,7 +182,7 @@ class QuenchGUI(Display):
         self.step_size_spinbox.setValue(0.2)
 
         self.stop_amp_spinbox.setMinimum(0)
-        self.stop_amp_spinbox.setMaximum(21)
+        self.stop_amp_spinbox.setMaximum(22)
         self.stop_amp_spinbox.setValue(21)
 
         self.step_time_spinbox.setMinimum(0.1)
@@ -263,6 +263,7 @@ class QuenchGUI(Display):
         for idx, channel in enumerate(channels):
             r, g, b, alpha = colors[idx]
             rga_color = QColor(r, g, b, alpha)
+            # TODO make amp line thicker
             self.amp_rad_timeplot.addYChannel(
                 y_channel=channel,
                 useArchiveData=True,
