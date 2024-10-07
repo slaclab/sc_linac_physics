@@ -175,7 +175,7 @@ class QuenchGUI(Display):
 
     def create_processing_spinboxes(self):
         self.start_amp_spinbox.setMinimum(0)
-        self.start_amp_spinbox.setMaximum(21)
+        self.start_amp_spinbox.setMaximum(22)
         self.start_amp_spinbox.setValue(5)
 
         self.step_size_spinbox.setMinimum(0)

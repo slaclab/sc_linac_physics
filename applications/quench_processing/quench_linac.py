@@ -177,7 +177,7 @@ class QuenchCavity(Cavity):
             )
 
             if self.is_quenched:
-                print(f"Detected quench for {self}")
+                print(f"{datetime.datetime.now()} Detected quench for {self}")
                 attempt = 0
                 running_times = []
                 time_to_quench = self.wait_for_quench()
