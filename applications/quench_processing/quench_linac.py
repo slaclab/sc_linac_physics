@@ -89,7 +89,7 @@ class QuenchCavity(Cavity):
             self._interlock_reset_pv_obj = PV(self.interlock_reset_pv)
 
         self._interlock_reset_pv_obj.put(1)
-        sleep(time_after_reset)
+        self.wait_for_decarads()
 
     def walk_to_quench(
         self,
@@ -102,8 +102,7 @@ class QuenchCavity(Cavity):
             self.check_abort()
             self.wait(step_time)
             self.ades = min(self.ades + step_size, end_amp)
-
-        self.wait_for_decarads()
+            self.wait_for_decarads()
 
     def wait(self, seconds: float):
         for _ in range(int(seconds)):
@@ -130,7 +129,6 @@ class QuenchCavity(Cavity):
             sleep(1)
 
         time_done = datetime.datetime.now()
-        self.wait_for_decarads()
 
         return (time_done - time_start).total_seconds()
 

@@ -87,6 +87,7 @@ class TestQuenchCavity(TestCase):
 
     def test_reset_interlocks(self):
         self.cavity._interlock_reset_pv_obj = make_mock_pv()
+        self.cavity._quench_latch_pv_obj = make_mock_pv()
         self.cavity.reset_interlocks()
         self.cavity._interlock_reset_pv_obj.put.assert_called_with(1)
 
