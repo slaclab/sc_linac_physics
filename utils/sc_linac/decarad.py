@@ -17,7 +17,9 @@ class DecaradHead(SCLinacObject):
         self._pv_prefix = self.decarad.pv_addr("{:02d}:".format(self.number))
 
         self.avg_dose_rate_pv: str = self.pv_addr("GAMMAAVE")
+        self.raw_dose_rate_pv: str = self.pv_addr("GAMMA_DOSE_RATE")
         self._avg_dose_rate_pv_obj: Optional[PV] = None
+        self._raw_dose_rate_pv_obj: Optional[PV] = None
 
         self.counter = 0
 
@@ -32,8 +34,18 @@ class DecaradHead(SCLinacObject):
         return self._avg_dose_rate_pv_obj
 
     @property
+    def raw_dose_rate_pv_obj(self) -> PV:
+        if not self._raw_dose_rate_pv_obj:
+            self._raw_dose_rate_pv_obj = PV(self.raw_dose_rate_pv)
+        return self._raw_dose_rate_pv_obj
+
+    @property
     def normalized_avg_dose(self) -> float:
         return max(self.avg_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING, 0)
+
+    @property
+    def normalized_raw_dose(self) -> float:
+        return max(self.raw_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING, 0)
 
 
 class Decarad(SCLinacObject):
@@ -72,5 +84,9 @@ class Decarad(SCLinacObject):
         return self._pv_prefix
 
     @property
-    def max_avg_dose(self):
+    def max_avg_dose(self) -> float:
         return max([head.normalized_avg_dose for head in self.heads.values()])
+
+    @property
+    def max_raw_dose(self) -> float:
+        return max([head.normalized_raw_dose for head in self.heads.values()])

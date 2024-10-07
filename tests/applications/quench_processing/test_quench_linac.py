@@ -98,7 +98,7 @@ class TestQuenchCavity(TestCase):
         self.cavity._ades_pv_obj = make_mock_pv(get_val=end_amp)
         self.cavity.check_abort = MagicMock()
         self.cavity.wait = MagicMock()
-        self.cavity.walk_to_quench_limit(end_amp=end_amp)
+        self.cavity.walk_to_quench(end_amp=end_amp)
 
         self.cavity.wait.assert_not_called()
         self.cavity._ades_pv_obj.put.assert_not_called()
@@ -121,8 +121,8 @@ class TestQuenchCavity(TestCase):
 
     def test_check_abort(self):
         self.cavity.decarad = MagicMock()
-        self.cavity.decarad.max_avg_dose = randint(0, 100)
-        if self.cavity.decarad.max_avg_dose > 50:
+        self.cavity.decarad.max_raw_dose = randint(0, 5)
+        if self.cavity.decarad.max_raw_dose > 2:
             self.assertRaises(QuenchError, self.cavity.check_abort)
         else:
             self.cavity.check_abort()

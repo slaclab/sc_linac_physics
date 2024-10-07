@@ -18,6 +18,7 @@ LOADED_Q_CHANGE_FOR_QUENCH = 0.6
 MAX_WAIT_TIME_FOR_QUENCH = 30
 QUENCH_STABLE_TIME = 30 * 60
 MAX_QUENCH_RETRIES = 20
+DECARAD_SETTLE_TIME = 5
 
 
 class QuenchCavity(Cavity):
@@ -90,7 +91,7 @@ class QuenchCavity(Cavity):
         self._interlock_reset_pv_obj.put(1)
         sleep(time_after_reset)
 
-    def walk_to_quench_limit(
+    def walk_to_quench(
         self,
         end_amp: float = 21,
         step_size: float = 0.2,
@@ -101,6 +102,8 @@ class QuenchCavity(Cavity):
             self.check_abort()
             self.wait(step_time)
             self.ades = min(self.ades + step_size, end_amp)
+
+        self.wait_for_decarads()
 
     def wait(self, seconds: float):
         for _ in range(int(seconds)):
@@ -115,21 +118,37 @@ class QuenchCavity(Cavity):
         # wait 1s before resetting just in case
         sleep(1)
         self.reset_interlocks()
-        start = datetime.datetime.now()
+        time_start = datetime.datetime.now()
         print(f"{datetime.datetime.now()} Waiting for {self} to quench")
 
         while (
             not self.is_quenched
-            and (datetime.datetime.now() - start).total_seconds()
+            and (datetime.datetime.now() - time_start).total_seconds()
             < MAX_WAIT_TIME_FOR_QUENCH
         ):
             self.check_abort()
             sleep(1)
-        return (datetime.datetime.now() - start).total_seconds()
+
+        time_done = datetime.datetime.now()
+        self.wait_for_decarads()
+
+        return (time_done - time_start).total_seconds()
+
+    def wait_for_decarads(self):
+        if self.is_quenched:
+            print(
+                f"Detected {self} quench, waiting {DECARAD_SETTLE_TIME}s for decarads to settle"
+            )
+            start = datetime.datetime.now()
+            while (
+                datetime.datetime.now() - start
+            ).total_seconds() < DECARAD_SETTLE_TIME:
+                super().check_abort()
+                sleep(1)
 
     def check_abort(self):
         super().check_abort()
-        if self.decarad.max_avg_dose > 50:
+        if self.decarad.max_raw_dose > 2:
             raise QuenchError("Max Radiation Dose Exceeded")
 
     def quench_process(
@@ -153,7 +172,7 @@ class QuenchCavity(Cavity):
             self.check_abort()
 
             print(f"Walking {self} to quench")
-            self.walk_to_quench_limit(
+            self.walk_to_quench(
                 end_amp=end_amp,
                 step_size=step_size,
                 step_time=step_time,
