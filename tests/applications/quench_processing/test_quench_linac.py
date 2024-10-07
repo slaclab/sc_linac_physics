@@ -16,6 +16,7 @@ from applications.quench_processing.quench_linac import (
     QUENCH_MACHINE,
     QuenchCavity,
     LOADED_Q_CHANGE_FOR_QUENCH,
+    QUENCH_STABLE_TIME,
 )
 from utils.sc_linac.linac_utils import QuenchError
 
@@ -97,7 +98,7 @@ class TestQuenchCavity(TestCase):
         self.cavity._ades_pv_obj = make_mock_pv(get_val=end_amp)
         self.cavity.check_abort = MagicMock()
         self.cavity.wait = MagicMock()
-        self.cavity.walk_to_quench(end_amp=end_amp)
+        self.cavity.walk_to_quench_limit(end_amp=end_amp)
 
         self.cavity.wait.assert_not_called()
         self.cavity._ades_pv_obj.put.assert_not_called()
@@ -128,16 +129,19 @@ class TestQuenchCavity(TestCase):
 
     def test_quench_process(self):
         # TODO test actual processing
-        amp = randint(5, 21)
+        start_amp = randint(5, 15)
+        end_amp = randint(15, 21)
         self.cavity.turn_off = MagicMock()
-        self.cavity._ades_pv_obj = make_mock_pv(get_val=amp)
+        self.cavity._ades_pv_obj = make_mock_pv(get_val=start_amp)
         self.cavity.set_sela_mode = MagicMock()
         self.cavity.turn_on = MagicMock()
-        self.cavity._ades_max_pv_obj = make_mock_pv(get_val=amp)
+        self.cavity._ades_max_pv_obj = make_mock_pv(get_val=start_amp)
+        self.cavity._quench_latch_pv_obj = make_mock_pv()
+        self.cavity.wait_for_quench = MagicMock(return_value=QUENCH_STABLE_TIME * 2)
 
-        self.cavity.quench_process(start_amp=amp, end_amp=amp)
+        self.cavity.quench_process(start_amp=start_amp, end_amp=end_amp)
         self.cavity.turn_off.assert_called()
-        self.cavity._ades_pv_obj.put.assert_called_with(amp)
+        self.cavity._ades_pv_obj.put.assert_called_with(min(5.0, start_amp))
         self.cavity.set_sela_mode.assert_called()
         self.cavity.turn_on.assert_called()
         self.cavity._ades_max_pv_obj.get.assert_called()
