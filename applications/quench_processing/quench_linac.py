@@ -173,7 +173,7 @@ class QuenchCavity(Cavity):
             self.walk_to_quench(
                 end_amp=end_amp,
                 step_size=step_size,
-                step_time=step_time if not quenched else 5 * 60,
+                step_time=step_time if not quenched else 3 * 60,
             )
 
             if self.is_quenched:
