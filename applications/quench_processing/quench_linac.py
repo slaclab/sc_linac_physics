@@ -100,8 +100,8 @@ class QuenchCavity(Cavity):
         self.reset_interlocks()
         while not self.is_quenched and self.ades < end_amp:
             self.check_abort()
-            self.wait(step_time)
             self.ades = min(self.ades + step_size, end_amp)
+            self.wait(step_time - DECARAD_SETTLE_TIME)
             self.wait_for_decarads()
 
     def wait(self, seconds: float):
@@ -163,6 +163,8 @@ class QuenchCavity(Cavity):
             print(f"{end_amp} above AMAX, ramping to {self.ades_max} instead")
             end_amp = self.ades_max
 
+        quenched = False
+
         while self.ades < end_amp:
             self.check_abort()
 
@@ -170,10 +172,11 @@ class QuenchCavity(Cavity):
             self.walk_to_quench(
                 end_amp=end_amp,
                 step_size=step_size,
-                step_time=step_time,
+                step_time=step_time if not quenched else 5 * 60,
             )
 
             if self.is_quenched:
+                quenched = True
                 print(f"{datetime.datetime.now()} Detected quench for {self}")
                 attempt = 0
                 running_times = []
