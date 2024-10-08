@@ -100,8 +100,9 @@ class QuenchCavity(Cavity):
         self.reset_interlocks()
         while not self.is_quenched and self.ades < end_amp:
             self.check_abort()
-            self.ades = min(self.ades + step_size, end_amp)
+            # waiting before the increase in case it immediately quenches
             self.wait(step_time - DECARAD_SETTLE_TIME)
+            self.ades = min(self.ades + step_size, end_amp)
             self.wait_for_decarads()
 
     def wait(self, seconds: float):
