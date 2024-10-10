@@ -103,7 +103,7 @@ class TestQuenchGUI(TestCase):
 
         colors = make_rainbow(num_colors=11)
         channels = [self.cavity.aact_pv] + [
-            head.avg_dose_rate_pv for head in Decarad(decarad).heads.values()
+            head.raw_dose_rate_pv for head in Decarad(decarad).heads.values()
         ]
         axes = ["Amplitude"] + ["Radiation" for _ in range(10)]
         calls = []
