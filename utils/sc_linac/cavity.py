@@ -439,10 +439,14 @@ class Cavity(linac_utils.SCLinacObject):
         return f"C={self.number},RFS={rfs},R={r},CM={cm},ID={macro_id},CH={ch}"
 
     @property
-    def hw_mode(self):
+    def hw_mode_pv_obj(self) -> PV:
         if not self._hw_mode_pv_obj:
             self._hw_mode_pv_obj = PV(self.hw_mode_pv)
-        return self._hw_mode_pv_obj.get()
+        return self._hw_mode_pv_obj
+
+    @property
+    def hw_mode(self):
+        return self.hw_mode_pv_obj.get()
 
     @property
     def is_online(self) -> bool:

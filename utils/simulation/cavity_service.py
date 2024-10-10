@@ -170,6 +170,12 @@ class CavityPVGroup(PVGroup):
         enum_strings=("", "Reset"),
         value=0,
     )
+    quench_latch: PvpropertyEnum = pvproperty(
+        value=0,
+        name="QUENCH_LTCH",
+        dtype=ChannelType.ENUM,
+        enum_strings=("Ok", "Fault"),
+    )
     probe_cal_start: PvpropertyInteger = pvproperty(name="PROBECALSTRT", value=0)
     probe_cal_stat: PvpropertyEnum = pvproperty(
         name="PROBECALSTS",
@@ -235,6 +241,18 @@ class CavityPVGroup(PVGroup):
                 datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
             )
             await self.probe_cal_start.write(0)
+
+    @interlock_reset.putter
+    async def interlock_reset(self, instance, value):
+        # TODO clear all other faults
+        await self.quench_latch.write(0)
+        await self.aact.write(self.ades.value)
+        await self.amean.write(self.ades.value)
+
+    @quench_latch.putter
+    async def quench_latch(self, instance, value):
+        await self.aact.write(0)
+        await self.amean.write(0)
 
     @ades.putter
     async def ades(self, instance, value):

@@ -51,12 +51,6 @@ class CavFaultPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("Ok", "Fault"),
     )
-    quench_latch: PvpropertyEnum = pvproperty(
-        value=0,
-        name="QUENCH_LTCH",
-        dtype=ChannelType.ENUM,
-        enum_strings=("Ok", "Fault"),
-    )
     res_chas_sum: PvpropertyEnum = pvproperty(
         value=0,
         name="RESINTLK_LTCH",

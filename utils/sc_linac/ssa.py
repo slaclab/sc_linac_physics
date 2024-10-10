@@ -168,7 +168,10 @@ class SSA(linac_utils.SCLinacObject):
             self.cavity.check_abort()
             self.run_calibration()
 
-        except (linac_utils.SSACalibrationToleranceError, linac_utils.SSACalibrationError) as e:
+        except (
+            linac_utils.SSACalibrationToleranceError,
+            linac_utils.SSACalibrationError,
+        ) as e:
             if attempt < 3:
                 self.calibrate(drive_max, attempt + 1)
             else:
@@ -194,7 +197,7 @@ class SSA(linac_utils.SCLinacObject):
 
     def turn_on(self):
         if not self.is_on:
-            # Check to see if SSA is hard faulted first (self.reset() tries a set
+            # Check to see if SSA is hard faulted first (cls.reset() tries a set
             # number of times before raising an error)
             self.reset()
 
@@ -245,7 +248,10 @@ class SSA(linac_utils.SCLinacObject):
             while self.is_resetting:
                 sleep(1)
 
-            if self.is_faulted and reset_attempt >= linac_utils.INTERLOCK_RESET_ATTEMPTS:
+            if (
+                self.is_faulted
+                and reset_attempt >= linac_utils.INTERLOCK_RESET_ATTEMPTS
+            ):
                 raise linac_utils.SSAFaultError(
                     f"{self} failed to reset {linac_utils.INTERLOCK_RESET_ATTEMPTS}x"
                 )
@@ -281,7 +287,10 @@ class SSA(linac_utils.SCLinacObject):
 
     @property
     def calibration_result_good(self) -> bool:
-        return self.cal_result_status_pv_obj.get() == linac_utils.SSA_RESULT_GOOD_STATUS_VALUE
+        return (
+            self.cal_result_status_pv_obj.get()
+            == linac_utils.SSA_RESULT_GOOD_STATUS_VALUE
+        )
 
     def run_calibration(self, save_slope: bool = False):
         """
