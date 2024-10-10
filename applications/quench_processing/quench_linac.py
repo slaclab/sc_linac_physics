@@ -112,7 +112,7 @@ class QuenchCavity(Cavity):
                 return
         sleep(seconds - int(seconds))
 
-    def wait_for_quench(self) -> Optional[float]:
+    def wait_for_quench(self, time_to_wait=MAX_WAIT_TIME_FOR_QUENCH) -> Optional[float]:
         # wait 1s before resetting just in case
         sleep(1)
         self.reset_interlocks()
@@ -121,8 +121,7 @@ class QuenchCavity(Cavity):
 
         while (
             not self.is_quenched
-            and (datetime.datetime.now() - time_start).total_seconds()
-            < MAX_WAIT_TIME_FOR_QUENCH
+            and (datetime.datetime.now() - time_start).total_seconds() < time_to_wait
         ):
             self.check_abort()
             sleep(1)
@@ -205,7 +204,12 @@ class QuenchCavity(Cavity):
                     print(f"Running times: {running_times}")
                     raise QuenchError("Quench processing failed")
 
-        while self.wait_for_quench() < QUENCH_STABLE_TIME:
+        while (
+            self.wait_for_quench(time_to_wait=QUENCH_STABLE_TIME) < QUENCH_STABLE_TIME
+        ):
+            print(
+                f"{datetime.datetime.now()}{self} made it to target amplitude, waiting {QUENCH_STABLE_TIME}s to prove stability"
+            )
             super().check_abort()
 
     def validate_quench(self, wait_for_update: bool = False):
