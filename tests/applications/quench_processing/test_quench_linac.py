@@ -122,6 +122,7 @@ class TestQuenchCavity(TestCase):
         self.skipTest("Not yet implemented")
 
     def test_check_abort(self):
+        # TODO check liquid level error
         self.cavity.decarad = MagicMock()
         self.cavity.decarad.max_raw_dose = randint(0, 5)
         if self.cavity.decarad.max_raw_dose > 2:

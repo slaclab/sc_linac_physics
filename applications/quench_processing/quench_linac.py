@@ -117,7 +117,7 @@ class QuenchCavity(Cavity):
         sleep(1)
         self.reset_interlocks()
         time_start = datetime.datetime.now()
-        print(f"{datetime.datetime.now()} Waiting for {self} to quench")
+        print(f"{datetime.datetime.now()} Waiting {time_to_wait}s for {self} to quench")
 
         while (
             not self.is_quenched
@@ -146,6 +146,8 @@ class QuenchCavity(Cavity):
         super().check_abort()
         if self.decarad.max_raw_dose > 2:
             raise QuenchError("Max Radiation Dose Exceeded")
+        if self.cryomodule.ds_level > 93:
+            raise QuenchError("Potential uncaught quench detected")
 
     def quench_process(
         self,
