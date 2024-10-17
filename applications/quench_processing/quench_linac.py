@@ -12,7 +12,7 @@ from utils.sc_linac.cavity import Cavity
 from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.decarad import Decarad
 from utils.sc_linac.linac import Machine
-from utils.sc_linac.linac_utils import QuenchError
+from utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
 
 LOADED_Q_CHANGE_FOR_QUENCH = 0.6
 MAX_WAIT_TIME_FOR_QUENCH = 30
@@ -146,7 +146,7 @@ class QuenchCavity(Cavity):
         super().check_abort()
         if self.decarad.max_raw_dose > 2:
             raise QuenchError("Max Radiation Dose Exceeded")
-        if self.cryomodule.ds_level > 93:
+        if self.is_on and self.rf_mode == RF_MODE_SELA and self.aact <= 0.7 * self.ades:
             raise QuenchError("Potential uncaught quench detected")
 
     def quench_process(
