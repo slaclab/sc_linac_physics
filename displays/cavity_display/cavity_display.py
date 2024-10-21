@@ -8,14 +8,15 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QGroupBox,
 )
+from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
 from pydm.utilities import IconFont
 from pydm.widgets import PyDMByteIndicator, PyDMLabel
 
+from displays.cavity_display.frontend.fault_count_display import FaultCountDisplay
 from frontend.decoder import DecoderDisplay
 from frontend.gui_machine import GUIMachine
 from frontend.utils import make_line
-from lcls_tools.common.frontend.display.util import showDisplay
 
 
 class CavityDisplayGUI(Display):
@@ -72,3 +73,13 @@ class CavityDisplayGUI(Display):
         self.groupbox = QGroupBox()
         self.groupbox.setLayout(self.groupbox_vlayout)
         self.vlayout.addWidget(self.groupbox)
+
+        self.fault_count_display: FaultCountDisplay = FaultCountDisplay()
+        self.fault_count_button: QPushButton = QPushButton("Fault Counter")
+        self.fault_count_button.clicked.connect(
+            partial(showDisplay, self.fault_count_display)
+        )
+        self.fault_count_button.setIcon(icon)
+        self.fault_count_button.setCursor(QCursor(icon.pixmap(16, 16)))
+        self.fault_count_button.openInNewWindow = True
+        self.header.addWidget(self.fault_count_button)
