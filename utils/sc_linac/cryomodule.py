@@ -1,4 +1,6 @@
-from typing import Type, Dict, List, TYPE_CHECKING
+from typing import Type, Dict, List, TYPE_CHECKING, Optional
+
+from lcls_tools.common.controls.pyepics.utils import PV
 
 from utils.sc_linac.linac_utils import SCLinacObject
 
@@ -58,6 +60,8 @@ class Cryomodule(SCLinacObject):
             self.jt_prefix = f"CLIC:{name_map[self.name]}:3001:PVJT:"
 
         self.ds_level_pv: str = f"CLL:CM{self.name}:2301:DS:LVL"
+        self._ds_level_pv_obj: Optional[PV] = None
+
         self.us_level_pv: str = f"CLL:CM{self.name}:2601:US:LVL"
         self.ds_pressure_pv: str = f"CPT:CM{self.name}:2302:DS:PRESS"
         self.jt_valve_readback_pv: str = self.jt_prefix + "ORBV"
@@ -85,6 +89,16 @@ class Cryomodule(SCLinacObject):
             + self.linac.beamline_vacuum_pvs
             + self.linac.insulating_vacuum_pvs
         )
+
+    @property
+    def ds_level_pv_obj(self) -> PV:
+        if not self._ds_level_pv_obj:
+            self._ds_level_pv_obj = PV(self.ds_level_pv)
+        return self._ds_level_pv_obj
+
+    @property
+    def ds_level(self):
+        return self.ds_level_pv_obj.get()
 
     @property
     def is_harmonic_linearizer(self):
