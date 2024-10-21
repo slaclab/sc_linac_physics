@@ -1,6 +1,6 @@
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from datetime import datetime
-from typing import Dict
+from typing import DefaultDict
 
 from epics import caput
 
@@ -34,9 +34,9 @@ class BackendCavity(Cavity):
 
     def create_faults(self):
         for csv_fault_dict in parse_csv():
-            level = csv_fault_dict["Level"]
-            suffix = csv_fault_dict["PV Suffix"]
-            rack = csv_fault_dict["Rack"]
+            level: str = csv_fault_dict["Level"]
+            suffix: str = csv_fault_dict["PV Suffix"]
+            rack: str = csv_fault_dict["Rack"]
 
             if level == "RACK":
                 # Rack A cavities don't care about faults for Rack B and vice versa
@@ -52,19 +52,19 @@ class BackendCavity(Cavity):
                     RACK=self.rack.rack_name,
                     CAVITY=self.number,
                 )
-                pv = prefix + suffix
+                pv: str = prefix + suffix
 
             elif level == "CRYO":
                 prefix = csv_fault_dict["PV Prefix"].format(
                     CRYOMODULE=self.cryomodule.name, CAVITY=self.number
                 )
-                pv = prefix + suffix
+                pv: str = prefix + suffix
 
             elif level == "SSA":
-                pv = self.ssa.pv_addr(suffix)
+                pv: str = self.ssa.pv_addr(suffix)
 
             elif level == "CAV":
-                pv = self.pv_addr(suffix)
+                pv: str = self.pv_addr(suffix)
 
             elif level == "CM":
                 cm_type = csv_fault_dict["CM Type"]
@@ -78,21 +78,21 @@ class BackendCavity(Cavity):
                     cm_type == "3.9" and not self.cryomodule.is_harmonic_linearizer
                 ):
                     continue
-                pv = prefix + suffix
+                pv: str = prefix + suffix
 
             elif level == "ALL":
                 prefix = csv_fault_dict["PV Prefix"]
-                pv = prefix + suffix
+                pv: str = prefix + suffix
 
             else:
                 raise (SpreadsheetError("Unexpected fault level in fault spreadsheet"))
 
-            tlc = csv_fault_dict["Three Letter Code"]
-            ok_condition = csv_fault_dict["OK If Equal To"]
-            fault_condition = csv_fault_dict["Faulted If Equal To"]
-            csv_prefix = csv_fault_dict["PV Prefix"]
+            tlc: str = csv_fault_dict["Three Letter Code"]
+            ok_condition: str = csv_fault_dict["OK If Equal To"]
+            fault_condition: str = csv_fault_dict["Faulted If Equal To"]
+            csv_prefix: str = csv_fault_dict["PV Prefix"]
 
-            key = display_hash(
+            key: int = display_hash(
                 rack=rack,
                 fault_condition=fault_condition,
                 ok_condition=ok_condition,
@@ -102,7 +102,7 @@ class BackendCavity(Cavity):
             )
 
             # setting key of faults dictionary to be row number b/c it's unique (i.e. not repeated)
-            self.faults[key] = Fault(
+            self.faults[key]: OrderedDict[int, Fault] = Fault(
                 tlc=tlc,
                 severity=csv_fault_dict["Severity"],
                 pv=pv,
@@ -120,12 +120,21 @@ class BackendCavity(Cavity):
 
     def get_fault_counts(
         self, start_time: datetime, end_time: datetime
-    ) -> Dict[str, FaultCounter]:
-        result: Dict[str, FaultCounter] = {}
+    ) -> DefaultDict[str, FaultCounter]:
+        result: DefaultDict[str, FaultCounter] = defaultdict(FaultCounter)
 
+        """
+        Using max function to get the maximum fault or invalid count for duplicate TLCs
+            i.e. MGT tlc has three PVs associated with it (X, Y, and Q) but we
+            only want the fault and invalid count for whichever PV had the
+            greatest number of faults
+        """
         for fault in self.faults.values():
-            result[fault.pv.pvname] = fault.get_fault_count_over_time_range(
-                start_time=start_time, end_time=end_time
+            result[fault.tlc] = max(
+                result[fault.tlc],
+                fault.get_fault_count_over_time_range(
+                    start_time=start_time, end_time=end_time
+                ),
             )
 
         return result
