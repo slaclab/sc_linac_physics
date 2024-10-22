@@ -1,6 +1,6 @@
 typing
 pydm
-numpy <= 1.26.4
+numpy
 qtpy
 pyyaml
 pydantic
@@ -18,3 +18,5 @@ edmbutton
 pyqtgraph
 urllib3
 simulacrum @ git+https://github.com/slaclab/simulacrum.git
+pytest-qt
+simulacrum
