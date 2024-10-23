@@ -14,11 +14,13 @@ from utils.sc_linac.decarad import Decarad
 from utils.sc_linac.linac import Machine
 from utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
 
+QUENCH_AMP_THRESHOLD = 0.7
 LOADED_Q_CHANGE_FOR_QUENCH = 0.6
 MAX_WAIT_TIME_FOR_QUENCH = 30
 QUENCH_STABLE_TIME = 30 * 60
 MAX_QUENCH_RETRIES = 100
 DECARAD_SETTLE_TIME = 3
+RADIATION_LIMIT = 2
 
 
 class QuenchCavity(Cavity):
@@ -144,10 +146,17 @@ class QuenchCavity(Cavity):
 
     def check_abort(self):
         super().check_abort()
-        if self.decarad.max_raw_dose > 2:
+        if self.decarad.max_raw_dose > RADIATION_LIMIT:
             raise QuenchError("Max Radiation Dose Exceeded")
-        if self.is_on and self.rf_mode == RF_MODE_SELA and self.aact <= 0.7 * self.ades:
+        if self.has_uncaught_quench():
             raise QuenchError("Potential uncaught quench detected")
+
+    def has_uncaught_quench(self) -> bool:
+        return (
+            self.is_on
+            and self.rf_mode == RF_MODE_SELA
+            and self.aact <= QUENCH_AMP_THRESHOLD * self.ades
+        )
 
     def quench_process(
         self,
