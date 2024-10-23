@@ -33,6 +33,7 @@ def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
     vlayout.addWidget(stop_button)
 
     readback_layout = QHBoxLayout()
+    readback_layout.addStretch()
     watcher_pv = f"ALRM:SYS0:{watcher_name}:ALHBERR"
     indicator = PyDMByteIndicator(init_channel=watcher_pv)
     indicator.showLabels = False
@@ -41,6 +42,7 @@ def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
     readback_label = PyDMLabel(init_channel=watcher_pv)
     readback_layout.addWidget(indicator)
     readback_layout.addWidget(readback_label)
+    readback_layout.addStretch()
     vlayout.addLayout(readback_layout)
     return groupbox
 
