@@ -39,7 +39,7 @@ class SRFHome(Display):
             + "/applications/sel_phase_optimizer/sel_phase_optimizer.py"
         )
         self.sel_phase_opt_groupbox = make_watcher_groupbox(
-            watcher_name="SC_SEL_PHASE_OPT", script_path=sel_opt_path
+            watcher_name="SC_SEL_PHAS_OPT", script_path=sel_opt_path
         )
 
         self.vlayout.addWidget(self.links_groupbox)
