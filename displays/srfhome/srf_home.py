@@ -89,19 +89,21 @@ class SRFHome(Display):
         mini_home_groupbox_layout = QGridLayout()
         self.mini_home_groupbox.setLayout(mini_home_groupbox_layout)
 
-        for col, row_label in enumerate(["", "Global"] + [f"L{i}B" for i in range(4)]):
-            label = QLabel(row_label)
+        for col, col_label in enumerate(["", "Global"] + [f"L{i}B" for i in range(4)]):
+            label = QLabel(col_label)
             label.setAlignment(Qt.AlignCenter)
             mini_home_groupbox_layout.addWidget(label, 0, col)
 
-        for row, col_label in enumerate(["", "RF", "Cryo", "Magnets", "Vacuum"]):
-            q_label = QLabel(col_label)
+        for row, row_label in enumerate(["", "RF", "Cryo", "Magnets", "Vacuum"]):
+            q_label = QLabel(row_label)
             q_label.setAlignment(Qt.AlignCenter)
             mini_home_groupbox_layout.addWidget(q_label, row, 0)
 
         for col in range(2, 6):
             for linac in range(4):
-                rf_button = PyDMRelatedDisplayButton(filename=f"rf/l{linac}b_main.py")
+                rf_button = PyDMRelatedDisplayButton(
+                    filename=f"$PYDM/rf/l{linac}b_main.ui"
+                )
                 cryo_button = PyDMEDMDisplayButton(
                     filename=f"$EDM/cryo/cryo_l{linac}b_main.edl"
                 )
@@ -109,7 +111,7 @@ class SRFHome(Display):
                     filename=f"$EDM/lcls/mgnt_l{linac}b_main.edl"
                 )
                 vacuum_button = PyDMRelatedDisplayButton(
-                    filename=f"vac/l{linac}b_main.py"
+                    filename=f"$PYDM/vac/l{linac}b_main.ui"
                 )
                 mini_home_groupbox_layout.addWidget(rf_button, 1, col)
                 mini_home_groupbox_layout.addWidget(cryo_button, 2, col)
