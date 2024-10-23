@@ -99,8 +99,8 @@ class SRFHome(Display):
             q_label.setAlignment(Qt.AlignCenter)
             mini_home_groupbox_layout.addWidget(q_label, row, 0)
 
-        for col in range(2, 6):
-            for linac in range(4):
+        for linac in range(4):
+            for col in range(2, 6):
                 rf_button = PyDMRelatedDisplayButton(
                     filename=f"$PYDM/rf/l{linac}b_main.ui"
                 )
