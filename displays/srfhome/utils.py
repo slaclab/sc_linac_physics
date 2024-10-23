@@ -1,6 +1,3 @@
-import os
-import subprocess
-
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout
 from pydm.widgets import PyDMByteIndicator, PyDMLabel, PyDMShellCommand
@@ -45,16 +42,6 @@ def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
     readback_layout.addStretch()
     vlayout.addLayout(readback_layout)
     return groupbox
-
-
-def watcher_start_func(watcher_name, script_path):
-    envs = dict(os.environ)
-    envs["TMUX_SSH_USER"] = "laci"
-    envs["TMUX_SSH_SERVER"] = "lcls-srv03"
-    subprocess.Popen(
-        ["xterm", "-T", f'"Start {watcher_name}"', "-e", f'"{script_path}"'],
-        env=envs,
-    )
 
 
 def make_link_button(text: str, link: str) -> PyDMShellCommand:
