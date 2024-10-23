@@ -11,11 +11,13 @@ from displays.cavity_display.frontend.cavity_widget import (
     SHAPE_PARAMETER_DICT,
 )
 
-app = QApplication(sys.argv)
+if not QApplication.instance():
+    app = QApplication(sys.argv)
+else:
+    app = QApplication.instance()
 
 
 class TestCavityWidget(TestCase):
-
     def setUp(self):
         self.cavity_widget: CavityWidget = CavityWidget()
         self.cavity_widget.clicked = MagicMock()
@@ -39,12 +41,10 @@ class TestCavityWidget(TestCase):
         self.cavity_widget.clicked.emit.assert_called()
 
     def test_cavity_text(self):
-
         self.cavity_widget.cavity_text = self.test_str
         self.assertEqual(self.cavity_widget.cavity_text, self.test_str)
 
     def test_description_channel(self):
-
         self.cavity_widget.description_channel = self.test_addr
         self.assertEqual(self.cavity_widget.description_channel, self.test_addr)
 
@@ -56,7 +56,6 @@ class TestCavityWidget(TestCase):
         self.cavity_widget.setToolTip.assert_called_with(self.test_str)
 
     def test_severity_channel(self):
-
         self.cavity_widget.severity_channel = self.test_addr
         self.assertEqual(self.cavity_widget.severity_channel, self.test_addr)
 

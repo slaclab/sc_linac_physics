@@ -1,9 +1,11 @@
 from collections import OrderedDict
 from datetime import timedelta, datetime
+from typing import DefaultDict
 from unittest import TestCase, mock
 
 from displays.cavity_display.backend.backend_cavity import BackendCavity
 from displays.cavity_display.backend.fault import FaultCounter
+from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.linac import Machine
 
 builtin_open = open  # save the unpatched version
@@ -178,9 +180,9 @@ class TestBackendCavity(TestCase):
         cls.mock_open_patcher.stop()
 
     def setUp(self):
-        self.cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
-        self.cavity1 = self.cm01.cavities[1]
-        self.cavity5 = self.cm01.cavities[5]
+        self.cm01: Cryomodule = self.DISPLAY_MACHINE.cryomodules["01"]
+        self.cavity1: BackendCavity = self.cm01.cavities[1]
+        self.cavity5: BackendCavity = self.cm01.cavities[5]
         self.cavity1.rack.rack_name = "A"
 
         # Need additonal setup for running through fault tests
@@ -192,7 +194,7 @@ class TestBackendCavity(TestCase):
         self.cavity1.description_pv = "DESCRIPTION_PV"
 
     def test_create_faults_rack(self):
-        cm01 = self.DISPLAY_MACHINE.cryomodules["01"]
+        cm01: Cryomodule = self.DISPLAY_MACHINE.cryomodules["01"]
         cavity1: BackendCavity = cm01.cavities[1]
         cavity5: BackendCavity = cm01.cavities[5]
 
@@ -211,56 +213,64 @@ class TestBackendCavity(TestCase):
     def test_get_fault_counts(self):
         # Setup
         cavity1: BackendCavity = self.cm01.cavities[1]
+
         # Making Mock fault objects w/ values
+        mock_fault_counter_1 = FaultCounter(fault_count=5, ok_count=3, invalid_count=0)
+        mock_fault_counter_2 = FaultCounter(fault_count=3, ok_count=5, invalid_count=1)
+        mock_fault_counter_3 = FaultCounter(fault_count=1, ok_count=8, invalid_count=2)
         mock_faults = [
             mock.Mock(
-                pv="PV1",
+                tlc="OFF",
+                pv=mock.Mock(pvname="PV1"),
                 get_fault_count_over_time_range=mock.Mock(
-                    return_value=FaultCounter(
-                        fault_count=5, ok_count=3, invalid_count=0
-                    )
+                    return_value=mock_fault_counter_1
                 ),
             ),
             mock.Mock(
-                pv="PV2",
+                tlc="MGT",
+                pv=mock.Mock(pvname="PV2"),
                 get_fault_count_over_time_range=mock.Mock(
-                    return_value=FaultCounter(
-                        fault_count=3, ok_count=5, invalid_count=1
-                    )
+                    return_value=mock_fault_counter_2
                 ),
             ),
             mock.Mock(
-                pv="PV3",
+                tlc="MGT",
+                pv=mock.Mock(pvname="PV3"),
                 get_fault_count_over_time_range=mock.Mock(
-                    return_value=FaultCounter(
-                        fault_count=0, ok_count=8, invalid_count=0
-                    )
+                    return_value=mock_fault_counter_3
                 ),
             ),
         ]
-        # Now need to replace cavity.faults w/ our mock faults.
+        # Now need to replace cavity1.faults w/ our mock faults.
         cavity1.faults = OrderedDict((i, fault) for i, fault in enumerate(mock_faults))
+
         # Test
         start_time = datetime.now()
         end_time = start_time + timedelta(minutes=1)
+
         # Calling function we are testing w/ our time range.
-        result = cavity1.get_fault_counts(start_time, end_time)
+        result: DefaultDict[str, FaultCounter] = cavity1.get_fault_counts(
+            start_time, end_time
+        )
 
         # Our assertions
         # 1. results needs to be an instance of dict
         self.assertIsInstance(result, dict)
-        # 2. Need to verify the result has 3 entries
-        self.assertEqual(len(result), 3)
-        # Making sure FaultCounter obj in the result match each PV
-        self.assertEqual(
-            result["PV1"], FaultCounter(fault_count=5, ok_count=3, invalid_count=0)
+
+        # 2. Need to verify the result has 2 entries
+        self.assertEqual(len(result), 2)
+
+        # 3. Making sure FaultCounter obj with the highest sum of
+        #    fault_count+invalid_count is in the result for its associated TLC
+        self.assertEqual(result["OFF"], mock_fault_counter_1)
+        self.assertEqual(result["MGT"], mock_fault_counter_2)
+
+        # Edge Case for Empty Fault
+        cavity1.faults = OrderedDict()
+        empty_result: DefaultDict[str, FaultCounter] = cavity1.get_fault_counts(
+            start_time, end_time
         )
-        self.assertEqual(
-            result["PV2"], FaultCounter(fault_count=3, ok_count=5, invalid_count=1)
-        )
-        self.assertEqual(
-            result["PV3"], FaultCounter(fault_count=0, ok_count=8, invalid_count=0)
-        )
+        self.assertEqual(len(empty_result), 0)
 
         # 4. Need to verify get_fault_count_over_time_range was called for each fault
         for fault in mock_faults:
@@ -272,6 +282,7 @@ class TestBackendCavity(TestCase):
     def test_run_through_faults(self, mock_caput):
         # 1st part we're testing is: No faults
         self.cavity1.faults = OrderedDict()
+
         # Calling method
         self.cavity1.run_through_faults()
 

@@ -233,11 +233,6 @@ class RFError(Exception):
     pass
 
 
-class QuenchError(RFError):
-    def __init__(self):
-        super().__init__("Quench Detected")
-
-
 class CryoError(Exception):
     """
     Exception thrown during Cryo Execution for the GUI to catch
