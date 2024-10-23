@@ -1,0 +1,1164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<ui version="4.0">
+    <class>Form</class>
+    <widget class="QWidget" name="Form">
+        <property name="geometry">
+            <rect>
+                <x>0</x>
+                <y>0</y>
+                <width>806</width>
+                <height>607</height>
+            </rect>
+        </property>
+        <property name="windowTitle">
+            <string>SRF Home</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayout">
+            <item row="2" column="0" rowspan="2">
+                <widget class="QGroupBox" name="groupBox_4">
+                    <property name="title">
+                        <string>Links</string>
+                    </property>
+                    <layout class="QGridLayout" name="gridLayout_4">
+                        <item row="2" column="0">
+                            <widget class="PyDMShellCommand" name="lcls2ElogButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>LCLS2 elog</string>
+                                </property>
+                                <property name="commands" stdset="0">
+                                    <stringlist>
+                                        <string>firefox -new-window -P extra34
+                                            http://physics-elog.slac.stanford.edu/lcls2elog/index.jsp
+                                        </string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="1" column="0">
+                            <widget class="PyDMShellCommand" name="bigPixButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>BigPix Dir</string>
+                                </property>
+                                <property name="allowMultipleExecutions" stdset="0">
+                                    <bool>true</bool>
+                                </property>
+                                <property name="commands" stdset="0">
+                                    <stringlist>
+                                        <string>firefox -new-window -P extra37
+                                            https://slac.stanford.edu/grp/ad/srf/slaconly/
+                                        </string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="0" column="0">
+                            <widget class="PyDMShellCommand" name="srfConfluencePageButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>SRF Conf. Page</string>
+                                </property>
+                                <property name="allowMultipleExecutions" stdset="0">
+                                    <bool>true</bool>
+                                </property>
+                                <property name="commands" stdset="0">
+                                    <stringlist>
+                                        <string>firefox -new-window -P extra40
+                                            https://confluence.slac.stanford.edu/display/SRF/
+                                        </string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="3" column="0">
+                            <widget class="PyDMShellCommand" name="mccElogButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>MCC elog</string>
+                                </property>
+                                <property name="commands" stdset="0">
+                                    <stringlist>
+                                        <string>firefox -new-window -P extra33
+                                            https://mccelog.slac.stanford.edu/elog/wbin/elog.php
+                                        </string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </widget>
+            </item>
+            <item row="2" column="1" rowspan="2">
+                <widget class="QGroupBox" name="groupBox_6">
+                    <property name="title">
+                        <string>SEL Phase Optimizer Watcher</string>
+                    </property>
+                    <layout class="QVBoxLayout" name="verticalLayout_5">
+                        <item>
+                            <layout class="QVBoxLayout" name="verticalLayout_4">
+                                <item>
+                                    <widget class="PyDMShellCommand" name="PyDMShellCommand_7">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Show Output</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>xterm -T &quot;SEL Phase Optimizer Output&quot; -e tmux_launcher
+                                                    open sel_phase_opt
+                                                </string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="PyDMShellCommand" name="PyDMShellCommand_8">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Start SEL Phase Optimizer</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>xterm -T &quot;Start SEL Phase Optimizer&quot; -e \&quot;/home/physics/srf/gitRepos/srfhome/scripts/sel_phase_opt/start_sel_phase_opt.sh\&quot;</string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="PyDMShellCommand" name="PyDMShellCommand_9">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Stop SEL Phase Optimizer</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>xterm -T &quot;Stop SEL Phase Optimizer&quot; -e \&quot;/home/physics/srf/gitRepos/srfhome/scripts/sel_phase_opt/stop_sel_phase_opt.sh\&quot;</string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </item>
+                        <item>
+                            <layout class="QHBoxLayout" name="horizontalLayout_2">
+                                <item>
+                                    <spacer name="horizontalSpacer_5">
+                                        <property name="orientation">
+                                            <enum>Qt::Horizontal</enum>
+                                        </property>
+                                        <property name="sizeHint" stdset="0">
+                                            <size>
+                                                <width>44</width>
+                                                <height>20</height>
+                                            </size>
+                                        </property>
+                                    </spacer>
+                                </item>
+                                <item>
+                                    <widget class="PyDMByteIndicator" name="PyDMByteIndicator_3" native="true">
+                                        <property name="sizePolicy">
+                                            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+                                                <horstretch>0</horstretch>
+                                                <verstretch>0</verstretch>
+                                            </sizepolicy>
+                                        </property>
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="channel" stdset="0">
+                                            <string>ALRM:SYS0:SC_SEL_PHAS_OPT:ALHBERR</string>
+                                        </property>
+                                        <property name="onColor" stdset="0">
+                                            <color>
+                                                <red>255</red>
+                                                <green>0</green>
+                                                <blue>0</blue>
+                                            </color>
+                                        </property>
+                                        <property name="offColor" stdset="0">
+                                            <color>
+                                                <red>0</red>
+                                                <green>255</green>
+                                                <blue>0</blue>
+                                            </color>
+                                        </property>
+                                        <property name="showLabels" stdset="0">
+                                            <bool>false</bool>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="PyDMLabel" name="PyDMLabel_3">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="channel" stdset="0">
+                                            <string>ALRM:SYS0:SC_SEL_PHAS_OPT:ALHBERR</string>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <spacer name="horizontalSpacer_6">
+                                        <property name="orientation">
+                                            <enum>Qt::Horizontal</enum>
+                                        </property>
+                                        <property name="sizeHint" stdset="0">
+                                            <size>
+                                                <width>43</width>
+                                                <height>20</height>
+                                            </size>
+                                        </property>
+                                    </spacer>
+                                </item>
+                            </layout>
+                        </item>
+                    </layout>
+                </widget>
+            </item>
+            <item row="4" column="1" rowspan="2">
+                <widget class="QGroupBox" name="groupBox_5">
+                    <property name="title">
+                        <string>Auto Quench Reset Watcher</string>
+                    </property>
+                    <layout class="QVBoxLayout" name="verticalLayout_3">
+                        <item>
+                            <layout class="QVBoxLayout" name="verticalLayout">
+                                <item>
+                                    <widget class="PyDMShellCommand" name="PyDMShellCommand_6">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Show Validation Output</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>xterm -T &quot;Auto Quench Reset Output&quot; -e tmux_launcher
+                                                    open autoQuenchReset
+                                                </string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="PyDMShellCommand" name="PyDMShellCommand_4">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Start Quench Resetter</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>xterm -e \&quot;/home/physics/srf/gitRepos/srfhome/scripts/quench_resetter/startQnchResetTMUX.sh\&quot;</string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="PyDMShellCommand" name="PyDMShellCommand_5">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Stop Quench Resetter</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>xterm -e \&quot;/home/physics/srf/gitRepos/srfhome/scripts/quench_resetter/stopQnchResetTMUX.sh\&quot;</string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </item>
+                        <item>
+                            <layout class="QHBoxLayout" name="horizontalLayout">
+                                <item>
+                                    <spacer name="horizontalSpacer_3">
+                                        <property name="orientation">
+                                            <enum>Qt::Horizontal</enum>
+                                        </property>
+                                        <property name="sizeHint" stdset="0">
+                                            <size>
+                                                <width>44</width>
+                                                <height>20</height>
+                                            </size>
+                                        </property>
+                                    </spacer>
+                                </item>
+                                <item>
+                                    <widget class="PyDMByteIndicator" name="PyDMByteIndicator_2" native="true">
+                                        <property name="sizePolicy">
+                                            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+                                                <horstretch>0</horstretch>
+                                                <verstretch>0</verstretch>
+                                            </sizepolicy>
+                                        </property>
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="channel" stdset="0">
+                                            <string>ALRM:SYS0:SC_CAV_QNCH_RESET:ALHBERR</string>
+                                        </property>
+                                        <property name="onColor" stdset="0">
+                                            <color>
+                                                <red>255</red>
+                                                <green>0</green>
+                                                <blue>0</blue>
+                                            </color>
+                                        </property>
+                                        <property name="offColor" stdset="0">
+                                            <color>
+                                                <red>0</red>
+                                                <green>255</green>
+                                                <blue>0</blue>
+                                            </color>
+                                        </property>
+                                        <property name="showLabels" stdset="0">
+                                            <bool>false</bool>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="PyDMLabel" name="PyDMLabel_2">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="channel" stdset="0">
+                                            <string>ALRM:SYS0:SC_CAV_QNCH_RESET:ALHBERR</string>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <spacer name="horizontalSpacer_4">
+                                        <property name="orientation">
+                                            <enum>Qt::Horizontal</enum>
+                                        </property>
+                                        <property name="sizeHint" stdset="0">
+                                            <size>
+                                                <width>43</width>
+                                                <height>20</height>
+                                            </size>
+                                        </property>
+                                    </spacer>
+                                </item>
+                            </layout>
+                        </item>
+                    </layout>
+                </widget>
+            </item>
+            <item row="4" column="0" rowspan="2">
+                <widget class="QGroupBox" name="groupBox_2">
+                    <property name="title">
+                        <string>Cavity Display Launcher &amp;&amp; Watcher</string>
+                    </property>
+                    <layout class="QGridLayout" name="gridLayout_5">
+                        <item row="4" column="2">
+                            <widget class="PyDMLabel" name="PyDMLabel">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="channel" stdset="0">
+                                    <string>ALRM:SYS0:SC_CAV_FAULT:ALHBERR</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="1" column="0" colspan="4">
+                            <layout class="QVBoxLayout" name="verticalLayout_2">
+                                <item>
+                                    <widget class="PyDMShellCommand" name="cavityDisplayButton">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Cavity Summary GUI</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>
+                                                    /home/physics/srf/gitRepos/srfhome/scripts/cavity_display/cavSumDisp.sh
+                                                </string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="PyDMShellCommand" name="PyDMShellCommand">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Start Backend</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>xterm -e \&quot;/home/physics/srf/gitRepos/srfhome/scripts/cavity_display/startCavityTMUX.sh\&quot;</string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="PyDMShellCommand" name="PyDMShellCommand_2">
+                                        <property name="toolTip">
+                                            <string/>
+                                        </property>
+                                        <property name="text">
+                                            <string>Stop Backend</string>
+                                        </property>
+                                        <property name="commands" stdset="0">
+                                            <stringlist>
+                                                <string>xterm -e \&quot;/home/physics/srf/gitRepos/srfhome/scripts/cavity_display/stopCavityTMUX.sh\&quot;</string>
+                                            </stringlist>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </item>
+                        <item row="4" column="0">
+                            <spacer name="horizontalSpacer">
+                                <property name="orientation">
+                                    <enum>Qt::Horizontal</enum>
+                                </property>
+                                <property name="sizeHint" stdset="0">
+                                    <size>
+                                        <width>40</width>
+                                        <height>20</height>
+                                    </size>
+                                </property>
+                            </spacer>
+                        </item>
+                        <item row="4" column="1">
+                            <widget class="PyDMByteIndicator" name="PyDMByteIndicator" native="true">
+                                <property name="sizePolicy">
+                                    <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+                                        <horstretch>0</horstretch>
+                                        <verstretch>0</verstretch>
+                                    </sizepolicy>
+                                </property>
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="channel" stdset="0">
+                                    <string>ALRM:SYS0:SC_CAV_FAULT:ALHBERR</string>
+                                </property>
+                                <property name="onColor" stdset="0">
+                                    <color>
+                                        <red>255</red>
+                                        <green>0</green>
+                                        <blue>0</blue>
+                                    </color>
+                                </property>
+                                <property name="offColor" stdset="0">
+                                    <color>
+                                        <red>0</red>
+                                        <green>255</green>
+                                        <blue>0</blue>
+                                    </color>
+                                </property>
+                                <property name="showLabels" stdset="0">
+                                    <bool>false</bool>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="4" column="3">
+                            <spacer name="horizontalSpacer_2">
+                                <property name="orientation">
+                                    <enum>Qt::Horizontal</enum>
+                                </property>
+                                <property name="sizeHint" stdset="0">
+                                    <size>
+                                        <width>40</width>
+                                        <height>20</height>
+                                    </size>
+                                </property>
+                            </spacer>
+                        </item>
+                    </layout>
+                </widget>
+            </item>
+            <item row="0" column="0" rowspan="2" colspan="2">
+                <widget class="QGroupBox" name="groupBox">
+                    <property name="title">
+                        <string/>
+                    </property>
+                    <layout class="QGridLayout" name="gridLayout_2">
+                        <item row="1" column="3">
+                            <widget class="PyDMRelatedDisplayButton" name="rfButtonL1B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>rf/l1b_main.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="3" column="2">
+                            <widget class="PyDMEDMDisplayButton" name="magnetButtonL0B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/lcls/mgnt_l0b_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="4" column="3">
+                            <widget class="PyDMRelatedDisplayButton" name="vacuumButtonL1B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>vac/l1b_main.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="1" column="0">
+                            <widget class="QLabel" name="label_6">
+                                <property name="sizePolicy">
+                                    <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+                                        <horstretch>0</horstretch>
+                                        <verstretch>0</verstretch>
+                                    </sizepolicy>
+                                </property>
+                                <property name="text">
+                                    <string>RF</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="0" column="5">
+                            <widget class="QLabel" name="label_5">
+                                <property name="text">
+                                    <string>L3B</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="3" column="0">
+                            <widget class="QLabel" name="label_8">
+                                <property name="text">
+                                    <string>Magnets</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="1" column="2">
+                            <widget class="PyDMRelatedDisplayButton" name="rfButtonL0B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>rf/l0b_main.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="2" column="1">
+                            <widget class="PyDMEDMDisplayButton" name="cryoButtonGlobal">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/cryo/cryo_global_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="0" column="2">
+                            <widget class="QLabel" name="label_2">
+                                <property name="text">
+                                    <string>L0B</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="3" column="3">
+                            <widget class="PyDMEDMDisplayButton" name="magnetButtonL1B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/lcls/mgnt_l1b_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="0" column="3">
+                            <widget class="QLabel" name="label_3">
+                                <property name="text">
+                                    <string>L1B</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="0" column="1">
+                            <widget class="QLabel" name="label_10">
+                                <property name="sizePolicy">
+                                    <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+                                        <horstretch>0</horstretch>
+                                        <verstretch>0</verstretch>
+                                    </sizepolicy>
+                                </property>
+                                <property name="maximumSize">
+                                    <size>
+                                        <width>16777215</width>
+                                        <height>16777215</height>
+                                    </size>
+                                </property>
+                                <property name="text">
+                                    <string>Global</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="4" column="4">
+                            <widget class="PyDMRelatedDisplayButton" name="vacuumButtonL2B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>vac/l2b_main.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="4" column="0">
+                            <widget class="QLabel" name="label_9">
+                                <property name="text">
+                                    <string>Vacuum</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="2" column="5">
+                            <widget class="PyDMEDMDisplayButton" name="cryoButtonL3B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/cryo/cryo_l3b_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="0" column="4">
+                            <widget class="QLabel" name="label_4">
+                                <property name="text">
+                                    <string>L2B</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="1" column="1">
+                            <widget class="PyDMEDMDisplayButton" name="rfButtonGlobal">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/lcls/rf_global_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="3" column="4">
+                            <widget class="PyDMEDMDisplayButton" name="magnetButtonL2B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/lcls/mgnt_l2b_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="4" column="5">
+                            <widget class="PyDMRelatedDisplayButton" name="vacuumButtonL3B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>vac/l3b_main.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="4" column="2">
+                            <widget class="PyDMRelatedDisplayButton" name="vacuumButtonL0B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>vac/l0b_main.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="3" column="5">
+                            <widget class="PyDMEDMDisplayButton" name="magnetButtonL3B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/lcls/mgnt_l3b_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="1" column="5">
+                            <widget class="PyDMRelatedDisplayButton" name="rfButtonL3B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>rf/l3b_main.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="2" column="4">
+                            <widget class="PyDMEDMDisplayButton" name="cryoButtonL2B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/cryo/cryo_l2b_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="2" column="3">
+                            <widget class="PyDMEDMDisplayButton" name="cryoButtonL1B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/cryo/cryo_l1b_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="1" column="4">
+                            <widget class="PyDMRelatedDisplayButton" name="rfButtonL2B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>rf/l2b_main.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="2" column="0">
+                            <widget class="QLabel" name="label_7">
+                                <property name="text">
+                                    <string>CRYO</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="2" column="2">
+                            <widget class="PyDMEDMDisplayButton" name="cryoButtonL0B">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/cryo/cryo_l0b_main.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </widget>
+            </item>
+            <item row="0" column="3" rowspan="5">
+                <widget class="QGroupBox" name="groupBox_3">
+                    <property name="title">
+                        <string>SRF Screens &amp; GUIs</string>
+                    </property>
+                    <layout class="QGridLayout" name="gridLayout_3">
+                        <item row="4" column="0">
+                            <widget class="PyDMRelatedDisplayButton" name="decarad1Button">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>Decarad 1</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$TOOLS/pydm/display/ads/decarad_main.ui</string>
+                                    </stringlist>
+                                </property>
+                                <property name="showIcon" stdset="0">
+                                    <bool>false</bool>
+                                </property>
+                                <property name="macros" stdset="0">
+                                    <stringlist>
+                                        <string>P=RADM:SYS0:100, M=1</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="4" column="1">
+                            <widget class="PyDMRelatedDisplayButton" name="decarad2Button">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>Decarad 2</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$TOOLS/pydm/display/ads/decarad_main.ui</string>
+                                    </stringlist>
+                                </property>
+                                <property name="showIcon" stdset="0">
+                                    <bool>false</bool>
+                                </property>
+                                <property name="macros" stdset="0">
+                                    <stringlist>
+                                        <string>P=RADM:SYS0:200, M=2</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="1" column="0" colspan="2">
+                            <widget class="PyDMShellCommand" name="PyDMShellCommand_3">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>Commissioning GUI</string>
+                                </property>
+                                <property name="commands" stdset="0">
+                                    <stringlist>
+                                        <string>/home/physics/srf/gitRepos/srfhome/comm.sh</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="8" column="0" colspan="2">
+                            <widget class="PyDMRelatedDisplayButton" name="PyDMRelatedDisplayButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>Microphonics GUI</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>/home/physics/srf/gitRepos/microphonics/CommMicro.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="10" column="0" colspan="2">
+                            <widget class="PyDMRelatedDisplayButton" name="faultDisplayButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>Fault Summary Disp</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>/home/physics/srf/gitRepos/faultDisplay/XfelDispTest2.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="7" column="0" colspan="2">
+                            <widget class="PyDMEDMDisplayButton" name="PyDMEDMDisplayButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>All Heaters</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/cryo/cryo_d0_cm_ehcv_overview.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="11" column="0" colspan="2">
+                            <widget class="PyDMRelatedDisplayButton" name="meanHistGuiButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>meanHist GUI</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>/home/physics/srf/gitRepos/meanHist/meanHist.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="5" column="0" colspan="2">
+                            <widget class="PyDMRelatedDisplayButton" name="autoplotButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>autoPlots</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>/home/physics/srf/gitRepos/makeAutoPlot/srf_stavDispMulti.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="6" column="0" colspan="2">
+                            <widget class="PyDMEDMDisplayButton" name="AllUnitTestsButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>All CM Unit Tests</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>$EDM/llrf/rf_srf_cavity_unit_all.edl</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="3" column="0" colspan="2">
+                            <widget class="PyDMRelatedDisplayButton" name="PyDMRelatedDisplayButton_2">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>CM Plots</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>/home/physics/srf/gitRepos/cm_plots/cryomodule_plots.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="2" column="0" colspan="2">
+                            <widget class="PyDMRelatedDisplayButton" name="PyDMRelatedDisplayButton_3">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>Auto Setup</string>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>/home/physics/srf/gitRepos/auto_setup/setup_gui.py</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item row="12" column="0" colspan="2">
+                            <widget class="PyDMRelatedDisplayButton" name="PyDMRelatedDisplayButton_4">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>Cryo Signals</string>
+                                </property>
+                                <property name="alarmSensitiveContent" stdset="0">
+                                    <bool>false</bool>
+                                </property>
+                                <property name="alarmSensitiveBorder" stdset="0">
+                                    <bool>true</bool>
+                                </property>
+                                <property name="PyDMToolTip" stdset="0">
+                                    <string/>
+                                </property>
+                                <property name="channel" stdset="0">
+                                    <string/>
+                                </property>
+                                <property name="filenames" stdset="0">
+                                    <stringlist>
+                                        <string>/home/physics/srf/gitRepos/cryo_signals/cryo_signals.py</string>
+                                    </stringlist>
+                                </property>
+                                <property name="showIcon" stdset="0">
+                                    <bool>true</bool>
+                                </property>
+                                <property name="macros" stdset="0">
+                                    <stringlist>
+                                        <string>{}</string>
+                                    </stringlist>
+                                </property>
+                                <property name="openInNewWindow" stdset="0">
+                                    <bool>false</bool>
+                                </property>
+                                <property name="passwordProtected" stdset="0">
+                                    <bool>false</bool>
+                                </property>
+                                <property name="password" stdset="0">
+                                    <string/>
+                                </property>
+                                <property name="protectedPassword" stdset="0">
+                                    <string/>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </widget>
+            </item>
+            <item row="5" column="3">
+                <widget class="QGroupBox" name="groupBox_7">
+                    <property name="title">
+                        <string>Useful Tools</string>
+                    </property>
+                    <layout class="QVBoxLayout" name="verticalLayout_6">
+                        <item>
+                            <widget class="PyDMShellCommand" name="archiveViewerButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>Archive Viewer</string>
+                                </property>
+                                <property name="allowMultipleExecutions" stdset="0">
+                                    <bool>true</bool>
+                                </property>
+                                <property name="commands" stdset="0">
+                                    <stringlist>
+                                        <string>lclsarch</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="PyDMShellCommand" name="striptoolButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>StripTool</string>
+                                </property>
+                                <property name="allowMultipleExecutions" stdset="0">
+                                    <bool>true</bool>
+                                </property>
+                                <property name="commands" stdset="0">
+                                    <stringlist>
+                                        <string>StripTool &amp;</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="PyDMShellCommand" name="lclsHomeSCButton">
+                                <property name="toolTip">
+                                    <string/>
+                                </property>
+                                <property name="text">
+                                    <string>lclshome SC</string>
+                                </property>
+                                <property name="commands" stdset="0">
+                                    <stringlist>
+                                        <string>$TOOLS/script/lclshome --source SC</string>
+                                    </stringlist>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </widget>
+            </item>
+        </layout>
+    </widget>
+    <customwidgets>
+        <customwidget>
+            <class>PyDMLabel</class>
+            <extends>QLabel</extends>
+            <header>pydm.widgets.label</header>
+        </customwidget>
+        <customwidget>
+            <class>PyDMByteIndicator</class>
+            <extends>QWidget</extends>
+            <header>pydm.widgets.byte</header>
+        </customwidget>
+        <customwidget>
+            <class>PyDMRelatedDisplayButton</class>
+            <extends>QPushButton</extends>
+            <header>pydm.widgets.related_display_button</header>
+        </customwidget>
+        <customwidget>
+            <class>PyDMShellCommand</class>
+            <extends>QPushButton</extends>
+            <header>pydm.widgets.shell_command</header>
+        </customwidget>
+        <customwidget>
+            <class>PyDMEDMDisplayButton</class>
+            <extends>PyDMRelatedDisplayButton</extends>
+            <header>edmbutton.edm_button</header>
+            <container>1</container>
+        </customwidget>
+    </customwidgets>
+    <resources/>
+    <connections/>
+</ui>
