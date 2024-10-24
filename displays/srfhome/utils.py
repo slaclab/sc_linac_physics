@@ -15,8 +15,8 @@ def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
 
     # TODO change export to point to release
     xterm_prefix += (
-        ' "export PYTHONPATH=/home/physics/zacarias/sc_linac_physics && export TMUX_SSH_USER=laci && '
-        "exportMUX_SSH_SERVER=lcls-srv03"
+        ' "export PYTHONPATH=$PYTHONPATH:/home/physics/zacarias/sc_linac_physics && export TMUX_SSH_USER=laci && '
+        "export TMUX_SSH_SERVER=lcls-srv03"
     )
 
     start_button = PyDMShellCommand()
