@@ -117,6 +117,7 @@ class TestQuenchCavity(TestCase):
     def test_wait(self):
         self.cavity.check_abort = MagicMock()
         self.cavity._quench_latch_pv_obj = make_mock_pv(get_val=1)
+        self.cavity.has_uncaught_quench = MagicMock()
         self.cavity.wait(1)
         self.cavity.check_abort.assert_called()
 
