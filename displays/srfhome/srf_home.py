@@ -117,15 +117,19 @@ class SRFHome(Display):
         for linac in range(4):
             col = linac + 2
             rf_button = PyDMRelatedDisplayButton(filename=f"$PYDM/rf/l{linac}b_main.ui")
+            rf_button.setToolTip(f"L{linac}B RF")
             cryo_button = PyDMEDMDisplayButton(
                 filename=f"$EDM/cryo/cryo_l{linac}b_main.edl"
             )
+            cryo_button.setToolTip(f"L{linac}B Cryo")
             magnet_button = PyDMEDMDisplayButton(
                 filename=f"$EDM/lcls/mgnt_l{linac}b_main.edl"
             )
+            magnet_button.setToolTip(f"L{linac}B Magnets")
             vacuum_button = PyDMRelatedDisplayButton(
                 filename=f"$PYDM/vac/l{linac}b_main.ui"
             )
+            vacuum_button.setToolTip(f"L{linac}B Vacuum")
             mini_home_groupbox_layout.addWidget(rf_button, 1, col)
             mini_home_groupbox_layout.addWidget(cryo_button, 2, col)
             mini_home_groupbox_layout.addWidget(magnet_button, 3, col)
