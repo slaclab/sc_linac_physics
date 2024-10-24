@@ -17,7 +17,7 @@ class EnumLabel(PyDMLabel):
     """
 
     def __init__(self, fault, codeLabel, parent=None, args=None):
-        super(EnumLabel, self).__init__(parent=parent, init_channel=fault.pv.pvname)
+        super(EnumLabel, self).__init__(parent=parent, init_channel=fault.pv)
         self.fault = fault
         self.codeLabel = codeLabel
 
