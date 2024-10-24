@@ -4,6 +4,9 @@
 Script to optimize SEL phase offsets
 Originally by J. Nelson, refactored by L. Zacarias
 """
+import sys
+
+sys.path.append("/home/physics/zacarias/sc_linac_physics")
 
 import time
 
