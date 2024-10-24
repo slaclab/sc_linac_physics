@@ -47,15 +47,8 @@ class CavityDisplayGUI(Display):
         self.header.addStretch()
 
         self.decoder_window: DecoderDisplay = DecoderDisplay()
-
-        self.decoder = QPushButton("Three Letter Code Decoder")
-        self.decoder.clicked.connect(partial(showDisplay, self.decoder_window))
-
-        icon = IconFont().icon("file")
-        self.decoder.setIcon(icon)
-        self.decoder.setCursor(QCursor(icon.pixmap(16, 16)))
-        self.decoder.openInNewWindow = True
-        self.header.addWidget(self.decoder)
+        self.decoder_button = QPushButton("Three Letter Code Decoder")
+        self.add_header_button(self.decoder_button, self.decoder_window)
 
         self.setWindowTitle("SRF Cavity Display")
 
@@ -76,10 +69,13 @@ class CavityDisplayGUI(Display):
 
         self.fault_count_display: FaultCountDisplay = FaultCountDisplay()
         self.fault_count_button: QPushButton = QPushButton("Fault Counter")
-        self.fault_count_button.clicked.connect(
-            partial(showDisplay, self.fault_count_display)
-        )
-        self.fault_count_button.setIcon(icon)
-        self.fault_count_button.setCursor(QCursor(icon.pixmap(16, 16)))
-        self.fault_count_button.openInNewWindow = True
-        self.header.addWidget(self.fault_count_button)
+        self.add_header_button(self.fault_count_button, self.fault_count_display)
+
+    def add_header_button(self, button: QPushButton, display: Display):
+        button.clicked.connect(partial(showDisplay, display))
+
+        icon = IconFont().icon("file")
+        button.setIcon(icon)
+        button.setCursor(QCursor(icon.pixmap(16, 16)))
+        button.openInNewWindow = True
+        self.header.addWidget(button)
