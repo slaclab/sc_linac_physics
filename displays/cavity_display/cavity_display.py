@@ -8,14 +8,15 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QGroupBox,
 )
+from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
 from pydm.utilities import IconFont
 from pydm.widgets import PyDMByteIndicator, PyDMLabel
 
+from displays.cavity_display.frontend.fault_count_display import FaultCountDisplay
 from frontend.decoder import DecoderDisplay
 from frontend.gui_machine import GUIMachine
 from frontend.utils import make_line
-from lcls_tools.common.frontend.display.util import showDisplay
 
 
 class CavityDisplayGUI(Display):
@@ -46,15 +47,8 @@ class CavityDisplayGUI(Display):
         self.header.addStretch()
 
         self.decoder_window: DecoderDisplay = DecoderDisplay()
-
-        self.decoder = QPushButton("Three Letter Code Decoder")
-        self.decoder.clicked.connect(partial(showDisplay, self.decoder_window))
-
-        icon = IconFont().icon("file")
-        self.decoder.setIcon(icon)
-        self.decoder.setCursor(QCursor(icon.pixmap(16, 16)))
-        self.decoder.openInNewWindow = True
-        self.header.addWidget(self.decoder)
+        self.decoder_button = QPushButton("Three Letter Code Decoder")
+        self.add_header_button(self.decoder_button, self.decoder_window)
 
         self.setWindowTitle("SRF Cavity Display")
 
@@ -72,3 +66,17 @@ class CavityDisplayGUI(Display):
         self.groupbox = QGroupBox()
         self.groupbox.setLayout(self.groupbox_vlayout)
         self.vlayout.addWidget(self.groupbox)
+
+        self.fault_count_display: FaultCountDisplay = FaultCountDisplay()
+        self.fault_count_button: QPushButton = QPushButton("Fault Counter")
+        self.fault_count_button.setToolTip("See fault history using archived data")
+        self.add_header_button(self.fault_count_button, self.fault_count_display)
+
+    def add_header_button(self, button: QPushButton, display: Display):
+        button.clicked.connect(partial(showDisplay, display))
+
+        icon = IconFont().icon("file")
+        button.setIcon(icon)
+        button.setCursor(QCursor(icon.pixmap(16, 16)))
+        button.openInNewWindow = True
+        self.header.addWidget(button)
