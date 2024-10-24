@@ -69,6 +69,7 @@ class CavityDisplayGUI(Display):
 
         self.fault_count_display: FaultCountDisplay = FaultCountDisplay()
         self.fault_count_button: QPushButton = QPushButton("Fault Counter")
+        self.fault_count_button.setToolTip("See fault history using archived data")
         self.add_header_button(self.fault_count_button, self.fault_count_display)
 
     def add_header_button(self, button: QPushButton, display: Display):
