@@ -13,7 +13,11 @@ def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
     xterm_prefix = f"xterm -T {watcher_name} -hold -e"
     show_button.commands = [f"{xterm_prefix} tmux_launcher open {watcher_name}"]
 
-    xterm_prefix += ' "export TMUX_SSH_USER=laci && export TMUX_SSH_SERVER=lcls-srv03'
+    # TODO change export to point to release
+    xterm_prefix += (
+        ' "export PYTHONPATH=/home/physics/zacarias/sc_linac_physics && export TMUX_SSH_USER=laci && '
+        "exportMUX_SSH_SERVER=lcls-srv03"
+    )
 
     start_button = PyDMShellCommand()
     start_button.setText(f"(Re)Start {watcher_name} Process")
