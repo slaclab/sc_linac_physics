@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from datetime import datetime
 from typing import Optional
 
 import numpy as np
@@ -10,6 +11,7 @@ from scipy import stats
 
 from utils.sc_linac.cavity import Cavity
 from utils.sc_linac.linac import Machine
+from utils.sc_linac.linac_utils import RF_MODE_SELAP
 
 MAX_STEP = 5
 MULT = -51.0471
@@ -63,7 +65,10 @@ class SELCavity(Cavity):
         :return: True if wanted to take a step larger than MAX_STEP
         """
 
-        if not self.is_online or self.aact <= 1:
+        if not self.is_online or self.rf_mode != RF_MODE_SELAP or self.aact <= 1:
+            print(
+                f"{datetime.now()} {self} does not meet qualifications for straightening, skipping"
+            )
             return False
 
         startVal = self.sel_phase_offset

@@ -10,20 +10,22 @@ def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
 
     show_button = PyDMShellCommand()
     show_button.setText(f"Show {watcher_name} Output")
-    xterm_prefix = f"xterm -T {watcher_name} -e"
+    xterm_prefix = f"xterm -T {watcher_name} -hold -e"
     show_button.commands = [f"{xterm_prefix} tmux_launcher open {watcher_name}"]
 
-    xterm_prefix += " export TMUX_SSH_USER=laci && export TMUX_SSH_SERVER=lcls-srv03"
+    xterm_prefix += ' "export TMUX_SSH_USER=laci && export TMUX_SSH_SERVER=lcls-srv03'
 
     start_button = PyDMShellCommand()
     start_button.setText(f"(Re)Start {watcher_name} Process")
-    tmux_command = f"tmux_launcher restart 'python {script_path}' {watcher_name}"
+    tmux_command = f"tmux_launcher restart 'python {script_path}' {watcher_name}\""
     start_button.commands = [f"{xterm_prefix} && {tmux_command}"]
+    print(start_button.commands)
 
     stop_button = PyDMShellCommand()
     stop_button.setText(f"Stop {watcher_name} Process")
-    tmux_command = f"tmux_launcher stop {script_path} {watcher_name}"
+    tmux_command = f'tmux_launcher stop {script_path} {watcher_name}"'
     stop_button.commands = [f"{xterm_prefix} && {tmux_command}"]
+    print(stop_button.commands)
 
     vlayout.addWidget(show_button)
     vlayout.addWidget(start_button)
