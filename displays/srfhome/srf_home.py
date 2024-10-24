@@ -100,23 +100,21 @@ class SRFHome(Display):
             mini_home_groupbox_layout.addWidget(q_label, row, 0)
 
         for linac in range(4):
-            for col in range(2, 6):
-                rf_button = PyDMRelatedDisplayButton(
-                    filename=f"$PYDM/rf/l{linac}b_main.ui"
-                )
-                cryo_button = PyDMEDMDisplayButton(
-                    filename=f"$EDM/cryo/cryo_l{linac}b_main.edl"
-                )
-                magnet_button = PyDMEDMDisplayButton(
-                    filename=f"$EDM/lcls/mgnt_l{linac}b_main.edl"
-                )
-                vacuum_button = PyDMRelatedDisplayButton(
-                    filename=f"$PYDM/vac/l{linac}b_main.ui"
-                )
-                mini_home_groupbox_layout.addWidget(rf_button, 1, col)
-                mini_home_groupbox_layout.addWidget(cryo_button, 2, col)
-                mini_home_groupbox_layout.addWidget(magnet_button, 3, col)
-                mini_home_groupbox_layout.addWidget(vacuum_button, 4, col)
+            col = linac + 2
+            rf_button = PyDMRelatedDisplayButton(filename=f"$PYDM/rf/l{linac}b_main.ui")
+            cryo_button = PyDMEDMDisplayButton(
+                filename=f"$EDM/cryo/cryo_l{linac}b_main.edl"
+            )
+            magnet_button = PyDMEDMDisplayButton(
+                filename=f"$EDM/lcls/mgnt_l{linac}b_main.edl"
+            )
+            vacuum_button = PyDMRelatedDisplayButton(
+                filename=f"$PYDM/vac/l{linac}b_main.ui"
+            )
+            mini_home_groupbox_layout.addWidget(rf_button, 1, col)
+            mini_home_groupbox_layout.addWidget(cryo_button, 2, col)
+            mini_home_groupbox_layout.addWidget(magnet_button, 3, col)
+            mini_home_groupbox_layout.addWidget(vacuum_button, 4, col)
 
         global_rf_button = PyDMEDMDisplayButton(filename="$EDM/lcls/rf_global_main.edl")
         global_cryo_button = PyDMEDMDisplayButton(
