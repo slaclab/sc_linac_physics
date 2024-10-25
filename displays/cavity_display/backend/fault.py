@@ -1,6 +1,6 @@
 import dataclasses
 from datetime import datetime
-from typing import Union, Optional
+from typing import Union
 
 from lcls_tools.common.controls.pyepics.utils import (
     PV,
@@ -71,19 +71,12 @@ class Fault:
         self.button_macro = button_macro
         self.action = action
 
-        self._pv_obj: Optional[PV] = None
-        self.pv: str = pv
-
-    @property
-    def pv_obj(self) -> PV:
-        if not self._pv_obj:
-            self._pv_obj = PV(self.pv, connection_timeout=PV_TIMEOUT)
-        return self._pv_obj
+        self.pv: PV = PV(pv, connection_timeout=PV_TIMEOUT)
 
     def is_currently_faulted(self) -> bool:
         # returns "TRUE" if faulted
         # returns "FALSE" if not faulted
-        return self.is_faulted(self.pv_obj)
+        return self.is_faulted(self.pv)
 
     def is_faulted(self, obj: Union[PV, ArchiverValue]) -> bool:
         """
@@ -95,7 +88,7 @@ class Fault:
             INVALID = 3
         """
         if obj.severity == EPICS_INVALID_VAL or obj.status is None:
-            raise PVInvalidError(self.pv)
+            raise PVInvalidError(self.pv.pvname)
 
         # self.ok_value is the value stated in spreadsheet
         # obj.value is the actual reading value from pv
@@ -110,25 +103,27 @@ class Fault:
             return obj.val == self.fault_value
 
         else:
-            print(self.pv)
+            print(self)
             raise Exception(
                 "Fault has neither 'Fault if equal to' nor"
                 " 'OK if equal to' parameter"
             )
 
     def was_faulted(self, time: datetime) -> bool:
-        archiver_result = get_data_at_time(pv_list=[self.pv], time_requested=time)
-        archiver_value = archiver_result[self.pv]
+        archiver_result = get_data_at_time(
+            pv_list=[self.pv.pvname], time_requested=time
+        )
+        archiver_value = archiver_result[self.pv.pvname]
         return self.is_faulted(archiver_value)
 
     def get_fault_count_over_time_range(
         self, start_time: datetime, end_time: datetime
     ) -> FaultCounter:
         result = get_values_over_time_range(
-            pv_list=[self.pv], start_time=start_time, end_time=end_time
+            pv_list=[self.pv.pvname], start_time=start_time, end_time=end_time
         )
 
-        data_handler: ArchiveDataHandler = result[self.pv]
+        data_handler: ArchiveDataHandler = result[self.pv.pvname]
 
         counter = FaultCounter()
 

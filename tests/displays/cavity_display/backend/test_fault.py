@@ -2,19 +2,18 @@ from random import randint
 from unittest import TestCase, mock
 from unittest.mock import MagicMock
 
-from displays.cavity_display.backend.fault import FaultCounter
-
 from lcls_tools.common.controls.pyepics.utils import (
     make_mock_pv,
-    EPICS_INVALID_VAL,
-    PVInvalidError,
 )
 from lcls_tools.common.data.archiver import ArchiverValue
+
+from displays.cavity_display.backend.fault import FaultCounter
 
 archiver_value = ArchiverValue()
 archive_mock = MagicMock(return_value={"PV": archiver_value})
 with mock.patch("lcls_tools.common.data.archiver.get_data_at_time", archive_mock):
     from displays.cavity_display.backend.fault import Fault
+
 
 class TestFaultCounter(TestCase):
     def setUp(self):
@@ -59,19 +58,16 @@ class TestFaultCounter(TestCase):
         else:
             self.assertFalse(self.fault_counter == self.fault_counter2)
 
+
 class TestFault(TestCase):
     def setUp(self):
         self.fault = Fault(severity=0)
 
-    def test_pv_obj(self):
-        self.fault._pv_obj = MagicMock()
-        self.assertEqual(self.fault.pv_obj, self.fault._pv_obj)
-
     def test_is_currently_faulted(self):
         self.fault.is_faulted = MagicMock()
-        self.fault._pv_obj = make_mock_pv()
+        self.fault.pv = make_mock_pv()
         self.fault.is_currently_faulted()
-        self.fault.is_faulted.assert_called_with(self.fault._pv_obj)
+        self.fault.is_faulted.assert_called_with(self.fault.pv)
 
     def test_is_faulted_invalid(self):
         pv = make_mock_pv(severity=EPICS_INVALID_VAL)
