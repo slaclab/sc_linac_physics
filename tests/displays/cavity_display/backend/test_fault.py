@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 
 from lcls_tools.common.controls.pyepics.utils import (
     make_mock_pv,
+    EPICS_INVALID_VAL,
+    PVInvalidError,
 )
 from lcls_tools.common.data.archiver import ArchiverValue
 
