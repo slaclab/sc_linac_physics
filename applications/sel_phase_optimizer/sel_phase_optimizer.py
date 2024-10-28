@@ -5,21 +5,19 @@ Script to optimize SEL phase offsets
 Originally by J. Nelson, refactored by L. Zacarias
 """
 import sys
-
-sys.path.append("/home/physics/zacarias/sc_linac_physics")
-
 import time
 
-from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
-
-from sel_phase_linac import SEL_MACHINE
-from utils.sc_linac.cryomodule import Cryomodule
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES
+sys.path.append("/home/physics/srf/sc_linac_physics")
+from applications.sel_phase_optimizer.sel_phase_linac import SEL_MACHINE  # noqa: E402
+from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError  # noqa: E402
+from utils.sc_linac.cryomodule import Cryomodule  # noqa: E402
+from utils.sc_linac.linac_utils import ALL_CRYOMODULES  # noqa: E402
 
 HEARTBEAT_PV = PV("PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT")
 
 
 def update_heartbeat(time_to_wait: int):
+    print(f"Sleeping for {time_to_wait} seconds")
     for _ in range(time_to_wait):
         try:
             HEARTBEAT_PV.put(HEARTBEAT_PV.get() + 1)
@@ -50,8 +48,6 @@ def run():
         print(
             f"\033[94mThanks for your help! The current date/time is {current_time}\033[0m"
         )
-        print(f"Sleeping for 600 seconds")
-        print("")
         update_heartbeat(600)
 
 
