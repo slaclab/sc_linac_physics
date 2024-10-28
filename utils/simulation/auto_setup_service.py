@@ -69,14 +69,14 @@ class AutoSetupCMPVGroup(AutoSetupPVGroup):
         self.cm_name: str = cm_name
 
     async def trigger_setup_script(self):
-        process = await create_subprocess_exec(
+        await create_subprocess_exec(
             "python",
             "/Users/zacarias/srf/auto_setup/srf_cm_setup_launcher.py",
             f"-cm={self.cm_name}",
         )
 
     async def trigger_shutdown_script(self):
-        process = await create_subprocess_exec(
+        await create_subprocess_exec(
             "python",
             "/Users/zacarias/srf/auto_setup/srf_cm_setup_launcher.py",
             f"-cm={self.cm_name}",
@@ -90,14 +90,14 @@ class AutoSetupLinacPVGroup(AutoSetupPVGroup):
         self.linac_idx: int = linac_idx
 
     async def trigger_setup_script(self):
-        process = await create_subprocess_exec(
+        await create_subprocess_exec(
             "python",
             "/Users/zacarias/srf/auto_setup/srf_linac_setup_launcher.py",
             f"-cm={self.linac_idx}",
         )
 
     async def trigger_shutdown_script(self):
-        process = await create_subprocess_exec(
+        await create_subprocess_exec(
             "python",
             "/Users/zacarias/srf/auto_setup/srf_linac_setup_launcher.py",
             f"-cm={self.linac_idx}",
@@ -110,13 +110,13 @@ class AutoSetupGlobalPVGroup(AutoSetupPVGroup):
         super().__init__(prefix)
 
     async def trigger_setup_script(self):
-        process = await create_subprocess_exec(
+        await create_subprocess_exec(
             "python",
             "/Users/zacarias/srf/auto_setup/srf_global_setup_launcher.py",
         )
 
     async def trigger_shutdown_script(self):
-        process = await create_subprocess_exec(
+        await create_subprocess_exec(
             "python",
             "/Users/zacarias/srf/auto_setup/srf_global_setup_launcher.py",
             "-off",

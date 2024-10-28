@@ -219,7 +219,8 @@ class QuenchCavity(Cavity):
             self.wait_for_quench(time_to_wait=QUENCH_STABLE_TIME) < QUENCH_STABLE_TIME
         ):
             print(
-                f"{datetime.datetime.now()}{self} made it to target amplitude, waiting {QUENCH_STABLE_TIME}s to prove stability"
+                f"{datetime.datetime.now()}{self} made it to target amplitude, "
+                f"waiting {QUENCH_STABLE_TIME}s to prove stability"
             )
             super().check_abort()
 
