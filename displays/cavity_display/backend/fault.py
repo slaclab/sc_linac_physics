@@ -71,8 +71,9 @@ class Fault:
             self._pv_obj = PV(self.pv, connection_timeout = PV_TIMEOUT)
         return self._pv_obj
 
-    def is_currently_faulted(self):
-        # Changed from self.pv
+    def is_currently_faulted(self) -> bool:
+        # returns "TRUE" if faulted
+        # returns "FALSE" if not faulted
         return self.is_faulted(self.pv_obj)
 
     def is_faulted(self, obj: Union[PV, ArchiverValue]):
