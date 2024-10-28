@@ -34,16 +34,31 @@ class SRFHome(Display):
         self.links_groupbox = QGroupBox("Shortcuts & Bookmarks")
         self.fill_link_groupbox()
 
+        root_dir = os.getenv("SRF_ROOT_DIR", "/home/physics/srf/sc_linac_physics")
         sel_opt_path = (
-            os.getenv("SRF_ROOT_DIR", "/home/physics/srf/sc_linac_physics")
-            + "/applications/sel_phase_optimizer/sel_phase_optimizer.py"
+            root_dir + "/applications/sel_phase_optimizer/sel_phase_optimizer.py"
         )
+        quench_reset_path = (
+            root_dir + "/applications/quench_processing/quench_resetter.py"
+        )
+        cav_disp_backend_path = root_dir + "/displays/cavity_display/backend/runner.py"
+
         self.sel_phase_opt_groupbox = make_watcher_groupbox(
             watcher_name="SC_SEL_PHAS_OPT", script_path=sel_opt_path
         )
+        self.quench_reset_groupbox = make_watcher_groupbox(
+            watcher_name="SC_CAV_QNCH_RESET", script_path=quench_reset_path
+        )
+        self.cav_disp_groupbox = make_watcher_groupbox(
+            watcher_name="SC_CAV_FAULT", script_path=cav_disp_backend_path
+        )
+        watcher_layout = QGridLayout()
+        watcher_layout.addWidget(self.links_groupbox, 0, 0)
+        watcher_layout.addWidget(self.sel_phase_opt_groupbox, 0, 1)
+        watcher_layout.addWidget(self.quench_reset_groupbox, 1, 0)
+        watcher_layout.addWidget(self.cav_disp_groupbox, 1, 1)
 
-        self.vlayout.addWidget(self.links_groupbox)
-        self.vlayout.addWidget(self.sel_phase_opt_groupbox)
+        self.vlayout.addLayout(watcher_layout)
 
     def fill_link_groupbox(self):
         link_layout = QVBoxLayout()
@@ -102,15 +117,19 @@ class SRFHome(Display):
         for linac in range(4):
             col = linac + 2
             rf_button = PyDMRelatedDisplayButton(filename=f"$PYDM/rf/l{linac}b_main.ui")
+            rf_button.setToolTip(f"L{linac}B RF")
             cryo_button = PyDMEDMDisplayButton(
                 filename=f"$EDM/cryo/cryo_l{linac}b_main.edl"
             )
+            cryo_button.setToolTip(f"L{linac}B Cryo")
             magnet_button = PyDMEDMDisplayButton(
                 filename=f"$EDM/lcls/mgnt_l{linac}b_main.edl"
             )
+            magnet_button.setToolTip(f"L{linac}B Magnets")
             vacuum_button = PyDMRelatedDisplayButton(
                 filename=f"$PYDM/vac/l{linac}b_main.ui"
             )
+            vacuum_button.setToolTip(f"L{linac}B Vacuum")
             mini_home_groupbox_layout.addWidget(rf_button, 1, col)
             mini_home_groupbox_layout.addWidget(cryo_button, 2, col)
             mini_home_groupbox_layout.addWidget(magnet_button, 3, col)
