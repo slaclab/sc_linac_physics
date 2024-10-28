@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from functools import partial
 from typing import Dict, Optional
 
-import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QDoubleSpinBox,
@@ -20,7 +19,7 @@ from urllib3.exceptions import ConnectTimeoutError
 
 import q0_utils
 from q0_linac import Q0Cavity, Q0Cryomodule
-from utils.qt import Worker
+from utils.qt import Worker, get_dimensions
 from utils.sc_linac.linac_utils import CavityAbortError
 
 DEFAULT_LL_DROP = 4
@@ -235,8 +234,9 @@ class Q0Options(QObject):
 
         with open(cryomodule.q0_idx_file, "r+") as f:
             q0_measurements: Dict = json.load(f)
-            col_count = get_dimensions(q0_measurements)
-            for idx, time_stamp in enumerate(q0_measurements.keys()):
+            timestamps = list(q0_measurements.keys())
+            col_count = get_dimensions(timestamps)
+            for idx, time_stamp in enumerate(timestamps):
                 cav_amps = q0_measurements[time_stamp]["Cavity Amplitudes"]
                 radio_button: QRadioButton = QRadioButton(
                     f"{time_stamp}: \n{json.dumps(cav_amps, indent=4)}"
@@ -254,15 +254,6 @@ class Q0Options(QObject):
             f" CM{self.cryomodule.name} from {timestamp}"
             f" with q0 {self.cryomodule.q0_measurement.q0:.2e}"
         )
-
-
-def get_dimensions(options):
-    num_options = len(options.keys())
-    row_count = int(np.sqrt(num_options))
-    col_count = int(np.ceil(np.sqrt(num_options)))
-    if row_count * col_count != num_options:
-        col_count += 1
-    return col_count
 
 
 class CalibrationOptions(QObject):

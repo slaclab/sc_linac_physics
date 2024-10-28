@@ -1,4 +1,6 @@
 import os
+import pathlib
+from typing import List
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -7,6 +9,7 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QLabel,
     QSizePolicy,
+    QHBoxLayout,
 )
 from edmbutton import PyDMEDMDisplayButton
 from pydm import Display
@@ -15,33 +18,35 @@ from pydm.widgets import (
 )
 
 from displays.srfhome.utils import make_link_button, make_watcher_groupbox
+from utils.qt import get_dimensions
 
 
 class SRFHome(Display):
     def __init__(self):
         super().__init__()
+        self.root_dir = os.getenv("SRF_ROOT_DIR", "/home/physics/srf/sc_linac_physics")
         self.setWindowTitle("SRF Home")
-        self.vlayout = QVBoxLayout()
+        self.main_layout = QHBoxLayout()
         self.mini_home_groupbox = QGroupBox()
         self.mini_home_groupbox.setSizePolicy(
             QSizePolicy.Preferred, QSizePolicy.Maximum
         )
         self.fill_mini_home_groupbox()
 
-        self.setLayout(self.vlayout)
-        self.vlayout.addWidget(self.mini_home_groupbox)
+        self.setLayout(self.main_layout)
 
-        self.links_groupbox = QGroupBox("Shortcuts & Bookmarks")
+        self.links_groupbox = QGroupBox("Shortcuts && Bookmarks")
         self.fill_link_groupbox()
 
-        root_dir = os.getenv("SRF_ROOT_DIR", "/home/physics/srf/sc_linac_physics")
         sel_opt_path = (
-            root_dir + "/applications/sel_phase_optimizer/sel_phase_optimizer.py"
+            f"{self.root_dir}/applications/sel_phase_optimizer/sel_phase_optimizer.py"
         )
         quench_reset_path = (
-            root_dir + "/applications/quench_processing/quench_resetter.py"
+            f"{self.root_dir}/applications/quench_processing/quench_resetter.py"
         )
-        cav_disp_backend_path = root_dir + "/displays/cavity_display/backend/runner.py"
+        cav_disp_backend_path = (
+            f"{self.root_dir}/displays/cavity_display/backend/runner.py"
+        )
 
         self.sel_phase_opt_groupbox = make_watcher_groupbox(
             watcher_name="SC_SEL_PHAS_OPT", script_path=sel_opt_path
@@ -52,30 +57,33 @@ class SRFHome(Display):
         self.cav_disp_groupbox = make_watcher_groupbox(
             watcher_name="SC_CAV_FAULT", script_path=cav_disp_backend_path
         )
-        watcher_layout = QGridLayout()
-        watcher_layout.addWidget(self.links_groupbox, 0, 0)
-        watcher_layout.addWidget(self.sel_phase_opt_groupbox, 0, 1)
-        watcher_layout.addWidget(self.quench_reset_groupbox, 1, 0)
-        watcher_layout.addWidget(self.cav_disp_groupbox, 1, 1)
+        extras_layout = QVBoxLayout()
+        watcher_layout = QVBoxLayout()
+        extras_layout.addWidget(self.mini_home_groupbox)
+        extras_layout.addWidget(self.links_groupbox)
+        watcher_layout.addWidget(self.sel_phase_opt_groupbox)
+        watcher_layout.addWidget(self.quench_reset_groupbox)
+        watcher_layout.addWidget(self.cav_disp_groupbox)
 
-        self.vlayout.addLayout(watcher_layout)
+        self.main_layout.addLayout(extras_layout)
+        self.main_layout.addLayout(watcher_layout)
+
+        app_button_layout = QVBoxLayout()
 
     def fill_link_groupbox(self):
-        link_layout = QVBoxLayout()
+        link_layout = QGridLayout()
         self.links_groupbox.setLayout(link_layout)
-
-        link_layout.addWidget(
+        buttons = [
             make_link_button(
                 text="SRF Confluence Page",
                 link="https://confluence.slac.stanford.edu/display/SRF/",
-            )
-        )
-        link_layout.addWidget(
+            ),
             make_link_button(
                 text="MCC E-Log",
                 link="https://mccelog.slac.stanford.edu/elog/wbin/elog.php",
-            )
-        )
+            ),
+        ]
+
         # TODO decide if we still need/want these links
 
         # link_layout.addWidget(
@@ -98,7 +106,26 @@ class SRFHome(Display):
             )
             decarad_button.setText(f"Decarad {decarad}")
             decarad_button.macros = f"P=RADM:SYS0:{decarad}00,M={decarad}"
-            link_layout.addWidget(decarad_button)
+            buttons.append(decarad_button)
+
+        self.add_buttons_from_path(buttons, "*gui.py")
+        self.add_buttons_from_path(buttons, "*display.py")
+
+        col_count = get_dimensions(buttons)
+        for idx, button in enumerate(buttons):
+            link_layout.addWidget(button, int(idx / col_count), idx % col_count)
+
+    def add_buttons_from_path(self, buttons: List[PyDMRelatedDisplayButton], suffix):
+        for file in pathlib.Path(self.root_dir).rglob(suffix):
+            name: str = file.name
+            if name.startswith("test"):
+                continue
+            gui_button = PyDMRelatedDisplayButton(
+                filename=os.path.join(self.root_dir, file)
+            )
+            parsed_name = name.split(".")[0].replace("_", " ")
+            gui_button.setText(parsed_name.title().replace("Gui", "GUI"))
+            buttons.append(gui_button)
 
     def fill_mini_home_groupbox(self):
         mini_home_groupbox_layout = QGridLayout()

@@ -90,3 +90,12 @@ def highlight_text(r, g, b, text):
     https://stackoverflow.com/questions/70519979/printing-with-rgb-background
     """
     return f"\033[48;2;{r};{g};{b}m{text}\033[0m"
+
+
+def get_dimensions(options: List):
+    num_options = len(options)
+    row_count = int(np.sqrt(num_options))
+    col_count = int(np.ceil(np.sqrt(num_options)))
+    if row_count * col_count != num_options:
+        col_count += 1
+    return col_count
