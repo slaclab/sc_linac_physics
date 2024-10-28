@@ -20,13 +20,11 @@ def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
     start_button.setText(f"Restart {parsed_name} Process")
     tmux_command = f"tmux_launcher restart 'python {script_path}' {watcher_name}\""
     start_button.commands = [f"{xterm_prefix} && {tmux_command}"]
-    print(start_button.commands)
 
     stop_button = PyDMShellCommand()
     stop_button.setText(f"Stop {parsed_name} Process")
     tmux_command = f'tmux_launcher stop {script_path} {watcher_name}"'
     stop_button.commands = [f"{xterm_prefix} && {tmux_command}"]
-    print(stop_button.commands)
 
     vlayout.addWidget(show_button)
     vlayout.addWidget(start_button)
