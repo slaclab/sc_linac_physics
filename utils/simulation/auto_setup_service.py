@@ -162,7 +162,7 @@ class AutoSetupCavityPVGroup(AutoSetupPVGroup):
             await self.status_sevr.write(["Ready", "Running", "Error"].index(value))
 
     async def trigger_setup_script(self):
-        process = await create_subprocess_exec(
+        await create_subprocess_exec(
             "python",
             "/Users/zacarias/srf/auto_setup/srf_cavity_setup_launcher.py",
             f"-cm={self.cm_name}",
@@ -170,7 +170,7 @@ class AutoSetupCavityPVGroup(AutoSetupPVGroup):
         )
 
     async def trigger_shutdown_script(self):
-        process = await create_subprocess_exec(
+        await create_subprocess_exec(
             "python",
             "/Users/zacarias/srf/auto_setup/srf_cavity_setup_launcher.py",
             f"-cm={self.cm_name}",

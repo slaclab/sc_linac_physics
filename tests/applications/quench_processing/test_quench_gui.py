@@ -155,7 +155,9 @@ def test_update_decarad(qtbot: QtBot):
 
 
 # TODO figure out why this test is causing problems
-# pydm.widgets.enum_combo_box:enum_combo_box.py:179 Can not change value to 'ACCL:L0B:0110:RFMODECTRL-6'. Not an option in PyDMComboBox
+"""pydm.widgets.enum_combo_box:enum_combo_box.py:179
+   Can not change value to 'ACCL:L0B:0110:RFMODECTRL-6'.
+   Not an option in PyDMComboBox"""
 
 # def test_update_cm(qtbot: QtBot):
 #     gui = QuenchGUI()
