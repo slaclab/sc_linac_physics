@@ -17,8 +17,10 @@ from applications.quench_processing.quench_linac import (
     QuenchCavity,
     LOADED_Q_CHANGE_FOR_QUENCH,
     QUENCH_STABLE_TIME,
+    RADIATION_LIMIT,
+    QUENCH_AMP_THRESHOLD,
 )
-from utils.sc_linac.linac_utils import QuenchError
+from utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
 
 
 class TestQuenchCavity(TestCase):
@@ -115,20 +117,34 @@ class TestQuenchCavity(TestCase):
     def test_wait(self):
         self.cavity.check_abort = MagicMock()
         self.cavity._quench_latch_pv_obj = make_mock_pv(get_val=1)
+        self.cavity.has_uncaught_quench = MagicMock()
         self.cavity.wait(1)
         self.cavity.check_abort.assert_called()
 
     def test_wait_for_quench(self):
         self.skipTest("Not yet implemented")
 
-    def test_check_abort(self):
-        # TODO check liquid level error
+    def test_check_abort_radiation(self):
         self.cavity.decarad = MagicMock()
-        self.cavity.decarad.max_raw_dose = randint(0, 5)
-        if self.cavity.decarad.max_raw_dose > 2:
-            self.assertRaises(QuenchError, self.cavity.check_abort)
-        else:
-            self.cavity.check_abort()
+        self.cavity.decarad.max_raw_dose = RADIATION_LIMIT + 1
+        self.assertRaises(QuenchError, self.cavity.check_abort)
+
+    def test_check_abort_quench(self):
+        self.cavity.decarad = MagicMock()
+        self.cavity.decarad.max_raw_dose = RADIATION_LIMIT
+        self.cavity.has_uncaught_quench = MagicMock(return_value=True)
+        self.assertRaises(QuenchError, self.cavity.check_abort)
+
+    def test_has_uncaught_quench(self):
+        self.cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
+        self.cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_SELA)
+
+        amplitude = 16.6
+        self.cavity._aact_pv_obj = make_mock_pv(
+            get_val=QUENCH_AMP_THRESHOLD * amplitude
+        )
+        self.cavity._ades_pv_obj = make_mock_pv(get_val=amplitude)
+        self.assertTrue(self.cavity.has_uncaught_quench())
 
     def test_quench_process(self):
         # TODO test actual processing
