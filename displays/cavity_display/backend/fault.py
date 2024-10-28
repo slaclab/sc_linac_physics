@@ -2,7 +2,7 @@ import dataclasses
 from datetime import datetime
 from typing import Union, Optional
 
-from lcls_tools.common.controls.pyepics.utils import PV
+from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 from lcls_tools.common.data.archiver import (
     ArchiveDataHandler,
     ArchiverValue,
@@ -20,16 +20,21 @@ class FaultCounter:
     invalid_count: int = 0
 
     @property
+    def sum_fault_count(self) -> int:
+        return self.fault_count + self.invalid_count
+
+    @property
     def ratio_ok(self):
         try:
             return self.ok_count / (self.fault_count + self.invalid_count)
         except ZeroDivisionError:
             return 1
 
+    def __gt__(self, other) -> bool:
+        return self.sum_fault_count > other.sum_fault_count
 
-class PVInvalidError(Exception):
-    def __init__(self, message):
-        super(PVInvalidError, self).__init__(message)
+    def __eq__(self, other) -> bool:
+        return self.sum_fault_count == other.sum_fault_count
 
 
 class Fault:
@@ -76,7 +81,8 @@ class Fault:
         # returns "FALSE" if not faulted
         return self.is_faulted(self.pv_obj)
 
-    def is_faulted(self, obj: Union[PV, ArchiverValue]):
+
+    def is_faulted(self, obj: Union[PV, ArchiverValue]) -> bool:
         """
         Dug through the pyepics source code to find the severity values:
         class AlarmSeverity(DefaultIntEnum):
@@ -89,10 +95,16 @@ class Fault:
             # Changed from self.pv.pvname
             raise PVInvalidError(self.pv)
 
+        # self.ok_value is the value stated in spreadsheet
+        # obj.value is the actual reading value from pv
         if self.ok_value is not None:
+            # return "TRUE" means they do NOT match
+            # return "FALSE" means is_okay, not faulted
             return obj.val != self.ok_value
 
         elif self.fault_value is not None:
+            # return "TRUE" means faulted
+            # return "FALSE" means not faulted
             return obj.val == self.fault_value
 
         else:
@@ -102,7 +114,7 @@ class Fault:
                 " 'OK if equal to' parameter"
             )
 
-    def was_faulted(self, time: datetime):
+    def was_faulted(self, time: datetime) -> bool:
         archiver_value: ArchiverValue = get_data_at_time(
             # Changed from self.pv.pvname
             pv_list=[self.pv], time_requested=time
