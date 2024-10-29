@@ -83,7 +83,7 @@ class SELCavity(Cavity):
 
         if not np.isnan(slop):
             chisum = 0
-            for nn, yy in enumerate(iwf):
+            for nn, yy in enumerate(qwf):
                 chisum += (yy - (slop * iwf[nn] + inter)) ** 2 / (
                     slop * iwf[nn] + inter
                 )

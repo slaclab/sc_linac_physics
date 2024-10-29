@@ -110,7 +110,8 @@ def test_should_not_straighten_iq_plot(cavity):
 
 def test_straighten_iq_plot(cavity):
     cavity.can_be_straightened = MagicMock(return_value=True)
-    wf = [i for i in range(randint(1, 100))]
+    wf = [i for i in range(1, randint(2, 100))]
     cavity._i_waveform_pv = make_mock_pv(get_val=wf)
     cavity._q_waveform_pv = make_mock_pv(get_val=wf)
-    assert cavity.straighten_iq_plot() == 0
+    cavity._sel_poff_pv = make_mock_pv(get_val=randint(0, 360))
+    assert cavity.straighten_iq_plot() != 0
