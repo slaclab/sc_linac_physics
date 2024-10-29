@@ -1,5 +1,6 @@
 import logging
 import os
+import pathlib
 from typing import Optional
 
 import numpy as np
@@ -27,11 +28,9 @@ class SELCavity(Cavity):
         self._sel_poff_pv: Optional[PV] = None
 
         self.logger = custom_logger(f"{self} SEL Phase Opt Logger")
-        root_dir = os.getenv("SRF_ROOT_DIR", "/home/physics/srf/sc_linac_physics")
-        self.logfile = (
-            f"{root_dir}/applications/sel_phase_optimizer/logfiles"
-            f"/cm{self.cryomodule.name}/{self.number}_sel_phase_opt.log"
-        )
+        file_directory = pathlib.Path(__file__).parent.resolve()
+        self.logfile = f"{file_directory}/logfiles/cm{self.cryomodule.name}/{self.number}_sel_phase_opt.log"
+        print(self.logfile)
         os.makedirs(os.path.dirname(self.logfile), exist_ok=True)
 
         self.file_handler = logging.FileHandler(self.logfile, mode="a")
