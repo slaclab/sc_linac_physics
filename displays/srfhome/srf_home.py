@@ -89,6 +89,12 @@ class SRFHome(Display):
         unit_test_button.setText("All CM Unit Tests")
         buttons.append(unit_test_button)
 
+        auto_plot_button = PyDMRelatedDisplayButton(
+            filename="/home/physics/srf/gitRepos/" "makeAutoPlot/srf_stavDispMulti.py"
+        )
+        auto_plot_button.setText("Auto Plot")
+        buttons.append(auto_plot_button)
+
         # TODO decide if we still need/want these links
 
         # link_layout.addWidget(
