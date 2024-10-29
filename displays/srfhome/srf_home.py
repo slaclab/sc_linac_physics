@@ -83,6 +83,11 @@ class SRFHome(Display):
                 link="https://mccelog.slac.stanford.edu/elog/wbin/elog.php",
             ),
         ]
+        unit_test_button = PyDMEDMDisplayButton(
+            filename="$EDM/llrf/rf_srf_cavity_unit_all.edl"
+        )
+        unit_test_button.setText("All CM Unit Tests")
+        buttons.append(unit_test_button)
 
         # TODO decide if we still need/want these links
 
