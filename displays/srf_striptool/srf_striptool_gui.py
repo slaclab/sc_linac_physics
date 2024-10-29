@@ -11,7 +11,7 @@
 # writes the command(s) to make a config file and start
 # StripTool or archive Viewer
 #
-
+import pathlib
 import time
 from os import path, system, environ
 
@@ -48,13 +48,9 @@ class SRFStriptoolGUI(Display):
             print(self.plot_z[self.plots[0]].name)
 
         # Connect pushbuttons to functions
-        self.ui.GoButton.clicked.connect(self.Go)
-        self.ui.UsualPB.clicked.connect(self.UsualSuspects)
-        self.ui.ClearPB.clicked.connect(self.ClearSelection)
-
-        # connect spinner boxes to functions
-        self.ui.CMComboBox.activated.connect(self.ChangeCM)
-        self.ui.CavComboBox.activated.connect(self.ChangeCav)
+        self.ui.GoButton.clicked.connect(self.go)
+        self.ui.UsualPB.clicked.connect(self.usual_suspects)
+        self.ui.ClearPB.clicked.connect(self.clear_selection)
 
         # Fill in ui components
 
@@ -84,60 +80,41 @@ class SRFStriptoolGUI(Display):
                     )
                     self.ui.CheckBoxGrid.addWidget(self.dispCBs[-1], xx, yy)
 
-    # DEBUG
-    #    foo=system('echo 123')
-    #    foo=self.ui.DispComboBox.currentText()
-    #    print(foo)
-    #    foo=self.ui.CMComboBox.currentText()
-    #    print(foo)
-    #    foo=self.ui.CavComboBox.currentText()
-    #    print(foo)
-    #    foo=self.ui.STradioButton.isChecked()
-    #    print(foo)
-    #    foo=self.ui.AVradioButton.isChecked()
-    #    print(foo)
-
-    def Go(self):
-        #    print("Go")
+    def go(self):
         # gather variables to pass to python script
         for idx, checkbox in enumerate(self.dispCBs):
             if checkbox.isChecked():
                 dispname = self.plots[idx]
-                # idx = self.plots.index(dispname)
                 cmid = self.CMComboBox.currentText()
-                #        if self.reqcav[idx]:
                 if self.plot_z[dispname].needCav:
                     cavnum = self.CavComboBox.currentText()
                 else:
                     cavnum = " "
                 if self.ui.STradioButton.isChecked():
-                    stav = "st "
+                    stav = "st"
                 else:
-                    stav = "av "
+                    stav = "av"
 
-                if DEBUG:
-                    print("debug - using local srf_stavDisplaysCfg.py")
-                    cmd = "./srf_stavDisplaysCfg.py "
-                else:
-                    cmd = "/home/physics/srf/gitRepos/makeAutoPlot/srf_stavDisplaysCfg.py "
-                cmd = cmd + stav + dispname + " " + cmid + " " + cavnum + " ; "
-                if stav == "st ":
+                config_path = (
+                    f"{pathlib.Path(__file__).parent.resolve()}/srf_stavDisplaysCfg.py"
+                )
+                cmd = f"{config_path} {stav} {dispname} {cmid} {cavnum} ; "
+                if stav == "st":
                     cmd = cmd + "StripTool $STRIP_CONFIGFILE_DIR/SRF/srf_"
                     cmd = cmd + dispname + ".stp &"
                 else:
                     cmd = cmd + ' lclsarch "SRF/srf_' + dispname + '.xml -plot" &'
 
-                #    print(cmd)
                 system(cmd)
                 time.sleep(self.waitTime)
 
-    def UsualSuspects(self):
-        self.ClearSelection()
+    def usual_suspects(self):
+        self.clear_selection()
 
         for pidx in self.usualPlots:
             self.dispCBs[pidx].setChecked(True)
 
-    def ClearSelection(self):
+    def clear_selection(self):
         for checkBox in self.dispCBs:
             checkBox.setChecked(False)
 

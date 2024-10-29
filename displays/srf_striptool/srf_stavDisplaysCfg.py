@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import pathlib
 ############################################################
 # NAME: srf_stavDisplaysCfg.py
 # Author: Janice Nelson
@@ -107,7 +108,15 @@ else:
 
 if configType == "st":
     # Create config file
-    f = open(os.getenv("STRIP_CONFIGFILE_DIR") + "/SRF/" + fileNamePrefix + ".stp", "w")
+    config_dir = os.getenv(
+        "STRIP_CONFIGFILE_DIR", f"{pathlib.Path(__file__).parent.resolve()}/config"
+    )
+    filename = f"{fileNamePrefix}.stp"
+    filedir = f"{config_dir}/SRF"
+
+    os.makedirs(filedir, exist_ok=True)
+    f = open(f"{filedir}/{filename}", "w")
+
     #  f=open(fileNamePrefix+'.stp', 'w')
 
     # Write header
