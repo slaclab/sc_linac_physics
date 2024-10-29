@@ -89,11 +89,11 @@ class SRFHome(Display):
         unit_test_button.setText("All CM Unit Tests")
         buttons.append(unit_test_button)
 
-        # TODO write python auto plot to replace old call
+        # TODO write python auto plot to replace striptool-based repo
         auto_plot_button = PyDMRelatedDisplayButton(
             filename="/home/physics/srf/gitRepos/" "makeAutoPlot/srf_stavDispMulti.py"
         )
-        auto_plot_button.setText("Auto Plot")
+        auto_plot_button.setText("SRF Auto Plot")
         buttons.append(auto_plot_button)
 
         # TODO decide if we still need/want these links

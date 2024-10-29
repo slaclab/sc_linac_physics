@@ -14,7 +14,7 @@ from pydm.utilities import IconFont
 from pydm.widgets import PyDMByteIndicator, PyDMLabel
 
 from displays.cavity_display.frontend.fault_count_display import FaultCountDisplay
-from frontend.decoder import DecoderDisplay
+from frontend.fault_decoder_display import DecoderDisplay
 from frontend.gui_machine import GUIMachine
 from frontend.utils import make_line
 
