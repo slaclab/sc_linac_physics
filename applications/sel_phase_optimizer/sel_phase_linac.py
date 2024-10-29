@@ -1,7 +1,5 @@
 import logging
 import os
-import time
-from datetime import datetime
 from typing import Optional
 
 import numpy as np
@@ -60,21 +58,26 @@ class SELCavity(Cavity):
             self._q_waveform_pv = PV(self.pv_addr("CTRL:QWF"))
         return self._q_waveform_pv.get()
 
-    def straighten_cheeto(self) -> bool:
+    def can_be_straightened(self) -> bool:
+        return (
+            self.is_online
+            and self.is_on
+            and self.rf_mode == RF_MODE_SELAP
+            and self.aact > 1
+        )
+
+    def straighten_iq_plot(self) -> float:
         """
-        :return: True if wanted to take a step larger than MAX_STEP
+        TODO make the return value more intuitive
+        :return: change in SEL phase offset
         """
 
-        if not self.is_online or self.rf_mode != RF_MODE_SELAP or self.aact <= 1:
-            print(
-                f"{datetime.now()} {self} does not meet qualifications for straightening, skipping"
-            )
-            return False
+        if not self.can_be_straightened():
+            return 0
 
-        startVal = self.sel_phase_offset
+        start_val = self.sel_phase_offset
         iwf = self.i_waveform
         qwf = self.q_waveform
-        large_step = False
 
         [slop, inter] = stats.siegelslopes(iwf, qwf)
 
@@ -88,29 +91,24 @@ class SELCavity(Cavity):
             step = slop * MULT
             if abs(step) > MAX_STEP:
                 step = MAX_STEP * np.sign(step)
-                prefix = "\033[91m"
-                suffix = "\033[0m"
-                large_step = True
-                self.logger.warning(f"{prefix}Large step taken{suffix}")
-            else:
-                prefix = ""
-                suffix = ""
-            if startVal + step < -180:
+                self.logger.warning(
+                    f"Desired SEL Phase Offset change too large, moving by {step} instead"
+                )
+
+            if start_val + step < -180:
                 step = step + 360
-            elif startVal + step > 180:
+            elif start_val + step > 180:
                 step = step - 360
 
-            timi = time.localtime()
-            current_time = time.strftime("%m/%d %H:%M ", timi)
+            self.sel_poff_pv.put(start_val + step)
             self.logger.info(
-                f"{prefix}{current_time}{self}{suffix}  step: {step:5.2f} chi^2: {chisum:.2g}"
+                f"Changed SEL Phase Offset by {step:5.2f} with chi^2 {chisum:.2g}"
             )
-
-            self.sel_poff_pv.put(startVal + step)
-            return large_step
+            return step
 
         else:
-            self.logger.warning(f"{self} slope is NaN, skipping")
+            self.logger.warning("IQ slope is NaN, not changing SEL Phase Offset")
+            return 0
 
 
 SEL_MACHINE: Machine = Machine(cavity_class=SELCavity)
