@@ -11,11 +11,11 @@ from typing import List
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 
 sys.path.append("/home/physics/srf/sc_linac_physics")
-from applications.sel_phase_optimizer.sel_phase_linac import (
+from applications.sel_phase_optimizer.sel_phase_linac import (  # noqa: E402
     SEL_MACHINE,
     SELCavity,
     MAX_STEP,
-)  # noqa: E402
+)
 
 HEARTBEAT_PV = PV("PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT")
 
