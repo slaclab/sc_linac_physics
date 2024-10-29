@@ -85,7 +85,7 @@ def test_cannot_be_straightened_rf_state(cavity):
 
 def test_cannot_be_straightened_rf_mode(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
-    cavity._rf_state_pv_obj = make_mock_pv(get_val=0)
+    cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
     cavity._rf_mode_pv_obj = make_mock_pv(
         get_val=choice(
             [RF_MODE_SELA, RF_MODE_SEL, RF_MODE_SEL_RAW, RF_MODE_PULSE, RF_MODE_CHIRP]
@@ -97,7 +97,7 @@ def test_cannot_be_straightened_rf_mode(cavity):
 
 def test_cannot_be_straightened_aact(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
-    cavity._rf_state_pv_obj = make_mock_pv(get_val=0)
+    cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
     cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_SELAP)
     cavity._aact_pv_obj = make_mock_pv(get_val=1)
     assert not cavity.can_be_straightened()
