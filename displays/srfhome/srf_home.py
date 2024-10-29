@@ -89,6 +89,7 @@ class SRFHome(Display):
         unit_test_button.setText("All CM Unit Tests")
         buttons.append(unit_test_button)
 
+        # TODO write python auto plot to replace old call
         auto_plot_button = PyDMRelatedDisplayButton(
             filename="/home/physics/srf/gitRepos/" "makeAutoPlot/srf_stavDispMulti.py"
         )
