@@ -91,7 +91,7 @@ class SRFHome(Display):
 
         # TODO write python auto plot to replace striptool-based repo
         auto_plot_button = PyDMRelatedDisplayButton(
-            filename="/home/physics/srf/gitRepos/" "makeAutoPlot/srf_stavDispMulti.py"
+            filename="/home/physics/srf/gitRepos/makeAutoPlot/srf_stavDispMulti.py"
         )
         auto_plot_button.setText("SRF Auto Plot")
         buttons.append(auto_plot_button)
