@@ -15,12 +15,13 @@ from applications.sel_phase_optimizer.sel_phase_linac import (
     SEL_MACHINE,
     SELCavity,
     MAX_STEP,
-)
+)  # noqa: E402
 
 HEARTBEAT_PV = PV("PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT")
 
 
 def update_heartbeat(time_to_wait: int):
+    print(f"Sleeping for {time_to_wait} seconds")
     for _ in range(time_to_wait):
         try:
             HEARTBEAT_PV.put(HEARTBEAT_PV.get() + 1)
@@ -55,8 +56,7 @@ def run():
             print(
                 f"\033[94mThanks for your help! The current date/time is {current_time}\033[0m"
             )
-            print(f"Sleeping for 600 seconds")
-            print("")
+
             update_heartbeat(600)
 
 
