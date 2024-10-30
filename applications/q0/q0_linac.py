@@ -7,8 +7,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from epics import caget, camonitor, camonitor_clear, caput
 from lcls_tools.common.controls.pyepics.utils import PV
-from lcls_tools.common.data_analysis.archiver import get_values_over_time_range
-
+from lcls_tools.common.data.archiver import get_values_over_time_range
 from numpy import floor, linspace, sign
 from scipy.signal import medfilt
 from scipy.stats import linregress
