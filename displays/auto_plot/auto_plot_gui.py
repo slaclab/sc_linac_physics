@@ -14,7 +14,7 @@ def get_pvs(sc_linac_object: SCLinacObject):
     for attr in sc_linac_object.__dict__.keys():
         if attr.endswith("pv") or attr.endswith("pvs"):
             linac_pvs.append(attr)
-    return linac_pvs
+    return sorted(linac_pvs)
 
 
 class AutoPlot(Display):
@@ -48,5 +48,10 @@ class AutoPlot(Display):
         self.tab_widget.addTab(page, name)
         col_count = get_dimensions(options)
         for idx, option in enumerate(options):
-            checkbox: QCheckBox = QCheckBox(option.replace("_", " "))
+            parsed_name = (
+                option.replace("_", " ").replace("pvs", "").replace("pv", "").title()
+            )
+
+            checkbox: QCheckBox = QCheckBox(parsed_name)
+            checkbox.setAccessibleName(option)
             page_layout.addWidget(checkbox, int(idx / col_count), idx % col_count)
