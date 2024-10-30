@@ -5,7 +5,6 @@ from PyQt5.QtCore import Qt
 from displays.cavity_display.frontend.decoder import DecoderDisplay, Row, rows
 
 
-
 class TestDecoderDisplay(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -14,8 +13,6 @@ class TestDecoderDisplay(unittest.TestCase):
             cls.app = QApplication([])
         else:
             cls.app = QApplication.instance()
-
-
 
     @classmethod
     def tearDownClass(cls):
@@ -204,7 +201,7 @@ class TestDecoderDisplay(unittest.TestCase):
 
         display = DecoderDisplay()
         scroll_area_layout = display.groupbox.layout()
-        self.verify_layout_structure(scroll_area_layout, 3)  # Header + 2 rows
+        self.verify_layout_structure(scroll_area_layout, 3)
 
         row1_layout = scroll_area_layout.itemAt(1).layout()
         self.assertEqual(row1_layout.itemAt(0).widget().text().strip(), "ABC")
@@ -228,7 +225,7 @@ class TestDecoderDisplay(unittest.TestCase):
 
         display = DecoderDisplay()
         scroll_area_layout = display.groupbox.layout()
-        self.verify_layout_structure(scroll_area_layout, 3)  # Header + 2 rows
+        self.verify_layout_structure(scroll_area_layout, 3)
         # ABC should appear first in the display (bc sorting)
         row1_layout = scroll_area_layout.itemAt(1).layout()
         self.assertEqual(row1_layout.itemAt(0).widget().text().strip(), "ABC")
@@ -244,7 +241,7 @@ class TestDecoderDisplay(unittest.TestCase):
         display = DecoderDisplay()
         scroll_area_layout = display.groupbox.layout()
         # Should just have the header row and nothing else
-        self.verify_layout_structure(scroll_area_layout, 1)  # Only header, no rows
+        self.verify_layout_structure(scroll_area_layout, 1)
 
 
 if __name__ == '__main__':
