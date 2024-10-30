@@ -68,6 +68,9 @@ class Decarad(SCLinacObject):
             head: DecaradHead(number=head, decarad=self) for head in range(1, 11)
         }
 
+        self.raw_dose_pvs = [head.raw_dose_rate_pv for head in self.heads.values()]
+        self.avg_dose_pvs = [head.avg_dose_rate_pv for head in self.heads.values()]
+
     def __eq__(self, other):
         return isinstance(other, Decarad) and other.number == self.number
 
