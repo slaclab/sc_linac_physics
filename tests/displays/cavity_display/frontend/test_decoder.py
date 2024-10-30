@@ -10,7 +10,12 @@ class TestDecoderDisplay(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Need to create a QApplication instance before running any PyQt tests
-        cls.app = QApplication([])
+        if not QApplication.instance():
+            cls.app = QApplication([])
+        else:
+            cls.app = QApplication.instance()
+
+
 
     @classmethod
     def tearDownClass(cls):
