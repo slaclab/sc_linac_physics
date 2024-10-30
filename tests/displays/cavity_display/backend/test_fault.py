@@ -18,16 +18,15 @@ get_values_over_time_range_mock = MagicMock(
     return_value={"PV": ArchiveDataHandler([archiver_value])}
 )
 
+
 @patch.multiple(
     'lcls_tools.common.data.archiver',
     get_data_at_time=get_data_at_time_mock,
     get_values_over_time_range=get_values_over_time_range_mock
 )
-
-
 class TestFault(TestCase):
     def setUp(self):
-        from displays.cavity_display.backend.fault import Fault, FaultCounter
+        from displays.cavity_display.backend.fault import Fault
         self.fault = Fault(severity=0)
 
     def test_pv_obj(self):
@@ -111,9 +110,6 @@ class TestFaultCounter(TestCase):
             self.fault_count + self.invalid_count, self.fault_counter.sum_fault_count
         )
 
-    def test_ratio_ok(self):
-        self.skipTest("Not yet implemented")
-
     def test_gt(self):
         if self.fault_counter.sum_fault_count > self.fault_counter2.sum_fault_count:
             self.assertTrue(self.fault_counter > self.fault_counter2)
@@ -125,4 +121,3 @@ class TestFaultCounter(TestCase):
             self.assertTrue(self.fault_counter == self.fault_counter2)
         else:
             self.assertFalse(self.fault_counter == self.fault_counter2)
-

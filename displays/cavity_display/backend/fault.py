@@ -12,6 +12,7 @@ from lcls_tools.common.data.archiver import (
 
 PV_TIMEOUT = 0.01
 
+
 @dataclasses.dataclass
 class FaultCounter:
     fault_count: int = 0

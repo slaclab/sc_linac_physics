@@ -282,4 +282,3 @@ class TestBackendCavity(TestCase):
         mock_caput.assert_any_call("STATUS_PV", "1")
         mock_caput.assert_any_call("SEVERITY_PV", 0)
         mock_caput.assert_any_call("DESCRIPTION_PV", " ")
-
