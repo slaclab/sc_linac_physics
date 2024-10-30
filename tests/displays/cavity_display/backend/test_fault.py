@@ -27,7 +27,21 @@ get_values_over_time_range_mock = MagicMock(
 class TestFault(TestCase):
     def setUp(self):
         from displays.cavity_display.backend.fault import Fault
-        self.fault = Fault(severity=0)
+        self.fault = Fault(
+            severity=0,
+            tlc="test_tlc",
+            pv="test_pv",
+            ok_value=None,  # Changed from 1 to None
+            fault_value=None,  # Start with None, will be set in specific tests
+            long_description="Test long description",
+            short_description="Test short description",
+            button_level=1,
+            button_command="test_command",
+            macros={},
+            button_text="Test Button",
+            button_macro={},
+            action=None
+        )
 
     def test_pv_obj(self):
         self.fault._pv_obj = MagicMock()
@@ -44,25 +58,32 @@ class TestFault(TestCase):
         self.assertRaises(PVInvalidError, self.fault.is_faulted, pv)
 
     def test_is_faulted_ok(self):
-        pv: MagicMock = make_mock_pv()
-        self.fault.ok_value = 5
+        pv = make_mock_pv()
         pv.val = 5
+        # Test with ok_value
+        self.fault.ok_value = 5
+        self.fault.fault_value = None
         self.assertFalse(self.fault.is_faulted(pv))
 
         self.fault.ok_value = 3
         self.assertTrue(self.fault.is_faulted(pv))
 
     def test_is_faulted(self):
-        pv: MagicMock = make_mock_pv()
-        self.fault.fault_value = 5
+        pv = make_mock_pv()
         pv.val = 5
+        # Test with fault_value
+        self.fault.ok_value = None  # Make sure ok_value is None
+        self.fault.fault_value = 5
         self.assertTrue(self.fault.is_faulted(pv))
 
         self.fault.fault_value = 3
         self.assertFalse(self.fault.is_faulted(pv))
 
     def test_is_faulted_exception(self):
-        pv: MagicMock = make_mock_pv()
+        pv = make_mock_pv()
+        # Set both values to None to trigger the exception
+        self.fault.ok_value = None
+        self.fault.fault_value = None
         self.assertRaises(Exception, self.fault.is_faulted, pv)
 
     @patch('displays.cavity_display.backend.fault.get_data_at_time', get_data_at_time_mock)
