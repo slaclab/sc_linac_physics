@@ -46,12 +46,12 @@ class GUICavity:
 
     def __post_init__(self):
         self._cavity: Optional[SetupCavity] = None
-        self.setup_button = QPushButton(f"Set Up")
+        self.setup_button = QPushButton("Set Up")
 
         self.abort_button: QPushButton = QPushButton("Abort")
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.request_stop)
-        self.shutdown_button: QPushButton = QPushButton(f"Turn Off")
+        self.shutdown_button: QPushButton = QPushButton("Turn Off")
         self.shutdown_button.clicked.connect(self.trigger_shutdown)
 
         self.setup_button.clicked.connect(self.trigger_setup)

@@ -26,7 +26,7 @@ if __name__ == "__main__":
         "-cm",
         choices=ALL_CRYOMODULES,
         required=True,
-        help=f"Cryomodule name as a string",
+        help="Cryomodule name as a string",
     )
     parser.add_argument(
         "--cavity",
@@ -34,7 +34,7 @@ if __name__ == "__main__":
         required=True,
         choices=range(1, 9),
         type=int,
-        help=f"Cavity number as an int",
+        help="Cavity number as an int",
     )
     parser.add_argument(
         "--shutdown", "-off", action="store_true", help="Turn off cavity and SSA"

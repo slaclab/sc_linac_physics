@@ -132,7 +132,7 @@ class DecoderDisplay(Display):
 
 def main():
     app = QApplication(sys.argv)
-    decoder = DecoderDisplay()
+    DecoderDisplay()
     sys.exit(app.exec_())
 
 
