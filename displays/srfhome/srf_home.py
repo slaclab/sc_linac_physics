@@ -68,8 +68,6 @@ class SRFHome(Display):
         self.main_layout.addLayout(extras_layout)
         self.main_layout.addLayout(watcher_layout)
 
-        app_button_layout = QVBoxLayout()
-
     def fill_link_groupbox(self):
         link_layout = QGridLayout()
         self.links_groupbox.setLayout(link_layout)
