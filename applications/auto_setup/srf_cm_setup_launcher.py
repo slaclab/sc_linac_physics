@@ -30,7 +30,7 @@ if __name__ == "__main__":
         "-cm",
         choices=ALL_CRYOMODULES,
         required=True,
-        help=f"Cryomodule name as a string",
+        help="Cryomodule name as a string",
     )
 
     parser.add_argument(
