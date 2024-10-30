@@ -256,7 +256,6 @@ class TestBackendCavity(TestCase):
         # 1. results needs to be an instance of dict
         self.assertIsInstance(result, dict)
 
-        # 2. Need to verify the result has 2 entries (OFF and MGT)
         self.assertEqual(len(result), 2)
 
         # 3. Making sure FaultCounter obj with the highest sum of
