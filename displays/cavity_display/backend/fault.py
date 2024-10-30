@@ -12,7 +12,6 @@ from lcls_tools.common.data.archiver import (
 
 PV_TIMEOUT = 0.01
 
-
 @dataclasses.dataclass
 class FaultCounter:
     fault_count: int = 0
@@ -73,14 +72,13 @@ class Fault:
     @property
     def pv_obj(self) -> PV:
         if not self._pv_obj:
-            self._pv_obj = PV(self.pv, connection_timeout = PV_TIMEOUT)
+            self._pv_obj = PV(self.pv, connection_timeout=PV_TIMEOUT)
         return self._pv_obj
 
     def is_currently_faulted(self) -> bool:
         # returns "TRUE" if faulted
         # returns "FALSE" if not faulted
         return self.is_faulted(self.pv_obj)
-
 
     def is_faulted(self, obj: Union[PV, ArchiverValue]) -> bool:
         """

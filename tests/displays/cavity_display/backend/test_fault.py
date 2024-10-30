@@ -1,4 +1,4 @@
-from unittest import TestCase, mock
+from unittest import TestCase
 from unittest.mock import MagicMock, patch
 from random import randint
 from datetime import datetime
@@ -23,6 +23,7 @@ get_values_over_time_range_mock = MagicMock(
     get_data_at_time=get_data_at_time_mock,
     get_values_over_time_range=get_values_over_time_range_mock
 )
+
 
 class TestFault(TestCase):
     def setUp(self):
@@ -73,8 +74,8 @@ class TestFault(TestCase):
         self.fault.is_faulted.assert_called_with(archiver_value)
 
     def test_get_fault_count_over_time_range(self):
-
         self.skipTest("Not yet implemented")
+
     # Double checking that the patch.multiple is working.
     def test_mocks_are_applied(self):
         from lcls_tools.common.data.archiver import get_data_at_time, get_values_over_time_range

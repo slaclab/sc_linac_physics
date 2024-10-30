@@ -164,7 +164,6 @@ def mock_open(*args, **kwargs):
     return mock.mock_open(read_data="\n".join(data))(*args, **kwargs)
 
 
-# Comment
 class TestBackendCavity(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -201,10 +200,6 @@ class TestBackendCavity(TestCase):
         self.assertEqual(len(cavity1.faults.values()), 5)
         # Asserting cav5 only has 4 fault.
         self.assertEqual(len(cavity5.faults.values()), 4)
-
-        # Maybe an assertion to confirm cav5 has no rack faults?
-
-        # WIP
 
     def test_create_faults(self):
         self.skipTest("not yet implemented")
@@ -288,8 +283,3 @@ class TestBackendCavity(TestCase):
         mock_caput.assert_any_call("SEVERITY_PV", 0)
         mock_caput.assert_any_call("DESCRIPTION_PV", " ")
 
-        # 2nd part im thinking testing: We have 1 fault
-
-        # 3rd part im thinking testing: Invalid PV
-
-        # WIP
