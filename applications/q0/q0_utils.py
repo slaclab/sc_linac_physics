@@ -281,8 +281,7 @@ class ValveParams:
     refHeatLoadAct: float
 
 
-def gen_axis(title, xlabel, ylabel):
-    # type: (str, str, str) -> Axes
+def gen_axis(title: str, xlabel: str, ylabel: str) -> Axes:
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.set_title(title)
@@ -291,8 +290,7 @@ def gen_axis(title, xlabel, ylabel):
     return ax
 
 
-def redraw_axis(canvas, title, xlabel, ylabel):
-    # type: (FigureCanvasQTAgg, str, str, str) -> None
+def redraw_axis(canvas, title: FigureCanvasQTAgg, xlabel: str, ylabel: str):
     canvas.axes.cla()
     canvas.draw_idle()
     canvas.axes.set_title(title)
