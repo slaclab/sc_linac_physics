@@ -1,6 +1,6 @@
 import dataclasses
 from datetime import datetime
-from typing import Union, Optional
+from typing import Union, Optional, Dict
 
 from lcls_tools.common.controls.pyepics.utils import (
     PV,
@@ -118,8 +118,10 @@ class Fault:
             )
 
     def was_faulted(self, time: datetime) -> bool:
-        archiver_result = get_data_at_time(pv_list=[self.pv], time_requested=time)
-        archiver_value = archiver_result[self.pv]
+        archiver_result: Dict[str, ArchiverValue] = get_data_at_time(
+            pv_list=[self.pv], time_requested=time
+        )
+        archiver_value: ArchiverValue = archiver_result[self.pv]
         return self.is_faulted(archiver_value)
 
     def get_fault_count_over_time_range(
