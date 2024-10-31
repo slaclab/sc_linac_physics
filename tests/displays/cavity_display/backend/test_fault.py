@@ -30,27 +30,6 @@ with mock.patch("lcls_tools.common.data.archiver.get_data_at_time", archive_mock
     get_values_over_time_range=get_values_over_time_range_mock,
 )
 class TestFault(TestCase):
-    """
-    def setUp(self):
-        from displays.cavity_display.backend.fault import Fault
-
-        self.fault = Fault(
-            severity=0,
-            tlc="test_tlc",
-            pv="test_pv",
-            ok_value=None,  # Changed from 1 to None
-            fault_value=None,  # Start with None, will be set in specific tests
-            long_description="Test long description",
-            short_description="Test short description",
-            button_level=1,
-            button_command="test_command",
-            macros={},
-            button_text="Test Button",
-            button_macro={},
-            action=None,
-        )
-    """
-
     def setUp(self):
         self.fault = Fault(severity=0)
 
