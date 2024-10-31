@@ -1,0 +1,26 @@
+from unittest.mock import MagicMock
+
+import pytest
+from lcls_tools.common.controls.pyepics.utils import make_mock_pv
+
+from displays.cavity_display.backend.runner import Runner
+
+
+@pytest.fixture
+def runner() -> Runner:
+    runner = Runner()
+    runner._watcher_pv_obj = make_mock_pv()
+    for cavity in runner.backend_cavities:
+        cavity.run_through_faults = MagicMock()
+    return runner
+
+
+def test_check_faults(runner):
+    runner.check_faults()
+    for cavity in runner.backend_cavities:
+        cavity.run_through_faults.assert_called()
+    runner._watcher_pv_obj.put.assert_called()
+
+
+def test_watcher_pv_obj(runner):
+    assert runner.watcher_pv_obj == runner._watcher_pv_obj
