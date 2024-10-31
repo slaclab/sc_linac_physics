@@ -3,6 +3,8 @@ from PyQt5.QtWidgets import QFrame, QSizePolicy, QGridLayout, QLabel
 from lcls_tools.common.controls.pyepics.utils import PVInvalidError
 from pydm.widgets import PyDMLabel, PyDMRelatedDisplayButton
 
+from displays.cavity_display.backend.fault import Fault
+
 
 def make_line(shape=QFrame.VLine):
     line = QFrame()
@@ -16,10 +18,10 @@ class EnumLabel(PyDMLabel):
     PyDMLabel subclass to change PyDMLabel Alarm channel text
     """
 
-    def __init__(self, fault, codeLabel, parent=None, args=None):
-        super(EnumLabel, self).__init__(parent=parent, init_channel=fault.pv.pvname)
-        self.fault = fault
-        self.codeLabel = codeLabel
+    def __init__(self, fault: Fault, code_label: QLabel, parent=None, args=None):
+        super(EnumLabel, self).__init__(parent=parent, init_channel=fault.pv)
+        self.fault: Fault = fault
+        self.code_label: QLabel = code_label
 
         self.setMaximumWidth(100)
         self.setMaximumHeight(28)
@@ -36,7 +38,7 @@ class EnumLabel(PyDMLabel):
                     "background-color: rgb(255,0,0); font-weight: "
                     "bold; border: 2px solid black; color: white;"
                 )
-                self.codeLabel.setStyleSheet("font-weight:bold;")
+                self.code_label.setStyleSheet("font-weight:bold;")
 
             else:
                 self.setText("OK")
@@ -44,7 +46,7 @@ class EnumLabel(PyDMLabel):
                     "background-color: rgb(0,255,0);font-weight: bold; "
                     "border: 2px solid black;"
                 )
-                self.codeLabel.setStyleSheet("font-weight:plain;")
+                self.code_label.setStyleSheet("font-weight:plain;")
 
         except PVInvalidError:
             self.setText("INVALID")
@@ -52,7 +54,7 @@ class EnumLabel(PyDMLabel):
                 "background-color: rgb(255,0,255);font-weight: bold;"
                 "border: 2px solid black;"
             )
-            self.codeLabel.setStyleSheet("font-weight:bold;")
+            self.code_label.setStyleSheet("font-weight:bold;")
 
 
 class PyDMFaultButton(PyDMRelatedDisplayButton):

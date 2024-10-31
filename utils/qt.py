@@ -94,8 +94,9 @@ def highlight_text(r, g, b, text):
 
 def get_dimensions(options: List):
     num_options = len(options)
-    row_count = int(np.sqrt(num_options))
-    col_count = int(np.ceil(np.sqrt(num_options)))
-    if row_count * col_count != num_options:
+    sqrt = np.sqrt(num_options)
+    row_count = int(sqrt)
+    col_count = int(np.ceil(sqrt))
+    if row_count * col_count < num_options:
         col_count += 1
     return col_count

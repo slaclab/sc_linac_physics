@@ -111,7 +111,7 @@ class GUICavity(BackendCavity):
             action_label.setAlignment(Qt.AlignLeft)
             action_label.setWordWrap(True)
 
-            status_label = EnumLabel(fault=fault, codeLabel=code_label)
+            status_label = EnumLabel(fault=fault, code_label=code_label)
             status_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
 
             row_idx = idx + 1

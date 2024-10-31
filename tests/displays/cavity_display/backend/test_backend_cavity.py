@@ -5,166 +5,13 @@ from unittest import TestCase, mock
 
 from displays.cavity_display.backend.backend_cavity import BackendCavity
 from displays.cavity_display.backend.fault import FaultCounter
+from tests.displays.cavity_display.utils.utils import mock_open
 from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.linac import Machine
 
 builtin_open = open  # save the unpatched version
 
-csv_keys = [
-    "Three Letter Code",
-    "Short Description",
-    "Long Description",
-    "Recommended Corrective Actions",
-    "Level",
-    "CM Type",
-    "Button Type",
-    "Button Path",
-    "Button Macros",
-    "Rack",
-    "PV Prefix",
-    "PV Suffix",
-    "OK If Equal To",
-    "Faulted If Equal To",
-    "Severity",
-    "Generic Short Description for Decoder",
-]
-csv_cav_row = [
-    "   ",
-    "Offline",
-    "Cavity not usable or not intended to be used for extended period",
-    "No further action required",
-    "CAV",
-    "",
-    "EDM",
-    "$EDM/llrf/rf_srf_cavity_main.edl",
-    '"SELTAB=10',
-    'SELCHAR=3"',
-    "",
-    "ACCL:{LINAC}:{CRYOMODULE}{CAVITY}0:",
-    "HWMODE",
-    "",
-    "2",
-    "5",
-    "Offline",
-    "",
-]
 
-csv_all_row = [
-    "BSO",
-    "BSOIC Tripped Chain A",
-    "BSOIC tripped",
-    "Communicate the fault to the EOIC and await resolution",
-    "ALL",
-    "",
-    "EDM",
-    "$EDM/pps/pps_sysw.edl",
-    "",
-    "",
-    "BSOC:SYSW:2:",
-    "SumyA",
-    "1",
-    "",
-    "2",
-    "BSOIC Tripped",
-    "",
-]
-
-csv_rack_row = [
-    "BLV",
-    "Beamline Vacuum",
-    "Beamline Vacuum too high",
-    "Contact on call SRF person",
-    "RACK",
-    "",
-    "EDM",
-    "$EDM/llrf/rf_srf_cavity_main.edl",
-    '"SELTAB=4',
-    'SELCHAR=3"',
-    "A",
-    "ACCL:{LINAC}:{CRYOMODULE}00:",
-    "BMLNVACA_LTCH",
-    "0",
-    "",
-    "2",
-    "",
-    "",
-]
-
-csv_ssa_row = [
-    "SSA",
-    "SSA Faulted",
-    "SSA not on",
-    "Run auto setup",
-    "SSA",
-    "",
-    "EDM",
-    "$EDM/llrf/rf_srf_ssa_{cm_OR_hl}.edl",
-    "",
-    "",
-    "ACCL:{LINAC}:{CRYOMODULE}{CAVITY}0:SSA:",
-    "FaultSummary.SEVR",
-    "",
-    "2",
-    "2",
-    "SSA Faulted",
-    "",
-]
-
-csv_cryo_row = [
-    "USL",
-    "Upstream liquid level out of tolerance Alarm",
-    "Cryomodule liquid level out of tolerance",
-    "Call on shift cryo operator",
-    "CRYO",
-    "",
-    "EDM",
-    "$EDM/cryo/cryo_system_all.edl",
-    "",
-    "",
-    "CLL:CM{CRYOMODULE}:2601:US:",
-    "LVL.SEVR",
-    "",
-    "2",
-    "2",
-    "",
-    "",
-]
-
-csv_cm_row = [
-    "BCS",
-    "BCS LLRF Drive Fault",
-    "BCS fault is interrupting LLRF drive (only affects CM01 in practice)",
-    "Communicate the fault to the EOIC and await resolution",
-    "CM",
-    "ALL",
-    "EDM",
-    "$EDM/bcs/ops_lcls2_bcs_main.edl",
-    "",
-    "",
-    "ACCL:{LINAC}:{CRYOMODULE}00:",
-    "BCSDRVSUM",
-    "0",
-    "",
-    "2",
-    "BCS LLRF Drive Fault",
-    "",
-]
-
-
-def mock_open(*args, **kwargs):
-    data = [
-        ",".join(csv_keys),
-        ",".join(csv_rack_row),
-        ",".join(csv_all_row),
-        ",".join(csv_ssa_row),
-        ",".join(csv_cryo_row),
-        ",".join(csv_cm_row),
-    ]
-    # mocked open for path "foo"
-    return mock.mock_open(read_data="\n".join(data))(*args, **kwargs)
-
-
-# Comment
 class TestBackendCavity(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -186,7 +33,6 @@ class TestBackendCavity(TestCase):
         self.cavity1.rack.rack_name = "A"
 
         # Need additonal setup for running through fault tests
-
         self.cavity1.create_faults = mock.Mock()
         self.cavity1.number = 1
         self.cavity1.status_pv = "STATUS_PV"
@@ -203,10 +49,6 @@ class TestBackendCavity(TestCase):
         # Asserting cav5 only has 4 fault.
         self.assertEqual(len(cavity5.faults.values()), 4)
 
-        # Maybe an assertion to confirm cav5 has no rack faults?
-
-        # WIP
-
     def test_create_faults(self):
         self.skipTest("not yet implemented")
 
@@ -221,21 +63,21 @@ class TestBackendCavity(TestCase):
         mock_faults = [
             mock.Mock(
                 tlc="OFF",
-                pv=mock.Mock(pvname="PV1"),
+                pv="PV1",
                 get_fault_count_over_time_range=mock.Mock(
                     return_value=mock_fault_counter_1
                 ),
             ),
             mock.Mock(
                 tlc="MGT",
-                pv=mock.Mock(pvname="PV2"),
+                pv="PV2",
                 get_fault_count_over_time_range=mock.Mock(
                     return_value=mock_fault_counter_2
                 ),
             ),
             mock.Mock(
                 tlc="MGT",
-                pv=mock.Mock(pvname="PV3"),
+                pv="PV3",
                 get_fault_count_over_time_range=mock.Mock(
                     return_value=mock_fault_counter_3
                 ),
@@ -257,7 +99,6 @@ class TestBackendCavity(TestCase):
         # 1. results needs to be an instance of dict
         self.assertIsInstance(result, dict)
 
-        # 2. Need to verify the result has 2 entries
         self.assertEqual(len(result), 2)
 
         # 3. Making sure FaultCounter obj with the highest sum of
@@ -289,9 +130,3 @@ class TestBackendCavity(TestCase):
         mock_caput.assert_any_call("STATUS_PV", "1")
         mock_caput.assert_any_call("SEVERITY_PV", 0)
         mock_caput.assert_any_call("DESCRIPTION_PV", " ")
-
-        # 2nd part im thinking testing: We have 1 fault
-
-        # 3rd part im thinking testing: Invalid PV
-
-        # WIP

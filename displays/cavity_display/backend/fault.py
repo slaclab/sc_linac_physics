@@ -116,8 +116,7 @@ class Fault:
     def was_faulted(self, time: datetime) -> bool:
         archiver_value: ArchiverValue = get_data_at_time(
             # Changed from self.pv.pvname
-            pv_list=[self.pv],
-            time_requested=time,
+            pv_list=[self.pv], time_requested=time
         )[self.pv]
         return self.is_faulted(archiver_value)
 
@@ -126,9 +125,7 @@ class Fault:
     ) -> FaultCounter:
         result = get_values_over_time_range(
             # Changed from self.pv.pvname
-            pv_list=[self.pv],
-            start_time=start_time,
-            end_time=end_time,
+            pv_list=[self.pv], start_time=start_time, end_time=end_time
         )
         # Changed from self.pv.pvname
         data_handler: ArchiveDataHandler = result[self.pv]
