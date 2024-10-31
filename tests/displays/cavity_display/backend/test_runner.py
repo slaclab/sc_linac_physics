@@ -1,3 +1,4 @@
+from random import randint
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,7 +10,7 @@ from displays.cavity_display.backend.runner import Runner
 @pytest.fixture
 def runner() -> Runner:
     runner = Runner()
-    runner._watcher_pv_obj = make_mock_pv()
+    runner._watcher_pv_obj = make_mock_pv(get_val=randint(0, 1000000))
     for cavity in runner.backend_cavities:
         cavity.run_through_faults = MagicMock()
     return runner
