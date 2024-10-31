@@ -18,8 +18,9 @@ get_values_over_time_range_mock = MagicMock(
     return_value={"PV": ArchiveDataHandler([archiver_value])}
 )
 
-archive_mock = MagicMock(return_value={"PV": archiver_value})
-with mock.patch("lcls_tools.common.data.archiver.get_data_at_time", archive_mock):
+with mock.patch(
+    "lcls_tools.common.data.archiver.get_data_at_time", get_data_at_time_mock
+):
     from displays.cavity_display.backend.fault import Fault
 
 
