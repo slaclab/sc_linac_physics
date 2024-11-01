@@ -58,9 +58,13 @@ class Cavity(linac_utils.SCLinacObject):
             LINAC=self.linac.name, CRYOMODULE=self.cryomodule.name, CAVITY=self.number
         )
 
-        self.ctePrefix = "CTE:CM{cm}:1{cav}".format(
-            cm=self.cryomodule.name, cav=self.number
-        )
+        self.cte_prefix = f"CTE:CM{self.cryomodule.name}:1{self.number}"
+
+        self.ds_hom_pv = f"{self.cte_prefix}20:DH:TEMP"
+        self.us_hom_pv = f"{self.cte_prefix}18:UH:TEMP"
+
+        self.coupler_bottom_pv = self.pv_addr("CPLRTEMP2")
+        self.coupler_top_pv = self.pv_addr("CPLRTEMP1")
 
         self.chirp_prefix = self._pv_prefix + "CHIRP:"
         self.abort_flag: bool = False
