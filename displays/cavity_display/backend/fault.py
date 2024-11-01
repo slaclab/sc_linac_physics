@@ -1,8 +1,12 @@
 import dataclasses
 from datetime import datetime
-from typing import Union, Optional
+from typing import Union, Optional, Dict
 
-from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
+from lcls_tools.common.controls.pyepics.utils import (
+    PV,
+    EPICS_INVALID_VAL,
+    PVInvalidError,
+)
 from lcls_tools.common.data.archiver import (
     ArchiveDataHandler,
     ArchiverValue,
@@ -40,19 +44,19 @@ class FaultCounter:
 class Fault:
     def __init__(
         self,
-        tlc,
-        severity,
-        pv,
-        ok_value,
-        fault_value,
-        long_description,
-        short_description,
-        button_level,
-        button_command,
-        macros,
-        button_text,
-        button_macro,
-        action,
+        tlc=None,
+        severity=None,
+        pv=None,
+        ok_value=None,
+        fault_value=None,
+        long_description=None,
+        short_description=None,
+        button_level=None,
+        button_command=None,
+        macros=None,
+        button_text=None,
+        button_macro=None,
+        action=None,
     ):
         self.tlc = tlc
         self.severity = int(severity)
@@ -66,6 +70,7 @@ class Fault:
         self.button_text = button_text
         self.button_macro = button_macro
         self.action = action
+
         # Storing PV name as a string instead of making a PV obj
         self.pv: str = pv
         self._pv_obj: Optional[PV] = None
@@ -90,8 +95,7 @@ class Fault:
             MAJOR = 2
             INVALID = 3
         """
-        if obj.severity == 3 or obj.status is None:
-            # Changed from self.pv.pvname
+        if obj.severity == EPICS_INVALID_VAL or obj.status is None:
             raise PVInvalidError(self.pv)
 
         # self.ok_value is the value stated in spreadsheet
@@ -114,20 +118,19 @@ class Fault:
             )
 
     def was_faulted(self, time: datetime) -> bool:
-        archiver_value: ArchiverValue = get_data_at_time(
-            # Changed from self.pv.pvname
+        archiver_result: Dict[str, ArchiverValue] = get_data_at_time(
             pv_list=[self.pv], time_requested=time
-        )[self.pv]
+        )
+        archiver_value: ArchiverValue = archiver_result[self.pv]
         return self.is_faulted(archiver_value)
 
     def get_fault_count_over_time_range(
         self, start_time: datetime, end_time: datetime
     ) -> FaultCounter:
         result = get_values_over_time_range(
-            # Changed from self.pv.pvname
             pv_list=[self.pv], start_time=start_time, end_time=end_time
         )
-        # Changed from self.pv.pvname
+
         data_handler: ArchiveDataHandler = result[self.pv]
 
         counter = FaultCounter()
