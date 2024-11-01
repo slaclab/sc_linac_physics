@@ -1,6 +1,6 @@
 from datetime import datetime
 from random import randint
-from unittest import TestCase, mock
+from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from lcls_tools.common.controls.pyepics.utils import (
@@ -10,18 +10,13 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 from lcls_tools.common.data.archiver import ArchiverValue, ArchiveDataHandler
 
-from displays.cavity_display.backend.fault import FaultCounter
+from displays.cavity_display.backend.fault import FaultCounter, Fault
 
 archiver_value = ArchiverValue()
 get_data_at_time_mock = MagicMock(return_value={"PV": archiver_value})
 get_values_over_time_range_mock = MagicMock(
     return_value={"PV": ArchiveDataHandler([archiver_value])}
 )
-
-with mock.patch(
-    "lcls_tools.common.data.archiver.get_data_at_time", get_data_at_time_mock
-):
-    from displays.cavity_display.backend.fault import Fault
 
 
 @patch.multiple(
