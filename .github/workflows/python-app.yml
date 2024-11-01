@@ -35,5 +35,4 @@ jobs:
           flake8 . --count --max-complexity=10 --max-line-length=120 --show-source --statistics
       - name: Test with pytest
         run: |
-          QT_QPA_PLATFORM=offscreen PYDM_DEFAULT_PROTOCOL=fake python -m coverage run -m pytest -rx
-          coverage report
+          QT_QPA_PLATFORM=offscreen PYDM_DEFAULT_PROTOCOL=fake python -m pytest -rx
