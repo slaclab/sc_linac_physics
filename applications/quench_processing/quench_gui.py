@@ -49,9 +49,9 @@ class QuenchGUI(Display):
 
         self.add_selectors()
 
-        self.cm_combobox.addItems(ALL_CRYOMODULES)
-        self.cav_combobox.addItems(map(str, range(1, 9)))
-        self.decarad_combobox.addItems(["1", "2"])
+        self.cm_combobox.addItems([""] + ALL_CRYOMODULES)
+        self.cav_combobox.addItems([""] + list(map(str, range(1, 9))))
+        self.decarad_combobox.addItems(["", "1", "2"])
 
         widget_hlayout: QHBoxLayout = QHBoxLayout()
         self.controls_vlayout: QVBoxLayout = QVBoxLayout()
@@ -115,9 +115,6 @@ class QuenchGUI(Display):
 
         self.decarads: Dict[str, Decarad] = {"1": Decarad(1), "2": Decarad(2)}
         self.current_decarad: Optional[Decarad] = None
-
-        self.update_cm()
-        self.update_decarad()
 
         self.quench_worker: Optional[QuenchWorker] = None
 
@@ -274,6 +271,9 @@ class QuenchGUI(Display):
             )
 
     def update_decarad(self):
+        if not self.decarad_combobox.currentText():
+            return
+
         self.current_decarad = self.decarads[self.decarad_combobox.currentText()]
 
         self.update_timeplot()
@@ -287,6 +287,9 @@ class QuenchGUI(Display):
         self.decarad_voltage_readback.channel = self.current_decarad.voltage_readback_pv
 
     def update_cm(self):
+        if not self.cm_combobox.currentText() or not self.cav_combobox.currentText():
+            return
+
         self.clear_all_connections()
 
         self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[
