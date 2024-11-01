@@ -19,3 +19,4 @@ pyqtgraph
 urllib3
 simulacrum @ git+https://github.com/slaclab/simulacrum.git
 pytest-qt
+pytest

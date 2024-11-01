@@ -47,6 +47,12 @@ class SCLinacPhysicsService(Service):
         self["ALRM:SYS0:SC_CAV_FAULT:ALHBERR"] = ChannelEnum(
             enum_strings=("RUNNING", "NOT_RUNNING", "INVALID"), value=0
         )
+        self["ALRM:SYS0:SC_SEL_PHAS_OPT:ALHBERR"] = ChannelEnum(
+            enum_strings=("RUNNING", "NOT_RUNNING", "INVALID"), value=0
+        )
+        self["ALRM:SYS0:SC_CAV_QNCH_RESET:ALHBERR"] = ChannelEnum(
+            enum_strings=("RUNNING", "NOT_RUNNING", "INVALID"), value=0
+        )
         self.add_pvs(BSOICPVGroup(prefix="BSOC:SYSW:2:"))
 
         rackA = range(1, 5)
