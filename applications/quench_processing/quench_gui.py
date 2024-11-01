@@ -241,6 +241,12 @@ class QuenchGUI(Display):
             self.clear_connections(signal)
 
     def update_timeplot(self):
+        if (
+            not self.cm_combobox.currentText()
+            or not self.cav_combobox.currentText()
+            or not self.decarad_combobox.currentText()
+        ):
+            return
         self.amp_rad_timeplot.clearCurves()
 
         self.current_decarad = self.decarads[self.decarad_combobox.currentText()]

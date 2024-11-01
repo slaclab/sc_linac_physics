@@ -21,9 +21,11 @@ class RFControls:
         self.rf_status_readback_label: PyDMLabel = PyDMLabel()
 
         self.ades_spinbox: PyDMSpinbox = PyDMSpinbox()
+        self.ades_spinbox.setSingleStep(0.1)
         self.aact_readback_label: PyDMLabel = PyDMLabel()
 
         self.srf_max_spinbox: PyDMSpinbox = PyDMSpinbox()
+        self.srf_max_spinbox.setSingleStep(0.1)
         self.srf_max_readback_label: PyDMLabel = PyDMLabel()
 
         self.rf_control_groupbox: QGroupBox = QGroupBox("RF Controls")
