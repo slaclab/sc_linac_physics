@@ -247,6 +247,7 @@ class QuenchGUI(Display):
             or not self.decarad_combobox.currentText()
         ):
             return
+
         self.amp_rad_timeplot.clearCurves()
 
         self.current_decarad = self.decarads[self.decarad_combobox.currentText()]

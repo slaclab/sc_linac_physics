@@ -155,10 +155,6 @@ def test_update_cm(qtbot: QtBot, gui):
     gui.clear_all_connections = MagicMock()
     gui.update_timeplot = MagicMock()
     gui.waveform_updater.updatePlot = MagicMock()
-    gui.rf_controls.ssa_on_button = MagicMock()
-    gui.rf_controls.ssa_off_button = MagicMock()
-    gui.rf_controls.rf_on_button = MagicMock()
-    gui.rf_controls.rf_off_button = MagicMock()
     gui.start_button = MagicMock()
     gui.abort_button = MagicMock()
 
