@@ -152,7 +152,8 @@ HW_MODE_READY_VALUE = 4
 INTERLOCK_RESET_ATTEMPTS = 5
 
 # this value is based on historical data, when the decarads were on, but not seeing any FE from a cavity
-DECARAD_BACKGROUND_READING = 0.8
+DECARAD_BACKGROUND_READING_AVG = 0.8
+DECARAD_BACKGROUND_READING_RAW = 8
 
 
 class SCLinacObject(ABC, object):

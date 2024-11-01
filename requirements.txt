@@ -1,0 +1,22 @@
+typing
+pydm
+numpy
+qtpy
+pyyaml
+pydantic
+h5py
+requests
+scipy
+scikit-learn
+matplotlib
+setuptools
+PyQt5
+edmbutton @ git+https://github.com/slaclab/edmbutton.git
+lcls-tools @ git+https://github.com/slaclab/lcls-tools.git
+caproto
+edmbutton
+pyqtgraph
+urllib3
+simulacrum @ git+https://github.com/slaclab/simulacrum.git
+pytest-qt
+pytest
