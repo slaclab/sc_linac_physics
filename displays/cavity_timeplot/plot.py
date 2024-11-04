@@ -126,8 +126,8 @@ class Plot(Display):
         """Cleanup EPICS connections when closing"""
         try:
             epics.ca.finalize_libca()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error finalizing EPICS: {e}")
         super().closeEvent(event)
 
     @property
