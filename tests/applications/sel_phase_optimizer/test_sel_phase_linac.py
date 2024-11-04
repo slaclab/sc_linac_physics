@@ -28,13 +28,13 @@ def cavity() -> SELCavity:
 
 
 def test_sel_poff_pv(cavity):
-    cavity._sel_poff_pv = make_mock_pv()
-    assert cavity.sel_poff_pv == cavity._sel_poff_pv
+    cavity._sel_poff_pv_obj = make_mock_pv()
+    assert cavity.sel_poff_pv_obj == cavity._sel_poff_pv_obj
 
 
 def test_sel_phase_offset(cavity):
     offset = randint(0, 100)
-    cavity._sel_poff_pv = make_mock_pv(get_val=offset)
+    cavity._sel_poff_pv_obj = make_mock_pv(get_val=offset)
     assert cavity.sel_phase_offset == offset
 
 
@@ -113,5 +113,5 @@ def test_straighten_iq_plot(cavity):
     wf = [i for i in range(1, randint(2, 100))]
     cavity._i_waveform_pv = make_mock_pv(get_val=wf)
     cavity._q_waveform_pv = make_mock_pv(get_val=wf)
-    cavity._sel_poff_pv = make_mock_pv(get_val=randint(0, 360))
+    cavity._sel_poff_pv_obj = make_mock_pv(get_val=randint(0, 360))
     assert cavity.straighten_iq_plot() != 0

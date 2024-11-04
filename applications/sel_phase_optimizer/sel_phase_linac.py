@@ -25,7 +25,10 @@ class SELCavity(Cavity):
         super().__init__(cavity_num=cavity_num, rack_object=rack_object)
         self._q_waveform_pv: Optional[PV] = None
         self._i_waveform_pv: Optional[PV] = None
-        self._sel_poff_pv: Optional[PV] = None
+        self._sel_poff_pv_obj: Optional[PV] = None
+        self._fit_chisquare_pv_obj: Optional[PV] = None
+        self._fit_slope_pv_obj: Optional[PV] = None
+        self._fit_intercept_pv_obj: Optional[PV] = None
 
         self.logger = custom_logger(f"{self} SEL Phase Opt Logger")
         file_directory = pathlib.Path(__file__).parent.resolve()
@@ -38,14 +41,14 @@ class SELCavity(Cavity):
         self.logger.addHandler(self.file_handler)
 
     @property
-    def sel_poff_pv(self) -> PV:
-        if not self._sel_poff_pv:
-            self._sel_poff_pv = PV(self.pv_addr("SEL_POFF"))
-        return self._sel_poff_pv
+    def sel_poff_pv_obj(self) -> PV:
+        if not self._sel_poff_pv_obj:
+            self._sel_poff_pv_obj = PV(self.pv_addr("SEL_POFF"))
+        return self._sel_poff_pv_obj
 
     @property
     def sel_phase_offset(self):
-        return self.sel_poff_pv.get()
+        return self.sel_poff_pv_obj.get()
 
     @property
     def i_waveform(self):
@@ -60,22 +63,22 @@ class SELCavity(Cavity):
         return self._q_waveform_pv.get()
 
     @property
-    def fit_chisquare(self) -> PV:
-        if not self._fit_chisquare:
-            self._fit_chisquare = PV(self.pv_addr("CTRL:FIT_CHISQUARE"))
-        return self._fit_chisquare
+    def fit_chisquare_pv_obj(self) -> PV:
+        if not self._fit_chisquare_pv_obj:
+            self._fit_chisquare_pv_obj = PV(self.pv_addr("CTRL:FIT_CHISQUARE"))
+        return self._fit_chisquare_pv_obj
 
     @property
-    def fit_slope(self) -> PV:
-        if not self._fit_slope:
-            self._fit_slope = PV(self.pv_addr("CTRL:FIT_SLOPE"))
-        return self._fit_slope
+    def fit_slope_pv_obj(self) -> PV:
+        if not self._fit_slope_pv_obj:
+            self._fit_slope_pv_obj = PV(self.pv_addr("CTRL:FIT_SLOPE"))
+        return self._fit_slope_pv_obj
 
     @property
-    def fit_intercept(self) -> PV:
-        if not self._fit_intercept:
-            self._fit_intercept = PV(self.pv_addr("CTRL:FIT_INTERCEPT"))
-        return self._fit_intercept
+    def fit_intercept_pv_obj(self) -> PV:
+        if not self._fit_intercept_pv_obj:
+            self._fit_intercept_pv_obj = PV(self.pv_addr("CTRL:FIT_INTERCEPT"))
+        return self._fit_intercept_pv_obj
 
     def can_be_straightened(self) -> bool:
         return (
@@ -119,10 +122,10 @@ class SELCavity(Cavity):
             elif start_val + step > 180:
                 step = step - 360
 
-            self.sel_poff_pv.put(start_val + step)
-            self.fit_chisquare.put(chisum)
-            self.fit_slope.put(slop)
-            self.fit_intercept.put(inter)
+            self.sel_poff_pv_obj.put(start_val + step)
+            self.fit_chisquare_pv_obj.put(chisum)
+            self.fit_slope_pv_obj.put(slop)
+            self.fit_intercept_pv_obj.put(inter)
 
             self.logger.info(
                 f"Changed SEL Phase Offset by {step:5.2f} with chi^2 {chisum:.2g}"
