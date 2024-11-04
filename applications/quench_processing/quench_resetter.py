@@ -1,3 +1,4 @@
+import sys
 from time import sleep
 from typing import List
 
@@ -8,8 +9,12 @@ from lcls_tools.superconducting.sc_linac_utils import (
 )
 from numpy.linalg import LinAlgError
 
-from applications.quench_processing.quench_linac import QuenchCavity, QuenchCryomodule
-from quench_linac import QUENCH_MACHINE
+sys.path.append("/home/physics/srf/sc_linac_physics")
+from applications.quench_processing.quench_linac import (  # noqa: E402
+    QuenchCavity,
+    QuenchCryomodule,
+)
+from quench_linac import QUENCH_MACHINE  # noqa: E402
 
 WATCHER_PV: PV = PV("PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT")
 WATCHER_PV.put(0)
