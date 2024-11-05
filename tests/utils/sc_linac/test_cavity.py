@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from random import randint
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from lcls_tools.common.controls.pyepics.utils import (
     EPICS_INVALID_VAL,
@@ -50,8 +50,6 @@ class TestCavity(TestCase):
 
         cls.hz_per_microstep = 0.00540801
         cls.measured_loaded_q = 4.41011e07
-        cls.patcher = patch("time.sleep")
-        cls.patcher.start()
 
     def setUp(self):
         self.non_hl_cavity: Cavity = next(self.non_hl_iterator)

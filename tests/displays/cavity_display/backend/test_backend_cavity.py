@@ -4,10 +4,10 @@ from typing import DefaultDict
 from unittest import TestCase, mock
 
 from displays.cavity_display.backend.backend_cavity import BackendCavity
+from displays.cavity_display.backend.backend_machine import BackendMachine
 from displays.cavity_display.backend.fault import FaultCounter
 from tests.displays.cavity_display.utils.utils import mock_open
 from utils.sc_linac.cryomodule import Cryomodule
-from utils.sc_linac.linac import Machine
 
 builtin_open = open  # save the unpatched version
 
@@ -19,7 +19,7 @@ class TestBackendCavity(TestCase):
         cls.mock_open_patcher = mock.patch("builtins.open", mock_open)
         cls.mock_open_patcher.start()
         # Create display Machine
-        cls.DISPLAY_MACHINE = Machine(cavity_class=BackendCavity)
+        cls.DISPLAY_MACHINE = BackendMachine(lazy_fault_pvs=True)
 
     @classmethod
     def tearDownClass(cls):

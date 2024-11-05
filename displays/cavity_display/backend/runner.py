@@ -5,19 +5,18 @@ from typing import List, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
+from displays.cavity_display.backend.backend_machine import BackendMachine
+
 sys.path.append("/home/physics/srf/sc_linac_physics")
 from displays.cavity_display.backend.backend_cavity import BackendCavity  # noqa: E402
 from displays.cavity_display.utils.utils import DEBUG, BACKEND_SLEEP_TIME  # noqa: E402
-from utils.sc_linac.linac import Machine  # noqa: E402
 
 
 class Runner:
     def __init__(self):
         self.watcher_pv = "PHYS:SYS0:1:SC_CAV_FAULT_HEARTBEAT"
         self._watcher_pv_obj: Optional[PV] = None
-        self.backend_cavities: List[BackendCavity] = list(
-            Machine(cavity_class=BackendCavity).all_iterator
-        )
+        self.backend_cavities: List[BackendCavity] = list(BackendMachine().all_iterator)
 
     @property
     def watcher_pv_obj(self):

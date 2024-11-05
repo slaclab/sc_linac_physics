@@ -5,16 +5,15 @@ from unittest.mock import MagicMock
 from PyQt5.QtCore import QDateTime
 from pytestqt.qtbot import QtBot
 
-from displays.cavity_display.backend.backend_cavity import BackendCavity
+from displays.cavity_display.backend.backend_machine import BackendMachine
 from displays.cavity_display.backend.fault import FaultCounter
 from displays.cavity_display.frontend.fault_count_display import FaultCountDisplay
-from utils.sc_linac.linac import Machine
 
-non_hl_iterator = Machine(cavity_class=BackendCavity).non_hl_iterator
+non_hl_iterator = BackendMachine(lazy_fault_pvs=True).non_hl_iterator
 
 
 def test_get_data_no_data(qtbot: QtBot):
-    window = FaultCountDisplay()
+    window = FaultCountDisplay(lazy_fault_pvs=True)
     qtbot.addWidget(window)
 
     start = datetime.now().replace(microsecond=0) - timedelta(days=1)

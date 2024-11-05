@@ -17,11 +17,7 @@ from utils.sc_linac.cavity import Cavity
 
 
 class BackendCavity(Cavity):
-    def __init__(
-        self,
-        cavity_num,
-        rack_object,
-    ):
+    def __init__(self, cavity_num, rack_object):
         super(BackendCavity, self).__init__(
             cavity_num=cavity_num, rack_object=rack_object
         )
@@ -116,10 +112,11 @@ class BackendCavity(Cavity):
                 button_text=csv_fault_dict["Three Letter Code"],
                 button_macro=csv_fault_dict["Button Macros"],
                 action=csv_fault_dict["Recommended Corrective Actions"],
+                lazy_pv=self.rack.cryomodule.linac.machine.lazy_fault_pvs,
             )
 
     def get_fault_counts(
-            self, start_time: datetime, end_time: datetime
+        self, start_time: datetime, end_time: datetime
     ) -> DefaultDict[str, FaultCounter]:
         """
         Using max function to get the maximum fault or invalid count for duplicate TLCs
