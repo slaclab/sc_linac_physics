@@ -10,6 +10,7 @@ from displays.cavity_display.frontend.gui_cavity import GUICavity
 def mock_ssa_class(**kwargs) -> MagicMock:
     ssa = MagicMock()
     ssa.status_pv = "MOCK:SSA:STATUS:PV"
+    ssa.pv_addr = MagicMock(return_value="MOCK:SSA:PV")
     return ssa
 
 

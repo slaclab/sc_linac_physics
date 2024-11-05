@@ -57,6 +57,7 @@ class Fault:
         button_text=None,
         button_macro=None,
         action=None,
+        lazy_pv=False,
     ):
         self.tlc = tlc
         self.severity = int(severity)
@@ -74,7 +75,9 @@ class Fault:
         # Storing PV name as a string instead of making a PV obj
         self.pv: str = pv
         # TODO figure out why lazy generation breaks the backend runner
-        self._pv_obj: Optional[PV] = PV(self.pv, connection_timeout=PV_TIMEOUT)
+        self._pv_obj: Optional[PV] = (
+            PV(self.pv, connection_timeout=PV_TIMEOUT) if not lazy_pv else None
+        )
 
     @property
     def pv_obj(self) -> PV:

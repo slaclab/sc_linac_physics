@@ -26,7 +26,7 @@ get_values_over_time_range_mock = MagicMock(
 )
 class TestFault(TestCase):
     def setUp(self):
-        self.fault = Fault(severity=0)
+        self.fault = Fault(severity=0, lazy_pv=True)
 
     def test_pv_obj(self):
         self.fault._pv_obj = MagicMock()
