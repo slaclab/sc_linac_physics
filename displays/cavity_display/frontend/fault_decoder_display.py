@@ -1,6 +1,7 @@
 import sys
 from collections import OrderedDict
 from dataclasses import dataclass
+from typing import Dict
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -15,9 +16,7 @@ from PyQt5.QtWidgets import (
 )
 from pydm import Display
 
-from displays.cavity_display.utils.utils import parse_csv
-
-rows = {}
+from displays.cavity_display.utils import utils
 
 
 @dataclass
@@ -32,7 +31,9 @@ class DecoderDisplay(Display):
     def __init__(self, parent=None, args=None, macros=None):
         super().__init__(parent, args, macros)
 
-        for faultRowDict in parse_csv():
+        rows: Dict[str, Row] = {}
+
+        for faultRowDict in utils.parse_csv():
             tlc = faultRowDict["Three Letter Code"]
             rows[tlc] = Row(
                 tlc=tlc,
