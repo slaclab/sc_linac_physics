@@ -73,7 +73,8 @@ class Fault:
 
         # Storing PV name as a string instead of making a PV obj
         self.pv: str = pv
-        self._pv_obj: Optional[PV] = None
+        # TODO figure out why lazy generation breaks the backend runner
+        self._pv_obj: Optional[PV] = PV(self.pv, connection_timeout=PV_TIMEOUT)
 
     @property
     def pv_obj(self) -> PV:
