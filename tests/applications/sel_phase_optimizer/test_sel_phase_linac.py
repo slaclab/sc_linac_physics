@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from applications.sel_phase_optimizer.sel_phase_linac import SEL_MACHINE, SELCavity
+from applications.sel_phase_optimizer.sel_phase_linac import SELCavity
 from utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     RF_MODE_SELAP,
@@ -19,12 +19,17 @@ from utils.sc_linac.linac_utils import (
     RF_MODE_CHIRP,
 )
 
-non_hl_iterator = SEL_MACHINE.non_hl_iterator
+
+def mock_func(*args, **kwargs):
+    return MagicMock()
 
 
 @pytest.fixture
-def cavity() -> SELCavity:
-    yield next(non_hl_iterator)
+def cavity(monkeypatch) -> SELCavity:
+    monkeypatch.setattr("os.makedirs", mock_func)
+    monkeypatch.setattr("lcls_tools.common.logger.logger.custom_logger", mock_func)
+    monkeypatch.setattr("logging.FileHandler", mock_func)
+    yield SELCavity(randint(1, 8), rack_object=MagicMock())
 
 
 def test_sel_poff_pv_obj(cavity):

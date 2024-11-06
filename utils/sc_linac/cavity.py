@@ -835,7 +835,6 @@ class Cavity(linac_utils.SCLinacObject):
             self._char_timestamp_pv_obj = PV(self.char_timestamp_pv)
         date_string = self._char_timestamp_pv_obj.get(use_caget=False)
         time_readback = datetime.strptime(date_string, "%Y-%m-%d-%H:%M:%S")
-        print(f"{self} characterization time is {time_readback}")
         return time_readback
 
     def characterize(self):
