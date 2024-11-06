@@ -6,7 +6,7 @@ from unittest import TestCase, mock
 from displays.cavity_display.backend.backend_cavity import BackendCavity
 from displays.cavity_display.backend.backend_machine import BackendMachine
 from displays.cavity_display.backend.fault import FaultCounter
-from tests.displays.cavity_display.utils.utils import mock_open
+from tests.displays.cavity_display.test_utils.utils import mock_open
 from utils.sc_linac.cryomodule import Cryomodule
 
 builtin_open = open  # save the unpatched version

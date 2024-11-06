@@ -75,9 +75,14 @@ class Fault:
         # Storing PV name as a string instead of making a PV obj
         self.pv: str = pv
         # TODO figure out why lazy generation breaks the backend runner
-        self._pv_obj: Optional[PV] = (
-            PV(self.pv, connection_timeout=PV_TIMEOUT) if not lazy_pv else None
-        )
+        if not lazy_pv:
+            print(f"Creating PV object for {self.pv}")
+            self._pv_obj: Optional[PV] = PV(self.pv, connection_timeout=PV_TIMEOUT)
+        else:
+            self._pv_obj: Optional[PV] = None
+        # self._pv_obj: Optional[PV] = (
+        #     PV(self.pv, connection_timeout=PV_TIMEOUT) if not lazy_pv else None
+        # )
 
     @property
     def pv_obj(self) -> PV:
@@ -115,9 +120,8 @@ class Fault:
             return obj.val == self.fault_value
 
         else:
-            print(self)
             raise Exception(
-                "Fault has neither 'Fault if equal to' nor"
+                f"Fault for {self.pv} has neither 'Fault if equal to' nor"
                 " 'OK if equal to' parameter"
             )
 
