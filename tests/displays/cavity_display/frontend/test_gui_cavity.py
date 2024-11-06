@@ -18,6 +18,7 @@ def mock_ssa_class(**kwargs) -> MagicMock:
 def gui_cavity() -> GUICavity:
     rack = MagicMock()
     rack.ssa_class = mock_ssa_class
+    rack.cryomodule.linac.machine.lazy_fault_pvs = True
     return GUICavity(1, rack)
 
 
