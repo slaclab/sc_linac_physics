@@ -36,9 +36,11 @@ def test_fit_chisquare_pv_obj(cavity):
     cavity._fit_chisqaure_pv_obj = make_mock_pv()
     assert cavity.fit_chisquare_pv_obj == cavity._fit_chisquare_pv_obj
 
+
 def test_fit_slope_pv_obj(cavity):
     cavity._fit_slope_pv_obj = make_mock_pv()
     assert cavity.fit_slope_pv_obj == cavity._fit_slope_pv_obj
+
 
 def test_fit_intercept_pv_obj(cavity):
     cavity._fit_intercept_pv_obj = make_mock_pv()
