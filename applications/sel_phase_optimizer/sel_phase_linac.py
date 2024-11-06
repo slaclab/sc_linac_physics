@@ -101,13 +101,16 @@ class SELCavity(Cavity):
         iwf = self.i_waveform
         qwf = self.q_waveform
 
+        """
+        siegelslopes is called with y then (optional) x
+        """
         [slop, inter] = stats.siegelslopes(iwf, qwf)
 
         if not np.isnan(slop):
             chisum = 0
-            for nn, yy in enumerate(qwf):
-                chisum += (yy - (slop * iwf[nn] + inter)) ** 2 / (
-                    slop * iwf[nn] + inter
+            for nn, yy in enumerate(iwf):
+                chisum += (yy - (slop * qwf[nn] + inter)) ** 2 / (
+                    slop * qwf[nn] + inter
                 )
 
             step = slop * MULT

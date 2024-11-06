@@ -55,6 +55,9 @@ def test_can_be_straightened(cavity):
     cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
     cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_SELAP)
     cavity._aact_pv_obj = make_mock_pv(get_val=randint(5, 21))
+    cavity._fit_chisquare_pv_obj = make_mock_pv()
+    cavity._fit_slope_pv_obj = make_mock_pv()
+    cavity._fit_intercept_pv_obj = make_mock_pv()
     assert cavity.can_be_straightened()
 
 
@@ -114,4 +117,7 @@ def test_straighten_iq_plot(cavity):
     cavity._i_waveform_pv = make_mock_pv(get_val=wf)
     cavity._q_waveform_pv = make_mock_pv(get_val=wf)
     cavity._sel_poff_pv_obj = make_mock_pv(get_val=randint(0, 360))
+    cavity._fit_chisquare_pv_obj = make_mock_pv()
+    cavity._fit_slope_pv_obj = make_mock_pv()
+    cavity._fit_intercept_pv_obj = make_mock_pv()
     assert cavity.straighten_iq_plot() != 0
