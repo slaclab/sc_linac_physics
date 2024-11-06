@@ -27,14 +27,29 @@ def cavity() -> SELCavity:
     yield next(non_hl_iterator)
 
 
-def test_sel_poff_pv(cavity):
-    cavity._sel_poff_pv = make_mock_pv()
-    assert cavity.sel_poff_pv == cavity._sel_poff_pv
+def test_sel_poff_pv_obj(cavity):
+    cavity._sel_poff_pv_obj = make_mock_pv()
+    assert cavity.sel_poff_pv_obj == cavity._sel_poff_pv_obj
+
+
+def test_fit_chisquare_pv_obj(cavity):
+    cavity._fit_chisqaure_pv_obj = make_mock_pv()
+    assert cavity.fit_chisquare_pv_obj == cavity._fit_chisquare_pv_obj
+
+
+def test_fit_slope_pv_obj(cavity):
+    cavity._fit_slope_pv_obj = make_mock_pv()
+    assert cavity.fit_slope_pv_obj == cavity._fit_slope_pv_obj
+
+
+def test_fit_intercept_pv_obj(cavity):
+    cavity._fit_intercept_pv_obj = make_mock_pv()
+    assert cavity.fit_intercept_pv_obj == cavity._fit_intercept_pv_obj
 
 
 def test_sel_phase_offset(cavity):
     offset = randint(0, 100)
-    cavity._sel_poff_pv = make_mock_pv(get_val=offset)
+    cavity._sel_poff_pv_obj = make_mock_pv(get_val=offset)
     assert cavity.sel_phase_offset == offset
 
 
@@ -55,6 +70,9 @@ def test_can_be_straightened(cavity):
     cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
     cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_SELAP)
     cavity._aact_pv_obj = make_mock_pv(get_val=randint(5, 21))
+    cavity._fit_chisquare_pv_obj = make_mock_pv()
+    cavity._fit_slope_pv_obj = make_mock_pv()
+    cavity._fit_intercept_pv_obj = make_mock_pv()
     assert cavity.can_be_straightened()
 
 
@@ -113,5 +131,8 @@ def test_straighten_iq_plot(cavity):
     wf = [i for i in range(1, randint(2, 100))]
     cavity._i_waveform_pv = make_mock_pv(get_val=wf)
     cavity._q_waveform_pv = make_mock_pv(get_val=wf)
-    cavity._sel_poff_pv = make_mock_pv(get_val=randint(0, 360))
+    cavity._sel_poff_pv_obj = make_mock_pv(get_val=randint(0, 360))
+    cavity._fit_chisquare_pv_obj = make_mock_pv()
+    cavity._fit_slope_pv_obj = make_mock_pv()
+    cavity._fit_intercept_pv_obj = make_mock_pv()
     assert cavity.straighten_iq_plot() != 0
