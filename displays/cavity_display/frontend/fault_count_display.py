@@ -24,7 +24,7 @@ from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 class FaultCountDisplay(Display):
-    def __init__(self, lazy_fault_pvs=False):
+    def __init__(self, lazy_fault_pvs=True):
         super().__init__()
         self.setWindowTitle("Fault Count Display")
 

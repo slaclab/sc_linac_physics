@@ -40,7 +40,7 @@ class Runner:
 
 
 if __name__ == "__main__":
-    runner = Runner()
+    runner = Runner(lazy_fault_pvs=False)
     runner.watcher_pv_obj.put(0)
     while True:
         runner.check_faults()

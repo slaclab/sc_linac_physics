@@ -57,7 +57,7 @@ class Fault:
         button_text=None,
         button_macro=None,
         action=None,
-        lazy_pv=False,
+        lazy_pv=True,
     ):
         self.tlc = tlc
         self.severity = int(severity)

@@ -3,6 +3,6 @@ from utils.sc_linac.linac import Machine
 
 
 class BackendMachine(Machine):
-    def __init__(self, lazy_fault_pvs=False):
+    def __init__(self, lazy_fault_pvs=True):
         self.lazy_fault_pvs = lazy_fault_pvs
         super().__init__(cavity_class=BackendCavity)
