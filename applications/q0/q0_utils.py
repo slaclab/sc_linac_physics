@@ -290,7 +290,7 @@ def gen_axis(title: str, xlabel: str, ylabel: str) -> Axes:
     return ax
 
 
-def redraw_axis(canvas, title: FigureCanvasQTAgg, xlabel: str, ylabel: str):
+def redraw_axis(canvas: FigureCanvasQTAgg, title: str, xlabel: str, ylabel: str):
     canvas.axes.cla()
     canvas.draw_idle()
     canvas.axes.set_title(title)
