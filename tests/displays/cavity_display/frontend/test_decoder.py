@@ -15,7 +15,7 @@ from displays.cavity_display.frontend.fault_decoder_display import (
     DecoderDisplay,
     Row,
 )
-from tests.displays.cavity_display.utils.utils import mock_parse
+from tests.displays.cavity_display.test_utils.utils import mock_parse
 
 
 @pytest.fixture
