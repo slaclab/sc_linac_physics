@@ -1,15 +1,15 @@
 from collections import OrderedDict, defaultdict
 from datetime import datetime
-from typing import DefaultDict
+from typing import DefaultDict, Optional
 
-from epics import caput
+from lcls_tools.common.controls.pyepics.utils import PV
 
 from displays.cavity_display.backend.fault import Fault, FaultCounter, PVInvalidError
+from displays.cavity_display.utils import utils
 from displays.cavity_display.utils.utils import (
     STATUS_SUFFIX,
     DESCRIPTION_SUFFIX,
     SEVERITY_SUFFIX,
-    parse_csv,
     SpreadsheetError,
     display_hash,
 )
@@ -22,14 +22,35 @@ class BackendCavity(Cavity):
             cavity_num=cavity_num, rack_object=rack_object
         )
         self.status_pv: str = self.pv_addr(STATUS_SUFFIX)
+        self._status_pv_obj: Optional[PV] = None
         self.severity_pv: str = self.pv_addr(SEVERITY_SUFFIX)
+        self._severity_pv_obj: Optional[PV] = None
         self.description_pv: str = self.pv_addr(DESCRIPTION_SUFFIX)
+        self._description_pv_obj: Optional[PV] = None
 
         self.faults: OrderedDict[int, Fault] = OrderedDict()
         self.create_faults()
 
+    @property
+    def status_pv_obj(self) -> PV:
+        if not self._status_pv_obj:
+            self._status_pv_obj = PV(self.status_pv)
+        return self._status_pv_obj
+
+    @property
+    def severity_pv_obj(self) -> PV:
+        if not self._severity_pv_obj:
+            self._severity_pv_obj = PV(self.severity_pv)
+        return self._severity_pv_obj
+
+    @property
+    def description_pv_obj(self) -> PV:
+        if not self._description_pv_obj:
+            self._description_pv_obj = PV(self.description_pv)
+        return self._description_pv_obj
+
     def create_faults(self):
-        for csv_fault_dict in parse_csv():
+        for csv_fault_dict in utils.parse_csv():
             level: str = csv_fault_dict["Level"]
             suffix: str = csv_fault_dict["PV Suffix"]
             rack: str = csv_fault_dict["Rack"]
@@ -152,13 +173,13 @@ class BackendCavity(Cavity):
                 break
 
         if is_okay:
-            caput(self.status_pv, f"{self.number}")
-            caput(self.severity_pv, 0)
-            caput(self.description_pv, " ")
+            self.status_pv_obj.put(str(self.number))
+            self.severity_pv_obj.put(0)
+            self.description_pv_obj.put(" ")
         else:
-            caput(self.status_pv, fault.tlc)
-            caput(self.description_pv, fault.short_description)
+            self.status_pv_obj.put(fault.tlc)
+            self.description_pv_obj.put(fault.short_description)
             if not invalid:
-                caput(self.severity_pv, fault.severity)
+                self.severity_pv_obj.put(fault.severity)
             else:
-                caput(self.severity_pv, 3)
+                self.severity_pv_obj.put(3)

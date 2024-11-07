@@ -1,36 +1,21 @@
+from typing import List
 from unittest.mock import patch
 
 import pytest
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QSizePolicy, QAbstractScrollArea
+from PyQt5.QtWidgets import (
+    QSizePolicy,
+    QAbstractScrollArea,
+    QLayout,
+    QHBoxLayout,
+)
 from pytestqt.qtbot import QtBot
 
 from displays.cavity_display.frontend.fault_decoder_display import (
     DecoderDisplay,
+    Row,
 )
-
-TEST_ACTION = "Test Action"
-TEST_SHORT_DESC = "Test Short"
-TEST_LONG_DESC = "Test Description"
-TEST_TLC = "ABC"
-TEST_TLC_2 = "XYZ"
-
-
-def mock_parse():
-    return [
-        {
-            "Three Letter Code": TEST_TLC,
-            "Long Description": TEST_LONG_DESC,
-            "Generic Short Description for Decoder": TEST_SHORT_DESC,
-            "Recommended Corrective Actions": TEST_ACTION,
-        },
-        {
-            "Three Letter Code": TEST_TLC_2,
-            "Long Description": TEST_LONG_DESC,
-            "Generic Short Description for Decoder": TEST_SHORT_DESC,
-            "Recommended Corrective Actions": TEST_ACTION,
-        },
-    ]
+from tests.displays.cavity_display.utils.utils import mock_parse
 
 
 @pytest.fixture
@@ -135,23 +120,56 @@ def verify_layout_structure(layout, expected_count):
     assert actual_count == expected_count
 
 
-def test_row_creation(qtbot: QtBot, display):
+def test_header(qtbot: QtBot, display):
+    qtbot.addWidget(display)
+    scroll_area_layout: QLayout = display.groupbox.layout()
+
+    header_row_layout: QHBoxLayout = scroll_area_layout.itemAt(0).layout()
+    keys = []
+    for col_num in range(header_row_layout.count()):
+        keys.append(header_row_layout.itemAt(col_num).widget().text().strip())
+
+    assert keys == ["Code", "Name", "Description", "Corrective Action"]
+
+
+def test_content(qtbot: QtBot, display):
     """Testing if 1 row of data gets displayed right (does the data show up)"""
     qtbot.addWidget(display)
 
-    scroll_area_layout = display.groupbox.layout()
-    # Header + 1 row
-    verify_layout_structure(scroll_area_layout, 3)
-    # Row details
-    row_item = scroll_area_layout.itemAt(1)
-    # Make sure all our data fields show up in the right order
-    row_layout = row_item.layout()
-    assert row_layout is not None
-    assert row_layout.count() == 4
-    assert row_layout.itemAt(0).widget().text().strip() == TEST_TLC
-    assert row_layout.itemAt(1).widget().text().strip() == TEST_SHORT_DESC
-    assert row_layout.itemAt(2).widget().text().strip() == TEST_LONG_DESC
-    assert row_layout.itemAt(3).widget().text().strip() == TEST_ACTION
+    scroll_area_layout: QLayout = display.groupbox.layout()
+    # Header + rows
+    row_data: List[Row] = []
+    for fault_row_dict in mock_parse():
+        row_data.append(
+            Row(
+                tlc=fault_row_dict["Three Letter Code"],
+                long_desc=fault_row_dict["Long Description"],
+                gen_short_desc=fault_row_dict["Generic Short Description for Decoder"],
+                corrective_action=fault_row_dict["Recommended Corrective Actions"],
+            )
+        )
 
-    row2_layout = scroll_area_layout.itemAt(2).layout()
-    assert row2_layout.itemAt(0).widget().text().strip() == TEST_TLC_2
+    row_data = sorted(row_data)
+
+    verify_layout_structure(scroll_area_layout, len(row_data) + 1)
+
+    for data_index, row in enumerate(row_data):
+        row_num = data_index + 1
+        # Row details
+        row_item = scroll_area_layout.itemAt(row_num)
+        # Make sure all our data fields show up in the right order
+        row_layout = row_item.layout()
+        assert row_layout is not None
+        assert row_layout.count() == 4
+
+        for col_index, col_name in enumerate(
+            [
+                "tlc",
+                "gen_short_desc",
+                "long_desc",
+                "corrective_action",
+            ]
+        ):
+
+            row_widget = row_layout.itemAt(col_index).widget()
+            assert row_widget.text() == row.__dict__[col_name]
