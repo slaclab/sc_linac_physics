@@ -10,7 +10,7 @@ from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
 from displays.cavity_display.backend.backend_cavity import BackendCavity
 from displays.cavity_display.backend.fault import FaultCounter, Fault
-from tests.displays.cavity_display.utils.utils import mock_parse
+from tests.displays.cavity_display.test_utils.utils import mock_parse
 
 
 @pytest.fixture

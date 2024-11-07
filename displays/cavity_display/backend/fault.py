@@ -111,9 +111,8 @@ class Fault:
             return obj.val == self.fault_value
 
         else:
-            print(self)
             raise Exception(
-                "Fault has neither 'Fault if equal to' nor"
+                f"Fault for {self.pv} has neither 'Fault if equal to' nor"
                 " 'OK if equal to' parameter"
             )
 
