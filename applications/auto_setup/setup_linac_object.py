@@ -11,9 +11,10 @@ class SetupLinacObject(SCLinacObject):
         return super().pv_prefix
 
     def auto_pv_addr(self, suffix: str):
-        return self.pv_addr("AUTO:" + suffix)
+        return self.pv_addr(f"AUTO:{suffix}")
 
     def __init__(self):
+        super().__init__()
         self.abort_pv: str = self.auto_pv_addr("ABORT")
         self._abort_pv_obj: Optional[PV] = None
 
