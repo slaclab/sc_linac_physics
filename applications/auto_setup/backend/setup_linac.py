@@ -1,4 +1,4 @@
-from applications.auto_setup.setup_linac_object import SetupLinacObject
+from applications.auto_setup.backend.setup_linac_object import SetupLinacObject
 from utils.sc_linac.linac import Linac
 
 

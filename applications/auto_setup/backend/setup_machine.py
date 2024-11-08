@@ -1,7 +1,7 @@
-from applications.auto_setup.setup_cavity import SetupCavity
-from applications.auto_setup.setup_cryomodule import SetupCryomodule
-from applications.auto_setup.setup_linac import SetupLinac
-from applications.auto_setup.setup_linac_object import SetupLinacObject
+from applications.auto_setup.backend.setup_cavity import SetupCavity
+from applications.auto_setup.backend.setup_cryomodule import SetupCryomodule
+from applications.auto_setup.backend.setup_linac import SetupLinac
+from applications.auto_setup.backend.setup_linac_object import SetupLinacObject
 from utils.sc_linac.linac import Machine
 
 

@@ -4,8 +4,8 @@ from typing import Optional
 from epics.ca import CASeverityException
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 
-from applications.auto_setup.setup_linac_object import SetupLinacObject
-from applications.auto_setup.setup_utils import (
+from applications.auto_setup.backend.setup_linac_object import SetupLinacObject
+from applications.auto_setup.backend.setup_utils import (
     STATUS_READY_VALUE,
     STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,

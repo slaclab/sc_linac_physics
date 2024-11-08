@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from applications.auto_setup.setup_machine import SetupMachine
+from applications.auto_setup.backend.setup_machine import SetupMachine
 
 
 @pytest.fixture

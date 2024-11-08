@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from applications.auto_setup.setup_cavity import SetupCavity
-from applications.auto_setup.setup_utils import (
+from applications.auto_setup.backend.setup_cavity import SetupCavity
+from applications.auto_setup.backend.setup_utils import (
     STATUS_READY_VALUE,
     STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,
