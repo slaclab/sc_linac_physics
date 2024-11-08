@@ -26,7 +26,7 @@ def reset_quench() -> bool:
     is_real = quench_cav.validate_quench(wait_for_update=True)
     if not is_real:
         quench_cm.logger.info(f"{quench_cav} FAKE quench detected, resetting")
-        quench_cav.reset_interlocks()
+        super(quench_cav).reset_interlocks()
         return True
 
     else:
@@ -39,7 +39,7 @@ while True:
     issued_reset = False
 
     for quench_cav in cavities:
-        if quench_cav.hw_mode == HW_MODE_ONLINE_VALUE:
+        if quench_cav.hw_mode == HW_MODE_ONLINE_VALUE and quench_cav.is_on:
             if (
                 not quench_cav.quench_latch_invalid
                 and quench_cav.quench_latch_pv_obj.get() == 1
