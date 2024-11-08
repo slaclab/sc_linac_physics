@@ -1,6 +1,6 @@
 import sys
-from collections import OrderedDict
 from dataclasses import dataclass
+from typing import List
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -15,9 +15,7 @@ from PyQt5.QtWidgets import (
 )
 from pydm import Display
 
-from displays.cavity_display.utils.utils import parse_csv
-
-rows = {}
+from displays.cavity_display.utils import utils
 
 
 @dataclass
@@ -27,23 +25,32 @@ class Row:
     gen_short_desc: str
     corrective_action: str
 
+    def __gt__(self, other):
+        return self.tlc > other.tlc
+
+    def __eq__(self, other):
+        return self.tlc == other.tlc
+
 
 class DecoderDisplay(Display):
     def __init__(self, parent=None, args=None, macros=None):
         super().__init__(parent, args, macros)
 
-        for faultRowDict in parse_csv():
-            tlc = faultRowDict["Three Letter Code"]
-            rows[tlc] = Row(
-                tlc=tlc,
-                long_desc=faultRowDict["Long Description"],
-                gen_short_desc=faultRowDict["Generic Short Description for Decoder"],
-                corrective_action=faultRowDict["Recommended Corrective Actions"],
+        rows: List[Row] = []
+
+        for fault_row_dict in utils.parse_csv():
+            rows.append(
+                Row(
+                    tlc=fault_row_dict["Three Letter Code"],
+                    long_desc=fault_row_dict["Long Description"],
+                    gen_short_desc=fault_row_dict[
+                        "Generic Short Description for Decoder"
+                    ],
+                    corrective_action=fault_row_dict["Recommended Corrective Actions"],
+                )
             )
 
-        sorted_fault_rows = OrderedDict(
-            [(tlc, rows[tlc]) for tlc in sorted(rows.keys())]
-        )
+        rows = sorted(rows)
 
         self.setWindowTitle("Three Letter Codes")
         vlayout = QVBoxLayout()
@@ -98,7 +105,7 @@ class DecoderDisplay(Display):
 
         scroll_area_layout.addLayout(header_layout)
 
-        for row in sorted_fault_rows.values():
+        for row in rows:
             horizontal_layout = QHBoxLayout()
             description_label = QLabel(row.long_desc)
             description_label.setMinimumSize(100, 50)

@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 from lcls_tools.common.controls.pyepics.utils import PV
-from lcls_tools.common.logger.logger import custom_logger, FORMAT_STRING
+from lcls_tools.common.logger import logger
 from scipy import stats
 
 from utils.sc_linac.cavity import Cavity
@@ -30,14 +30,13 @@ class SELCavity(Cavity):
         self._fit_slope_pv_obj: Optional[PV] = None
         self._fit_intercept_pv_obj: Optional[PV] = None
 
-        self.logger = custom_logger(f"{self} SEL Phase Opt Logger")
+        self.logger = logger.custom_logger(f"{self} SEL Phase Opt Logger")
         file_directory = pathlib.Path(__file__).parent.resolve()
         self.logfile = f"{file_directory}/logfiles/cm{self.cryomodule.name}/{self.number}_sel_phase_opt.log"
-        print(self.logfile)
         os.makedirs(os.path.dirname(self.logfile), exist_ok=True)
 
         self.file_handler = logging.FileHandler(self.logfile, mode="a")
-        self.file_handler.setFormatter(logging.Formatter(FORMAT_STRING))
+        self.file_handler.setFormatter(logging.Formatter(logger.FORMAT_STRING))
         self.logger.addHandler(self.file_handler)
 
     @property
