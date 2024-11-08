@@ -24,7 +24,9 @@ from pydm.widgets.analog_indicator import PyDMAnalogIndicator
 from pydm.widgets.display_format import DisplayFormat
 
 from applications.auto_setup.setup_cavity import SetupCavity
-from setup_linac import SETUP_MACHINE, SetupCryomodule, SetupLinac
+from applications.auto_setup.setup_cryomodule import SetupCryomodule
+from applications.auto_setup.setup_machine import SETUP_MACHINE
+from setup_linac import SetupLinac
 from utils.sc_linac import linac_utils
 
 

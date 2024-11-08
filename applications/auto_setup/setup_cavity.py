@@ -245,7 +245,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.status_message = f"Running {self} SSA Calibration"
             self.turn_off()
             self.progress = 20
-            self.ssa.calibrate(self.ssa.drive_max)
+            self.ssa.calibrate(self.ssa.drive_max, attempt=2)
             self.status_message = f"{self} SSA Calibrated"
         self.progress = 25
         self.check_abort()

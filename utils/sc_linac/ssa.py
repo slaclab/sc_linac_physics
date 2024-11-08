@@ -173,7 +173,7 @@ class SSA(linac_utils.SCLinacObject):
             linac_utils.SSACalibrationError,
         ) as e:
             if attempt < 3:
-                self.calibrate(drive_max, attempt + 1)
+                self.calibrate(drive_max - 0.01, attempt + 1)
             else:
                 raise linac_utils.SSACalibrationError(e)
 

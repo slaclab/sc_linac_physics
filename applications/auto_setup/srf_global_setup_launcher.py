@@ -1,6 +1,7 @@
 import argparse
 
-from setup_linac import SETUP_MACHINE, SetupCryomodule, SetupMachine
+from applications.auto_setup.setup_cryomodule import SetupCryomodule
+from applications.auto_setup.setup_machine import SetupMachine, SETUP_MACHINE
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES_NO_HL, ALL_CRYOMODULES
 
 

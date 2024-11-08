@@ -1,7 +1,7 @@
 import argparse
 
 from applications.auto_setup.setup_cavity import SetupCavity
-from setup_linac import SETUP_MACHINE
+from applications.auto_setup.setup_machine import SETUP_MACHINE
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
