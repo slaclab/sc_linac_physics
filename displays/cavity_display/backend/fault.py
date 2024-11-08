@@ -1,16 +1,18 @@
 import dataclasses
 from datetime import datetime
-from typing import Union
+from typing import Union, Optional, Dict
 
-from lcls_tools.common.controls.pyepics.utils import PV
+from lcls_tools.common.controls.pyepics.utils import (
+    PV,
+    EPICS_INVALID_VAL,
+    PVInvalidError,
+)
 from lcls_tools.common.data.archiver import (
     ArchiveDataHandler,
     ArchiverValue,
     get_data_at_time,
     get_values_over_time_range,
 )
-
-PV_TIMEOUT = 0.01
 
 
 @dataclasses.dataclass
@@ -20,34 +22,40 @@ class FaultCounter:
     invalid_count: int = 0
 
     @property
+    def sum_fault_count(self) -> int:
+        return self.fault_count + self.invalid_count
+
+    @property
     def ratio_ok(self):
         try:
             return self.ok_count / (self.fault_count + self.invalid_count)
         except ZeroDivisionError:
             return 1
 
+    def __gt__(self, other) -> bool:
+        return self.sum_fault_count > other.sum_fault_count
 
-class PVInvalidError(Exception):
-    def __init__(self, message):
-        super(PVInvalidError, self).__init__(message)
+    def __eq__(self, other) -> bool:
+        return self.sum_fault_count == other.sum_fault_count
 
 
 class Fault:
     def __init__(
         self,
-        tlc,
-        severity,
-        pv,
-        ok_value,
-        fault_value,
-        long_description,
-        short_description,
-        button_level,
-        button_command,
-        macros,
-        button_text,
-        button_macro,
-        action,
+        tlc=None,
+        severity=None,
+        pv=None,
+        ok_value=None,
+        fault_value=None,
+        long_description=None,
+        short_description=None,
+        button_level=None,
+        button_command=None,
+        macros=None,
+        button_text=None,
+        button_macro=None,
+        action=None,
+        lazy_pv=True,
     ):
         self.tlc = tlc
         self.severity = int(severity)
@@ -62,12 +70,23 @@ class Fault:
         self.button_macro = button_macro
         self.action = action
 
-        self.pv: PV = PV(pv, connection_timeout=PV_TIMEOUT)
+        # Storing PV name as a string instead of making a PV obj
+        self.pv: str = pv
+        # TODO figure out why lazy generation breaks the backend runner
+        self._pv_obj: Optional[PV] = PV(self.pv) if not lazy_pv else None
 
-    def is_currently_faulted(self):
-        return self.is_faulted(self.pv)
+    @property
+    def pv_obj(self) -> PV:
+        if not self._pv_obj:
+            self._pv_obj = PV(self.pv)
+        return self._pv_obj
 
-    def is_faulted(self, obj: Union[PV, ArchiverValue]):
+    def is_currently_faulted(self) -> bool:
+        # returns "TRUE" if faulted
+        # returns "FALSE" if not faulted
+        return self.is_faulted(self.pv_obj)
+
+    def is_faulted(self, obj: Union[PV, ArchiverValue]) -> bool:
         """
         Dug through the pyepics source code to find the severity values:
         class AlarmSeverity(DefaultIntEnum):
@@ -76,36 +95,42 @@ class Fault:
             MAJOR = 2
             INVALID = 3
         """
-        if obj.severity == 3 or obj.status is None:
-            raise PVInvalidError(self.pv.pvname)
+        if obj.severity == EPICS_INVALID_VAL or obj.status is None:
+            raise PVInvalidError(self.pv)
 
+        # self.ok_value is the value stated in spreadsheet
+        # obj.value is the actual reading value from pv
         if self.ok_value is not None:
+            # return "TRUE" means they do NOT match
+            # return "FALSE" means is_okay, not faulted
             return obj.val != self.ok_value
 
         elif self.fault_value is not None:
+            # return "TRUE" means faulted
+            # return "FALSE" means not faulted
             return obj.val == self.fault_value
 
         else:
-            print(self)
             raise Exception(
-                "Fault has neither 'Fault if equal to' nor"
+                f"Fault for {self.pv} has neither 'Fault if equal to' nor"
                 " 'OK if equal to' parameter"
             )
 
-    def was_faulted(self, time: datetime):
-        archiver_value: ArchiverValue = get_data_at_time(
-            pv_list=[self.pv.pvname], time_requested=time
-        )[self.pv.pvname]
+    def was_faulted(self, time: datetime) -> bool:
+        archiver_result: Dict[str, ArchiverValue] = get_data_at_time(
+            pv_list=[self.pv], time_requested=time
+        )
+        archiver_value: ArchiverValue = archiver_result[self.pv]
         return self.is_faulted(archiver_value)
 
     def get_fault_count_over_time_range(
         self, start_time: datetime, end_time: datetime
     ) -> FaultCounter:
         result = get_values_over_time_range(
-            pv_list=[self.pv.pvname], start_time=start_time, end_time=end_time
+            pv_list=[self.pv], start_time=start_time, end_time=end_time
         )
 
-        data_handler: ArchiveDataHandler = result[self.pv.pvname]
+        data_handler: ArchiveDataHandler = result[self.pv]
 
         counter = FaultCounter()
 

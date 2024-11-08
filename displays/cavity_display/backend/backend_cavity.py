@@ -1,15 +1,15 @@
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from datetime import datetime
-from typing import Dict
+from typing import DefaultDict, Optional
 
-from epics import caput
+from lcls_tools.common.controls.pyepics.utils import PV
 
 from displays.cavity_display.backend.fault import Fault, FaultCounter, PVInvalidError
+from displays.cavity_display.utils import utils
 from displays.cavity_display.utils.utils import (
     STATUS_SUFFIX,
     DESCRIPTION_SUFFIX,
     SEVERITY_SUFFIX,
-    parse_csv,
     SpreadsheetError,
     display_hash,
 )
@@ -17,26 +17,43 @@ from utils.sc_linac.cavity import Cavity
 
 
 class BackendCavity(Cavity):
-    def __init__(
-        self,
-        cavity_num,
-        rack_object,
-    ):
+    def __init__(self, cavity_num, rack_object):
         super(BackendCavity, self).__init__(
             cavity_num=cavity_num, rack_object=rack_object
         )
         self.status_pv: str = self.pv_addr(STATUS_SUFFIX)
+        self._status_pv_obj: Optional[PV] = None
         self.severity_pv: str = self.pv_addr(SEVERITY_SUFFIX)
+        self._severity_pv_obj: Optional[PV] = None
         self.description_pv: str = self.pv_addr(DESCRIPTION_SUFFIX)
+        self._description_pv_obj: Optional[PV] = None
 
         self.faults: OrderedDict[int, Fault] = OrderedDict()
         self.create_faults()
 
+    @property
+    def status_pv_obj(self) -> PV:
+        if not self._status_pv_obj:
+            self._status_pv_obj = PV(self.status_pv)
+        return self._status_pv_obj
+
+    @property
+    def severity_pv_obj(self) -> PV:
+        if not self._severity_pv_obj:
+            self._severity_pv_obj = PV(self.severity_pv)
+        return self._severity_pv_obj
+
+    @property
+    def description_pv_obj(self) -> PV:
+        if not self._description_pv_obj:
+            self._description_pv_obj = PV(self.description_pv)
+        return self._description_pv_obj
+
     def create_faults(self):
-        for csv_fault_dict in parse_csv():
-            level = csv_fault_dict["Level"]
-            suffix = csv_fault_dict["PV Suffix"]
-            rack = csv_fault_dict["Rack"]
+        for csv_fault_dict in utils.parse_csv():
+            level: str = csv_fault_dict["Level"]
+            suffix: str = csv_fault_dict["PV Suffix"]
+            rack: str = csv_fault_dict["Rack"]
 
             if level == "RACK":
                 # Rack A cavities don't care about faults for Rack B and vice versa
@@ -52,19 +69,19 @@ class BackendCavity(Cavity):
                     RACK=self.rack.rack_name,
                     CAVITY=self.number,
                 )
-                pv = prefix + suffix
+                pv: str = prefix + suffix
 
             elif level == "CRYO":
                 prefix = csv_fault_dict["PV Prefix"].format(
                     CRYOMODULE=self.cryomodule.name, CAVITY=self.number
                 )
-                pv = prefix + suffix
+                pv: str = prefix + suffix
 
             elif level == "SSA":
-                pv = self.ssa.pv_addr(suffix)
+                pv: str = self.ssa.pv_addr(suffix)
 
             elif level == "CAV":
-                pv = self.pv_addr(suffix)
+                pv: str = self.pv_addr(suffix)
 
             elif level == "CM":
                 cm_type = csv_fault_dict["CM Type"]
@@ -78,21 +95,21 @@ class BackendCavity(Cavity):
                     cm_type == "3.9" and not self.cryomodule.is_harmonic_linearizer
                 ):
                     continue
-                pv = prefix + suffix
+                pv: str = prefix + suffix
 
             elif level == "ALL":
                 prefix = csv_fault_dict["PV Prefix"]
-                pv = prefix + suffix
+                pv: str = prefix + suffix
 
             else:
                 raise (SpreadsheetError("Unexpected fault level in fault spreadsheet"))
 
-            tlc = csv_fault_dict["Three Letter Code"]
-            ok_condition = csv_fault_dict["OK If Equal To"]
-            fault_condition = csv_fault_dict["Faulted If Equal To"]
-            csv_prefix = csv_fault_dict["PV Prefix"]
+            tlc: str = csv_fault_dict["Three Letter Code"]
+            ok_condition: str = csv_fault_dict["OK If Equal To"]
+            fault_condition: str = csv_fault_dict["Faulted If Equal To"]
+            csv_prefix: str = csv_fault_dict["PV Prefix"]
 
-            key = display_hash(
+            key: int = display_hash(
                 rack=rack,
                 fault_condition=fault_condition,
                 ok_condition=ok_condition,
@@ -102,7 +119,7 @@ class BackendCavity(Cavity):
             )
 
             # setting key of faults dictionary to be row number b/c it's unique (i.e. not repeated)
-            self.faults[key] = Fault(
+            self.faults[key]: OrderedDict[int, Fault] = Fault(
                 tlc=tlc,
                 severity=csv_fault_dict["Severity"],
                 pv=pv,
@@ -116,16 +133,26 @@ class BackendCavity(Cavity):
                 button_text=csv_fault_dict["Three Letter Code"],
                 button_macro=csv_fault_dict["Button Macros"],
                 action=csv_fault_dict["Recommended Corrective Actions"],
+                lazy_pv=self.rack.cryomodule.linac.machine.lazy_fault_pvs,
             )
 
     def get_fault_counts(
         self, start_time: datetime, end_time: datetime
-    ) -> Dict[str, FaultCounter]:
-        result: Dict[str, FaultCounter] = {}
+    ) -> DefaultDict[str, FaultCounter]:
+        """
+        Using max function to get the maximum fault or invalid count for duplicate TLCs
+            i.e. MGT tlc has three PVs associated with it (X, Y, and Q) but we
+            only want the fault and invalid count for whichever PV had the
+            greatest number of faults
+        """
+        result: DefaultDict[str, FaultCounter] = defaultdict(FaultCounter)
 
         for fault in self.faults.values():
-            result[fault.pv.pvname] = fault.get_fault_count_over_time_range(
-                start_time=start_time, end_time=end_time
+            result[fault.tlc] = max(
+                result[fault.tlc],
+                fault.get_fault_count_over_time_range(
+                    start_time=start_time, end_time=end_time
+                ),
             )
 
         return result
@@ -146,13 +173,13 @@ class BackendCavity(Cavity):
                 break
 
         if is_okay:
-            caput(self.status_pv, f"{self.number}")
-            caput(self.severity_pv, 0)
-            caput(self.description_pv, " ")
+            self.status_pv_obj.put(str(self.number))
+            self.severity_pv_obj.put(0)
+            self.description_pv_obj.put(" ")
         else:
-            caput(self.status_pv, fault.tlc)
-            caput(self.description_pv, fault.short_description)
+            self.status_pv_obj.put(fault.tlc)
+            self.description_pv_obj.put(fault.short_description)
             if not invalid:
-                caput(self.severity_pv, fault.severity)
+                self.severity_pv_obj.put(fault.severity)
             else:
-                caput(self.severity_pv, 3)
+                self.severity_pv_obj.put(3)

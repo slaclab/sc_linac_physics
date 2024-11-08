@@ -439,10 +439,14 @@ class Cavity(linac_utils.SCLinacObject):
         return f"C={self.number},RFS={rfs},R={r},CM={cm},ID={macro_id},CH={ch}"
 
     @property
-    def hw_mode(self):
+    def hw_mode_pv_obj(self) -> PV:
         if not self._hw_mode_pv_obj:
             self._hw_mode_pv_obj = PV(self.hw_mode_pv)
-        return self._hw_mode_pv_obj.get()
+        return self._hw_mode_pv_obj
+
+    @property
+    def hw_mode(self):
+        return self.hw_mode_pv_obj.get()
 
     @property
     def is_online(self) -> bool:
@@ -831,7 +835,6 @@ class Cavity(linac_utils.SCLinacObject):
             self._char_timestamp_pv_obj = PV(self.char_timestamp_pv)
         date_string = self._char_timestamp_pv_obj.get(use_caget=False)
         time_readback = datetime.strptime(date_string, "%Y-%m-%d-%H:%M:%S")
-        print(f"{self} characterization time is {time_readback}")
         return time_readback
 
     def characterize(self):

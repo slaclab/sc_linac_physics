@@ -49,6 +49,7 @@ class Linac:
         self.ssa_class = machine.ssa_class
         self.stepper_class = machine.stepper_class
         self.piezo_class = machine.piezo_class
+        self.machine = machine
 
         self.name = f"L{linac_section}B"
         self.cryomodules: Dict[str, Cryomodule] = {}

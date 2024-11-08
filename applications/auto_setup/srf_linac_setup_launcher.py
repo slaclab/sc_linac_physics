@@ -30,7 +30,7 @@ if __name__ == "__main__":
         required=True,
         choices=range(4),
         type=int,
-        help=f"Linac number as an int",
+        help="Linac number as an int",
     )
 
     parser.add_argument(

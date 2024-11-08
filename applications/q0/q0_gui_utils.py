@@ -3,15 +3,13 @@ from datetime import datetime, timedelta
 from functools import partial
 from typing import Dict, Optional
 
-import numpy as np
-from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QRadioButton,
 )
 from epics import caget, caput
@@ -21,6 +19,7 @@ from urllib3.exceptions import ConnectTimeoutError
 
 import q0_utils
 from q0_linac import Q0Cavity, Q0Cryomodule
+from utils.qt import Worker, get_dimensions
 from utils.sc_linac.linac_utils import CavityAbortError
 
 DEFAULT_LL_DROP = 4
@@ -31,24 +30,6 @@ DEFAULT_NUM_CAL_POINTS = 5
 DEFAULT_POST_RF_HEAT = 24
 DEFAULT_JT_START_DELTA = timedelta(hours=24)
 DEFAULT_LL_BUFFER_SIZE = 10
-
-
-class Worker(QThread):
-    finished = pyqtSignal(str)
-    progress = pyqtSignal(int)
-    error = pyqtSignal(str)
-    status = pyqtSignal(str)
-
-    def __init__(self):
-        super().__init__()
-        self.finished.connect(print)
-        self.progress.connect(print)
-        self.error.connect(print)
-        self.status.connect(print)
-
-    def terminate(self) -> None:
-        self.error.emit("Thread termination requested")
-        super().terminate()
 
 
 class CryoParamSetupWorker(Worker):
@@ -212,14 +193,6 @@ class CalibrationWorker(Worker):
             self.error.emit(str(e))
 
 
-def make_error_popup(title, message: str):
-    popup = QMessageBox()
-    popup.setIcon(QMessageBox.Critical)
-    popup.setWindowTitle(title)
-    popup.setText(message)
-    popup.exec()
-
-
 class CavAmpControl:
     def __init__(self):
         self.groupbox: QGroupBox = QGroupBox()
@@ -261,8 +234,9 @@ class Q0Options(QObject):
 
         with open(cryomodule.q0_idx_file, "r+") as f:
             q0_measurements: Dict = json.load(f)
-            col_count = get_dimensions(q0_measurements)
-            for idx, time_stamp in enumerate(q0_measurements.keys()):
+            timestamps = list(q0_measurements.keys())
+            col_count = get_dimensions(timestamps)
+            for idx, time_stamp in enumerate(timestamps):
                 cav_amps = q0_measurements[time_stamp]["Cavity Amplitudes"]
                 radio_button: QRadioButton = QRadioButton(
                     f"{time_stamp}: \n{json.dumps(cav_amps, indent=4)}"
@@ -280,15 +254,6 @@ class Q0Options(QObject):
             f" CM{self.cryomodule.name} from {timestamp}"
             f" with q0 {self.cryomodule.q0_measurement.q0:.2e}"
         )
-
-
-def get_dimensions(options):
-    num_options = len(options.keys())
-    row_count = int(np.sqrt(num_options))
-    col_count = int(np.ceil(np.sqrt(num_options)))
-    if row_count * col_count != num_options:
-        col_count += 1
-    return col_count
 
 
 class CalibrationOptions(QObject):

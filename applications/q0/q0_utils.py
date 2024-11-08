@@ -233,11 +233,6 @@ class RFError(Exception):
     pass
 
 
-class QuenchError(RFError):
-    def __init__(self):
-        super().__init__("Quench Detected")
-
-
 class CryoError(Exception):
     """
     Exception thrown during Cryo Execution for the GUI to catch
@@ -286,8 +281,7 @@ class ValveParams:
     refHeatLoadAct: float
 
 
-def gen_axis(title, xlabel, ylabel):
-    # type: (str, str, str) -> Axes
+def gen_axis(title: str, xlabel: str, ylabel: str) -> Axes:
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.set_title(title)
@@ -296,8 +290,7 @@ def gen_axis(title, xlabel, ylabel):
     return ax
 
 
-def redraw_axis(canvas, title, xlabel, ylabel):
-    # type: (FigureCanvasQTAgg, str, str, str) -> None
+def redraw_axis(canvas: FigureCanvasQTAgg, title: str, xlabel: str, ylabel: str):
     canvas.axes.cla()
     canvas.draw_idle()
     canvas.axes.set_title(title)

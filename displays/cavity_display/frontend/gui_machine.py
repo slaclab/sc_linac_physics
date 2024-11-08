@@ -7,7 +7,8 @@ from utils.sc_linac.linac import Machine
 
 
 class GUIMachine(Machine):
-    def __init__(self):
+    def __init__(self, lazy_fault_pvs=True):
+        self.lazy_fault_pvs = lazy_fault_pvs
         super().__init__(cavity_class=GUICavity, cryomodule_class=GUICryomodule)
         self.top_half = QHBoxLayout()
         self.bottom_half = QHBoxLayout()
