@@ -6,8 +6,7 @@ from PyQt5.QtWidgets import QPushButton, QSizePolicy
 from edmbutton import PyDMEDMDisplayButton
 from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
 from pydm import Display
-from pydm.widgets import PyDMLabel
-from pydm.widgets.analog_indicator import PyDMAnalogIndicator
+from pydm.widgets import PyDMLabel, analog_indicator
 from pydm.widgets.display_format import DisplayFormat
 
 from applications.auto_setup.backend.setup_cavity import SetupCavity
@@ -62,8 +61,8 @@ class GUICavity:
         self.status_label.alarmSensitiveBorder = True
         self.status_label.alarmSensitiveContent = True
 
-        self.progress_bar: PyDMAnalogIndicator = PyDMAnalogIndicator(
-            init_channel=self.cavity.progress_pv
+        self.progress_bar: analog_indicator.PyDMAnalogIndicator = (
+            analog_indicator.PyDMAnalogIndicator(init_channel=self.cavity.progress_pv)
         )
         self.progress_bar.backgroundSizeRate = 0.2
         self.progress_bar.sizePolicy().setVerticalPolicy(QSizePolicy.Maximum)
