@@ -5,22 +5,20 @@ from applications.auto_setup.backend.setup_machine import SETUP_MACHINE
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
-def main():
-    global cavity_object
-
-    if cavity_object.script_is_running:
-        cavity_object.status_message = f"{cavity_object} script already running"
+def setup_cavity(cavity: SetupCavity, args: argparse.Namespace):
+    if cavity.script_is_running:
+        cavity.status_message = f"{cavity} script already running"
         return
 
     if args.shutdown:
-        cavity_object.shut_down()
+        cavity.shut_down()
 
     else:
-        cavity_object.setup()
+        cavity.setup()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser: argparse.ArgumentParser = argparse.ArgumentParser()
     parser.add_argument(
         "--cryomodule",
         "-cm",
@@ -40,11 +38,10 @@ if __name__ == "__main__":
         "--shutdown", "-off", action="store_true", help="Turn off cavity and SSA"
     )
 
-    args = parser.parse_args()
-    print(args)
-    cm_name = args.cryomodule
-    cav_num = args.cavity
+    parsed_args: argparse.Namespace = parser.parse_args()
+    cm_name = parsed_args.cryomodule
+    cav_num = parsed_args.cavity
 
-    cavity_object: SetupCavity = SETUP_MACHINE.cryomodules[cm_name].cavities[cav_num]
+    cavity_obj: SetupCavity = SETUP_MACHINE.cryomodules[cm_name].cavities[cav_num]
 
-    main()
+    setup_cavity(cavity_obj, parsed_args)
