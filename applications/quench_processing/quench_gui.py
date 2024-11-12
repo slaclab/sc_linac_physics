@@ -22,9 +22,9 @@ from pydm.widgets import PyDMWaveformPlot, PyDMTimePlot, PyDMLabel
 from pydm.widgets.timeplot import updateMode
 from qtpy.QtCore import Signal
 
-from applications.quench_processing.quench_linac import (
+from applications.quench_processing.quench_cavity import QuenchCavity
+from applications.quench_processing.quench_cryomodule import (
     QUENCH_MACHINE,
-    QuenchCavity,
     QuenchCryomodule,
 )
 from applications.quench_processing.quench_worker import QuenchWorker

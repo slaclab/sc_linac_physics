@@ -12,13 +12,15 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 from numpy import pi, exp, linspace
 
-from applications.quench_processing.quench_linac import (
+from applications.quench_processing.quench_cavity import QuenchCavity
+from applications.quench_processing.quench_cryomodule import (
     QUENCH_MACHINE,
-    QuenchCavity,
+)
+from applications.quench_processing.quench_utils import (
+    QUENCH_AMP_THRESHOLD,
     LOADED_Q_CHANGE_FOR_QUENCH,
     QUENCH_STABLE_TIME,
     RADIATION_LIMIT,
-    QUENCH_AMP_THRESHOLD,
 )
 from utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
 

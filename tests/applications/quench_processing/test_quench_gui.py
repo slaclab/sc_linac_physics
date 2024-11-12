@@ -5,11 +5,11 @@ import pytest
 from PyQt5.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
-from applications.quench_processing.quench_gui import QuenchGUI
-from applications.quench_processing.quench_linac import (
-    QuenchCavity,
+from applications.quench_processing.quench_cavity import QuenchCavity
+from applications.quench_processing.quench_cryomodule import (
     QuenchCryomodule,
 )
+from applications.quench_processing.quench_gui import QuenchGUI
 from applications.quench_processing.quench_worker import QuenchWorker
 from utils.qt import make_rainbow
 from utils.sc_linac.decarad import Decarad
