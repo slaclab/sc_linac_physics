@@ -12,25 +12,17 @@ from numpy.linalg import LinAlgError
 sys.path.append("/home/physics/srf/sc_linac_physics")
 from applications.quench_processing.quench_cryomodule import (  # noqa: E402
     QuenchCryomodule,
+    QUENCH_MACHINE,
 )
 from applications.quench_processing.quench_cavity import QuenchCavity  # noqa: E402
-from quench_cryomodule import QUENCH_MACHINE  # noqa: E402
-
-WATCHER_PV: PV = PV("PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT")
-WATCHER_PV.put(0)
-
-cavities: List[QuenchCavity] = list(QUENCH_MACHINE.all_iterator)
 
 
-def check_cavities():
+def check_cavities(cavity_list: List[QuenchCavity], watcher_pv: PV):
     # Flag to know if we tried to reset a false quench
     issued_reset = False
-    for quench_cav in cavities:
+    for quench_cav in cavity_list:
         if quench_cav.hw_mode == HW_MODE_ONLINE_VALUE and quench_cav.is_on:
-            if (
-                not quench_cav.quench_latch_invalid
-                and quench_cav.quench_latch_pv_obj.get() == 1
-            ):
+            if quench_cav.is_quenched:
                 quench_cm: QuenchCryomodule = quench_cav.cryomodule
                 try:
                     issued_reset = quench_cav.reset_quench()
@@ -48,11 +40,14 @@ def check_cavities():
     if issued_reset:
         sleep(3)
     try:
-        WATCHER_PV.put(WATCHER_PV.get() + 1)
+        watcher_pv.put(watcher_pv.get() + 1)
     except PVInvalidError as e:
         print(e)
 
 
 if __name__ == "__main__":
+    WATCHER_PV: PV = PV("PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT")
+    WATCHER_PV.put(0)
+    cavities: List[QuenchCavity] = list(QUENCH_MACHINE.all_iterator)
     while True:
-        check_cavities()
+        check_cavities(cavities, WATCHER_PV)

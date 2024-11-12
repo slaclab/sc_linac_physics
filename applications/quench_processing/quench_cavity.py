@@ -1,5 +1,5 @@
 import datetime
-from time import sleep
+import time
 from typing import Optional
 
 import numpy as np
@@ -105,14 +105,14 @@ class QuenchCavity(Cavity):
     def wait(self, seconds: float):
         for _ in range(int(seconds)):
             self.check_abort()
-            sleep(1)
+            time.sleep(1)
             if self.is_quenched:
                 return
-        sleep(seconds - int(seconds))
+        time.sleep(seconds - int(seconds))
 
     def wait_for_quench(self, time_to_wait=MAX_WAIT_TIME_FOR_QUENCH) -> Optional[float]:
         # wait 1s before resetting just in case
-        sleep(1)
+        time.sleep(1)
         self.reset_interlocks()
         time_start = datetime.datetime.now()
         print(f"{datetime.datetime.now()} Waiting {time_to_wait}s for {self} to quench")
@@ -122,7 +122,7 @@ class QuenchCavity(Cavity):
             and (datetime.datetime.now() - time_start).total_seconds() < time_to_wait
         ):
             self.check_abort()
-            sleep(1)
+            time.sleep(1)
 
         time_done = datetime.datetime.now()
 
@@ -138,7 +138,7 @@ class QuenchCavity(Cavity):
                 datetime.datetime.now() - start
             ).total_seconds() < DECARAD_SETTLE_TIME:
                 super().check_abort()
-                sleep(1)
+                time.sleep(1)
 
     def check_abort(self):
         super().check_abort()
@@ -240,15 +240,15 @@ class QuenchCavity(Cavity):
 
         if wait_for_update:
             print(f"Waiting 0.1s to give {self} waveforms a chance to update")
-            sleep(0.1)
+            time.sleep(0.1)
 
         time_data = self.fault_time_waveform_pv_obj.get()
         fault_data = self.fault_waveform_pv_obj.get()
         time_0 = 0
 
         # Look for time 0 (quench). These waveforms capture data beforehand
-        for time_0, time in enumerate(time_data):
-            if time >= 0:
+        for time_0, timestamp in enumerate(time_data):
+            if timestamp >= 0:
                 break
 
         fault_data = fault_data[time_0:]

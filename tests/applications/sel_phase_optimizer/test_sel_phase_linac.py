@@ -5,6 +5,7 @@ import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
 from applications.sel_phase_optimizer.sel_phase_linac import SELCavity
+from tests.utils.mock_utils import mock_func
 from utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     RF_MODE_SELAP,
@@ -18,10 +19,6 @@ from utils.sc_linac.linac_utils import (
     RF_MODE_PULSE,
     RF_MODE_CHIRP,
 )
-
-
-def mock_func(*args, **kwargs):
-    return MagicMock()
 
 
 @pytest.fixture
