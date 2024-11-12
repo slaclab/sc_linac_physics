@@ -13,7 +13,7 @@ sys.path.append("/home/physics/srf/sc_linac_physics")
 from applications.quench_processing.quench_cryomodule import (  # noqa: E402
     QuenchCryomodule,
 )
-from applications.quench_processing.quench_cavity import QuenchCavity
+from applications.quench_processing.quench_cavity import QuenchCavity  # noqa: E402
 from quench_cryomodule import QUENCH_MACHINE  # noqa: E402
 
 WATCHER_PV: PV = PV("PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT")
