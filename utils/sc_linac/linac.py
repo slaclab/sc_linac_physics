@@ -68,6 +68,9 @@ class Linac:
                 cryo_name=cm_name, linac_object=self
             )
 
+    def __str__(self):
+        return self.name
+
 
 class Machine:
     """

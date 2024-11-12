@@ -1,7 +1,8 @@
 import argparse
 from time import sleep
 
-from setup_linac import SETUP_MACHINE, SetupCryomodule
+from applications.auto_setup.backend.setup_cryomodule import SetupCryomodule
+from applications.auto_setup.backend.setup_machine import SETUP_MACHINE
 from utils.sc_linac.linac_utils import LINAC_CM_DICT
 
 

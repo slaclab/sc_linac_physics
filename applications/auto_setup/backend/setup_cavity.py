@@ -4,8 +4,8 @@ from typing import Optional
 from epics.ca import CASeverityException
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 
-from applications.auto_setup.setup_linac_object import SetupLinacObject
-from applications.auto_setup.setup_utils import (
+from applications.auto_setup.backend.setup_linac_object import SetupLinacObject
+from applications.auto_setup.backend.setup_utils import (
     STATUS_READY_VALUE,
     STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,
@@ -245,7 +245,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.status_message = f"Running {self} SSA Calibration"
             self.turn_off()
             self.progress = 20
-            self.ssa.calibrate(self.ssa.drive_max)
+            self.ssa.calibrate(self.ssa.drive_max, attempt=2)
             self.status_message = f"{self} SSA Calibrated"
         self.progress = 25
         self.check_abort()

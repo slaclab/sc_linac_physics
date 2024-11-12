@@ -90,6 +90,9 @@ class Cryomodule(SCLinacObject):
             + self.linac.insulating_vacuum_pvs
         )
 
+    def __str__(self):
+        return f"{self.linac.name} CM{self.name}"
+
     @property
     def ds_level_pv_obj(self) -> PV:
         if not self._ds_level_pv_obj:
