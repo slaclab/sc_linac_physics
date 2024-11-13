@@ -246,9 +246,7 @@ class SSA(linac_utils.SCLinacObject):
             print(f"Resetting {self}...")
             self.reset_pv_obj.put(1)
 
-            while self.is_resetting:
-                self.cavity.check_abort()
-                time.sleep(1)
+            self.wait_while_resetting()
 
             if (
                 self.is_faulted
@@ -261,6 +259,11 @@ class SSA(linac_utils.SCLinacObject):
             reset_attempt += 1
 
         print(f"{self} reset")
+
+    def wait_while_resetting(self):
+        while self.is_resetting:
+            self.cavity.check_abort()
+            time.sleep(1)
 
     def start_calibration(self):
         if not self._calibration_start_pv_obj:

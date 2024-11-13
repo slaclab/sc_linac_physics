@@ -20,6 +20,7 @@ from utils.sc_linac.linac_utils import (
     SSA_SLOPE_UPPER_LIMIT,
     SSACalibrationToleranceError,
     ALL_CRYOMODULES,
+    CavityAbortError,
 )
 from utils.sc_linac.ssa import SSA
 
@@ -147,9 +148,13 @@ def test_reset_pv_obj(ssa):
 def test_reset(ssa):
     ssa._status_pv_obj = make_mock_pv(get_val=SSA_STATUS_FAULTED_VALUE)
     ssa._reset_pv_obj = make_mock_pv()
+    ssa.cavity.check_abort = MagicMock()
+    ssa.wait_while_resetting = MagicMock()
     with pytest.raises(SSAFaultError):
         ssa.reset()
     ssa._reset_pv_obj.put.assert_called_with(1)
+    ssa.cavity.check_abort.assert_called()
+    ssa.wait_while_resetting.assert_called()
 
 
 def test_start_calibration(ssa):
@@ -287,3 +292,11 @@ def test_measured_slope_high(ssa):
     slope = SSA_SLOPE_UPPER_LIMIT * 2
     ssa._measured_slope_pv_obj = make_mock_pv(get_val=slope)
     assert not ssa.measured_slope_in_tolerance
+
+
+def test_wait_while_resetting(ssa):
+    ssa.cavity.abort_flag = True
+    ssa.cavity.turn_off = MagicMock()
+    ssa._status_pv_obj = make_mock_pv(get_val=SSA_STATUS_RESETTING_FAULTS_VALUE)
+    with pytest.raises(CavityAbortError):
+        ssa.wait_while_resetting()
