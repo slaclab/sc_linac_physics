@@ -242,11 +242,11 @@ class SSA(linac_utils.SCLinacObject):
     def reset(self):
         reset_attempt = 0
         while self.is_faulted:
+            self.cavity.check_abort()
             print(f"Resetting {self}...")
             self.reset_pv_obj.put(1)
 
-            while self.is_resetting:
-                time.sleep(1)
+            self.wait_while_resetting()
 
             if (
                 self.is_faulted
@@ -259,6 +259,19 @@ class SSA(linac_utils.SCLinacObject):
             reset_attempt += 1
 
         print(f"{self} reset")
+
+    def wait_while_resetting(self):
+        start = datetime.now()
+        while self.is_resetting:
+            self.cavity.check_abort()
+            print(
+                f"{datetime.now().replace(microsecond=0)} Waiting for {self} to finish resetting"
+            )
+            time.sleep(5)
+            if (datetime.now() - start).total_seconds() >= 90:
+                raise linac_utils.SSAFaultError(
+                    f"{self} took too long to reset, inspect and try again"
+                )
 
     def start_calibration(self):
         if not self._calibration_start_pv_obj:
