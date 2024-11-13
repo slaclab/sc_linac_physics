@@ -1,5 +1,5 @@
+import time
 from datetime import datetime
-from time import sleep
 from typing import Optional, Callable, TYPE_CHECKING
 
 from lcls_tools.common.controls.pyepics.utils import (
@@ -54,13 +54,11 @@ class Cavity(linac_utils.SCLinacObject):
             self.scale_factor_lower_limit = linac_utils.CAVITY_SCALE_LOWER_LIMIT
             self.scale_factor_upper_limit = linac_utils.CAVITY_SCALE_UPPER_LIMIT
 
-        self._pv_prefix = "ACCL:{LINAC}:{CRYOMODULE}{CAVITY}0:".format(
-            LINAC=self.linac.name, CRYOMODULE=self.cryomodule.name, CAVITY=self.number
+        self._pv_prefix = (
+            f"ACCL:{self.linac.name}:{self.cryomodule.name}{self.number}0:"
         )
 
-        self.ctePrefix = "CTE:CM{cm}:1{cav}".format(
-            cm=self.cryomodule.name, cav=self.number
-        )
+        self.ctePrefix = f"CTE:CM{self.cryomodule.name}:1{self.number}"
 
         self.chirp_prefix = self._pv_prefix + "CHIRP:"
         self.abort_flag: bool = False
@@ -679,7 +677,7 @@ class Cavity(linac_utils.SCLinacObject):
         while self.pulse_status < 2:
             self.check_abort()
             print("waiting for pulse state", datetime.now())
-            sleep(1)
+            time.sleep(1)
         if self.pulse_status > 2:
             raise linac_utils.PulseError("Unable to pulse cavity")
 
@@ -693,7 +691,7 @@ class Cavity(linac_utils.SCLinacObject):
             while not self.is_on:
                 self.check_abort()
                 print(f"waiting for {self} to turn on", datetime.now())
-                sleep(1)
+                time.sleep(1)
 
             print(f"{self} on")
         else:
@@ -705,7 +703,7 @@ class Cavity(linac_utils.SCLinacObject):
         while self.is_on:
             self.check_abort()
             print(f"waiting for {self} to turn off")
-            sleep(1)
+            time.sleep(1)
         print(f"{self} off")
 
     def setup_selap(self, des_amp: float = 5):
@@ -785,7 +783,7 @@ class Cavity(linac_utils.SCLinacObject):
 
             print(f"turning {self} RF on and waiting 5s for detune to catch up")
             self.turn_on()
-            sleep(5)
+            time.sleep(5)
             self.find_chirp_range(chirp_range)
 
         else:
@@ -796,7 +794,7 @@ class Cavity(linac_utils.SCLinacObject):
     def find_chirp_range(self, chirp_range=50000):
         self.check_abort()
         self.set_chirp_range(chirp_range)
-        sleep(1)
+        time.sleep(1)
         if self.detune_invalid:
             if chirp_range < 400000:
                 self.find_chirp_range(int(chirp_range * 1.1))
@@ -813,7 +811,7 @@ class Cavity(linac_utils.SCLinacObject):
             self._interlock_reset_pv_obj = PV(self.interlock_reset_pv)
 
         self._interlock_reset_pv_obj.put(1)
-        sleep(wait)
+        time.sleep(wait)
 
         print(f"Checking {self} RF permit")
         if self.rf_inhibited:
@@ -861,7 +859,7 @@ class Cavity(linac_utils.SCLinacObject):
 
         print(f"Starting {self} cavity characterization at {datetime.now()}")
         self.start_characterization()
-        sleep(2)
+        time.sleep(2)
 
         while self.characterization_running:
             self.check_abort()
@@ -869,7 +867,7 @@ class Cavity(linac_utils.SCLinacObject):
                 f"waiting for {self} characterization" f" to stop running",
                 datetime.now(),
             )
-            sleep(1)
+            time.sleep(1)
 
         if self.characterization_status == linac_utils.CALIBRATION_COMPLETE_VALUE:
             if (datetime.now() - self.characterization_timestamp).total_seconds() > 300:
@@ -915,7 +913,7 @@ class Cavity(linac_utils.SCLinacObject):
                 )
             self.ades = self.ades + step_size
             # to avoid tripping sensitive interlock
-            sleep(0.1)
+            time.sleep(0.1)
 
         if self.ades != des_amp:
             self.ades = des_amp

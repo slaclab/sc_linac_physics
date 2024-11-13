@@ -1,10 +1,9 @@
+import time
 from datetime import datetime
-from time import sleep
 from typing import Optional, TYPE_CHECKING
 
-from numpy import sign
-
 from lcls_tools.common.controls.pyepics.utils import PV
+from numpy import sign
 
 from utils.sc_linac import linac_utils
 
@@ -156,8 +155,10 @@ class StepperTuner(linac_utils.SCLinacObject):
     @property
     def on_limit_switch(self) -> bool:
         return (
-            self.limit_switch_a_pv_obj.get() == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
-            or self.limit_switch_b_pv_obj.get() == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
+            self.limit_switch_a_pv_obj.get()
+            == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
+            or self.limit_switch_b_pv_obj.get()
+            == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
         )
 
     @property
@@ -218,7 +219,9 @@ class StepperTuner(linac_utils.SCLinacObject):
 
             # make sure that we don't exceed the speed limit as defined by the tuner experts
             self.speed = (
-                speed if speed < linac_utils.MAX_STEPPER_SPEED else linac_utils.MAX_STEPPER_SPEED
+                speed
+                if speed < linac_utils.MAX_STEPPER_SPEED
+                else linac_utils.MAX_STEPPER_SPEED
             )
 
         if abs(num_steps) <= max_steps:
@@ -260,17 +263,19 @@ class StepperTuner(linac_utils.SCLinacObject):
             self.move_negative()
 
         print(f"Waiting 5s for {self.cavity} motor to start moving")
-        sleep(5)
+        time.sleep(5)
 
         while self.motor_moving:
             self.check_abort()
             if check_detune:
                 self.cavity.check_detune()
             print(f"{self} motor still moving, waiting 5s", datetime.now())
-            sleep(5)
+            time.sleep(5)
 
         print(f"{self} motor done moving")
 
         # the motor can be done moving for good OR bad reasons
         if self.on_limit_switch:
-            raise linac_utils.StepperError(f"{self.cavity} stepper motor on limit switch")
+            raise linac_utils.StepperError(
+                f"{self.cavity} stepper motor on limit switch"
+            )
