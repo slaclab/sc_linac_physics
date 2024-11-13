@@ -1,4 +1,4 @@
-from time import sleep
+import time
 from typing import Optional, TYPE_CHECKING
 
 from lcls_tools.common.controls.pyepics.utils import PV
@@ -147,9 +147,9 @@ class Piezo(linac_utils.SCLinacObject):
             self.cavity.check_abort()
             print(f"{self} not enabled, trying to enable")
             self.enable_pv_obj.put(linac_utils.PIEZO_DISABLE_VALUE)
-            sleep(2)
+            time.sleep(2)
             self.enable_pv_obj.put(linac_utils.PIEZO_ENABLE_VALUE)
-            sleep(2)
+            time.sleep(2)
 
     def enable_feedback(self):
         self.enable()
@@ -157,9 +157,9 @@ class Piezo(linac_utils.SCLinacObject):
             self.cavity.check_abort()
             print(f"{self} feedback not enabled, trying to enable feedback")
             self.set_to_manual()
-            sleep(2)
+            time.sleep(2)
             self.set_to_feedback()
-            sleep(2)
+            time.sleep(2)
 
     def disable_feedback(self):
         self.enable()
@@ -167,6 +167,6 @@ class Piezo(linac_utils.SCLinacObject):
             self.cavity.check_abort()
             print(f"{self} feedback enabled, trying to disable feedback")
             self.set_to_feedback()
-            sleep(2)
+            time.sleep(2)
             self.set_to_manual()
-            sleep(2)
+            time.sleep(2)

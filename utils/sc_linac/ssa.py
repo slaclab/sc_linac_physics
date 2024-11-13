@@ -1,5 +1,5 @@
+import time
 from datetime import datetime
-from time import sleep
 from typing import Optional, TYPE_CHECKING
 
 from lcls_tools.common.controls.pyepics.utils import PV
@@ -207,7 +207,7 @@ class SSA(linac_utils.SCLinacObject):
             while not self.is_on:
                 self.cavity.check_abort()
                 print(f"waiting for {self} to turn on")
-                sleep(1)
+                time.sleep(1)
 
         if self.cavity.cryomodule.is_harmonic_linearizer:
             self.ps_volt_setpoint2_pv_obj.put(linac_utils.HL_SSA_PS_SETPOINT)
@@ -229,7 +229,7 @@ class SSA(linac_utils.SCLinacObject):
             while self.is_on:
                 self.cavity.check_abort()
                 print(f"waiting for {self} to turn off")
-                sleep(1)
+                time.sleep(1)
 
         print(f"{self} off")
 
@@ -246,7 +246,7 @@ class SSA(linac_utils.SCLinacObject):
             self.reset_pv_obj.put(1)
 
             while self.is_resetting:
-                sleep(1)
+                time.sleep(1)
 
             if (
                 self.is_faulted
@@ -308,12 +308,12 @@ class SSA(linac_utils.SCLinacObject):
 
         print(f"Starting {self} calibration")
         self.start_calibration()
-        sleep(2)
+        time.sleep(2)
 
         while self.calibration_running:
             print(f"waiting for {self} calibration to stop running", datetime.now())
-            sleep(1)
-        sleep(2)
+            time.sleep(1)
+        time.sleep(2)
 
         if self.calibration_crashed:
             raise linac_utils.SSACalibrationError(f"{self} calibration crashed")

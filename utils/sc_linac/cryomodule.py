@@ -2,7 +2,7 @@ from typing import Type, Dict, List, TYPE_CHECKING, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-from utils.sc_linac.linac_utils import SCLinacObject
+from utils.sc_linac.linac_utils import SCLinacObject, L1BHL
 
 if TYPE_CHECKING:
     from cavity import Cavity
@@ -105,7 +105,7 @@ class Cryomodule(SCLinacObject):
 
     @property
     def is_harmonic_linearizer(self):
-        return self.name in ["H1", "H2"]
+        return self.name in L1BHL
 
     @property
     def pv_prefix(self):
