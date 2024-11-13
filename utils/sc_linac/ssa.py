@@ -242,10 +242,12 @@ class SSA(linac_utils.SCLinacObject):
     def reset(self):
         reset_attempt = 0
         while self.is_faulted:
+            self.cavity.check_abort()
             print(f"Resetting {self}...")
             self.reset_pv_obj.put(1)
 
             while self.is_resetting:
+                self.cavity.check_abort()
                 time.sleep(1)
 
             if (
