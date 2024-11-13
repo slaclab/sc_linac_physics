@@ -1,5 +1,4 @@
 from random import randint
-from unittest import TestCase
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -7,7 +6,6 @@ from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
 from tests.utils.mock_utils import mock_func
 from utils.sc_linac.cavity import Cavity
-from utils.sc_linac.linac import MACHINE
 from utils.sc_linac.linac_utils import (
     PIEZO_ENABLE_VALUE,
     PIEZO_DISABLE_VALUE,
@@ -145,14 +143,3 @@ def test_disable_feedback(piezo):
     piezo.disable_feedback()
     piezo.enable.assert_called()
     piezo.set_to_manual.assert_called()
-
-
-class TestPiezo(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.non_hl_iterator = MACHINE.non_hl_iterator
-
-    def setUp(piezo):
-        piezo: Piezo = next(self.non_hl_iterator).piezo
-        print(f"Testing {piezo}")
-        self.num_calls = 0

@@ -218,10 +218,7 @@ def test_measured_scale_factor(cavity):
 def test_measured_scale_factor_in_tolerance_hl(hl_cavity):
     val = randint(CAVITY_SCALE_LOWER_LIMIT_HL, CAVITY_SCALE_UPPER_LIMIT_HL)
     hl_cavity._measured_scale_factor_pv_obj = make_mock_pv(get_val=val)
-    assert (
-        hl_cavity.measured_scale_factor_in_tolerance,
-        f"scale factor {val} not in tol for {hl_cavity}",
-    )
+    assert hl_cavity.measured_scale_factor_in_tolerance
 
 
 def test_measured_scale_factor_in_tolerance(cavity):
