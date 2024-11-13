@@ -1,4 +1,4 @@
-from applications.quench_processing.quench_linac import QuenchCavity
+from applications.quench_processing.quench_cavity import QuenchCavity
 from utils.qt import Worker
 from utils.sc_linac.linac_utils import CavityAbortError, QuenchError
 

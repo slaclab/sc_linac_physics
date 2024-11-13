@@ -1,26 +1,22 @@
 import datetime
-import logging
-import os
-import sys
-from time import sleep
+import time
 from typing import Optional
 
 import numpy as np
 from lcls_tools.common.controls.pyepics.utils import PV, EPICS_INVALID_VAL
 
+from applications.quench_processing.quench_utils import (
+    QUENCH_AMP_THRESHOLD,
+    LOADED_Q_CHANGE_FOR_QUENCH,
+    MAX_WAIT_TIME_FOR_QUENCH,
+    QUENCH_STABLE_TIME,
+    MAX_QUENCH_RETRIES,
+    DECARAD_SETTLE_TIME,
+    RADIATION_LIMIT,
+)
 from utils.sc_linac.cavity import Cavity
-from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.decarad import Decarad
-from utils.sc_linac.linac import Machine
 from utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
-
-QUENCH_AMP_THRESHOLD = 0.7
-LOADED_Q_CHANGE_FOR_QUENCH = 0.6
-MAX_WAIT_TIME_FOR_QUENCH = 30
-QUENCH_STABLE_TIME = 30 * 60
-MAX_QUENCH_RETRIES = 100
-DECARAD_SETTLE_TIME = 3
-RADIATION_LIMIT = 2
 
 
 class QuenchCavity(Cavity):
@@ -109,14 +105,14 @@ class QuenchCavity(Cavity):
     def wait(self, seconds: float):
         for _ in range(int(seconds)):
             self.check_abort()
-            sleep(1)
+            time.sleep(1)
             if self.is_quenched:
                 return
-        sleep(seconds - int(seconds))
+        time.sleep(seconds - int(seconds))
 
     def wait_for_quench(self, time_to_wait=MAX_WAIT_TIME_FOR_QUENCH) -> Optional[float]:
         # wait 1s before resetting just in case
-        sleep(1)
+        time.sleep(1)
         self.reset_interlocks()
         time_start = datetime.datetime.now()
         print(f"{datetime.datetime.now()} Waiting {time_to_wait}s for {self} to quench")
@@ -126,7 +122,7 @@ class QuenchCavity(Cavity):
             and (datetime.datetime.now() - time_start).total_seconds() < time_to_wait
         ):
             self.check_abort()
-            sleep(1)
+            time.sleep(1)
 
         time_done = datetime.datetime.now()
 
@@ -142,7 +138,7 @@ class QuenchCavity(Cavity):
                 datetime.datetime.now() - start
             ).total_seconds() < DECARAD_SETTLE_TIME:
                 super().check_abort()
-                sleep(1)
+                time.sleep(1)
 
     def check_abort(self):
         super().check_abort()
@@ -244,15 +240,15 @@ class QuenchCavity(Cavity):
 
         if wait_for_update:
             print(f"Waiting 0.1s to give {self} waveforms a chance to update")
-            sleep(0.1)
+            time.sleep(0.1)
 
         time_data = self.fault_time_waveform_pv_obj.get()
         fault_data = self.fault_waveform_pv_obj.get()
         time_0 = 0
 
         # Look for time 0 (quench). These waveforms capture data beforehand
-        for time_0, time in enumerate(time_data):
-            if time >= 0:
+        for time_0, timestamp in enumerate(time_data):
+            if timestamp >= 0:
                 break
 
         fault_data = fault_data[time_0:]
@@ -288,30 +284,15 @@ class QuenchCavity(Cavity):
 
         return is_real
 
+    def reset_quench(self) -> bool:
+        is_real = self.validate_quench(wait_for_update=True)
+        if not is_real:
+            self.cryomodule.logger.info(f"{self} FAKE quench detected, resetting")
+            super().reset_interlocks()
+            return True
 
-class QuenchCryomodule(Cryomodule):
-    def __init__(self, cryo_name, linac_object):
-        super().__init__(cryo_name, linac_object)
-
-        formatter = logging.Formatter(
-            fmt="%(asctime)s %(levelname)-8s %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-
-        self.console_handler = logging.StreamHandler(sys.stdout)
-        self.console_handler.setFormatter(formatter)
-
-        self.logger = logging.getLogger(f"{self} quench resetter")
-        self.logger.setLevel(logging.DEBUG)
-
-        self.logfile = f"logfiles/cm{self.name}/cm{self.name}_quench_reset.log"
-        os.makedirs(os.path.dirname(self.logfile), exist_ok=True)
-
-        self.file_handler = logging.FileHandler(self.logfile, mode="w")
-        self.file_handler.setFormatter(formatter)
-
-        self.logger.addHandler(self.file_handler)
-        self.logger.addHandler(self.console_handler)
-
-
-QUENCH_MACHINE = Machine(cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule)
+        else:
+            self.cryomodule.logger.warning(
+                f"{self} REAL quench detected, not resetting"
+            )
+            return False
