@@ -63,7 +63,7 @@ class GUICryomodule:
         self.cryomodule_object.trigger_shutdown()
 
     def request_stop(self):
-        self.cryomodule_object.request_abort()
+        self.cryomodule_object.trigger_abort()
 
     @property
     def cryomodule_object(self) -> SetupCryomodule:

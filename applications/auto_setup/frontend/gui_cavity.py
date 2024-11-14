@@ -81,7 +81,7 @@ class GUICavity:
         self.note_label.alarmSensitiveContent = True
 
     def request_stop(self):
-        self.cavity.request_abort()
+        self.cavity.trigger_abort()
 
     @property
     def cavity(self) -> SetupCavity:

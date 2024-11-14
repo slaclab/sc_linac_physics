@@ -79,7 +79,7 @@ class SetupLinacObject(SCLinacObject):
     def trigger_shutdown(self):
         self.shutoff_pv_obj.put(1)
 
-    def request_abort(self):
+    def trigger_abort(self):
         self.abort_pv_obj.put(1)
 
     def kill_setup(self):

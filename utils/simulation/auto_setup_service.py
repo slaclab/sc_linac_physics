@@ -1,3 +1,4 @@
+import os
 from asyncio import create_subprocess_exec
 from datetime import datetime
 from typing import List
@@ -16,6 +17,9 @@ from utils.simulation.severity_prop import SeverityProp
 
 
 class AutoSetupPVGroup(PVGroup):
+    srf_root_dir = os.getenv("SRF_ROOT_DIR", "~/sc_linac_physics")
+    launcher_dir = os.path.join(srf_root_dir, "applications/auto_setup/launcher")
+
     setup_start: PvpropertyBoolEnum = pvproperty(name="SETUPSTRT")
     setup_stop: PvpropertyBoolEnum = pvproperty(name="SETUPSTOP")
     setup_status: PvpropertyBoolEnum = pvproperty(name="SETUPSTS")
@@ -71,14 +75,14 @@ class AutoSetupCMPVGroup(AutoSetupPVGroup):
     async def trigger_setup_script(self):
         await create_subprocess_exec(
             "python",
-            "/Users/zacarias/srf/auto_setup/srf_cm_setup_launcher.py",
+            os.path.join(self.launcher_dir, "srf_cm_setup_launcher.py"),
             f"-cm={self.cm_name}",
         )
 
     async def trigger_shutdown_script(self):
         await create_subprocess_exec(
             "python",
-            "/Users/zacarias/srf/auto_setup/srf_cm_setup_launcher.py",
+            os.path.join(self.launcher_dir, "srf_cm_setup_launcher.py"),
             f"-cm={self.cm_name}",
             "-off",
         )
@@ -92,14 +96,14 @@ class AutoSetupLinacPVGroup(AutoSetupPVGroup):
     async def trigger_setup_script(self):
         await create_subprocess_exec(
             "python",
-            "/Users/zacarias/srf/auto_setup/srf_linac_setup_launcher.py",
+            os.path.join(self.launcher_dir, "srf_linac_setup_launcher.py"),
             f"-cm={self.linac_idx}",
         )
 
     async def trigger_shutdown_script(self):
         await create_subprocess_exec(
             "python",
-            "/Users/zacarias/srf/auto_setup/srf_linac_setup_launcher.py",
+            os.path.join(self.launcher_dir, "srf_linac_setup_launcher.py"),
             f"-cm={self.linac_idx}",
             "-off",
         )
@@ -112,13 +116,13 @@ class AutoSetupGlobalPVGroup(AutoSetupPVGroup):
     async def trigger_setup_script(self):
         await create_subprocess_exec(
             "python",
-            "/Users/zacarias/srf/auto_setup/srf_global_setup_launcher.py",
+            os.path.join(self.launcher_dir, "srf_global_setup_launcher.py"),
         )
 
     async def trigger_shutdown_script(self):
         await create_subprocess_exec(
             "python",
-            "/Users/zacarias/srf/auto_setup/srf_global_setup_launcher.py",
+            os.path.join(self.launcher_dir, "srf_global_setup_launcher.py"),
             "-off",
         )
 
@@ -164,7 +168,7 @@ class AutoSetupCavityPVGroup(AutoSetupPVGroup):
     async def trigger_setup_script(self):
         await create_subprocess_exec(
             "python",
-            "/Users/zacarias/srf/auto_setup/srf_cavity_setup_launcher.py",
+            os.path.join(self.launcher_dir, "srf_cavity_setup_launcher.py"),
             f"-cm={self.cm_name}",
             f"-cav={self.cav_num}",
         )
@@ -172,7 +176,7 @@ class AutoSetupCavityPVGroup(AutoSetupPVGroup):
     async def trigger_shutdown_script(self):
         await create_subprocess_exec(
             "python",
-            "/Users/zacarias/srf/auto_setup/srf_cavity_setup_launcher.py",
+            os.path.join(self.launcher_dir, "srf_cavity_setup_launcher.py"),
             f"-cm={self.cm_name}",
             f"-cav={self.cav_num}",
             "-off",

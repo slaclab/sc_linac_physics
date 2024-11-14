@@ -67,7 +67,7 @@ class GUILinac:
         return self._linac_object
 
     def request_stop(self):
-        self.linac_object.request_abort()
+        self.linac_object.trigger_abort()
 
     def trigger_shutdown(self):
         self.linac_object.trigger_shutdown()

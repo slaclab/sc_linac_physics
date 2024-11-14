@@ -95,7 +95,7 @@ class SetupCavity(Cavity, SetupLinacObject):
     def clear_abort(self):
         self.abort_pv_obj.put(0)
 
-    def request_abort(self):
+    def trigger_abort(self):
         if self.script_is_running:
             self.status_message = f"Requesting stop for {self}"
             self.abort_pv_obj.put(1)
