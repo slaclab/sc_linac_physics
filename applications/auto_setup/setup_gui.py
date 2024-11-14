@@ -57,11 +57,16 @@ class SetupGUI(Display):
 
         self.connect_buttons()
 
-        self.option_layout: QHBoxLayout = QHBoxLayout()
         self.ssa_cal_checkbox = QCheckBox("SSA Calibration")
+        self.ssa_cal_checkbox.setChecked(True)
         self.autotune_checkbox: QCheckBox = QCheckBox("Auto Tune")
+        self.autotune_checkbox.setChecked(True)
         self.cav_char_checkbox: QCheckBox = QCheckBox("Cavity Characterization")
+        self.cav_char_checkbox.setChecked(True)
         self.rf_ramp_checkbox: QCheckBox = QCheckBox("RF Ramp")
+        self.rf_ramp_checkbox.setChecked(True)
+
+        self.option_layout: QHBoxLayout = QHBoxLayout()
         self.option_layout.addStretch()
         self.option_layout.addWidget(self.ssa_cal_checkbox)
         self.option_layout.addWidget(self.autotune_checkbox)
