@@ -80,7 +80,7 @@ def test_request_abort(cavity):
     cavity._status_msg_pv_obj = make_mock_pv()
     cavity._abort_pv_obj = make_mock_pv()
 
-    cavity.request_abort()
+    cavity.trigger_abort()
 
     if status == STATUS_RUNNING_VALUE:
         cavity._abort_pv_obj.put.assert_called()

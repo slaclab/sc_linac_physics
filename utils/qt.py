@@ -104,3 +104,16 @@ def get_dimensions(options: List):
     if row_count * col_count < num_options:
         col_count += 1
     return col_count
+
+
+def make_sanity_check_popup(txt: str) -> QMessageBox:
+    msg = QMessageBox()
+    msg.setText("Are you sure?")
+    msg.setInformativeText(txt)
+    msg.setIcon(QMessageBox.Warning)
+    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
+    msg.setDefaultButton(QMessageBox.Cancel)
+
+    # msg.setDetailedText("details")
+
+    return msg
