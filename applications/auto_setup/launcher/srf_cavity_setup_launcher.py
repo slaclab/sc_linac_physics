@@ -1,8 +1,10 @@
 import argparse
+import sys
 
-from applications.auto_setup.backend.setup_cavity import SetupCavity
-from applications.auto_setup.backend.setup_machine import SETUP_MACHINE
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES
+sys.path.append("/home/physics/srf/sc_linac_physics")
+from applications.auto_setup.backend.setup_cavity import SetupCavity  # noqa: E402
+from applications.auto_setup.backend.setup_machine import SETUP_MACHINE  # noqa: E402
+from utils.sc_linac.linac_utils import ALL_CRYOMODULES  # noqa: E402
 
 
 def setup_cavity(cavity: SetupCavity, args: argparse.Namespace):

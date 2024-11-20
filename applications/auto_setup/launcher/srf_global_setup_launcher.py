@@ -1,8 +1,18 @@
 import argparse
+import sys
 
-from applications.auto_setup.backend.setup_cryomodule import SetupCryomodule
-from applications.auto_setup.backend.setup_machine import SetupMachine, SETUP_MACHINE
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES_NO_HL, ALL_CRYOMODULES
+sys.path.append("/home/physics/srf/sc_linac_physics")
+from applications.auto_setup.backend.setup_cryomodule import (  # noqa: E402
+    SetupCryomodule,
+)
+from applications.auto_setup.backend.setup_machine import (  # noqa: E402
+    SetupMachine,
+    SETUP_MACHINE,
+)
+from utils.sc_linac.linac_utils import (  # noqa: E402
+    ALL_CRYOMODULES_NO_HL,
+    ALL_CRYOMODULES,
+)
 
 
 def setup_cryomodule(cryomodule_object: SetupCryomodule):
