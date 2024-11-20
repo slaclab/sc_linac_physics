@@ -1,10 +1,15 @@
 import argparse
+import sys
 from time import sleep
 
-from applications.auto_setup.backend.setup_cavity import SetupCavity
-from applications.auto_setup.backend.setup_cryomodule import SetupCryomodule
-from applications.auto_setup.backend.setup_machine import SETUP_MACHINE
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES
+sys.path.append("/home/physics/srf/sc_linac_physics")
+
+from applications.auto_setup.backend.setup_cavity import SetupCavity  # noqa: E402
+from applications.auto_setup.backend.setup_cryomodule import (  # noqa: E402
+    SetupCryomodule,
+)
+from applications.auto_setup.backend.setup_machine import SETUP_MACHINE  # noqa: E402
+from utils.sc_linac.linac_utils import ALL_CRYOMODULES  # noqa: E402
 
 
 def setup_cavity(cavity_object: SetupCavity, args):
