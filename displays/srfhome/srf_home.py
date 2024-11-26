@@ -94,21 +94,12 @@ class SRFHome(Display):
         auto_plot_button.setText("SRF Auto Plot")
         buttons.append(auto_plot_button)
 
-        # TODO decide if we still need/want these links
-
-        # link_layout.addWidget(
-        #     make_link_button(
-        #         text="BigPics Directory",
-        #         link="https://slac.stanford.edu/grp/ad/srf/slaconly/",
-        #     )
-        # )
-
-        # link_layout.addWidget(
-        #     make_link_button(
-        #         text="LCLS-II Physics Log",
-        #         link="http://physics-elog.slac.stanford.edu/lcls2elog/index.jsp",
-        #     )
-        # )
+        # TODO migrate microphonics gui
+        microphonics_button = PyDMRelatedDisplayButton(
+            filename="/home/physics/srf/gitRepos/microphonics/CommMicro.py"
+        )
+        microphonics_button.setText("Microphonics GUI")
+        buttons.append(microphonics_button)
 
         for decarad in [1, 2]:
             decarad_button = PyDMRelatedDisplayButton(
