@@ -5,9 +5,8 @@ from typing import List, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-from displays.cavity_display.backend.backend_machine import BackendMachine
-
 sys.path.append("/home/physics/srf/sc_linac_physics")
+from displays.cavity_display.backend.backend_machine import BackendMachine  # noqa: E402
 from displays.cavity_display.backend.backend_cavity import BackendCavity  # noqa: E402
 from displays.cavity_display.utils.utils import DEBUG, BACKEND_SLEEP_TIME  # noqa: E402
 
