@@ -370,12 +370,12 @@ def test_chirp_freq_start(cavity):
 
 def test_chirp_freq_stop(cavity):
     val = 200000
-    cavity._freq_stop_pv_obj = make_mock_pv(get_val=val)
+    cavity._chirp_freq_stop_pv_obj = make_mock_pv(get_val=val)
     assert cavity.chirp_freq_stop == val
 
     new_val = 400000
     cavity.chirp_freq_stop = new_val
-    cavity._freq_stop_pv_obj.put.assert_called_with(new_val)
+    cavity._chirp_freq_stop_pv_obj.put.assert_called_with(new_val)
 
 
 def test_calculate_probe_q(cavity):
@@ -386,11 +386,11 @@ def test_calculate_probe_q(cavity):
 
 def test_set_chirp_range(cavity):
     cavity._chirp_freq_start_pv_obj = make_mock_pv()
-    cavity._freq_stop_pv_obj = make_mock_pv()
+    cavity._chirp_freq_stop_pv_obj = make_mock_pv()
     offset = randint(-400000, 0)
     cavity.set_chirp_range(offset)
     cavity._chirp_freq_start_pv_obj.put.assert_called_with(offset)
-    cavity._freq_stop_pv_obj.put.assert_called_with(-offset)
+    cavity._chirp_freq_stop_pv_obj.put.assert_called_with(-offset)
 
 
 def test_rf_state(cavity):
