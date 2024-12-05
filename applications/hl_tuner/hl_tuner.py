@@ -5,7 +5,6 @@ from pydm import Display
 from pydm.widgets import PyDMTimePlot, PyDMSpinbox
 from pydm.widgets.enum_button import PyDMEnumButton
 
-from tests.utils.sc_linac.test_cavity import cavity
 from utils.qt import make_rainbow
 from utils.sc_linac.cavity import Cavity
 from utils.sc_linac.rack import Rack
