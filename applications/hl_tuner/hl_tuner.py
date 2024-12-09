@@ -1,5 +1,12 @@
 from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QTabWidget
+from PyQt5.QtWidgets import (
+    QTabWidget,
+    QGroupBox,
+    QVBoxLayout,
+    QGridLayout,
+    QWidget,
+    QHBoxLayout,
+)
 from edmbutton import PyDMEDMDisplayButton
 from pydm import Display
 from pydm.widgets import PyDMTimePlot, PyDMSpinbox
@@ -7,6 +14,7 @@ from pydm.widgets.enum_button import PyDMEnumButton
 
 from utils.qt import make_rainbow
 from utils.sc_linac.cavity import Cavity
+from utils.sc_linac.linac import MACHINE
 from utils.sc_linac.rack import Rack
 
 
@@ -28,16 +36,42 @@ class CavitySection:
         self.max_steps: PyDMSpinbox = PyDMSpinbox(
             init_channel=cavity.stepper_tuner.max_steps_pv
         )
+        self.groupbox = QGroupBox(f"{cavity}")
+        layout = QVBoxLayout()
+        self.groupbox.setLayout(layout)
+        spinbox_layout = QGridLayout()
+        layout.addWidget(self.tune_state)
+        layout.addLayout(spinbox_layout)
+        spinbox_layout.addWidget(self.chirp_start, 0, 0)
+        spinbox_layout.addWidget(self.chirp_stop, 0, 1)
+        spinbox_layout.addWidget(self.motor_speed, 1, 0)
+        spinbox_layout.addWidget(self.max_steps, 1, 1)
 
 
 class RackScreen:
     def __init__(self, rack: Rack):
         self.detune_plot: PyDMTimePlot = PyDMTimePlot()
+        self.detune_plot.setPlotTitle("Cavity Detunes")
         self.rack = rack
         self.populate_detune_plot()
+        self.detune_plot.showLegend = True
         rack_file = f"/usr/local/lcls/tools/edm/display/llrf/rf_srf_freq_scan_rack{rack.rack_name}.edl"
         self.edm_screen: PyDMEDMDisplayButton = PyDMEDMDisplayButton(filename=rack_file)
+        self.edm_screen.setText("EDM Rack Screen")
         self.edm_screen.macros = list(rack.cavities.values())[0].edm_macro_string
+        self.groupbox = QGroupBox(f"{rack}")
+        layout = QVBoxLayout()
+        self.groupbox.setLayout(layout)
+
+        cav_layout = QGridLayout()
+
+        for idx, cavity in enumerate(list(rack.cavities.values())):
+            cav_layout.addWidget(CavitySection(cavity).groupbox, int(idx / 2), idx % 2)
+
+        layout.addLayout(cav_layout)
+
+        layout.addWidget(self.edm_screen)
+        layout.addWidget(self.detune_plot)
 
     def populate_detune_plot(self):
         detune_pvs = []
@@ -60,3 +94,15 @@ class HLTuner(Display):
         super().__init__()
         self.setWindowTitle("SRF HL Tuner")
         self.tab_widget: QTabWidget = QTabWidget()
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+        layout.addWidget(self.tab_widget)
+
+        for cm_name in ["H1", "H2"]:
+            cm = MACHINE.cryomodules[cm_name]
+            page = QWidget()
+            page_layout = QHBoxLayout()
+            page.setLayout(page_layout)
+            page_layout.addWidget(RackScreen(cm.rack_a).groupbox)
+            page_layout.addWidget(RackScreen(cm.rack_b).groupbox)
+            self.tab_widget.addTab(page, cm_name)
