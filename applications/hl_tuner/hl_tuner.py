@@ -9,8 +9,7 @@ from PyQt5.QtWidgets import (
 )
 from edmbutton import PyDMEDMDisplayButton
 from pydm import Display
-from pydm.widgets import PyDMTimePlot, PyDMSpinbox
-from pydm.widgets.enum_button import PyDMEnumButton
+from pydm.widgets import PyDMTimePlot, PyDMSpinbox, PyDMEnumComboBox
 
 from utils.qt import make_rainbow
 from utils.sc_linac.cavity import Cavity
@@ -21,7 +20,7 @@ from utils.sc_linac.rack import Rack
 class CavitySection:
     def __init__(self, cavity: Cavity):
         self.cavity = cavity
-        self.tune_state: PyDMEnumButton = PyDMEnumButton(
+        self.tune_state: PyDMEnumComboBox = PyDMEnumComboBox(
             init_channel=cavity.tune_config_pv
         )
         self.chirp_start: PyDMSpinbox = PyDMSpinbox(
