@@ -6,15 +6,27 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QWidget,
     QHBoxLayout,
+    QLabel,
 )
 from edmbutton import PyDMEDMDisplayButton
 from pydm import Display
 from pydm.widgets import PyDMTimePlot, PyDMSpinbox, PyDMEnumComboBox
+from pydm.widgets.timeplot import updateMode
 
 from utils.qt import make_rainbow
 from utils.sc_linac.cavity import Cavity
 from utils.sc_linac.linac import MACHINE
 from utils.sc_linac.rack import Rack
+
+
+class LabeledSpinbox:
+    def __init__(self, init_channel: str):
+        self.spinbox: PyDMSpinbox = PyDMSpinbox(init_channel=init_channel)
+        self.spinbox.showStepExponent = False
+        self.label = QLabel(init_channel.split(":")[-1])
+        self.layout = QHBoxLayout()
+        self.layout.addWidget(self.label)
+        self.layout.addWidget(self.spinbox)
 
 
 class CavitySection:
@@ -23,33 +35,40 @@ class CavitySection:
         self.tune_state: PyDMEnumComboBox = PyDMEnumComboBox(
             init_channel=cavity.tune_config_pv
         )
-        self.chirp_start: PyDMSpinbox = PyDMSpinbox(
+
+        self.chirp_start: LabeledSpinbox = LabeledSpinbox(
             init_channel=cavity.chirp_freq_start_pv
         )
-        self.chirp_stop: PyDMSpinbox = PyDMSpinbox(
+
+        self.chirp_stop: LabeledSpinbox = LabeledSpinbox(
             init_channel=cavity.chirp_freq_stop_pv
         )
-        self.motor_speed: PyDMSpinbox = PyDMSpinbox(
+
+        self.motor_speed: LabeledSpinbox = LabeledSpinbox(
             init_channel=cavity.stepper_tuner.speed_pv
         )
-        self.max_steps: PyDMSpinbox = PyDMSpinbox(
+
+        self.max_steps: LabeledSpinbox = LabeledSpinbox(
             init_channel=cavity.stepper_tuner.max_steps_pv
         )
+
         self.groupbox = QGroupBox(f"{cavity}")
         layout = QVBoxLayout()
         self.groupbox.setLayout(layout)
         spinbox_layout = QGridLayout()
         layout.addWidget(self.tune_state)
         layout.addLayout(spinbox_layout)
-        spinbox_layout.addWidget(self.chirp_start, 0, 0)
-        spinbox_layout.addWidget(self.chirp_stop, 0, 1)
-        spinbox_layout.addWidget(self.motor_speed, 1, 0)
-        spinbox_layout.addWidget(self.max_steps, 1, 1)
+        spinbox_layout.addLayout(self.chirp_start.layout, 0, 0)
+        spinbox_layout.addLayout(self.chirp_stop.layout, 0, 1)
+        spinbox_layout.addLayout(self.motor_speed.layout, 1, 0)
+        spinbox_layout.addLayout(self.max_steps.layout, 1, 1)
 
 
 class RackScreen:
     def __init__(self, rack: Rack):
         self.detune_plot: PyDMTimePlot = PyDMTimePlot()
+        self.detune_plot.setTimeSpan(3600)
+        self.detune_plot.updateMode = updateMode.AtFixedRate
         self.detune_plot.setPlotTitle("Cavity Detunes")
         self.rack = rack
         self.populate_detune_plot()
