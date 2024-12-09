@@ -59,3 +59,6 @@ class Rack(SCLinacObject):
     @property
     def pv_prefix(self):
         return self._pv_prefix
+
+    def __str__(self):
+        return f"{self.cryomodule} Rack {self.rack_name}"
