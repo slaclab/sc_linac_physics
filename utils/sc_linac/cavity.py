@@ -174,8 +174,8 @@ class Cavity(linac_utils.SCLinacObject):
         self.chirp_freq_start_pv: str = self.chirp_prefix + "FREQ_START"
         self._chirp_freq_start_pv_obj: Optional[PV] = None
 
-        self.freq_stop_pv: str = self.chirp_prefix + "FREQ_STOP"
-        self._freq_stop_pv_obj: Optional[PV] = None
+        self.chirp_freq_stop_pv: str = self.chirp_prefix + "FREQ_STOP"
+        self._chirp_freq_stop_pv_obj: Optional[PV] = None
 
         self.hw_mode_pv: str = self.pv_addr("HWMODE")
         self._hw_mode_pv_obj: Optional[PV] = None
@@ -484,9 +484,9 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def freq_stop_pv_obj(self) -> PV:
-        if not self._freq_stop_pv_obj:
-            self._freq_stop_pv_obj = PV(self.freq_stop_pv)
-        return self._freq_stop_pv_obj
+        if not self._chirp_freq_stop_pv_obj:
+            self._chirp_freq_stop_pv_obj = PV(self.chirp_freq_stop_pv)
+        return self._chirp_freq_stop_pv_obj
 
     @property
     def chirp_freq_stop(self):
