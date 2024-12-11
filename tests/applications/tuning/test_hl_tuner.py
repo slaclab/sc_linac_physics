@@ -1,7 +1,7 @@
 import pytest
 from pytestqt.qtbot import QtBot
 
-from applications.hl_tuner.hl_tuner import HLTuner
+from applications.tuning.hl_tuner import HLTuner
 
 
 @pytest.fixture
