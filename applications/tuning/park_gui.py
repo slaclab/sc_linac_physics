@@ -20,56 +20,41 @@ from park_linac import ParkCavity
 from park_utils import ColdWorker
 
 
-class CavityObject:
-    def __init__(self, cavity: ParkCavity):
+class AlarmPyDMLabel(PyDMLabel):
+    def __init__(self, init_channel):
+        super().__init__(init_channel=init_channel)
+        self.alarmSensitiveContent = True
+        self.showUnits = True
+
+
+class CavityObject(QObject):
+    def __init__(self, cavity: ParkCavity, parent):
+        super().__init__(parent=parent)
         self.cavity: ParkCavity = cavity
+        self.parent = parent
 
         self.label = QLabel("Ready")
         self.signals = WorkerSignals(self.label)
 
         readbacks: QFormLayout = QFormLayout()
 
-        self.detune_readback: PyDMLabel = PyDMLabel(
+        self.detune_readback: PyDMLabel = AlarmPyDMLabel(
             init_channel=self.cavity.detune_best_pv
         )
-        self.detune_readback.alarmSensitiveContent = True
-        self.detune_readback.showUnits = True
 
-        cold_steps: PyDMLabel = PyDMLabel(
+        self.cold_steps: PyDMLabel = AlarmPyDMLabel(
             init_channel=self.cavity.stepper_tuner.nsteps_cold_pv
         )
-        cold_steps.alarmSensitiveContent = True
-        cold_steps.showUnits = True
 
-        park_steps: PyDMLabel = PyDMLabel(
-            init_channel=self.cavity.stepper_tuner.nsteps_park_pv
-        )
-        park_steps.alarmSensitiveContent = True
-        park_steps.showUnits = True
+        self.freq_cold: PyDMLabel = AlarmPyDMLabel(init_channel=self.cavity.df_cold_pv)
 
-        freq_cold: PyDMLabel = PyDMLabel(init_channel=self.cavity.df_cold_pv)
-        freq_cold.alarmSensitiveContent = True
-        freq_cold.showUnits = True
-
-        step_readback: PyDMLabel = PyDMLabel(
+        self.step_readback: PyDMLabel = AlarmPyDMLabel(
             init_channel=self.cavity.stepper_tuner.step_signed_pv
         )
-        step_readback.alarmSensitiveContent = True
-        step_readback.showUnits = True
 
-        config_label = PyDMLabel(init_channel=self.cavity.tune_config_pv)
-        config_label.alarmSensitiveContent = True
-        config_label.showUnits = True
+        self.config_label = AlarmPyDMLabel(init_channel=self.cavity.tune_config_pv)
 
-        readbacks.addRow("Live Detune", self.detune_readback)
-        readbacks.addRow("Steps to Cold Landing", cold_steps)
-
-        # TODO reintroduce when parking is necessary
-        # readbacks.addRow("Steps to Park", park_steps)
-
-        readbacks.addRow("Cold Landing Detune", freq_cold)
-        readbacks.addRow("Live Total Step Count", step_readback)
-        readbacks.addRow("Tune Config", config_label)
+        self.populate_readbacks(readbacks)
 
         self.cold_button: QPushButton = QPushButton("Move to Cold Landing")
         self.cold_button.clicked.connect(self.move_to_cold_landing)
@@ -98,12 +83,12 @@ class CavityObject:
             "subtract 'Live Total Step Count' from 'Steps to Park'"
         )
 
-        self.groupbox = QGroupBox(f"Cavity {num}")
+        self.groupbox = QGroupBox(f"{cavity}")
         self.vlayout = QVBoxLayout()
         self.vlayout.addWidget(self.count_signed_steps)
         self.vlayout.addWidget(self.cold_button)
 
-        # TODO reintroduce when parking is necessary
+        # TODO reintroduce when tuning is necessary
         # self.vlayout.addWidget(self.park_button)
 
         self.vlayout.addLayout(readbacks)
@@ -120,6 +105,13 @@ class CavityObject:
             count_signed_steps=self.count_signed_steps,
             freq_radiobutton=self.parent.ui.freq_radiobutton,
         )
+
+    def populate_readbacks(self, readbacks):
+        readbacks.addRow("Live Detune", self.detune_readback)
+        readbacks.addRow("Steps to Cold Landing", self.cold_steps)
+        readbacks.addRow("Cold Landing Detune", self.freq_cold)
+        readbacks.addRow("Live Total Step Count", self.step_readback)
+        readbacks.addRow("Tune Config", self.config_label)
 
     def disable_buttons(self):
         self.park_button.setEnabled(False)
