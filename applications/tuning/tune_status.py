@@ -2,7 +2,9 @@ from csv import DictWriter
 
 from lcls_tools.superconducting.sc_linac_utils import ALL_CRYOMODULES
 
-from park_linac import PARK_MACHINE
+from applications.tuning.tune_cavity import TuneCavity
+from applications.tuning.tune_stepper import TuneStepper
+from utils.sc_linac.linac import Machine
 
 CM_KEY = "Cryomodule"
 CAV_KEY = "Cavity"
@@ -10,6 +12,8 @@ CONFIG_KEY = "Tune Config"
 STEPS_KEY = "Steps to Cold Landing"
 DF_COLD_KEY = "DF Cold"
 HW_MODE_KEY = "HW Mode"
+
+PARK_MACHINE = Machine(cavity_class=TuneCavity, stepper_class=TuneStepper)
 
 with open("cavity_status.csv", "w", newline="") as csvfile:
     fieldnames = [CM_KEY, CAV_KEY, CONFIG_KEY, STEPS_KEY, DF_COLD_KEY, HW_MODE_KEY]

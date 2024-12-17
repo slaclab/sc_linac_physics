@@ -14,23 +14,16 @@ from PyQt5.QtWidgets import (
 from lcls_tools.common.frontend.display.util import WorkerSignals
 from lcls_tools.superconducting.sc_linac_utils import ALL_CRYOMODULES, StepperAbortError
 from pydm import Display
-from pydm.widgets import PyDMLabel
 
-from park_linac import ParkCavity
-from park_utils import ColdWorker
-
-
-class AlarmPyDMLabel(PyDMLabel):
-    def __init__(self, init_channel):
-        super().__init__(init_channel=init_channel)
-        self.alarmSensitiveContent = True
-        self.showUnits = True
+from applications.tuning.tune_utils import AlarmPyDMLabel
+from tune_cavity import TuneCavity
+from tune_utils import ColdWorker
 
 
 class CavityObject(QObject):
-    def __init__(self, cavity: ParkCavity, parent):
+    def __init__(self, cavity: TuneCavity, parent):
         super().__init__(parent=parent)
-        self.cavity: ParkCavity = cavity
+        self.cavity: TuneCavity = cavity
         self.parent = parent
 
         self.label = QLabel("Ready")
@@ -38,17 +31,19 @@ class CavityObject(QObject):
 
         readbacks: QFormLayout = QFormLayout()
 
-        self.detune_readback: PyDMLabel = AlarmPyDMLabel(
+        self.detune_readback: AlarmPyDMLabel = AlarmPyDMLabel(
             init_channel=self.cavity.detune_best_pv
         )
 
-        self.cold_steps: PyDMLabel = AlarmPyDMLabel(
+        self.cold_steps: AlarmPyDMLabel = AlarmPyDMLabel(
             init_channel=self.cavity.stepper_tuner.nsteps_cold_pv
         )
 
-        self.freq_cold: PyDMLabel = AlarmPyDMLabel(init_channel=self.cavity.df_cold_pv)
+        self.freq_cold: AlarmPyDMLabel = AlarmPyDMLabel(
+            init_channel=self.cavity.df_cold_pv
+        )
 
-        self.step_readback: PyDMLabel = AlarmPyDMLabel(
+        self.step_readback: AlarmPyDMLabel = AlarmPyDMLabel(
             init_channel=self.cavity.stepper_tuner.step_signed_pv
         )
 
