@@ -55,34 +55,40 @@ class RackSection:
         for idx, (detune_pv, df_cold_pv, step_pv) in enumerate(detune_pvs):
             r, g, b, alpha = colors[idx]
             rga_color = QColor(r, g, b, alpha)
+            detune_curve = self.detune_plot.addYChannel(
+                y_channel=detune_pv,
+                useArchiveData=True,
+                color=rga_color,
+                yAxisName="detune",
+            )
+            detune_curve.setUpdatesAsynchronously(True)
             self.detune_plot.addLegendItem(
-                self.detune_plot.addYChannel(
-                    y_channel=detune_pv,
-                    useArchiveData=True,
-                    color=rga_color,
-                    yAxisName="detune",
-                ),
+                detune_curve,
                 detune_pv,
             )
+            df_cold_curve = self.detune_plot.addYChannel(
+                y_channel=df_cold_pv,
+                useArchiveData=True,
+                color=rga_color,
+                lineStyle=QtCore.Qt.DashLine,
+                yAxisName="detune",
+            )
+            df_cold_curve.setUpdatesAsynchronously(True)
             self.detune_plot.addLegendItem(
-                self.detune_plot.addYChannel(
-                    y_channel=df_cold_pv,
-                    useArchiveData=True,
-                    color=rga_color,
-                    lineStyle=QtCore.Qt.DashLine,
-                    yAxisName="detune",
-                ),
+                df_cold_curve,
                 df_cold_pv,
             )
+            step_curve = self.detune_plot.addYChannel(
+                y_channel=step_pv,
+                useArchiveData=True,
+                color=rga_color,
+                lineStyle=QtCore.Qt.DotLine,
+                yAxisName="steps",
+            )
             self.detune_plot.addLegendItem(
-                self.detune_plot.addYChannel(
-                    y_channel=step_pv,
-                    useArchiveData=True,
-                    color=rga_color,
-                    lineStyle=QtCore.Qt.DotLine,
-                    yAxisName="steps",
-                ),
+                step_curve,
                 step_pv,
             )
+            step_curve.setUpdatesAsynchronously(True)
 
         self.detune_plot.setShowLegend(True)
