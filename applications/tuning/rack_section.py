@@ -3,7 +3,6 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QGridLayout
 from edmbutton import PyDMEDMDisplayButton
 from pydm.widgets import PyDMArchiverTimePlot
-from pydm.widgets.timeplot import updateMode
 
 from applications.tuning.cavity_section import CavitySection
 from utils.qt import make_rainbow
@@ -20,7 +19,7 @@ class RackSection:
             name="steps", orientation="right", plot_data_item=None, label="Steps"
         )
         self.detune_plot.setTimeSpan(3600)
-        self.detune_plot.updateMode = updateMode.AtFixedRate
+        self.detune_plot.setUpdatesAsynchronously(True)
         self.detune_plot.setPlotTitle("Cavity Detunes")
         self.rack = rack
         self.populate_detune_plot()
