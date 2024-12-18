@@ -49,12 +49,10 @@ class RackSection:
                 y_channel=detune_pv,
                 useArchiveData=True,
                 color=rga_color,
-                yAxisName="Detune (Hz)",
             )
             self.detune_plot.addYChannel(
                 y_channel=df_cold_pv,
                 useArchiveData=True,
                 color=rga_color,
-                yAxisName="DF Cold (Hz)",
                 lineStyle=QtCore.Qt.DashLine,
             )
