@@ -61,17 +61,17 @@ class RackSection:
             )
 
             self.detune_plot.addYChannel(
-                y_channel=df_cold_pv,
-                useArchiveData=True,
-                color=rga_color,
-                lineStyle=QtCore.Qt.DashLine,
-                yAxisName="detune",
-            )
-
-            self.detune_plot.addYChannel(
                 y_channel=step_pv,
                 useArchiveData=True,
                 color=rga_color,
-                lineStyle=QtCore.Qt.DotLine,
+                lineStyle=QtCore.Qt.DashLine,
                 yAxisName="steps",
+            )
+            rga_color.setAlpha(alpha / 2)
+            self.detune_plot.addYChannel(
+                y_channel=df_cold_pv,
+                useArchiveData=True,
+                color=rga_color,
+                lineStyle=QtCore.Qt.DotLine,
+                yAxisName="detune",
             )
