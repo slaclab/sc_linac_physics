@@ -49,9 +49,9 @@ class RackSection:
                     cavity.stepper_tuner.step_signed_pv,
                 )
             )
-        colors = make_rainbow(len(detune_pvs))
+        colors = make_rainbow(8)
         for idx, (detune_pv, df_cold_pv, step_pv) in enumerate(detune_pvs):
-            r, g, b, alpha = colors[idx]
+            r, g, b, alpha = colors[idx if self.rack.rack_name == "A" else idx + 3]
             rga_color = QColor(r, g, b, alpha)
             self.detune_plot.addYChannel(
                 y_channel=detune_pv,
