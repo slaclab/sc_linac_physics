@@ -67,7 +67,7 @@ class RackSection:
                 lineStyle=QtCore.Qt.DashLine,
                 yAxisName="steps",
             )
-            rga_color.setAlpha(alpha / 2)
+            rga_color.setAlpha(int(alpha / 2))
             self.detune_plot.addYChannel(
                 y_channel=df_cold_pv,
                 useArchiveData=True,
