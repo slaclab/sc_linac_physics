@@ -62,6 +62,7 @@ class ParkSignals(WorkerSignals):
 class LabeledSpinbox:
     def __init__(self, init_channel: str):
         self.spinbox: PyDMSpinbox = PyDMSpinbox(init_channel=init_channel)
+        self.spinbox.alarmSensitiveContent = True
         self.spinbox.showStepExponent = False
         self.label = QLabel(init_channel.split(":")[-1])
         self.layout = QHBoxLayout()
