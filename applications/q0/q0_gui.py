@@ -69,7 +69,9 @@ class Q0GUI(Display):
         for i in range(8):
             cav_amp_control = q0_gui_utils.CavAmpControl()
             self.cav_amp_controls[i + 1] = cav_amp_control
-            self.ui.cavity_layout.addWidget(cav_amp_control.groupbox, i / 4, i % 4)
+            self.ui.cavity_layout.addWidget(
+                cav_amp_control.groupbox, int(i / 4), int(i % 4)
+            )
 
         self.ui.heater_setpoint_spinbox.ctrl_limit_changed = lambda *args: None
         self.ui.jt_setpoint_spinbox.ctrl_limit_changed = lambda *args: None
