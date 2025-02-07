@@ -449,8 +449,8 @@ class Q0Cryomodule(Cryomodule):
         caput(self.jtAutoSelectPV, 1, wait=True)
         print("Turning cavities and SSAs off")
         for cavity in self.cavities.values():
-            cavity.turnOff()
-            cavity.ssa.turnOff()
+            cavity.turn_off()
+            cavity.ssa.turn_off()
 
     @property
     def heater_power(self):
@@ -490,7 +490,7 @@ class Q0Cryomodule(Cryomodule):
 
         if turn_cavities_off:
             for cavity in self.cavities.values():
-                cavity.turnOff()
+                cavity.turn_off()
 
         self.waitForLL(desired_level)
 
@@ -545,7 +545,7 @@ class Q0Cryomodule(Cryomodule):
                 # We only want to use time periods in which there were no
                 # changes made to the heater settings
                 if len(des_val_set) == 1:
-                    des_pos = round(np.mean(data.values[self.jtValveReadbackPV]), 1)
+                    des_pos = round(np.mean(data.values[self.jt_valve_readback_pv]), 1)
                     heater_des = des_val_set.pop()
                     heater_act = np.mean(data.values[self.heater_readback_pv])
 
@@ -643,10 +643,7 @@ class Q0Cryomodule(Cryomodule):
         self.setup_cryo_for_measurement(desired_ll, turn_cavities_off=False)
 
         for cav_num, des_amp in desiredAmplitudes.items():
-            while (
-                abs(caget(self.cavities[cav_num].selAmplitudeActPV.pvname) - des_amp)
-                > 0.1
-            ):
+            while abs(caget(self.cavities[cav_num].aact_pv) - des_amp) > 0.1:
                 self.check_abort()
                 print(f"Waiting for CM{self.name} cavity {cav_num} to be ready")
                 sleep(5)
