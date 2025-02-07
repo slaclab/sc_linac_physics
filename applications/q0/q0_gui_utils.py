@@ -137,8 +137,7 @@ class CavityRampWorker(Worker):
     def run(self) -> None:
         try:
             self.status.emit(f"Ramping Cavity {self.cavity.number} to {self.des_amp}")
-            self.cavity.turn_on()
-            self.cavity.walk_amp(self.des_amp, step_size=0.1)
+            self.cavity.setup_rf(self.des_amp)
             self.finished.emit(
                 f"Cavity {self.cavity.number} ramped up to {self.des_amp}"
             )
