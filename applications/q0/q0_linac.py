@@ -17,6 +17,8 @@ from utils.sc_linac.cavity import Cavity
 from utils.sc_linac.cryomodule import Cryomodule
 from utils.sc_linac.linac import Machine
 
+def round_for_printing(unrounded_number):
+    return np.round(unrounded_number, decimals=3)
 
 class Calibration:
     def __init__(self, time_stamp, cryomodule):
@@ -621,7 +623,8 @@ class Q0Cryomodule(Cryomodule):
             avgLevel > q0_utils.MIN_DS_LL
         ):
             self.check_abort()
-            print(f"Averaged level is {avgLevel}; waiting 10s")
+            avgLevel_rounded = round_for_printing(self.averaged_liquid_level) 
+            print(f"Averaged level is {avgLevel_rounded}; waiting 10s")
             avgLevel = self.averaged_liquid_level
             sleep(10)
 
@@ -822,8 +825,9 @@ class Q0Cryomodule(Cryomodule):
 
         while (desiredLiquidLevel - self.averaged_liquid_level) > 0.01:
             self.check_abort()
+            avgLevel_rounded = round_for_printing(self.averaged_liquid_level)
             print(
-                f"Current averaged level is {self.averaged_liquid_level}; waiting 10 seconds for more data."
+                f"Current averaged level is {avgLevel_rounded}; waiting 10 seconds for more data."
             )
             sleep(10)
 
