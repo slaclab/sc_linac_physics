@@ -177,7 +177,7 @@ def stepper_tol_factor(num_steps) -> float:
     First attempt at making the stepper mover tolerance dependent on the
     steps to move. We have empirically determined that 1.3GHz cavities move
     around 50,000 steps around resonance and 50,000,000 steps for cold landing.
-    We want to allow 10x the expected steps around resonance, and 1% of the
+    We want to allow 5x the expected steps around resonance, and 1% of the
     expected steps around cold landing. We also empirically determined that
     this also works to (roughly) triple the steps around resonance for 3.9GHz
     cavities, which are about an order of magnitude lower at resonance (while
