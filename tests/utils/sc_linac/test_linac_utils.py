@@ -4,7 +4,7 @@ from utils.sc_linac.linac_utils import stepper_tol_factor
 
 
 def test_stepper_tol_factor_low():
-    assert stepper_tol_factor(randint(-50000, 0)) == 10
+    assert stepper_tol_factor(randint(-10000, 0)) == 5
 
 
 def test_stepper_tol_factor_high():
@@ -12,4 +12,4 @@ def test_stepper_tol_factor_high():
 
 
 def test_stepper_tol_factor():
-    assert 1.01 <= stepper_tol_factor(randint(50000, int(50e6))) <= 10
+    assert 1.01 <= stepper_tol_factor(randint(10000, int(50e6))) <= 5
