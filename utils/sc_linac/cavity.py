@@ -444,7 +444,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def hw_mode(self):
-        return self.hw_mode_pv_obj.get()
+        return self.hw_mode_pv_obj.get(use_caget=False)
 
     @property
     def is_online(self) -> bool:
