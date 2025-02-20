@@ -459,7 +459,7 @@ class Cavity(linac_utils.SCLinacObject):
         if not self._quench_latch_pv_obj:
             self._quench_latch_pv_obj = PV(self.quench_latch_pv)
         if self._quench_latch_pv_obj.severity == EPICS_INVALID_VAL:
-            raise PVInvalidError("Quench Latch PV Invalid")
+            raise PVInvalidError(f"{self} quench latch PV invalid")
         return self._quench_latch_pv_obj.get() == 1
 
     @property
@@ -605,7 +605,7 @@ class Cavity(linac_utils.SCLinacObject):
         reset_signed_steps: bool = False,
     ):
         if self.detune_invalid:
-            raise linac_utils.DetuneError(f"Detune for {self} is invalid")
+            raise linac_utils.DetuneError(f"{self} detune invalid")
 
         delta_hz = delta_hz_func()
         expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))
@@ -688,7 +688,7 @@ class Cavity(linac_utils.SCLinacObject):
             print("waiting for pulse state", datetime.now())
             time.sleep(1)
         if self.pulse_status > 2:
-            raise linac_utils.PulseError("Unable to pulse cavity")
+            raise linac_utils.PulseError(f"Unable to pulse {self}")
 
     def turn_on(self):
         print(f"Turning {self} on")
