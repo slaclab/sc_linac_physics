@@ -119,17 +119,11 @@ class SetupGUI(Display):
                 GUILinac(
                     f"L{linac_idx}B",
                     linac_idx,
-                    linac_utils.LINAC_TUPLES[linac_idx][1],
+                    linac_utils.LINAC_CM_MAP[linac_idx],
                     settings=self.settings,
                     parent=self,
                 )
             )
-        self.linac_widgets.insert(
-            2,
-            GUILinac(
-                "L1BHL", 1, linac_utils.L1BHL, settings=self.settings, parent=self
-            ),
-        )
 
     def connect_buttons(self):
         self.machine_abort_button.setStyleSheet(ERROR_STYLESHEET)
