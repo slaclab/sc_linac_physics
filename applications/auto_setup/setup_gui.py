@@ -148,7 +148,7 @@ class SetupGUI(Display):
                 self.settings.cav_char_checkbox.isChecked()
             )
             SETUP_MACHINE.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
-            SETUP_MACHINE.trigger_machine_setup()
+            SETUP_MACHINE.trigger_setup()
 
     def trigger_machine_shutdown(self):
         selection = self.machine_shutdown_popup.exec()
