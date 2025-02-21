@@ -153,7 +153,7 @@ class SetupGUI(Display):
     def trigger_machine_shutdown(self):
         selection = self.machine_shutdown_popup.exec()
         if selection == QMessageBox.Yes:
-            SETUP_MACHINE.trigger_machine_shutdown()
+            SETUP_MACHINE.trigger_shutdown()
 
     def trigger_machine_abort(self):
         selection = self.machine_abort_popup.exec()
