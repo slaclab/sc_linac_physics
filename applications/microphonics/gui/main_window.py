@@ -1,8 +1,7 @@
-"""Main window for the Microphonics measurement application"""
-
 from pathlib import Path
 from typing import Dict, List
 
+from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QMessageBox
@@ -10,20 +9,40 @@ from PyQt5.QtWidgets import (
 
 from applications.microphonics.components.components import (
     ChannelSelectionGroup, PlotConfigGroup,
-    StatisticsPanel, DataLoadingGroup
+    DataLoadingGroup
 )
+from applications.microphonics.gui.async_data_manager import AsyncDataManager, MeasurementConfig
 from applications.microphonics.gui.config_panel import ConfigPanel
 from applications.microphonics.gui.plot_panel import PlotPanel
+from applications.microphonics.gui.statistics_calculator import StatisticsCalculator
 from applications.microphonics.gui.status_panel import StatusPanel
 
 
 class MicrophonicsGUI(QMainWindow):
     """Main window for the LCLS-II Microphonics measurement system"""
+    measurementError = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LCLS-II Microphonics Measurement")
         self.setMinimumSize(1200, 800)
+
+        self.measurement_errors = []  # Track errors during measurement
+
+        self.stats_calculator = StatisticsCalculator()
+        self.cavity_data = {}  # Store data for statistics calculation
+
+        # Add error signal connection
+        self.measurementError.connect(self._handle_measurement_error)
+
+        # Add data manager
+        self.data_manager = AsyncDataManager()
+
+        # Connect data manager signals
+        self.data_manager.acquisitionProgress.connect(self._handle_progress)
+        self.data_manager.acquisitionError.connect(self._handle_error)
+        self.data_manager.dataReceived.connect(self._handle_new_data)
+        self.data_manager.acquisitionComplete.connect(self._handle_completion)
 
         # Create central widget and layout
         central_widget = QWidget()
@@ -53,6 +72,9 @@ class MicrophonicsGUI(QMainWindow):
         # Initialize measurement state
         self.measurement_running = False
 
+        # Store the current channel selection
+        self.current_channels = []
+
     def init_panels(self):
         """Initialize all panels"""
         # Left panel components
@@ -64,7 +86,6 @@ class MicrophonicsGUI(QMainWindow):
         # Right panel components
         self.plot_config = PlotConfigGroup()
         self.plot_panel = PlotPanel()
-        self.statistics = StatisticsPanel()
 
     def setup_left_panel(self, layout: QVBoxLayout):
         """Setup the left side of the window"""
@@ -78,7 +99,6 @@ class MicrophonicsGUI(QMainWindow):
         """Setup the right side of the window"""
         layout.addWidget(self.plot_config)
         layout.addWidget(self.plot_panel)
-        layout.addWidget(self.statistics)
 
     def connect_signals(self):
         """Connect all panel signals"""
@@ -97,7 +117,7 @@ class MicrophonicsGUI(QMainWindow):
         self.data_loading.dataLoaded.connect(self.load_data)
 
     def on_config_changed(self, config: Dict):
-        """Handle configuration changes"""
+        print("Configuration changed:", config)
         try:
             # Update UI based on new configuration
             if not self.measurement_running:
@@ -120,64 +140,266 @@ class MicrophonicsGUI(QMainWindow):
         # Update UI based on selected channels
         pass
 
+    def _split_chassis_config(self, config: dict) -> Dict[str, Dict]:
+        """Split configuration by chassis (A/B) and include channel selection"""
+        print("\nDebug: Starting _split_chassis_config")
+        print(f"Debug: Input config: {config}")
+        result = {}
+
+        # Get selected channels from ChannelSelectionGroup
+        selected_channels = self.channel_selection.get_selected_channels()
+        print(f"Debug: Selected channels: {selected_channels}")
+
+        if not config.get('modules'):
+            print("Debug: No modules in config")
+            return result
+
+        for module in config['modules']:
+            print(f"\nDebug: Processing module: {module}")
+            base_channel = module['base_channel']
+
+            # Group cavities by rack (A/B)
+            rack_a_cavities = []
+            rack_b_cavities = []
+
+            for cavity_num, is_selected in config['cavities'].items():
+                print(f"Debug: Checking cavity {cavity_num}: {is_selected}")
+                if is_selected:  # Only add selected cavities
+                    if cavity_num <= 4:
+                        rack_a_cavities.append(cavity_num)
+                    else:
+                        rack_b_cavities.append(cavity_num)
+
+            print(f"Debug: Rack A cavities: {rack_a_cavities}")
+            print(f"Debug: Rack B cavities: {rack_b_cavities}")
+
+            # Create configs for each rack that has selected cavities
+            if rack_a_cavities:
+                chassis_id = f"{base_channel}:RESA"
+                result[chassis_id] = {
+                    'pv_base': f"ca://{base_channel}:RESA:",  # Add trailing colon
+                    'config': MeasurementConfig(
+                        channels=selected_channels,
+                        decimation=config['decimation'],
+                        buffer_count=config['buffer_count']
+                    ),
+                    'cavities': rack_a_cavities
+                }
+                print(f"Debug: Added Rack A config: {result[chassis_id]}")
+
+            if rack_b_cavities:
+                chassis_id = f"{base_channel}:RESB"
+                result[chassis_id] = {
+                    'pv_base': f"ca://{base_channel}:RESB:",  # Add trailing colon
+                    'config': MeasurementConfig(
+                        channels=selected_channels,
+                        decimation=config['decimation'],
+                        buffer_count=config['buffer_count']
+                    ),
+                    'cavities': rack_b_cavities
+                }
+                print(f"Debug: Added Rack B config: {result[chassis_id]}")
+
+        print(f"\nDebug: Final result: {result}")
+        return result
+
     def start_measurement(self):
         """Start the measurement process"""
+        print("Start measurement clicked")
         try:
-            self.measurement_running = True
-            config = self.config_panel.get_config()
-            channels = self.channel_selection.get_selected_channels()
+            self.measurement_errors = []
+            # Remove cothread.Spawn and use QTimer
+            QTimer.singleShot(0, self._start_measurement_async)
+        except Exception as e:
+            print(f"Error in start_measurement: {str(e)}")
+            QMessageBox.critical(self, "Error", str(e))
 
-            # Update UI state
-            self.config_panel.set_enabled(False)
+    def _handle_measurement_error(self, error_msg):
+        """Handle measurement errors with non-modal dialog"""
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setText(error_msg)
+        msg_box.setWindowTitle("Error")
+        msg_box.setModal(False)  # Make dialog non-modal
+        msg_box.show()
+
+    def _start_measurement_async(self):
+        """Async portion of start measurement"""
+        try:
+            self.plot_panel.clear_plots()  # Clear old plots before starting new measurement
+            config = self.config_panel.get_config()
+            print("Current config:", config)
+
+            # Check for cross-CM cavity selection
+            selected_cavities = [num for num, selected in config['cavities'].items() if selected]
+            low_cm = any(c <= 4 for c in selected_cavities)
+            high_cm = any(c > 4 for c in selected_cavities)
+            if low_cm and high_cm:
+                raise ValueError("ERROR: Cavity selection crosses half-CM")
+
+            if not any(config['cavities'].values()):
+                raise ValueError("No cavities selected - please select at least one cavity")
+
+            self.current_channels = self.channel_selection.get_selected_channels()
+            if not self.current_channels:
+                raise ValueError("No channels selected for measurement")
+
+            chassis_config = self._split_chassis_config(config)
+            if not chassis_config:
+                selected_cavities = [num for num, selected in config['cavities'].items() if selected]
+                raise ValueError(f"No valid chassis configuration created. Selected cavities: {selected_cavities}")
+
+            print("Chassis config:", chassis_config)
+
+            self.measurement_running = True
+            self.config_panel.set_measurement_running(True)
             self.channel_selection.setEnabled(False)
             self.data_loading.setEnabled(False)
 
-            # TODO: Initialize measurement hardware
-            # TODO: Start data acquisition
+            self.data_manager.initiate_measurement(chassis_config)
+            print("Measurement started successfully")
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to start measurement: {str(e)}")
-            self.stop_measurement()
-
-    def stop_measurement(self):
-        """Stop the measurement process"""
-        try:
+            print(f"Error in _start_measurement_async: {str(e)}")
+            self.measurementError.emit(str(e))
             self.measurement_running = False
-
-            # Update UI state
-            self.config_panel.set_enabled(True)
+            self.config_panel.set_measurement_running(False)
             self.channel_selection.setEnabled(True)
             self.data_loading.setEnabled(True)
 
-            # TODO: Stop data acquisition
-            # TODO: Cleanup hardware
+    def stop_measurement(self):
+        """Stop the measurement process"""
+        print("Stop measurement called")
+        if self.measurement_running:
+            self.plot_panel.clear_plots()  # Clear plots when stopping
+            self.data_manager.stop_all()
+            self.measurement_running = False
+            self.config_panel.set_measurement_running(False)
+            self.channel_selection.setEnabled(True)
+            self.data_loading.setEnabled(True)
+            self.measurement_errors.clear()
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error during measurement stop: {str(e)}")
+            # Clear stored cavity data and reset statistics
+            self.cavity_data.clear()
+            for cavity_num in range(1, 9):
+                self.status_panel.update_statistics(cavity_num, {
+                    'mean': 0.0,
+                    'std': 0.0,
+                    'min': 0.0,
+                    'max': 0.0,
+                    'outliers': 0
+                })
+
+            self.config_panel._config_changed()
+
+    def _handle_new_data(self, chassis_id: str, data: dict):
+        """Handle new data from measurement"""
+        cavity_num = data['cavity']
+
+        # Only process channels that were selected when measurement started
+        buffer_data = {
+            channel: data['channels'][channel]
+            for channel in self.current_channels
+            if channel in data['channels']
+        }
+
+        # Update plot panel with new data
+        self.plot_panel.update_plots(cavity_num, buffer_data)
+
+    def _handle_error(self, chassis_id: str, error_msg: str):
+        """Show modal error dialogs during tests"""
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setText(error_msg)
+        msg_box.setWindowTitle("Error")
+        msg_box.setModal(True)  # Force modal for test detection
+        msg_box.show()
+
+    def _handle_completion(self, chassis_id: str):
+        """Handle measurement completion"""
+        # Check if all measurements are complete by checking active acquisitions
+        if chassis_id in self.data_manager.active_acquisitions:
+            self.data_manager.active_acquisitions.remove(chassis_id)
+
+        if not self.data_manager.active_acquisitions:
+            # All acquisitions are complete, reset GUI state
+            self.measurement_running = False
+            self.config_panel.set_measurement_running(False)
+            self.channel_selection.setEnabled(True)
+            self.data_loading.setEnabled(True)
+
+    def _finalize_measurement(self):
+        """Final measurement cleanup and status checks"""
+        # 1. Check active processes from data manager
+        active_processes = getattr(self.data_manager.data_manager, 'active_processes', {})
+
+        # 2. Only proceed if ALL acquisitions completed
+        if active_processes:
+            return
+
+        # 3. Update measurement state
+        self.measurement_running = False
+        self.config_panel.set_measurement_running(False)
+
+        # 4. Handle errors/success
+        if self.measurement_errors:
+            # Show combined errors
+            error_text = "\n".join(set(self.measurement_errors))  # Deduplicate
+            QMessageBox.critical(self, "Measurement Errors", error_text)
+        else:
+            # Show success
+            QMessageBox.information(self, "Complete",
+                                    "Measurement completed successfully")
+
+        # 5. Cleanup
+        self.measurement_errors.clear()
+        self.config_panel._config_changed()  # Refresh UI state
+
+    def _handle_progress(self, chassis_id: str, cavity_num: int, progress: int):
+        """Handle progress updates from measurement"""
+        self.status_panel.update_cavity_status(
+            cavity_num,
+            "Running",
+            progress,
+            f"Buffer acquisition: {progress}%"
+        )
+
+    def _handle_new_data(self, chassis_id: str, data: dict):
+        """Handle new data from measurement"""
+        cavity_num = data['cavity']
+
+        # Only process channels that were selected when measurement started
+        buffer_data = {
+            channel: data['channels'][channel]
+            for channel in self.current_channels
+            if channel in data['channels']
+        }
+
+        # Store DF data for statistics calculation
+        if 'DF' in buffer_data:
+            self.cavity_data[cavity_num] = buffer_data['DF']
+
+            # Calculate statistics for this cavity
+            stats = self.stats_calculator.calculate_statistics(buffer_data['DF'])
+            panel_stats = self.stats_calculator.convert_to_panel_format(stats)
+
+            # Update statistics panel
+            self.status_panel.update_statistics(cavity_num, panel_stats)
+
+        # Update plot panel with new data
+        self.plot_panel.update_plots(cavity_num, buffer_data)
 
     def load_data(self, file_path: Path):
         """Load data from file"""
         try:
             # TODO: Implement data loading
-            # TODO: Update plots and statistics
+            # TODO: Update plots
             pass
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load data: {str(e)}")
 
     def closeEvent(self, event):
-        """Handle application close"""
-        if self.measurement_running:
-            reply = QMessageBox.question(
-                self,
-                "Confirm Exit",
-                "A measurement is running. Do you want to stop it and exit?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
-                self.stop_measurement()
-                event.accept()
-            else:
-                event.ignore()
-        else:
-            event.accept()
+        """Ensure clean shutdown"""
+        if hasattr(self, 'data_manager'):
+            self.data_manager.stop_all()  # This calls the AsyncDataManager's stop_all
+        super().closeEvent(event)
