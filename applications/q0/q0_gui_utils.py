@@ -214,8 +214,13 @@ class CavAmpControl:
 
     def connect(self, cavity: Q0Cavity):
         self.groupbox.setTitle(f"Cavity {cavity.number}")
-        self.desAmpSpinbox.setValue(min(16.6, cavity.ades_max))
-        self.desAmpSpinbox.setRange(0, cavity.ades_max)
+        if not cavity.is_online:
+            self.groupbox.setChecked(False)
+            self.desAmpSpinbox.setRange(0, 0)
+        else:
+            self.groupbox.setChecked(True)
+            self.desAmpSpinbox.setValue(min(16.6, cavity.ades_max))
+            self.desAmpSpinbox.setRange(0, cavity.ades_max)
         self.aact_label.channel = cavity.aact_pv
 
 
