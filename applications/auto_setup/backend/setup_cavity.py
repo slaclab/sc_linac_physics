@@ -196,7 +196,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             if not self.is_on or (
                 self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP
             ):
-                self.ades = min(5, self.acon)
+                self.ades = min(2, self.acon)
 
             self.turn_on()
             self.progress = 85
