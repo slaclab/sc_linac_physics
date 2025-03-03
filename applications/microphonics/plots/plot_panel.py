@@ -1,0 +1,204 @@
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QTabWidget, QGroupBox,
+    QCheckBox, QHBoxLayout, QPushButton, QSizePolicy
+)
+
+from applications.microphonics.plots.fft_plot import FFTPlot
+from applications.microphonics.plots.histogram_plot import HistogramPlot
+from applications.microphonics.plots.spectogram_plot import SpectrogramPlot
+from applications.microphonics.plots.time_series_plot import TimeSeriesPlot
+
+
+class PlotPanel(QWidget):
+    """Container for all plot types w/ self contained configuration"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # Default configuration
+        self.config = {
+            'plot_type': 'FFT Analysis',
+            'fft': {
+                'window_size': 1024,
+                'max_freq': 150
+            },
+            'histogram': {
+                'bins': 100,
+                'range': 200
+            },
+            'spectrogram': {
+                'window': 1.0,
+                'colormap': 'viridis'
+            }
+        }
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Initialize the UI w/ tab layout containing all plot types"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Set size policy for the entire panel to expand
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Add cavity visibility controls
+        self.visibility_group = QGroupBox("Cavity Visibility")
+        self.visibility_layout = QVBoxLayout()
+        self.visibility_layout.setContentsMargins(5, 5, 5, 5)
+        self.visibility_layout.setSpacing(2)
+
+        # This creates horizontal layout for group selection buttons
+        group_buttons_layout = QHBoxLayout()
+        group_buttons_layout.setSpacing(5)
+
+        # This creates toggle buttons for each rack
+        self.select_lower_btn = QPushButton("Select Rack A (1-4)")
+        self.select_lower_btn.clicked.connect(self.toggle_lower_cavities)
+        self.lower_selected = False
+        group_buttons_layout.addWidget(self.select_lower_btn)
+
+        self.select_upper_btn = QPushButton("Select Rack B (5-8)")
+        self.select_upper_btn.clicked.connect(self.toggle_upper_cavities)
+        self.upper_selected = False
+        group_buttons_layout.addWidget(self.select_upper_btn)
+
+        # Add group buttons to visibility layout
+        self.visibility_layout.addLayout(group_buttons_layout)
+
+        # Create horizontal layout for cavity checkboxes
+        checkbox_layout = QHBoxLayout()
+        checkbox_layout.setSpacing(2)
+        self.cavity_checkboxes = {}
+
+        # Create checkboxes for each cavity
+        for i in range(1, 9):
+            checkbox = QCheckBox(f"Cavity {i}")
+            checkbox.setChecked(False)
+            checkbox.stateChanged.connect(lambda state, cav=i: self.toggle_cavity_visibility(cav, state))
+            self.cavity_checkboxes[i] = checkbox
+            checkbox_layout.addWidget(checkbox)
+
+        # Add checkbox layout to visibility layout
+        self.visibility_layout.addLayout(checkbox_layout)
+
+        self.visibility_group.setLayout(self.visibility_layout)
+        # Set max height for the visibility group to keep it compact
+        self.visibility_group.setMaximumHeight(100)
+        layout.addWidget(self.visibility_group)
+
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+
+        # Connect tab change signal to update config
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+
+        # Create specialized plot widgets
+        self.fft_plot = FFTPlot()
+        self.histogram_plot = HistogramPlot()
+        self.time_series_plot = TimeSeriesPlot()
+        self.spectrogram_plot = SpectrogramPlot()
+
+        # Add plots to tabs
+        self.tab_widget.addTab(self.fft_plot, "FFT Analysis")
+        self.tab_widget.addTab(self.histogram_plot, "Histogram")
+        self.tab_widget.addTab(self.time_series_plot, "Time Series")
+        self.tab_widget.addTab(self.spectrogram_plot, "Spectrogram")
+
+        # Make sure the tab widget expands to fill available space
+        layout.addWidget(self.tab_widget, stretch=10)
+
+        # Initially set config for all plot types
+        self._apply_config_to_all_plots()
+
+    def on_tab_changed(self, index):
+        """
+        Handle tab changes by updating the plot type in configuration
+        """
+        tab_mapping = {
+            0: 'FFT Analysis',
+            1: 'Histogram',
+            2: 'Real-time',  # 'Time Series' tab
+            3: 'Spectrogram'
+        }
+        self.config['plot_type'] = tab_mapping.get(index, 'FFT Analysis')
+
+    def _apply_config_to_all_plots(self):
+        """Apply configuration to all plot types"""
+        import copy
+        fft_config = copy.deepcopy(self.config)
+        fft_config['plot_type'] = 'fft'
+
+        hist_config = copy.deepcopy(self.config)
+        hist_config['plot_type'] = 'histogram'
+
+        time_config = copy.deepcopy(self.config)
+        time_config['plot_type'] = 'time_series'
+
+        spec_config = copy.deepcopy(self.config)
+        spec_config['plot_type'] = 'spectrogram'
+
+        # Apply to each plot
+        self.fft_plot.set_plot_config(fft_config)
+        self.histogram_plot.set_plot_config(hist_config)
+        self.time_series_plot.set_plot_config(time_config)
+        self.spectrogram_plot.set_plot_config(spec_config)
+
+    def toggle_cavity_visibility(self, cavity_num, state):
+        """Toggle visibility of cavity data across all plots"""
+        self.fft_plot.toggle_cavity_visibility(cavity_num, state)
+        self.histogram_plot.toggle_cavity_visibility(cavity_num, state)
+        self.time_series_plot.toggle_cavity_visibility(cavity_num, state)
+        self.spectrogram_plot.toggle_cavity_visibility(cavity_num, state)
+
+    def toggle_lower_cavities(self):
+        """Toggle selection of lower half cavities (1-4)"""
+        self.lower_selected = not self.lower_selected
+        for i in range(1, 5):
+            self.cavity_checkboxes[i].setChecked(self.lower_selected)
+
+        # Update button text
+        self.select_lower_btn.setText(
+            "Deselect Rack A (1-4)" if self.lower_selected else "Select Rack A (1-4)"
+        )
+
+    def toggle_upper_cavities(self):
+        """Toggle selection of upper half cavities (5-8)"""
+        self.upper_selected = not self.upper_selected
+        for i in range(5, 9):
+            self.cavity_checkboxes[i].setChecked(self.upper_selected)
+
+        # Update button text
+        self.select_upper_btn.setText(
+            "Deselect Rack B (5-8)" if self.upper_selected else "Select Rack B (5-8)"
+        )
+
+    def set_plot_config(self, config):
+        """
+        Handle external configuration changes
+        """
+        # Update our internal config w/ any new values
+        if 'fft' in config:
+            self.config['fft'].update(config['fft'])
+        if 'histogram' in config:
+            self.config['histogram'].update(config['histogram'])
+        if 'spectrogram' in config:
+            self.config['spectrogram'].update(config['spectrogram'])
+
+        # Apply updated config
+        self._apply_config_to_all_plots()
+
+    def update_plots(self, cavity_num, buffer_data):
+        """Update all plots w/ new data"""
+        # Forward data to all plots
+        self.fft_plot.update_plot(cavity_num, buffer_data)
+        self.histogram_plot.update_plot(cavity_num, buffer_data)
+        self.time_series_plot.update_plot(cavity_num, buffer_data)
+        self.spectrogram_plot.update_plot(cavity_num, buffer_data)
+
+    def clear_plots(self):
+        """Clear all plot data"""
+        self.fft_plot.clear_plot()
+        self.histogram_plot.clear_plot()
+        self.time_series_plot.clear_plot()
+        self.spectrogram_plot.clear_plot()
