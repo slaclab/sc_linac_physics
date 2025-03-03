@@ -1,5 +1,3 @@
-"""Application entry point for the Microphonics measurement system"""
-
 import signal
 import sys
 
@@ -11,17 +9,17 @@ from applications.microphonics.gui.main_window import MicrophonicsGUI
 def main():
     """Main application entry point"""
     try:
-        # Create Qt Application
+        # Creates Qt Application
         app = QApplication(sys.argv)
 
-        # Handle signals in main thread
+        # Handles signals in main thread
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-        # Create and show main window
+        # Creates and show main window
         window = MicrophonicsGUI()
         window.show()
 
-        # Start Qt event loop
+        # Will start Qt event loop
         return app.exec_()
 
     except Exception as e:

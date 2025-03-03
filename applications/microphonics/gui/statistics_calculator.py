@@ -18,7 +18,7 @@ class CavityStatistics:
 
 class StatisticsCalculator:
     """
-    Handles statistical analysis of cavity data including:
+    Handles stat analysis of cavity data including:
     - Basic statistics (mean, std, min, max)
     - Outlier detection
     - RMS calculation
@@ -56,10 +56,10 @@ class StatisticsCalculator:
         # RMS calculation
         rms = np.sqrt(np.mean(np.square(data)))
 
-        # Peak-to-peak
+        # Peak to peak
         peak_to_peak = max_val - min_val
 
-        # Outlier detection using z-score method
+        # Outlier detection using z score method
         z_scores = np.abs((data - mean) / std)
         outliers = np.sum(z_scores > self._outlier_threshold)
 

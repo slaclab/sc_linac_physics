@@ -9,10 +9,10 @@ from PyQt5.QtWidgets import (
 
 
 class ConfigPanel(QWidget):
-    """Configuration panel for the Microphonics GUI.
+    """Config panel for Microphonics GUI.
 
-    Provides controls for:
-    - Linac and cryomodule selection
+    This providess the controls for:
+    - Linac and CM selection
     - Cavity selection (Rack A/B)
     - Acquisition settings
     - Measurement control
@@ -36,22 +36,22 @@ class ConfigPanel(QWidget):
         super().__init__(parent)
         self.selected_linac = None
         self.selected_modules = set()
-        self.is_updating = False  # Add flag to prevent recursive updates
+        self.is_updating = False  # I added this flag to prevent recursive updates (check)
         self.setup_ui()
         self.connect_signals()
 
     def setup_ui(self):
-        """Initialize the user interface"""
+        """Initialize user interface"""
         layout = QVBoxLayout(self)
 
-        # Create scrollable area
+        # This creates a scrollable area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content_widget = QWidget()
         scroll.setWidget(content_widget)
         content_layout = QVBoxLayout(content_widget)
 
-        # Add configuration sections
+        # Adding config sections
         content_layout.addWidget(self.create_linac_section())
         content_layout.addWidget(self.create_cavity_section())
         content_layout.addWidget(self.create_settings_section())
@@ -61,7 +61,7 @@ class ConfigPanel(QWidget):
         layout.addWidget(scroll)
 
     def create_linac_section(self) -> QGroupBox:
-        """Create linac and cryomodule selection group"""
+        """Create linac and CM selection group"""
         group = QGroupBox("Linac Configuration")
         layout = QVBoxLayout()
 
@@ -76,7 +76,7 @@ class ConfigPanel(QWidget):
             linac_layout.addWidget(btn)
         layout.addLayout(linac_layout)
 
-        # Cryomodule selection grid
+        # CM selection grid
         self.cryo_group = QGroupBox("Cryomodule Selection")
         self.cryo_layout = QGridLayout()
         self.cryo_buttons = {}
@@ -87,11 +87,11 @@ class ConfigPanel(QWidget):
         return group
 
     def create_cavity_section(self):
-        """Create cavity selection section with tabs and Select All button"""
+        """Create cavity selection section w/ tabs and Select All button"""
         group = QGroupBox("Cavity Selection")
         layout = QVBoxLayout()
 
-        # Create tab widget for Rack A/B
+        # THis creates tab widget for Rack A/B
         tabs = QTabWidget()
 
         # Rack A (Cavities 1-4)
@@ -103,15 +103,15 @@ class ConfigPanel(QWidget):
             self.cavity_checks_a[i] = cb
             rack_a_layout.addWidget(cb, 0, i - 1)
 
-        # Add Select All button for Rack A
+        # Select All button for Rack A
         self.select_all_a = QPushButton("Select All")
         self.select_all_a.clicked.connect(lambda: self._select_all_cavities('A'))
-        rack_a_layout.addWidget(self.select_all_a, 1, 0, 1, 4)  # Span all columns
+        rack_a_layout.addWidget(self.select_all_a, 1, 0, 1, 4)  # Spans all columns
 
         rack_a.setLayout(rack_a_layout)
         tabs.addTab(rack_a, "Rack A (1-4)")
 
-        # Rack B (Cavities 5-8)
+        # Rack B
         rack_b = QWidget()
         rack_b_layout = QGridLayout()
         self.cavity_checks_b = {}
@@ -120,10 +120,10 @@ class ConfigPanel(QWidget):
             self.cavity_checks_b[i] = cb
             rack_b_layout.addWidget(cb, 0, i - 5)
 
-        # Add Select All button for Rack B
+        # Select All button for Rack B
         self.select_all_b = QPushButton("Select All")
         self.select_all_b.clicked.connect(lambda: self._select_all_cavities('B'))
-        rack_b_layout.addWidget(self.select_all_b, 1, 0, 1, 4)  # Span all columns
+        rack_b_layout.addWidget(self.select_all_b, 1, 0, 1, 4)
 
         rack_b.setLayout(rack_b_layout)
         tabs.addTab(rack_b, "Rack B (5-8)")
@@ -133,25 +133,22 @@ class ConfigPanel(QWidget):
         return group
 
     def _select_all_cavities(self, rack: str):
-        """Select or deselect all cavities in the specified rack
-
-        Args:
-            rack: 'A' for cavities 1-4, 'B' for cavities 5-8
+        """Select and/or deselect all cavities in specified rack
         """
         if self.is_updating:
             return
 
         self.is_updating = True
         try:
-            # Get the relevant checkboxes and button
+            # This gets the relevant checkboxes and button
             checks = self.cavity_checks_a if rack == 'A' else self.cavity_checks_b
             button = self.select_all_a if rack == 'A' else self.select_all_b
 
-            # Determine the current state (use first checkbox as reference)
+            # Determine the current state (use 1st checkbox as reference)
             first_cavity = min(checks.keys())
             current_state = checks[first_cavity].isChecked()
 
-            # Toggle all checkboxes to the opposite state
+            # Toggles all checkboxes to the opp state
             new_state = not current_state
             for cb in checks.values():
                 cb.setChecked(new_state)
@@ -159,7 +156,7 @@ class ConfigPanel(QWidget):
             # Update button text
             button.setText("Deselect All" if new_state else "Select All")
 
-            # Validate with is_bulk_action=True to skip the "at least one cavity" check
+            # Validate w/ is_bulk_action=True to skip the "at least one cavity" check
             if error_msg := self.validate_cavity_selection(is_bulk_action=True):
                 # Reset checkboxes if validation fails
                 for cb in checks.values():
@@ -170,6 +167,7 @@ class ConfigPanel(QWidget):
                 # For config emission after bulk action, still use standard validation
                 config = self.get_config()
                 self.configChanged.emit(config)
+
 
         finally:
             self.is_updating = False
@@ -219,7 +217,7 @@ class ConfigPanel(QWidget):
 
         self.is_updating = True
         try:
-            # Update button states
+            # This updates button states
             for l, btn in self.linac_buttons.items():
                 btn.setChecked(l == linac)
 
@@ -231,7 +229,7 @@ class ConfigPanel(QWidget):
 
     def _update_cryomodule_buttons(self):
         """Update cryomodule buttons based on selected linac"""
-        # Clear existing buttons
+        # This clears existing buttons
         for btn in self.cryo_buttons.values():
             self.cryo_layout.removeWidget(btn)
             btn.deleteLater()
@@ -249,13 +247,13 @@ class ConfigPanel(QWidget):
             # Store full ACCL name pattern but display simple number
             accl_name = f"ACCL:{self.selected_linac}:{module}00"
 
-            # Create button with simple display text
+            # Create button w/ simple display text
             display_text = module  # Just show "01", "02", "H1" etc.
             btn = QPushButton(display_text)
             btn.setCheckable(True)
             btn.clicked.connect(self._emit_config_if_valid)
 
-            # Store the full ACCL name and module ID as properties
+            # Store full ACCL name and module ID as properties
             btn.setProperty('accl_name', accl_name)
             btn.setProperty('module_id', module)
 
@@ -270,13 +268,15 @@ class ConfigPanel(QWidget):
     def validate_cavity_selection(self, is_bulk_action: bool = False) -> Optional[str]:
         """Validate cavity selection
 
+
         Args:
             is_bulk_action: If True, skip the "at least one cavity" check for bulk operations
+
 
         Returns:
             Error message string if validation fails, None if validation passes
         """
-        # Only perform validation for cavity-related actions, not for initial setup
+        # Only perform validation for cavity related actions, not for initial setup
         sender = self.sender()
         if isinstance(sender, QCheckBox) or isinstance(sender, QPushButton) and sender in [self.select_all_a,
                                                                                            self.select_all_b]:
@@ -284,19 +284,19 @@ class ConfigPanel(QWidget):
             selected_a = [num for num, cb in self.cavity_checks_a.items() if cb.isChecked()]
             selected_b = [num for num, cb in self.cavity_checks_b.items() if cb.isChecked()]
 
-            # For individual selections (not bulk actions), check if any cavities are selected
+            # For individual selections check if any cavities are selected
             if not is_bulk_action and not selected_a and not selected_b:
                 return "Please select at least one cavity"
 
-            # Prevent cross-rack selection
+            # This prevents cross rack selection
             if selected_a and selected_b:
                 return "Cannot measure cavities from both racks simultaneously"
 
         return None
 
     def _config_changed(self):
-        """Emit configuration changed signal with validation"""
-        # For normal config changes, use standard validation (not bulk action)
+        """Emit configuration changed signal w/ validation"""
+        # For normal config changes, use standard validation 
         if error_msg := self.validate_cavity_selection(is_bulk_action=False):
             QMessageBox.warning(self, "Invalid Selection", error_msg)
             return
@@ -307,11 +307,12 @@ class ConfigPanel(QWidget):
     def _emit_config_if_valid(self, check_cavities: bool = True):
         """Emit configuration only if valid
 
+
         Args:
             check_cavities: If True, validate cavity selection rules
         """
         if not self.is_updating:
-            # For normal config changes, use standard validation (not bulk action)
+            # For normal config changes, use standard validation
             if error_msg := self.validate_cavity_selection(is_bulk_action=False, check_cavities=check_cavities):
                 QMessageBox.warning(self, "Invalid Selection", error_msg)
                 return
@@ -319,21 +320,21 @@ class ConfigPanel(QWidget):
             self.configChanged.emit(config)
 
     def connect_signals(self):
-        # Connect cavity checkboxes - single validation point
+        # Connect cavity checkboxes -> single validation point
         for checks in [self.cavity_checks_a, self.cavity_checks_b]:
             for cb in checks.values():
                 cb.stateChanged.connect(self._on_cavity_selection_changed)
 
-        # Connect module buttons
+        # This connects module buttons
         for btn in self.cryo_buttons.values():
             btn.clicked.connect(self._emit_config_if_valid)
 
-        # Connect start/stop buttons
+        # This connects start/stop buttons
         self.start_button.clicked.connect(self._on_start_clicked)
         self.stop_button.clicked.connect(self.measurementStopped.emit)
 
     def _on_start_clicked(self):
-        """Handle start button click with validation"""
+        """Handle start button click w/ validation"""
         error_msg = self.validate_cavity_selection(is_bulk_action=False)
         if error_msg:
             QMessageBox.warning(self, "Invalid Selection", error_msg)
@@ -341,7 +342,7 @@ class ConfigPanel(QWidget):
         self.measurementStarted.emit()
 
     def _on_cavity_selection_changed(self):
-        """Handle cavity selection changes with button text updates"""
+        """Handle cavity selection changes w/ button text updates"""
         if self.is_updating:
             return
 
@@ -355,7 +356,7 @@ class ConfigPanel(QWidget):
             all_b_selected = all(cb.isChecked() for cb in self.cavity_checks_b.values())
             self.select_all_b.setText("Deselect All" if all_b_selected else "Select All")
 
-            # For individual cavity selection, use normal validation (is_bulk_action=False)
+            # For individual cavity selection, use normal validation
             error_msg = self.validate_cavity_selection(is_bulk_action=False)
             if error_msg:
                 msg_box = QMessageBox(self)

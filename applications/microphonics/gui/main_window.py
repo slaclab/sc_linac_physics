@@ -8,34 +8,35 @@ from PyQt5.QtWidgets import (
 )
 
 from applications.microphonics.components.components import (
-    ChannelSelectionGroup, PlotConfigGroup,
-    DataLoadingGroup
+    ChannelSelectionGroup, DataLoadingGroup
 )
 from applications.microphonics.gui.async_data_manager import AsyncDataManager, MeasurementConfig
 from applications.microphonics.gui.config_panel import ConfigPanel
-from applications.microphonics.gui.plot_panel import PlotPanel
+from applications.microphonics.gui.data_loader import DataLoader
 from applications.microphonics.gui.statistics_calculator import StatisticsCalculator
 from applications.microphonics.gui.status_panel import StatusPanel
+from applications.microphonics.plots.plot_panel import PlotPanel
 
 
 class MicrophonicsGUI(QMainWindow):
-    """Main window for the LCLS-II Microphonics measurement system"""
+    """Main window for the Microphonics GUI Measurement system"""
     measurementError = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LCLS-II Microphonics Measurement")
         self.setMinimumSize(1200, 800)
-
-        self.measurement_errors = []  # Track errors during measurement
+        # Tracks errors during measurement
+        self.measurement_errors = []
 
         self.stats_calculator = StatisticsCalculator()
-        self.cavity_data = {}  # Store data for statistics calculation
+        # Stores data for stats calculation
+        self.cavity_data = {}
 
-        # Add error signal connection
+        # Error signal connection
         self.measurementError.connect(self._handle_measurement_error)
 
-        # Add data manager
+        # Data manager
         self.data_manager = AsyncDataManager()
 
         # Connect data manager signals
@@ -44,16 +45,23 @@ class MicrophonicsGUI(QMainWindow):
         self.data_manager.dataReceived.connect(self._handle_new_data)
         self.data_manager.acquisitionComplete.connect(self._handle_completion)
 
-        # Create central widget and layout
+        # Central widget and layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(5)
 
-        # Create left and right panel layouts
+        # Left and right panel layouts
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(2, 2, 2, 2)
+        left_layout.setSpacing(5)
+
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(2, 2, 2, 2)
+        right_layout.setSpacing(0)
 
         # Initialize all panels
         self.init_panels()
@@ -62,7 +70,7 @@ class MicrophonicsGUI(QMainWindow):
         self.setup_left_panel(left_layout)
         self.setup_right_panel(right_layout)
 
-        # Add panels to main layout
+        # Add panels to main layout with adjusted proportions
         main_layout.addWidget(left_panel, stretch=4)  # 40% width
         main_layout.addWidget(right_panel, stretch=6)  # 60% width
 
@@ -72,8 +80,15 @@ class MicrophonicsGUI(QMainWindow):
         # Initialize measurement state
         self.measurement_running = False
 
-        # Store the current channel selection
+        # Store current channel selection
         self.current_channels = []
+
+        # Initialize data loader
+        self.data_loader = DataLoader()
+
+        # Connect data loader signals
+        self.data_loader.dataLoaded.connect(lambda data: self._handle_new_data("file", data))
+        self.data_loader.loadError.connect(self._handle_load_error)
 
     def init_panels(self):
         """Initialize all panels"""
@@ -84,11 +99,10 @@ class MicrophonicsGUI(QMainWindow):
         self.status_panel = StatusPanel()
 
         # Right panel components
-        self.plot_config = PlotConfigGroup()
         self.plot_panel = PlotPanel()
 
     def setup_left_panel(self, layout: QVBoxLayout):
-        """Setup the left side of the window"""
+        """Setup left side of the window"""
         layout.addWidget(self.config_panel)
         layout.addWidget(self.channel_selection)
         layout.addWidget(self.data_loading)
@@ -96,8 +110,7 @@ class MicrophonicsGUI(QMainWindow):
         layout.addStretch()
 
     def setup_right_panel(self, layout: QVBoxLayout):
-        """Setup the right side of the window"""
-        layout.addWidget(self.plot_config)
+        """Setup right side of the window"""
         layout.addWidget(self.plot_panel)
 
     def connect_signals(self):
@@ -110,11 +123,8 @@ class MicrophonicsGUI(QMainWindow):
         # Channel selection signals
         self.channel_selection.channelsChanged.connect(self.on_channels_changed)
 
-        # Plot configuration signals
-        self.plot_config.configChanged.connect(self.plot_panel.set_plot_config)
-
         # Data loading signals
-        self.data_loading.dataLoaded.connect(self.load_data)
+        self.data_loading.fileSelected.connect(self.load_data)
 
     def on_config_changed(self, config: Dict):
         print("Configuration changed:", config)
@@ -142,8 +152,6 @@ class MicrophonicsGUI(QMainWindow):
 
     def _split_chassis_config(self, config: dict) -> Dict[str, Dict]:
         """Split configuration by chassis (A/B) and include channel selection"""
-        print("\nDebug: Starting _split_chassis_config")
-        print(f"Debug: Input config: {config}")
         result = {}
 
         # Get selected channels from ChannelSelectionGroup
@@ -292,20 +300,6 @@ class MicrophonicsGUI(QMainWindow):
 
             self.config_panel._config_changed()
 
-    def _handle_new_data(self, chassis_id: str, data: dict):
-        """Handle new data from measurement"""
-        cavity_num = data['cavity']
-
-        # Only process channels that were selected when measurement started
-        buffer_data = {
-            channel: data['channels'][channel]
-            for channel in self.current_channels
-            if channel in data['channels']
-        }
-
-        # Update plot panel with new data
-        self.plot_panel.update_plots(cavity_num, buffer_data)
-
     def _handle_error(self, chassis_id: str, error_msg: str):
         """Show modal error dialogs during tests"""
         msg_box = QMessageBox(self)
@@ -364,39 +358,54 @@ class MicrophonicsGUI(QMainWindow):
             f"Buffer acquisition: {progress}%"
         )
 
-    def _handle_new_data(self, chassis_id: str, data: dict):
-        """Handle new data from measurement"""
-        cavity_num = data['cavity']
+    def _handle_new_data(self, source: str, data: dict):
+        """Handle new data from measurement or file"""
+        try:
+            cavity_num = data['cavity']
+            buffer_data = data['channels']  # This will work for both file and live data
 
-        # Only process channels that were selected when measurement started
-        buffer_data = {
-            channel: data['channels'][channel]
-            for channel in self.current_channels
-            if channel in data['channels']
-        }
+            # Store DF data for statistics calculation
+            if 'DF' in buffer_data:
+                self.cavity_data[cavity_num] = buffer_data['DF']
 
-        # Store DF data for statistics calculation
-        if 'DF' in buffer_data:
-            self.cavity_data[cavity_num] = buffer_data['DF']
+                # Calculate statistics for this cavity
+                stats = self.stats_calculator.calculate_statistics(buffer_data['DF'])
+                panel_stats = self.stats_calculator.convert_to_panel_format(stats)
 
-            # Calculate statistics for this cavity
-            stats = self.stats_calculator.calculate_statistics(buffer_data['DF'])
-            panel_stats = self.stats_calculator.convert_to_panel_format(stats)
+                # Update statistics panel
+                self.status_panel.update_statistics(cavity_num, panel_stats)
 
-            # Update statistics panel
-            self.status_panel.update_statistics(cavity_num, panel_stats)
-
-        # Update plot panel with new data
-        self.plot_panel.update_plots(cavity_num, buffer_data)
+                # Update plot panel with new data
+                self.plot_panel.update_plots(cavity_num, buffer_data)
+        except Exception as e:
+            print(f"Error in _handle_new_data: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
 
     def load_data(self, file_path: Path):
-        """Load data from file"""
+        """Load data from file and display using existing visualization code."""
         try:
-            # TODO: Implement data loading
-            # TODO: Update plots
-            pass
+            # Clear existing plots
+            self.plot_panel.clear_plots()
+
+            # Load and process the data using DataLoader
+            self.data_loader.load_file(file_path)
+
+            # Set current channels to the currently selected ones
+            self.current_channels = self.channel_selection.get_selected_channels()
+
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load data: {str(e)}")
+            self._handle_load_error(f"Failed to load data: {str(e)}")
+
+    def _handle_load_error(self, error_msg: str):
+        """Handle errors during data loading"""
+        print(f"Error loading data: {error_msg}")
+        self.data_loading.update_file_info("Error loading file")
+        QMessageBox.critical(self, "Error", error_msg)
+
+    def _handle_load_progress(self, progress: int):
+        """Handle progress updates during data loading"""
+        self.data_loading.update_file_info(f"Loading: {progress}%")
 
     def closeEvent(self, event):
         """Ensure clean shutdown"""
