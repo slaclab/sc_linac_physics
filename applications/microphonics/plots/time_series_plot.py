@@ -5,10 +5,9 @@ from applications.microphonics.plots.base_plot import BasePlot
 
 
 class TimeSeriesPlot(BasePlot):
-    """Time series plot w/ optimizations for large datasets"""
+    """Time series plots"""
 
     def __init__(self, parent=None):
-        # Define configuration specific to time series plot
         config = {
             'title': "Time Series",
             'x_label': ('Time', 's'),
@@ -17,7 +16,6 @@ class TimeSeriesPlot(BasePlot):
             'grid': True
         }
 
-        # Call parent constructor w/ time series config
         super().__init__(parent, plot_type='time_series', config=config)
 
         # Initialize state for zoom optimization
@@ -37,11 +35,11 @@ class TimeSeriesPlot(BasePlot):
         vb.sigRangeChangedManually.connect(self._on_range_changed)
 
     def _format_tooltip(self, plot_type, x, y):
-        """Override base tooltip formatting with time series specific format"""
+        """Override base tooltip formatting"""
         return f"Time: {x:.3f} s\nDetuning: {y:.2f} Hz"
 
     def _decimate_data(self, times, values, target_points):
-        """Decimation that preserves important features"""
+        """Decimation that still preserves important features"""
         if len(times) <= target_points:
             return times, values
 
@@ -62,12 +60,12 @@ class TimeSeriesPlot(BasePlot):
         if remaining <= 0:
             return times[list(must_keep)], values[list(must_keep)]
 
-        # Create mask excluding must-keep points
+        # Create mask excluding must keep points
         mask = np.ones(len(times), dtype=bool)
         for idx in must_keep:
             mask[idx] = False
 
-        # Add small constant to ensure all points have some chance
+        # Adding small constant to make sure all points have some chance
         p = importance.copy()
         p[~mask] = 0
         p = p + 0.01
@@ -138,7 +136,7 @@ class TimeSeriesPlot(BasePlot):
             if level >= target_points:
                 return decimations[level]
 
-        # If we need more points than available, return original
+        # If we need more points than available will return original
         return decimations['original']
 
     def _filter_to_view(self, times, values, x_min, x_max):
@@ -165,7 +163,7 @@ class TimeSeriesPlot(BasePlot):
         return self._decimate_data(visible_times, visible_values, 5000)
 
     def _on_range_changed(self):
-        """Handle view range changes with optimized rendering"""
+        """Handle view range changes w/ optimized rendering"""
         self._is_zooming = True
 
         # Get current view range
@@ -186,7 +184,7 @@ class TimeSeriesPlot(BasePlot):
         self._zoom_timer.start(200)  # 200ms delay
 
     def _end_zoom(self):
-        """Update display with higher quality after zooming ends"""
+        """Update display w/ higher quality after zooming ends"""
         self._is_zooming = False
 
         # Get current view range
@@ -194,7 +192,7 @@ class TimeSeriesPlot(BasePlot):
         view_range = vb.viewRange()
         x_min, x_max = view_range[0]
 
-        # Update with more points now that zooming has ended
+        # Update w/ more points now that zooming has ended
         self._update_visible_curves(x_min, x_max)
 
         # Force refresh
@@ -208,7 +206,7 @@ class TimeSeriesPlot(BasePlot):
                     continue
 
             if cavity_num in self._original_data:
-                # Get appropriate decimation level
+                # Get a good decimation level
                 view_width = x_max - x_min
                 decimated = self._get_optimal_decimation(cavity_num, view_width)
 
@@ -224,7 +222,7 @@ class TimeSeriesPlot(BasePlot):
                     )
 
     def update_plot(self, cavity_num, data):
-        """Main method to update time series plot with new data"""
+        """Main method to update time series plot w/ new data"""
         # Extract and preprocess data
         data_array, is_valid = self._preprocess_data(data)
         if not is_valid:
@@ -263,14 +261,14 @@ class TimeSeriesPlot(BasePlot):
 
             self.plot_curves[cavity_num] = curve
         else:
-            # Use existing curve with new data
+            # Use existing curve w/ new data
             # Get current view range
             vb = self.plot_widget.getViewBox()
             view_range = vb.viewRange()
             x_min, x_max = view_range[0]
             view_width = x_max - x_min
 
-            # Get appropriate decimation and update
+            # Get a good decimation and update
             decimated = self._get_optimal_decimation(cavity_num, view_width)
             if decimated:
                 times, values = decimated
@@ -280,13 +278,13 @@ class TimeSeriesPlot(BasePlot):
                     skipFiniteCheck=True
                 )
 
-        # Smart auto-range for live data
+        # Smart auto range for live data
         view_window = 10  # Show last 10 seconds
         if times[-1] > view_window:
-            # For streaming data, slide the window
+            # For the streaming data slide the window
             self.plot_widget.setXRange(max(0, times[-1] - view_window), times[-1])
         else:
-            # For smaller datasets, show all data
+            # For smaller datasets we will show all data
             self.plot_widget.setXRange(0, times[-1])
 
     def clear_plot(self):
