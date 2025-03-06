@@ -302,3 +302,7 @@ def draw_and_show():
     # type: () -> None
     plt.draw()
     plt.show()
+
+
+def round_for_printing(unrounded_number):
+    return np.round(unrounded_number, decimals=3)

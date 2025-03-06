@@ -18,7 +18,8 @@ from requests import ConnectTimeout
 from urllib3.exceptions import ConnectTimeoutError
 
 import q0_utils
-from q0_linac import Q0Cavity, Q0Cryomodule
+from applications.q0.q0_cavity import Q0Cavity
+from applications.q0.q0_cryomodule import Q0Cryomodule
 from utils.qt import Worker, get_dimensions
 from utils.sc_linac.linac_utils import CavityAbortError
 
@@ -48,7 +49,7 @@ class CryoParamSetupWorker(Worker):
 
         self.cryomodule.heater_power = self.heater_setpoint
         self.cryomodule.jt_position = 35
-        caput(self.cryomodule.jtAutoSelectPV, 1, wait=True)
+        caput(self.cryomodule.jt_auto_select_pv, 1, wait=True)
         self.finished.emit("Cryo setup for new reference parameters in ~1 hour")
 
 

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Dict
 
 from numpy import polyfit
 
@@ -155,6 +156,8 @@ INTERLOCK_RESET_ATTEMPTS = 5
 # this value is based on historical data, when the decarads were on, but not seeing any FE from a cavity
 DECARAD_BACKGROUND_READING_AVG = 0.8
 DECARAD_BACKGROUND_READING_RAW = 8
+
+CRYO_NAME_MAP: Dict[str, str] = {"H1": "HL01", "H2": "HL02"}
 
 
 class SCLinacObject(ABC, object):
