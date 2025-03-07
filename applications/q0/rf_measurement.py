@@ -5,6 +5,7 @@ from typing import Optional, Dict, TYPE_CHECKING
 import numpy as np
 
 from applications.q0 import q0_utils
+from applications.q0.q0_cavity import Q0Cavity
 
 if TYPE_CHECKING:
     from applications.q0.q0_cryomodule import Q0Cryomodule
@@ -174,10 +175,12 @@ class Q0Measurement:
 
             effective_amplitude = np.sqrt(sum_square_amp)
 
+            cavity: "Q0Cavity" = self.cryomodule.cavities[1]
             self._q0 = q0_utils.calc_q0(
                 amplitude=effective_amplitude,
                 rf_heat_load=self.heat_load,
                 avg_pressure=self.rf_run.avg_pressure,
-                cav_length=self.cryomodule.cavities[1].length,
+                cav_length=cavity.length,
+                r_over_q=cavity.r_over_q,
             )
         return self._q0
