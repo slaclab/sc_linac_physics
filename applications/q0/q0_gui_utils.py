@@ -17,7 +17,7 @@ from pydm.widgets import PyDMLabel
 from requests import ConnectTimeout
 from urllib3.exceptions import ConnectTimeoutError
 
-import q0_utils
+from applications.q0 import q0_utils
 from applications.q0.q0_cavity import Q0Cavity
 from applications.q0.q0_cryomodule import Q0Cryomodule
 from utils.qt import Worker, get_dimensions

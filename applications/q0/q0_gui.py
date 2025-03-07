@@ -7,11 +7,11 @@ from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
 from pyqtgraph import PlotWidget, plot
 
-import q0_gui_utils
+from applications.q0 import q0_gui_utils
 from applications.q0.q0_cavity import Q0Cavity
 from applications.q0.q0_cryomodule import Q0Cryomodule
-from q0_gui_utils import CalibrationWorker
-from q0_utils import ValveParams
+from applications.q0.q0_gui_utils import CalibrationWorker
+from applications.q0.q0_utils import ValveParams
 from utils.qt import make_error_popup
 from utils.sc_linac.linac import Machine
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
