@@ -1,332 +1,21 @@
-import json
 from datetime import datetime, timedelta
 from os.path import isfile
 from time import sleep
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import numpy as np
-from epics import caget, camonitor, camonitor_clear, caput
-from lcls_tools.common.controls.pyepics.utils import PV
+from epics import caget, caput, camonitor, camonitor_clear
 from lcls_tools.common.data.archiver import get_values_over_time_range
-from numpy import floor, linspace, sign
+from numpy import linspace, sign, floor
 from scipy.signal import medfilt
 from scipy.stats import linregress
 
-import q0_utils
-from utils.sc_linac.cavity import Cavity
+from applications.q0 import q0_utils
+from applications.q0.calibration import Calibration
+from applications.q0.q0_utils import round_for_printing
+from applications.q0.rf_measurement import Q0Measurement
+from applications.q0.rf_run import RFRun
 from utils.sc_linac.cryomodule import Cryomodule
-from utils.sc_linac.linac import Machine
-
-
-def round_for_printing(unrounded_number):
-    return np.round(unrounded_number, decimals=3)
-
-
-class Calibration:
-    def __init__(self, time_stamp, cryomodule):
-        # type: (str, Q0Cryomodule) -> None
-
-        self.time_stamp: str = time_stamp
-        self.cryomodule: Q0Cryomodule = cryomodule
-
-        self.heater_runs: List[q0_utils.HeaterRun] = []
-        self._slope = None
-        self.adjustment = 0
-
-    def load_data(self):
-        self.heater_runs: List[q0_utils.HeaterRun] = []
-
-        with open(self.cryomodule.calib_data_file, "r+") as f:
-            all_data: Dict = json.load(f)
-            data: Dict = all_data[self.time_stamp]
-
-            for heater_run_data in data.values():
-                run = q0_utils.HeaterRun(heater_run_data["Desired Heat Load"])
-                run._start_time = datetime.strptime(
-                    heater_run_data[q0_utils.JSON_START_KEY],
-                    q0_utils.DATETIME_FORMATTER,
-                )
-                run._end_time = datetime.strptime(
-                    heater_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
-                )
-
-                ll_data = {}
-                for timestamp_str, val in heater_run_data[q0_utils.JSON_LL_KEY].items():
-                    ll_data[float(timestamp_str)] = val
-
-                run.ll_data = ll_data
-                run.average_heat = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
-
-                self.heater_runs.append(run)
-
-            with open(self.cryomodule.calib_idx_file, "r+") as f:
-                all_data: Dict = json.load(f)
-                data: Dict = all_data[self.time_stamp]
-
-                self.cryomodule.valveParams = q0_utils.ValveParams(
-                    refValvePos=data["JT Valve Position"],
-                    refHeatLoadDes=data["Total Reference Heater Setpoint"],
-                    refHeatLoadAct=data["Total Reference Heater Readback"],
-                )
-                print("Loaded new reference parameters")
-
-    def save_data(self):
-        new_data = {}
-        for idx, heater_run in enumerate(self.heater_runs):
-            key = heater_run.start_time
-            heater_data = {
-                q0_utils.JSON_START_KEY: heater_run.start_time,
-                q0_utils.JSON_END_KEY: heater_run.end_time,
-                "Desired Heat Load": heater_run.heat_load_des,
-                q0_utils.JSON_HEATER_READBACK_KEY: heater_run.average_heat,
-                q0_utils.JSON_DLL_KEY: heater_run.dll_dt,
-                q0_utils.JSON_LL_KEY: heater_run.ll_data,
-            }
-
-            new_data[key] = heater_data
-
-        q0_utils.update_json_data(
-            self.cryomodule.calib_data_file, self.time_stamp, new_data
-        )
-
-    def save_results(self):
-        newData = {
-            q0_utils.JSON_START_KEY: self.time_stamp,
-            "Calculated Heat vs dll/dt Slope": self.dLLdt_dheat,
-            "Calculated Adjustment": self.adjustment,
-            "Total Reference Heater Setpoint": self.cryomodule.valveParams.refHeatLoadDes,
-            "Total Reference Heater Readback": self.cryomodule.valveParams.refHeatLoadAct,
-            "JT Valve Position": self.cryomodule.valveParams.refValvePos,
-        }
-        q0_utils.update_json_data(
-            self.cryomodule.calib_idx_file, self.time_stamp, newData
-        )
-
-    @property
-    def dLLdt_dheat(self):
-        if not self._slope:
-            heat_loads = []
-            dll_dts = []
-            for run in self.heater_runs:
-                heat_loads.append(run.average_heat)
-                dll_dts.append(run.dll_dt)
-
-            slope, intercept, r_val, p_val, std_err = linregress(heat_loads, dll_dts)
-
-            if np.isnan(slope):
-                self._slope = None
-            else:
-                self.adjustment = intercept
-                self._slope = slope
-
-        return self._slope
-
-    def get_heat(self, dll_dt: float):
-        return (dll_dt - self.adjustment) / self.dLLdt_dheat
-
-
-class RFRun(q0_utils.DataRun):
-    def __init__(self, amplitudes: Dict[int, float]):
-        super().__init__()
-        self.amplitudes = amplitudes
-        self.pressure_buffer = []
-        self._avg_pressure = None
-
-    @property
-    def avg_pressure(self):
-        if not self._avg_pressure:
-            self._avg_pressure = np.mean(self.pressure_buffer)
-        return self._avg_pressure
-
-    @avg_pressure.setter
-    def avg_pressure(self, value: float):
-        self._avg_pressure = value
-
-
-class Q0Measurement:
-    def __init__(self, cryomodule):
-        # type: (Q0Cryomodule) -> None
-        self.cryomodule: Q0Cryomodule = cryomodule
-        self.heater_run: Optional[q0_utils.HeaterRun] = None
-        self.rf_run: Optional[RFRun] = None
-        self._raw_heat: Optional[float] = None
-        self._adjustment: Optional[float] = None
-        self._heat_load: Optional[float] = None
-        self._q0: Optional[float] = None
-        self._start_time: Optional[str] = None
-        self._amplitudes: Optional[Dict[int, float]] = None
-        self._heater_run_heatload: Optional[float] = None
-
-    @property
-    def amplitudes(self):
-        return self._amplitudes
-
-    @amplitudes.setter
-    def amplitudes(self, amplitudes: Dict[int, float]):
-        self._amplitudes = amplitudes
-        self.rf_run = RFRun(amplitudes)
-
-    @property
-    def heater_run_heatload(self):
-        return self._heater_run_heatload
-
-    @heater_run_heatload.setter
-    def heater_run_heatload(self, heat_load: float):
-        self._heater_run_heatload = heat_load
-        self.heater_run = q0_utils.HeaterRun(heat_load)
-
-    @property
-    def start_time(self):
-        return self._start_time
-
-    @start_time.setter
-    def start_time(self, start_time: datetime):
-        if not self._start_time:
-            self._start_time = start_time.strftime(q0_utils.DATETIME_FORMATTER)
-
-    def load_data(self, time_stamp: str):
-        # TODO need to load the other parameters
-        self.start_time = datetime.strptime(time_stamp, q0_utils.DATETIME_FORMATTER)
-
-        with open(self.cryomodule.q0_data_file, "r+") as f:
-            all_data: Dict = json.load(f)
-            q0_meas_data: Dict = all_data[time_stamp]
-
-            heater_run_data: Dict = q0_meas_data[q0_utils.JSON_HEATER_RUN_KEY]
-
-            self.heater_run_heatload = heater_run_data[
-                q0_utils.JSON_HEATER_READBACK_KEY
-            ]
-            self.heater_run.average_heat = heater_run_data[
-                q0_utils.JSON_HEATER_READBACK_KEY
-            ]
-            self.heater_run.start_time = datetime.strptime(
-                heater_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
-            )
-            self.heater_run.end_time = datetime.strptime(
-                heater_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
-            )
-            ll_data = {}
-            for time_str, val in heater_run_data[q0_utils.JSON_LL_KEY].items():
-                ll_data[float(time_str)] = val
-            self.heater_run.ll_data = ll_data
-
-            rf_run_data: Dict = q0_meas_data[q0_utils.JSON_RF_RUN_KEY]
-            cav_amps = {}
-            for cav_num_str, amp in rf_run_data[q0_utils.JSON_CAV_AMPS_KEY].items():
-                cav_amps[int(cav_num_str)] = amp
-
-            self.amplitudes = cav_amps
-            self.rf_run.start_time = datetime.strptime(
-                rf_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
-            )
-            self.rf_run.end_time = datetime.strptime(
-                rf_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
-            )
-            self.rf_run.average_heat = rf_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
-
-            ll_data = {}
-            for time_str, val in rf_run_data[q0_utils.JSON_LL_KEY].items():
-                ll_data[float(time_str)] = val
-            self.rf_run.ll_data = ll_data
-
-            self.rf_run.avg_pressure = rf_run_data[q0_utils.JSON_AVG_PRESS_KEY]
-
-        self.save_data()
-
-    def save_data(self):
-        q0_utils.make_json_file(self.cryomodule.q0_data_file)
-        heater_data = {
-            q0_utils.JSON_START_KEY: self.heater_run.start_time,
-            q0_utils.JSON_END_KEY: self.heater_run.end_time,
-            q0_utils.JSON_LL_KEY: self.heater_run.ll_data,
-            q0_utils.JSON_HEATER_READBACK_KEY: self.heater_run.average_heat,
-            q0_utils.JSON_DLL_KEY: self.heater_run.dll_dt,
-        }
-
-        rf_data = {
-            q0_utils.JSON_START_KEY: self.rf_run.start_time,
-            q0_utils.JSON_END_KEY: self.rf_run.end_time,
-            q0_utils.JSON_LL_KEY: self.rf_run.ll_data,
-            q0_utils.JSON_HEATER_READBACK_KEY: self.rf_run.average_heat,
-            q0_utils.JSON_AVG_PRESS_KEY: self.rf_run.avg_pressure,
-            q0_utils.JSON_DLL_KEY: self.rf_run.dll_dt,
-            q0_utils.JSON_CAV_AMPS_KEY: self.rf_run.amplitudes,
-        }
-
-        new_data = {
-            q0_utils.JSON_HEATER_RUN_KEY: heater_data,
-            q0_utils.JSON_RF_RUN_KEY: rf_data,
-        }
-
-        q0_utils.update_json_data(
-            self.cryomodule.q0_data_file, self.start_time, new_data
-        )
-
-    def save_results(self):
-        newData = {
-            q0_utils.JSON_START_KEY: self.start_time,
-            q0_utils.JSON_CAV_AMPS_KEY: self.rf_run.amplitudes,
-            "Calculated Adjusted Heat Load": self.heat_load,
-            "Calculated Raw Heat Load": self.raw_heat,
-            "Calculated Adjustment": self.adjustment,
-            "Calculated Q0": self.q0,
-            "Calibration Used": self.cryomodule.calibration.time_stamp,
-        }
-
-        q0_utils.update_json_data(self.cryomodule.q0_idx_file, self.start_time, newData)
-
-    @property
-    def raw_heat(self):
-        if not self._raw_heat:
-            self._raw_heat = self.cryomodule.calibration.get_heat(self.rf_run.dll_dt)
-        return self._raw_heat
-
-    @property
-    def adjustment(self):
-        if not self._adjustment:
-            heater_run_raw_heat = self.cryomodule.calibration.get_heat(
-                self.heater_run.dll_dt
-            )
-            self._adjustment = self.heater_run.average_heat - heater_run_raw_heat
-        return self._adjustment
-
-    @property
-    def heat_load(self):
-        if not self._heat_load:
-            self._heat_load = self.raw_heat + self.adjustment
-        return self._heat_load
-
-    @property
-    def q0(self):
-        if not self._q0:
-            sum_square_amp = 0
-
-            for amp in self.rf_run.amplitudes.values():
-                sum_square_amp += amp**2
-
-            effective_amplitude = np.sqrt(sum_square_amp)
-
-            self._q0 = q0_utils.calc_q0(
-                amplitude=effective_amplitude,
-                rf_heat_load=self.heat_load,
-                avg_pressure=self.rf_run.avg_pressure,
-                cav_length=self.cryomodule.cavities[1].length,
-            )
-        return self._q0
-
-
-class Q0Cavity(Cavity):
-    def __init__(
-        self,
-        cavity_num,
-        rack_object,
-    ):
-        super().__init__(cavity_num, rack_object)
-        self.ready_for_q0 = False
-
-    def mark_ready(self):
-        self.ready_for_q0 = True
 
 
 class Q0Cryomodule(Cryomodule):
@@ -337,21 +26,20 @@ class Q0Cryomodule(Cryomodule):
     ):
         super().__init__(cryo_name, linac_object)
 
-        self.jtModePV: str = self.jt_prefix + "MODE"
-        self.jt_mode_str_pv: str = self.jt_prefix + "MODE_STRING"
-        self.jtManualSelectPV: str = self.jt_prefix + "MANUAL"
-        self.jtAutoSelectPV: str = self.jt_prefix + "AUTO"
-        self.dsLiqLevSetpointPV: str = self.jt_prefix + "SP_RQST"
-        self.jtManPosSetpointPV: str = self.jt_prefix + "MANPOS_RQST"
+        self.jt_mode_pv: str = self.make_jt_pv("MODE")
+        self.jt_mode_str_pv: str = self.make_jt_pv("MODE_STRING")
+        self.jt_manual_select_pv: str = self.make_jt_pv("MANUAL")
+        self.jt_auto_select_pv: str = self.make_jt_pv("AUTO")
+        self.ds_liq_lev_setpoint_pv: str = self.make_jt_pv("SP_RQST")
+        self.jt_man_pos_setpoint_pv: str = self.make_jt_pv("MANPOS_RQST")
 
-        self.heater_prefix = f"CPIC:CM{self.name}:0000:EHCV:"
-        self.heater_setpoint_pv: str = self.heater_prefix + "MANPOS_RQST"
-        self.heater_manual_pv: str = self.heater_prefix + "MANUAL"
-        self.heater_sequencer_pv: str = self.heater_prefix + "SEQUENCER"
-        self.heater_mode_string_pv: str = self.heater_prefix + "MODE_STRING"
-        self.heater_mode_pv: str = self.heater_prefix + "MODE"
+        self.heater_setpoint_pv: str = self.make_heater_pv("MANPOS_RQST")
+        self.heater_manual_pv: str = self.make_heater_pv("MANUAL")
+        self.heater_sequencer_pv: str = self.make_heater_pv("SEQUENCER")
+        self.heater_mode_string_pv: str = self.make_heater_pv("MODE_STRING")
+        self.heater_mode_pv: str = self.make_heater_pv("MODE")
 
-        self.cryo_access_pv: str = f"CRYO:CM{self.name}:0:CAS_ACCESS"
+        self.cryo_access_pv: str = f"CRYO:{self.cryo_name}:0:CAS_ACCESS"
 
         self.q0_measurements: Dict[str, Q0Measurement] = {}
         self.calibrations: Dict[str, Calibration] = {}
@@ -377,11 +65,6 @@ class Q0Cryomodule(Cryomodule):
         self.fill_data_run_buffer = False
 
         self.abort_flag: bool = False
-
-        self._ds_level_pv_obj: Optional[PV] = None
-
-    def __str__(self):
-        return f"CM{self.name}"
 
     def check_abort(self):
         if self.abort_flag:
@@ -450,7 +133,7 @@ class Q0Cryomodule(Cryomodule):
     def shut_off(self):
         print("Restoring cryo")
         caput(self.heater_sequencer_pv, 1, wait=True)
-        caput(self.jtAutoSelectPV, 1, wait=True)
+        caput(self.jt_auto_select_pv, 1, wait=True)
         print("Turning cavities and SSAs off")
         for cavity in self.cavities.values():
             cavity.turn_off()
@@ -473,12 +156,6 @@ class Q0Cryomodule(Cryomodule):
         print(f"set {self} heater power to {value} W")
 
     @property
-    def ds_level_pv_obj(self) -> PV:
-        if not self._ds_level_pv_obj:
-            self._ds_level_pv_obj = PV(self.ds_level_pv)
-        return self._ds_level_pv_obj
-
-    @property
     def ds_liquid_level(self):
         return self.ds_level_pv_obj.get()
 
@@ -489,7 +166,7 @@ class Q0Cryomodule(Cryomodule):
     def fill(self, desired_level=q0_utils.MAX_DS_LL, turn_cavities_off: bool = True):
         self.ds_liquid_level = desired_level
         print(f"Setting JT to auto for refill to {desired_level}")
-        caput(self.jtAutoSelectPV, 1, wait=True)
+        caput(self.jt_auto_select_pv, 1, wait=True)
         self.heater_power = 0
 
         if turn_cavities_off:
@@ -502,7 +179,7 @@ class Q0Cryomodule(Cryomodule):
         self.ds_liquid_level = desiredLevel
 
         print(f"Setting JT to auto for refill to {desiredLevel}")
-        caput(self.jtAutoSelectPV, 1, wait=True)
+        caput(self.jt_auto_select_pv, 1, wait=True)
 
         self.heater_power = self.valveParams.refHeatLoadDes
 
@@ -751,7 +428,7 @@ class Q0Cryomodule(Cryomodule):
         print(f"setting {self} heater to {self.valveParams.refHeatLoadDes} W")
         self.heater_power = self.valveParams.refHeatLoadDes
 
-        starting_ll_setpoint = caget(self.dsLiqLevSetpointPV)
+        starting_ll_setpoint = caget(self.ds_liq_lev_setpoint_pv)
         print(f"Starting liquid level setpoint: {starting_ll_setpoint}")
 
         camonitor(self.ds_level_pv, callback=self.monitor_ll)
@@ -780,7 +457,7 @@ class Q0Cryomodule(Cryomodule):
 
     def restore_cryo(self):
         print("Restoring initial cryo conditions")
-        caput(self.jtAutoSelectPV, 1, wait=True)
+        caput(self.jt_auto_select_pv, 1, wait=True)
         self.ds_liquid_level = 92
         caput(self.heater_sequencer_pv, 1, wait=True)
 
@@ -799,20 +476,20 @@ class Q0Cryomodule(Cryomodule):
         step = sign(delta)
 
         print("Setting JT to manual and waiting for readback to change")
-        caput(self.jtManualSelectPV, 1, wait=True)
+        caput(self.jt_manual_select_pv, 1, wait=True)
 
         # One way for the JT valve to be locked in the correct position is for
         # it to be in manual mode and at the desired value
-        while caget(self.jtModePV) != q0_utils.JT_MANUAL_MODE_VALUE:
+        while caget(self.jt_mode_pv) != q0_utils.JT_MANUAL_MODE_VALUE:
             self.check_abort()
             sleep(1)
 
         print(f"Walking {self} JT to {value}%")
         for _ in range(int(floor(abs(delta)))):
-            caput(self.jtManPosSetpointPV, self.jt_position + step, wait=True)
+            caput(self.jt_man_pos_setpoint_pv, self.jt_position + step, wait=True)
             sleep(3)
 
-        caput(self.jtManPosSetpointPV, value)
+        caput(self.jt_man_pos_setpoint_pv, value)
 
         print(f"Waiting for {self} JT Valve position to be in tolerance")
         # Wait for the valve position to be within tolerance before continuing
@@ -834,8 +511,3 @@ class Q0Cryomodule(Cryomodule):
             sleep(10)
 
         print("downstream liquid level at required value.")
-
-
-Q0_CRYOMODULES: Dict[str, Cryomodule] = Machine(
-    cryomodule_class=Q0Cryomodule, cavity_class=Q0Cavity
-).cryomodules

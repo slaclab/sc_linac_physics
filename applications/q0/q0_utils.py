@@ -188,10 +188,10 @@ def calc_q0(
     avg_pressure: float,
     cav_length: float,
     use_correction: bool = False,
+    r_over_q=1012,
 ) -> float:
     # The initial Q0 calculation doesn't account for the temperature
     # variation of the 2 K helium
-    r_over_q = 1012
 
     uncorrected_q0 = ((amplitude * 1e6) ** 2) / (r_over_q * rf_heat_load)
     print(f"Uncorrected Q0: {uncorrected_q0}")
@@ -302,3 +302,7 @@ def draw_and_show():
     # type: () -> None
     plt.draw()
     plt.show()
+
+
+def round_for_printing(unrounded_number):
+    return np.round(unrounded_number, decimals=3)
