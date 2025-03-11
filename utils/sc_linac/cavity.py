@@ -529,11 +529,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     def delta_piezo(self):
         delta_volts = self.piezo.voltage - linac_utils.PIEZO_CENTER_VOLTAGE
-        delta_hz = delta_volts * (
-            linac_utils.PIEZO_HZ_PER_VOLT
-            if not self.cryomodule.is_harmonic_linearizer
-            else linac_utils.PIEZO_HZ_PER_VOLT_HL
-        )
+        delta_hz = delta_volts * self.piezo.hz_per_v
         print(f"{self} piezo detune: {delta_hz}")
         return delta_hz if not self.cryomodule.is_harmonic_linearizer else -delta_hz
 
@@ -553,12 +549,7 @@ class Cavity(linac_utils.SCLinacObject):
             print(f"Centering {self} piezo")
             self._auto_tune(
                 delta_hz_func=self.delta_piezo,
-                tolerance=5
-                * (
-                    linac_utils.PIEZO_HZ_PER_VOLT_HL
-                    if self.cryomodule.is_harmonic_linearizer
-                    else linac_utils.PIEZO_HZ_PER_VOLT
-                ),
+                tolerance=5 * self.piezo.hz_per_v,
                 reset_signed_steps=False,
             )
 

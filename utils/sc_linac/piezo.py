@@ -48,12 +48,21 @@ class Piezo(linac_utils.SCLinacObject):
         self.voltage_pv: str = self.pv_addr("V")
         self._voltage_pv_obj: Optional[PV] = None
 
+        self.hz_per_v_pv: str = self.pv_addr("SCALE")
+        self._hz_per_v_pv_obj: Optional[PV] = None
+
     def __str__(self):
         return self.cavity.__str__() + " Piezo"
 
     @property
     def pv_prefix(self):
         return self._pv_prefix
+
+    @property
+    def hz_per_v(self):
+        if not self._hz_per_v_pv_obj:
+            self._hz_per_v_pv_obj = PV(self.hz_per_v_pv)
+        return self._hz_per_v_pv_obj.get()
 
     @property
     def voltage_pv_obj(self):
