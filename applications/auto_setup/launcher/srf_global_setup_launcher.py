@@ -1,31 +1,25 @@
 import argparse
 import sys
 
+from applications.auto_setup.backend.setup_cavity import SetupCavity
+
 sys.path.append("/home/physics/srf/sc_linac_physics")
-from applications.auto_setup.backend.setup_cryomodule import (  # noqa: E402
-    SetupCryomodule,
-)
 from applications.auto_setup.backend.setup_machine import (  # noqa: E402
-    SetupMachine,
     SETUP_MACHINE,
 )
-from utils.sc_linac.linac_utils import (  # noqa: E402
-    ALL_CRYOMODULES_NO_HL,
-    ALL_CRYOMODULES,
-)
 
 
-def setup_cryomodule(cryomodule_object: SetupCryomodule):
+def trigger_cavity(cavity_obj: SetupCavity):
     if args.shutdown:
-        cryomodule_object.trigger_shutdown()
+        cavity_obj.trigger_shutdown()
 
     else:
-        cryomodule_object.ssa_cal_requested = machine.ssa_cal_requested
-        cryomodule_object.auto_tune_requested = machine.auto_tune_requested
-        cryomodule_object.cav_char_requested = machine.cav_char_requested
-        cryomodule_object.rf_ramp_requested = machine.rf_ramp_requested
+        cavity_obj.ssa_cal_requested = SETUP_MACHINE.ssa_cal_requested
+        cavity_obj.auto_tune_requested = SETUP_MACHINE.auto_tune_requested
+        cavity_obj.cav_char_requested = SETUP_MACHINE.cav_char_requested
+        cavity_obj.rf_ramp_requested = SETUP_MACHINE.rf_ramp_requested
 
-        cryomodule_object.trigger_setup()
+        cavity_obj.trigger_setup()
 
 
 if __name__ == "__main__":
@@ -39,15 +33,12 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    machine: SetupMachine = SetupMachine()
     print(args)
 
     if args.no_hl:
-        for cm_name in ALL_CRYOMODULES_NO_HL:
-            cm_object: SetupCryomodule = SETUP_MACHINE.cryomodules[cm_name]
-            setup_cryomodule(cm_object)
+        for non_hl_cavity in SETUP_MACHINE.non_hl_iterator:
+            trigger_cavity(non_hl_cavity)
 
     else:
-        for cm_name in ALL_CRYOMODULES:
-            cm_object: SetupCryomodule = SETUP_MACHINE.cryomodules[cm_name]
-            setup_cryomodule(cm_object)
+        for cavity in SETUP_MACHINE.all_iterator:
+            trigger_cavity(cavity)
