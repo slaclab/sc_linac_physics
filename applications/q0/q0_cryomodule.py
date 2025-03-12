@@ -296,15 +296,13 @@ class Q0Cryomodule(Cryomodule):
         print("Heater run done")
 
     def wait_for_ll_drop(self, target_ll_diff):
-        startingLevel = self.averaged_liquid_level
-        avgLevel = startingLevel
-        while (startingLevel - avgLevel) < target_ll_diff and (
-            avgLevel > q0_utils.MIN_DS_LL
-        ):
+        starting_level = self.averaged_liquid_level
+        avg_level = starting_level
+        while (starting_level - avg_level) < target_ll_diff:
             self.check_abort()
-            avgLevel_rounded = round_for_printing(self.averaged_liquid_level)
-            print(f"Averaged level is {avgLevel_rounded}; waiting 10s")
-            avgLevel = self.averaged_liquid_level
+            avg_level_rounded = round_for_printing(self.averaged_liquid_level)
+            print(f"Averaged level is {avg_level_rounded}; waiting 10s")
+            avg_level = self.averaged_liquid_level
             sleep(10)
 
     def fill_pressure_buffer(self, value, **kwargs):
@@ -405,7 +403,7 @@ class Q0Cryomodule(Cryomodule):
         self.q0_measurement: Q0Measurement = Q0Measurement(self)
         self.q0_measurement.load_data(time_stamp)
 
-    def takeNewCalibration(
+    def take_new_calibration(
         self,
         jt_search_start: datetime = None,
         jt_search_end: datetime = None,
