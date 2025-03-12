@@ -17,8 +17,9 @@ from pydm.widgets import PyDMLabel
 from requests import ConnectTimeout
 from urllib3.exceptions import ConnectTimeoutError
 
-import q0_utils
-from q0_linac import Q0Cavity, Q0Cryomodule
+from applications.q0 import q0_utils
+from applications.q0.q0_cavity import Q0Cavity
+from applications.q0.q0_cryomodule import Q0Cryomodule
 from utils.qt import Worker, get_dimensions
 from utils.sc_linac.linac_utils import CavityAbortError
 
@@ -48,7 +49,7 @@ class CryoParamSetupWorker(Worker):
 
         self.cryomodule.heater_power = self.heater_setpoint
         self.cryomodule.jt_position = 35
-        caput(self.cryomodule.jtAutoSelectPV, 1, wait=True)
+        caput(self.cryomodule.jt_auto_select_pv, 1, wait=True)
         self.finished.emit("Cryo setup for new reference parameters in ~1 hour")
 
 
@@ -137,8 +138,7 @@ class CavityRampWorker(Worker):
     def run(self) -> None:
         try:
             self.status.emit(f"Ramping Cavity {self.cavity.number} to {self.des_amp}")
-            self.cavity.turn_on()
-            self.cavity.walk_amp(self.des_amp, step_size=0.1)
+            self.cavity.setup_rf(self.des_amp)
             self.finished.emit(
                 f"Cavity {self.cavity.number} ramped up to {self.des_amp}"
             )
@@ -215,8 +215,13 @@ class CavAmpControl:
 
     def connect(self, cavity: Q0Cavity):
         self.groupbox.setTitle(f"Cavity {cavity.number}")
-        self.desAmpSpinbox.setValue(min(16.6, cavity.ades_max))
-        self.desAmpSpinbox.setRange(0, cavity.ades_max)
+        if not cavity.is_online:
+            self.groupbox.setChecked(False)
+            self.desAmpSpinbox.setRange(0, 0)
+        else:
+            self.groupbox.setChecked(True)
+            self.desAmpSpinbox.setValue(min(16.6, cavity.ades_max))
+            self.desAmpSpinbox.setRange(0, cavity.ades_max)
         self.aact_label.channel = cavity.aact_pv
 
 
