@@ -178,7 +178,7 @@ class CalibrationWorker(Worker):
             return
         try:
             self.status.emit("Taking new calibration")
-            self.cryomodule.takeNewCalibration(
+            self.cryomodule.take_new_calibration(
                 jt_search_start=self.jt_search_start,
                 jt_search_end=self.jt_search_end,
                 desired_ll=self.desired_ll,

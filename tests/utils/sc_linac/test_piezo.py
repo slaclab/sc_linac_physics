@@ -143,3 +143,9 @@ def test_disable_feedback(piezo):
     piezo.disable_feedback()
     piezo.enable.assert_called()
     piezo.set_to_manual.assert_called()
+
+
+def test_hz_per_v(piezo):
+    gain = randint(0, 40)
+    piezo._hz_per_v_pv_obj = make_mock_pv(get_val=gain)
+    assert piezo.hz_per_v == gain

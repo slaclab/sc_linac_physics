@@ -406,15 +406,30 @@ def test_is_on(cavity):
     assert not cavity.is_on
 
 
-def test_move_to_resonance(cavity):
+def test_move_to_resonance_chirp(cavity):
     cavity._tune_config_pv_obj = make_mock_pv()
 
     cavity.setup_tuning = MagicMock()
     cavity._auto_tune = MagicMock()
 
-    cavity.move_to_resonance()
-    cavity.setup_tuning.assert_called()
+    cavity.move_to_resonance(use_sela=False)
+    cavity.setup_tuning.assert_called_with(use_sela=False)
     cavity._auto_tune.assert_called()
+    cavity._tune_config_pv_obj.put.assert_called_with(TUNE_CONFIG_RESONANCE_VALUE)
+
+
+def test_move_to_resonance_sela(cavity):
+    cavity._tune_config_pv_obj = make_mock_pv()
+    gain = randint(0, 40)
+    cavity.piezo._hz_per_v_pv_obj = make_mock_pv(get_val=gain)
+
+    cavity.setup_tuning = MagicMock()
+    cavity._auto_tune = MagicMock()
+
+    cavity.move_to_resonance(use_sela=True)
+    cavity.setup_tuning.assert_called_with(use_sela=True)
+    cavity._auto_tune.assert_called()
+    cavity.piezo._hz_per_v_pv_obj.get.assert_called()
     cavity._tune_config_pv_obj.put.assert_called_with(TUNE_CONFIG_RESONANCE_VALUE)
 
 
