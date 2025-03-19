@@ -308,7 +308,9 @@ class Q0GUI(Display):
     @pyqtSlot()
     def setup_for_cryo_params(self):
         self.cryo_param_setup_worker = q0_gui_utils.CryoParamSetupWorker(
-            self.selected_cm, heater_setpoint=self.ui.ref_heat_spinbox.value()
+            self.selected_cm,
+            heater_setpoint=self.ui.ref_heat_spinbox.value(),
+            jt_setpoint=self.ui.jt_pos_spinbox.value(),
         )
         self.cryo_param_setup_worker.error.connect(
             partial(make_error_popup, "Cryo Setup Error")
