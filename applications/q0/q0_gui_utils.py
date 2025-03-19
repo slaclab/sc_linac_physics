@@ -35,11 +35,15 @@ DEFAULT_LL_BUFFER_SIZE = 10
 
 class CryoParamSetupWorker(Worker):
     def __init__(
-        self, cryomodule: Q0Cryomodule, heater_setpoint=q0_utils.MINIMUM_HEATLOAD
+        self,
+        cryomodule: Q0Cryomodule,
+        heater_setpoint=q0_utils.MINIMUM_HEATLOAD,
+        jt_setpoint=35,
     ):
         super().__init__()
         self.cryomodule = cryomodule
         self.heater_setpoint = heater_setpoint
+        self.jt_setpoint = jt_setpoint
 
     def run(self) -> None:
         self.status.emit("Checking for required cryo permissions")
@@ -48,7 +52,7 @@ class CryoParamSetupWorker(Worker):
             return
 
         self.cryomodule.heater_power = self.heater_setpoint
-        self.cryomodule.jt_position = 35
+        self.cryomodule.jt_position = self.jt_setpoint
         caput(self.cryomodule.jt_auto_select_pv, 1, wait=True)
         self.finished.emit("Cryo setup for new reference parameters in ~1 hour")
 
