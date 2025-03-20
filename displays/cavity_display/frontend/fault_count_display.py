@@ -13,22 +13,22 @@ from PyQt5.QtWidgets import (
 from pydm import Display
 
 from displays.cavity_display.backend.backend_cavity import BackendCavity
+from displays.cavity_display.backend.backend_machine import BackendMachine
 from displays.cavity_display.backend.fault import FaultCounter
 from displays.cavity_display.frontend.cavity_widget import (
     DARK_GRAY_COLOR,
     RED_FILL_COLOR,
     PURPLE_FILL_COLOR,
 )
-from utils.sc_linac.linac import Machine
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
-
-DISPLAY_MACHINE = Machine(cavity_class=BackendCavity)
 
 
 class FaultCountDisplay(Display):
-    def __init__(self):
+    def __init__(self, lazy_fault_pvs=True):
         super().__init__()
         self.setWindowTitle("Fault Count Display")
+
+        self.machine = BackendMachine(lazy_fault_pvs=lazy_fault_pvs)
 
         main_v_layout = QVBoxLayout()
         input_h_layout = QHBoxLayout()
@@ -94,7 +94,7 @@ class FaultCountDisplay(Display):
         if not cm_name or not cav_num:
             return
 
-        self.cavity: BackendCavity = DISPLAY_MACHINE.cryomodules[cm_name].cavities[
+        self.cavity: BackendCavity = self.machine.cryomodules[cm_name].cavities[
             int(cav_num)
         ]
         self.update_plot()

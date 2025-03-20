@@ -10,6 +10,7 @@ from displays.cavity_display.frontend.gui_cavity import GUICavity
 def mock_ssa_class(**kwargs) -> MagicMock:
     ssa = MagicMock()
     ssa.status_pv = "MOCK:SSA:STATUS:PV"
+    ssa.pv_addr = MagicMock(return_value="MOCK:SSA:PV")
     return ssa
 
 
@@ -17,6 +18,7 @@ def mock_ssa_class(**kwargs) -> MagicMock:
 def gui_cavity() -> GUICavity:
     rack = MagicMock()
     rack.ssa_class = mock_ssa_class
+    rack.cryomodule.linac.machine.lazy_fault_pvs = True
     return GUICavity(1, rack)
 
 

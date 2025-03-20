@@ -1,8 +1,13 @@
 import argparse
+import sys
 from time import sleep
 
-from setup_linac import SETUP_MACHINE, SetupCryomodule
-from utils.sc_linac.linac_utils import LINAC_CM_DICT
+sys.path.append("/home/physics/srf/sc_linac_physics")
+from applications.auto_setup.backend.setup_cryomodule import (  # noqa: E402
+    SetupCryomodule,
+)
+from applications.auto_setup.backend.setup_machine import SETUP_MACHINE  # noqa: E402
+from utils.sc_linac.linac_utils import LINAC_CM_DICT  # noqa: E402
 
 
 def setup_cryomodule(cryomodule_object: SetupCryomodule):

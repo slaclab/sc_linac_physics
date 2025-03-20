@@ -15,6 +15,7 @@ from lcls_tools.superconducting.sc_linac_utils import (
 )
 
 from utils.simulation.cavity_service import CavityPVGroup
+from utils.simulation.severity_prop import SeverityProp
 
 
 class StepperPVGroup(PVGroup):
@@ -197,6 +198,7 @@ class PiezoPVGroup(PVGroup):
     integrator_sp: PvpropertyFloat = pvproperty(
         name="INTEG_SP", value=0, dtype=ChannelType.FLOAT
     )
+    integrator_lim_status = SeverityProp(name="INTEG_AT_LIM", value=0)
 
     voltage: PvpropertyInteger = pvproperty(name="V", value=17, dtype=ChannelType.INT)
 

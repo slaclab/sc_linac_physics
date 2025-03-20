@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Dict
 
 from numpy import polyfit
 
@@ -127,7 +128,6 @@ PIEZO_SCRIPT_COMPLETE_VALUE = 1
 PIEZO_PRE_RF_CHECKOUT_PASS_VALUE = 0
 PIEZO_WITH_RF_GRAD = 6.5
 PIEZO_CENTER_VOLTAGE = 25
-PIEZO_HZ_PER_VOLT = 20
 
 MICROSTEPS_PER_STEP = 256
 
@@ -155,6 +155,8 @@ INTERLOCK_RESET_ATTEMPTS = 5
 DECARAD_BACKGROUND_READING_AVG = 0.8
 DECARAD_BACKGROUND_READING_RAW = 8
 
+CRYO_NAME_MAP: Dict[str, str] = {"H1": "HL01", "H2": "HL02"}
+
 
 class SCLinacObject(ABC, object):
     """
@@ -176,7 +178,7 @@ def stepper_tol_factor(num_steps) -> float:
     First attempt at making the stepper mover tolerance dependent on the
     steps to move. We have empirically determined that 1.3GHz cavities move
     around 50,000 steps around resonance and 50,000,000 steps for cold landing.
-    We want to allow triple the expected steps around resonance, and 1% of the
+    We want to allow 5x the expected steps around resonance, and 1% of the
     expected steps around cold landing. We also empirically determined that
     this also works to (roughly) triple the steps around resonance for 3.9GHz
     cavities, which are about an order of magnitude lower at resonance (while
@@ -187,11 +189,11 @@ def stepper_tol_factor(num_steps) -> float:
 
     num_steps = abs(num_steps)
 
-    if num_steps <= 50000:
-        return 10
+    if num_steps <= 10000:
+        return 5
 
-    step_tol_des = {50e3: 10, 100e3: 5, 1e6: 1.5, 5e6: 1.1, 10e6: 1.1, 50e6: 1.01}
-    ranges = [(50e3, 100e3), (100e3, 1e6), (1e6, 5e6), (5e6, 50e6)]
+    step_tol_des = {10e3: 5, 100e3: 2.5, 1e6: 1.25, 5e6: 1.1, 10e6: 1.05, 50e6: 1.01}
+    ranges = [(10e3, 100e3), (100e3, 1e6), (1e6, 5e6), (5e6, 50e6)]
 
     for start, end in ranges:
         if end >= num_steps > start:

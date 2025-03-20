@@ -21,9 +21,13 @@ class RFControls:
         self.rf_status_readback_label: PyDMLabel = PyDMLabel()
 
         self.ades_spinbox: PyDMSpinbox = PyDMSpinbox()
+        self.ades_spinbox.step_exponent = -1
+        self.ades_spinbox.update_step_size()
         self.aact_readback_label: PyDMLabel = PyDMLabel()
 
         self.srf_max_spinbox: PyDMSpinbox = PyDMSpinbox()
+        self.srf_max_spinbox.step_exponent = -1
+        self.srf_max_spinbox.update_step_size()
         self.srf_max_readback_label: PyDMLabel = PyDMLabel()
 
         self.rf_control_groupbox: QGroupBox = QGroupBox("RF Controls")
@@ -100,3 +104,16 @@ def get_dimensions(options: List):
     if row_count * col_count < num_options:
         col_count += 1
     return col_count
+
+
+def make_sanity_check_popup(txt: str) -> QMessageBox:
+    msg = QMessageBox()
+    msg.setText("Are you sure?")
+    msg.setInformativeText(txt)
+    msg.setIcon(QMessageBox.Warning)
+    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
+    msg.setDefaultButton(QMessageBox.Cancel)
+
+    # msg.setDetailedText("details")
+
+    return msg

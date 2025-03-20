@@ -11,9 +11,10 @@ class SetupLinacObject(SCLinacObject):
         return super().pv_prefix
 
     def auto_pv_addr(self, suffix: str):
-        return self.pv_addr("AUTO:" + suffix)
+        return self.pv_addr(f"AUTO:{suffix}")
 
     def __init__(self):
+        super().__init__()
         self.abort_pv: str = self.auto_pv_addr("ABORT")
         self._abort_pv_obj: Optional[PV] = None
 
@@ -78,7 +79,7 @@ class SetupLinacObject(SCLinacObject):
     def trigger_shutdown(self):
         self.shutoff_pv_obj.put(1)
 
-    def request_abort(self):
+    def trigger_abort(self):
         self.abort_pv_obj.put(1)
 
     def kill_setup(self):

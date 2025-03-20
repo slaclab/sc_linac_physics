@@ -1,5 +1,5 @@
+import time
 from datetime import datetime
-from time import sleep
 from typing import Optional, TYPE_CHECKING
 
 from lcls_tools.common.controls.pyepics.utils import PV
@@ -173,7 +173,7 @@ class SSA(linac_utils.SCLinacObject):
             linac_utils.SSACalibrationError,
         ) as e:
             if attempt < 3:
-                self.calibrate(drive_max, attempt + 1)
+                self.calibrate(drive_max - 0.01, attempt + 1)
             else:
                 raise linac_utils.SSACalibrationError(e)
 
@@ -207,7 +207,7 @@ class SSA(linac_utils.SCLinacObject):
             while not self.is_on:
                 self.cavity.check_abort()
                 print(f"waiting for {self} to turn on")
-                sleep(1)
+                time.sleep(1)
 
         if self.cavity.cryomodule.is_harmonic_linearizer:
             self.ps_volt_setpoint2_pv_obj.put(linac_utils.HL_SSA_PS_SETPOINT)
@@ -229,7 +229,7 @@ class SSA(linac_utils.SCLinacObject):
             while self.is_on:
                 self.cavity.check_abort()
                 print(f"waiting for {self} to turn off")
-                sleep(1)
+                time.sleep(1)
 
         print(f"{self} off")
 
@@ -242,11 +242,11 @@ class SSA(linac_utils.SCLinacObject):
     def reset(self):
         reset_attempt = 0
         while self.is_faulted:
+            self.cavity.check_abort()
             print(f"Resetting {self}...")
             self.reset_pv_obj.put(1)
 
-            while self.is_resetting:
-                sleep(1)
+            self.wait_while_resetting()
 
             if (
                 self.is_faulted
@@ -259,6 +259,19 @@ class SSA(linac_utils.SCLinacObject):
             reset_attempt += 1
 
         print(f"{self} reset")
+
+    def wait_while_resetting(self):
+        start = datetime.now()
+        while self.is_resetting:
+            self.cavity.check_abort()
+            print(
+                f"{datetime.now().replace(microsecond=0)} Waiting for {self} to finish resetting"
+            )
+            time.sleep(5)
+            if (datetime.now() - start).total_seconds() >= 90:
+                raise linac_utils.SSAFaultError(
+                    f"{self} took too long to reset, inspect and try again"
+                )
 
     def start_calibration(self):
         if not self._calibration_start_pv_obj:
@@ -308,12 +321,12 @@ class SSA(linac_utils.SCLinacObject):
 
         print(f"Starting {self} calibration")
         self.start_calibration()
-        sleep(2)
+        time.sleep(2)
 
         while self.calibration_running:
             print(f"waiting for {self} calibration to stop running", datetime.now())
-            sleep(1)
-        sleep(2)
+            time.sleep(1)
+        time.sleep(2)
 
         if self.calibration_crashed:
             raise linac_utils.SSACalibrationError(f"{self} calibration crashed")

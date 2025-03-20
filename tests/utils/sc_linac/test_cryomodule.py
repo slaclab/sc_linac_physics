@@ -1,26 +1,31 @@
-from random import randint
-from unittest import TestCase
+from random import randint, choice
+from unittest.mock import MagicMock
 
-from utils.sc_linac.linac import MACHINE
+import pytest
+
+from utils.sc_linac.cryomodule import Cryomodule
+from utils.sc_linac.linac_utils import ALL_CRYOMODULES, L1BHL
+from utils.sc_linac.rack import Rack
 
 
-class TestCryomodule(TestCase):
-    def test_is_harmonic_linearizer_true(self):
-        hl = MACHINE.cryomodules[f"H{randint(1,2)}"]
-        self.assertTrue(
-            hl.is_harmonic_linearizer, msg=f"{hl} is_harmonic_linearizer is not true"
-        )
+@pytest.fixture
+def cryomodule():
+    linac = MagicMock()
+    linac.name = f"L{randint(0,3)}B"
+    linac.rack_class = Rack
+    yield Cryomodule(cryo_name=choice(ALL_CRYOMODULES), linac_object=linac)
 
-    def test_is_harmonic_linearizer_false(self):
-        cm = MACHINE.cryomodules[f"{randint(1, 35):02d}"]
-        self.assertFalse(
-            cm.is_harmonic_linearizer, msg=f"{cm} is_harmonic_linearizer is not false"
-        )
 
-    def test_pv_prefix(self):
-        cm = MACHINE.cryomodules["01"]
-        self.assertEqual(cm.pv_prefix, "ACCL:L0B:0100:")
+def test_is_harmonic_linearizer_true(cryomodule):
+    if cryomodule.name in L1BHL:
+        assert cryomodule.is_harmonic_linearizer
+    else:
+        assert not cryomodule.is_harmonic_linearizer
 
-    def test_num_cavities(self):
-        cm = MACHINE.cryomodules[f"{randint(1, 35):02d}"]
-        self.assertEqual(len(cm.cavities.keys()), 8)
+
+def test_pv_prefix(cryomodule):
+    assert cryomodule.pv_prefix == f"ACCL:{cryomodule.linac.name}:{cryomodule.name}00:"
+
+
+def test_num_cavities(cryomodule):
+    assert len(cryomodule.cavities.keys()) == 8

@@ -14,8 +14,6 @@ from lcls_tools.common.data.archiver import (
     get_values_over_time_range,
 )
 
-PV_TIMEOUT = 0.01
-
 
 @dataclasses.dataclass
 class FaultCounter:
@@ -57,6 +55,7 @@ class Fault:
         button_text=None,
         button_macro=None,
         action=None,
+        lazy_pv=True,
     ):
         self.tlc = tlc
         self.severity = int(severity)
@@ -73,12 +72,13 @@ class Fault:
 
         # Storing PV name as a string instead of making a PV obj
         self.pv: str = pv
-        self._pv_obj: Optional[PV] = None
+        # TODO figure out why lazy generation breaks the backend runner
+        self._pv_obj: Optional[PV] = PV(self.pv) if not lazy_pv else None
 
     @property
     def pv_obj(self) -> PV:
         if not self._pv_obj:
-            self._pv_obj = PV(self.pv, connection_timeout=PV_TIMEOUT)
+            self._pv_obj = PV(self.pv)
         return self._pv_obj
 
     def is_currently_faulted(self) -> bool:
@@ -111,9 +111,8 @@ class Fault:
             return obj.val == self.fault_value
 
         else:
-            print(self)
             raise Exception(
-                "Fault has neither 'Fault if equal to' nor"
+                f"Fault for {self.pv} has neither 'Fault if equal to' nor"
                 " 'OK if equal to' parameter"
             )
 

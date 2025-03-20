@@ -49,6 +49,7 @@ class Linac:
         self.ssa_class = machine.ssa_class
         self.stepper_class = machine.stepper_class
         self.piezo_class = machine.piezo_class
+        self.machine = machine
 
         self.name = f"L{linac_section}B"
         self.cryomodules: Dict[str, Cryomodule] = {}
@@ -66,6 +67,9 @@ class Linac:
             self.cryomodules[cm_name] = self.cryomodule_class(
                 cryo_name=cm_name, linac_object=self
             )
+
+    def __str__(self):
+        return self.name
 
 
 class Machine:

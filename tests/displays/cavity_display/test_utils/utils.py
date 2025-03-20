@@ -1,3 +1,4 @@
+from typing import List, Dict
 from unittest import mock
 
 csv_keys = [
@@ -28,7 +29,6 @@ csv_cav_row = [
     "EDM",
     "$EDM/llrf/rf_srf_cavity_main.edl",
     '"SELTAB=10',
-    'SELCHAR=3"',
     "",
     "ACCL:{LINAC}:{CRYOMODULE}{CAVITY}0:",
     "HWMODE",
@@ -36,8 +36,8 @@ csv_cav_row = [
     "2",
     "5",
     "Offline",
-    "",
 ]
+
 csv_all_row = [
     "BSO",
     "BSOIC Tripped Chain A",
@@ -66,8 +66,7 @@ csv_rack_row = [
     "",
     "EDM",
     "$EDM/llrf/rf_srf_cavity_main.edl",
-    '"SELTAB=4',
-    'SELCHAR=3"',
+    '"SELTAB=4,SELCHAR=3"',
     "A",
     "ACCL:{LINAC}:{CRYOMODULE}00:",
     "BMLNVACA_LTCH",
@@ -147,3 +146,22 @@ def mock_open(*args, **kwargs):
     ]
     # mocked open for path "foo"
     return mock.mock_open(read_data="\n".join(data))(*args, **kwargs)
+
+
+def mock_parse() -> List[Dict[str, str]]:
+    rack_dict = {}
+    cav_dict = {}
+    cm_dict = {}
+    cryo_dict = {}
+    ssa_dict = {}
+    all_dict = {}
+
+    for index, key in enumerate(csv_keys):
+        rack_dict[key] = csv_rack_row[index]
+        cav_dict[key] = csv_cav_row[index]
+        cm_dict[key] = csv_cm_row[index]
+        cryo_dict[key] = csv_cryo_row[index]
+        ssa_dict[key] = csv_ssa_row[index]
+        all_dict[key] = csv_all_row[index]
+
+    return [rack_dict, cav_dict, cm_dict, cryo_dict, ssa_dict, all_dict]

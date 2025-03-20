@@ -4,8 +4,8 @@ from typing import Optional
 from epics.ca import CASeverityException
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 
-from applications.auto_setup.setup_linac_object import SetupLinacObject
-from applications.auto_setup.setup_utils import (
+from applications.auto_setup.backend.setup_linac_object import SetupLinacObject
+from applications.auto_setup.backend.setup_utils import (
     STATUS_READY_VALUE,
     STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,
@@ -95,7 +95,7 @@ class SetupCavity(Cavity, SetupLinacObject):
     def clear_abort(self):
         self.abort_pv_obj.put(0)
 
-    def request_abort(self):
+    def trigger_abort(self):
         if self.script_is_running:
             self.status_message = f"Requesting stop for {self}"
             self.abort_pv_obj.put(1)
@@ -196,7 +196,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             if not self.is_on or (
                 self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP
             ):
-                self.ades = min(5, self.acon)
+                self.ades = min(2, self.acon)
 
             self.turn_on()
             self.progress = 85
@@ -245,7 +245,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.status_message = f"Running {self} SSA Calibration"
             self.turn_off()
             self.progress = 20
-            self.ssa.calibrate(self.ssa.drive_max)
+            self.ssa.calibrate(self.ssa.drive_max, attempt=2)
             self.status_message = f"{self} SSA Calibrated"
         self.progress = 25
         self.check_abort()
