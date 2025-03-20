@@ -2,7 +2,7 @@ from typing import Type, Dict, List, TYPE_CHECKING, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-from utils.sc_linac.linac_utils import SCLinacObject, L1BHL
+from utils.sc_linac.linac_utils import SCLinacObject, L1BHL, CRYO_NAME_MAP
 
 if TYPE_CHECKING:
     from cavity import Cavity
@@ -53,19 +53,22 @@ class Cryomodule(SCLinacObject):
         self.cvt_prefix = f"CVT:CM{self.name}:"
         self.cpv_prefix = f"CPV:CM{self.name}:"
 
-        if not self.is_harmonic_linearizer:
-            self.jt_prefix = f"CLIC:CM{self.name}:3001:PVJT:"
+        if self.is_harmonic_linearizer:
+            self.cryo_name = CRYO_NAME_MAP[self.name]
         else:
-            name_map: Dict[str, str] = {"H1": "HL01", "H2": "HL02"}
-            self.jt_prefix = f"CLIC:{name_map[self.name]}:3001:PVJT:"
+            self.cryo_name = f"CM{self.name}"
+
+        self.jt_prefix = f"CLIC:{self.cryo_name}:3001:PVJT:"
+        self.heater_prefix = f"CPIC:{self.cryo_name}:0000:EHCV:"
 
         self.ds_level_pv: str = f"CLL:CM{self.name}:2301:DS:LVL"
         self._ds_level_pv_obj: Optional[PV] = None
 
         self.us_level_pv: str = f"CLL:CM{self.name}:2601:US:LVL"
         self.ds_pressure_pv: str = f"CPT:CM{self.name}:2302:DS:PRESS"
-        self.jt_valve_readback_pv: str = self.jt_prefix + "ORBV"
-        self.heater_readback_pv: str = f"CPIC:CM{self.name}:0000:EHCV:ORBV"
+
+        self.jt_valve_readback_pv: str = self.make_jt_pv("ORBV")
+        self.heater_readback_pv: str = self.make_heater_pv("ORBV")
 
         self.rack_a: "Rack" = self.rack_class(rack_name="A", cryomodule_object=self)
         self.rack_b: "Rack" = self.rack_class(rack_name="B", cryomodule_object=self)
@@ -92,6 +95,12 @@ class Cryomodule(SCLinacObject):
 
     def __str__(self):
         return f"{self.linac.name} CM{self.name}"
+
+    def make_heater_pv(self, suffix: str) -> str:
+        return self.heater_prefix + suffix
+
+    def make_jt_pv(self, suffix: str) -> str:
+        return self.jt_prefix + suffix
 
     @property
     def ds_level_pv_obj(self) -> PV:
