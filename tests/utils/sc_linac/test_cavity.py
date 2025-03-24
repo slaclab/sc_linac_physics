@@ -370,12 +370,12 @@ def test_chirp_freq_start(cavity):
 
 def test_chirp_freq_stop(cavity):
     val = 200000
-    cavity._freq_stop_pv_obj = make_mock_pv(get_val=val)
+    cavity._chirp_freq_stop_pv_obj = make_mock_pv(get_val=val)
     assert cavity.chirp_freq_stop == val
 
     new_val = 400000
     cavity.chirp_freq_stop = new_val
-    cavity._freq_stop_pv_obj.put.assert_called_with(new_val)
+    cavity._chirp_freq_stop_pv_obj.put.assert_called_with(new_val)
 
 
 def test_calculate_probe_q(cavity):
@@ -386,11 +386,11 @@ def test_calculate_probe_q(cavity):
 
 def test_set_chirp_range(cavity):
     cavity._chirp_freq_start_pv_obj = make_mock_pv()
-    cavity._freq_stop_pv_obj = make_mock_pv()
+    cavity._chirp_freq_stop_pv_obj = make_mock_pv()
     offset = randint(-400000, 0)
     cavity.set_chirp_range(offset)
     cavity._chirp_freq_start_pv_obj.put.assert_called_with(offset)
-    cavity._freq_stop_pv_obj.put.assert_called_with(-offset)
+    cavity._chirp_freq_stop_pv_obj.put.assert_called_with(-offset)
 
 
 def test_rf_state(cavity):
@@ -406,15 +406,30 @@ def test_is_on(cavity):
     assert not cavity.is_on
 
 
-def test_move_to_resonance(cavity):
+def test_move_to_resonance_chirp(cavity):
     cavity._tune_config_pv_obj = make_mock_pv()
 
     cavity.setup_tuning = MagicMock()
     cavity._auto_tune = MagicMock()
 
-    cavity.move_to_resonance()
-    cavity.setup_tuning.assert_called()
+    cavity.move_to_resonance(use_sela=False)
+    cavity.setup_tuning.assert_called_with(use_sela=False)
     cavity._auto_tune.assert_called()
+    cavity._tune_config_pv_obj.put.assert_called_with(TUNE_CONFIG_RESONANCE_VALUE)
+
+
+def test_move_to_resonance_sela(cavity):
+    cavity._tune_config_pv_obj = make_mock_pv()
+    gain = randint(0, 40)
+    cavity.piezo._hz_per_v_pv_obj = make_mock_pv(get_val=gain)
+
+    cavity.setup_tuning = MagicMock()
+    cavity._auto_tune = MagicMock()
+
+    cavity.move_to_resonance(use_sela=True)
+    cavity.setup_tuning.assert_called_with(use_sela=True)
+    cavity._auto_tune.assert_called()
+    cavity.piezo._hz_per_v_pv_obj.get.assert_called()
     cavity._tune_config_pv_obj.put.assert_called_with(TUNE_CONFIG_RESONANCE_VALUE)
 
 

@@ -174,8 +174,8 @@ class Cavity(linac_utils.SCLinacObject):
         self.chirp_freq_start_pv: str = self.chirp_prefix + "FREQ_START"
         self._chirp_freq_start_pv_obj: Optional[PV] = None
 
-        self.freq_stop_pv: str = self.chirp_prefix + "FREQ_STOP"
-        self._freq_stop_pv_obj: Optional[PV] = None
+        self.chirp_freq_stop_pv: str = self.chirp_prefix + "FREQ_STOP"
+        self._chirp_freq_stop_pv_obj: Optional[PV] = None
 
         self.hw_mode_pv: str = self.pv_addr("HWMODE")
         self._hw_mode_pv_obj: Optional[PV] = None
@@ -444,7 +444,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def hw_mode(self):
-        return self.hw_mode_pv_obj.get()
+        return self.hw_mode_pv_obj.get(use_caget=False)
 
     @property
     def is_online(self) -> bool:
@@ -459,7 +459,7 @@ class Cavity(linac_utils.SCLinacObject):
         if not self._quench_latch_pv_obj:
             self._quench_latch_pv_obj = PV(self.quench_latch_pv)
         if self._quench_latch_pv_obj.severity == EPICS_INVALID_VAL:
-            raise PVInvalidError("Quench Latch PV Invalid")
+            raise PVInvalidError(f"{self} quench latch PV invalid")
         return self._quench_latch_pv_obj.get() == 1
 
     @property
@@ -484,9 +484,9 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def freq_stop_pv_obj(self) -> PV:
-        if not self._freq_stop_pv_obj:
-            self._freq_stop_pv_obj = PV(self.freq_stop_pv)
-        return self._freq_stop_pv_obj
+        if not self._chirp_freq_stop_pv_obj:
+            self._chirp_freq_stop_pv_obj = PV(self.chirp_freq_stop_pv)
+        return self._chirp_freq_stop_pv_obj
 
     @property
     def chirp_freq_stop(self):
@@ -529,11 +529,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     def delta_piezo(self):
         delta_volts = self.piezo.voltage - linac_utils.PIEZO_CENTER_VOLTAGE
-        delta_hz = delta_volts * (
-            linac_utils.PIEZO_HZ_PER_VOLT
-            if not self.cryomodule.is_harmonic_linearizer
-            else linac_utils.PIEZO_HZ_PER_VOLT_HL
-        )
+        delta_hz = delta_volts * self.piezo.hz_per_v
         print(f"{self} piezo detune: {delta_hz}")
         return delta_hz if not self.cryomodule.is_harmonic_linearizer else -delta_hz
 
@@ -553,12 +549,7 @@ class Cavity(linac_utils.SCLinacObject):
             print(f"Centering {self} piezo")
             self._auto_tune(
                 delta_hz_func=self.delta_piezo,
-                tolerance=5
-                * (
-                    linac_utils.PIEZO_HZ_PER_VOLT_HL
-                    if self.cryomodule.is_harmonic_linearizer
-                    else linac_utils.PIEZO_HZ_PER_VOLT
-                ),
+                tolerance=5 * self.piezo.hz_per_v,
                 reset_signed_steps=False,
             )
 
@@ -605,7 +596,7 @@ class Cavity(linac_utils.SCLinacObject):
         reset_signed_steps: bool = False,
     ):
         if self.detune_invalid:
-            raise linac_utils.DetuneError(f"Detune for {self} is invalid")
+            raise linac_utils.DetuneError(f"{self} detune invalid")
 
         delta_hz = delta_hz_func()
         expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))
@@ -688,7 +679,7 @@ class Cavity(linac_utils.SCLinacObject):
             print("waiting for pulse state", datetime.now())
             time.sleep(1)
         if self.pulse_status > 2:
-            raise linac_utils.PulseError("Unable to pulse cavity")
+            raise linac_utils.PulseError(f"Unable to pulse {self}")
 
     def turn_on(self):
         print(f"Turning {self} on")
