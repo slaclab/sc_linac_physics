@@ -13,12 +13,13 @@ class FFTPlot(BasePlot):
         config = {
             'title': "FFT Analysis (0-150 Hz)",
             'x_label': ('Frequency', 'Hz'),
-            'y_label': ('Amplitude', 'dB'),
+            'y_label': ('Relative Amplitude', ''),
             'x_range': (0, 150),
-            'y_range': (-140, 0),
+            'y_range': (0, 2.0),
             'grid': True
         }
         super().__init__(parent, plot_type='fft', config=config)
+        self._max_amplitude = 2.0  # Track max amplitude for auto-scaling
 
     def _format_tooltip(self, plot_type, x, y):
         """Format tooltip text specifically for FFT plot
@@ -26,12 +27,12 @@ class FFTPlot(BasePlot):
         Args:
             plot_type: Type of plot (unused in this implementation)
             x: X coordinate (frequency in Hz)
-            y: Y coordinate (amplitude in dB)
+            y: Y coordinate (amplitude)
 
         Returns:
             str: Formatted tooltip text
         """
-        return f"Frequency: {x:.1f} Hz\nAmplitude: {y:.2f} dB"
+        return f"Frequency: {x:.1f} Hz\nAmplitude: {y:.6f}"
 
     def update_plot(self, cavity_num, buffer_data):
         """Update FFT plot w/ new data
@@ -58,8 +59,10 @@ class FFTPlot(BasePlot):
         Args:
             cavity_num: Cavity number (1-8)
             freqs: Array of frequency values (Hz)
-            amplitudes: Array of amplitude values (dB)
+            amplitudes: Array of amplitude values (linear scale)
         """
+        import numpy as np
+
         pen = self._get_cavity_pen(cavity_num)
 
         if cavity_num not in self.plot_curves:
@@ -77,3 +80,13 @@ class FFTPlot(BasePlot):
                 freqs, amplitudes,
                 skipFiniteCheck=True
             )
+
+        # Auto-adjust y-axis range if needed
+        max_current = np.max(amplitudes) if len(amplitudes) > 0 else 0.1
+        if max_current > self._max_amplitude:
+            self._max_amplitude = max_current * 1.2  # Add 20% headroom
+            if hasattr(self.plot_widget, 'setYRange'):
+                try:
+                    self.plot_widget.setYRange(0, self._max_amplitude)
+                except Exception as e:
+                    print(f"Warning: Could not set Y range: {e}")

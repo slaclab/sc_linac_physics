@@ -2,37 +2,59 @@ import numpy as np
 from scipy import signal
 
 
-def calculate_fft(data, sample_rate=2000):
+def calculate_fft(data, original_sample_rate=2000, target_sample_rate=None):
     """
-    Calculate FFT of input data w/ the right scaling and windowing
+    Calculate FFT of input data w? correct frequency mapping
 
     Args:
         data (np.ndarray): Input time domain data
-        sample_rate (float): Sample rate in Hz
+        original_sample_rate (float): Original sample rate in Hz (unused)
+        target_sample_rate (float): Target sample rate (unused)
 
     Returns:
-        tuple: (frequencies, amplitudes) arrays
+        tuple: (frequencies, amplitudes) arrays in linear scale
     """
-    target_points = 4096
+    import numpy as np
+    from scipy.fftpack import fft, fftfreq
 
-    # Safe resampling using FFT based method
-    if len(data) > target_points:
-        data = signal.resample(data, target_points)  # Proper anti aliasing
-    else:
-        data = np.pad(data, (0, target_points - len(data)), 'constant')
+    # Handle empty or invalid data
+    if data is None or len(data) == 0:
+        return np.array([]), np.array([])
 
-    # Applying Hann window w/ correct scaling
-    window = np.hanning(len(data))
-    fft = np.fft.rfft(data * window)
-    freqs = np.fft.rfftfreq(len(data), d=1 / sample_rate)
+    # Make sure data is a numpy array
+    data = np.asarray(data)
 
-    # Proper amplitude scaling
-    magnitude = np.abs(fft) * 2 / np.sum(window)
-    dB = 20 * np.log10(magnitude + 1e-12)
+    # Remove NaN values if any
+    data = data[~np.isnan(data)]
 
-    # Apply frequency mask w/out downsampling
-    mask = freqs <= 150
-    return freqs[mask], dB[mask]
+    # Check if we still have valid data
+    if len(data) == 0:
+        return np.array([]), np.array([])
+
+    try:
+        # I did this: To use the exact sample spacing from the original code (this fixed my frequency mapping)
+
+        sample_spacing = 1.0 / 1000
+
+        # Get number of points
+        num_points = len(data)
+
+        # Calculate FFT directly (no resampling, no filtering)
+        yf = fft(data)
+
+        # Calculate frequency bins with the fixed sample spacing
+        xf = fftfreq(num_points, sample_spacing)[:num_points // 2]
+
+        # Calculate amplitudes with the same scaling as original
+        amplitudes = 2.0 / num_points * np.abs(yf[0:num_points // 2])
+
+        # Apply frequency mask to limit to 150 Hz for display
+        mask = xf <= 150
+
+        return xf[mask], amplitudes[mask]
+    except Exception as e:
+        print(f"Error calculating FFT: {e}")
+        return np.array([]), np.array([])
 
 
 def calculate_histogram(data, bin_range=None, num_bins=140):
