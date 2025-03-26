@@ -304,16 +304,11 @@ class ConfigPanel(QWidget):
         config = self.get_config()
         self.configChanged.emit(config)
 
-    def _emit_config_if_valid(self, check_cavities: bool = True):
-        """Emit configuration only if valid
-
-
-        Args:
-            check_cavities: If True, validate cavity selection rules
-        """
+    def _emit_config_if_valid(self):
+        """Emit configuration only if valid """
         if not self.is_updating:
             # For normal config changes, use standard validation
-            if error_msg := self.validate_cavity_selection(is_bulk_action=False, check_cavities=check_cavities):
+            if error_msg := self.validate_cavity_selection(is_bulk_action=False):
                 QMessageBox.warning(self, "Invalid Selection", error_msg)
                 return
             config = self.get_config()
