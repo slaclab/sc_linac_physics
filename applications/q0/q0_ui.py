@@ -7,7 +7,7 @@ from pydm.widgets import PyDMSpinbox, PyDMLabel, PyDMPushButton, PyDMByteIndicat
 
 class Q0UI:
     """
-    Python implementation of the q0.ui file.
+    Python implementation of the ui q0 file.
     This class makes all the widgets and maintains same widget names
     & hierarchy from the original UI file.
 
