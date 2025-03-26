@@ -1,11 +1,8 @@
-from asyncio import get_event_loop
-
 from caproto import ChannelEnum, ChannelFloat, ChannelInteger
 from caproto.server import (
     ioc_arg_parser,
     run,
 )
-from simulacrum import Service
 
 from utils.sc_linac.decarad import Decarad
 from utils.sc_linac.linac_utils import LINAC_TUPLES, LINAC_CM_DICT, L1BHL
@@ -33,6 +30,7 @@ from utils.simulation.fault_service import (
 )
 from utils.simulation.magnet_service import MAGNETPVGroup
 from utils.simulation.rack_service import RACKPVGroup
+from utils.simulation.service import Service
 from utils.simulation.ssa_service import SSAPVGroup
 from utils.simulation.tuner_service import StepperPVGroup, PiezoPVGroup
 
@@ -157,7 +155,6 @@ class SCLinacPhysicsService(Service):
 
 def main():
     service = SCLinacPhysicsService()
-    get_event_loop()
     _, run_options = ioc_arg_parser(
         default_prefix="", desc="Simulated CM Cavity Service"
     )
