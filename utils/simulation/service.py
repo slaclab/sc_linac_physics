@@ -92,7 +92,7 @@ class Service(dict):
                 new_subscription_route,
                 remove_subscription_route,
             ) in self.routes:
-                if pattern.match(pvname) != None:
+                if pattern.match(pvname) is not None:
                     chan = self.make_route_channel(
                         pvname,
                         data_type,
@@ -117,7 +117,7 @@ class Service(dict):
             new_subscription_route,
             remove_subscription_route,
         ) in self.routes:
-            if pattern.match(pvname) != None:
+            if pattern.match(key) is not None:
                 return True
         return False
 
