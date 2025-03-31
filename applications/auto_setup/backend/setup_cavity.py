@@ -189,7 +189,7 @@ class SetupCavity(Cavity, SetupLinacObject):
 
     def request_ramp(self):
         if self.rf_ramp_requested:
-            self.status_message = f"Waiting for {self} piezo to be in feedback"
+            self.status_message = f"Waiting for {self} piezo to be in feedback mode"
             self.piezo.enable_feedback()
             self.progress = 80
 
