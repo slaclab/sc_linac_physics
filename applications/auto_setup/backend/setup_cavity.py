@@ -189,7 +189,7 @@ class SetupCavity(Cavity, SetupLinacObject):
 
     def request_ramp(self):
         if self.rf_ramp_requested:
-            self.status_message = f"Ramping {self} to {self.acon}"
+            self.status_message = f"Waiting for {self} piezo to be in feedback mode"
             self.piezo.enable_feedback()
             self.progress = 80
 
@@ -203,13 +203,13 @@ class SetupCavity(Cavity, SetupLinacObject):
 
             self.check_abort()
 
+            self.status_message = f"Waiting for {self} to be in SELA"
             self.set_sela_mode()
-
             while self.rf_mode != RF_MODE_SELA:
                 self.check_abort()
-                self.status_message = "Waiting for cavity to be in SELA"
                 sleep(0.5)
 
+            self.status_message = f"Walking {self} to {self.acon}"
             self.walk_amp(self.acon, 0.1)
             self.progress = 90
 
@@ -217,6 +217,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.move_to_resonance(use_sela=True)
             self.progress = 95
 
+            self.status_message = f"Setting {self} to SELAP"
             self.set_selap_mode()
 
             self.status_message = f"{self} Ramped Up to {self.acon} MV"

@@ -166,9 +166,9 @@ class Piezo(linac_utils.SCLinacObject):
             self.cavity.check_abort()
             print(f"{self} feedback not enabled, trying to enable feedback")
             self.set_to_manual()
-            time.sleep(2)
+            time.sleep(5)
             self.set_to_feedback()
-            time.sleep(2)
+            time.sleep(5)
 
     def disable_feedback(self):
         self.enable()
