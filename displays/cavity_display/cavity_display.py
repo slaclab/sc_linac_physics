@@ -1,4 +1,3 @@
-import os
 from functools import partial
 
 from PyQt5.QtGui import QColor, QCursor
@@ -23,7 +22,6 @@ from displays.cavity_display.frontend.utils import make_line
 class CavityDisplayGUI(Display):
     def __init__(self, parent=None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
-        self._loaded_file = os.path.abspath(__file__)
         self.setStyleSheet(
             "background-color: rgb(35, 35, 35); color: rgb(255, 255, 255); font-size: 15pt;"
         )
