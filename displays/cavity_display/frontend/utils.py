@@ -58,8 +58,11 @@ class EnumLabel(PyDMLabel):
 
 
 class PyDMFaultButton(PyDMRelatedDisplayButton):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, filename):
+        super().__init__(filename=filename)
+
+    def find_parent_display(self):
+        return None
 
     def push_button_release_event(self, mouse_event) -> None:
         for item in self._get_items():
