@@ -133,9 +133,9 @@ class GUICavity(BackendCavity):
                 button.commands = [fault.button_command]
 
             elif fault.button_level == "PYDM":
-                button = PyDMFaultButton()
+                button = PyDMFaultButton(filename=fault.button_command)
                 button.openInNewWindow = True
-                button.filenames = [fault.button_command]
+                # button.filenames = [fault.button_command]
                 button.macros = self.cryomodule.pydm_macros
 
             else:
