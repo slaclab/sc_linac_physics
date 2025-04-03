@@ -199,12 +199,10 @@ class ConfigPanel(QWidget):
         layout = QHBoxLayout()
 
         self.start_button = QPushButton("Start Measurement")
-        self.start_button.clicked.connect(self.measurementStarted.emit)
         layout.addWidget(self.start_button)
 
         self.stop_button = QPushButton("Stop")
         self.stop_button.setEnabled(False)
-        self.stop_button.clicked.connect(self.measurementStopped.emit)
         layout.addWidget(self.stop_button)
 
         group.setLayout(layout)
