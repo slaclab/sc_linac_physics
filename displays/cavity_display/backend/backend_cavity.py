@@ -55,6 +55,8 @@ class BackendCavity(Cavity):
             suffix: str = csv_fault_dict["PV Suffix"]
             rack: str = csv_fault_dict["Rack"]
 
+            button_command = csv_fault_dict["Button Path"]
+
             if level == "RACK":
                 # Rack A cavities don't care about faults for Rack B and vice versa
                 if rack != self.rack.rack_name:
@@ -79,6 +81,9 @@ class BackendCavity(Cavity):
 
             elif level == "SSA":
                 pv: str = self.ssa.pv_addr(suffix)
+                button_command = button_command.format(
+                    cm_OR_hl="hl" if self.cryomodule.is_harmonic_linearizer else "cm"
+                )
 
             elif level == "CAV":
                 pv: str = self.pv_addr(suffix)
@@ -128,7 +133,7 @@ class BackendCavity(Cavity):
                 long_description=csv_fault_dict["Long Description"],
                 short_description=csv_fault_dict["Short Description"],
                 button_level=csv_fault_dict["Button Type"],
-                button_command=csv_fault_dict["Button Path"],
+                button_command=button_command,
                 macros=self.edm_macro_string,
                 button_text=csv_fault_dict["Three Letter Code"],
                 button_macro=csv_fault_dict["Button Macros"],
