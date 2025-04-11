@@ -138,7 +138,6 @@ class GUICavity(BackendCavity):
                 button.macros = self.cryomodule.pydm_macros + (
                     "," + fault.button_macro if fault.button_macro else ""
                 )
-                print("button.macros: ", button.macros)
 
             else:
                 button = PyDMRelatedDisplayButton()
