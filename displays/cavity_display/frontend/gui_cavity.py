@@ -135,7 +135,9 @@ class GUICavity(BackendCavity):
             elif fault.button_level == "PYDM":
                 button = PyDMFaultButton(filename=fault.button_command)
                 button.openInNewWindow = True
-                button.macros = self.cryomodule.pydm_macros
+                button.macros = self.cryomodule.pydm_macros + (
+                    "," + fault.button_macro if fault.button_macro else ""
+                )
 
             else:
                 button = PyDMRelatedDisplayButton()
