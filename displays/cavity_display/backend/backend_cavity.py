@@ -56,6 +56,7 @@ class BackendCavity(Cavity):
             rack: str = csv_fault_dict["Rack"]
 
             button_command = csv_fault_dict["Button Path"]
+            macros = self.edm_macro_string
 
             if level == "RACK":
                 # Rack A cavities don't care about faults for Rack B and vice versa
@@ -78,6 +79,7 @@ class BackendCavity(Cavity):
                     CRYOMODULE=self.cryomodule.name, CAVITY=self.number
                 )
                 pv: str = prefix + suffix
+                macros = self.cryo_edm_macro_string
 
             elif level == "SSA":
                 pv: str = self.ssa.pv_addr(suffix)
@@ -134,7 +136,7 @@ class BackendCavity(Cavity):
                 short_description=csv_fault_dict["Short Description"],
                 button_level=csv_fault_dict["Button Type"],
                 button_command=button_command,
-                macros=self.edm_macro_string,
+                macros=macros,
                 button_text=csv_fault_dict["Three Letter Code"],
                 button_macro=csv_fault_dict["Button Macros"],
                 action=csv_fault_dict["Recommended Corrective Actions"],
