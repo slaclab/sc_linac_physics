@@ -11,7 +11,7 @@ from applications.q0 import q0_gui_utils
 from applications.q0.q0_cavity import Q0Cavity
 from applications.q0.q0_cryomodule import Q0Cryomodule
 from applications.q0.q0_gui_utils import CalibrationWorker
-from applications.q0.q0_ui import Q0UI
+from applications.q0.q0_measurement_widget import Q0MeasurementWidget
 from applications.q0.q0_utils import ValveParams
 from utils.qt import make_error_popup
 from utils.sc_linac.linac import Machine
@@ -29,7 +29,7 @@ class Q0GUI(Display):
     def __init__(self, parent=None, args=None):
         super().__init__(parent=parent, args=args)
 
-        self.ui = Q0UI(self)
+        self.ui = Q0MeasurementWidget(self)
 
         self.selected_cm: Optional[Q0Cryomodule] = None
         self.ui.cm_combobox.addItems([""] + ALL_CRYOMODULES)
