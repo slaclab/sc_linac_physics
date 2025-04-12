@@ -440,7 +440,7 @@ class Cavity(linac_utils.SCLinacObject):
     def cryo_edm_macro_string(self):
         cm = self.cryomodule.name
         area = self.cryomodule.linac.name
-        return f"CM={cm}, AREA={area}"
+        return f"CM={cm},AREA={area}"
 
     @property
     def hw_mode_pv_obj(self) -> PV:
