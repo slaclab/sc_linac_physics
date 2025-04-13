@@ -347,7 +347,7 @@ def test_edm_macro_string_rack_b(cavity):
 
 def test_cryo_edm_macro_string(cavity):
     cavity = MACHINE.cryomodules["01"].cavities[1]
-    assert cavity.cryo_edm_macro_string == "CM=1,AREA=L1B"
+    assert cavity.cryo_edm_macro_string == "CM=01,AREA=L0B"
 
 
 def test_hw_mode(cavity):
