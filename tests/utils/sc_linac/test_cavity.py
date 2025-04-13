@@ -345,6 +345,11 @@ def test_edm_macro_string_rack_b(cavity):
     assert cav.edm_macro_string == "C=5,RFS=1B,R=B,CM=ACCL:L0B:01,ID=01,CH=1"
 
 
+def test_cryo_edm_macro_string(cavity):
+    cavity = MACHINE.cryomodules["01"].cavities[1]
+    assert cavity.cryo_edm_macro_string == "CM=1,AREA=L1B"
+
+
 def test_hw_mode(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
     assert cavity.hw_mode == HW_MODE_ONLINE_VALUE
