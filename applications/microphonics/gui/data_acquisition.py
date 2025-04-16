@@ -55,6 +55,7 @@ class DataAcquisitionManager(QObject):
     def start_acquisition(self, chassis_id: str, config: Dict):
         """Start acquisition using QProcess"""
         try:
+            print(f"DEBUG: >>> Entered start_acquisition for {chassis_id}")
             # Basic validation first
             if not config.get('cavities'):
                 raise ValueError("No cavities specified")
@@ -101,6 +102,8 @@ class DataAcquisitionManager(QObject):
             ]
 
             print(f"Starting QProcess with args: {args}")
+            print(f"DEBUG: Constructed args: {args}")
+            print(f"DEBUG: Arg types: {[type(a) for a in args]}")
             process.setArguments(args)
 
             # Connect signals

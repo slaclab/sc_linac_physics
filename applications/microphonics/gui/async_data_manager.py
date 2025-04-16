@@ -114,6 +114,7 @@ class AsyncDataManager(QObject):
 
         # All configs are valid, now we start acquisitions
         for chassis_id, config in chassis_config.items():
+            print(f"DEBUG: Scheduling start_acquisition for {chassis_id}")
             QTimer.singleShot(0, lambda cid=chassis_id, cfg=config:
             self.data_manager.start_acquisition(cid, cfg))
 
