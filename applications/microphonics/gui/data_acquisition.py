@@ -50,6 +50,8 @@ class DataAcquisitionManager(QObject):
 
         return data_path
 
+    # In DataAcquisitionManager.start_acquisition method:
+
     def start_acquisition(self, chassis_id: str, config: Dict):
         """Start acquisition using QProcess"""
         try:
@@ -63,32 +65,42 @@ class DataAcquisitionManager(QObject):
             if low_cm and high_cm:
                 raise ValueError("ERROR: Cavity selection crosses half-CM")
 
+            # Extract the nested MeasurementConfig object
+            measurement_cfg = config['config']  # Get the MeasurementConfig object
+
             process = QProcess()
-            process.setProgram(sys.executable)
+            process.setProgram(sys.executable)  # Use sys.executable for portability
 
-            # Extract CM number from chassis_id (e.g., "ACCL:L0B:0100:RESA" -> "01")
-            cm_num = chassis_id.split(':')[2][:2]
+            # Extract CM number from chassis_id
+            try:
+                cm_num = chassis_id.split(':')[2][:2]
+            except IndexError:
+                raise ValueError(f"Could not parse CM number from chassis_id: {chassis_id}")
 
-            # Format cavity numbers for filename
+            # Format cavity numbers for filename (using the cavities from the outer config)
             cavity_str = '_'.join(map(str, sorted(config['cavities'])))
 
             # Generate filename w/ timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
             filename = f"res_CM{cm_num}_cav{cavity_str}_{timestamp}.dat"
 
             # Create directory structure and get full path
             data_dir = self._create_data_directory(chassis_id)
 
+            # Fixed arguement construction
             args = [
                 str(self.script_path),
                 '-D', str(data_dir),
                 '-a', config['pv_base'],
-                '-wsp', str(config['decimation']),
+                '-wsp', str(measurement_cfg.decimation),
                 '-acav', *map(str, config['cavities']),
-                '-ch', *config['channels'],
-                '-c', str(config['buffer_count']),
+                '-ch', *measurement_cfg.channels,
+                '-c', str(measurement_cfg.buffer_count),
                 '-F', filename
             ]
+
+            print(f"Starting QProcess with args: {args}")
             process.setArguments(args)
 
             # Connect signals
@@ -104,18 +116,25 @@ class DataAcquisitionManager(QObject):
                 'process': process,
                 'output_dir': data_dir,
                 'filename': filename,
-                'decimation': config['decimation'],
-                'last_read': None
+                # Store the actual config used for data parsing later
+                'decimation': measurement_cfg.decimation,
+                'last_read': None,
+                'timer': None  # Initialize timer key
             }
             process.start()
+            print(f"QProcess for {chassis_id} started.")
 
-            # Start checking for output files
+            # Start checking for output files: Check if timer logic is needed/correct
             timer = QTimer()
             timer.timeout.connect(lambda: self._check_output_files(chassis_id))
             timer.start(1000)  # Check every sec
+            self.active_processes[chassis_id]['timer'] = timer  # Store the timer
 
         except Exception as e:
-            self.acquisitionError.emit(chassis_id, str(e))
+            print(f"Error during start_acquisition for {chassis_id}: {e}")
+            import traceback
+            traceback.print_exc()  # Print full traceback for debugging
+            self.acquisitionError.emit(chassis_id, f"Failed to start acquisition: {str(e)}")
 
     def handle_stdout(self, chassis_id: str, process: QProcess):
         """Handle standard output from process"""
