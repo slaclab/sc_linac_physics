@@ -28,6 +28,7 @@ class Q0GUI(Display):
 
     def __init__(self, parent=None, args=None):
         super().__init__(parent=parent, args=args)
+        self.setWindowTitle("Q0 Measurement")
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)

@@ -15,7 +15,6 @@ class Q0MeasurementWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self.setWindowTitle("Q0 Measurement")
         self._setup_ui()
 
     def _setup_ui(self):
