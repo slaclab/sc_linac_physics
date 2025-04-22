@@ -1,5 +1,5 @@
 from collections import OrderedDict, defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import DefaultDict, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
@@ -156,29 +156,29 @@ class BackendCavity(Cavity):
         result: DefaultDict[str, FaultCounter] = defaultdict(FaultCounter)
 
         data = get_values_over_time_range(
-            pv_list=[self.pv_addr("CUDSTATUS")],
+            pv_list=[self.pv_addr("CUDSTATUS"), self.pv_addr("CUDSEVR")],
             start_time=start_time,
             end_time=end_time,
         )
+        severities = data[self.pv_addr("CUDSEVR")]
 
-        # severities = data[self.pv_addr("CUDSEVR")]
-        #
-        # def severity_of_fault(timestamp: datetime):
-        #     sevr = None
-        #     for severity_timestamp, severity in zip(
-        #         severities.timestamps, severities.values
-        #     ):
-        #         try:
-        #             rounded_ts = severity_timestamp.replace(
-        #                 microsecond=round(severity_timestamp.microsecond / 1000) * 1000
-        #             )
-        #         except ValueError:
-        #             rounded_ts = severity_timestamp + timedelta(seconds=1)
-        #         if (timestamp - rounded_ts).total_seconds() > 0:
-        #             sevr = severity
-        #         else:
-        #             break
-        #     return sevr
+        def severity_of_fault(timestamp: datetime):
+            sevr = None
+            for severity_timestamp, severity in zip(
+                severities.timestamps, severities.values
+            ):
+                try:
+                    rounded_ts = severity_timestamp.replace(
+                        microsecond=round(severity_timestamp.microsecond / 10000)
+                        * 10000
+                    )
+                except ValueError:
+                    rounded_ts = severity_timestamp + timedelta(seconds=1)
+                if (timestamp - rounded_ts).total_seconds() >= 0:
+                    sevr = severity
+                else:
+                    break
+            return sevr
 
         statuses = data[self.pv_addr("CUDSTATUS")]
 
@@ -186,23 +186,21 @@ class BackendCavity(Cavity):
             if status == str(self.number):
                 continue
 
-            result[status].alarm_count += 1
-
-            # try:
-            #     ts = status_ts.replace(
-            #         microsecond=round(status_ts.microsecond / 1000) * 1000
-            #     )
-            # except ValueError:
-            #     ts = status_ts + timedelta(seconds=1)
-            # severity = severity_of_fault(ts)
-            # if severity == 0:
-            #     result[status].ok_count += 1
-            # elif severity == 1:
-            #     result[status].warning_count += 1
-            # elif severity == 2:
-            #     result[status].alarm_count += 1
-            # else:
-            #     result[status].invalid_count += 1
+            try:
+                ts = status_ts.replace(
+                    microsecond=round(status_ts.microsecond / 10000) * 10000
+                )
+            except ValueError:
+                ts = status_ts + timedelta(seconds=1)
+            severity = severity_of_fault(ts)
+            if severity == 0:
+                result[status].ok_count += 1
+            elif severity == 1:
+                result[status].warning_count += 1
+            elif severity == 2:
+                result[status].alarm_count += 1
+            else:
+                result[status].invalid_count += 1
 
         # for fault in self.faults.values():
         #     result[fault.tlc] = max(
@@ -211,7 +209,6 @@ class BackendCavity(Cavity):
         #             start_time=start_time, end_time=end_time
         #         ),
         #     )
-
         return result
 
     def run_through_faults(self):
@@ -230,13 +227,14 @@ class BackendCavity(Cavity):
                 break
 
         if is_okay:
-            self.status_pv_obj.put(str(self.number))
             self.severity_pv_obj.put(0)
+            self.status_pv_obj.put(str(self.number))
             self.description_pv_obj.put(" ")
         else:
-            self.status_pv_obj.put(fault.tlc)
-            self.description_pv_obj.put(fault.short_description)
             if not invalid:
                 self.severity_pv_obj.put(fault.severity)
             else:
                 self.severity_pv_obj.put(3)
+
+            self.status_pv_obj.put(fault.tlc)
+            self.description_pv_obj.put(fault.short_description)

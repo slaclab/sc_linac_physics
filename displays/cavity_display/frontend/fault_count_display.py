@@ -19,6 +19,7 @@ from displays.cavity_display.frontend.cavity_widget import (
     DARK_GRAY_COLOR,
     RED_FILL_COLOR,
     PURPLE_FILL_COLOR,
+    YELLOW_FILL_COLOR,
 )
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
@@ -78,6 +79,7 @@ class FaultCountDisplay(Display):
 
         self.num_of_faults = []
         self.num_of_invalids = []
+        self.num_of_warnings = []
         self.y_data = None
         self.data: Dict[str, FaultCounter] = None
 
@@ -100,6 +102,7 @@ class FaultCountDisplay(Display):
     def get_data(self):
         self.num_of_faults = []
         self.num_of_invalids = []
+        self.num_of_warnings = []
         self.y_data = []
 
         start = self.start_selector.dateTime().toPyDateTime()
@@ -119,6 +122,7 @@ class FaultCountDisplay(Display):
             self.y_data.append(tlc)
             self.num_of_faults.append(counter_obj.alarm_count)
             self.num_of_invalids.append(counter_obj.invalid_count)
+            self.num_of_warnings.append(counter_obj.warning_count)
 
     def update_plot(self):
         if not self.cavity:
@@ -149,9 +153,17 @@ class FaultCountDisplay(Display):
             width=self.num_of_invalids,
             brush=PURPLE_FILL_COLOR,
         )
-
+        warning_starts = list(map(lambda a,b: a +b, self.num_of_faults, self.num_of_invalids))
+        warning_bars = pg.BarGraphItem(
+            x0=warning_starts,
+            y=y_vals_ints,
+            height=0.6,
+            width=self.num_of_warnings,
+            brush=YELLOW_FILL_COLOR,
+        )
         tlc_axis = self.plot_window.getAxis("left")
         tlc_axis.setTicks([ticks])
         self.plot_window.showGrid(x=True, y=False, alpha=0.6)
         self.plot_window.addItem(fault_bars)
         self.plot_window.addItem(invalid_bars)
+        self.plot_window.addItem(warning_bars)
