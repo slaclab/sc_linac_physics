@@ -17,18 +17,19 @@ from lcls_tools.common.data.archiver import (
 
 @dataclasses.dataclass
 class FaultCounter:
-    fault_count: int = 0
+    alarm_count: int = 0
     ok_count: int = 0
     invalid_count: int = 0
+    warning_count: int = 0
 
     @property
     def sum_fault_count(self) -> int:
-        return self.fault_count + self.invalid_count
+        return self.alarm_count + self.invalid_count
 
     @property
     def ratio_ok(self):
         try:
-            return self.ok_count / (self.fault_count + self.invalid_count)
+            return self.ok_count / (self.alarm_count + self.invalid_count)
         except ZeroDivisionError:
             return 1
 
@@ -137,7 +138,7 @@ class Fault:
         for archiver_value in data_handler.value_list:
             try:
                 if self.is_faulted(archiver_value):
-                    counter.fault_count += 1
+                    counter.alarm_count += 1
                 else:
                     counter.ok_count += 1
             except PVInvalidError:

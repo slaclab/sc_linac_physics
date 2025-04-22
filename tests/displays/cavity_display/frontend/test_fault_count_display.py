@@ -51,7 +51,7 @@ def test_get_data_with_pot(qtbot: QtBot, window):
     window.cavity = next(non_hl_iterator)
     faults = randint(0, 100)
     invalids = randint(0, 100)
-    result = {"POT": FaultCounter(fault_count=faults, invalid_count=invalids)}
+    result = {"POT": FaultCounter(alarm_count=faults, invalid_count=invalids)}
     window.cavity.get_fault_counts = MagicMock(return_value=result)
     window.get_data()
     window.cavity.get_fault_counts.assert_called()
@@ -73,7 +73,7 @@ def test_get_data_without_pot(qtbot: QtBot, window):
     window.cavity = next(non_hl_iterator)
     faults = randint(0, 100)
     invalids = randint(0, 100)
-    result = {"POT": FaultCounter(fault_count=faults, invalid_count=invalids)}
+    result = {"POT": FaultCounter(alarm_count=faults, invalid_count=invalids)}
     window.cavity.get_fault_counts = MagicMock(return_value=result)
     window.get_data()
     window.cavity.get_fault_counts.assert_called()
@@ -93,7 +93,7 @@ def test_update_plot(qtbot: QtBot, window):
 
     faults = randint(0, 100)
     invalids = randint(0, 100)
-    result = {"POT": FaultCounter(fault_count=faults, invalid_count=invalids)}
+    result = {"POT": FaultCounter(alarm_count=faults, invalid_count=invalids)}
     window.cavity.get_fault_counts = MagicMock(return_value=result)
 
     window.update_plot()

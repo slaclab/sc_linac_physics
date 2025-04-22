@@ -56,9 +56,7 @@ class FaultCountDisplay(Display):
         self.start_selector.setMinimumDateTime(min_date_time)
         self.start_selector.setDateTime(intermediate_time)
         self.end_selector.setDateTime(end_date_time)
-        self.start_selector.dateChanged.connect(self.update_plot)
         self.start_selector.editingFinished.connect(self.update_plot)
-        self.end_selector.dateChanged.connect(self.update_plot)
         self.end_selector.editingFinished.connect(self.update_plot)
 
         self.hide_pot_checkbox = QCheckBox(text="Hide POT faults")
@@ -119,7 +117,7 @@ class FaultCountDisplay(Display):
 
         for tlc, counter_obj in data.items():
             self.y_data.append(tlc)
-            self.num_of_faults.append(counter_obj.fault_count)
+            self.num_of_faults.append(counter_obj.alarm_count)
             self.num_of_invalids.append(counter_obj.invalid_count)
 
     def update_plot(self):

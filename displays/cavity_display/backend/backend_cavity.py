@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import DefaultDict, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
+from lcls_tools.common.data.archiver import get_values_over_time_range
 
 from displays.cavity_display.backend.fault import Fault, FaultCounter, PVInvalidError
 from displays.cavity_display.utils import utils
@@ -154,13 +155,62 @@ class BackendCavity(Cavity):
         """
         result: DefaultDict[str, FaultCounter] = defaultdict(FaultCounter)
 
-        for fault in self.faults.values():
-            result[fault.tlc] = max(
-                result[fault.tlc],
-                fault.get_fault_count_over_time_range(
-                    start_time=start_time, end_time=end_time
-                ),
-            )
+        data = get_values_over_time_range(
+            pv_list=[self.pv_addr("CUDSTATUS")],
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        # severities = data[self.pv_addr("CUDSEVR")]
+        #
+        # def severity_of_fault(timestamp: datetime):
+        #     sevr = None
+        #     for severity_timestamp, severity in zip(
+        #         severities.timestamps, severities.values
+        #     ):
+        #         try:
+        #             rounded_ts = severity_timestamp.replace(
+        #                 microsecond=round(severity_timestamp.microsecond / 1000) * 1000
+        #             )
+        #         except ValueError:
+        #             rounded_ts = severity_timestamp + timedelta(seconds=1)
+        #         if (timestamp - rounded_ts).total_seconds() > 0:
+        #             sevr = severity
+        #         else:
+        #             break
+        #     return sevr
+
+        statuses = data[self.pv_addr("CUDSTATUS")]
+
+        for status, status_ts in zip(statuses.values, statuses.timestamps):
+            if status == str(self.number):
+                continue
+
+            result[status].alarm_count += 1
+
+            # try:
+            #     ts = status_ts.replace(
+            #         microsecond=round(status_ts.microsecond / 1000) * 1000
+            #     )
+            # except ValueError:
+            #     ts = status_ts + timedelta(seconds=1)
+            # severity = severity_of_fault(ts)
+            # if severity == 0:
+            #     result[status].ok_count += 1
+            # elif severity == 1:
+            #     result[status].warning_count += 1
+            # elif severity == 2:
+            #     result[status].alarm_count += 1
+            # else:
+            #     result[status].invalid_count += 1
+
+        # for fault in self.faults.values():
+        #     result[fault.tlc] = max(
+        #         result[fault.tlc],
+        #         fault.get_fault_count_over_time_range(
+        #             start_time=start_time, end_time=end_time
+        #         ),
+        #     )
 
         return result
 
