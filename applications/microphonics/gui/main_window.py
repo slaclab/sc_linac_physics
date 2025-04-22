@@ -155,8 +155,13 @@ class MicrophonicsGUI(QMainWindow):
         result = {}
 
         # Get selected channels from ChannelSelectionGroup
-        selected_channels = self.channel_selection.get_selected_channels()
-        print(f"Debug: Selected channels: {selected_channels}")
+
+        selected_channels_ui = self.channel_selection.get_selected_channels()
+        print(f"Debug: Selected channels (from UI): {selected_channels_ui}")
+
+        # For debug: hardcode channel selection
+        channels_for_script = ['DF']
+        print(f"Debug: Channels actually sent to script: {channels_for_script}")
 
         if not config.get('modules'):
             print("Debug: No modules in config")
@@ -187,26 +192,28 @@ class MicrophonicsGUI(QMainWindow):
                 result[chassis_id] = {
                     'pv_base': f"ca://{base_channel}:RESA:",  # Add trailing colon
                     'config': MeasurementConfig(
-                        channels=selected_channels,
+                        channels=channels_for_script,
                         decimation=config['decimation'],
                         buffer_count=config['buffer_count']
                     ),
                     'cavities': rack_a_cavities
                 }
-                print(f"Debug: Added Rack A config: {result[chassis_id]}")
+                # Check which channels were actually used
+                print(f"Debug: Added Rack A config (using {channels_for_script}): {result[chassis_id]}")
 
             if rack_b_cavities:
                 chassis_id = f"{base_channel}:RESB"
                 result[chassis_id] = {
                     'pv_base': f"ca://{base_channel}:RESB:",  # Add trailing colon
                     'config': MeasurementConfig(
-                        channels=selected_channels,
+                        channels=channels_for_script,
                         decimation=config['decimation'],
                         buffer_count=config['buffer_count']
                     ),
                     'cavities': rack_b_cavities
                 }
-                print(f"Debug: Added Rack B config: {result[chassis_id]}")
+                # Checking which channel was used
+                print(f"Debug: Added Rack B config (using {channels_for_script}): {result[chassis_id]}")
 
         print(f"\nDebug: Final result: {result}")
         return result
