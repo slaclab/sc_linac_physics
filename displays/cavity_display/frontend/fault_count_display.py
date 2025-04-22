@@ -153,7 +153,9 @@ class FaultCountDisplay(Display):
             width=self.num_of_invalids,
             brush=PURPLE_FILL_COLOR,
         )
-        warning_starts = list(map(lambda a,b: a +b, self.num_of_faults, self.num_of_invalids))
+        warning_starts = list(
+            map(lambda a, b: a + b, self.num_of_faults, self.num_of_invalids)
+        )
         warning_bars = pg.BarGraphItem(
             x0=warning_starts,
             y=y_vals_ints,
