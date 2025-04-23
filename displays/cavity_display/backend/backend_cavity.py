@@ -3,7 +3,9 @@ from datetime import datetime, timedelta
 from typing import DefaultDict, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
-from lcls_tools.common.data.archiver import get_values_over_time_range
+from lcls_tools.common.data.archiver import (
+    get_values_over_time_range,
+)
 
 from displays.cavity_display.backend.fault import Fault, FaultCounter, PVInvalidError
 from displays.cavity_display.utils import utils
@@ -13,6 +15,7 @@ from displays.cavity_display.utils.utils import (
     SEVERITY_SUFFIX,
     SpreadsheetError,
     display_hash,
+    severity_of_fault,
 )
 from utils.sc_linac.cavity import Cavity
 
@@ -160,27 +163,9 @@ class BackendCavity(Cavity):
             start_time=start_time,
             end_time=end_time,
         )
-        severities = data[self.pv_addr("CUDSEVR")]
-
-        def severity_of_fault(timestamp: datetime):
-            sevr = None
-            for severity_timestamp, severity in zip(
-                severities.timestamps, severities.values
-            ):
-                try:
-                    rounded_ts = severity_timestamp.replace(
-                        microsecond=round(severity_timestamp.microsecond / 10000)
-                        * 10000
-                    )
-                except ValueError:
-                    rounded_ts = severity_timestamp + timedelta(seconds=1)
-                if (timestamp - rounded_ts).total_seconds() >= 0:
-                    sevr = severity
-                else:
-                    break
-            return sevr
 
         statuses = data[self.pv_addr("CUDSTATUS")]
+        severities = data[self.pv_addr("CUDSEVR")]
 
         for status, status_ts in zip(statuses.values, statuses.timestamps):
             if status == str(self.number):
@@ -192,7 +177,9 @@ class BackendCavity(Cavity):
                 )
             except ValueError:
                 ts = status_ts + timedelta(seconds=1)
-            severity = severity_of_fault(ts)
+
+            severity = severity_of_fault(ts, severities)
+
             if severity == 0:
                 result[status].ok_count += 1
             elif severity == 1:
