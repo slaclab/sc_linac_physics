@@ -35,8 +35,8 @@ def test_get_data_no_data(qtbot: QtBot, window):
     window.get_data()
     window.cavity.get_fault_counts.assert_called_with(start, end)
     assert window.y_data == []
-    assert window.num_of_faults == []
-    assert window.num_of_invalids == []
+    assert window.num_faults == []
+    assert window.num_invalids == []
 
 
 def test_get_data_with_pot(qtbot: QtBot, window):
@@ -57,8 +57,8 @@ def test_get_data_with_pot(qtbot: QtBot, window):
     window.cavity.get_fault_counts.assert_called()
     window.hide_pot_checkbox.isChecked.assert_called()
     assert window.y_data == ["POT"]
-    assert window.num_of_faults == [faults]
-    assert window.num_of_invalids == [invalids]
+    assert window.num_faults == [faults]
+    assert window.num_invalids == [invalids]
 
 
 def test_get_data_without_pot(qtbot: QtBot, window):
@@ -79,8 +79,8 @@ def test_get_data_without_pot(qtbot: QtBot, window):
     window.cavity.get_fault_counts.assert_called()
     window.hide_pot_checkbox.isChecked.assert_called()
     assert window.y_data == []
-    assert window.num_of_faults == []
-    assert window.num_of_invalids == []
+    assert window.num_faults == []
+    assert window.num_invalids == []
 
 
 def test_update_plot(qtbot: QtBot, window):

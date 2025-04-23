@@ -77,9 +77,9 @@ class FaultCountDisplay(Display):
         self.cm_combo_box.addItems([""] + ALL_CRYOMODULES)
         self.cav_combo_box.addItems([""] + [str(i) for i in range(1, 9)])
 
-        self.num_of_faults = []
-        self.num_of_invalids = []
-        self.num_of_warnings = []
+        self.num_faults = []
+        self.num_invalids = []
+        self.num_warnings = []
         self.y_data = None
         self.data: Dict[str, FaultCounter] = None
 
@@ -100,9 +100,9 @@ class FaultCountDisplay(Display):
         self.update_plot()
 
     def get_data(self):
-        self.num_of_faults = []
-        self.num_of_invalids = []
-        self.num_of_warnings = []
+        self.num_faults = []
+        self.num_invalids = []
+        self.num_warnings = []
         self.y_data = []
 
         start = self.start_selector.dateTime().toPyDateTime()
@@ -120,9 +120,9 @@ class FaultCountDisplay(Display):
 
         for tlc, counter_obj in data.items():
             self.y_data.append(tlc)
-            self.num_of_faults.append(counter_obj.alarm_count)
-            self.num_of_invalids.append(counter_obj.invalid_count)
-            self.num_of_warnings.append(counter_obj.warning_count)
+            self.num_faults.append(counter_obj.alarm_count)
+            self.num_invalids.append(counter_obj.invalid_count)
+            self.num_warnings.append(counter_obj.warning_count)
 
     def update_plot(self):
         if not self.cavity:
@@ -142,25 +142,25 @@ class FaultCountDisplay(Display):
             x0=0,
             y=y_vals_ints,
             height=0.6,
-            width=self.num_of_faults,
+            width=self.num_faults,
             brush=RED_FILL_COLOR,
         )
 
         invalid_bars = pg.BarGraphItem(
-            x0=self.num_of_faults,
+            x0=self.num_faults,
             y=y_vals_ints,
             height=0.6,
-            width=self.num_of_invalids,
+            width=self.num_invalids,
             brush=PURPLE_FILL_COLOR,
         )
         warning_starts = list(
-            map(lambda a, b: a + b, self.num_of_faults, self.num_of_invalids)
+            map(lambda a, b: a + b, self.num_faults, self.num_invalids)
         )
         warning_bars = pg.BarGraphItem(
             x0=warning_starts,
             y=y_vals_ints,
             height=0.6,
-            width=self.num_of_warnings,
+            width=self.num_warnings,
             brush=YELLOW_FILL_COLOR,
         )
         tlc_axis = self.plot_window.getAxis("left")
