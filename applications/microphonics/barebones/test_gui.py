@@ -1,5 +1,4 @@
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from PyQt5.QtCore import QProcess, QCoreApplication
@@ -36,7 +35,7 @@ class MinimalAcqApp(QWidget):
     def __init__(self):
         super().__init__()
         self.process = None
-        self.output_file_path = None
+        # self.output_file_path = None
         self._init_ui()
 
     def _init_ui(self):
@@ -118,82 +117,32 @@ class MinimalAcqApp(QWidget):
 
         self.output_text.clear()
         self.start_button.setEnabled(False)
-        self.output_file_path = None
+        # Hardcode Command Test
+        hardcoded_data_dir = "/u1/lcls/physics/rf_lcls2/microphonics/LCLS/L1B/CM03/20250422"
+        hardcoded_filename = "res_CM03_cav3_20250422_144715.dat"
+        self.hardcoded_output_path_str = f"{hardcoded_data_dir}/{hardcoded_filename}"  # Logging
+        python_executable = "python"
 
-        # Gather Inputs
-        cm_id = self.cm_combo.currentText()
-        cavity = self.cavity_spin.value()
-        decimation = self.decimation_spin.value()
-        num_buffers = self.buffers_spin.value()
-
-        # Drive Parameters (Logic from CommMicro.py)
-        try:
-            parts = cm_id.split(':')
-            if len(parts) != 3:
-                raise ValueError(f"Invalid CM ID format: {cm_id}")
-            linac = parts[1]  # e.g., L1B
-            cm_num_str = parts[2]  # e.g., 03 (keep as string)
-        except Exception as e:
-            self._log(f"Error parsing CM ID: {e}")
-            self.start_button.setEnabled(True)
-            return
-
-        # Determine Rack (A for 1-4, B for 5-8) and PV Address Base
-        rack_char = 'A' if 1 <= cavity <= 4 else 'B'
-        # Make sure CM number is padded (e.g., '03' -> '0300')
-        # Format requires 4 digits for the CM part in the PV
-        cm_pv_part = cm_num_str
-        if len(cm_pv_part) == 2 and cm_pv_part.isdigit():
-            cm_pv_part += "00"  # Pad like in CommMicro example: 03 -> 0300
-        elif len(cm_pv_part) == 2 and cm_pv_part.startswith('H'):  # Handle H1/H2
-            cm_pv_part += "00"  # H1 -> H100, H2 -> H200
-
-        pv_address = f"ca://ACCL:{linac}:{cm_pv_part}:RES{rack_char}:"
-
-        # Generate Data Directory Path
-        now = datetime.now()
-        year = str(now.year)
-        month = f"{now.month:02d}"
-        day = f"{now.day:02d}"
-        # Directory structure: /base/ACCL_LxB_CMXX00/YYYY/MM/DD/
-        data_dir = DATA_DIR_PATH / f"ACCL_{linac}_{cm_num_str}00" / year / month / day
-
-        # Generate Output Filename
-        timestamp = now.strftime("%Y%m%d_%H%M%S")
-        # Filename: res_CMXX_cavY_cZ_YYYYMMDD_HHMMSS.dat
-        # Here we use the single selected cavity.
-        output_filename = f"res_CM{cm_num_str}_cav{cavity}_c{num_buffers}_{timestamp}.dat"
-        self.output_file_path = data_dir / output_filename
-
-        # Create Data Directory
-        try:
-            data_dir.mkdir(parents=True, exist_ok=True)
-            self._log(f"Ensured data directory exists: {data_dir}")
-        except OSError as e:
-            self._log(f"Error creating data directory {data_dir}: {e}")
-            self.start_button.setEnabled(True)
-            return
-
-        # Construct QProcess Arguments
-        # Ensure all arguments are strings
-        args = [
-            '-D', str(data_dir),
-            '-a', pv_address,
-            '-wsp', str(decimation),
-            '-acav', str(cavity),  # Single cavity for this example
-            '-ch', CHANNEL_SELECTION,
-            '-c', str(num_buffers),
-            '-F', output_filename  # Just the filename, -D specifies dir
+        hardcoded_args = [
+            RES_DATA_ACQ_SCRIPT,
+            "-D", hardcoded_data_dir,
+            "-a", "ca://ACCL:L1B:0300:RESA:",
+            "-wsp", "1",
+            "-acav", "3",
+            "-ch", "DF",
+            "-c", "1",
+            "-F", hardcoded_filename
         ]
 
         # Log and Start Process
-        self._log("Starting QProcess...")
-        self._log(f"  Script: {RES_DATA_ACQ_SCRIPT}")
-        self._log(f"  Arguments: {args}")
+        self._log("Starting QProcess (HARDCODED COMMAND)...")
+        self._log(f"  Directory (Must Exist): {hardcoded_data_dir}")
+        self._log(f"  Interpreter: {python_executable}")
+        self._log(f"  Arguments: {hardcoded_args}")
         # Check if script exists and is executable
-        script_path = Path(RES_DATA_ACQ_SCRIPT)
+        script_path = Path(hardcoded_args[0])
         if not script_path.is_file():
-            self._log(f"ERROR: Script not found at {RES_DATA_ACQ_SCRIPT}")
+            self._log(f"ERROR: Script not found at {hardcoded_args[0]}")
             self.start_button.setEnabled(True)
             return
 
@@ -203,8 +152,8 @@ class MinimalAcqApp(QWidget):
         self.process.finished.connect(self._process_finished)
         self.process.errorOccurred.connect(self._process_error)  # Handle QProcess specific errors
 
-        # Start the process
-        self.process.start(RES_DATA_ACQ_SCRIPT, args)
+        # Start the process w/ hardcoded command
+        self.process.start(python_executable, hardcoded_args)
         # Check for immediate start errors (e.g., executable not found by QProcess)
         if not self.process.waitForStarted(2000):  # Wait 2s for start
             self._log(f"ERROR: Failed to start process. Error code: {self.process.error()}")
@@ -230,17 +179,23 @@ class MinimalAcqApp(QWidget):
         self._log(f"Exit Code: {exitCode}")
         self._log(f"Exit Status: {status_str}")
 
+        # Check if the process exited successfully
         if exitCode == 0 and exitStatus == QProcess.NormalExit:
-            self._log(f"SUCCESS: Acquisition likely completed.")
-            if self.output_file_path and self.output_file_path.exists():
-                self._log(f"Output file generated at: {self.output_file_path}")
+            self._log(f"SUCCESS: Acquisition likely completed (using hardcoded command).")
+            # Now check if the expected output file exists
+            if hasattr(self, 'hardcoded_output_path_str') and Path(self.hardcoded_output_path_str).exists():
+                self._log(f"Output file should be at: {self.hardcoded_output_path_str}")
                 self._log("MANUALLY CONFIRM if the file contains data rows after the header.")
             else:
-                self._log(f"WARNING: Process exited normally, but output file not found at {self.output_file_path}")
+                # Process succeeded, but if file is missing Log a warning.
+                path_str = getattr(self, 'hardcoded_output_path_str', 'UNKNOWN HARDCODED PATH')
+                self._log(f"WARNING: Process exited normally, but output file not found at {path_str}")
         else:
-            self._log(f"ERROR: Process exited abnormally.")
-            if self.output_file_path:
-                self._log(f"Check file (may be incomplete or empty): {self.output_file_path}")
+            # Process failed
+            self._log(f"ERROR: Process exited abnormally (using hardcoded command).")
+            # Still report the expected file path for checking
+            if hasattr(self, 'hardcoded_output_path_str'):
+                self._log(f"Check file (may be incomplete or empty): {self.hardcoded_output_path_str}")
 
         self.start_button.setEnabled(True)
         self.process = None
