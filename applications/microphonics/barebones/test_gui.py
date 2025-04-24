@@ -46,7 +46,7 @@ class MinimalAcqApp(QWidget):
         layout = QVBoxLayout(self)
 
         # Input Controls
-        controls_layout = QHBoxLayout
+        controls_layout = QHBoxLayout()
 
         # Cryomodule
         cm_layout = QVBoxLayout()
@@ -59,24 +59,16 @@ class MinimalAcqApp(QWidget):
         except ValueError:
             self.cm_combo.setCurrentIndex(0)
         cm_layout.addWidget(self.cm_combo)
-        controls_layout.addLayout(cm_layout)
+        controls_layout.addLayout(cm_layout, 0)
 
         # Cavity
         cav_layout = QVBoxLayout()
         cav_layout.addWidget(QLabel("Cavity (1-8)"))
         self.cavity_spin = QSpinBox()
-        self.cavity_spin.setValue(DEFAULT_CAVITY)
-        cav_layout.addWidget(self.cavity_spin)
-        controls_layout.addLayout(cav_layout)
-
-        # Cavity
-        cav_layout = QVBoxLayout()
-        cav_layout.addWidget(QLabel("Cavity (1-8):"))
-        self.cavity_spin = QSpinBox()
         self.cavity_spin.setRange(1, 8)
         self.cavity_spin.setValue(DEFAULT_CAVITY)
         cav_layout.addWidget(self.cavity_spin)
-        controls_layout.addLayout(cav_layout)
+        controls_layout.addLayout(cav_layout, 0)
 
         # Decimation
         dec_layout = QVBoxLayout()
@@ -85,7 +77,7 @@ class MinimalAcqApp(QWidget):
         self.decimation_spin.setRange(1, 16)
         self.decimation_spin.setValue(DEFAULT_DECIMATION)
         dec_layout.addWidget(self.decimation_spin)
-        controls_layout.addLayout(dec_layout)
+        controls_layout.addLayout(dec_layout, 0)
 
         # Buffers
         buf_layout = QVBoxLayout()
@@ -94,7 +86,7 @@ class MinimalAcqApp(QWidget):
         self.buffers_spin.setRange(1, 1000)
         self.buffers_spin.setValue(DEFAULT_BUFFERS)
         buf_layout.addWidget(self.buffers_spin)
-        controls_layout.addLayout(buf_layout)
+        controls_layout.addLayout(buf_layout, 0)
 
         layout.addLayout(controls_layout)
 
