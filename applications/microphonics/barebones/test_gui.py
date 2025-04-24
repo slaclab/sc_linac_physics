@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from PyQt5.QtCore import QProcess, QCoreApplication
+from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QSpinBox, QPushButton, QTextEdit, QMessageBox, QSizePolicy
@@ -164,9 +165,9 @@ class MinimalAcqApp(QWidget):
         if not self.process: return
         data = self.process.readAllStandardOutput()
         text = bytes(data).decode(errors='ignore')  # Decode bytes to string
-        self.output_text.moveCursor(QTextEdit.End)
+        self.output_text.moveCursor(QTextCursor.End)
         self.output_text.insertPlainText(text)
-        self.output_text.moveCursor(QTextEdit.End)
+        self.output_text.moveCursor(QTextCursor.End)
 
     def _process_error(self, error):
         """Handles errors reported by QProcess itself (e.g., failed to start)."""
