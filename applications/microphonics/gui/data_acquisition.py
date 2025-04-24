@@ -19,6 +19,9 @@ class DataAcquisitionManager(QObject):
         self.active_processes = {}  # chassis_id: QProcess
         self.base_path = Path("/u1/lcls/physics/rf_lcls2/microphonics")
         self.script_path = Path("/usr/local/lcls/package/lcls2_llrf/srf/software/res_ctl/res_data_acq.py")
+        if not self.script_path.is_file():
+            # Add check early
+            print(f"Error: Acquisition script not found at {self.script_path}")
 
     def _create_data_directory(self, chassis_id: str) -> Path:
         """Create hierarchical data directory structure.
@@ -35,22 +38,16 @@ class DataAcquisitionManager(QObject):
         if len(parts) < 4:
             raise ValueError(f"Invalid chassis_id format: {chassis_id}")
 
-        facility = "LCLS"  # Hard-coded for now
+        facility = "LCLS"  # Hard coded
         linac = parts[1]  # e.g., L1B
         cryomodule = parts[2][:2]  # e.g., 03 from 0300
-
         # Create date string
         date_str = datetime.now().strftime("%Y%m%d")
-
         # Construct the full path
         data_path = self.base_path / facility / linac / f"CM{cryomodule}" / date_str
-
         # Create directory structure if it doesn't exist
         data_path.mkdir(parents=True, exist_ok=True)
-
         return data_path
-
-    # In DataAcquisitionManager.start_acquisition method:
 
     def start_acquisition(self, chassis_id: str, config: Dict):
         """Start acquisition using QProcess"""
@@ -70,28 +67,23 @@ class DataAcquisitionManager(QObject):
             measurement_cfg = config['config']  # Get the MeasurementConfig object
 
             process = QProcess()
-            process.setProgram(sys.executable)  # Use sys.executable for portability
 
+            # Filename and Directory Logic
             # Extract CM number from chassis_id
             try:
                 cm_num = chassis_id.split(':')[2][:2]
             except IndexError:
                 raise ValueError(f"Could not parse CM number from chassis_id: {chassis_id}")
-
             # Format cavity numbers for filename (using the cavities from the outer config)
             cavity_str = '_'.join(map(str, sorted(config['cavities'])))
-
             # Generate filename w/ timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
             filename = f"res_CM{cm_num}_cav{cavity_str}_{timestamp}.dat"
-
             # Create directory structure and get full path
             data_dir = self._create_data_directory(chassis_id)
 
-            # Fixed arguement construction
+            # Arguement construction
             args = [
-                str(self.script_path),
                 '-D', str(data_dir),
                 '-a', config['pv_base'],
                 '-wsp', str(measurement_cfg.decimation),
@@ -101,10 +93,15 @@ class DataAcquisitionManager(QObject):
                 '-F', filename
             ]
 
-            print(f"Starting QProcess with args: {args}")
-            print(f"DEBUG: Constructed args: {args}")
-            print(f"DEBUG: Arg types: {[type(a) for a in args]}")
-            process.setArguments(args)
+            python_executable = sys.executable
+            full_command_args = [str(self.script_path)] + args
+
+            print(f"Starting QProcess for {chassis_id}")
+            print(f"Interpreter {python_executable}")
+            print(f"Script Path: {self.script_path}")
+            print(f"Script Args: {args}")
+            print(f"Full Command to Execute: {[python_executable] + full_command_args}")
+            print(f"Argument Types for Python: {[type(a) for a in full_command_args]}")
 
             # Connect signals
             process.readyReadStandardOutput.connect(
@@ -124,10 +121,24 @@ class DataAcquisitionManager(QObject):
                 'last_read': None,
                 'timer': None  # Initialize timer key
             }
-            process.start()
-            print(f"QProcess for {chassis_id} started.")
+            process.start(python_executable, full_command_args)
 
-            # Start checking for output files: Check if timer logic is needed/correct
+            # Check for immediate start failure
+            if not process.waitForStarted(3000):  # Wait up to 3 sec
+                error_str = process.errorString()
+                print(f"ERROR: Failed to start QProcess for {chassis_id}. QProcess Error: {error_str}")
+                # Clean up immediately if start fails
+                if chassis_id in self.active_processes:
+                    if self.active_processes[chassis_id].get('timer'):
+                        self.active_processes[chassis_id]['timer'].stop()
+                    del self.active_processes[chassis_id]
+                # Emit error
+                self.acquisitionError.emit(chassis_id, f"Failed to start acquisition process: {error_str}")
+                return  # Stop further processing
+
+            print(f"QProcess for {chassis_id} started successfully (PID: {process.processId()}).")
+
+            # Start Timer
             timer = QTimer()
             timer.timeout.connect(lambda: self._check_output_files(chassis_id))
             timer.start(1000)  # Check every sec
