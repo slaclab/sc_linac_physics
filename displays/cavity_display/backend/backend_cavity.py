@@ -1,10 +1,11 @@
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
-from typing import DefaultDict, Optional
+from typing import DefaultDict, Optional, Dict
 
 from lcls_tools.common.controls.pyepics.utils import PV
 from lcls_tools.common.data.archiver import (
     get_values_over_time_range,
+    ArchiveDataHandler,
 )
 
 from displays.cavity_display.backend.fault import Fault, FaultCounter, PVInvalidError
@@ -158,14 +159,14 @@ class BackendCavity(Cavity):
         """
         result: DefaultDict[str, FaultCounter] = defaultdict(FaultCounter)
 
-        data = get_values_over_time_range(
+        data: Dict[str, ArchiveDataHandler] = get_values_over_time_range(
             pv_list=[self.pv_addr("CUDSTATUS"), self.pv_addr("CUDSEVR")],
             start_time=start_time,
             end_time=end_time,
         )
 
-        statuses = data[self.pv_addr("CUDSTATUS")]
-        severities = data[self.pv_addr("CUDSEVR")]
+        statuses: ArchiveDataHandler = data[self.pv_addr("CUDSTATUS")]
+        severities: ArchiveDataHandler = data[self.pv_addr("CUDSEVR")]
 
         for status, status_ts in zip(statuses.values, statuses.timestamps):
             if status == str(self.number):
