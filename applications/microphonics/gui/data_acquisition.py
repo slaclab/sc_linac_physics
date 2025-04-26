@@ -1,4 +1,5 @@
 import io
+import re
 import sys
 import traceback
 from datetime import datetime
@@ -14,6 +15,14 @@ class DataAcquisitionManager(QObject):
     acquisitionError = pyqtSignal(str, str)  # chassis_id, error_message
     acquisitionComplete = pyqtSignal(str)  # chassis_id
     dataReceived = pyqtSignal(str, dict)  # chassis_id, data_dict
+
+    # Get completion messages from res_data_acq.py stdout
+    COMPLETION_MARKERS = [
+        "Restoring acquisition settings...",
+        "Done"  # This appears after Restoring
+    ]
+    # Regex to capture progress (more robust)
+    PROGRESS_REGEX = re.compile(r"Acquired\s+(\d+)\s+/\s+(\d+)\s+buffers")
 
     def __init__(self):
         super().__init__()
@@ -113,12 +122,17 @@ class DataAcquisitionManager(QObject):
                 lambda exit_code, exit_status: self.handle_finished(chassis_id, process, exit_code, exit_status))
 
             # Store process info
+            output_path = data_dir / filename
             self.active_processes[chassis_id] = {
                 'process': process,
-                'output_dir': data_dir,
-                'filename': filename,
+                'output_path': output_path,
                 # Store the actual config used for data parsing later
-                'decimation': measurement_cfg.decimation
+                'decimation': measurement_cfg.decimation,
+                'expected_buffers': measurement_cfg.buffer_count,
+                'completion_signal_received': False,  # Flag to track script completion message
+                'last_progress': 0,
+                'cavity_num_for_progress': config['cavities'][0] if config['cavities'] else 0
+                # Use first cavity for progress reporting
             }
             process.start(python_executable, full_command_args)
 
@@ -143,16 +157,48 @@ class DataAcquisitionManager(QObject):
 
     def handle_stdout(self, chassis_id: str, process: QProcess):
         """Handle standard output from process"""
+        if chassis_id not in self.active_processes:
+            return
+        process_info = self.active_processes[chassis_id]
         try:
-            data = bytes(process.readAllStandardOutput()).decode().strip()
-            for line in data.split('\n'):
-                if "Progress:" in line:
-                    parts = line.split()
-                    cavity_num = int(parts[2])
-                    progress = int(parts[-1].strip('%'))
-                    self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
+            current_process = process_info['process']
+            if not current_process: return
+            data = bytes(current_process.readAllStandardOutput()).decode(errors='ignore').strip()
+            for line in data.splitlines():
+                line = line.strip()
+                if not line: continue
+                print(f"STDOUT Line ({chassis_id}): {line}")  # Log each line
+                # Check for completion markers first
+                if any(marker in line for marker in self.COMPLETION_MARKERS):
+                    print(f"INFO: Completion marker '{line}' detected for {chassis_id}.")
+                    process_info['completion_signal_received'] = True
+
+                # Check for progress
+                match = self.PROGRESS_REGEX.search(line)
+                if match:
+                    try:
+                        acquired = int(match.group(1))
+                        total = int(match.group(2))
+                        # Validation and progress calculation
+                        progress = int((acquired / total) * 100) if total > 0 else 0
+                        process_info['last_progress'] = progress
+                        cavity_num = process_info['cavity_num_for_progress']
+                        self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
+                        print(f"Progress ({chassis_id}, Cav {cavity_num}): {progress}% ({acquired}/{total})")
+
+                        # Backup completion check
+                        if acquired == total:
+                            print(f"INFO: Final buffer acquired message detected for {chassis_id}.")
+                            process_info['completion_signal_received'] = True
+                    except ValueError:
+                        print(f"WARN ({chassis_id}): Could not parse progress numbers from line: {line}")
+                    except Exception as e_parse:
+                        print(f"ERROR processing progress line for {chassis_id}: {e_parse}")
+
         except Exception as e:
-            print(f"Error processing stdout: {e}")
+            print(f"CRITICAL ERROR processing stdout for {chassis_id}: {e}")
+            traceback.print_exc()
+            self.acquisitionError.emit(chassis_id, f"Internal error processing script output: {str(e)}")
 
     def handle_stderr(self, chassis_id: str, process: QProcess):
         """Handle standard error from process"""
@@ -164,73 +210,84 @@ class DataAcquisitionManager(QObject):
         except Exception as e:
             print(f"Error processing stderr for {chassis_id}: {e}")
 
-    def handle_finished(self, chassis_id: str, process: QProcess, exit_code: int, exit_status: QProcess.ExitStatus):
-        """Handle process completion"""
-        process_info = None
-        # Get and remove process
-        if chassis_id in self.active_processes:
-            process_info = self.active_processes.pop(chassis_id)
+    def handle_finished(self, chassis_id: str, exit_code: int, exit_status: QProcess.ExitStatus):
+        """Handle process completion checking for completion signal."""
+        print(f"DEBUG: handle_finished entered for {chassis_id}. Exit code: {exit_code}, Status: {exit_status}")
+
+        if chassis_id not in self.active_processes:
+            print(f"WARN: handle_finished called for {chassis_id}, but it's not in active_processes.")
+            return
+
+        process_info = self.active_processes.pop(chassis_id)
+        process = process_info['process']
 
         try:
             status_str = "NormalExit" if exit_status == QProcess.NormalExit else "CrashExit"
             print(f"Process finished for {chassis_id}. Exit code: {exit_code}, Status: {status_str}")
 
-            if process_info and exit_code == 0 and exit_status == QProcess.NormalExit:
-                print(f"Acquisition process for {chassis_id} completed successfully. Processing output file...")
-                output_path = process_info['output_dir'] / process_info['filename']
-                # Delayed call
-                QTimer.singleShot(300, lambda cid=chassis_id, op=output_path, pi=process_info:
-                self._delayed_process_output(cid, op, pi))
+            # Read remaining output/error streams
+            stderr_final = ""
+            stdout_final = ""
+            try:
+                stderr_final = bytes(process.readAllStandardError()).decode(errors='ignore').strip()
+                stdout_final = bytes(process.readAllStandardOutput()).decode(errors='ignore').strip()
+                if stderr_final: print(f" Final STDERR ({chassis_id}): {stderr_final}")
+                if stdout_final:
+                    print(f" Final STDOUT ({chassis_id}): {stdout_final}")
+                    # Last check for completion markers
+                    if not process_info['completion_signal_received']:
+                        for line in stdout_final.splitlines():
+                            if any(marker in line for marker in self.COMPLETION_MARKERS):
+                                print(f"INFO: Completion marker found in final stdout for {chassis_id}.")
+                                process_info['completion_signal_received'] = True
+                                break
+            except Exception as e_read:
+                print(f"Error reading final stderr/stdout for {chassis_id}: {e_read}")
 
-            elif process_info:
-                # When Failure
-                error_msg = f"Acquisition process for {chassis_id} exited abnormally. Code: {exit_code}, Status: {status_str}."
-                print(error_msg)  # Log the basic error
-                stderr_final = ""
-                stdout_final = ""
+            # Worked Condition: Check exit code, status, and completion signal
+            if exit_code == 0 and exit_status == QProcess.NormalExit and process_info['completion_signal_received']:
+                print(
+                    f"Acquisition process for {chassis_id} completed successfully AND signaled completion. Processing output file...")
+                output_path = process_info['output_path']
 
-                try:
-                    # Making sure reading all remaining output
-                    stderr_final = bytes(process.readAllStandardError()).decode(errors='ignore').strip()
-                    stdout_final = bytes(process.readAllStandardOutput()).decode(errors='ignore').strip()
-                    if stderr_final:
-                        print(f" Final STDERR ({chassis_id}): {stderr_final}")
-                        error_msg += f"\nDetails: {stderr_final}"
-                    if stdout_final:
-                        print(f"Final STDOUT ({chassis_id}): {stdout_final}")
-                except Exception as e_read:
-                    print(f"Error reading final stderr/stdout for {chassis_id}: {e_read}")
-                self.acquisitionError.emit(chassis_id, error_msg)
-                print(f"Emitted error for abnormal exit: {chassis_id}")
+                QTimer.singleShot(100, lambda p=output_path, pi=process_info:
+                self._process_output_file_wrapper(chassis_id, p, pi))  # Calls wrapper directly
+
+            # Failure Conditions
             else:
-                # Process finished
-                print(f"Warning: Process finished for {chassis_id}, but no process info found.")
+                error_msg = f"Acquisition process for {chassis_id} failed or did not signal completion."
+                if exit_status != QProcess.NormalExit: error_msg += f" Status: {status_str}."
+                if exit_code != 0: error_msg += f" Exit Code: {exit_code}."
+                if not process_info['completion_signal_received']:  # Specific check
+                    error_msg += " Script did not signal completion via expected stdout message."
+                    print(
+                        f"ERROR ({chassis_id}): Process finished normally (code 0) but completion signal was NOT received.")
+                # Append stderr/stdout details if there
+                if stderr_final:
+                    error_msg += f"\nScript Error: {stderr_final}"
+                elif stdout_final:
+                    error_msg += f"\nScript Output: {stdout_final[:200]}..."
+                print(error_msg)  # Log full error
+                self.acquisitionError.emit(chassis_id, error_msg)
+
         except Exception as e:
-            # Catch errors within the handle_finished logic
             print(f"CRITICAL: Error within handle_finished for {chassis_id}: {e}")
             traceback.print_exc()
-            # Emit an error, with the chassis_id
-            self.acquisitionError.emit(chassis_id or "Unknown Chassis",
-                                       f"Internal error handling process finish: {str(e)}")
+            self.acquisitionError.emit(chassis_id, f"Internal error handling process finish: {str(e)}")
         finally:
-            # Cleanup
-            # Make sure the QProcess object is always scheduled for deletion
             if process:
                 QTimer.singleShot(500, process.deleteLater)
-                print(f"Scheduled QProcess deleteLater for {chassis_id}")
 
-    def _delayed_process_output(self, chassis_id: str, output_path: Path, process_info: dict):
-        """Processes the output file after a short delay."""
+    def _process_output_file_wrapper(self, chassis_id: str, output_path: Path, process_info: dict):
+        """Wrapper to catch exceptions during file processing."""
         try:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            print(f"[{current_time}] DEBUG: Attempting to process file after delay: {output_path}")
+            print(f"[{current_time}] DEBUG: Attempting to process file: {output_path}")
 
-            # Check if its there right before reading
             if not output_path.exists():
-                print(
-                    f"WARN: File {output_path} not found immediately after delay. Waiting 200ms more for last attempt.")
-                QTimer.singleShot(200, lambda cid=chassis_id, op=output_path, pi=process_info:
-                self._process_output_file_final_attempt(cid, op, pi))
+                print(f"ERROR: File {output_path} not found even after script completion signal!")
+                self.acquisitionError.emit(chassis_id,
+                                           f"Output file {output_path.name} missing despite script success.")
                 return
 
             file_size = output_path.stat().st_size
@@ -240,104 +297,67 @@ class DataAcquisitionManager(QObject):
                 self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} was empty.")
                 return
 
-            # Call original processing function
+            # Call the processing function
             self._process_output_file(chassis_id, output_path, process_info)
+
             # Emit completion signal only if processing works
             self.acquisitionComplete.emit(chassis_id)
             current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
             print(f"[{current_time_end}] DEBUG: Successfully processed file: {output_path}")
 
         except FileNotFoundError as e:
-            # Maybe will be caught if file disappears between the exists() check and _read_data_file
-            print(f"ERROR (Delayed): Output file not found: {e}")
             self.acquisitionError.emit(chassis_id, f"Output file missing or unreadable: {output_path.name}")
-        except (ValueError, IndexError) as e:  # Catch parsing/indexing errors
-            print(f"ERROR (Delayed): Failed to parse/process data from {output_path.name}: {e}")
-            try:
-                with open(output_path, 'r', errors='ignore') as f_err:
-                    lines = f_err.readlines()
-                    print(f"--- File Content Snippet ({output_path.name}) ---")
-                    print("".join(lines[:5]))  # Print first 5 lines
-                    if len(lines) > 10: print("...")
-                    print("".join(lines[-5:]))  # Print last 5 lines
-                    print("-----------------------------------------")
-            except Exception as read_err:
-                print(f"(Could not read file content for error diagnosis: {read_err})")
-            self.acquisitionError.emit(chassis_id, f"Data parsing/indexing error in {output_path.name}: {e}")
-        except Exception as e:  # Catch any other unexpected errors
-            print(f"ERROR (Delayed): Unexpected error processing file {output_path.name}: {e}")
-            traceback.print_exc()
-            self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
-
-    def _process_output_file_final_attempt(self, chassis_id: str, output_path: Path, process_info: dict):
-        """Last attempt to process the file if it wasn't found immediately after the first delay."""
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{current_time}] DEBUG: Final attempt to process file: {output_path}")
-        try:
-            # Check if its there one last time
-            if not output_path.exists():
-                raise FileNotFoundError(f"Output file not found after extra delay: {output_path}")
-
-            file_size = output_path.stat().st_size
-            print(f"DEBUG: File exists last try. Size before reading: {file_size} bytes")
-            if file_size == 0:
-                print(f"WARN: File {output_path} exists but is empty last try. Skipping processing.")
-                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} was empty.")
-                return
-
-            # Call processing function
-            self._process_output_file(chassis_id, output_path, process_info)
-            # Emit completion signal only if processing works
-            self.acquisitionComplete.emit(chassis_id)
-            current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            print(f"[{current_time_end}] DEBUG: Successfully processed file (final attempt): {output_path}")
-
-        except FileNotFoundError as e:
-            print(f"ERROR (Final Attempt): Output file definitively not found or unreadable: {e}")
-            self.acquisitionError.emit(chassis_id, f"Output file missing or unreadable: {output_path.name}")
-        except (ValueError, IndexError) as e:
-            print(f"ERROR (Final Attempt): Failed to parse/process data from {output_path.name}: {e}")
+        except (ValueError, IndexError) as e:  # Catch parsing/indexing errors specifically
             self.acquisitionError.emit(chassis_id, f"Data parsing/indexing error in {output_path.name}: {e}")
         except Exception as e:
-            print(f"ERROR (Final Attempt): Unexpected error processing file {output_path.name}: {e}")
-            traceback.print_exc()
             self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
 
     def _process_output_file(self, chassis_id: str, output_path: Path, process_info: dict):
-        """Reads and parses the completed data file."""
-        if not output_path.exists():
-            raise FileNotFoundError(f"Output file not found: {output_path}")
-
+        """Reads and parses the completed data file. (Error handling moved to wrapper)"""
         print(f"Reading data file: {output_path}")
         header_lines, data = self._read_data_file(output_path)
 
-        if data.size == 0:
-            print(f"Warning: Data file {output_path} contains header but no data rows.")
-            # Emit an error or warning
-            self.acquisitionError.emit(chassis_id, f"Warning: Output file {output_path.name} contained no data rows.")
-            return  # Stop processing this file
-
         channels = self._parse_channels(header_lines)
 
-        # Check if number of channels matches data columns
-        if len(channels) != data.shape[1]:
+        if data.size == 0:
+            print(f"Warning: Data array loaded from {output_path} is empty (size 0).")
+
+        # Check channel/column mismatch only if data exists
+        if data.size > 0 and len(channels) != data.shape[1]:
             raise ValueError(
-                f"Mismatch between channels in header ({len(channels)}) and data columns ({data.shape[1]}) in {output_path}")
-
-        # Convert data to channel specific arrays
+                f"Mismatch between channels in header ({len(channels)}) "
+                f"and data columns ({data.shape[1]}) in {output_path}"
+            )
         parsed_data = {}
-        for idx, channel in enumerate(channels):
-            parsed_data[channel] = data[:, idx]
+        if data.size > 0:
+            if data.ndim == 1:
+                if len(channels) == 1:
+                    data = data.reshape(-1, 1)
+                else:
+                    raise ValueError("Internal logic error: 1D data shape inconsistent with multiple channels.")
 
-        # Extract cavity number
+            for idx, channel in enumerate(channels):
+                parsed_data[channel] = data[:, idx]
+        else:
+            for channel in channels:
+                parsed_data[channel] = np.array([])
+        cavity_num = 0
         try:
-            # Assuming filename format res_CMXX_cavY_... or similar
-            cavity_num_str = output_path.stem.split('_')[2]  # e.g., cav3
-            cavity_num = int(cavity_num_str.replace('cav', ''))
-        except (IndexError, ValueError):
-            print(
-                f"Warning: Could not parse cavity number from filename {output_path.name}. Using default or placeholder.")
-            cavity_num = 0
+            match = re.search(r'_cav(\d+)', output_path.stem)
+            if match:
+                cavity_num = int(match.group(1))
+            else:
+                # Fallback splitting
+                parts = output_path.stem.split('_')
+                cav_part = next((p for p in parts if p.startswith('cav')), None)
+                if cav_part:
+                    cav_num_str = cav_part.replace('cav', '').split('_')[0]
+                    cavity_num = int(cav_num_str)
+                else:
+                    print(
+                        f"Warning: Could not parse cavity number reliably from filename {output_path.name}. Using default 0.")
+        except (IndexError, ValueError, TypeError) as e:
+            print(f"Warning: Error parsing cavity number from filename {output_path.name}: {e}. Using default 0.")
 
         decimation = process_info.get('decimation', 1)
 
@@ -345,7 +365,8 @@ class DataAcquisitionManager(QObject):
         self.dataReceived.emit(chassis_id, {
             'cavity': cavity_num,
             'channels': parsed_data,
-            'decimation': decimation
+            'decimation': decimation,
+            'filepath': str(output_path)
         })
 
     def stop_acquisition(self, chassis_id: str):
