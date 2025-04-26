@@ -178,25 +178,16 @@ class DataAcquisitionManager(QObject):
             if process_info and exit_code == 0 and exit_status == QProcess.NormalExit:
                 print(f"Acquisition process for {chassis_id} completed successfully. Processing output file...")
                 output_path = process_info['output_dir'] / process_info['filename']
-                try:
-                    self._process_output_file(chassis_id, output_path, process_info)
-                    self.acquisitionComplete.emit(chassis_id)  # signal emitted if sucessfull
-                except FileNotFoundError as e:
-                    print(f"ERROR: Output file not found after process finished: {e}")
-                    self.acquisitionError.emit(chassis_id, f"Output file missing: {output_path.name}")
-                    # To catch parsing errors
-                except ValueError as e:
-                    print(f"ERROR: Failed to parse data from {output_path.name}: {e}")
-                    self.acquisitionError.emit(chassis_id, f"Data parsing error in {output_path.name}: {e}")
-                except Exception as e:  # Catch any other processing errors
-                    print(f"ERROR: processing file {output_path.name}: {e}")
-                    traceback.print_exc()
-                    self.acquisitionError.emit(chassis_id, f"Error processing file {output_path.name}: {str(e)}")
-            # Unusual exit like CrashExit
+                # Delayed call
+                QTimer.singleShot(300, lambda cid=chassis_id, op=output_path, pi=process_info:
+                self._delayed_process_output(cid, op, pi))
+
             elif process_info:
                 # When Failure
                 error_msg = f"Acquisition process for {chassis_id} exited abnormally. Code: {exit_code}, Status: {status_str}."
                 print(error_msg)  # Log the basic error
+                stderr_final = ""
+                stdout_final = ""
 
                 try:
                     # Making sure reading all remaining output
@@ -225,7 +216,92 @@ class DataAcquisitionManager(QObject):
             # Cleanup
             # Make sure the QProcess object is always scheduled for deletion
             if process:
-                process.deleteLater()
+                QTimer.singleShot(500, process.deleteLater)
+                print(f"Scheduled QProcess deleteLater for {chassis_id}")
+
+    def _delayed_process_output(self, chassis_id: str, output_path: Path, process_info: dict):
+        """Processes the output file after a short delay."""
+        try:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            print(f"[{current_time}] DEBUG: Attempting to process file after delay: {output_path}")
+
+            # Check if its there right before reading
+            if not output_path.exists():
+                print(
+                    f"WARN: File {output_path} not found immediately after delay. Waiting 200ms more for last attempt.")
+                QTimer.singleShot(200, lambda cid=chassis_id, op=output_path, pi=process_info:
+                self._process_output_file_final_attempt(cid, op, pi))
+                return
+
+            file_size = output_path.stat().st_size
+            print(f"DEBUG: File exists. Size before reading: {file_size} bytes")
+            if file_size == 0:
+                print(f"WARN: File {output_path} exists but is empty. Skipping processing.")
+                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} was empty.")
+                return
+
+            # Call original processing function
+            self._process_output_file(chassis_id, output_path, process_info)
+            # Emit completion signal only if processing works
+            self.acquisitionComplete.emit(chassis_id)
+            current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            print(f"[{current_time_end}] DEBUG: Successfully processed file: {output_path}")
+
+        except FileNotFoundError as e:
+            # Maybe will be caught if file disappears between the exists() check and _read_data_file
+            print(f"ERROR (Delayed): Output file not found: {e}")
+            self.acquisitionError.emit(chassis_id, f"Output file missing or unreadable: {output_path.name}")
+        except (ValueError, IndexError) as e:  # Catch parsing/indexing errors
+            print(f"ERROR (Delayed): Failed to parse/process data from {output_path.name}: {e}")
+            try:
+                with open(output_path, 'r', errors='ignore') as f_err:
+                    lines = f_err.readlines()
+                    print(f"--- File Content Snippet ({output_path.name}) ---")
+                    print("".join(lines[:5]))  # Print first 5 lines
+                    if len(lines) > 10: print("...")
+                    print("".join(lines[-5:]))  # Print last 5 lines
+                    print("-----------------------------------------")
+            except Exception as read_err:
+                print(f"(Could not read file content for error diagnosis: {read_err})")
+            self.acquisitionError.emit(chassis_id, f"Data parsing/indexing error in {output_path.name}: {e}")
+        except Exception as e:  # Catch any other unexpected errors
+            print(f"ERROR (Delayed): Unexpected error processing file {output_path.name}: {e}")
+            traceback.print_exc()
+            self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
+
+    def _process_output_file_final_attempt(self, chassis_id: str, output_path: Path, process_info: dict):
+        """Last attempt to process the file if it wasn't found immediately after the first delay."""
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{current_time}] DEBUG: Final attempt to process file: {output_path}")
+        try:
+            # Check if its there one last time
+            if not output_path.exists():
+                raise FileNotFoundError(f"Output file not found after extra delay: {output_path}")
+
+            file_size = output_path.stat().st_size
+            print(f"DEBUG: File exists last try. Size before reading: {file_size} bytes")
+            if file_size == 0:
+                print(f"WARN: File {output_path} exists but is empty last try. Skipping processing.")
+                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} was empty.")
+                return
+
+            # Call processing function
+            self._process_output_file(chassis_id, output_path, process_info)
+            # Emit completion signal only if processing works
+            self.acquisitionComplete.emit(chassis_id)
+            current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            print(f"[{current_time_end}] DEBUG: Successfully processed file (final attempt): {output_path}")
+
+        except FileNotFoundError as e:
+            print(f"ERROR (Final Attempt): Output file definitively not found or unreadable: {e}")
+            self.acquisitionError.emit(chassis_id, f"Output file missing or unreadable: {output_path.name}")
+        except (ValueError, IndexError) as e:
+            print(f"ERROR (Final Attempt): Failed to parse/process data from {output_path.name}: {e}")
+            self.acquisitionError.emit(chassis_id, f"Data parsing/indexing error in {output_path.name}: {e}")
+        except Exception as e:
+            print(f"ERROR (Final Attempt): Unexpected error processing file {output_path.name}: {e}")
+            traceback.print_exc()
+            self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
 
     def _process_output_file(self, chassis_id: str, output_path: Path, process_info: dict):
         """Reads and parses the completed data file."""
@@ -372,7 +448,7 @@ class DataAcquisitionManager(QObject):
             traceback.print_exc()
             raise
 
-    # Ensure _parse_channels ALSO only looks for # ACCL:
+    # Make sure _parse_channels also only looks for # ACCL:
     def _parse_channels(self, header_lines: List[str]) -> List[str]:
         """Parse channel names (full PVs) from res_data_acq.py file header."""
         # Look for the line starting with # ACCL:
@@ -385,17 +461,3 @@ class DataAcquisitionManager(QObject):
                 return parsed_channels
         # If the specific line is not found, raise an error
         raise ValueError("Channel header line ('# ACCL:') not found in provided header lines.")
-
-    def _parse_channels(self, header_lines: List[str]) -> List[str]:
-        """Parse channel names (full PVs) from res_data_acq.py file header."""
-        # Look for line starting with # ACCL:
-        for line in header_lines:
-            line_strip = line.strip()
-            if line_strip.startswith('# ACCL:'):
-                # Remove #, strip whitespace, split by space
-                parsed_channels = line_strip.strip('# \n').split()
-                print(f"Parsed channels from header: {parsed_channels}")  # Debug log
-                return parsed_channels
-        # Fallback or error if line not found
-        print(f"Warning: Channel header line ('# ACCL:') not found in header. Defaulting.")
-        return ['DAC', 'DF']  # Current fallback
