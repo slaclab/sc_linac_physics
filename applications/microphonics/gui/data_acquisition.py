@@ -219,56 +219,67 @@ class DataAcquisitionManager(QObject):
             return
 
         process_info = self.active_processes.pop(chassis_id)
-        process = process_info['process']
+        process = process_info.get('process')
 
         try:
             status_str = "NormalExit" if exit_status == QProcess.NormalExit else "CrashExit"
             print(f"Process finished for {chassis_id}. Exit code: {exit_code}, Status: {status_str}")
+            completion_received = process_info.get('completion_signal_received', False)
+            output_path = process_info.get('output_path')
 
             # Read remaining output/error streams
             stderr_final = ""
             stdout_final = ""
             try:
+                if process.state() != QProcess.NotRunning:
+                    pass
                 stderr_final = bytes(process.readAllStandardError()).decode(errors='ignore').strip()
                 stdout_final = bytes(process.readAllStandardOutput()).decode(errors='ignore').strip()
                 if stderr_final: print(f" Final STDERR ({chassis_id}): {stderr_final}")
                 if stdout_final:
                     print(f" Final STDOUT ({chassis_id}): {stdout_final}")
                     # Last check for completion markers
-                    if not process_info['completion_signal_received']:
+                    if not completion_received:
                         for line in stdout_final.splitlines():
                             if any(marker in line for marker in self.COMPLETION_MARKERS):
                                 print(f"INFO: Completion marker found in final stdout for {chassis_id}.")
                                 process_info['completion_signal_received'] = True
+                                completion_received = True
                                 break
             except Exception as e_read:
                 print(f"Error reading final stderr/stdout for {chassis_id}: {e_read}")
 
             # Worked Condition: Check exit code, status, and completion signal
-            if exit_code == 0 and exit_status == QProcess.NormalExit and process_info['completion_signal_received']:
-                print(
-                    f"Acquisition process for {chassis_id} completed successfully AND signaled completion. Processing output file...")
-                output_path = process_info['output_path']
+            if exit_code == 0 and exit_status == QProcess.NormalExit and completion_received and output_path:
+                print(f"Acquisition process for {chassis_id} completed successfully AND signaled completion.")
+                print(f"DIAGNOSTIC: Starting deliberate delay before reading {output_path}...")
 
-                QTimer.singleShot(3000, lambda p=output_path, pi=process_info:
+                QTimer.singleShot(10000, lambda p=output_path, pi=process_info:
                 self._process_output_file_wrapper(chassis_id, p, pi))  # Calls wrapper directly
 
             # Failure Conditions
             else:
+                error_details = []
                 error_msg = f"Acquisition process for {chassis_id} failed or did not signal completion."
+                error_details.append(error_msg)
                 if exit_status != QProcess.NormalExit: error_msg += f" Status: {status_str}."
                 if exit_code != 0: error_msg += f" Exit Code: {exit_code}."
                 if not process_info['completion_signal_received']:  # Specific check
                     error_msg += " Script did not signal completion via expected stdout message."
                     print(
-                        f"ERROR ({chassis_id}): Process finished normally (code 0) but completion signal was NOT received.")
+                        f"ERROR ({chassis_id}): Process finished normally but completion signal was not received.")
+                    if exit_code == 0 and exit_status == QProcess.NormalExit:
+                        print(
+                            f"WARN ({chassis_id}): Process finished normally but completion signal was not received.")
+
                 # Append stderr/stdout details if there
                 if stderr_final:
-                    error_msg += f"\nScript Error: {stderr_final}"
-                elif stdout_final:
-                    error_msg += f"\nScript Output: {stdout_final[:200]}..."
-                print(error_msg)  # Log full error
-                self.acquisitionError.emit(chassis_id, error_msg)
+                    error_details.append(f"\nScript Error: {stderr_final}")
+                elif stdout_final and not completion_received:
+                    error_details.append(f"\nFinal Script Output (max 200 chars): {stdout_final[:200]}...")
+                full_error_msg = " ".join(error_details)
+                print(f"ERROR_MSG_EMIT ({chassis_id}): {full_error_msg}")  # Log full error
+                self.acquisitionError.emit(chassis_id, full_error_msg)
 
         except Exception as e:
             print(f"CRITICAL: Error within handle_finished for {chassis_id}: {e}")
@@ -276,7 +287,15 @@ class DataAcquisitionManager(QObject):
             self.acquisitionError.emit(chassis_id, f"Internal error handling process finish: {str(e)}")
         finally:
             if process:
-                QTimer.singleShot(500, process.deleteLater)
+                try:
+                    process.readyReadStandardOutput.disconnect()
+                    process.readyReadStandardError.disconnect()
+                    process.finished.disconnect()
+                except TypeError:
+                    pass  # Already disconnected
+                except Exception as e_disconnect:
+                    print(f"Warning: Error disconnecting signals for {chassis_id}: {e_disconnect}")
+                QTimer.singleShot(0, process.deleteLater)
 
     def _process_output_file_wrapper(self, chassis_id: str, output_path: Path, process_info: dict):
         """Wrapper to catch exceptions during file processing."""
