@@ -250,7 +250,7 @@ class DataAcquisitionManager(QObject):
                     f"Acquisition process for {chassis_id} completed successfully AND signaled completion. Processing output file...")
                 output_path = process_info['output_path']
 
-                QTimer.singleShot(100, lambda p=output_path, pi=process_info:
+                QTimer.singleShot(3000, lambda p=output_path, pi=process_info:
                 self._process_output_file_wrapper(chassis_id, p, pi))  # Calls wrapper directly
 
             # Failure Conditions
