@@ -85,12 +85,15 @@ class DataAcquisitionManager(QObject):
             except IndexError:
                 raise ValueError(f"Could not parse CM number from chassis_id: {chassis_id}")
             # Format cavity numbers for filename (using the cavities from the outer config)
-            cavity_str = '_'.join(map(str, sorted(config['cavities'])))
+            cavity_str = ''.join(map(str, sorted(config['cavities'])))
             # Generate filename w/ timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"res_CM{cm_num}_cav{cavity_str}_{timestamp}.dat"
+            cm_part = f"CM{cm_num}"
+            cav_part = f"cav{cavity_str}"
+            filename = f"res_{cm_part}_{cav_part}_{timestamp}.dat"
             # Create directory structure and get full path
             data_dir = self._create_data_directory(chassis_id)
+            output_path = data_dir / filename
 
             # Arguement construction
             args = [
@@ -336,83 +339,74 @@ class DataAcquisitionManager(QObject):
             self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
 
     def _process_output_file(self, chassis_id: str, output_path: Path, process_info: dict):
-        """Reads and parses the completed data file. (Error handling moved to wrapper)"""
         print(f"DEBUG: _process_output_file entered for {chassis_id}")
         print(f"Reading data file: {output_path}")
         header_lines, data = self._read_data_file(output_path)
 
         channels = self._parse_channels(header_lines)
 
-        if data.size == 0:
-            print(f"Warning: Data array loaded from {output_path} is empty (size 0).")
-
-        # Check channel/column mismatch only if data exists
-        if data.size > 0 and len(channels) != data.shape[1]:
-            raise ValueError(
-                f"Mismatch between channels in header ({len(channels)}) "
-                f"and data columns ({data.shape[1]}) in {output_path}"
-            )
         parsed_data = {}
         if data.size > 0:
             if data.ndim == 1:
-                if len(channels) == 1:
-                    data = data.reshape(-1, 1)
-                else:
-                    raise ValueError("Internal logic error: 1D data shape inconsistent with multiple channels.")
+                data = data.reshape(-1, 1)
 
-            for idx, channel in enumerate(channels):
-                parsed_data[channel] = data[:, idx]
-        else:
-            for channel in channels:
-                parsed_data[channel] = np.array([])
-        cavity_num = 0
-        cav_str_to_convert = None
-        cav_part = None
-        match = None
-        try:
-            file_stem = output_path.stem
-            print(f"--- DEBUG: Parsing cavity number from stem: '{file_stem}' ---")
-            match = re.search(r'_cav(\d+)', file_stem)
-            if match:
-                cav_str_to_convert = match.group(1)
-                print(f"--- DEBUG: Regex found group 1: '{cav_str_to_convert}' ---")
-                cavity_num = int(cav_str_to_convert)
-                print(f"--- DEBUG: Regex parse successful, cavity_num = {cavity_num} ---")
+            expected_cols = len(channels)
+            actual_cols = data.shape[1]
 
-            else:
-                print("--- DEBUG: Regex failed, trying fallback split ---")
-                parts = file_stem.split('_')
-                cav_part = next((p for p in parts if p.startswith('cav')), None)
-                if cav_part:
-                    cav_num_str = cav_part.replace('cav', '').split('_')[0]
-                    cav_str_to_convert = cav_num_str
-                    print(f"--- DEBUG: Fallback found cav_part '{cav_part}', derived str: '{cav_str_to_convert}' ---")
-                    cavity_num = int(cav_str_to_convert)
-                    print(f"--- DEBUG: Fallback parse successful, cavity_num = {cavity_num} ---")
-                else:
-                    print(
-                        f"--- DEBUG WARNING: Could not find 'cav' part in filename stem: {file_stem}. Using default 0. ---")
-                    cavity_num = 0
-                    print(
-                        f"Warning: Could not parse cavity number reliably from filename {output_path.name}. Using default 0.")
-        except ValueError as ve_cav:
-            print(f"--- CRITICAL DEBUG: ValueError DIRECTLY during cavity parsing: {ve_cav} ---")
-            if cav_str_to_convert is not None:
-                print(f"--- CRITICAL DEBUG: String causing error was likely: '{cav_str_to_convert}' ---")
+            if actual_cols == expected_cols:
+                print(f"DEBUG: Data shape {data.shape}, mapping {actual_cols} cols to {expected_cols} channels.")
+                for idx, channel in enumerate(channels):
+                    parsed_data[channel] = data[:, idx]
             else:
                 print(
-                    f"--- CRITICAL DEBUG: Could not determine exact string causing ValueError (cav_str_to_convert is None) ---")  # ADDED
-                cavity_num = 0
-        except (IndexError, TypeError) as e:
-            print(f"Warning: Other error parsing cavity number from filename {output_path.name}: {e}. Using default 0.")
-            cavity_num = 0
-        print(f"--- DEBUG: Final cavity_num before emit: {cavity_num} ---")
+                    f"ERROR: Mismatch! Header channels={expected_cols}, Data columns={actual_cols} in {output_path}. Assigning empty data.")
+                for channel in channels:
+                    parsed_data[channel] = np.array([])
+        else:
+            print(f"DEBUG: Data size is 0. Assigning empty arrays for channels: {channels}")
+            for channel in channels:
+                parsed_data[channel] = np.array([])
+
+        cavity_numbers: List[int] = []
+        cav_str_match = None
+        try:
+            file_stem = output_path.stem
+            print(f"--- DEBUG: Parsing cavity numbers from stem: '{file_stem}' ---")
+
+            match = re.search(r'_cav(\d+)', file_stem)
+
+            if match:
+                cav_str_match = match.group(1)
+                print(f"--- DEBUG: Regex found cavity string: '{cav_str_match}' ---")
+                if cav_str_match.isdigit():
+                    cavity_numbers = [int(digit) for digit in cav_str_match]
+                    print(f"--- DEBUG: Parsed cavity numbers: {cavity_numbers} ---")
+                else:
+                    print(
+                        f"--- DEBUG WARNING: Regex matched '{cav_str_match}', but it contains non-digits. Using default []. ---")
+                    cavity_numbers = []
+            else:
+                print(
+                    f"--- DEBUG WARNING: Could not find '_cav<digits>' pattern in filename stem: {file_stem}. Using default []. ---")
+                cavity_numbers = []
+
+        except ValueError as ve_parse:
+            print(f"--- CRITICAL DEBUG: ValueError during cavity number conversion: {ve_parse} ---")
+            if cav_str_match is not None:
+                print(f"--- CRITICAL DEBUG: String being converted was likely: '{cav_str_match}' ---")
+            cavity_numbers = []
+        except Exception as e_parse:
+            print(f"--- CRITICAL DEBUG: Unexpected error during cavity parsing: {e_parse} ---")
+            traceback.print_exc()
+            cavity_numbers = []
+
+        print(f"--- DEBUG: Final cavity_numbers before emit: {cavity_numbers} ---")
 
         decimation = process_info.get('decimation', 1)
 
-        print(f"Emitting dataReceived for {chassis_id}, Cavity {cavity_num}")
+        print(f"Emitting dataReceived for {chassis_id}, Cavities {cavity_numbers}")
         self.dataReceived.emit(chassis_id, {
-            'cavity': cavity_num,
+            'cavities': cavity_numbers,
             'channels': parsed_data,
             'decimation': decimation,
             'filepath': str(output_path)
