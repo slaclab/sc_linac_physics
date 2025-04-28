@@ -221,19 +221,27 @@ class TimeSeriesPlot(BasePlot):
                         skipFiniteCheck=True
                     )
 
-    def update_plot(self, cavity_num, data):
+    def update_plot(self, cavity_num, cavity_channel_data):
         """Main method to update time series plot w/ new data"""
         # Extract and preprocess data
-        data_array, is_valid = self._preprocess_data(data)
+        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type='DF')
         if not is_valid:
+            print(f"TimeSeriesPlot: No valid 'DF' data for cavity {cavity_num}")
+            # Optionally clear/hide existing curve
+            if cavity_num in self.plot_curves:
+                self.plot_curves[cavity_num].setData([], [])
             return
 
-        # Create time values and store original data
-        num_points = len(data_array)
-        times = np.linspace(0, (num_points - 1) / self.SAMPLE_RATE, num_points)
-        values = data_array
+        num_points = len(df_data)
+        if num_points == 0:
+            print(f"TimeSeriesPlot: Preprocessed 'DF' data is empty for cavity {cavity_num}")
+            return
 
-        # Store the original data
+        values = df_data
+
+        effective_sample_rate = self.SAMPLE_RATE
+        times = np.linspace(0, (num_points - 1) / effective_sample_rate, num_points)
+
         self._original_data[cavity_num] = (times, values)
 
         # Create decimated versions for different zoom levels
@@ -242,7 +250,7 @@ class TimeSeriesPlot(BasePlot):
         # Create pen for this cavity
         pen = self._get_cavity_pen(cavity_num)
 
-        # Create curve if it doesn't exist yet
+        # Plotting Logic uses derived times/values)
         if cavity_num not in self.plot_curves:
             # For initial creation, use a decimated version
             if len(times) > 2000:
@@ -258,34 +266,32 @@ class TimeSeriesPlot(BasePlot):
                 skipFiniteCheck=True,
                 antialias=True
             )
-
             self.plot_curves[cavity_num] = curve
         else:
-            # Use existing curve w/ new data
-            # Get current view range
+            # Update existing curve using appropriate decimation for current view
             vb = self.plot_widget.getViewBox()
             view_range = vb.viewRange()
             x_min, x_max = view_range[0]
             view_width = x_max - x_min
 
-            # Get a good decimation and update
             decimated = self._get_optimal_decimation(cavity_num, view_width)
             if decimated:
-                times, values = decimated
-                display_times, display_values = self._filter_to_view(times, values, x_min, x_max)
+                dec_times, dec_values = decimated
+                display_times, display_values = self._filter_to_view(dec_times, dec_values, x_min, x_max)
                 self.plot_curves[cavity_num].setData(
                     display_times, display_values,
                     skipFiniteCheck=True
                 )
 
-        # Smart auto range for live data
-        view_window = 10  # Show last 10 seconds
-        if times[-1] > view_window:
-            # For the streaming data slide the window
-            self.plot_widget.setXRange(max(0, times[-1] - view_window), times[-1])
+        if len(times) > 0:  # Check if times array is not empty
+            view_window = 10
+            if times[-1] > view_window:
+                self.plot_widget.setXRange(max(0, times[-1] - view_window), times[-1])
+            else:
+                self.plot_widget.setXRange(0, times[-1])
         else:
-            # For smaller datasets we will show all data
-            self.plot_widget.setXRange(0, times[-1])
+            # Handle case with no time data
+            self.plot_widget.setXRange(0, 1)
 
     def clear_plot(self):
         """Override clear_plot to also clear time series specific data structures"""

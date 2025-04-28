@@ -40,42 +40,45 @@ class HistogramPlot(BasePlot):
         """
         return f"Detuning: {x:.1f} Hz\nCount: {int(y)}"
 
-    def update_plot(self, cavity_num, buffer_data):
+    def update_plot(self, cavity_num, cavity_channel_data):
         """Update histogram plot w/ new data
 
         Args:
             cavity_num: Cavity number (1-8)
             buffer_data: Dictionary containing detuning data
         """
-        # Preprocess data
-        data_array, is_valid = self._preprocess_data(buffer_data)
+        # Preprocess data get the DF channel
+        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type='DF')
         if not is_valid:
-            print(f"No valid data for cavity {cavity_num}")
+            print(f"HistogramPlot: No valid 'DF' data for cavity {cavity_num}")
+            # Optionally clear/hide existing curve
+            if cavity_num in self.plot_curves:
+                self.plot_curves[cavity_num].setData([], [])
             return
 
         # Calculate data range
         if self.data_range is None:
-            # Add a small margin to the range for better visualization
-            min_val = np.min(data_array)
-            max_val = np.max(data_array)
-            range_padding = 0.05 * (max_val - min_val)
+            try:
+                min_val = np.min(df_data)
+                max_val = np.max(df_data)
+                range_padding = 0.05 * (max_val - min_val)
+                if range_padding < 1e-6: range_padding = 5
+                self.data_range = (min_val - range_padding, max_val + range_padding)
 
-            # Making sure we have a non 0 range
-            if range_padding < 1e-6:
-                range_padding = 5  # Default padding in case if range is too small
+                self.plot_widget.setTitle(f"Histogram ({self.data_range[0]:.1f} to {self.data_range[1]:.1f} Hz)")
+                self.plot_widget.setXRange(*self.data_range)
+            except ValueError:  # Handle empty array case if min/max fails
+                print(f"HistogramPlot: Could not calculate range for Cav {cavity_num} (likely empty data).")
+                return  # Don't proceed if range calculation fails
 
-            self.data_range = (min_val - range_padding, max_val + range_padding)
+            # Calculate histogram using utility function
+        try:
+            bins, counts = calculate_histogram(df_data, bin_range=self.data_range, num_bins=self.num_bins)
+        except Exception as e:
+            print(f"HistogramPlot: Error during histogram calculation for Cav {cavity_num}: {e}")
+            return
 
-            # Update plot title w/ actual range
-            self.plot_widget.setTitle(f"Histogram ({self.data_range[0]:.1f} to {self.data_range[1]:.1f} Hz)")
-
-            # Update x-axis range
-            self.plot_widget.setXRange(*self.data_range)
-
-        # Calculate histogram using utility function w/ the data driven range
-        bins, counts = calculate_histogram(data_array, bin_range=self.data_range, num_bins=self.num_bins)
-
-        # Update plot
+            # Update plot using the helper method 
         self.update_histogram_plot(cavity_num, bins, counts)
 
     def update_histogram_plot(self, cavity_num, bins, counts):

@@ -14,7 +14,7 @@ class MeasurementConfig:
     buffer_length: int = 16384
     sample_rate: int = 2000
     decimation: int = 1
-    buffer_count: int = 65
+    buffer_count: int = 1
 
     def validate(self) -> Optional[str]:
         """Validate configuration parameters"""

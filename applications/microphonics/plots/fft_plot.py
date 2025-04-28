@@ -34,23 +34,28 @@ class FFTPlot(BasePlot):
         """
         return f"Frequency: {x:.1f} Hz\nAmplitude: {y:.6f}"
 
-    def update_plot(self, cavity_num, buffer_data):
+    def update_plot(self, cavity_num, cavity_channel_data):
         """Update FFT plot w/ new data
 
         Args:
             cavity_num: Cavity number (1-8)
             buffer_data: Dictionary containing detuning data
         """
-        # Preprocess data
-        data_array, is_valid = self._preprocess_data(buffer_data)
+        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type='DF')
         if not is_valid:
-            print(f"No valid data for cavity {cavity_num}")
+            print(f"FFTPlot: No valid 'DF' data for cavity {cavity_num}")
+            # Optionally clear/hide existing curve
+            if cavity_num in self.plot_curves:
+                self.plot_curves[cavity_num].setData([], [])
             return
 
-        # Calculate FFT using utility function
-        freqs, amplitudes = calculate_fft(data_array, self.SAMPLE_RATE)
+        try:
+            freqs, amplitudes = calculate_fft(df_data, self.SAMPLE_RATE)
+        except Exception as e:
+            print(f"FFTPlot: Error during FFT calculation for Cav {cavity_num}: {e}")
+            return
 
-        # Update plot
+        # Update plot using the helper method (no changes needed in update_fft_plot itself)
         self.update_fft_plot(cavity_num, freqs, amplitudes)
 
     def update_fft_plot(self, cavity_num, freqs, amplitudes):
