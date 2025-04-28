@@ -188,13 +188,20 @@ class PlotPanel(QWidget):
         # Apply updated config
         self._apply_config_to_all_plots()
 
-    def update_plots(self, cavity_num, buffer_data):
+    def update_plots(self, data_dict: dict):
         """Update all plots w/ new data"""
-        # Forward data to all plots
-        self.fft_plot.update_plot(cavity_num, buffer_data)
-        self.histogram_plot.update_plot(cavity_num, buffer_data)
-        self.time_series_plot.update_plot(cavity_num, buffer_data)
-        self.spectrogram_plot.update_plot(cavity_num, buffer_data)
+        cavity_list = data_dict.get('cavity_list', [])
+        all_cavity_data = data_dict.get('cavities', {})
+        for cavity_num in cavity_list:
+            cavity_channel_data = all_cavity_data.get(cavity_num)
+            if cavity_channel_data:
+                # Pass dictionary of channel data for this cavity to each plot types update method
+                self.fft_plot.update_plot(cavity_num, cavity_channel_data)
+                self.histogram_plot.update_plot(cavity_num, cavity_channel_data)
+                self.time_series_plot.update_plot(cavity_num, cavity_channel_data)
+                self.spectrogram_plot.update_plot(cavity_num, cavity_channel_data)
+            else:
+                print(f"PlotPanel: No data found for cavity {cavity_num} in received data_dict.")
 
     def clear_plots(self):
         """Clear all plot data"""

@@ -4,7 +4,7 @@ import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional, Any
 
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, QProcess, QTimer
@@ -23,6 +23,8 @@ class DataAcquisitionManager(QObject):
     ]
     # Regex to capture progress (more robust)
     PROGRESS_REGEX = re.compile(r"Acquired\s+(\d+)\s+/\s+(\d+)\s+buffers")
+    PV_CAVITY_REGEX = re.compile(r"ACCL:L\dB:(\d{2})(\d)0:")
+    PV_CHANNEL_REGEX = re.compile(r":PZT:([A-Z]+):WF")
 
     def __init__(self):
         super().__init__()
@@ -63,18 +65,19 @@ class DataAcquisitionManager(QObject):
         """Start acquisition using QProcess"""
         try:
             print(f"DEBUG: >>> Entered start_acquisition for {chassis_id}")
-            # Basic validation first
             if not config.get('cavities'):
                 raise ValueError("No cavities specified")
+            if not config.get('config'):
+                raise ValueError("MeasurementConfig missing in config dict")
+
+            measurement_cfg = config['config']  # MeasurementConfig object
+            selected_cavities = sorted(config['cavities'])
 
             # Check CM boundary crossing
             low_cm = any(c <= 4 for c in config['cavities'])
             high_cm = any(c > 4 for c in config['cavities'])
             if low_cm and high_cm:
                 raise ValueError("ERROR: Cavity selection crosses half-CM")
-
-            # Extract the nested MeasurementConfig object
-            measurement_cfg = config['config']  # Get the MeasurementConfig object
 
             process = QProcess()
 
@@ -84,23 +87,26 @@ class DataAcquisitionManager(QObject):
                 cm_num = chassis_id.split(':')[2][:2]
             except IndexError:
                 raise ValueError(f"Could not parse CM number from chassis_id: {chassis_id}")
-            # Format cavity numbers for filename (using the cavities from the outer config)
-            cavity_str = ''.join(map(str, sorted(config['cavities'])))
-            # Generate filename w/ timestamp
+            # Format cavity numbers for filename
+            cavity_str_for_filename = ''.join(map(str, selected_cavities))
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             cm_part = f"CM{cm_num}"
-            cav_part = f"cav{cavity_str}"
-            filename = f"res_{cm_part}_{cav_part}_{timestamp}.dat"
-            # Create directory structure and get full path
+            cav_part = f"cav{cavity_str_for_filename}"
+            # Include buffer count in filename
+            buffer_part = f"c{measurement_cfg.buffer_count}"
+            # Filename format
+            filename = f"res_{cm_part}_{cav_part}_{buffer_part}_{timestamp}.dat"
+
             data_dir = self._create_data_directory(chassis_id)
             output_path = data_dir / filename
+            print(f"DEBUG: Output file path set to: {output_path}")
 
             # Arguement construction
             args = [
                 '-D', str(data_dir),
                 '-a', config['pv_base'],
                 '-wsp', str(measurement_cfg.decimation),
-                '-acav', *map(str, config['cavities']),
+                '-acav', *map(str, selected_cavities),
                 '-ch', *measurement_cfg.channels,
                 '-c', str(measurement_cfg.buffer_count),
                 '-F', filename
@@ -110,11 +116,7 @@ class DataAcquisitionManager(QObject):
             full_command_args = [str(self.script_path)] + args
 
             print(f"Starting QProcess for {chassis_id}")
-            print(f"Interpreter {python_executable}")
-            print(f"Script Path: {self.script_path}")
-            print(f"Script Args: {args}")
             print(f"Full Command to Execute: {[python_executable] + full_command_args}")
-            print(f"Argument Types for Python: {[type(a) for a in full_command_args]}")
 
             # Connect signals
             process.readyReadStandardOutput.connect(
@@ -141,7 +143,7 @@ class DataAcquisitionManager(QObject):
             process.start(python_executable, full_command_args)
 
             # Check for immediate start failure
-            if not process.waitForStarted(3000):  # Wait up to 3 sec
+            if not process.waitForStarted(5000):  # Wait up to 5 sec
                 error_str = process.errorString()
                 print(f"ERROR: Failed to start QProcess for {chassis_id}. QProcess Error: {error_str}")
                 # Clean up immediately if start fails
@@ -175,29 +177,37 @@ class DataAcquisitionManager(QObject):
                 # Check for completion markers first
                 if any(marker in line for marker in self.COMPLETION_MARKERS):
                     print(f"INFO: Completion marker '{line}' detected for {chassis_id}.")
-                    process_info['completion_signal_received'] = True
-
+                    if not process_info['completion_signal_received']:
+                        process_info['completion_signal_received'] = True
+                        if process_info['last_progress'] < 100:
+                            cavity_num = process_info['cavity_num_for_progress']
+                            self.acquisitionProgress.emit(chassis_id, cavity_num, 100)
+                            process_info['last_progress'] = 100
+                            print(f"Progress ({chassis_id}, Cav {cavity_num}): 100% (Completion marker seen)")
                 # Check for progress
-                match = self.PROGRESS_REGEX.search(line)
-                if match:
-                    try:
-                        acquired = int(match.group(1))
-                        total = int(match.group(2))
-                        # Validation and progress calculation
-                        progress = int((acquired / total) * 100) if total > 0 else 0
-                        process_info['last_progress'] = progress
-                        cavity_num = process_info['cavity_num_for_progress']
-                        self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
-                        print(f"Progress ({chassis_id}, Cav {cavity_num}): {progress}% ({acquired}/{total})")
+                if not process_info['completion_signal_received']:
+                    match = self.PROGRESS_REGEX.search(line)
+                    if match:
+                        try:
+                            acquired = int(match.group(1))
+                            total = int(match.group(2))
+                            if total > 0:
+                                progress = int((acquired / total) * 100)
+                                if progress >= process_info['last_progress'] and progress <= 100:
+                                    process_info['last_progress'] = progress
+                                    cavity_num = process_info['cavity_num_for_progress']
+                                    self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
+                                    print(
+                                        f"Progress ({chassis_id}, Cav {cavity_num}): {progress}% ({acquired}/{total})")
+                                    if acquired == total:
+                                        print(
+                                            f"INFO: Final buffer acquired message detected for {chassis_id} (progress {acquired}/{total}). Setting completion flag.")
+                                        process_info['completion_signal_received'] = True
 
-                        # Backup completion check
-                        if acquired == total:
-                            print(f"INFO: Final buffer acquired message detected for {chassis_id}.")
-                            process_info['completion_signal_received'] = True
-                    except ValueError:
-                        print(f"WARN ({chassis_id}): Could not parse progress numbers from line: {line}")
-                    except Exception as e_parse:
-                        print(f"ERROR processing progress line for {chassis_id}: {e_parse}")
+                        except ValueError:
+                            print(f"WARN ({chassis_id}): Could not parse progress numbers from line: {line}")
+                        except Exception as e_parse:
+                            print(f"ERROR processing progress line for {chassis_id}: {e_parse}")
 
         except Exception as e:
             print(f"CRITICAL ERROR processing stdout for {chassis_id}: {e}")
@@ -234,31 +244,31 @@ class DataAcquisitionManager(QObject):
             # Read remaining output/error streams
             stderr_final = ""
             stdout_final = ""
-            try:
-                if process.state() != QProcess.NotRunning:
-                    pass
-                stderr_final = bytes(process.readAllStandardError()).decode(errors='ignore').strip()
-                stdout_final = bytes(process.readAllStandardOutput()).decode(errors='ignore').strip()
-                if stderr_final: print(f" Final STDERR ({chassis_id}): {stderr_final}")
-                if stdout_final:
-                    print(f" Final STDOUT ({chassis_id}): {stdout_final}")
-                    # Last check for completion markers
-                    if not completion_received:
-                        for line in stdout_final.splitlines():
-                            if any(marker in line for marker in self.COMPLETION_MARKERS):
-                                print(f"INFO: Completion marker found in final stdout for {chassis_id}.")
-                                process_info['completion_signal_received'] = True
-                                completion_received = True
-                                break
-            except Exception as e_read:
-                print(f"Error reading final stderr/stdout for {chassis_id}: {e_read}")
+            if process.state() != QProcess.NotRunning:
+                try:
+                    process.waitForReadyRead(100)
+                    stderr_final = bytes(process.readAllStandardError()).decode(errors='ignore').strip()
+                    stdout_final = bytes(process.readAllStandardOutput()).decode(errors='ignore').strip()
+                    if stderr_final: print(f" Final STDERR ({chassis_id}): {stderr_final}")
+                    if stdout_final:
+                        print(f" Final STDOUT ({chassis_id}): {stdout_final}")
+                        # Last check for completion markers
+                        if not completion_received:
+                            for line in stdout_final.splitlines():
+                                if any(marker in line for marker in self.COMPLETION_MARKERS):
+                                    print(f"INFO: Completion marker found in final stdout for {chassis_id}.")
+                                    process_info['completion_signal_received'] = True
+                                    completion_received = True
+                                    break
+                except Exception as e_read:
+                    print(f"Error reading final stderr/stdout for {chassis_id}: {e_read}")
 
             # Worked Condition: Check exit code, status, and completion signal
             if exit_code == 0 and exit_status == QProcess.NormalExit and completion_received and output_path:
                 print(f"Acquisition process for {chassis_id} completed successfully AND signaled completion.")
                 print(f"DIAGNOSTIC: Starting deliberate delay before reading {output_path}...")
 
-                QTimer.singleShot(10000, lambda p=output_path, pi=process_info:
+                QTimer.singleShot(20000, lambda p=output_path, pi=process_info:
                 self._process_output_file_wrapper(chassis_id, p, pi))  # Calls wrapper directly
 
             # Failure Conditions
@@ -266,266 +276,329 @@ class DataAcquisitionManager(QObject):
                 error_details = []
                 error_msg = f"Acquisition process for {chassis_id} failed or did not signal completion."
                 error_details.append(error_msg)
-                if exit_status != QProcess.NormalExit: error_msg += f" Status: {status_str}."
-                if exit_code != 0: error_msg += f" Exit Code: {exit_code}."
-                if not process_info['completion_signal_received']:  # Specific check
-                    error_msg += " Script did not signal completion via expected stdout message."
-                    print(
-                        f"ERROR ({chassis_id}): Process finished normally but completion signal was not received.")
-                    if exit_code == 0 and exit_status == QProcess.NormalExit:
-                        print(
-                            f"WARN ({chassis_id}): Process finished normally but completion signal was not received.")
+                if exit_status != QProcess.NormalExit:
+                    error_msg += f" Status: {status_str}."
+                elif exit_code != 0:
+                    error_details.append(f"Exit Code: {exit_code}.")
 
-                # Append stderr/stdout details if there
-                if stderr_final:
-                    error_details.append(f"\nScript Error: {stderr_final}")
-                elif stdout_final and not completion_received:
-                    error_details.append(f"\nFinal Script Output (max 200 chars): {stdout_final[:200]}...")
-                full_error_msg = " ".join(error_details)
-                print(f"ERROR_MSG_EMIT ({chassis_id}): {full_error_msg}")  # Log full error
-                self.acquisitionError.emit(chassis_id, full_error_msg)
+                if not completion_received:
+                    error_details.append("Script did not signal completion via stdout.")
+                    if exit_code == 0 and exit_status == QProcess.NormalExit:
+                        print(f"WARN ({chassis_id}): Process finished normally but completion signal was missing.")
+                    else:
+                        print(f"ERROR ({chassis_id}): Process finished abnormally and completion signal was missing.")
 
         except Exception as e:
             print(f"CRITICAL: Error within handle_finished for {chassis_id}: {e}")
             traceback.print_exc()
-            self.acquisitionError.emit(chassis_id, f"Internal error handling process finish: {str(e)}")
         finally:
             if process:
                 try:
                     process.readyReadStandardOutput.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                try:
                     process.readyReadStandardError.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                try:
                     process.finished.disconnect()
-                except TypeError:
-                    pass  # Already disconnected
-                except Exception as e_disconnect:
-                    print(f"Warning: Error disconnecting signals for {chassis_id}: {e_disconnect}")
+                except (TypeError, RuntimeError):
+                    pass
+                # Schedule deletion
                 QTimer.singleShot(0, process.deleteLater)
+                print(f"DEBUG: Scheduled QProcess for {chassis_id} for deletion.")
+                if 'process' in process_info: process_info['process'] = None
 
     def _process_output_file_wrapper(self, chassis_id: str, output_path: Path, process_info: dict):
-        """Wrapper to catch exceptions during file processing."""
+        """Wrapper to catch exceptions during file processing and emit completion."""
         print(f"DEBUG: _process_output_file_wrapper entered for {chassis_id}")
-
         try:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            print(f"[{current_time}] DEBUG: Attempting to process file: {output_path}")
+            print(f"[{current_time}] Attempting to process file: {output_path}")
 
+            # Check file existence and size before processing
             if not output_path.exists():
-                print(f"ERROR: File {output_path} not found even after script completion signal!")
-                self.acquisitionError.emit(chassis_id,
-                                           f"Output file {output_path.name} missing despite script success.")
+                print(f"ERROR: File {output_path} not found after wait!")
+                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} missing after wait.")
                 return
 
             file_size = output_path.stat().st_size
-            print(f"DEBUG: File exists. Size before reading: {file_size} bytes")
+            print(f"DEBUG: File exists. Size: {file_size} bytes")
             if file_size == 0:
-                print(f"WARN: File {output_path} exists but is empty. Skipping processing.")
+                print(f"WARN: File {output_path} exists but is empty. Aborting processing.")
                 self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} was empty.")
                 return
 
-            # Call the processing function
-            print(f" DEBUG: Calling _process_output_file for {chassis_id} from wrapper")
-            self._process_output_file(chassis_id, output_path, process_info)
+            # Call the core processing function
+            print(f"DEBUG: Calling _process_output_file for {chassis_id}")
+            parsed_data_dict = self._process_output_file(chassis_id, output_path, process_info)
 
-            # Emit completion signal only if processing works
-            self.acquisitionComplete.emit(chassis_id)
-            current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            print(f"[{current_time_end}] DEBUG: Successfully processed file: {output_path}")
+            # Emit Signals only on completion
+            if parsed_data_dict:
+                print(f"DEBUG: Emitting dataReceived for {chassis_id}")
+                self.dataReceived.emit(chassis_id, parsed_data_dict)
 
-        except FileNotFoundError as e:
+                # Emit overall completion after data is successfully processed and emitted
+                print(f"DEBUG: Emitting acquisitionComplete for {chassis_id}")
+                self.acquisitionComplete.emit(chassis_id)
+
+                current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                print(f"[{current_time_end}] Successfully processed and emitted data for: {output_path}")
+            else:
+                # Error should have been emitted within _process_output_file or _read_data_file
+                print(
+                    f"ERROR: _process_output_file did not return valid data for {chassis_id}. Completion not signaled.")
+
+        except FileNotFoundError:
+            print(f"ERROR: File not found during processing wrapper for {chassis_id}: {output_path}")
             self.acquisitionError.emit(chassis_id, f"Output file missing or unreadable: {output_path.name}")
-        except (ValueError, IndexError) as e:  # Catch parsing/indexing errors specifically
-            self.acquisitionError.emit(chassis_id, f"Data parsing/indexing error in {output_path.name}: {e}")
+        except (ValueError, IndexError) as e:
+            print(f"ERROR: Data parsing/indexing error in wrapper for {chassis_id}: {e}")
+            traceback.print_exc()
+            self.acquisitionError.emit(chassis_id, f"Data parsing error in {output_path.name}: {e}")
         except Exception as e:
+            print(f"CRITICAL: Unexpected error processing file in wrapper for {chassis_id}: {e}")
+            traceback.print_exc()
             self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
 
-    def _process_output_file(self, chassis_id: str, output_path: Path, process_info: dict):
-        print(f"DEBUG: _process_output_file entered for {chassis_id}")
-        print(f"Reading data file: {output_path}")
-        header_lines, data = self._read_data_file(output_path)
-
-        channels = self._parse_channels(header_lines)
-
-        parsed_data = {}
-        if data.size > 0:
-            if data.ndim == 1:
-                data = data.reshape(-1, 1)
-
-            expected_cols = len(channels)
-            actual_cols = data.shape[1]
-
-            if actual_cols == expected_cols:
-                print(f"DEBUG: Data shape {data.shape}, mapping {actual_cols} cols to {expected_cols} channels.")
-                for idx, channel in enumerate(channels):
-                    parsed_data[channel] = data[:, idx]
-            else:
-                print(
-                    f"ERROR: Mismatch! Header channels={expected_cols}, Data columns={actual_cols} in {output_path}. Assigning empty data.")
-                for channel in channels:
-                    parsed_data[channel] = np.array([])
-        else:
-            print(f"DEBUG: Data size is 0. Assigning empty arrays for channels: {channels}")
-            for channel in channels:
-                parsed_data[channel] = np.array([])
-
-        cavity_numbers: List[int] = []
-        cav_str_match = None
+    def _extract_cavity_channel_from_pv(self, pv_string: str) -> Optional[Tuple[int, str]]:
+        """
+        Extracts cavity number and channel type from PV string based on observed convention:
+        ACCL:L<X>B:<CM><CAV>0:PZT:<TYPE>:WF
+        """
         try:
-            file_stem = output_path.stem
-            print(f"--- DEBUG: Parsing cavity numbers from stem: '{file_stem}' ---")
-
-            match = re.search(r'_cav(\d+)', file_stem)
-
-            if match:
-                cav_str_match = match.group(1)
-                print(f"--- DEBUG: Regex found cavity string: '{cav_str_match}' ---")
-                if cav_str_match.isdigit():
-                    cavity_numbers = [int(digit) for digit in cav_str_match]
-                    print(f"--- DEBUG: Parsed cavity numbers: {cavity_numbers} ---")
+            parts = pv_string.split(':')
+            # Check structure: ACCL:LXB:CMCAV0:PZT:TYPE:WF
+            if len(parts) >= 6 and parts[3] == 'PZT' and parts[5] == 'WF':
+                segment3 = parts[2]  # e.g., '0250'
+                if len(segment3) == 4 and segment3.endswith('0'):
+                    # Cavity number is the 3rd character (index 2)
+                    cav_num = int(segment3[2])
+                    # Channel type is the 5th segment (index 4)
+                    channel_type = parts[4]
+                    return cav_num, channel_type
                 else:
-                    print(
-                        f"--- DEBUG WARNING: Regex matched '{cav_str_match}', but it contains non-digits. Using default []. ---")
-                    cavity_numbers = []
+                    # Log warning if format of segment 3 is unexpected
+                    print(f"WARN: PV segment '{segment3}' in '{pv_string}' doesn't match <CM><CAV>0 format.")
+                    return None
             else:
+                # Log warning if overall structure is wrong
+                # print(f"WARN: PV string '{pv_string}' doesn't match expected format.") # Optional: reduce verbosity
+                return None
+        except (IndexError, ValueError) as e:
+            # Log warning if indexing or int conversion fails
+            print(f"WARN: Could not parse cavity/channel from PV '{pv_string}': {e}")
+            return None
+
+    def _process_output_file(self, chassis_id: str, output_path: Path, process_info: dict) -> Optional[Dict[str, Any]]:
+        """
+        Reads data file, parses header/data using PV names, structures output by cavity.
+        Returns the structured data dictionary or none on failure.
+        """
+        print(f"DEBUG: _process_output_file entered for {chassis_id}, File: {output_path}")
+        try:
+            # Read header and data
+            header_lines, data_array = self._read_data_file(output_path)
+            if header_lines is None or data_array is None:
+                # Error already logged
+                self.acquisitionError.emit(chassis_id, f"Failed to read/parse data file: {output_path.name}")
+                return None
+
+            # Parse full PV channel names
+            channel_pvs = self._parse_channels(header_lines)
+            if not channel_pvs:
+                # Error already logged
+                self.acquisitionError.emit(chassis_id, f"Channel PVs not found in header: {output_path.name}")
+                return None
+
+            print(f"DEBUG: Found {len(channel_pvs)} channel PVs in header: {channel_pvs}")
+            print(f"DEBUG: Data array shape: {data_array.shape}")
+
+            # Prepare output structure
+            output_data: Dict[str, Any] = {
+                'cavities': {},
+                'cavity_list': [],
+                'decimation': process_info.get('decimation', 1),
+                'filepath': str(output_path)
+            }
+            cavity_numbers_found = set()
+
+            # Check for column mismatch
+            expected_cols = len(channel_pvs)
+            actual_cols = data_array.shape[1] if data_array.ndim == 2 else 0
+
+            if data_array.size > 0 and actual_cols != expected_cols:
                 print(
-                    f"--- DEBUG WARNING: Could not find '_cav<digits>' pattern in filename stem: {file_stem}. Using default []. ---")
-                cavity_numbers = []
+                    f"ERROR: Column mismatch in {output_path.name}! Header={expected_cols}, Data={actual_cols}. Assigning empty data.")
+                data_array = np.empty((0, expected_cols), dtype=float)
 
-        except ValueError as ve_parse:
-            print(f"--- CRITICAL DEBUG: ValueError during cavity number conversion: {ve_parse} ---")
-            if cav_str_match is not None:
-                print(f"--- CRITICAL DEBUG: String being converted was likely: '{cav_str_match}' ---")
-            cavity_numbers = []
-        except Exception as e_parse:
-            print(f"--- CRITICAL DEBUG: Unexpected error during cavity parsing: {e_parse} ---")
+            # Populate output structure by parsing PVs and assigning data columns
+            for idx, pv_name in enumerate(channel_pvs):
+                parsed_info = self._extract_cavity_channel_from_pv(pv_name)
+                if parsed_info:
+                    cav_num, channel_type = parsed_info
+                    cavity_numbers_found.add(cav_num)
+
+                    if cav_num not in output_data['cavities']:
+                        output_data['cavities'][cav_num] = {}
+
+                    # Assign data column if data exists and dimensions match
+                    if data_array.ndim == 2 and idx < actual_cols and data_array.shape[0] > 0:
+                        column_data = data_array[:, idx]
+                        output_data['cavities'][cav_num][channel_type] = column_data
+                    else:
+                        # Assign empty array if no data rows, column mismatch, or parsing failed
+                        output_data['cavities'][cav_num][channel_type] = np.array([], dtype=float)
+                else:
+                    # Case where PV parsing failed for this specific header entry
+                    print(f"WARN: Skipping data column {idx} due to PV parsing failure: {pv_name}")
+
+            output_data['cavity_list'] = sorted(list(cavity_numbers_found))
+            print(
+                f"DEBUG: Final processed data structure for {chassis_id}: Cavities found: {output_data['cavity_list']}")
+
+            return output_data
+
+        except ValueError as e:
+            print(f"ERROR: ValueError processing file {output_path.name}: {e}")
             traceback.print_exc()
-            cavity_numbers = []
-
-        print(f"--- DEBUG: Final cavity_numbers before emit: {cavity_numbers} ---")
-
-        decimation = process_info.get('decimation', 1)
-
-        print(f"Emitting dataReceived for {chassis_id}, Cavities {cavity_numbers}")
-        self.dataReceived.emit(chassis_id, {
-            'cavities': cavity_numbers,
-            'channels': parsed_data,
-            'decimation': decimation,
-            'filepath': str(output_path)
-        })
+            self.acquisitionError.emit(chassis_id, f"Data processing error in {output_path.name}: {e}")
+            return None
+        except IndexError as e:
+            print(f"ERROR: IndexError processing file {output_path.name}: {e}")
+            traceback.print_exc()
+            self.acquisitionError.emit(chassis_id, f"Data indexing error in {output_path.name}: {e}")
+            return None
+        except Exception as e:
+            print(f"CRITICAL: Unexpected error in _process_output_file for {chassis_id}: {e}")
+            traceback.print_exc()
+            self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
+            return None
 
     def stop_acquisition(self, chassis_id: str):
-        """Stop a running acquisition"""
-        if chassis_id in self.active_processes:
-            process_info = self.active_processes[chassis_id]
-            process = process_info['process']
-            process.terminate()
-            # Force kill after timeout if not terminated
-            QTimer.singleShot(2000, process.kill)
+        """Stop a running acquisition process."""
+        print(f"Attempting to stop acquisition for {chassis_id}...")
+        process_info = self.active_processes.get(chassis_id)
+        if process_info:
+            process = process_info.get('process')
+            if process and process.state() != QProcess.NotRunning:
+                print(f"Terminating process for {chassis_id} (PID: {process.processId()})...")
+                process.terminate()
+                if not process.waitForFinished(2000):
+                    print(f"Process {chassis_id} did not terminate gracefully, killing...")
+                    process.kill()
+                    process.waitForFinished(1000)
+            else:
+                print(f"Process for {chassis_id} already stopped or not found in info dict.")
+
+            # Remove from active list after attempting stop
+            if chassis_id in self.active_processes:
+                del self.active_processes[chassis_id]
+                print(f"Removed {chassis_id} from active processes list during stop.")
+        else:
+            print(f"No active acquisition found for {chassis_id} to stop.")
 
     def stop_all(self):
         """Stop all acquisitions"""
         for chassis_id in list(self.active_processes.keys()):
             self.stop_acquisition(chassis_id)
 
-    def _read_data_file(self, file_path: Path) -> Tuple[List[str], np.ndarray]:
-        """Read data file generated by res_data_acq.py, parsing numerical data."""
-        print(f"\n!!! DEBUG: _read_data_file called for {file_path}")
-        print("!!! DEBUG: Call stack:")
-        traceback.print_stack()
-        print("!!! DEBUG: --- End Call Stack ---\n")
-        header_lines = []
-        data_lines = []
-        channel_header_found = False  # Flag to track if we found the specific header
+    def _read_data_file(self, file_path: Path) -> Tuple[Optional[List[str]], Optional[np.ndarray]]:
+        """
+        Reads data file, separates header/data based on '# ACCL:' line.
+        Returns (header_lines, data_array).
+        """
+        print(f"DEBUG: _read_data_file attempting to read: {file_path}")
+        header_lines: List[str] = []
+        data_content_lines: List[str] = []
+        channel_header_line_index: Optional[int] = None
 
         try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                # Read Header Part
-                line = f.readline()
-                while line:  # Read until end of file
-                    stripped_line = line.strip()
+            with file_path.open('r', encoding='utf-8', errors='ignore') as f:
+                all_lines = f.readlines()
 
-                    # Check for the specific channel header marker
-                    if stripped_line.startswith('# ACCL:'):
-                        header_lines.append(line)  # Keep the channel header line
-                        channel_header_found = True
-                        # Continue reading the rest of the file for data/comments
-                        line = f.readline()
-                        continue  # Move to next line
+            # Find the crucial channel header line ('# ACCL:')
+            for i, line in enumerate(all_lines):
+                if line.strip().startswith('# ACCL:'):
+                    channel_header_line_index = i
+                    break
 
-                    # If we haven't found the channel header yet treat lines as header
-                    if not channel_header_found:
-                        header_lines.append(line)
-                    # If we have found the channel header check if line is data or comment
-                    else:
-                        if stripped_line and not stripped_line.startswith('#'):
-                            data_lines.append(line)  # It's a data line
-                        elif stripped_line.startswith('#'):
-                            header_lines.append(line)  # It's a comment after channel header
-
-                    # Read next line for the loop
-                    line = f.readline()
-
-            # File reading done
-
-            # Check if the imp channel header was ever found
-            if not channel_header_found:
+            if channel_header_line_index is None:
                 print(f"ERROR: Essential channel header line ('# ACCL:') not found in {file_path}")
-                raise ValueError(f"Channel header line ('# ACCL:') not found in {file_path}")
+                return None, None
 
-            # Case where channel header was found but no data lines followed
-            if not data_lines:
-                print(f"Warning: No data lines found in file {file_path} after header.")
-                num_channels = 0  # Default
-                try:
-                    # Still parse the header to get the expected column count
-                    num_channels = len(self._parse_channels(header_lines))
-                except Exception as parse_err:
-                    print(f"Warning: Could not parse channels from header to get empty array shape: {parse_err}")
-                # Return empty 2D array w/ correct # of columns
-                return header_lines, np.empty((0, num_channels if num_channels > 0 else 0))
+            header_lines = all_lines[:channel_header_line_index + 1]
 
-            # If data lines exist, attempt to load them
-            data_io = io.StringIO("".join(data_lines))
-            # Use ndmin=2 to ensure 2D output
-            data = np.loadtxt(data_io, comments='#', ndmin=2)
+            for line in all_lines[channel_header_line_index + 1:]:
+                stripped_line = line.strip()
+                if stripped_line and not stripped_line.startswith('#'):
+                    data_content_lines.append(line)
 
-            # Check for empty data AFTER loadtxt
-            if data.size == 0:
-                print(f"Warning: np.loadtxt resulted in an empty array (shape {data.shape}) for {file_path}.")
-                return header_lines, data  # Return the empty 2D array
+            # Process data lines
+            if not data_content_lines:
+                print(f"Warning: No numerical data lines found after header in {file_path}.")
+                num_channels = 0
+                try:  # Try to get column count from header even if data is empty
+                    channels = self._parse_channels(header_lines)
+                    num_channels = len(channels) if channels else 0
+                except ValueError:
+                    print(f"Warning: Could not parse channels from header of empty data file {file_path}")
+                # Return empty 2D array with right number of columns
+                return header_lines, np.empty((0, num_channels), dtype=float)
 
-            print(f"Successfully parsed data shape {data.shape} from {file_path}")
-            return header_lines, data
+            # Use StringIO for np.loadtxt
+            data_io = io.StringIO("".join(data_content_lines))
+            # Use ndmin=2 for 2D output specify float type
+            data_array = np.loadtxt(data_io, comments='#', ndmin=2, dtype=float)
 
-        # Exception Handlers
+            # Check if loadtxt failed despite having lines
+            if data_array.size == 0 and len(data_content_lines) > 0:
+                print(f"ERROR: np.loadtxt failed to parse data content in {file_path}.")
+                return header_lines, None
+
+            print(
+                f"DEBUG: Successfully read header ({len(header_lines)} lines) and data (shape {data_array.shape}) from {file_path}")
+            return header_lines, data_array
+
         except FileNotFoundError:
-            print(f"Error: Data file not found during read: {file_path}")
-            raise
-        except ValueError as e:  # Catches header parsing (# ACCL: not found) or loadtxt errors
-            print(f"Error parsing data in {file_path}: {e}")
-            if data_lines:  # Only print data lines if loadtxt prob failed
-                print("--- Problematic Data Lines (first 5) ---")
-                for i, line in enumerate(data_lines):
-                    if i < 5:
-                        print(line.strip())
-                    else:
-                        break
-                print("-----------------------------------------")
-            raise ValueError(f"Failed to parse data from {file_path}: {e}") from e
-        except Exception as e:  # Catch any other unexpected errors
-            print(f"Unexpected error reading/parsing data file {file_path}: {e}")
+            print(f"ERROR: Data file not found during read: {file_path}")
+            return None, None
+        except ValueError as e:
+            print(f"ERROR: ValueError during file read/parse for {file_path}: {e}")
+            return None, None
+        except Exception as e:
+            print(f"CRITICAL: Unexpected error reading/parsing file {file_path}: {e}")
             traceback.print_exc()
-            raise
+            return None, None
 
-    # Make sure _parse_channels also only looks for # ACCL:
-    def _parse_channels(self, header_lines: List[str]) -> List[str]:
-        """Parse channel names (full PVs) from res_data_acq.py file header."""
+    # Make sure _parse_channels only looks for # ACCL:
+    def _parse_channels(self, header_lines: List[str]) -> Optional[List[str]]:
+        """
+        Parse channel PV names from the specific # ACCL: line in header.
+        Returns list of PV names or None if the line is not found/parsable.
+        """
+        channel_line: Optional[str] = None
         # Look for the line starting with # ACCL:
         for line in reversed(header_lines):  # Check recent lines first
-            line_strip = line.strip()
-            if line_strip.startswith('# ACCL:'):
-                # Remove # strip whitespace split by space
-                parsed_channels = line_strip.strip('# \n').split()
-                print(f"Parsed channels from header ('# ACCL:'): {parsed_channels}")
+            stripped_line = line.strip()
+            if stripped_line.startswith('# ACCL:'):
+                channel_line = stripped_line
+                break
+
+        if channel_line:
+            try:
+                # Remove #, strip whitespace, split by space
+                parsed_channels = channel_line.strip('# \n').split()
+                if not parsed_channels:  # Check if split resulted in empty list
+                    print("WARN: Found '# ACCL:' line but no channels listed after it.")
+                    return None
+                print(f"DEBUG: Parsed channels from header: {parsed_channels}")
                 return parsed_channels
-        # If the specific line is not found, raise an error
-        raise ValueError("Channel header line ('# ACCL:') not found in provided header lines.")
+            except Exception as e:
+                print(f"ERROR: Failed to split/parse the found '# ACCL:' line: {channel_line} - {e}")
+                return None
+        else:
+            # Case indicates the # ACCL: line wasn't in the input header_lines
+            print("ERROR: Channel header line ('# ACCL:') not found in provided header lines during channel parsing.")
+            return None

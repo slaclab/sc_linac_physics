@@ -1,6 +1,8 @@
+import traceback
 from pathlib import Path
 from typing import Dict, List
 
+import numpy as np
 from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
@@ -365,29 +367,56 @@ class MicrophonicsGUI(QMainWindow):
             f"Buffer acquisition: {progress}%"
         )
 
-    def _handle_new_data(self, source: str, data: dict):
+    def _handle_new_data(self, source: str, data_dict: dict):
         """Handle new data from measurement or file"""
+        print(f"DEBUG: _handle_new_data received from '{source}'")
+
         try:
-            cavity_num = data['cavity']
-            buffer_data = data['channels']  # This will work for both file and live data
+            # Get the list of cavities and the nested cavity data
+            cavity_list = data_dict.get('cavity_list', [])
+            all_cavity_data = data_dict.get('cavities', {})
 
-            # Store DF data for statistics calculation
-            if 'DF' in buffer_data:
-                self.cavity_data[cavity_num] = buffer_data['DF']
+            if not cavity_list:
+                print("WARN: _handle_new_data received empty cavity list or missing 'cavity_list' key.")
+                return  # Nothing to process
 
-                # Calculate statistics for this cavity
-                stats = self.stats_calculator.calculate_statistics(buffer_data['DF'])
-                panel_stats = self.stats_calculator.convert_to_panel_format(stats)
+            # Update stats for each cavity present i
+            for cavity_num in cavity_list:
+                cavity_channel_data = all_cavity_data.get(cavity_num)
 
-                # Update statistics panel
-                self.status_panel.update_statistics(cavity_num, panel_stats)
+                if not cavity_channel_data:
+                    print(f"WARN: No channel data found for cavity {cavity_num} in data_dict['cavities'].")
+                    continue
 
-                # Update plot panel with new data
-                self.plot_panel.update_plots(cavity_num, buffer_data)
+                df_data = cavity_channel_data.get('DF')
+
+                # Check if DF data is valid for statistics
+                if df_data is not None and isinstance(df_data, np.ndarray) and df_data.size > 0:
+                    try:
+                        stats = self.stats_calculator.calculate_statistics(df_data)
+                        panel_stats = self.stats_calculator.convert_to_panel_format(stats)
+
+                        # Update statistics display in the status panel
+                        self.status_panel.update_statistics(cavity_num, panel_stats)
+                    except Exception as stat_err:
+                        # Log error but continue processing other cavities/plots
+                        print(f"ERROR: Failed to calculate/update stats for Cav {cavity_num}: {stat_err}")
+                        traceback.print_exc()  # Print traceback for stat errors
+                else:
+                    # Log if DF data is missing or invalid for stats
+                    print(f"WARN: No valid 'DF' data found for statistics for cavity {cavity_num}.")
+
+            print(f"DEBUG: Calling plot_panel.update_plots with data for cavities: {cavity_list}")
+            self.plot_panel.update_plots(data_dict)
+
+        except KeyError as ke:
+            # Catch errors if expected keys are missing from data_dict
+            print(f"ERROR in _handle_new_data: Missing key {ke} in received data dictionary.")
+            traceback.print_exc()
         except Exception as e:
-            print(f"Error in _handle_new_data: {str(e)}")
-            import traceback
-            print(traceback.format_exc())
+            # Catch any other unexpected errors during processing
+            print(f"CRITICAL ERROR in _handle_new_data processing data from '{source}': {str(e)}")
+            traceback.print_exc()
 
     def load_data(self, file_path: Path):
         """Load data from file and display using existing visualization code."""

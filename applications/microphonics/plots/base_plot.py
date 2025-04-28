@@ -1,3 +1,5 @@
+from typing import Tuple, Optional
+
 import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
@@ -206,7 +208,8 @@ class BasePlot(QWidget):
         """
         return f"X: {x:.2f}, Y: {y:.2f}"
 
-    def _preprocess_data(self, buffer_data):
+    def _preprocess_data(self, cavity_channel_data: dict, channel_type: str = 'DF') -> Tuple[
+        Optional[np.ndarray], bool]:
         """
         Validate and preprocess data, centralizing common operations
 
@@ -216,17 +219,30 @@ class BasePlot(QWidget):
         Returns:
             tuple: (data_array, is_valid)
         """
-        # Extract data from either format
-        data_array = buffer_data.get('DF', None)
-        if data_array is None and 'channels' in buffer_data:
-            data_array = buffer_data['channels'].get('DF', None)
+
+        if not cavity_channel_data:
+            return None, False
+            # Get specific channel data array
+        data_array = cavity_channel_data.get(channel_type)
 
         # Validate data
-        if data_array is None or len(data_array) == 0:
+        if data_array is None or not isinstance(data_array, np.ndarray) or data_array.size == 0:
             return None, False
 
-        # Ensure data is numpy array w/ float64 type
-        return np.array(data_array, dtype=np.float64), True
+        # Make sure data is numpy array w/ float64 type
+        try:
+            # Make sure it's a NumPy array and convert type if needed
+            if not isinstance(data_array, np.ndarray):
+                data_array = np.array(data_array)
+
+            # Ensure float type for calculations
+            if data_array.dtype != np.float64:
+                data_array = data_array.astype(np.float64)
+
+            return data_array, True
+        except (TypeError, ValueError) as e:
+            print(f"BasePlot: Error converting channel '{channel_type}' data to float64: {e}")
+            return None, False
 
     def toggle_cavity_visibility(self, cavity_num, state):
         """

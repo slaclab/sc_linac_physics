@@ -40,23 +40,30 @@ class SpectrogramPlot(BasePlot):
         """
         return f"Time: {x:.3f} s\nFrequency: {y:.1f} Hz"
 
-    def update_plot(self, cavity_num, buffer_data):
+    def update_plot(self, cavity_num, cavity_channel_data):
         """Update spectrogram plot w/ new data
 
         Args:
             cavity_num: Cavity number (1-8)
             buffer_data: Dictionary containing detuning data
         """
-        # Preprocess data
-        data_array, is_valid = self._preprocess_data(buffer_data)
+        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type='DF')
         if not is_valid:
-            print(f"No valid data for cavity {cavity_num}")
+            print(f"SpectrogramPlot: No valid 'DF' data for cavity {cavity_num}")
+            # Optionally hide existing image item
+            if cavity_num in self.image_items:
+                self.image_items[cavity_num].clear()
             return
 
         # Calculate spectrogram using utility function
-        f, t, Sxx = calculate_spectrogram(data_array, self.SAMPLE_RATE)
+        try:
+            # Assuming calculate_spectrogram takes data array and sample rate
+            f, t, Sxx = calculate_spectrogram(df_data, self.SAMPLE_RATE)
+        except Exception as e:
+            print(f"SpectrogramPlot: Error during spectrogram calculation for Cav {cavity_num}: {e}")
+            return
 
-        # Update plot
+        # Update plot using the helper method 
         self.update_spectrogram_plot(cavity_num, Sxx, t, f)
 
     def update_spectrogram_plot(self, cavity_num, Sxx, t, f):
