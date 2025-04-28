@@ -1,6 +1,7 @@
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 
+from applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
 from applications.microphonics.plots.base_plot import BasePlot
 from applications.microphonics.utils.data_processing import calculate_spectrogram
 
@@ -18,7 +19,7 @@ class SpectrogramPlot(BasePlot):
             'x_label': ('Time', 's'),
             'y_label': ('Frequency', 'Hz'),
             'x_range': (0, 1),
-            'y_range': (0, self.SAMPLE_RATE / 2),
+            'y_range': (0, BASE_HARDWARE_SAMPLE_RATE / 2),
             'grid': True
         }
         super().__init__(parent, plot_type='spectrogram', config=config)
@@ -55,15 +56,21 @@ class SpectrogramPlot(BasePlot):
                 self.image_items[cavity_num].clear()
             return
 
+        decimation = cavity_channel_data.get('decimation', 1)
+        if not isinstance(decimation, (int, float)) or decimation <= 0:
+            print(f"WARN (SpectrogramPlot Cav {cavity_num}): Invalid decimation value '{decimation}'. Using 1.")
+            decimation = 1
+        effective_sample_rate = BASE_HARDWARE_SAMPLE_RATE / decimation
+
         # Calculate spectrogram using utility function
         try:
             # Assuming calculate_spectrogram takes data array and sample rate
-            f, t, Sxx = calculate_spectrogram(df_data, self.SAMPLE_RATE)
+            f, t, Sxx = calculate_spectrogram(df_data, effective_sample_rate)
         except Exception as e:
             print(f"SpectrogramPlot: Error during spectrogram calculation for Cav {cavity_num}: {e}")
             return
 
-        # Update plot using the helper method 
+        # Update plot using the helper method
         self.update_spectrogram_plot(cavity_num, Sxx, t, f)
 
     def update_spectrogram_plot(self, cavity_num, Sxx, t, f):

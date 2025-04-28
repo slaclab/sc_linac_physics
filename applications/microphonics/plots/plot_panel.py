@@ -192,14 +192,16 @@ class PlotPanel(QWidget):
         """Update all plots w/ new data"""
         cavity_list = data_dict.get('cavity_list', [])
         all_cavity_data = data_dict.get('cavities', {})
+        decimation = data_dict.get('decimation', 1)
         for cavity_num in cavity_list:
-            cavity_channel_data = all_cavity_data.get(cavity_num)
-            if cavity_channel_data:
+            cavity_data_for_plot = all_cavity_data.get(cavity_num)
+            if cavity_data_for_plot:
+                cavity_data_for_plot['decimation'] = decimation
                 # Pass dictionary of channel data for this cavity to each plot types update method
-                self.fft_plot.update_plot(cavity_num, cavity_channel_data)
-                self.histogram_plot.update_plot(cavity_num, cavity_channel_data)
-                self.time_series_plot.update_plot(cavity_num, cavity_channel_data)
-                self.spectrogram_plot.update_plot(cavity_num, cavity_channel_data)
+                self.fft_plot.update_plot(cavity_num, cavity_data_for_plot)
+                self.histogram_plot.update_plot(cavity_num, cavity_data_for_plot)
+                self.time_series_plot.update_plot(cavity_num, cavity_data_for_plot)
+                self.spectrogram_plot.update_plot(cavity_num, cavity_data_for_plot)
             else:
                 print(f"PlotPanel: No data found for cavity {cavity_num} in received data_dict.")
 

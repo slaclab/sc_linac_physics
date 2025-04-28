@@ -11,9 +11,6 @@ from PyQt5.QtWidgets import (
 class BasePlot(QWidget):
     """Base class for all plot types in Microphonics GUI"""
 
-    # Default sample rate for all plots
-    SAMPLE_RATE = 2000
-
     def __init__(self, parent=None, plot_type=None, config=None):
         """
         Initialize base plot w/ common functionality
