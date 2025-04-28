@@ -15,11 +15,10 @@ class FFTPlot(BasePlot):
             'x_label': ('Frequency', 'Hz'),
             'y_label': ('Relative Amplitude', ''),
             'x_range': (0, 150),
-            'y_range': (0, 2.0),
             'grid': True
         }
         super().__init__(parent, plot_type='fft', config=config)
-        self._max_amplitude = 2.0  # Track max amplitude for auto-scaling
+        self.plot_widget.enableAutoRange(axis='y', enable=True)
 
     def _format_tooltip(self, plot_type, x, y):
         """Format tooltip text specifically for FFT plot
@@ -32,7 +31,7 @@ class FFTPlot(BasePlot):
         Returns:
             str: Formatted tooltip text
         """
-        return f"Frequency: {x:.1f} Hz\nAmplitude: {y:.6f}"
+        return f"Frequency: {x:.1f} Hz\nAmplitude: {y:.3f}"
 
     def update_plot(self, cavity_num, cavity_channel_data):
         """Update FFT plot w/ new data
@@ -43,7 +42,7 @@ class FFTPlot(BasePlot):
         """
         df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type='DF')
         if not is_valid:
-            print(f"FFTPlot: No valid 'DF' data for cavity {cavity_num}")
+            print(f"FFTPlot: No valid DF data for cavity {cavity_num}")
             # Optionally clear/hide existing curve
             if cavity_num in self.plot_curves:
                 self.plot_curves[cavity_num].setData([], [])
@@ -55,7 +54,7 @@ class FFTPlot(BasePlot):
             print(f"FFTPlot: Error during FFT calculation for Cav {cavity_num}: {e}")
             return
 
-        # Update plot using the helper method (no changes needed in update_fft_plot itself)
+        # Update plot using the helper method
         self.update_fft_plot(cavity_num, freqs, amplitudes)
 
     def update_fft_plot(self, cavity_num, freqs, amplitudes):
@@ -66,7 +65,6 @@ class FFTPlot(BasePlot):
             freqs: Array of frequency values (Hz)
             amplitudes: Array of amplitude values (linear scale)
         """
-        import numpy as np
 
         pen = self._get_cavity_pen(cavity_num)
 
@@ -85,13 +83,3 @@ class FFTPlot(BasePlot):
                 freqs, amplitudes,
                 skipFiniteCheck=True
             )
-
-        # Auto-adjust y-axis range if needed
-        max_current = np.max(amplitudes) if len(amplitudes) > 0 else 0.1
-        if max_current > self._max_amplitude:
-            self._max_amplitude = max_current * 1.2  # Add 20% headroom
-            if hasattr(self.plot_widget, 'setYRange'):
-                try:
-                    self.plot_widget.setYRange(0, self._max_amplitude)
-                except Exception as e:
-                    print(f"Warning: Could not set Y range: {e}")

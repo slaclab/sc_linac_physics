@@ -24,9 +24,6 @@ class HistogramPlot(BasePlot):
         self.num_bins = 140  # Default number of bins
         super().__init__(parent, plot_type='histogram', config=config)
 
-        # Set y-axis to log scale
-        self.plot_widget.setLogMode(y=True)
-
     def _format_tooltip(self, plot_type, x, y):
         """Format tooltip text specifically for histogram plot
 
@@ -38,7 +35,7 @@ class HistogramPlot(BasePlot):
         Returns:
             str: Formatted tooltip text
         """
-        return f"Detuning: {x:.1f} Hz\nCount: {int(y)}"
+        return f"Detuning: {x:.1f} Hz\nCount: {int(max(1, y))}"
 
     def update_plot(self, cavity_num, cavity_channel_data):
         """Update histogram plot w/ new data
@@ -57,19 +54,30 @@ class HistogramPlot(BasePlot):
             return
 
         # Calculate data range
-        if self.data_range is None:
+        if self.data_range is None and df_data.size > 0:
             try:
                 min_val = np.min(df_data)
                 max_val = np.max(df_data)
                 range_padding = 0.05 * (max_val - min_val)
-                if range_padding < 1e-6: range_padding = 5
+                range_padding = max(range_padding, 0.5)
                 self.data_range = (min_val - range_padding, max_val + range_padding)
-
                 self.plot_widget.setTitle(f"Histogram ({self.data_range[0]:.1f} to {self.data_range[1]:.1f} Hz)")
                 self.plot_widget.setXRange(*self.data_range)
+
             except ValueError:  # Handle empty array case if min/max fails
                 print(f"HistogramPlot: Could not calculate range for Cav {cavity_num} (likely empty data).")
                 return  # Don't proceed if range calculation fails
+
+        elif df_data.size == 0:
+            print(f"HistogramPlot: Empty data for Cav {cavity_num}, cannot calculate histogram.")
+            if cavity_num in self.plot_curves:
+                self.plot_curves[cavity_num].setData([], [])
+            return
+
+            # If data_range is still None (e.g., first update had empty data), skip
+        if self.data_range is None:
+            print(f"HistogramPlot: Data range not set for Cav {cavity_num}, skipping histogram calculation.")
+            return
 
             # Calculate histogram using utility function
         try:
@@ -78,7 +86,7 @@ class HistogramPlot(BasePlot):
             print(f"HistogramPlot: Error during histogram calculation for Cav {cavity_num}: {e}")
             return
 
-            # Update plot using the helper method 
+            # Update plot using the helper method
         self.update_histogram_plot(cavity_num, bins, counts)
 
     def update_histogram_plot(self, cavity_num, bins, counts):
@@ -89,49 +97,47 @@ class HistogramPlot(BasePlot):
             bins: Array of bin edges
             counts: Array of count values
         """
+        if len(bins) != len(counts) + 1:
+            print(
+                f"HistogramPlot Error (Cav {cavity_num}): Mismatch between bins ({len(bins)}) and counts ({len(counts)})")
+            return
+
         pen = self._get_cavity_pen(cavity_num)
+        counts = np.maximum(counts, 1)
 
         # Create step plot data - to look like matplotlibs histogram
         # This is a step histogram so we need to create points at each bin edge
         x_values = []
         y_values = []
 
-        # Make sure counts are positive for log scale
-        counts = np.maximum(counts, 1)
+        x_values.append(bins[0])
+        y_values.append(1)
 
         # This creates the step pattern for the histogram
         for i in range(len(counts)):
-            if i == 0:
-                # First point
-                x_values.append(bins[i])
-                y_values.append(1)  # Start at 1 for log scale
-
-            # Add the horizontal line at the current bin
+            # Vertical line up at the start of the bin
             x_values.append(bins[i])
             y_values.append(counts[i])
 
-            # Add the horizontal line at the next bin edge
+            # Add the horizontal line at the current bin
             x_values.append(bins[i + 1])
             y_values.append(counts[i])
 
-            if i == len(counts) - 1:
-                # Last point
-                x_values.append(bins[i + 1])
-                y_values.append(1)  # End at 1 for log scale
+        # End point at the bottom right
+        x_values.append(bins[-1])
+        y_values.append(1)
+
+        # Convert to numpy arrays
+        x_values = np.array(x_values)
+        y_values = np.array(y_values)
 
         if cavity_num not in self.plot_curves:
-            # Create new curve
-            # Get a QColor for fill w/ reduced alpha (transparency)
-            fill_color = pen.color()
-            fill_color.setAlpha(50)  # Set to ~20% opacity
-
             curve = self.plot_widget.plot(
                 x_values,
                 y_values,
                 pen=pen,
-                fillLevel=0,  # Set to 0.1 to make sure it fills down to the bottom of log scale
-                fillBrush=fill_color,
-                name=f"Cavity {cavity_num}"
+                name=f"Cavity {cavity_num}",
+                stepMode="left"
             )
             self.plot_curves[cavity_num] = curve
         else:
@@ -140,8 +146,6 @@ class HistogramPlot(BasePlot):
                 x_values,
                 y_values
             )
-            # Keep the fill settings
-            self.plot_curves[cavity_num].setFillLevel(0)
 
     def reset_range(self):
         """Reset the data range to force recalculation w/ next data update"""
