@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QDateTimeEdit,
     QLabel,
-    QCheckBox,
 )
 from pydm import Display
 
@@ -60,8 +59,11 @@ class FaultCountDisplay(Display):
         self.start_selector.editingFinished.connect(self.update_plot)
         self.end_selector.editingFinished.connect(self.update_plot)
 
-        self.hide_pot_checkbox = QCheckBox(text="Hide POT faults")
-        self.hide_pot_checkbox.stateChanged.connect(self.update_plot)
+        # removing for now as POT faults no longer seem to be much of an issue
+        # in terms of distorting the data
+        # TODO: generalize ability to suppress any fault(s)
+        # self.hide_pot_checkbox = QCheckBox(text="Hide POT faults")
+        # self.hide_pot_checkbox.stateChanged.connect(self.update_plot)
 
         input_h_layout.addWidget(QLabel("Cryomodule:"))
         input_h_layout.addWidget(self.cm_combo_box)
@@ -72,7 +74,7 @@ class FaultCountDisplay(Display):
         input_h_layout.addWidget(self.start_selector)
         input_h_layout.addWidget(QLabel("End:"))
         input_h_layout.addWidget(self.end_selector)
-        main_v_layout.addWidget(self.hide_pot_checkbox)
+        # main_v_layout.addWidget(self.hide_pot_checkbox)
 
         self.cm_combo_box.addItems([""] + ALL_CRYOMODULES)
         self.cav_combo_box.addItems([""] + [str(i) for i in range(1, 9)])
@@ -115,8 +117,9 @@ class FaultCountDisplay(Display):
         """
         data: Dict[str, FaultCounter] = self.cavity.get_fault_counts(start, end)
 
-        if self.hide_pot_checkbox.isChecked():
-            data.pop("POT")
+        # TODO generalize fault suppression
+        # if self.hide_pot_checkbox.isChecked():
+        #     data.pop("POT")
 
         for tlc, counter_obj in data.items():
             self.y_data.append(tlc)
