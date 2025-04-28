@@ -224,7 +224,7 @@ class DataAcquisitionManager(QObject):
         except Exception as e:
             print(f"Error processing stderr for {chassis_id}: {e}")
 
-    def handle_finished(self, chassis_id: str, exit_code: int, exit_status: QProcess.ExitStatus):
+    def handle_finished(self, chassis_id: str, process: QProcess, exit_code: int, exit_status: QProcess.ExitStatus):
         """Handle process completion checking for completion signal."""
         print(f"DEBUG: handle_finished entered for {chassis_id}. Exit code: {exit_code}, Status: {exit_status}")
 
@@ -364,8 +364,7 @@ class DataAcquisitionManager(QObject):
 
     def _extract_cavity_channel_from_pv(self, pv_string: str) -> Optional[Tuple[int, str]]:
         """
-        Extracts cavity number and channel type from PV string based on observed convention:
-        ACCL:L<X>B:<CM><CAV>0:PZT:<TYPE>:WF
+        Extracts cavity number and channel type from PV string: ACCL:L<X>B:<CM><CAV>0:PZT:<TYPE>:WF
         """
         try:
             parts = pv_string.split(':')

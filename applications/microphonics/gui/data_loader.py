@@ -1,6 +1,8 @@
+import io
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Tuple
 
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -22,15 +24,32 @@ class DataProcessor:
     """Handles data processing and cavity info extraction"""
 
     @staticmethod
-    def extract_cavity_number(channel_name: str) -> Optional[int]:
-        """Extract cavity number from channel name"""
+    def extract_cavity_channel_from_pv(pv_string: str) -> Optional[Tuple[int, str]]:
+        """
+        Extracts cavity number and channel type from PV string.
+        """
         try:
-            parts = channel_name.split(':')
-            # Example channel: ACCL:L1B:0210:PZT:DF:WF
-            # parts[2] is "0210" → cavity number is third character ('1')
-            cavity_part = parts[2]
-            return int(cavity_part[2])
-        except (IndexError, ValueError):
+            parts = pv_string.split(':')
+            # Check structure: ACCL:LXB:CMCAV0:PZT:TYPE:WF
+            if len(parts) >= 6 and parts[3] == 'PZT' and parts[5] == 'WF':
+                segment3 = parts[2]
+                if len(segment3) == 4 and segment3.endswith('0'):
+                    # Cavity number is the 3rd character (index 2)
+                    cav_num = int(segment3[2])
+                    # Channel type is the 5th segment (index 4)
+                    channel_type = parts[4]
+                    return cav_num, channel_type
+                else:
+                    # Log warning if format of segment 3 is unexpected
+                    print(
+                        f"WARN DataProcessor: PV segment '{segment3}' in '{pv_string}' doesn't match <CM><CAV>0 format.")
+                    return None
+            else:
+                # Log warning if overall structure is wrong
+                return None
+        except (IndexError, ValueError) as e:
+            # Log warning if indexing or int conversion fails
+            print(f"WARN DataProcessor: Could not parse cavity/channel from PV '{pv_string}': {e}")
             return None
 
 
@@ -54,82 +73,105 @@ class DataLoader(QObject):
         self.processor = DataProcessor()
         self.stats_calculator = StatisticsCalculator()
 
-    def load_file(self, file_path: Path) -> LoadedData:
-        """
-        Load and process data from a file.
-        """
+    def load_file(self, file_path: Path):
         if not file_path.exists():
-            raise FileNotFoundError(f"Could not find file: {file_path}")
+            error_msg = f"Could not find file: {file_path}"
+            self.loadError.emit(error_msg)
+            raise FileNotFoundError(error_msg)
 
         try:
-            # Read the file
-            with open(file_path, 'r') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
 
-            # Find channel names and data start
-            channel_names = []
-            timestamp = ""
-            data_start = 0
+            channel_pvs: List[str] = []
+            accl_line_index: int = -1
 
             for i, line in enumerate(lines):
-                if line.startswith('# ACCL:'):
-                    channel_names = line.strip('# \n').split()
-                    if i + 1 < len(lines):
-                        timestamp = lines[i + 1].strip('# \n')
-                    data_start = i + 2
+                stripped_line = line.strip()
+                if stripped_line.startswith('# ACCL:'):
+                    channel_pvs = [pv for pv in stripped_line.strip('# \n').split() if pv]
+                    accl_line_index = i
                     break
 
-            if not channel_names:
-                raise ValueError("No channel names found in file")
+            if not channel_pvs:
+                raise ValueError(f"Essential channel header line ('# ACCL:') not found in {file_path}")
+            if accl_line_index == -1:
+                raise ValueError(f"Could not locate the '# ACCL:' header line index in {file_path}")
 
-            # Get numerical data
-            data_values = []
-            for line in lines[data_start:]:
-                if line.strip() and not line.startswith('#'):
-                    try:
-                        values = [float(x) for x in line.strip().split()]
-                        if values:  # Only add non-empty rows
-                            data_values.append(values)
-                    except ValueError:
-                        continue
+            if accl_line_index + 1 >= len(lines):
+                print(f"Warning: No lines found after '# ACCL:' header in {file_path}. Proceeding with empty data.")
+                data_array = np.empty((0, len(channel_pvs)), dtype=float)
+            else:
+                data_io = io.StringIO("".join(lines[accl_line_index + 1:]))
+                try:
+                    data_array = np.loadtxt(data_io, comments='#', ndmin=2, dtype=float)
+                except ValueError as e:
+                    raise ValueError(f"Could not parse numerical data following header in {file_path}: {e}")
 
-            # Convert to numpy array and transpose
-            data_array = np.array(data_values)
+            if data_array.size == 0 and any(
+                    line.strip() and not line.strip().startswith('#') for line in lines[accl_line_index + 1:]):
+                print(
+                    f"Warning: np.loadtxt resulted in empty array for {file_path} despite non-comment lines existing after header.")
+                data_array = np.empty((0, len(channel_pvs)), dtype=float)
 
-            # Create dict w/ data for each cavity
-            channels_data = {}
-            for i, channel in enumerate(channel_names):
-                cavity_num = self.processor.extract_cavity_number(channel)
-                if cavity_num:
-                    # Extract data for this cavity (column i)
-                    cavity_data = data_array[:, i]
-                    channels_data[cavity_num] = {
-                        'DF': cavity_data,
-                        'DAC': np.zeros_like(cavity_data)  # Placeholder for DAC data
-                    }
+            expected_cols = len(channel_pvs)
+            actual_cols = data_array.shape[1] if data_array.ndim == 2 else 0
 
-                    # Emit data for this cavity
-                    cavity_data_dict = {
-                        'cavity': cavity_num,
-                        'channels': {'DF': cavity_data},
-                        'statistics': self.stats_calculator.calculate_statistics(cavity_data)
-                    }
-                    self.dataLoaded.emit(cavity_data_dict)
+            if data_array.size > 0 and actual_cols != expected_cols:
+                error_msg = f"Column mismatch in {file_path}! Header indicates {expected_cols} channels, but data has {actual_cols} columns."
+                print(f"ERROR: {error_msg}")
+                data_array = np.empty((0, expected_cols), dtype=float)
 
+            all_cavities_data: Dict[int, Dict[str, np.ndarray]] = {}
+            found_cavity_numbers = set()
+
+            if not hasattr(self, 'processor') or not hasattr(self.processor, 'extract_cavity_channel_from_pv'):
+                raise AttributeError(
+                    "DataLoader requires an initialized 'processor' attribute with 'extract_cavity_channel_from_pv' method.")
+
+            for col_idx, pv_name in enumerate(channel_pvs):
+                parsed_info = self.processor.extract_cavity_channel_from_pv(pv_name)
+                if parsed_info:
+                    cav_num, channel_type = parsed_info
+                    found_cavity_numbers.add(cav_num)
+
+                    if cav_num not in all_cavities_data:
+                        all_cavities_data[cav_num] = {}
+
+                    if data_array.ndim == 2 and col_idx < actual_cols and data_array.shape[0] > 0:
+                        column_data = data_array[:, col_idx]
+                        all_cavities_data[cav_num][channel_type] = column_data
+                    else:
+                        all_cavities_data[cav_num][channel_type] = np.array([], dtype=float)
+                else:
+                    print(
+                        f"WARN DataLoader: Could not parse cavity/channel from PV '{pv_name}' in file {file_path}. Skipping column {col_idx}.")
+
+            final_data_dict: Dict[str, Any] = {
+                'cavity_list': sorted(list(found_cavity_numbers)),
+                'cavities': all_cavities_data,
+                'decimation': 1,
+                'filepath': str(file_path),
+                'source': 'file'
+            }
+
+            print(
+                f"DEBUG DataLoader: Emitting dataLoaded signal for file {file_path.name} with cavities: {final_data_dict['cavity_list']}")
+            self.dataLoaded.emit(final_data_dict)
             self.loadProgress.emit(100)
 
-            return LoadedData(
-                channels=channels_data,
-                cavity_numbers=sorted(list(channels_data.keys())),
-                timestamp=timestamp,
-                channel_names=channel_names,
-                file_path=file_path
-            )
-
-        except Exception as e:
-            error_msg = f"Error loading file: {str(e)}"
+        except FileNotFoundError:
+            pass
+        except (ValueError, AttributeError) as ve:
+            error_msg = f"Error processing file {file_path.name}: {str(ve)}"
+            print(f"ERROR: {error_msg}")
+            traceback.print_exc()
             self.loadError.emit(error_msg)
-            raise
+        except Exception as e:
+            error_msg = f"Unexpected error loading file {file_path.name}: {str(e)}"
+            print(f"CRITICAL ERROR: {error_msg}")
+            traceback.print_exc()
+            self.loadError.emit(error_msg)
 
     def validate_file_format(self, file_path: Path) -> bool:
         """
