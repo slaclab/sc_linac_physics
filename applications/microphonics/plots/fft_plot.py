@@ -1,3 +1,4 @@
+from applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
 from applications.microphonics.plots.base_plot import BasePlot
 from applications.microphonics.utils.data_processing import calculate_fft
 
@@ -48,8 +49,14 @@ class FFTPlot(BasePlot):
                 self.plot_curves[cavity_num].setData([], [])
             return
 
+        decimation = cavity_channel_data.get('decimation', 1)
+        if not isinstance(decimation, (int, float)) or decimation <= 0:
+            print(f"WARN (FFTPlot Cav {cavity_num}): Invalid decimation value '{decimation}'. Using 1.")
+            decimation = 1
+        effective_sample_rate = BASE_HARDWARE_SAMPLE_RATE / decimation
+
         try:
-            freqs, amplitudes = calculate_fft(df_data, self.SAMPLE_RATE)
+            freqs, amplitudes = calculate_fft(df_data, effective_sample_rate)
         except Exception as e:
             print(f"FFTPlot: Error during FFT calculation for Cav {cavity_num}: {e}")
             return

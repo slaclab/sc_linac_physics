@@ -6,13 +6,14 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 from applications.microphonics.gui.data_acquisition import DataAcquisitionManager
 
+BASE_HARDWARE_SAMPLE_RATE = 2000
+
 
 @dataclass
 class MeasurementConfig:
     """Configuration for measurement parameters"""
     channels: List[str]
     buffer_length: int = 16384
-    sample_rate: int = 2000
     decimation: int = 1
     buffer_count: int = 1
 
