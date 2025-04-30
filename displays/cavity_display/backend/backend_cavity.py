@@ -1,8 +1,12 @@
 from collections import OrderedDict, defaultdict
-from datetime import datetime
-from typing import DefaultDict, Optional
+from datetime import datetime, timedelta
+from typing import DefaultDict, Optional, Dict
 
 from lcls_tools.common.controls.pyepics.utils import PV
+from lcls_tools.common.data.archiver import (
+    get_values_over_time_range,
+    ArchiveDataHandler,
+)
 
 from displays.cavity_display.backend.fault import Fault, FaultCounter, PVInvalidError
 from displays.cavity_display.utils import utils
@@ -12,6 +16,7 @@ from displays.cavity_display.utils.utils import (
     SEVERITY_SUFFIX,
     SpreadsheetError,
     display_hash,
+    severity_of_fault,
 )
 from utils.sc_linac.cavity import Cavity
 
@@ -154,14 +159,44 @@ class BackendCavity(Cavity):
         """
         result: DefaultDict[str, FaultCounter] = defaultdict(FaultCounter)
 
-        for fault in self.faults.values():
-            result[fault.tlc] = max(
-                result[fault.tlc],
-                fault.get_fault_count_over_time_range(
-                    start_time=start_time, end_time=end_time
-                ),
-            )
+        data: Dict[str, ArchiveDataHandler] = get_values_over_time_range(
+            pv_list=[self.pv_addr("CUDSTATUS"), self.pv_addr("CUDSEVR")],
+            start_time=start_time,
+            end_time=end_time,
+        )
 
+        statuses: ArchiveDataHandler = data[self.pv_addr("CUDSTATUS")]
+        severities: ArchiveDataHandler = data[self.pv_addr("CUDSEVR")]
+
+        for status, status_ts in zip(statuses.values, statuses.timestamps):
+            if status == str(self.number):
+                continue
+
+            try:
+                ts = status_ts.replace(
+                    microsecond=round(status_ts.microsecond / 10000) * 10000
+                )
+            except ValueError:
+                ts = status_ts + timedelta(seconds=1)
+
+            severity = severity_of_fault(ts, severities)
+
+            if severity == 0:
+                result[status].ok_count += 1
+            elif severity == 1:
+                result[status].warning_count += 1
+            elif severity == 2:
+                result[status].alarm_count += 1
+            else:
+                result[status].invalid_count += 1
+
+        # for fault in self.faults.values():
+        #     result[fault.tlc] = max(
+        #         result[fault.tlc],
+        #         fault.get_fault_count_over_time_range(
+        #             start_time=start_time, end_time=end_time
+        #         ),
+        #     )
         return result
 
     def run_through_faults(self):
@@ -180,13 +215,14 @@ class BackendCavity(Cavity):
                 break
 
         if is_okay:
-            self.status_pv_obj.put(str(self.number))
             self.severity_pv_obj.put(0)
+            self.status_pv_obj.put(str(self.number))
             self.description_pv_obj.put(" ")
         else:
-            self.status_pv_obj.put(fault.tlc)
-            self.description_pv_obj.put(fault.short_description)
             if not invalid:
                 self.severity_pv_obj.put(fault.severity)
             else:
                 self.severity_pv_obj.put(3)
+
+            self.status_pv_obj.put(fault.tlc)
+            self.description_pv_obj.put(fault.short_description)

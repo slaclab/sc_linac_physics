@@ -18,3 +18,5 @@ pyqtgraph
 urllib3
 pytest-qt
 pytest
+flake8
+black
