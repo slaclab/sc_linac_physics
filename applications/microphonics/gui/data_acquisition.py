@@ -47,6 +47,7 @@ class DataAcquisitionManager(QObject):
         # Parse chassis_id components
         # Example: ACCL:L1B:0300:RESA -> facility=LCLS, linac=L1B, cryomodule=03
         parts = chassis_id.split(':')
+        # Checking if there is 4 parts after spliting
         if len(parts) < 4:
             raise ValueError(f"Invalid chassis_id format: {chassis_id}")
 

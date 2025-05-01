@@ -1,3 +1,5 @@
+import traceback
+
 import numpy as np
 from scipy import signal
 from scipy.fftpack import fft, fftfreq
@@ -5,7 +7,7 @@ from scipy.fftpack import fft, fftfreq
 
 def calculate_fft(data: np.ndarray, effective_sample_rate: float):
     """
-    Calculate FFT of input data w? correct frequency mapping
+    Calculate FFT of input data w/ correct frequency mapping
 
     Args:
         data (np.ndarray): Input time domain data
@@ -17,11 +19,25 @@ def calculate_fft(data: np.ndarray, effective_sample_rate: float):
     """
     # Handle empty or invalid data
     if data is None or len(data) == 0:
+        print("Warning: calculate_fft received empty data.")
         return np.array([]), np.array([])
+    # Check if data is NumPy array
+    if not isinstance(data, np.ndarray):
+        try:
+            data = np.asarray(data, dtype=np.float64)
+        except (TypeError, ValueError) as e:
+            print(f"Error (calculate_fft): Could not convert input data to NumPy array: {e}")
+            return np.array([]), np.array([])
 
-    # Remove NaN values if any
-    data = data[~np.isnan(data)]
-    if data.size == 0:
+    # Remove NaN values if any bc FFT cant process
+    nan_mask = np.isnan(data)
+    if np.any(nan_mask):
+        data = data[~nan_mask]
+        print(f"Warning (calculate_fft): Removed {np.sum(nan_mask)} NaN value(s).")
+    # Check if data became empty after NaN removal
+    num_points = data.size
+    if num_points == 0:
+        print("Warning (calculate_fft): Data array is empty after removing NaNs.")
         return np.array([]), np.array([])
 
     if effective_sample_rate <= 0:
@@ -31,25 +47,29 @@ def calculate_fft(data: np.ndarray, effective_sample_rate: float):
     try:
 
         sample_spacing = 1.0 / effective_sample_rate
-
-        # Get number of points
-        num_points = len(data)
-
         # Calculate FFT directly (no resampling, no filtering)
         yf = fft(data)
+        if num_points == 1:
+            xf = np.array([0.0])
+            # Amplitude is the absolute value of the single FFT result
+            amplitudes = np.abs(yf)
+        else:
+            # Calculate frequency bins with the fixed sample spacing
+            xf = fftfreq(num_points, sample_spacing)[:num_points // 2]
 
-        # Calculate frequency bins with the fixed sample spacing
-        xf = fftfreq(num_points, sample_spacing)[:num_points // 2]
+            # Calculate amplitudes with the same scaling as original
+            amplitudes = 2.0 / num_points * np.abs(yf[0:num_points // 2])
 
-        # Calculate amplitudes with the same scaling as original
-        amplitudes = 2.0 / num_points * np.abs(yf[0:num_points // 2])
+        min_len = min(len(xf), len(amplitudes))
+        if len(xf) != min_len or len(amplitudes) != min_len:
+            print("Warning (calculate_fft): Adjusting length mismatch between freqs and amps.")
+            xf = xf[:min_len]
+            amplitudes = amplitudes[:min_len]
+        return xf, amplitudes
 
-        # Apply frequency mask to limit to 150 Hz for display
-        mask = (xf >= 0) & xf <= 150
-
-        return xf[mask], amplitudes[mask]
     except Exception as e:
         print(f"Error calculating FFT: {e}")
+        traceback.print_exc()
         return np.array([]), np.array([])
 
 
