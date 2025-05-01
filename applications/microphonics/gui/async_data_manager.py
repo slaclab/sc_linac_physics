@@ -14,7 +14,7 @@ class MeasurementConfig:
     """Configuration for measurement parameters"""
     channels: List[str]
     buffer_length: int = 16384
-    decimation: int = 1
+    decimation: int = 2
     buffer_count: int = 1
 
     def validate(self) -> Optional[str]:

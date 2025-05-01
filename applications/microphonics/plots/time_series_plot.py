@@ -1,6 +1,7 @@
 import numpy as np
 from PyQt5.QtCore import QTimer
 
+from applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
 from applications.microphonics.plots.base_plot import BasePlot
 
 
@@ -239,14 +240,43 @@ class TimeSeriesPlot(BasePlot):
 
         values = df_data
 
-        effective_sample_rate = self.SAMPLE_RATE
-        times = np.linspace(0, (num_points - 1) / effective_sample_rate, num_points)
+        decimation = cavity_channel_data.get('decimation', 1)
+        if not isinstance(decimation, (int, float)) or decimation <= 0:
+            print(f"WARN (TimeSeriesPlot Cav {cavity_num}): Invalid decimation value '{decimation}'. Using 1.")
+            decimation = 1
+        try:
+            if BASE_HARDWARE_SAMPLE_RATE <= 0:
+                raise ValueError(f"Invalid BASE_HARDWARE_SAMPLE_RATE: {BASE_HARDWARE_SAMPLE_RATE}")
+            if decimation == 0:
+                raise ZeroDivisionError("Decimation factor cannot be zero")
+            effective_sample_rate = BASE_HARDWARE_SAMPLE_RATE / decimation
+        except ZeroDivisionError:
+            print(
+                f"ERROR (TimeSeriesPlot Cav {cavity_num}): Decimation factor is zero cannot calculate sample rate.")
+            if cavity_num in self.plot_curves:
+                self.plot_curves[cavity_num].setData([], [])
+            return
+        except ValueError as e:
+            print(f"ERROR (TimeSeriesPlot Cav {cavity_num}): {e}")
+            if cavity_num in self.plot_curves:
+                self.plot_curves[cavity_num].setData([], [])
+            return
+
+        if effective_sample_rate <= 0:
+            print(
+                f"ERROR (TimeSeriesPlot Cav {cavity_num}): Cannot generate time axis with non positive sample rate {effective_sample_rate} (Base: {BASE_HARDWARE_SAMPLE_RATE}, Decimation: {decimation})")
+            if cavity_num in self.plot_curves:
+                self.plot_curves[cavity_num].setData([], [])
+            return
+        if num_points > 0:
+            times = np.linspace(0, (num_points - 1) / effective_sample_rate, num_points)
+        else:
+            # Should have been caught earlier
+            times = np.array([])
 
         self._original_data[cavity_num] = (times, values)
-
         # Create decimated versions for different zoom levels
         self._decimated_data[cavity_num] = self._create_decimated_levels(times, values)
-
         # Create pen for this cavity
         pen = self._get_cavity_pen(cavity_num)
 
