@@ -7,6 +7,8 @@ from PyQt5.QtWidgets import (
     QPushButton, QGridLayout, QScrollArea, QTabWidget, QMessageBox
 )
 
+from applications.microphonics.utils.pv_utils import format_accl_base
+
 
 class ConfigPanel(QWidget):
     """Config panel for Microphonics GUI.
@@ -243,7 +245,7 @@ class ConfigPanel(QWidget):
 
         for module in modules:
             # Store full ACCL name pattern but display simple number
-            accl_name = f"ACCL:{self.selected_linac}:{module}00"
+            accl_name = format_accl_base(self.selected_linac, module)
 
             # Create button w/ simple display text
             display_text = module  # Just show "01", "02", "H1" etc.
@@ -374,28 +376,12 @@ class ConfigPanel(QWidget):
         selected_modules = []
         for mod, btn in self.cryo_buttons.items():
             if btn.isChecked():
-                base_accl = f"ACCL:{self.selected_linac}:{mod}00"
+                base_accl = format_accl_base(self.selected_linac, mod)
                 module_config = {
                     'id': mod,
                     'name': base_accl,
-                    'base_channel': base_accl,
-                    'channel_access': {
-                        'rack_a': [],
-                        'rack_b': []
-                    }
+                    'base_channel': base_accl
                 }
-
-                for cav_num, cb in self.cavity_checks_a.items():
-                    if cb.isChecked():
-                        module_config['channel_access']['rack_a'].append(
-                            f"ca://{base_accl}:RESA:{cav_num}"
-                        )
-
-                for cav_num, cb in self.cavity_checks_b.items():
-                    if cb.isChecked():
-                        module_config['channel_access']['rack_b'].append(
-                            f"ca://{base_accl}:RESB:{cav_num}"
-                        )
 
                 selected_modules.append(module_config)
 

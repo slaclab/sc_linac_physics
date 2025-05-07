@@ -18,6 +18,7 @@ from applications.microphonics.gui.data_loader import DataLoader
 from applications.microphonics.gui.statistics_calculator import StatisticsCalculator
 from applications.microphonics.gui.status_panel import StatusPanel
 from applications.microphonics.plots.plot_panel import PlotPanel
+from applications.microphonics.utils.pv_utils import format_pv_base
 
 
 class MicrophonicsGUI(QMainWindow):
@@ -192,7 +193,7 @@ class MicrophonicsGUI(QMainWindow):
             if rack_a_cavities:
                 chassis_id = f"{base_channel}:RESA"
                 result[chassis_id] = {
-                    'pv_base': f"ca://{base_channel}:RESA:",  # Add trailing colon
+                    'pv_base': format_pv_base(base_channel, 'A'),
                     'config': MeasurementConfig(
                         channels=channels_for_script,
                         decimation=config['decimation'],
@@ -206,7 +207,7 @@ class MicrophonicsGUI(QMainWindow):
             if rack_b_cavities:
                 chassis_id = f"{base_channel}:RESB"
                 result[chassis_id] = {
-                    'pv_base': f"ca://{base_channel}:RESB:",  # Add trailing colon
+                    'pv_base': format_pv_base(base_channel, 'B'),
                     'config': MeasurementConfig(
                         channels=channels_for_script,
                         decimation=config['decimation'],
