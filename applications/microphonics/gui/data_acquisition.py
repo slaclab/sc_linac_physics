@@ -1,13 +1,16 @@
 import io
+import logging
 import re
 import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, QProcess, QTimer
+
+from applications.microphonics.utils.file_parser import FileParserError, load_and_process_file
 
 
 class DataAcquisitionManager(QObject):
@@ -363,118 +366,65 @@ class DataAcquisitionManager(QObject):
             traceback.print_exc()
             self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
 
-    def _extract_cavity_channel_from_pv(self, pv_string: str) -> Optional[Tuple[int, str]]:
+    def _process_output_file_wrapper(self, chassis_id: str, output_path: Path, process_info: dict):
         """
-        Extracts cavity number and channel type from PV string: ACCL:L<X>B:<CM><CAV>0:PZT:<TYPE>:WF
+        Wrapper to check file, call the central file parser, handle errors,
+        and emit signals.
         """
+        logging.debug(f"_process_output_file_wrapper entered for {chassis_id}, File: {output_path}")
         try:
-            parts = pv_string.split(':')
-            # Check structure: ACCL:LXB:CMCAV0:PZT:TYPE:WF
-            if len(parts) >= 6 and parts[3] == 'PZT' and parts[5] == 'WF':
-                segment3 = parts[2]  # e.g., '0250'
-                if len(segment3) == 4 and segment3.endswith('0'):
-                    # Cavity number is the 3rd character (index 2)
-                    cav_num = int(segment3[2])
-                    # Channel type is the 5th segment (index 4)
-                    channel_type = parts[4]
-                    return cav_num, channel_type
-                else:
-                    # Log warning if format of segment 3 is unexpected
-                    print(f"WARN: PV segment '{segment3}' in '{pv_string}' doesn't match <CM><CAV>0 format.")
-                    return None
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            logging.debug(f"[{current_time}] Attempting to process file: {output_path}")
+
+            if not output_path.exists():
+                logging.error(f"File {output_path} not found after wait!")
+                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} missing after wait.")
+                return
+
+            file_size = output_path.stat().st_size
+            logging.debug(f"File exists. Size: {file_size} bytes")
+            if file_size == 0:
+                logging.warning(f"File {output_path} exists but is empty. Aborting processing.")
+                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} was empty.")
+                return
+            logging.debug(f"Calling load_and_process_file for {chassis_id}")
+            parsed_data_dict = load_and_process_file(output_path)
+
+            if parsed_data_dict and parsed_data_dict.get(
+                    'cavities'):
+                logging.debug(f"Successfully parsed data for {chassis_id}. Emitting signals.")
+
+                parsed_data_dict['source'] = chassis_id
+                parsed_data_dict['decimation'] = process_info.get('decimation', 1)
+
+                self.dataReceived.emit(chassis_id, parsed_data_dict)
+                self.acquisitionComplete.emit(chassis_id)
+
+                current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                logging.debug(f"[{current_time_end}] Successfully processed and emitted data for: {output_path}")
             else:
-                # Log warning if overall structure is wrong
-                # print(f"WARN: PV string '{pv_string}' doesn't match expected format.") # Optional: reduce verbosity
-                return None
-        except (IndexError, ValueError) as e:
-            # Log warning if indexing or int conversion fails
-            print(f"WARN: Could not parse cavity/channel from PV '{pv_string}': {e}")
-            return None
 
-    def _process_output_file(self, chassis_id: str, output_path: Path, process_info: dict) -> Optional[Dict[str, Any]]:
-        """
-        Reads data file, parses header/data using PV names, structures output by cavity.
-        Returns the structured data dictionary or none on failure.
-        """
-        print(f"DEBUG: _process_output_file entered for {chassis_id}, File: {output_path}")
-        try:
-            # Read header and data
-            header_lines, data_array = self._read_data_file(output_path)
-            if header_lines is None or data_array is None:
-                # Error already logged
-                self.acquisitionError.emit(chassis_id, f"Failed to read/parse data file: {output_path.name}")
-                return None
+                logging.error(
+                    f"load_and_process_file did not return valid data for {chassis_id} from {output_path.name}.")
+                self.acquisitionError.emit(chassis_id, f"Failed to parse valid data from {output_path.name}")
 
-            # Parse full PV channel names
-            channel_pvs = self._parse_channels(header_lines)
-            if not channel_pvs:
-                # Error already logged
-                self.acquisitionError.emit(chassis_id, f"Channel PVs not found in header: {output_path.name}")
-                return None
+        except FileParserError as e:
 
-            print(f"DEBUG: Found {len(channel_pvs)} channel PVs in header: {channel_pvs}")
-            print(f"DEBUG: Data array shape: {data_array.shape}")
+            logging.error(f"File parsing error in wrapper for {chassis_id}: {e}")
+            self.acquisitionError.emit(chassis_id, f"Data parsing error in {output_path.name}: {e}")
+        except FileNotFoundError:
 
-            # Prepare output structure
-            output_data: Dict[str, Any] = {
-                'cavities': {},
-                'cavity_list': [],
-                'decimation': process_info.get('decimation', 1),
-                'filepath': str(output_path)
-            }
-            cavity_numbers_found = set()
+            logging.error(f"File not found during processing wrapper for {chassis_id}: {output_path}")
+            self.acquisitionError.emit(chassis_id, f"Output file missing or unreadable: {output_path.name}")
+        except (ValueError, IndexError) as e:
 
-            # Check for column mismatch
-            expected_cols = len(channel_pvs)
-            actual_cols = data_array.shape[1] if data_array.ndim == 2 else 0
-
-            if data_array.size > 0 and actual_cols != expected_cols:
-                print(
-                    f"ERROR: Column mismatch in {output_path.name}! Header={expected_cols}, Data={actual_cols}. Assigning empty data.")
-                data_array = np.empty((0, expected_cols), dtype=float)
-
-            # Populate output structure by parsing PVs and assigning data columns
-            for idx, pv_name in enumerate(channel_pvs):
-                parsed_info = self._extract_cavity_channel_from_pv(pv_name)
-                if parsed_info:
-                    cav_num, channel_type = parsed_info
-                    cavity_numbers_found.add(cav_num)
-
-                    if cav_num not in output_data['cavities']:
-                        output_data['cavities'][cav_num] = {}
-
-                    # Assign data column if data exists and dimensions match
-                    if data_array.ndim == 2 and idx < actual_cols and data_array.shape[0] > 0:
-                        column_data = data_array[:, idx]
-                        output_data['cavities'][cav_num][channel_type] = column_data
-                    else:
-                        # Assign empty array if no data rows, column mismatch, or parsing failed
-                        output_data['cavities'][cav_num][channel_type] = np.array([], dtype=float)
-                else:
-                    # Case where PV parsing failed for this specific header entry
-                    print(f"WARN: Skipping data column {idx} due to PV parsing failure: {pv_name}")
-
-            output_data['cavity_list'] = sorted(list(cavity_numbers_found))
-            print(
-                f"DEBUG: Final processed data structure for {chassis_id}: Cavities found: {output_data['cavity_list']}")
-
-            return output_data
-
-        except ValueError as e:
-            print(f"ERROR: ValueError processing file {output_path.name}: {e}")
+            logging.error(f"Data processing/indexing error in wrapper for {chassis_id}: {e}")
             traceback.print_exc()
-            self.acquisitionError.emit(chassis_id, f"Data processing error in {output_path.name}: {e}")
-            return None
-        except IndexError as e:
-            print(f"ERROR: IndexError processing file {output_path.name}: {e}")
-            traceback.print_exc()
-            self.acquisitionError.emit(chassis_id, f"Data indexing error in {output_path.name}: {e}")
-            return None
+            self.acquisitionError.emit(chassis_id, f"Data processing error for {output_path.name}: {e}")
         except Exception as e:
-            print(f"CRITICAL: Unexpected error in _process_output_file for {chassis_id}: {e}")
+            logging.critical(f"Unexpected error processing file in wrapper for {chassis_id}: {e}")
             traceback.print_exc()
             self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
-            return None
 
     def stop_acquisition(self, chassis_id: str):
         """Stop a running acquisition process."""
