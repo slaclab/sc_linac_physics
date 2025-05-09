@@ -6,7 +6,6 @@ from typing import Dict, List, Optional
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from applications.microphonics.gui.statistics_calculator import StatisticsCalculator
 from applications.microphonics.utils.file_parser import load_and_process_file, FileParserError
 
 
@@ -37,7 +36,6 @@ class DataLoader(QObject):
         """
         super().__init__()
         self.base_path = base_path or Path("/u1/lcls/physics/rf_lcls2/microphonics/")
-        self.stats_calculator = StatisticsCalculator()
 
     def load_file(self, file_path: Path):
         try:
@@ -59,46 +57,3 @@ class DataLoader(QObject):
             traceback.print_exc()
             self.loadError.emit(error_msg)
             self.loadProgress.emit(0)
-
-    def validate_file_format(self, file_path: Path) -> bool:
-        """
-        Check if file is in the correct format.
-
-        Args:
-            file_path: Path to the file to validate
-
-        Returns:
-            bool: True if the file appears to be in the correct format
-        """
-        try:
-            with open(file_path, 'r') as f:
-                # Check first few lines for expected format
-                for _ in range(10):
-                    line = f.readline()
-                    if not line:
-                        break
-                    if line.startswith('# ACCL:'):
-                        return True
-            return False
-        except Exception:
-            return False
-
-    def get_available_channels(self, file_path: Path) -> List[str]:
-        """
-        Get list of available channels in a data file.
-
-        Args:
-            file_path: Path to the data file
-
-        Returns:
-            List of channel names found in the file
-        """
-        try:
-            with open(file_path, 'r') as f:
-                for line in f:
-                    if line.startswith('# ACCL:'):
-                        return line.strip('# \n').split()
-            return []
-        except Exception as e:
-            self.loadError.emit(f"Error reading channels: {str(e)}")
-            return []

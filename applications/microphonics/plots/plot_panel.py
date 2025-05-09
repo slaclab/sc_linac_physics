@@ -3,17 +3,19 @@ from PyQt5.QtWidgets import (
     QCheckBox, QHBoxLayout, QPushButton, QSizePolicy
 )
 
+from applications.microphonics.gui.config_panel import ConfigPanel
 from applications.microphonics.plots.fft_plot import FFTPlot
 from applications.microphonics.plots.histogram_plot import HistogramPlot
-from applications.microphonics.plots.spectogram_plot import SpectrogramPlot
+from applications.microphonics.plots.spectrogram_plot import SpectrogramPlot
 from applications.microphonics.plots.time_series_plot import TimeSeriesPlot
 
 
 class PlotPanel(QWidget):
     """Container for all plot types w/ self contained configuration"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, config_panel_ref=None):
         super().__init__(parent)
+        self.config_panel = config_panel_ref
 
         # Default configuration
         self.config = {
@@ -31,7 +33,8 @@ class PlotPanel(QWidget):
                 'colormap': 'viridis'
             }
         }
-
+        self._last_data_dict_processed = None
+        self._current_plotting_decimation = None
         self.setup_ui()
 
     def setup_ui(self):
@@ -118,7 +121,7 @@ class PlotPanel(QWidget):
         tab_mapping = {
             0: 'FFT Analysis',
             1: 'Histogram',
-            2: 'Real-time',  # 'Time Series' tab
+            2: 'Time Series',
             3: 'Spectrogram'
         }
         self.config['plot_type'] = tab_mapping.get(index, 'FFT Analysis')
@@ -188,22 +191,48 @@ class PlotPanel(QWidget):
         # Apply updated config
         self._apply_config_to_all_plots()
 
+    def _get_decimation_for_plotting(self) -> int:
+        """Determines the decimation to use for plotting based on UI."""
+        if self.config_panel:
+            return self.config_panel.get_selected_decimation()
+        else:
+            print(f"PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation.")
+            return ConfigPanel.DEFAULT_DECIMATION_VALUE
+
     def update_plots(self, data_dict: dict):
         """Update all plots w/ new data"""
+        self._last_data_dict_processed = data_dict
         cavity_list = data_dict.get('cavity_list', [])
         all_cavity_data = data_dict.get('cavities', {})
-        decimation = data_dict.get('decimation', 1)
+        actual_plotting_decimation = self._get_decimation_for_plotting()
+        self._current_plotting_decimation = actual_plotting_decimation
+
         for cavity_num in cavity_list:
-            cavity_data_for_plot = all_cavity_data.get(cavity_num)
-            if cavity_data_for_plot:
-                cavity_data_for_plot['decimation'] = decimation
+            cavity_data_from_source = all_cavity_data.get(cavity_num)
+            if cavity_data_from_source:
+                data_for_this_plot_call = cavity_data_from_source.copy()
+                data_for_this_plot_call['decimation'] = actual_plotting_decimation
                 # Pass dictionary of channel data for this cavity to each plot types update method
-                self.fft_plot.update_plot(cavity_num, cavity_data_for_plot)
-                self.histogram_plot.update_plot(cavity_num, cavity_data_for_plot)
-                self.time_series_plot.update_plot(cavity_num, cavity_data_for_plot)
-                self.spectrogram_plot.update_plot(cavity_num, cavity_data_for_plot)
+                self.fft_plot.update_plot(cavity_num, data_for_this_plot_call)
+                self.histogram_plot.update_plot(cavity_num, data_for_this_plot_call)
+                self.time_series_plot.update_plot(cavity_num, data_for_this_plot_call)
+                self.spectrogram_plot.update_plot(cavity_num, data_for_this_plot_call)
             else:
                 print(f"PlotPanel: No data found for cavity {cavity_num} in received data_dict.")
+
+    def refresh_plots_if_decimation_changed(self):
+        """
+        Checks if UI decimation changed from what was last used for plotting.
+        and if so re plots the last processed data.
+        """
+        if not self.config_panel or not self._last_data_dict_processed:
+            return
+
+        new_ui_decimation = self.config_panel.get_selected_decimation()
+        if self._current_plotting_decimation is None or self._current_plotting_decimation != new_ui_decimation:
+            print(
+                f"PlotPanel: UI Decimation changed from {self._current_plotting_decimation} to {new_ui_decimation}. Refreshing plots.")
+            self.update_plots(self._last_data_dict_processed.copy())
 
     def clear_plots(self):
         """Clear all plot data"""

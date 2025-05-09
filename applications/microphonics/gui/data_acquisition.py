@@ -1,13 +1,11 @@
-import io
 import logging
 import re
 import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict
 
-import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, QProcess, QTimer
 
 from applications.microphonics.utils.file_parser import FileParserError, load_and_process_file
@@ -24,10 +22,7 @@ class DataAcquisitionManager(QObject):
         "Restoring acquisition settings...",
         "Done"  # This appears after Restoring
     ]
-    # Regex to capture progress (more robust)
     PROGRESS_REGEX = re.compile(r"Acquired\s+(\d+)\s+/\s+(\d+)\s+buffers")
-    PV_CAVITY_REGEX = re.compile(r"ACCL:L\dB:(\d{2})(\d)0:")
-    PV_CHANNEL_REGEX = re.compile(r":PZT:([A-Z]+):WF")
 
     def __init__(self):
         super().__init__()
@@ -315,58 +310,6 @@ class DataAcquisitionManager(QObject):
                 if 'process' in process_info: process_info['process'] = None
 
     def _process_output_file_wrapper(self, chassis_id: str, output_path: Path, process_info: dict):
-        """Wrapper to catch exceptions during file processing and emit completion."""
-        print(f"DEBUG: _process_output_file_wrapper entered for {chassis_id}")
-        try:
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            print(f"[{current_time}] Attempting to process file: {output_path}")
-
-            # Check file existence and size before processing
-            if not output_path.exists():
-                print(f"ERROR: File {output_path} not found after wait!")
-                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} missing after wait.")
-                return
-
-            file_size = output_path.stat().st_size
-            print(f"DEBUG: File exists. Size: {file_size} bytes")
-            if file_size == 0:
-                print(f"WARN: File {output_path} exists but is empty. Aborting processing.")
-                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} was empty.")
-                return
-
-            # Call the core processing function
-            print(f"DEBUG: Calling _process_output_file for {chassis_id}")
-            parsed_data_dict = self._process_output_file(chassis_id, output_path, process_info)
-
-            # Emit Signals only on completion
-            if parsed_data_dict:
-                print(f"DEBUG: Emitting dataReceived for {chassis_id}")
-                self.dataReceived.emit(chassis_id, parsed_data_dict)
-
-                # Emit overall completion after data is successfully processed and emitted
-                print(f"DEBUG: Emitting acquisitionComplete for {chassis_id}")
-                self.acquisitionComplete.emit(chassis_id)
-
-                current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                print(f"[{current_time_end}] Successfully processed and emitted data for: {output_path}")
-            else:
-                # Error should have been emitted within _process_output_file or _read_data_file
-                print(
-                    f"ERROR: _process_output_file did not return valid data for {chassis_id}. Completion not signaled.")
-
-        except FileNotFoundError:
-            print(f"ERROR: File not found during processing wrapper for {chassis_id}: {output_path}")
-            self.acquisitionError.emit(chassis_id, f"Output file missing or unreadable: {output_path.name}")
-        except (ValueError, IndexError) as e:
-            print(f"ERROR: Data parsing/indexing error in wrapper for {chassis_id}: {e}")
-            traceback.print_exc()
-            self.acquisitionError.emit(chassis_id, f"Data parsing error in {output_path.name}: {e}")
-        except Exception as e:
-            print(f"CRITICAL: Unexpected error processing file in wrapper for {chassis_id}: {e}")
-            traceback.print_exc()
-            self.acquisitionError.emit(chassis_id, f"Unexpected error processing file {output_path.name}: {str(e)}")
-
-    def _process_output_file_wrapper(self, chassis_id: str, output_path: Path, process_info: dict):
         """
         Wrapper to check file, call the central file parser, handle errors,
         and emit signals.
@@ -453,102 +396,3 @@ class DataAcquisitionManager(QObject):
         """Stop all acquisitions"""
         for chassis_id in list(self.active_processes.keys()):
             self.stop_acquisition(chassis_id)
-
-    def _read_data_file(self, file_path: Path) -> Tuple[Optional[List[str]], Optional[np.ndarray]]:
-        """
-        Reads data file, separates header/data based on '# ACCL:' line.
-        Returns (header_lines, data_array).
-        """
-        print(f"DEBUG: _read_data_file attempting to read: {file_path}")
-        header_lines: List[str] = []
-        data_content_lines: List[str] = []
-        channel_header_line_index: Optional[int] = None
-
-        try:
-            with file_path.open('r', encoding='utf-8', errors='ignore') as f:
-                all_lines = f.readlines()
-
-            # Find the crucial channel header line ('# ACCL:')
-            for i, line in enumerate(all_lines):
-                if line.strip().startswith('# ACCL:'):
-                    channel_header_line_index = i
-                    break
-
-            if channel_header_line_index is None:
-                print(f"ERROR: Essential channel header line ('# ACCL:') not found in {file_path}")
-                return None, None
-
-            header_lines = all_lines[:channel_header_line_index + 1]
-
-            for line in all_lines[channel_header_line_index + 1:]:
-                stripped_line = line.strip()
-                if stripped_line and not stripped_line.startswith('#'):
-                    data_content_lines.append(line)
-
-            # Process data lines
-            if not data_content_lines:
-                print(f"Warning: No numerical data lines found after header in {file_path}.")
-                num_channels = 0
-                try:  # Try to get column count from header even if data is empty
-                    channels = self._parse_channels(header_lines)
-                    num_channels = len(channels) if channels else 0
-                except ValueError:
-                    print(f"Warning: Could not parse channels from header of empty data file {file_path}")
-                # Return empty 2D array with right number of columns
-                return header_lines, np.empty((0, num_channels), dtype=float)
-
-            # Use StringIO for np.loadtxt
-            data_io = io.StringIO("".join(data_content_lines))
-            # Use ndmin=2 for 2D output specify float type
-            data_array = np.loadtxt(data_io, comments='#', ndmin=2, dtype=float)
-
-            # Check if loadtxt failed despite having lines
-            if data_array.size == 0 and len(data_content_lines) > 0:
-                print(f"ERROR: np.loadtxt failed to parse data content in {file_path}.")
-                return header_lines, None
-
-            print(
-                f"DEBUG: Successfully read header ({len(header_lines)} lines) and data (shape {data_array.shape}) from {file_path}")
-            return header_lines, data_array
-
-        except FileNotFoundError:
-            print(f"ERROR: Data file not found during read: {file_path}")
-            return None, None
-        except ValueError as e:
-            print(f"ERROR: ValueError during file read/parse for {file_path}: {e}")
-            return None, None
-        except Exception as e:
-            print(f"CRITICAL: Unexpected error reading/parsing file {file_path}: {e}")
-            traceback.print_exc()
-            return None, None
-
-    # Make sure _parse_channels only looks for # ACCL:
-    def _parse_channels(self, header_lines: List[str]) -> Optional[List[str]]:
-        """
-        Parse channel PV names from the specific # ACCL: line in header.
-        Returns list of PV names or None if the line is not found/parsable.
-        """
-        channel_line: Optional[str] = None
-        # Look for the line starting with # ACCL:
-        for line in reversed(header_lines):  # Check recent lines first
-            stripped_line = line.strip()
-            if stripped_line.startswith('# ACCL:'):
-                channel_line = stripped_line
-                break
-
-        if channel_line:
-            try:
-                # Remove #, strip whitespace, split by space
-                parsed_channels = channel_line.strip('# \n').split()
-                if not parsed_channels:  # Check if split resulted in empty list
-                    print("WARN: Found '# ACCL:' line but no channels listed after it.")
-                    return None
-                print(f"DEBUG: Parsed channels from header: {parsed_channels}")
-                return parsed_channels
-            except Exception as e:
-                print(f"ERROR: Failed to split/parse the found '# ACCL:' line: {channel_line} - {e}")
-                return None
-        else:
-            # Case indicates the # ACCL: line wasn't in the input header_lines
-            print("ERROR: Channel header line ('# ACCL:') not found in provided header lines during channel parsing.")
-            return None

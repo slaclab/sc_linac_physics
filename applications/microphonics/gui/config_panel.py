@@ -23,6 +23,7 @@ class ConfigPanel(QWidget):
     configChanged = pyqtSignal(dict)  # Emitted when any configuration changes
     measurementStarted = pyqtSignal()  # Emitted when start button clicked
     measurementStopped = pyqtSignal()  # Emitted when stop button clicked
+    decimationSettingChanged = pyqtSignal(int)
 
     # Constants
     VALID_LINACS = {
@@ -32,6 +33,7 @@ class ConfigPanel(QWidget):
         "L3B": [f"{i:02d}" for i in range(16, 36)]
     }
     VALID_DECIMATION = {1, 2, 4, 8}
+    DEFAULT_DECIMATION_VALUE = 2
     DEFAULT_BUFFER_COUNT = 65
 
     def __init__(self, parent=None):
@@ -40,6 +42,7 @@ class ConfigPanel(QWidget):
         self.selected_modules = set()
         self.is_updating = False  # I added this flag to prevent recursive updates (check)
         self.setup_ui()
+        self._set_default_decimation()
         self.connect_signals()
 
     def setup_ui(self):
@@ -61,6 +64,22 @@ class ConfigPanel(QWidget):
         content_layout.addStretch()
 
         layout.addWidget(scroll)
+
+    def get_selected_decimation(self):
+        """Returns the currently selected decimation value from the UI."""
+        try:
+            return int(self.decim_combo.currentText())
+        except ValueError:
+            print("Warning: Could not parse decimation from UI, defaulting to {self.DEFAULT_DECIMATION_VALUE}.")
+            return self.DEFAULT_DECIMATION_VALUE
+
+    def _set_default_decimation(self):
+        """Sets the decimation combo box to the default value."""
+        if str(self.DEFAULT_DECIMATION_VALUE) in [self.decim_combo.itemText(i) for i in
+                                                  range(self.decim_combo.count())]:
+            self.decim_combo.setCurrentText(str(self.DEFAULT_DECIMATION_VALUE))
+        else:
+            if self.decim_combo.count() > 0: self.decim_combo.setCurrentIndex(0)
 
     def create_linac_section(self) -> QGroupBox:
         """Create linac and CM selection group"""
@@ -327,6 +346,27 @@ class ConfigPanel(QWidget):
         # This connects start/stop buttons
         self.start_button.clicked.connect(self._on_start_clicked)
         self.stop_button.clicked.connect(self.measurementStopped.emit)
+
+        if hasattr(self, 'decim_combo'):
+            self.decim_combo.currentIndexChanged.connect(self._emit_decimation_change)
+        else:
+            print("WARNING (ConfigPanel): self.decim_combo not found during signal connection.")
+
+    def _emit_decimation_change(self):
+        """
+        Slot connected to the decimation combo boxes currentIndexChanged signal.
+        Emits the decimationSettingChanged signal w/ new decimation value.
+        """
+
+        try:
+            # Get current text of combo box and convert to an integer
+            dec_value = int(self.decim_combo.currentText())
+            self.decimationSettingChanged.emit(dec_value)
+            print(f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}")
+        except ValueError:
+            print(
+                f"WARNING (ConfigPanel): Could not parse decimation value from combo box: {self.decim_combo.currentText()}")
+            pass
 
     def _on_start_clicked(self):
         """Handle start button click w/ validation"""

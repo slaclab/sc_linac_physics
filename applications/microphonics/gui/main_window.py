@@ -1,6 +1,6 @@
 import traceback
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 import numpy as np
 from PyQt5.QtCore import QTimer, pyqtSignal
@@ -92,17 +92,18 @@ class MicrophonicsGUI(QMainWindow):
         # Connect data loader signals
         self.data_loader.dataLoaded.connect(lambda data: self._handle_new_data("file", data))
         self.data_loader.loadError.connect(self._handle_load_error)
+        self.data_loader.loadProgress.connect(self._handle_load_progress)
 
     def init_panels(self):
         """Initialize all panels"""
         # Left panel components
         self.config_panel = ConfigPanel()
+        self.status_panel = StatusPanel()
         self.channel_selection = ChannelSelectionGroup()
         self.data_loading = DataLoadingGroup()
-        self.status_panel = StatusPanel()
 
         # Right panel components
-        self.plot_panel = PlotPanel()
+        self.plot_panel = PlotPanel(self, config_panel_ref=self.config_panel)
 
     def setup_left_panel(self, layout: QVBoxLayout):
         """Setup left side of the window"""
@@ -122,9 +123,7 @@ class MicrophonicsGUI(QMainWindow):
         self.config_panel.configChanged.connect(self.on_config_changed)
         self.config_panel.measurementStarted.connect(self.start_measurement)
         self.config_panel.measurementStopped.connect(self.stop_measurement)
-
-        # Channel selection signals
-        self.channel_selection.channelsChanged.connect(self.on_channels_changed)
+        self.config_panel.decimationSettingChanged.connect(self.plot_panel.refresh_plots_if_decimation_changed)
 
         # Data loading signals
         self.data_loading.fileSelected.connect(self.load_data)
@@ -145,13 +144,6 @@ class MicrophonicsGUI(QMainWindow):
                     )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Configuration error: {str(e)}")
-
-    def on_channels_changed(self, channels: List[str]):
-        """Handle channel selection changes"""
-        if self.measurement_running:
-            return
-        # Update UI based on selected channels
-        pass
 
     def _split_chassis_config(self, config: dict) -> Dict[str, Dict]:
         """Split configuration by chassis (A/B) and include channel selection"""
@@ -331,33 +323,6 @@ class MicrophonicsGUI(QMainWindow):
             self.config_panel.set_measurement_running(False)
             self.channel_selection.setEnabled(True)
             self.data_loading.setEnabled(True)
-
-    def _finalize_measurement(self):
-        """Final measurement cleanup and status checks"""
-        # 1. Check active processes from data manager
-        active_processes = getattr(self.data_manager.data_manager, 'active_processes', {})
-
-        # 2. Only proceed if ALL acquisitions completed
-        if active_processes:
-            return
-
-        # 3. Update measurement state
-        self.measurement_running = False
-        self.config_panel.set_measurement_running(False)
-
-        # 4. Handle errors/success
-        if self.measurement_errors:
-            # Show combined errors
-            error_text = "\n".join(set(self.measurement_errors))  # Deduplicate
-            QMessageBox.critical(self, "Measurement Errors", error_text)
-        else:
-            # Show success
-            QMessageBox.information(self, "Complete",
-                                    "Measurement completed successfully")
-
-        # 5. Cleanup
-        self.measurement_errors.clear()
-        self.config_panel._config_changed()  # Refresh UI state
 
     def _handle_progress(self, chassis_id: str, cavity_num: int, progress: int):
         """Handle progress updates from measurement"""
