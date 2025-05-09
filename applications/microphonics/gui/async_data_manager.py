@@ -119,28 +119,6 @@ class AsyncDataManager(QObject):
             QTimer.singleShot(0, lambda cid=chassis_id, cfg=config:
             self.data_manager.start_acquisition(cid, cfg))
 
-    def _handle_measurement(self, chassis_config):
-        """Runs in worker thread context"""
-        try:
-            errors = self._validate_all_configs(chassis_config)
-            if errors:
-                # In worker thread, raise the first error
-                chassis_id, error = errors[0]
-                raise ValueError(f"Configuration error for {chassis_id}: {error}")
-
-            for chassis_id, config in chassis_config.items():
-                # Replacing the manual dict creation w/ the new method
-                self.data_manager.start_acquisition(
-                    chassis_id,
-                    config['config'].to_acquisition_config()
-                )
-
-        except Exception as e:
-            self.acquisitionError.emit(chassis_id, str(e))
-            self.stop_measurement(chassis_id)
-        finally:
-            self.thread.quit()
-
     def stop_measurement(self, chassis_id: str):
         """Stop measurement for specific chassis"""
         try:

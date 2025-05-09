@@ -110,34 +110,3 @@ class StatusPanel(QWidget):
                 0,
                 ""
             )
-
-    def set_cavity_error(self, cavity_num: int, error_msg: str):
-        """Set error state for a cavity
-        """
-        self.update_cavity_status(
-            cavity_num,
-            "Error",
-            0,
-            error_msg
-        )
-        # Optionally highlight the error state
-        if cavity_num in self.status_widgets:
-            self.status_widgets[cavity_num]['status'].setStyleSheet("color: red")
-
-    def clear_cavity_error(self, cavity_num: int):
-        """Clear error state for a cavity
-        """
-        if cavity_num in self.status_widgets:
-            self.status_widgets[cavity_num]['status'].setStyleSheet("")
-
-    def get_cavity_status(self, cavity_num: int) -> Dict:
-        """Get current status info for a cavity
-        """
-        if cavity_num in self.status_widgets:
-            widgets = self.status_widgets[cavity_num]
-            return {
-                'status': widgets['status'].text(),
-                'progress': widgets['progress'].value(),
-                'message': widgets['message'].text()
-            }
-        return {}

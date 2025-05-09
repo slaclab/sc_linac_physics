@@ -3,7 +3,7 @@ from pathlib import Path
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import (
     QVBoxLayout, QGroupBox, QLabel, QCheckBox, QPushButton,
-    QGridLayout, QFileDialog, QApplication
+    QGridLayout, QFileDialog
 )
 
 
@@ -83,11 +83,6 @@ class ChannelSelectionGroup(QGroupBox):
             self.optional_group.show()
         else:
             self.optional_group.hide()
-
-        # Force layout update
-        self.layout().activate()
-        self.updateGeometry()
-        QApplication.processEvents()
 
     def _on_channel_changed(self):
         """This will handle channel selection changes"""

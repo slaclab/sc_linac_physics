@@ -131,30 +131,6 @@ class BasePlot(QWidget):
 
         return pg.mkPen(qcolor, width=2, style=style)
 
-    def _get_cavity_color(self, cavity_num):
-        """
-        Get unique color for each cavity number
-
-        Args:
-            cavity_num: Cavity number (1-8)
-
-        Returns:
-            str: Color hex code for the cavity
-        """
-        colors = [
-            '#1f77b4',  # Blue
-            '#ff7f0e',  # Orange
-            '#2ca02c',  # Green
-            '#d62728',  # Red
-            '#9467bd',  # Purple
-            '#8c564b',  # Brown
-            '#e377c2',  # Pink
-            '#7f7f7f'  # Gray
-        ]
-
-        color_idx = (cavity_num - 1) % len(colors)
-        return colors[color_idx]
-
     def _show_tooltip(self, plot_type, ev):
         """
         Show tooltip w/ data values on hover

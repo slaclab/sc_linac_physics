@@ -1,3 +1,5 @@
+import numpy as np
+
 from applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
 from applications.microphonics.plots.base_plot import BasePlot
 from applications.microphonics.utils.data_processing import calculate_fft
@@ -16,13 +18,42 @@ class FFTPlot(BasePlot):
             'x_label': ('Frequency', 'Hz'),
             'y_label': ('Relative Amplitude', ''),
             'x_range': (0, 150),
+            'y_range': (0, 1.50),
             'grid': True
         }
         super().__init__(parent, plot_type='fft', config=config)
-        self.plot_widget.enableAutoRange(axis='y', enable=True)
+        self.current_max_freq = self.config['x_range'][1]
+
+    def set_plot_config(self, panel_wide_config):
+        super().set_plot_config(panel_wide_config)
+        fft_sub_config = {}
+        if 'fft' in self.config and isinstance(self.config['fft'], dict):
+            fft_sub_config = self.config['fft']
+        if hasattr(self, 'plot_widget'):
+            if 'max_freq' in fft_sub_config:
+                self.current_max_freq = fft_sub_config['max_freq']
+            else:
+                self.current_max_freq = self.config.get('x_range', (0, 150))[1]
+
+            if not isinstance(self.current_max_freq, (int, float)) or self.current_max_freq <= 0:
+                print(f"Warning (FFTPlot): Invalid max_freq '{self.current_max_freq}', defaulting to 150 Hz.")
+                self.current_max_freq = 150
+
+            self.plot_widget.setXRange(0, self.current_max_freq, padding=0)
+            self.plot_widget.setTitle(f"FFT Analysis (0-{self.current_max_freq:.0f} Hz)")
+
+            y_range_to_set = self.config.get('y_range')
+            if 'y_range' in fft_sub_config:
+                y_range_to_set = fft_sub_config['y_range']
+
+            if y_range_to_set and isinstance(y_range_to_set, (list, tuple)) and len(y_range_to_set) == 2:
+                self.plot_widget.setYRange(*y_range_to_set)
+            else:
+                default_y_range = self.config.get('y_range', (0, 1.5))
+                self.plot_widget.setYRange(*default_y_range)
 
     def _format_tooltip(self, plot_type, x, y):
-        """Format tooltip text specifically for FFT plot
+        """Format tooltip text for FFT plot
 
         Args:
             plot_type: Type of plot (unused in this implementation)
@@ -60,9 +91,20 @@ class FFTPlot(BasePlot):
         except Exception as e:
             print(f"FFTPlot: Error during FFT calculation for Cav {cavity_num}: {e}")
             return
+        if freqs.size > 0:
+            mask = freqs <= self.current_max_freq
+            freqs_to_plot = freqs[mask]
+            amplitudes_to_plot = amplitudes[mask]
+
+            if freqs.size > 0 and freqs_to_plot.size == 0:
+                freqs_to_plot = np.array([])
+                amplitudes_to_plot = np.array([])
+        else:
+            freqs_to_plot = np.array([])
+            amplitudes_to_plot = np.array([])
 
         # Update plot using the helper method
-        self.update_fft_plot(cavity_num, freqs, amplitudes)
+        self.update_fft_plot(cavity_num, freqs_to_plot, amplitudes_to_plot)
 
     def update_fft_plot(self, cavity_num, freqs, amplitudes):
         """Update FFT plot w/ calculated frequency data

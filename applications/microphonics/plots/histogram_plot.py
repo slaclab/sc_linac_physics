@@ -146,8 +146,3 @@ class HistogramPlot(BasePlot):
                 x_values,
                 y_values
             )
-
-    def reset_range(self):
-        """Reset the data range to force recalculation w/ next data update"""
-        self.data_range = None
-        self.plot_widget.setTitle("Histogram (Auto Range)")
