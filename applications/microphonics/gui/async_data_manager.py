@@ -13,7 +13,6 @@ BASE_HARDWARE_SAMPLE_RATE = 2000
 class MeasurementConfig:
     """Configuration for measurement parameters"""
     channels: List[str]
-    buffer_length: int = 16384
     decimation: int = 2
     buffer_count: int = 1
 

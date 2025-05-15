@@ -202,10 +202,6 @@ class TimeSeriesPlot(BasePlot):
     def _update_visible_curves(self, x_min, x_max):
         """Update all visible curves for current view"""
         for cavity_num in self.plot_curves:
-            if hasattr(self, 'cavity_checkboxes') and cavity_num in self.cavity_checkboxes:
-                if not self.cavity_checkboxes[cavity_num].isChecked():
-                    continue
-
             if cavity_num in self._original_data:
                 # Get a good decimation level
                 view_width = x_max - x_min

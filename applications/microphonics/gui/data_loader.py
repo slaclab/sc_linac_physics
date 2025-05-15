@@ -1,22 +1,9 @@
 import traceback
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
-import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from applications.microphonics.utils.file_parser import load_and_process_file, FileParserError
-
-
-@dataclass
-class LoadedData:
-    """Container for loaded data and metadata"""
-    channels: Dict[str, np.ndarray]
-    cavity_numbers: List[int]
-    timestamp: str
-    channel_names: List[str]
-    file_path: Path
 
 
 class DataLoader(QObject):
@@ -27,15 +14,11 @@ class DataLoader(QObject):
     loadError = pyqtSignal(str)  # Emits error messages
     loadProgress = pyqtSignal(int)  # Emits progress percentage
 
-    def __init__(self, base_path: Optional[Path] = None):
+    def __init__(self):
         """
-        Initialize DataLoader w/ optional base path for data files.
-
-        Args:
-            base_path: Optional path to the data directory. If None, uses the default path.
+        Initialize DataLoader.
         """
         super().__init__()
-        self.base_path = base_path or Path("/u1/lcls/physics/rf_lcls2/microphonics/")
 
     def load_file(self, file_path: Path):
         try:

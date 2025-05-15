@@ -15,8 +15,6 @@ class ChannelSelectionGroup(QGroupBox):
     - Primary channels (DAC and DF): Always on and can't be turned off
     - Optional channels: Extra measurements users can toggle on/off as needed
     """
-    # Signal tells other parts of the program when the channel selection changes
-    channelsChanged = pyqtSignal(list)
 
     def __init__(self, parent=None):
         super().__init__("Channel Selection", parent)
@@ -65,7 +63,6 @@ class ChannelSelectionGroup(QGroupBox):
         col = 0
         for name, checkbox in self.optional_channels.items():
             optional_layout.addWidget(checkbox, row, col)
-            checkbox.stateChanged.connect(self._on_channel_changed)
             col += 1
             if col > 2:
                 col = 0
@@ -84,10 +81,6 @@ class ChannelSelectionGroup(QGroupBox):
         else:
             self.optional_group.hide()
 
-    def _on_channel_changed(self):
-        """This will handle channel selection changes"""
-        self.channelsChanged.emit(self.get_selected_channels())
-
     def get_selected_channels(self):
         """This will get a list of selected channel names"""
         channels = ['DAC', 'DF']
@@ -95,69 +88,6 @@ class ChannelSelectionGroup(QGroupBox):
             if checkbox.isChecked():
                 channels.append(name)
         return channels
-
-
-class StatisticsPanel(QGroupBox):
-    """
-    Panel shows important numbers about your data for each cavity.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__("Statistical Analysis", parent)
-        self.setup_ui()
-
-    def setup_ui(self):
-        """
-        Creates a tableish like display where each row represents 1 cavity
-        and each column shows a different stat measurement.
-        """
-        layout = QGridLayout()
-
-        # This creates the header row with labels for each stat
-        headers = ["Cavity", "Mean", "Std Dev", "Min", "Max", "Outliers"]
-        for col, header in enumerate(headers):
-            label = QLabel(header)
-            label.setStyleSheet("font-weight: bold")
-            layout.addWidget(label, 0, col)
-
-        # This creates rows for each cavity
-        self.stat_widgets = {}
-        for row in range(1, 9):  # 8 cavities
-            cavity_label = QLabel(f"Cavity {row}")
-            layout.addWidget(cavity_label, row, 0)
-
-            # This creates spots for each stat
-            self.stat_widgets[row] = {
-                'mean': QLabel("0.0"),
-                'std': QLabel("0.0"),
-                'min': QLabel("0.0"),
-                'max': QLabel("0.0"),
-                'outliers': QLabel("0")
-            }
-
-            # Adding each stat label to the right spot in the grid
-            for col, (key, widget) in enumerate(self.stat_widgets[row].items(), 1):
-                layout.addWidget(widget, row, col)
-
-        self.setLayout(layout)
-
-    def update_statistics(self, cavity_num, stats):
-        """
-        Updates the numbers shown for a specific cavity.
-
-        Args:
-            cavity_num: Which cavity we're updating (1-8)
-            stats: A dictionary with new values for each statistic
-                  (mean, std dev, min, max, outliers)
-        """
-        if cavity_num in self.stat_widgets:
-            widgets = self.stat_widgets[cavity_num]
-            # Updating each number, w/ formatting to 2 decimal places for easier readability
-            widgets['mean'].setText(f"{stats['mean']:.2f}")
-            widgets['std'].setText(f"{stats['std']:.2f}")
-            widgets['min'].setText(f"{stats['min']:.2f}")
-            widgets['max'].setText(f"{stats['max']:.2f}")
-            widgets['outliers'].setText(str(stats['outliers']))
 
 
 class DataLoadingGroup(QGroupBox):
