@@ -10,9 +10,8 @@ def calculate_fft(data: np.ndarray, effective_sample_rate: float):
     Calculate FFT of input data w/ correct frequency mapping
 
     Args:
-        data (np.ndarray): Input time domain data
-        original_sample_rate (float): Original sample rate in Hz (unused)
-        target_sample_rate (float): Target sample rate (unused)
+        data (np.ndarray): Input time domain data.
+        effective_sample_rate (float): The effective sample rate of input data in Hz, after considering any decimation.
 
     Returns:
         tuple: (frequencies, amplitudes) arrays in linear scale

@@ -1,5 +1,3 @@
-from typing import Dict
-
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QLabel,
     QProgressBar, QGridLayout
@@ -66,20 +64,6 @@ class StatusPanel(QWidget):
             widgets['status'].setText(status)
             widgets['progress'].setValue(progress)
             widgets['message'].setText(message)
-
-    def update_all_status(self, status_dict: Dict):
-        """Update status for all cavities
-
-        Args:
-            status_dict: Dictionary mapping cavity numbers to status info
-        """
-        for cavity_num, info in status_dict.items():
-            self.update_cavity_status(
-                cavity_num,
-                info.get('status', ''),
-                info.get('progress', 0),
-                info.get('message', '')
-            )
 
     def update_statistics(self, cavity_num: int, stats: dict):
         """Update statistical infor for a cavity

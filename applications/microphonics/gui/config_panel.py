@@ -34,13 +34,12 @@ class ConfigPanel(QWidget):
     }
     VALID_DECIMATION = {1, 2, 4, 8}
     DEFAULT_DECIMATION_VALUE = 2
-    DEFAULT_BUFFER_COUNT = 65
+    DEFAULT_BUFFER_COUNT = 1
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_linac = None
-        self.selected_modules = set()
-        self.is_updating = False  # I added this flag to prevent recursive updates (check)
+        self.is_updating = False
         self.setup_ui()
         self._set_default_decimation()
         self.connect_signals()
@@ -208,7 +207,7 @@ class ConfigPanel(QWidget):
         layout.addWidget(QLabel("Buffer Count:"), 1, 0)
         self.buffer_spin = QSpinBox()
         self.buffer_spin.setRange(1, 1000)
-        self.buffer_spin.setValue(65)
+        self.buffer_spin.setValue(1)
         layout.addWidget(self.buffer_spin, 1, 1)
 
         group.setLayout(layout)
@@ -272,8 +271,7 @@ class ConfigPanel(QWidget):
             btn.setCheckable(True)
             btn.clicked.connect(self._emit_config_if_valid)
 
-            # Store full ACCL name and module ID as properties
-            btn.setProperty('accl_name', accl_name)
+            # Store module ID as properties
             btn.setProperty('module_id', module)
 
             self.cryo_buttons[module] = btn
@@ -313,16 +311,6 @@ class ConfigPanel(QWidget):
 
         return None
 
-    def _config_changed(self):
-        """Emit configuration changed signal w/ validation"""
-        # For normal config changes, use standard validation 
-        if error_msg := self.validate_cavity_selection(is_bulk_action=False):
-            QMessageBox.warning(self, "Invalid Selection", error_msg)
-            return
-
-        config = self.get_config()
-        self.configChanged.emit(config)
-
     def _emit_config_if_valid(self):
         """Emit configuration only if valid """
         if not self.is_updating:
@@ -338,10 +326,6 @@ class ConfigPanel(QWidget):
         for checks in [self.cavity_checks_a, self.cavity_checks_b]:
             for cb in checks.values():
                 cb.stateChanged.connect(self._on_cavity_selection_changed)
-
-        # This connects module buttons
-        for btn in self.cryo_buttons.values():
-            btn.clicked.connect(self._emit_config_if_valid)
 
         # This connects start/stop buttons
         self.start_button.clicked.connect(self._on_start_clicked)

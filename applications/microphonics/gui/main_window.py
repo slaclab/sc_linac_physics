@@ -5,9 +5,11 @@ from typing import Dict
 import numpy as np
 from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QWidget, QHBoxLayout, QVBoxLayout,
     QMessageBox
+
 )
+from pydm import Display
 
 from applications.microphonics.components.components import (
     ChannelSelectionGroup, DataLoadingGroup
@@ -21,20 +23,16 @@ from applications.microphonics.plots.plot_panel import PlotPanel
 from applications.microphonics.utils.pv_utils import format_pv_base
 
 
-class MicrophonicsGUI(QMainWindow):
+class MicrophonicsGUI(Display):
     """Main window for the Microphonics GUI Measurement system"""
     measurementError = pyqtSignal(str)
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None, args=None, macros=None):
+        super().__init__(parent=parent, args=args, macros=macros)
         self.setWindowTitle("LCLS-II Microphonics Measurement")
         self.setMinimumSize(1200, 800)
-        # Tracks errors during measurement
-        self.measurement_errors = []
 
         self.stats_calculator = StatisticsCalculator()
-        # Stores data for stats calculation
-        self.cavity_data = {}
 
         # Error signal connection
         self.measurementError.connect(self._handle_measurement_error)
@@ -48,12 +46,12 @@ class MicrophonicsGUI(QMainWindow):
         self.data_manager.dataReceived.connect(self._handle_new_data)
         self.data_manager.acquisitionComplete.connect(self._handle_completion)
 
-        # Central widget and layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+        # Main Layout
+        main_layout = QHBoxLayout()
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(5)
+        # Setting layout on display widget
+        self.setLayout(main_layout)
 
         # Left and right panel layouts
         left_panel = QWidget()
@@ -93,6 +91,10 @@ class MicrophonicsGUI(QMainWindow):
         self.data_loader.dataLoaded.connect(lambda data: self._handle_new_data("file", data))
         self.data_loader.loadError.connect(self._handle_load_error)
         self.data_loader.loadProgress.connect(self._handle_load_progress)
+
+    def ui_filename(self):
+        """Return None because this display is created only in Python."""
+        return None
 
     def init_panels(self):
         """Initialize all panels"""
@@ -217,7 +219,6 @@ class MicrophonicsGUI(QMainWindow):
         """Start the measurement process"""
         print("Start measurement clicked")
         try:
-            self.measurement_errors = []
             # Remove cothread.Spawn and use QTimer
             QTimer.singleShot(0, self._start_measurement_async)
         except Exception as e:
@@ -249,10 +250,6 @@ class MicrophonicsGUI(QMainWindow):
 
             if not any(config['cavities'].values()):
                 raise ValueError("No cavities selected - please select at least one cavity")
-
-            self.current_channels = self.channel_selection.get_selected_channels()
-            if not self.current_channels:
-                raise ValueError("No channels selected for measurement")
 
             chassis_config = self._split_chassis_config(config)
             if not chassis_config:
@@ -287,10 +284,7 @@ class MicrophonicsGUI(QMainWindow):
             self.config_panel.set_measurement_running(False)
             self.channel_selection.setEnabled(True)
             self.data_loading.setEnabled(True)
-            self.measurement_errors.clear()
 
-            # Clear stored cavity data and reset statistics
-            self.cavity_data.clear()
             for cavity_num in range(1, 9):
                 self.status_panel.update_statistics(cavity_num, {
                     'mean': 0.0,
@@ -299,8 +293,6 @@ class MicrophonicsGUI(QMainWindow):
                     'max': 0.0,
                     'outliers': 0
                 })
-
-            self.config_panel._config_changed()
 
     def _handle_error(self, chassis_id: str, error_msg: str):
         """Show modal error dialogs during tests"""
@@ -393,9 +385,6 @@ class MicrophonicsGUI(QMainWindow):
             # Load and process the data using DataLoader
             self.data_loader.load_file(file_path)
 
-            # Set current channels to the currently selected ones
-            self.current_channels = self.channel_selection.get_selected_channels()
-
         except Exception as e:
             self._handle_load_error(f"Failed to load data: {str(e)}")
 
@@ -412,5 +401,5 @@ class MicrophonicsGUI(QMainWindow):
     def closeEvent(self, event):
         """Ensure clean shutdown"""
         if hasattr(self, 'data_manager'):
-            self.data_manager.stop_all()  # This calls the AsyncDataManager's stop_all
+            self.data_manager.stop_all()
         super().closeEvent(event)

@@ -1,4 +1,5 @@
 import pyqtgraph as pg
+from pydm import PyDMApplication
 
 # Monkey patch for compatibility w/ PyQtGraph versions
 if not hasattr(pg.PlotWidget, 'autoRangeEnabled'):
@@ -16,8 +17,6 @@ if not hasattr(pg.PlotWidget, 'autoRangeEnabled'):
 import signal
 import sys
 
-from PyQt5.QtWidgets import QApplication
-
 from applications.microphonics.gui.main_window import MicrophonicsGUI
 
 
@@ -25,7 +24,7 @@ def main():
     """Main application entry point"""
     try:
         # Creates Qt Application
-        app = QApplication(sys.argv)
+        app = PyDMApplication(ui_file=None, command_line_args=sys.argv, use_main_window=False)
 
         # Handles signals in main thread
         signal.signal(signal.SIGINT, signal.SIG_DFL)

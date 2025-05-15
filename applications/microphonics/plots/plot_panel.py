@@ -176,21 +176,6 @@ class PlotPanel(QWidget):
             "Deselect Rack B (5-8)" if self.upper_selected else "Select Rack B (5-8)"
         )
 
-    def set_plot_config(self, config):
-        """
-        Handle external configuration changes
-        """
-        # Update our internal config w/ any new values
-        if 'fft' in config:
-            self.config['fft'].update(config['fft'])
-        if 'histogram' in config:
-            self.config['histogram'].update(config['histogram'])
-        if 'spectrogram' in config:
-            self.config['spectrogram'].update(config['spectrogram'])
-
-        # Apply updated config
-        self._apply_config_to_all_plots()
-
     def _get_decimation_for_plotting(self) -> int:
         """Determines the decimation to use for plotting based on UI."""
         if self.config_panel:
