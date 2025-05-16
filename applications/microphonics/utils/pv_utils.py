@@ -62,4 +62,4 @@ def format_pv_base(accl_base: str, rack: str) -> str:
     # Reusing prev helper function to get chassis ID
     chassis_id = format_chassis_id(accl_base, rack)
     # Needed "ca://" for -a argument of acquisition script (e.g "ca://ACCL:L1B:0300:RESA:")
-    return f"ca://{chassis_id}"
+    return f"ca://{chassis_id}:"
