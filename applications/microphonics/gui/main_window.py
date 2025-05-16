@@ -81,9 +81,6 @@ class MicrophonicsGUI(Display):
         # Initialize measurement state
         self.measurement_running = False
 
-        # Store current channel selection
-        self.current_channels = []
-
         # Initialize data loader
         self.data_loader = DataLoader()
 
@@ -152,12 +149,11 @@ class MicrophonicsGUI(Display):
         result = {}
 
         # Get selected channels from ChannelSelectionGroup
-
         selected_channels_ui = self.channel_selection.get_selected_channels()
         print(f"Debug: Selected channels (from UI): {selected_channels_ui}")
 
         # For debug: hardcode channel selection
-        channels_for_script = ['DF']
+        channels_for_script = selected_channels_ui
         print(f"Debug: Channels actually sent to script: {channels_for_script}")
 
         if not config.get('modules'):
