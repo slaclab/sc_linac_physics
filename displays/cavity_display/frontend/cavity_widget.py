@@ -17,7 +17,7 @@ from pydm.widgets.drawing import PyDMDrawingPolygon
 from qtpy.QtCore import Property as qtProperty, Qt, Slot
 
 GREEN_FILL_COLOR = QColor(9, 141, 0)
-YELLOW_FILL_COLOR = QColor(244, 230, 67, 180)
+YELLOW_FILL_COLOR = QColor(244, 230, 67, 120)
 RED_FILL_COLOR = QColor(150, 0, 0)
 PURPLE_FILL_COLOR = QColor(131, 61, 235)
 GRAY_FILL_COLOR = QColor(127, 127, 127)
