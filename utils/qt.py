@@ -2,7 +2,15 @@ from typing import List
 
 import numpy as np
 from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtWidgets import QPushButton, QGroupBox, QGridLayout, QLabel, QMessageBox
+from PyQt5.QtWidgets import (
+    QPushButton,
+    QGroupBox,
+    QGridLayout,
+    QLabel,
+    QMessageBox,
+    QWidget,
+    QVBoxLayout,
+)
 from matplotlib import pyplot as plt
 from pydm.widgets import PyDMLabel, PyDMEnumComboBox, PyDMSpinbox
 
@@ -117,3 +125,21 @@ def make_sanity_check_popup(txt: str) -> QMessageBox:
     # msg.setDetailedText("details")
 
     return msg
+
+
+class CollapsibleGroupBox(QGroupBox):
+    def __init__(self, title, content_layout, parent=None):
+        super().__init__(title, parent)
+        self.setCheckable(True)
+        self.setChecked(False)  # Initially collapsed
+        self.content_widget = QWidget()
+        self.content_layout = content_layout
+        self.content_widget.setLayout(self.content_layout)
+        self.layout = QVBoxLayout(self)
+        self.layout.addWidget(self.content_widget)
+        self.toggled.connect(self.on_toggled)
+        self.content_widget.setVisible(False)
+
+    def on_toggled(self, checked):
+        self.content_widget.setVisible(checked)
+        self.adjustSize()
