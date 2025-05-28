@@ -143,3 +143,8 @@ class CollapsibleGroupBox(QGroupBox):
     def on_toggled(self, checked):
         self.content_widget.setVisible(checked)
         self.adjustSize()
+
+
+class MockWidget(QWidget):
+    def __init__(self, **kwargs):
+        super().__init__()
