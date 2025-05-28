@@ -80,7 +80,7 @@ class CavitySection:
 
         button_layout = QHBoxLayout()
 
-        self.cold_button: QPushButton = QPushButton(f"Move to Cold Landing")
+        self.cold_button: QPushButton = QPushButton("Move to Cold Landing")
         self.cold_button.clicked.connect(self.move_to_cold_landing)
         self.status_label = QLabel("Ready")
         self.cold_worker: ColdWorker = ColdWorker(
@@ -138,7 +138,7 @@ class RackScreen:
 
         button_layout.addWidget(self.edm_screen)
 
-        self.cold_button: QPushButton = QPushButton(f"Move Cavities to Cold Landing")
+        self.cold_button: QPushButton = QPushButton("Move Cavities to Cold Landing")
         self.cold_button.clicked.connect(self.move_cavities_to_cold)
         button_layout.addWidget(self.cold_button)
 
