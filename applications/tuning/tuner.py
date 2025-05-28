@@ -164,9 +164,12 @@ class RackScreen:
         for cavity in self.rack.cavities.values():
             detune_pvs.append(cavity.detune_best_pv)
             cold_pvs.append(cavity.df_cold_pv)
-        colors = make_rainbow(len(detune_pvs))
+        colors = make_rainbow(len(detune_pvs) * 2)
         for idx, (detune_pv, cold_pv) in enumerate(zip(detune_pvs, cold_pvs)):
-            r, g, b, alpha = colors[idx]
+            if self.rack.rack_name == "A":
+                r, g, b, alpha = colors[idx]
+            else:
+                r, g, b, alpha = colors[idx + int(len(detune_pvs) / 2)]
             rga_color = QColor(r, g, b, alpha)
             self.detune_plot.addYChannel(
                 y_channel=detune_pv,
