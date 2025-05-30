@@ -187,7 +187,7 @@ class RackScreen:
             )
 
 
-class HLTuner(Display):
+class Tuner(Display):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("SRF Tuner")

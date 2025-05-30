@@ -56,7 +56,7 @@ class ColdWorker(QRunnable):
         try:
             self.cavity.move_to_cold_landing(
                 count_current=False,
-                use_freq=True,
+                use_rf=True,
             )
             self.signals.finished.emit("Cavity at cold landing")
         except (
