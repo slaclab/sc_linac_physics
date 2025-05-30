@@ -4,12 +4,11 @@ import pytest
 from pytestqt.qtbot import QtBot
 
 from applications.tuning.tuner import HLTuner
-from utils.qt import MockWidget
 
 
 @pytest.fixture
 def display():
-    with patch("pydm.widgets.spinbox.PyDMSpinbox", MockWidget):
+    with patch("pydm.widgets.base.PyDMWidget.channelValueChanged", lambda x: None):
         yield HLTuner()
 
 
