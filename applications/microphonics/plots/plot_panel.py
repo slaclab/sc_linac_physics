@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QGroupBox,
-    QCheckBox, QHBoxLayout, QPushButton, QSizePolicy
+    QHBoxLayout, QSizePolicy
 )
 
 from applications.microphonics.gui.config_panel import ConfigPanel
@@ -8,6 +8,7 @@ from applications.microphonics.plots.fft_plot import FFTPlot
 from applications.microphonics.plots.histogram_plot import HistogramPlot
 from applications.microphonics.plots.spectrogram_plot import SpectrogramPlot
 from applications.microphonics.plots.time_series_plot import TimeSeriesPlot
+from applications.microphonics.utils.ui_utils import create_checkboxes, create_pushbuttons
 
 
 class PlotPanel(QWidget):
@@ -35,6 +36,16 @@ class PlotPanel(QWidget):
         }
         self._last_data_dict_processed = None
         self._current_plotting_decimation = None
+        self.cavity_checkboxes = {}
+        self.select_lower_btn = None
+        self.select_upper_btn = None
+        self.lower_selected = False
+        self.upper_selected = False
+        self.tab_widget = None
+        self.fft_plot = None
+        self.histogram_plot = None
+        self.time_series_plot = None
+        self.spectrogram_plot = None
         self.setup_ui()
 
     def setup_ui(self):
@@ -56,15 +67,21 @@ class PlotPanel(QWidget):
         group_buttons_layout.setSpacing(5)
 
         # This creates toggle buttons for each rack
-        self.select_lower_btn = QPushButton("Select Rack A (1-4)")
+        button_items = {
+            'lower': "Select Rack A (1-4)",
+            'upper': "Select Rack B (5-8)"
+        }
+        buttons = create_pushbuttons(
+            self,
+            button_items,
+            group_buttons_layout
+        )
+        # Assign buttons to class attributes
+        self.select_lower_btn = buttons['lower']
+        self.select_upper_btn = buttons['upper']
+        # Connect button signals
         self.select_lower_btn.clicked.connect(self.toggle_lower_cavities)
-        self.lower_selected = False
-        group_buttons_layout.addWidget(self.select_lower_btn)
-
-        self.select_upper_btn = QPushButton("Select Rack B (5-8)")
         self.select_upper_btn.clicked.connect(self.toggle_upper_cavities)
-        self.upper_selected = False
-        group_buttons_layout.addWidget(self.select_upper_btn)
 
         # Add group buttons to visibility layout
         self.visibility_layout.addLayout(group_buttons_layout)
@@ -72,15 +89,20 @@ class PlotPanel(QWidget):
         # Create horizontal layout for cavity checkboxes
         checkbox_layout = QHBoxLayout()
         checkbox_layout.setSpacing(2)
-        self.cavity_checkboxes = {}
 
         # Create checkboxes for each cavity
-        for i in range(1, 9):
-            checkbox = QCheckBox(f"Cavity {i}")
-            checkbox.setChecked(False)
-            checkbox.stateChanged.connect(lambda state, cav=i: self.toggle_cavity_visibility(cav, state))
-            self.cavity_checkboxes[i] = checkbox
-            checkbox_layout.addWidget(checkbox)
+        checkbox_items = {i: f"Cavity {i}" for i in range(1, 9)}
+        self.cavity_checkboxes = create_checkboxes(
+            self,
+            checkbox_items,
+            checkbox_layout,
+            checked=False
+        )
+        # Connect signals afterward
+        for cavity_num, checkbox in self.cavity_checkboxes.items():
+            checkbox.stateChanged.connect(
+                lambda state, cav=cavity_num: self.toggle_cavity_visibility(cav, state)
+            )
 
         # Add checkbox layout to visibility layout
         self.visibility_layout.addLayout(checkbox_layout)

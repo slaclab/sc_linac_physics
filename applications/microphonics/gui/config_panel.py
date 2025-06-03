@@ -4,10 +4,11 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QLabel, QComboBox, QCheckBox, QSpinBox,
-    QPushButton, QGridLayout, QScrollArea, QTabWidget, QMessageBox
+    QPushButton, QGridLayout, QScrollArea, QMessageBox, QTabWidget
 )
 
 from applications.microphonics.utils.pv_utils import format_accl_base
+from applications.microphonics.utils.ui_utils import create_cavity_selection_tabs, create_pushbuttons
 
 
 class ConfigPanel(QWidget):
@@ -40,6 +41,19 @@ class ConfigPanel(QWidget):
         super().__init__(parent)
         self.selected_linac = None
         self.is_updating = False
+
+        self.cavity_checks_a = {}
+        self.cavity_checks_b = {}
+        self.select_all_a = None
+        self.select_all_b = None
+        self.linac_buttons = {}
+        self.cryo_buttons = {}
+        self.cryo_layout = None
+        self.decim_combo = None
+        self.buffer_spin = None
+        self.start_button = None
+        self.stop_button = None
+        # Setup UI components
         self.setup_ui()
         self._set_default_decimation()
         self.connect_signals()
@@ -87,19 +101,22 @@ class ConfigPanel(QWidget):
 
         # Linac selection buttons
         linac_layout = QHBoxLayout()
-        self.linac_buttons = {}
-        for linac in self.VALID_LINACS:
-            btn = QPushButton(linac)
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda checked, l=linac: self._on_linac_selected(l))
-            self.linac_buttons[linac] = btn
-            linac_layout.addWidget(btn)
+        linac_items = {linac: linac for linac in self.VALID_LINACS}
+
+        # Make linac selection buttons
+        self.linac_buttons = create_pushbuttons(
+            self,
+            linac_items,
+            linac_layout,
+            checkable=True,
+            connect_to=self._on_linac_selected
+        )
+
         layout.addLayout(linac_layout)
 
         # CM selection grid
         self.cryo_group = QGroupBox("Cryomodule Selection")
         self.cryo_layout = QGridLayout()
-        self.cryo_buttons = {}
         self.cryo_group.setLayout(self.cryo_layout)
         layout.addWidget(self.cryo_group)
 
@@ -107,48 +124,35 @@ class ConfigPanel(QWidget):
         return group
 
     def create_cavity_section(self):
-        """Create cavity selection section w/ tabs and Select All button"""
+        """Create cavity selection section w/ tabs"""
         group = QGroupBox("Cavity Selection")
         layout = QVBoxLayout()
 
-        # THis creates tab widget for Rack A/B
-        tabs = QTabWidget()
+        # Rack configuration
+        rack_config = {
+            'A': {'title': 'Rack A (1-4)', 'cavities': [1, 2, 3, 4]},
+            'B': {'title': 'Rack B (5-8)', 'cavities': [5, 6, 7, 8]}
+        }
+        # Create cavity selection tabs
+        cavity_tabs = {}
+        select_all_buttons = {}
 
-        # Rack A (Cavities 1-4)
-        rack_a = QWidget()
-        rack_a_layout = QGridLayout()
-        self.cavity_checks_a = {}
-        for i in range(1, 5):
-            cb = QCheckBox(f"Cavity {i}")
-            self.cavity_checks_a[i] = cb
-            rack_a_layout.addWidget(cb, 0, i - 1)
+        cavity_tabs, select_all_buttons = create_cavity_selection_tabs(
+            self,
+            rack_config,
+            self._select_all_cavities
+        )
+        self.cavity_checks_a = cavity_tabs['A']
+        self.cavity_checks_b = cavity_tabs['B']
+        self.select_all_a = select_all_buttons['A']
+        self.select_all_b = select_all_buttons['B']
 
-        # Select All button for Rack A
-        self.select_all_a = QPushButton("Select All")
-        self.select_all_a.clicked.connect(lambda: self._select_all_cavities('A'))
-        rack_a_layout.addWidget(self.select_all_a, 1, 0, 1, 4)  # Spans all columns
+        # Find tab widget
+        for child in self.children():
+            if isinstance(child, QTabWidget):
+                layout.addWidget(child)
+                break
 
-        rack_a.setLayout(rack_a_layout)
-        tabs.addTab(rack_a, "Rack A (1-4)")
-
-        # Rack B
-        rack_b = QWidget()
-        rack_b_layout = QGridLayout()
-        self.cavity_checks_b = {}
-        for i in range(5, 9):
-            cb = QCheckBox(f"Cavity {i}")
-            self.cavity_checks_b[i] = cb
-            rack_b_layout.addWidget(cb, 0, i - 5)
-
-        # Select All button for Rack B
-        self.select_all_b = QPushButton("Select All")
-        self.select_all_b.clicked.connect(lambda: self._select_all_cavities('B'))
-        rack_b_layout.addWidget(self.select_all_b, 1, 0, 1, 4)
-
-        rack_b.setLayout(rack_b_layout)
-        tabs.addTab(rack_b, "Rack B (5-8)")
-
-        layout.addWidget(tabs)
         group.setLayout(layout)
         return group
 
@@ -176,7 +180,7 @@ class ConfigPanel(QWidget):
             # Update button text
             button.setText("Deselect All" if new_state else "Select All")
 
-            # Validate w/ is_bulk_action=True to skip the "at least one cavity" check
+            # Validate w/ is_bulk_action=True to skip the at least one cavity check
             if error_msg := self.validate_cavity_selection(is_bulk_action=True):
                 # Reset checkboxes if validation fails
                 for cb in checks.values():
@@ -258,36 +262,40 @@ class ConfigPanel(QWidget):
 
         # Add new buttons
         modules = self.VALID_LINACS[self.selected_linac]
-        row = col = 0
-        max_cols = 6
+
+        # Create dictionary of button items
+        button_items = {}
+        custom_properties = {}
 
         for module in modules:
             # Store full ACCL name pattern but display simple number
             accl_name = format_accl_base(self.selected_linac, module)
 
-            # Create button w/ simple display text
+            # Use simple display text
             display_text = module  # Just show "01", "02", "H1" etc.
-            btn = QPushButton(display_text)
-            btn.setCheckable(True)
-            btn.clicked.connect(self._emit_config_if_valid)
+            button_items[module] = display_text
 
             # Store module ID as properties
-            btn.setProperty('module_id', module)
+            custom_properties[module] = {'module_id': module}
 
-            self.cryo_buttons[module] = btn
-            self.cryo_layout.addWidget(btn, row, col)
-
-            col += 1
-            if col >= max_cols:
-                col = 0
-                row += 1
+        # Create buttons
+        self.cryo_buttons = create_pushbuttons(
+            self,
+            button_items,
+            self.cryo_layout,
+            checkable=True,
+            connect_to=lambda _: self._emit_config_if_valid(),
+            custom_properties=custom_properties,
+            grid_layout=True,
+            max_cols=6
+        )
 
     def validate_cavity_selection(self, is_bulk_action: bool = False) -> Optional[str]:
         """Validate cavity selection
 
 
         Args:
-            is_bulk_action: If True, skip the "at least one cavity" check for bulk operations
+            is_bulk_action: If True, skip the at least one cavity check for bulk operations
 
 
         Returns:
