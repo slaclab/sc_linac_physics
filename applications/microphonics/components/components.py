@@ -3,7 +3,7 @@ from pathlib import Path
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QVBoxLayout, QGroupBox, QLabel, QPushButton,
-    QGridLayout, QFileDialog, QCheckBox
+    QGridLayout, QCheckBox, QFileDialog
 )
 
 
@@ -41,7 +41,7 @@ class ChannelSelectionGroup(QGroupBox):
                 col_idx += 1
             if col_idx > 0:
                 current_row += 1
-                
+
         # Adding stretch to push all UI elements to the top.
         layout.setRowStretch(current_row, 1)
 
@@ -59,6 +59,7 @@ class DataLoadingGroup(QGroupBox):
     """
     Component lets people load previously saved data files.
     """
+    PREFERRED_DEFAULT_DATA_PATH = Path("/u1/lcls/physics/rf_lcls2/microphonics")
     # Signal emitted when the load button is clicked and a file is selected
     fileSelected = pyqtSignal(Path)
 
@@ -83,13 +84,21 @@ class DataLoadingGroup(QGroupBox):
 
     def _handle_button_click(self):
         """Handle the load button being clicked"""
+        preferred_path = self.PREFERRED_DEFAULT_DATA_PATH
+        home_path = Path.home()
+
+        if preferred_path.is_dir():
+            start_directory_str = str(preferred_path)
+        elif home_path.is_dir():
+            start_directory_str = str(home_path)
+        else:
+            start_directory_str = str(Path("."))
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Load Previous Data",
-            str(Path.home()),  # Want to start in users home directory
+            start_directory_str,
             "All Files (*);;Text Files (*.txt);;Data Files (*.dat)"
         )
-
         if file_path:
             path = Path(file_path)
             self.file_info.setText(f"Selected: {path.name}")
