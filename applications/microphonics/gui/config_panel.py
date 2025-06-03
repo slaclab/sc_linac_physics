@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QGridLayout, QScrollArea, QMessageBox, QTabWidget
 )
 
+from applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
 from applications.microphonics.utils.pv_utils import format_accl_base
 from applications.microphonics.utils.ui_utils import create_cavity_selection_tabs, create_pushbuttons
 
@@ -36,6 +37,7 @@ class ConfigPanel(QWidget):
     VALID_DECIMATION = {1, 2, 4, 8}
     DEFAULT_DECIMATION_VALUE = 2
     DEFAULT_BUFFER_COUNT = 1
+    BUFFER_LENGTH = 16384
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -53,10 +55,14 @@ class ConfigPanel(QWidget):
         self.buffer_spin = None
         self.start_button = None
         self.stop_button = None
+        self.label_sampling_rate = None
+        self.label_acq_time = None
         # Setup UI components
         self.setup_ui()
         self._set_default_decimation()
         self.connect_signals()
+
+        self._update_daq_parameters()
 
     def setup_ui(self):
         """Initialize user interface"""
@@ -204,18 +210,83 @@ class ConfigPanel(QWidget):
         # Decimation
         layout.addWidget(QLabel("Decimation:"), 0, 0)
         self.decim_combo = QComboBox()
-        self.decim_combo.addItems([str(x) for x in [1, 2, 4, 8]])
+        self.decim_combo.addItems([str(x) for x in sorted(self.VALID_DECIMATION)])
         layout.addWidget(self.decim_combo, 0, 1)
 
         # Buffer count
         layout.addWidget(QLabel("Buffer Count:"), 1, 0)
         self.buffer_spin = QSpinBox()
         self.buffer_spin.setRange(1, 1000)
-        self.buffer_spin.setValue(1)
+        self.buffer_spin.setValue(self.DEFAULT_BUFFER_COUNT)
         layout.addWidget(self.buffer_spin, 1, 1)
+
+        # Sampling Rate Display
+        layout.addWidget(QLabel("Sampling Rate:"), 2, 0)
+        self.label_sampling_rate = QLabel("1000.0")
+        self.label_sampling_rate.setStyleSheet("font-weight: bold")
+        layout.addWidget(self.label_sampling_rate, 2, 1)
+        layout.addWidget(QLabel("Hz"), 2, 2)
+
+        # Acquisition Time Display
+        layout.addWidget(QLabel("Acquisition Time:"), 3, 0)
+        self.label_acq_time = QLabel("16.384")
+        self.label_acq_time.setStyleSheet("font-weight: bold")
+        layout.addWidget(self.label_acq_time, 3, 1)
+        layout.addWidget(QLabel("s"), 3, 2)
 
         group.setLayout(layout)
         return group
+
+    def _update_daq_parameters(self):
+        """Calculate and update sampling rate and acquisition time displays"""
+        try:
+            # Get current values (buffer count and the selected text from decimation combo box)
+            number_of_buffers = int(self.buffer_spin.value())
+            decimation_text = self.decim_combo.currentText()
+            # If somehow the combo box does not have any text set displays to N/A and exit
+            if not decimation_text:
+                self.label_sampling_rate.setText("N/A")
+                self.label_acq_time.setText("N/A")
+                return
+            # Converting decimation text to int ("2" -> 2)
+            decimation_num = int(decimation_text)
+
+            # Validate decimation (just a safety check)
+            if decimation_num <= 0:
+                self.label_sampling_rate.setText("Error")
+                self.label_acq_time.setText("Error")
+                print(f"Error: Invalid decimation value: {decimation_num}")
+                return
+
+            # Calculate sampling rate
+            sampling_rate = BASE_HARDWARE_SAMPLE_RATE / decimation_num
+
+            # Display sampling rate with right precision
+            if sampling_rate >= 1000:
+                # (e.g 2000)
+                self.label_sampling_rate.setText(f"{sampling_rate:.0f}")
+            else:
+                # (e.g 500.0)
+                self.label_sampling_rate.setText(f"{sampling_rate:.1f}")
+
+            # Calculate total acquisition time
+            # Formula: (BUFFER_LENGTH / effective_sample_rate) * number_of_buffers
+            acquisition_time = (self.BUFFER_LENGTH * decimation_num * number_of_buffers) / BASE_HARDWARE_SAMPLE_RATE
+
+            # Display acquisition time with right precision
+            if acquisition_time < 1:
+                self.label_acq_time.setText(f"{acquisition_time:.3f}")
+            else:
+                self.label_acq_time.setText(f"{acquisition_time:.2f}")
+
+        except ValueError as e:
+            print(f"Error parsing values in _update_daq_parameters: {e}")
+            self.label_sampling_rate.setText("Error")
+            self.label_acq_time.setText("Error")
+        except Exception as e:
+            print(f"Unexpected error in _update_daq_parameters: {e}")
+            self.label_sampling_rate.setText("Error")
+            self.label_acq_time.setText("Error")
 
     def create_control_section(self):
         """Create measurement control section"""
@@ -340,9 +411,15 @@ class ConfigPanel(QWidget):
         self.stop_button.clicked.connect(self.measurementStopped.emit)
 
         if hasattr(self, 'decim_combo'):
-            self.decim_combo.currentIndexChanged.connect(self._emit_decimation_change)
+            self.decim_combo.currentIndexChanged.connect(self._handle_decimation_change)
         else:
             print("WARNING (ConfigPanel): self.decim_combo not found during signal connection.")
+        if hasattr(self, 'buffer_spin'):
+            self.buffer_spin.valueChanged.connect(self._update_daq_parameters)
+            self.buffer_spin.valueChanged.connect(
+                lambda: self._emit_config_if_valid() if not self.is_updating else None)
+        else:
+            print("WARNING (ConfigPanel): self.buffer_spin not found during signal connection.")
 
     def _emit_decimation_change(self):
         """
@@ -359,6 +436,26 @@ class ConfigPanel(QWidget):
             print(
                 f"WARNING (ConfigPanel): Could not parse decimation value from combo box: {self.decim_combo.currentText()}")
             pass
+
+    def _handle_decimation_change(self):
+        """Handle changes to decimation combo box"""
+        # Update DAQ parameters display (to recalculate and update sampling rate and acq time displays)
+        self._update_daq_parameters()
+
+        # Emit decimation specific signal
+        try:
+            # Get current decimation value from combo box
+            dec_value = int(self.decim_combo.currentText())
+            # Emit signal w/ new decimation value 
+            self.decimationSettingChanged.emit(dec_value)
+            print(f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}")
+        except ValueError:
+            print(
+                f"WARNING (ConfigPanel): Could not parse decimation value from combo box: {self.decim_combo.currentText()}")
+
+        # Emit general config change if not updating
+        if not self.is_updating:
+            self._emit_config_if_valid()
 
     def _on_start_clicked(self):
         """Handle start button click w/ validation"""
