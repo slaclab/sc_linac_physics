@@ -1,7 +1,8 @@
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QGroupBox, QLabel,
-    QProgressBar, QGridLayout
+    QWidget, QVBoxLayout, QGroupBox, QGridLayout
 )
+
+from applications.microphonics.utils.ui_utils import create_status_widgets
 
 
 class StatusPanel(QWidget):
@@ -20,39 +21,15 @@ class StatusPanel(QWidget):
         group = QGroupBox("Cavity Status")
         grid_layout = QGridLayout()
 
-        # Add headers
-        headers = ["Cavity", "Status", "Progress", "Message"]
-        for col, header in enumerate(headers):
-            label = QLabel(header)
-            label.setStyleSheet("font-weight: bold")
-            grid_layout.addWidget(label, 0, col)
-
-        # Create status widgets for each cavity
-        for row, cavity_num in enumerate(range(1, 9), 1):
-            # Cavity number
-            grid_layout.addWidget(QLabel(f"Cavity {cavity_num}"), row, 0)
-
-            # Status label
-            status_label = QLabel("Not configured")
-            grid_layout.addWidget(status_label, row, 1)
-
-            # Progress bar
-            progress_bar = QProgressBar()
-            progress_bar.setMinimum(0)
-            progress_bar.setMaximum(100)
-            grid_layout.addWidget(progress_bar, row, 2)
-
-            # Message label
-            msg_label = QLabel("")
-            grid_layout.addWidget(msg_label, row, 3)
-
-            # Store references to widgets
-            self.status_widgets[cavity_num] = {
-                'status': status_label,
-                'progress': progress_bar,
-                'message': msg_label
-            }
-
+        # Create status widgets for all cavities
+        self.status_widgets = create_status_widgets(
+            self,
+            items=list(range(1, 9)),
+            grid_layout=grid_layout,
+            headers=["Cavity", "Status", "Progress", "Message"],
+            initial_status="Not configured",
+            initial_message=""
+        )
         group.setLayout(grid_layout)
         layout.addWidget(group)
 
@@ -66,7 +43,7 @@ class StatusPanel(QWidget):
             widgets['message'].setText(message)
 
     def update_statistics(self, cavity_num: int, stats: dict):
-        """Update statistical infor for a cavity
+        """Update stats information for a cavity
 
         Args:
             cavity_num: Cavity number (1-8)

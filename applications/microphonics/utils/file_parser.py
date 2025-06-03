@@ -1,4 +1,3 @@
-# Constants
 import io
 import logging
 import traceback
@@ -102,20 +101,22 @@ def _parse_channel_pvs(header_lines: List[str], marker_index: int) -> List[str]:
     Raises:
         FileParserError: If the marker line cant be parsed
     """
+    # Make sure the index is good before continuing
     if marker_index >= len(header_lines):
         raise FileParserError("Internal error: Marker index out of bounds for header lines")
-
+    # Get specific line containing channel info
     channel_line = header_lines[marker_index].strip()
-
+    # Safety check -> the line at marker_index should always start w/ header marker
     if not channel_line.startswith(HEADER_MARKER):
         logging.warning(f"Line at marker index {marker_index} doesn't start with {HEADER_MARKER}: '{channel_line}'")
 
     try:
+        # Remove marker prefix, whitespace, newlines and split by whitespace to get individual channel names
         parsed_channels = channel_line.strip('# \n').split()
-
+        # Make sure we actually got some channel names after parsing
         if not parsed_channels:
             raise FileParserError(f"Found '{HEADER_MARKER}' line but no channels listed after it: '{channel_line}'")
-
+        # Log parsing results for debugging purposes
         stripped_result_for_log = channel_line.strip('# \n')
         logging.debug(f"Original channel line: '{channel_line}'")
         logging.debug(f"Result of strip('# \\n'): '{stripped_result_for_log}'")
@@ -123,19 +124,25 @@ def _parse_channel_pvs(header_lines: List[str], marker_index: int) -> List[str]:
 
         return parsed_channels
     except Exception as e:
+        # Log the error and raise an exception
         logging.error(f"Failed to split/parse the channel marker line: {channel_line} - {e}")
         raise FileParserError(f"Failed to parse channel PVs from header line: {channel_line}")
 
 
 def _parse_numerical_data(data_content_lines: List[str], num_expected_columns: int, file_path: Path) -> np.ndarray:
     """Parses numerical data from data lines using numpy"""
+    # Handle case where no data lines were found
     if not data_content_lines:
         print(f"Warning (FileParser): No numerical data lines found.")
+        # Return empty array w/ right number of columns
         return np.empty((0, num_expected_columns), dtype=float)
-
+    # Combine all data lines into single string for numpy to parse
     data_io = io.StringIO("".join(data_content_lines))
     try:
+        # Use numpy to parse all numerical data at once
+        # ndmin=2 makes sure we always get a 2D array even w/ single row
         data_array = np.loadtxt(data_io, comments='#', ndmin=2, dtype=float)
+        # Additional validation -> if we have data lines but numpy returned empty array
         if data_array.size == 0 and len(data_content_lines) > 0:
             raise FileParserError("np.loadtxt failed to parse data content.")
         return data_array
@@ -147,41 +154,47 @@ def _structure_parsed_data(channel_pvs: List[str], data_array: np.ndarray, file_
         Dict[str, Any]:
     """Structures the parsed PVs and data array into the final dictionary"""
     output_data: Dict[str, Any] = {
-        'cavities': {},
-        'cavity_list': [],
-        'decimation': decimation,
-        'filepath': str(file_path),
-        'source': 'file'
+        'cavities': {},  # Contains cavity data by cavity number
+        'cavity_list': [],  # Contains list of all cavity numbers found
+        'decimation': decimation,  # Sampling decimation factor
+        'filepath': str(file_path),  # Path to source file
+        'source': 'file'  # Data source identifier
     }
-
+    # Track which cavity numbers found for cavity_list
     cavity_numbers_found = set()
+    # Check for dimensional consistency between header and data
     expected_cols = len(channel_pvs)
     actual_cols = data_array.shape[1] if data_array.ndim == 2 else 0
-
+    # Handle case where column count in data doesn't match header
     if data_array.size > 0 and actual_cols != expected_cols:
         print(
             f"Warning (FileParser): Column mismatch in {file_path.name}! Header={expected_cols}, Data={actual_cols}. Assigning empty data.")
+        # Reset to empty array w/ right number of columns
         data_array = np.empty((0, expected_cols), dtype=float)
         actual_cols = expected_cols
-
+    # Process each channel PV and organize data by cavity and channel type
     for idx, pv_name in enumerate(channel_pvs):
         logging.debug(f"Structuring data for index {idx}, pv_name: '{pv_name}'")
+        # Extract cavity number and channel type from PV name
         parsed_info = extract_cavity_channel_from_pv(pv_name)
         if parsed_info:
             cav_num, channel_type = parsed_info
+            # Add this cavity number to our tracking set
             cavity_numbers_found.add(cav_num)
-
+            # Initialize cavity dictionary if haven't seen this cavity before
             if cav_num not in output_data['cavities']:
                 output_data['cavities'][cav_num] = {}
-
+            # Get the data column for this PV if available and valid
             if data_array.ndim == 2 and idx < actual_cols and data_array.shape[0] > 0:
                 column_data = data_array[:, idx]
                 output_data['cavities'][cav_num][channel_type] = column_data
             else:
+                # Use empty array if no data or invalid column index
                 output_data['cavities'][cav_num][channel_type] = np.array([], dtype=float)
         else:
+            # Log warning if couldn't parse the PV name
             print(f"Warning (FileParser): Skipping data column {idx} due to PV parsing failure: {pv_name}")
-
+    # Sort cavity list for consistent output
     output_data['cavity_list'] = sorted(list(cavity_numbers_found))
     return output_data
 
@@ -190,9 +203,13 @@ def load_and_process_file(file_path: Path) -> Dict[str, Any]:
     """Main function to orchestrate the file loading and processing."""
     print(f"DEBUG (FileParser): Processing file {file_path.name}")
     try:
+        # Step 1: Read file and extract header, data sections, and metadata
         header_lines, data_content_lines, decimation, marker_index = _read_and_parse_header(file_path)
+        # Step 2: Parse PV channel names from header
         channel_pvs = _parse_channel_pvs(header_lines, marker_index)
+        # Step 3: Parse numerical data content
         data_array = _parse_numerical_data(data_content_lines, len(channel_pvs), file_path)
+        # Step 4: Structure the data by cavity and channel type
         structured_data = _structure_parsed_data(channel_pvs, data_array, file_path, decimation)
         print(
             f"DEBUG (FileParser): Successfully processed {file_path.name}. Cavities: {structured_data['cavity_list']}")
