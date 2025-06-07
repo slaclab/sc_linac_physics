@@ -20,6 +20,7 @@ from displays.cavity_display.frontend.cavity_widget import (
     PURPLE_FILL_COLOR,
     YELLOW_FILL_COLOR,
 )
+from displays.cavity_display.utils import utils
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
@@ -65,6 +66,13 @@ class FaultCountDisplay(Display):
         # self.hide_pot_checkbox = QCheckBox(text="Hide POT faults")
         # self.hide_pot_checkbox.stateChanged.connect(self.update_plot)
 
+        self.hide_fault_combo_box = QComboBox()
+        fault_tlc_list = []
+        for fault_row_dict in utils.parse_csv():
+            fault_tlc_list.append(fault_row_dict["Three Letter Code"])
+        self.hide_fault_combo_box.addItems(["Omit a TLC?"] + fault_tlc_list)
+        self.hide_fault_combo_box.currentIndexChanged.connect(self.update_plot)
+
         input_h_layout.addWidget(QLabel("Cryomodule:"))
         input_h_layout.addWidget(self.cm_combo_box)
         input_h_layout.addWidget(QLabel("Cavity:"))
@@ -75,6 +83,7 @@ class FaultCountDisplay(Display):
         input_h_layout.addWidget(QLabel("End:"))
         input_h_layout.addWidget(self.end_selector)
         # main_v_layout.addWidget(self.hide_pot_checkbox)
+        main_v_layout.addWidget(self.hide_fault_combo_box)
 
         self.cm_combo_box.addItems([""] + ALL_CRYOMODULES)
         self.cav_combo_box.addItems([""] + [str(i) for i in range(1, 9)])
@@ -120,6 +129,9 @@ class FaultCountDisplay(Display):
         # TODO generalize fault suppression
         # if self.hide_pot_checkbox.isChecked():
         #     data.pop("POT")
+        fault_tlc = self.hide_fault_combo_box.currentText()
+        if fault_tlc in data:
+            data.pop(fault_tlc)
 
         for tlc, counter_obj in data.items():
             self.y_data.append(tlc)
