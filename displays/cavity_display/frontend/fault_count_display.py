@@ -60,17 +60,9 @@ class FaultCountDisplay(Display):
         self.start_selector.editingFinished.connect(self.update_plot)
         self.end_selector.editingFinished.connect(self.update_plot)
 
-        # removing for now as POT faults no longer seem to be much of an issue
-        # in terms of distorting the data
-        # TODO: generalize ability to suppress any fault(s)
-        # self.hide_pot_checkbox = QCheckBox(text="Hide POT faults")
-        # self.hide_pot_checkbox.stateChanged.connect(self.update_plot)
-
         self.hide_fault_combo_box = QComboBox()
-        fault_tlc_list = []
-        for fault_row_dict in utils.parse_csv():
-            fault_tlc_list.append(fault_row_dict["Three Letter Code"])
-        self.hide_fault_combo_box.addItems(["Omit a TLC?"] + fault_tlc_list)
+        tlc_list = self.make_tlc_list()
+        self.hide_fault_combo_box.addItems(["Omit a TLC?"] + tlc_list)
         self.hide_fault_combo_box.currentIndexChanged.connect(self.update_plot)
 
         input_h_layout.addWidget(QLabel("Cryomodule:"))
@@ -82,7 +74,6 @@ class FaultCountDisplay(Display):
         input_h_layout.addWidget(self.start_selector)
         input_h_layout.addWidget(QLabel("End:"))
         input_h_layout.addWidget(self.end_selector)
-        # main_v_layout.addWidget(self.hide_pot_checkbox)
         main_v_layout.addWidget(self.hide_fault_combo_box)
 
         self.cm_combo_box.addItems([""] + ALL_CRYOMODULES)
@@ -97,6 +88,15 @@ class FaultCountDisplay(Display):
         self.cavity: Optional[BackendCavity] = None
         self.cm_combo_box.currentIndexChanged.connect(self.update_cavity)
         self.cav_combo_box.currentIndexChanged.connect(self.update_cavity)
+
+    def make_tlc_list(self):
+        fault_tlc_list = []
+        for fault_row_dict in utils.parse_csv():
+            if fault_row_dict["Three Letter Code"] not in fault_tlc_list:
+                fault_tlc_list.append(fault_row_dict["Three Letter Code"])
+
+        fault_tlc_list.sort()
+        return fault_tlc_list
 
     def update_cavity(self):
         cm_name = self.cm_combo_box.currentText()
@@ -126,9 +126,6 @@ class FaultCountDisplay(Display):
         """
         data: Dict[str, FaultCounter] = self.cavity.get_fault_counts(start, end)
 
-        # TODO generalize fault suppression
-        # if self.hide_pot_checkbox.isChecked():
-        #     data.pop("POT")
         fault_tlc = self.hide_fault_combo_box.currentText()
         if fault_tlc in data:
             data.pop(fault_tlc)
@@ -152,7 +149,8 @@ class FaultCountDisplay(Display):
             ticks.append((idy, y_val))
             y_vals_ints.append(idy)
 
-        # Create pyqt5graph bar graph for faults, then stack invalid faults on same bars
+        # Create pyqt5graph bar graph for faults
+        # then stack invalid and warning faults on same bars
         fault_bars = pg.BarGraphItem(
             x0=0,
             y=y_vals_ints,
