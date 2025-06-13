@@ -134,6 +134,9 @@ class CavityPVGroup(PVGroup):
     step_temp: PvpropertyFloat = pvproperty(
         value=35.0, name="STEPTEMP", dtype=ChannelType.FLOAT
     )
+    tone_counts: PvpropertyFloat = pvproperty(
+        value=35.0, name="DAC_AMPLITUDE", dtype=ChannelType.FLOAT
+    )
 
     fscan_stat: PvpropertyEnum = pvproperty(
         name="FSCAN:SEARCHSTAT",
