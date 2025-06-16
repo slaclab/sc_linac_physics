@@ -36,7 +36,7 @@ class SetupCavity(Cavity, SetupLinacObject):
         self.note_pv: str = self.auto_pv_addr("NOTE")
         self._note_pv_obj: Optional[PV] = None
 
-        if  self.cavity_num is not None:
+        if self.cavity_num is not None:
             prefix = "RFS1" if cavity_num % 4 in (1, 2) else "RFS2"
             rack = self.rack.rack_name
 
@@ -49,7 +49,7 @@ class SetupCavity(Cavity, SetupLinacObject):
     @property
     def tone_count_pv_obj(self):
         if not self._tone_count_pv_obj:
-            self._tone_count_obj = PV(tone_count_pv)
+            self._tone_count_pv_obj = PV(tone_count_pv)
         return self._tone_count_pv_obj
 
     @property
