@@ -49,7 +49,7 @@ class SetupCavity(Cavity, SetupLinacObject):
     @property
     def tone_count_pv_obj(self):
         if not self._tone_count_pv_obj:
-            self._tone_count_pv_obj = PV(tone_count_pv)
+            self._tone_count_pv_obj = PV(self.one_count_pv)
         return self._tone_count_pv_obj
 
     @property
