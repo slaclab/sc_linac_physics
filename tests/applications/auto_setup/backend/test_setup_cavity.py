@@ -143,8 +143,10 @@ def test_request_ssa_cal_true(cavity):
     cavity.ssa._saved_drive_max_pv_obj = make_mock_pv()
     cavity._tone_count_pv_obj = make_mock_pv()
     expected_prefix = cavity_prefix_map[cavity.number]
+    prefix = "RFS1" if cavity.number % 4 in (1, 2) else "RFS2"
+    prefix = f"{prefix}{cavity.rack.rack_name}"
 
-    assert cavity.prefix == expected_prefix, (
+    assert prefix == expected_prefix, (
         f"Expected {expected_prefix} for cavity {cavity.number}, "
         f"but got {cavity.prefix}"
     )
