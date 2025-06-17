@@ -144,7 +144,8 @@ def test_request_ssa_cal_true(cavity):
     cavity._tone_count_pv_obj = make_mock_pv()
     expected_prefix = cavity_prefix_map[cavity.number]
     prefix = "RFS1" if cavity.number % 4 in (1, 2) else "RFS2"
-    prefix = f"{prefix}{cavity.rack.rack_name}"
+    rack_name = "A" if cavity.number in (1,2,3,4) else "B"
+    prefix = f"{prefix}{rack_name}"
 
     assert prefix == expected_prefix, (
         f"Expected {expected_prefix} for cavity {cavity.number}, "
