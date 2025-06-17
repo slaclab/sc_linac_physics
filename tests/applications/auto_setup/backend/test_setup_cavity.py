@@ -130,6 +130,10 @@ def test_request_ssa_cal_false(cavity):
 
 
 def test_request_ssa_cal_true(cavity):
+    cavity_prefix_map = {
+        1: "RFS1A", 2: "RFS1A", 3: "RFS2A", 4: "RFS2A",
+        5: "RFS1B", 6: "RFS1B", 7: "RFS2B", 8: "RFS2B"
+    }
     cavity._ssa_cal_requested_pv_obj = make_mock_pv(get_val=True)
     cavity._progress_pv_obj = make_mock_pv()
     cavity.check_abort = MagicMock()
@@ -138,7 +142,9 @@ def test_request_ssa_cal_true(cavity):
     cavity.ssa.calibrate = MagicMock()
     cavity.ssa._saved_drive_max_pv_obj = make_mock_pv()
     cavity._tone_count_pv_obj = make_mock_pv()
+    expected_prefix = cavity_prefix_map[cavity.number]
 
+    assert cavity.prefix == expected_prefix, f"Expected {expected_prefix} for cavity {cavity.number}, but got {cavity.prefix}"
     cavity.request_ssa_cal()
     cavity._ssa_cal_requested_pv_obj.get.assert_called()
     cavity.turn_off.assert_called()
