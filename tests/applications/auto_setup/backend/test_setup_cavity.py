@@ -145,8 +145,8 @@ def test_request_ssa_cal_true(cavity):
     expected_prefix = cavity_prefix_map[cavity.number]
 
     assert cavity.prefix == expected_prefix, (
-    f"Expected {expected_prefix} for cavity {cavity.number}, "
-    f"but got {cavity.prefix}"
+        f"Expected {expected_prefix} for cavity {cavity.number}, "
+        f"but got {cavity.prefix}"
     )
     cavity.request_ssa_cal()
     cavity._ssa_cal_requested_pv_obj.get.assert_called()

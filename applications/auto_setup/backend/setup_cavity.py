@@ -14,7 +14,6 @@ from utils.sc_linac import linac_utils
 from utils.sc_linac.cavity import Cavity
 from utils.sc_linac.linac_utils import RF_MODE_SELA
 
-
 class SetupCavity(Cavity, SetupLinacObject):
     def __init__(
         self,
@@ -35,7 +34,7 @@ class SetupCavity(Cavity, SetupLinacObject):
 
         self.note_pv: str = self.auto_pv_addr("NOTE")
         self._note_pv_obj: Optional[PV] = None
-        
+
         prefix = "RFS1" if self.number % 4 in (1, 2) else "RFS2"
         rack = self.rack.rack_name
 
