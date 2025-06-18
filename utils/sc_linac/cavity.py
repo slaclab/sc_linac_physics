@@ -61,6 +61,9 @@ class Cavity(linac_utils.SCLinacObject):
         self.ctePrefix = f"CTE:CM{self.cryomodule.name}:1{self.number}"
 
         self.chirp_prefix = self._pv_prefix + "CHIRP:"
+
+        self.rfs_addr = f"{generate_rfs_addr()}{self.rack.rack_name}"
+
         self.abort_flag: bool = False
 
         # These need to be created after all the base cavity properties are defined
@@ -185,6 +188,10 @@ class Cavity(linac_utils.SCLinacObject):
 
     def __str__(self):
         return f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
+     
+    def generate_rfs_addr(self) -> str:
+    base = "RFS1" if self.number % 4 in (1, 2) else "RFS2"
+    return f"{base}"
 
     @property
     def pv_prefix(self):
