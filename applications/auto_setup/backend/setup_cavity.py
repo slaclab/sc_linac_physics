@@ -36,11 +36,7 @@ class SetupCavity(Cavity, SetupLinacObject):
         self.note_pv: str = self.auto_pv_addr("NOTE")
         self._note_pv_obj: Optional[PV] = None
 
-        prefix = "RFS1" if self.number % 4 in (1, 2) else "RFS2"
-        rack = self.rack.rack_name
-        prefix = f"{prefix}{rack}"
-
-        self.tone_count_pv = self.pv_addr(f"{prefix}:DAC_AMPLITUDE")
+        self.tone_count_pv = self.pv_addr(f"{self.rfs_addr}:DAC_AMPLITUDE")
         self._tone_count_pv_obj: Optional[PV] = None
 
     def capture_acon(self):
