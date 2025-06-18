@@ -190,8 +190,8 @@ class Cavity(linac_utils.SCLinacObject):
         return f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
      
     def generate_rfs_addr(self) -> str:
-    base = "RFS1" if self.number % 4 in (1, 2) else "RFS2"
-    return f"{base}"
+        base = "RFS1" if self.number % 4 in (1, 2) else "RFS2"
+        return f"{base}"
 
     @property
     def pv_prefix(self):
