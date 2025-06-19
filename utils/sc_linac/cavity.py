@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 class Cavity(linac_utils.SCLinacObject):
     """
-    Python representation of LCLS II cavities. This class provides utility
+    Python representation of LCLS II cavities. This class provides utility self.rfs_addr = f"{self.generate_rfs_addr()}"
     functions for commonly used tasks including powering on/off, changing RF mode,
     setting amplitude, characterizing, and tuning to resonance
 
@@ -48,7 +48,7 @@ class Cavity(linac_utils.SCLinacObject):
             self.scale_factor_upper_limit = linac_utils.CAVITY_SCALE_UPPER_LIMIT_HL
         else:
             self.length = 1.038
-            self.frequency = 1.3e9
+            self.frequency = 1.3e9 self.rfs_addr = f"{self.generate_rfs_addr()}"
             self.loaded_q_lower_limit = linac_utils.LOADED_Q_LOWER_LIMIT
             self.loaded_q_upper_limit = linac_utils.LOADED_Q_UPPER_LIMIT
             self.scale_factor_lower_limit = linac_utils.CAVITY_SCALE_LOWER_LIMIT
@@ -62,7 +62,7 @@ class Cavity(linac_utils.SCLinacObject):
 
         self.chirp_prefix = self._pv_prefix + "CHIRP:"
 
-        self.rfs_addr = f"{self.generate_rfs_addr()}{self.rack.rack_name}"
+        self.rfs_addr = f"{self.generate_rfs_addr()}"
 
         self.abort_flag: bool = False
 
@@ -190,8 +190,11 @@ class Cavity(linac_utils.SCLinacObject):
         return f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
 
     def generate_rfs_addr(self) -> str:
-        base = "RFS1" if self.number % 4 in (1, 2) else "RFS2"
-        return f"{base}"
+        base = self.compute_rfs_base()
+        return f"{base}{self.rack.rack_name}"
+
+    def compute_rfs_base(self) -> str:
+        return "RFS1" if self.number % 4 in (1, 2) else "RFS2"
 
     @property
     def pv_prefix(self):
