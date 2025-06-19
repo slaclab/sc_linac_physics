@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import pyqtgraph as pg
 from PyQt5.QtCore import QDateTime
@@ -61,7 +61,7 @@ class FaultCountDisplay(Display):
         self.end_selector.editingFinished.connect(self.update_plot)
 
         self.hide_fault_combo_box = QComboBox()
-        tlc_list = self.make_tlc_list()
+        tlc_list: List[str] = self.make_tlc_list()
         self.hide_fault_combo_box.addItems(["Omit a TLC?"] + tlc_list)
         self.hide_fault_combo_box.currentIndexChanged.connect(self.update_plot)
 
@@ -89,7 +89,7 @@ class FaultCountDisplay(Display):
         self.cm_combo_box.currentIndexChanged.connect(self.update_cavity)
         self.cav_combo_box.currentIndexChanged.connect(self.update_cavity)
 
-    def make_tlc_list(self):
+    def make_tlc_list(self) -> List[str]:
         fault_tlc_list = []
         for fault_row_dict in utils.parse_csv():
             if fault_row_dict["Three Letter Code"] not in fault_tlc_list:
@@ -150,7 +150,7 @@ class FaultCountDisplay(Display):
             y_vals_ints.append(idy)
 
         # Create pyqt5graph bar graph for faults
-        # then stack invalid and warning faults on same bars
+        # then stack invalid then warning faults on same bars
         fault_bars = pg.BarGraphItem(
             x0=0,
             y=y_vals_ints,
@@ -182,3 +182,5 @@ class FaultCountDisplay(Display):
         self.plot_window.addItem(fault_bars)
         self.plot_window.addItem(invalid_bars)
         self.plot_window.addItem(warning_bars)
+
+        print("Displaying plot for", self.cavity.cryomodule, self.cavity.number)
