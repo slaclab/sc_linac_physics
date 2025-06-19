@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 class Cavity(linac_utils.SCLinacObject):
     """
-    Python representation of LCLS II cavities. This class provides utility
+    Python representation of LCLS II cavities. This class provides utility self.rfs_addr = f"{self.generate_rfs_addr()}"
     functions for commonly used tasks including powering on/off, changing RF mode,
     setting amplitude, characterizing, and tuning to resonance
 
@@ -61,6 +61,7 @@ class Cavity(linac_utils.SCLinacObject):
         self.ctePrefix = f"CTE:CM{self.cryomodule.name}:1{self.number}"
 
         self.chirp_prefix = self._pv_prefix + "CHIRP:"
+
         self.abort_flag: bool = False
 
         # These need to be created after all the base cavity properties are defined
@@ -185,6 +186,14 @@ class Cavity(linac_utils.SCLinacObject):
 
     def __str__(self):
         return f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
+
+    @property
+    def rfs_addr(self) -> str:
+        base = self.compute_rfs_base()
+        return f"{base}{self.rack.rack_name}"
+
+    def compute_rfs_base(self) -> str:
+        return "RFS1" if self.number % 4 in (1, 2) else "RFS2"
 
     @property
     def pv_prefix(self):

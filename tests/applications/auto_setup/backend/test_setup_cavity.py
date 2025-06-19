@@ -129,6 +129,22 @@ def test_request_ssa_cal_false(cavity):
     cavity.check_abort.assert_called()
 
 
+def test_generate_rfs_addr(cavity):
+    cavity_prefix_map = {
+        1: "RFS1A", 2: "RFS1A", 3: "RFS2A", 4: "RFS2A",
+        5: "RFS1B", 6: "RFS1B", 7: "RFS2B", 8: "RFS2B"
+    }
+    actual_prefix = compute_rfs_base(cavity.number)
+    expected_prefix = cavity_prefix_map[cavity.number]
+    assert actual_prefix == expected_prefix
+
+
+def compute_rfs_base(number: int) -> str:
+    prefix = "RFS1" if number % 4 in (1, 2) else "RFS2"
+    rack = "A" if number in (1, 2, 3, 4) else "B"
+    return f"{prefix}{rack}"
+
+
 def test_request_ssa_cal_true(cavity):
     cavity._ssa_cal_requested_pv_obj = make_mock_pv(get_val=True)
     cavity._progress_pv_obj = make_mock_pv()
@@ -137,6 +153,7 @@ def test_request_ssa_cal_true(cavity):
     cavity.turn_off = MagicMock()
     cavity.ssa.calibrate = MagicMock()
     cavity.ssa._saved_drive_max_pv_obj = make_mock_pv()
+    cavity._tone_count_pv_obj = make_mock_pv()
 
     cavity.request_ssa_cal()
     cavity._ssa_cal_requested_pv_obj.get.assert_called()
@@ -146,6 +163,7 @@ def test_request_ssa_cal_true(cavity):
     cavity._status_msg_pv_obj.put.assert_called()
     cavity._progress_pv_obj.put.assert_called()
     cavity.check_abort.assert_called()
+    cavity._tone_count_pv_obj.put.assert_called()
 
 
 def test_request_auto_tune_false(cavity):
