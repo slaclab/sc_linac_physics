@@ -129,20 +129,20 @@ def test_request_ssa_cal_false(cavity):
     cavity.check_abort.assert_called()
 
 
-def test_generate_rfs_addr(number: int) -> bool:
+def test_generate_rfs_addr(cavity):
     cavity_prefix_map = {
         1: "RFS1A", 2: "RFS1A", 3: "RFS2A", 4: "RFS2A",
         5: "RFS1B", 6: "RFS1B", 7: "RFS2B", 8: "RFS2B"
     }
-    actual_prefix = test_compute_rfs_base(number)
-    expected_prefix = cavity_prefix_map[number]
-    return actual_prefix == expected_prefix
+    actual_prefix = test_compute_rfs_base(cavity)
+    expected_prefix = cavity_prefix_map[cavity.number]
+    assert actual_prefix == expected_prefix
 
 
-def test_compute_rfs_base(number: int) -> str:
+def compute_rfs_base(number: int) -> str:
     prefix = "RFS1" if number % 4 in (1, 2) else "RFS2"
-    rack_name = "A" if number in (1, 2, 3, 4) else "B"
-    return f"{prefix}{rack_name}"
+    rack = "A" if number in (1, 2, 3, 4) else "B"
+    return f"{prefix}{rack}"
 
 
 def test_request_ssa_cal_true(cavity):
@@ -164,7 +164,6 @@ def test_request_ssa_cal_true(cavity):
     cavity._progress_pv_obj.put.assert_called()
     cavity.check_abort.assert_called()
     cavity._tone_count_pv_obj.put.assert_called()
-    assert test_generate_rfs_addr(cavity.number)
 
 
 def test_request_auto_tune_false(cavity):
