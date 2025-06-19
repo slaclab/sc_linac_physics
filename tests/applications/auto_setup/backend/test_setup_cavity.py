@@ -134,7 +134,7 @@ def test_generate_rfs_addr(cavity):
         1: "RFS1A", 2: "RFS1A", 3: "RFS2A", 4: "RFS2A",
         5: "RFS1B", 6: "RFS1B", 7: "RFS2B", 8: "RFS2B"
     }
-    actual_prefix = test_compute_rfs_base(cavity)
+    actual_prefix = compute_rfs_base(cavity.number)
     expected_prefix = cavity_prefix_map[cavity.number]
     assert actual_prefix == expected_prefix
 
