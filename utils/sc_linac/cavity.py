@@ -62,7 +62,7 @@ class Cavity(linac_utils.SCLinacObject):
 
         self.chirp_prefix = self._pv_prefix + "CHIRP:"
 
-        self.rfs_addr = f"{self.generate_rfs_addr()}"
+        self.rfs_addr = self.generate_rfs_addr()
 
         self.abort_flag: bool = False
 
