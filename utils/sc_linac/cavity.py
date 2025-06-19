@@ -48,7 +48,7 @@ class Cavity(linac_utils.SCLinacObject):
             self.scale_factor_upper_limit = linac_utils.CAVITY_SCALE_UPPER_LIMIT_HL
         else:
             self.length = 1.038
-            self.frequency = 1.3e9 self.rfs_addr = f"{self.generate_rfs_addr()}"
+            self.frequency = 1.3e9 
             self.loaded_q_lower_limit = linac_utils.LOADED_Q_LOWER_LIMIT
             self.loaded_q_upper_limit = linac_utils.LOADED_Q_UPPER_LIMIT
             self.scale_factor_lower_limit = linac_utils.CAVITY_SCALE_LOWER_LIMIT
