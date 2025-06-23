@@ -25,7 +25,9 @@ from utils.sc_linac.ssa import SSA
 
 @pytest.fixture
 def cavity():
-    cavity = SetupCavity(cavity_num=randint(1, 8), rack_object=MagicMock())
+    rack = MagicMock()
+    rack.rack_name = "A" if cavity_num <= 4 else "B"
+    cavity = SetupCavity(cavity_num=randint(1, 8), rack_object=rack)
     cavity.ssa = SSA(cavity)
     yield cavity
 
