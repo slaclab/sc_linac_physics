@@ -25,7 +25,10 @@ from utils.sc_linac.ssa import SSA
 
 @pytest.fixture
 def cavity():
-    cavity = SetupCavity(cavity_num=randint(1, 8), rack_object=MagicMock())
+    cavity_num = randint(1, 8)
+    rack = MagicMock()
+    rack.rack_name = "A" if cavity_num <= 4 else "B"
+    cavity = SetupCavity(cavity_num=cavity_num, rack_object=rack)
     cavity.ssa = SSA(cavity)
     yield cavity
 
@@ -113,6 +116,15 @@ def test_shut_down(cavity):
     cavity.ssa.turn_off.assert_called()
 
 
+def test_generate_rfs_addr(cavity):
+    cavity_prefix_map = {
+        1: "RFS1A", 2: "RFS1A", 3: "RFS2A", 4: "RFS2A",
+        5: "RFS1B", 6: "RFS1B", 7: "RFS2B", 8: "RFS2B"
+    }
+    expected_prefix = cavity_prefix_map[cavity.number]
+    assert cavity.rfs_addr == expected_prefix
+
+
 def test_request_ssa_cal_false(cavity):
     cavity._ssa_cal_requested_pv_obj = make_mock_pv(get_val=False)
     cavity._progress_pv_obj = make_mock_pv()
@@ -137,6 +149,7 @@ def test_request_ssa_cal_true(cavity):
     cavity.turn_off = MagicMock()
     cavity.ssa.calibrate = MagicMock()
     cavity.ssa._saved_drive_max_pv_obj = make_mock_pv()
+    cavity._tone_count_pv_obj = make_mock_pv()
 
     cavity.request_ssa_cal()
     cavity._ssa_cal_requested_pv_obj.get.assert_called()
@@ -146,6 +159,7 @@ def test_request_ssa_cal_true(cavity):
     cavity._status_msg_pv_obj.put.assert_called()
     cavity._progress_pv_obj.put.assert_called()
     cavity.check_abort.assert_called()
+    cavity._tone_count_pv_obj.put.assert_called()
 
 
 def test_request_auto_tune_false(cavity):
