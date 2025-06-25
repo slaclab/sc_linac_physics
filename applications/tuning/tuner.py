@@ -62,7 +62,7 @@ class CavitySection:
             init_channel=cavity.stepper_tuner.max_steps_pv
         )
 
-        self.groupbox = QGroupBox(f"{cavity}")
+        self.groupbox = QGroupBox(cavity.__str__().split()[-2] + " " + cavity.__str__().split()[-1])
         layout = QVBoxLayout()
         self.groupbox.setLayout(layout)
         spinbox_layout = QGridLayout()
