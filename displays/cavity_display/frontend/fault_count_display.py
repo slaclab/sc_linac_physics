@@ -1,4 +1,4 @@
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 
 import pyqtgraph as pg
 from PyQt5.QtCore import QDateTime
@@ -25,6 +25,10 @@ from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 class FaultCountDisplay(Display):
+    fault_tlc_list = sorted(
+        set(map(lambda d: d["Three Letter Code"], utils.parse_csv()))
+    )
+
     def __init__(self, lazy_fault_pvs=True):
         super().__init__()
         self.setWindowTitle("Fault Count Display")
@@ -64,8 +68,7 @@ class FaultCountDisplay(Display):
 
         self.omit_tlc_text = QLabel(text="Select a fault to omit:")
         self.hide_fault_combo_box = QComboBox()
-        tlc_list: List[str] = self.make_tlc_list()
-        self.hide_fault_combo_box.addItems(["No fault selected"] + tlc_list)
+        self.hide_fault_combo_box.addItems(["No fault selected"] + self.fault_tlc_list)
         self.hide_fault_combo_box.currentIndexChanged.connect(self.update_plot)
 
         input_h_layout.addWidget(QLabel("Cryomodule:"))
@@ -94,15 +97,6 @@ class FaultCountDisplay(Display):
         self.cavity: Optional[BackendCavity] = None
         self.cm_combo_box.currentIndexChanged.connect(self.update_cavity)
         self.cav_combo_box.currentIndexChanged.connect(self.update_cavity)
-
-    def make_tlc_list(self) -> List[str]:
-        fault_tlc_list = []
-        for fault_row_dict in utils.parse_csv():
-            if fault_row_dict["Three Letter Code"] not in fault_tlc_list:
-                fault_tlc_list.append(fault_row_dict["Three Letter Code"])
-
-        fault_tlc_list.sort()
-        return fault_tlc_list
 
     def update_cavity(self):
         cm_name = self.cm_combo_box.currentText()
