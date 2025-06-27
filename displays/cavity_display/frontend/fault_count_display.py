@@ -33,12 +33,14 @@ class FaultCountDisplay(Display):
 
         main_v_layout = QVBoxLayout()
         input_h_layout = QHBoxLayout()
+        omit_fault_h_layout = QHBoxLayout()
 
         self.plot_window = pg.plot()
         self.plot_window.setBackground(DARK_GRAY_COLOR)
 
         main_v_layout.addLayout(input_h_layout)
         main_v_layout.addWidget(self.plot_window)
+        main_v_layout.addLayout(omit_fault_h_layout)
         self.setLayout(main_v_layout)
 
         self.cm_combo_box = QComboBox()
@@ -60,9 +62,10 @@ class FaultCountDisplay(Display):
         self.start_selector.editingFinished.connect(self.update_plot)
         self.end_selector.editingFinished.connect(self.update_plot)
 
+        self.omit_tlc_text = QLabel(text="Select a fault to omit:")
         self.hide_fault_combo_box = QComboBox()
         tlc_list: List[str] = self.make_tlc_list()
-        self.hide_fault_combo_box.addItems(["Omit a TLC?"] + tlc_list)
+        self.hide_fault_combo_box.addItems(["No fault selected"] + tlc_list)
         self.hide_fault_combo_box.currentIndexChanged.connect(self.update_plot)
 
         input_h_layout.addWidget(QLabel("Cryomodule:"))
@@ -74,7 +77,10 @@ class FaultCountDisplay(Display):
         input_h_layout.addWidget(self.start_selector)
         input_h_layout.addWidget(QLabel("End:"))
         input_h_layout.addWidget(self.end_selector)
-        main_v_layout.addWidget(self.hide_fault_combo_box)
+
+        omit_fault_h_layout.addWidget(self.omit_tlc_text)
+        omit_fault_h_layout.addWidget(self.hide_fault_combo_box)
+        omit_fault_h_layout.addStretch()
 
         self.cm_combo_box.addItems([""] + ALL_CRYOMODULES)
         self.cav_combo_box.addItems([""] + [str(i) for i in range(1, 9)])
