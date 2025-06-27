@@ -24,7 +24,7 @@ def test_make_tlc_list(qtbot: QtBot, window):
     assert isinstance(test_result_tlc_list, list)
     for tlc in test_result_tlc_list:
         assert isinstance(tlc, str)
-    assert (len(test_result_tlc_list) == len(set(test_result_tlc_list))) == True
+    assert len(test_result_tlc_list) == len(set(test_result_tlc_list))
 
 
 def test_get_data_no_data(qtbot: QtBot, window):
