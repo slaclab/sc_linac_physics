@@ -960,6 +960,3 @@ class Cavity(linac_utils.SCLinacObject):
     @rfs2.setter
     def rfs2(self, value: float):
         self.rfs2_pv_obj.put(value)
-
-
-

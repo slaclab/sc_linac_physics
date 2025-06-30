@@ -6,8 +6,6 @@ from utils.sc_linac.rfstation import RFStation
 if TYPE_CHECKING:
     from cavity import Cavity
     from cryomodule import Cryomodule
-    from rfstation import RFStation
-
 
 class Rack(SCLinacObject):
     """
@@ -43,7 +41,7 @@ class Rack(SCLinacObject):
             "RACK{RACK}:".format(RACK=self.rack_name)
         )
 
-        
+
         if rack_name == "A":
             # rack A always has cavities 1 - 4
             for cavityNum in range(1, 5):
