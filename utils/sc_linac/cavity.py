@@ -184,16 +184,14 @@ class Cavity(linac_utils.SCLinacObject):
         self.char_timestamp_pv: str = self.pv_addr("PROBECALTS")
         self._char_timestamp_pv_obj: Optional[PV] = None
 
+        self.rfs1_pv: str = self.rack.RFS2.pv_addr("DAC_AMPLITUDE")
+        self._rfs1_pv_obj: Optional[PV] = None
+
+        self.rfs2_pv: str = self.rack.RFS1.pv_addr("DAC_AMPLITUDE")
+        self._rfs2_pv_obj: Optional[PV] = None
+
     def __str__(self):
         return f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
-
-    @property
-    def rfs_addr(self) -> str:
-        base = self.compute_rfs_base()
-        return f"{base}{self.rack.rack_name}"
-
-    def compute_rfs_base(self) -> str:
-        return "RFS1" if self.number % 4 in (1, 2) else "RFS2"
 
     @property
     def pv_prefix(self):
@@ -934,3 +932,34 @@ class Cavity(linac_utils.SCLinacObject):
             self.ades = des_amp
 
         print(f"{self} at {des_amp} MV")
+
+    @property
+    def rfs1_pv_obj(self) -> PV:
+        if not self._rfs1_pv_obj:
+            self._rfs1_pv_obj = PV(self.rfs1_pv)
+        return self._rfs1_pv_obj
+
+    @property
+    def rfs1(self) -> float:
+        return self.rfs1_pv_obj.get()
+
+    @rfs1.setter
+    def rfs1(self, value: float):
+        self.rfs1_pv_obj.put(value)
+
+    @property
+    def rfs2_pv_obj(self) -> PV:
+        if not self._rfs2_pv_obj:
+            self._rfs2_pv_obj = PV(self.rfs2_pv)
+        return self._rfs2_pv_obj
+
+    @property
+    def rfs2(self) -> float:
+        return self.rfs2_pv_obj.get()
+
+    @rfs2.setter
+    def rfs2(self, value: float):
+        self.rfs2_pv_obj.put(value)
+
+
+

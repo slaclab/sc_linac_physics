@@ -1,7 +1,7 @@
 from typing import Type, Dict, TYPE_CHECKING
 
 from utils.sc_linac.linac_utils import SCLinacObject
-from utils.sc_linac.RFStation import RFStation
+from utils.sc_linac.rfstation import RFStation
 
 if TYPE_CHECKING:
     from cavity import Cavity

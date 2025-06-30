@@ -21,7 +21,6 @@ class RFStation(SCLinacObject):
 
         self._pv_prefix = self.cryomodule.pv_addr(
             "RFS{self.number} {self.rack.name}:")
-        )
 
     @property
     def pv_prefix(self):

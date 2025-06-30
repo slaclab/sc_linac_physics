@@ -36,25 +36,8 @@ class SetupCavity(Cavity, SetupLinacObject):
         self.note_pv: str = self.auto_pv_addr("NOTE")
         self._note_pv_obj: Optional[PV] = None
 
-        self.tone_count_pv = self.cryomodule.pv_addr(f"{self.rfs_addr}:DAC_AMPLITUDE")
-        self._tone_count_pv_obj: Optional[PV] = None
-
     def capture_acon(self):
         self.acon = self.ades
-
-    @property
-    def tone_count_pv_obj(self):
-        if not self._tone_count_pv_obj:
-            self._tone_count_pv_obj = PV(self.tone_count_pv)
-        return self._tone_count_pv_obj
-
-    @property
-    def tone_count(self) -> float:
-        return self.tone_count_pv_obj.get()
-
-    @tone_count.setter
-    def tone_count(self, value: float):
-        self.tone_count_pv_obj.put(value)
 
     @property
     def note_pv_obj(self) -> PV:
@@ -265,7 +248,8 @@ class SetupCavity(Cavity, SetupLinacObject):
         if self.ssa_cal_requested:
             self.status_message = f"Running {self} SSA Calibration"
             self.turn_off()
-            self.tone_count = 0
+            self.rfs1 = 0
+            self.rfs2 = 0
             self.progress = 20
             self.ssa.calibrate(self.ssa.drive_max, attempt=2)
             self.status_message = f"{self} SSA Calibrated"
