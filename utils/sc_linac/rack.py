@@ -1,10 +1,12 @@
 from typing import Type, Dict, TYPE_CHECKING
 
 from utils.sc_linac.linac_utils import SCLinacObject
+from utils.sc_linac.RFStation import RFStation
 
 if TYPE_CHECKING:
     from cavity import Cavity
     from cryomodule import Cryomodule
+    from rfstation import RFStation
 
 
 class Rack(SCLinacObject):
@@ -35,10 +37,13 @@ class Rack(SCLinacObject):
         self.piezo_class = self.cryomodule.piezo_class
 
         self.cavities: Dict[int, "Cavity"] = {}
+        self.RFS1 = RFStation(self.number, self)
+        self.RFS2 = RFStation(self.number, self)
         self._pv_prefix = self.cryomodule.pv_addr(
             "RACK{RACK}:".format(RACK=self.rack_name)
         )
 
+        
         if rack_name == "A":
             # rack A always has cavities 1 - 4
             for cavityNum in range(1, 5):
