@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from cavity import Cavity
     from cryomodule import Cryomodule
 
+
 class Rack(SCLinacObject):
     """
     Python representation of LCLS II RF Racks. This class functions mostly as a
@@ -40,7 +41,6 @@ class Rack(SCLinacObject):
         self._pv_prefix = self.cryomodule.pv_addr(
             "RACK{RACK}:".format(RACK=self.rack_name)
         )
-
 
         if rack_name == "A":
             # rack A always has cavities 1 - 4
