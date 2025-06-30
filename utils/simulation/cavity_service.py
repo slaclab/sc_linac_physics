@@ -122,6 +122,9 @@ class CavityPVGroup(PVGroup):
     detune_rfs: PvpropertyInteger = pvproperty(
         value=landing_freq, name="DF", dtype=ChannelType.INT
     )
+    detune_chirp: PvpropertyInteger = pvproperty(
+        value=landing_freq, name="CHIRP:DF", dtype=ChannelType.INT
+    )
     tune_config: PvpropertyEnum = pvproperty(
         name="TUNE_CONFIG",
         value=0,
@@ -135,16 +138,16 @@ class CavityPVGroup(PVGroup):
         value=35.0, name="STEPTEMP", dtype=ChannelType.FLOAT
     )
     tone_count_rackA_rfs1: PvpropertyFloat = pvproperty(
-       value=5.0, name="RFS1A:DAC_AMPLITUDE", dtype=ChannelType.FLOAT
+        value=5.0, name="RFS1A:DAC_AMPLITUDE", dtype=ChannelType.FLOAT
     )
     tone_count_rackA_rfs2: PvpropertyFloat = pvproperty(
-       value=5.0, name="RFS2A:DAC_AMPLITUDE", dtype=ChannelType.FLOAT
+        value=5.0, name="RFS2A:DAC_AMPLITUDE", dtype=ChannelType.FLOAT
     )
     tone_count_rackB_rfs1: PvpropertyFloat = pvproperty(
-       value=5.0, name="RFS1B:DAC_AMPLITUDE", dtype=ChannelType.FLOAT
+        value=5.0, name="RFS1B:DAC_AMPLITUDE", dtype=ChannelType.FLOAT
     )
     tone_count_rackB_rfs2: PvpropertyFloat = pvproperty(
-       value=5.0, name="RFS2B:DAC_AMPLITUDE", dtype=ChannelType.FLOAT
+        value=5.0, name="RFS2B:DAC_AMPLITUDE", dtype=ChannelType.FLOAT
     )
 
     fscan_stat: PvpropertyEnum = pvproperty(
@@ -245,6 +248,10 @@ class CavityPVGroup(PVGroup):
             self.length = 0.346
         else:
             self.length = 1.038
+
+    @rf_mode_des.putter
+    async def rf_mode_des(self, instance, value):
+        await self.rf_mode_act.write(value)
 
     @probe_cal_start.putter
     async def probe_cal_start(self, instance, value):
