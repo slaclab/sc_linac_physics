@@ -8,14 +8,14 @@ if TYPE_CHECKING:
 class RFStation(SCLinacObject):
     def __init__(
             self,
-            rack_number: int,
+            num: int,
             rack_object: "Rack",
     ):
         self.rack: "Rack" = rack_object
-        self.rack_number = rack_number
+        self.num = num
 
         self._pv_prefix = self.cryomodule.pv_addr(
-            "RFS{self.number} {self.rack.name}:")
+            "RFS{self.num} {self.rack.rack_name}:")
 
     @property
     def pv_prefix(self):
