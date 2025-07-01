@@ -184,12 +184,6 @@ class Cavity(linac_utils.SCLinacObject):
         self.char_timestamp_pv: str = self.pv_addr("PROBECALTS")
         self._char_timestamp_pv_obj: Optional[PV] = None
 
-        self.rfs1_pv: str = self.rack.RFS2.pv_addr("DAC_AMPLITUDE")
-        self._rfs1_pv_obj: Optional[PV] = None
-
-        self.rfs2_pv: str = self.rack.RFS1.pv_addr("DAC_AMPLITUDE")
-        self._rfs2_pv_obj: Optional[PV] = None
-
     def __str__(self):
         return f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
 
@@ -305,9 +299,9 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def measured_loaded_q_in_tolerance(self) -> bool:
         return (
-            self.loaded_q_lower_limit
-            <= self.measured_loaded_q
-            <= self.loaded_q_upper_limit
+                self.loaded_q_lower_limit
+                <= self.measured_loaded_q
+                <= self.loaded_q_upper_limit
         )
 
     def push_loaded_q(self):
@@ -324,9 +318,9 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def measured_scale_factor_in_tolerance(self) -> bool:
         return (
-            self.scale_factor_lower_limit
-            <= self.measured_scale_factor
-            <= self.scale_factor_upper_limit
+                self.scale_factor_lower_limit
+                <= self.measured_scale_factor
+                <= self.scale_factor_upper_limit
         )
 
     def push_scale_factor(self):
@@ -343,13 +337,13 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def characterization_running(self) -> bool:
         return (
-            self.characterization_status == linac_utils.CHARACTERIZATION_RUNNING_VALUE
+                self.characterization_status == linac_utils.CHARACTERIZATION_RUNNING_VALUE
         )
 
     @property
     def characterization_crashed(self) -> bool:
         return (
-            self.characterization_status == linac_utils.CHARACTERIZATION_CRASHED_VALUE
+                self.characterization_status == linac_utils.CHARACTERIZATION_CRASHED_VALUE
         )
 
     @property
@@ -603,10 +597,10 @@ class Cavity(linac_utils.SCLinacObject):
             return self.detune_best_pv_obj.severity == EPICS_INVALID_VAL
 
     def _auto_tune(
-        self,
-        delta_hz_func: Callable,
-        tolerance: int = 50,
-        reset_signed_steps: bool = False,
+            self,
+            delta_hz_func: Callable,
+            tolerance: int = 50,
+            reset_signed_steps: bool = False,
     ):
         if self.detune_invalid:
             raise linac_utils.DetuneError(f"{self} detune invalid")
@@ -932,31 +926,3 @@ class Cavity(linac_utils.SCLinacObject):
             self.ades = des_amp
 
         print(f"{self} at {des_amp} MV")
-
-    @property
-    def rfs1_pv_obj(self) -> PV:
-        if not self._rfs1_pv_obj:
-            self._rfs1_pv_obj = PV(self.rfs1_pv)
-        return self._rfs1_pv_obj
-
-    @property
-    def rfs1(self) -> float:
-        return self.rfs1_pv_obj.get()
-
-    @rfs1.setter
-    def rfs1(self, value: float):
-        self.rfs1_pv_obj.put(value)
-
-    @property
-    def rfs2_pv_obj(self) -> PV:
-        if not self._rfs2_pv_obj:
-            self._rfs2_pv_obj = PV(self.rfs2_pv)
-        return self._rfs2_pv_obj
-
-    @property
-    def rfs2(self) -> float:
-        return self.rfs2_pv_obj.get()
-
-    @rfs2.setter
-    def rfs2(self, value: float):
-        self.rfs2_pv_obj.put(value)
