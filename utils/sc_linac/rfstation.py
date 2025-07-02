@@ -2,8 +2,6 @@ from typing import TYPE_CHECKING, Optional
 
 from lcls_tools.common.controls.pyepics.utils import (
     PV,
-    EPICS_INVALID_VAL,
-    PVInvalidError,
 )
 
 from utils.sc_linac.linac_utils import SCLinacObject
