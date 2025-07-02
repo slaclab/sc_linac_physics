@@ -17,9 +17,9 @@ from utils.sc_linac.linac_utils import RF_MODE_SELA
 
 class SetupCavity(Cavity, SetupLinacObject):
     def __init__(
-        self,
-        cavity_num,
-        rack_object,
+            self,
+            cavity_num,
+            rack_object,
     ):
         Cavity.__init__(self, cavity_num=cavity_num, rack_object=rack_object)
         SetupLinacObject.__init__(self)
@@ -168,20 +168,20 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.progress = 100
             self.status = STATUS_READY_VALUE
         except (
-            linac_utils.StepperError,
-            linac_utils.DetuneError,
-            linac_utils.SSACalibrationError,
-            PVInvalidError,
-            linac_utils.QuenchError,
-            linac_utils.CavityQLoadedCalibrationError,
-            linac_utils.CavityScaleFactorCalibrationError,
-            linac_utils.SSAFaultError,
-            linac_utils.StepperAbortError,
-            linac_utils.CavityHWModeError,
-            linac_utils.CavityFaultError,
-            linac_utils.CavityAbortError,
-            CASeverityException,
-            linac_utils.CavityCharacterizationError,
+                linac_utils.StepperError,
+                linac_utils.DetuneError,
+                linac_utils.SSACalibrationError,
+                PVInvalidError,
+                linac_utils.QuenchError,
+                linac_utils.CavityQLoadedCalibrationError,
+                linac_utils.CavityScaleFactorCalibrationError,
+                linac_utils.SSAFaultError,
+                linac_utils.StepperAbortError,
+                linac_utils.CavityHWModeError,
+                linac_utils.CavityFaultError,
+                linac_utils.CavityAbortError,
+                CASeverityException,
+                linac_utils.CavityCharacterizationError,
         ) as e:
             self.status = STATUS_ERROR_VALUE
             self.clear_abort()
@@ -197,7 +197,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.progress = 80
 
             if not self.is_on or (
-                self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP
+                    self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP
             ):
                 self.ades = min(2, self.acon)
 
@@ -248,8 +248,8 @@ class SetupCavity(Cavity, SetupLinacObject):
         if self.ssa_cal_requested:
             self.status_message = f"Running {self} SSA Calibration"
             self.turn_off()
-            self.rfs1 = 0
-            self.rfs2 = 0
+            self.rack.rfs1.rfs1_dac_amp = 0
+            self.rack.rfs2.rfs2_dac_amp = 0
             self.progress = 20
             self.ssa.calibrate(self.ssa.drive_max, attempt=2)
             self.status_message = f"{self} SSA Calibrated"

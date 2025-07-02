@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from lcls_tools.common.controls.pyepics.utils import (
     PV,
@@ -21,13 +21,14 @@ class RFStation(SCLinacObject):
         self.rack: "Rack" = rack_object
         self.num = num
 
-        self.rfs1_dac_amp_pv: str = self.rack.rfs1.pv_addr("DAC_AMPLITUDE")
+        self._pv_prefix = self.rack.cryomodule.pv_addr(
+            f"RFS{self.num}{self.rack.rack_name}:")
+
+        self.rfs1_dac_amp_pv: str = self.pv_addr("DAC_AMPLITUDE")
         self._rfs1_dac_amp_pv_obj: Optional[PV] = None
 
-        self.rfs2_dac_amp_pv: str = self.rack.rfs2.pv_addr("DAC_AMPLITUDE")
+        self.rfs2_dac_amp_pv: str = self.pv_addr("DAC_AMPLITUDE")
         self._rfs2_dac_amp_pv_obj: Optional[PV] = None
-        self._pv_prefix = self.rack.cryomodule.pv_addr(
-            "RFS{self.num}{self.rack.rack_name}:")
 
     @property
     def pv_prefix(self):
@@ -54,9 +55,9 @@ class RFStation(SCLinacObject):
         return self._rfs2_dac_amp_pv_obj
 
     @property
-    def rfs2_dac_amplitude(self) -> float:
+    def rfs2_dac_amp(self) -> float:
         return self.rfs2_dac_amp_pv_obj.get()
 
-    @rfs2_dac_amplitude.setter
-    def rfs2_dac_amplitude(self, value: float):
+    @rfs2_dac_amp.setter
+    def rfs2_dac_amp(self, value: float):
         self.rfs2_dac_amp_pv_obj.put(value)
