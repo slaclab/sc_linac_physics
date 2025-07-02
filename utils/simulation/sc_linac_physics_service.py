@@ -135,10 +135,10 @@ class SCLinacPhysicsService(Service):
                     # Rack PVs are stupidly inconsistent
                     if cav_num in rackA:
                         hwi_prefix = cm_prefix + "00:RACKA:"
-                        rfs_infix = "A"
+                        rfs_infix = "A:"
                     else:
                         hwi_prefix = cm_prefix + "00:RACKB:"
-                        rfs_infix = "B"
+                        rfs_infix = "B:"
 
                     self.add_pvs(RACKPVGroup(prefix=hwi_prefix))
                     self.add_pvs(HOMPVGroup(prefix=HOM_prefix))
