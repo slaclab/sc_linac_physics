@@ -30,6 +30,7 @@ from utils.simulation.fault_service import (
 )
 from utils.simulation.magnet_service import MAGNETPVGroup
 from utils.simulation.rack_service import RACKPVGroup
+from utils.simulation.rfs_service import RFStationPVGroup
 from utils.simulation.service import Service
 from utils.simulation.ssa_service import SSAPVGroup
 from utils.simulation.tuner_service import StepperPVGroup, PiezoPVGroup
@@ -134,8 +135,10 @@ class SCLinacPhysicsService(Service):
                     # Rack PVs are stupidly inconsistent
                     if cav_num in rackA:
                         hwi_prefix = cm_prefix + "00:RACKA:"
+                        rfs_infix = "A"
                     else:
                         hwi_prefix = cm_prefix + "00:RACKB:"
+                        rfs_infix = "B"
 
                     self.add_pvs(RACKPVGroup(prefix=hwi_prefix))
                     self.add_pvs(HOMPVGroup(prefix=HOM_prefix))
@@ -146,6 +149,8 @@ class SCLinacPhysicsService(Service):
                             cav_num=cav_num,
                         )
                     )
+                    self.add_pvs(RFStationPVGroup(prefix=cav_prefix + f"RF1{rfs_infix}"))
+                    self.add_pvs(RFStationPVGroup(prefix=cav_prefix + f"RF2{rfs_infix}"))
 
                 self.add_pvs(CryoPVGroup(prefix=cryo_prefix))
                 self.add_pvs(BeamlineVacuumPVGroup(prefix=cm_prefix + "00:"))
