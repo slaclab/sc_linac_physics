@@ -10,4 +10,3 @@ class RFStationPVGroup(PVGroup):
     rfs: PvpropertyFloat = pvproperty(
         value=5.0, name="DAC_AMPLITUDE", dtype=ChannelType.FLOAT
     )
-   
