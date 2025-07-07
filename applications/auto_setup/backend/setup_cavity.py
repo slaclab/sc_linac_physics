@@ -248,8 +248,8 @@ class SetupCavity(Cavity, SetupLinacObject):
         if self.ssa_cal_requested:
             self.status_message = f"Running {self} SSA Calibration"
             self.turn_off()
-            self.rack.rfs1.rfs_dac_amp = 0
-            self.rack.rfs2.rfs_dac_amp = 0
+            self.rack.rfs1.dac_amp = 0
+            self.rack.rfs2.dac_amp = 0
             self.progress = 20
             self.ssa.calibrate(self.ssa.drive_max, attempt=2)
             self.status_message = f"{self} SSA Calibrated"
