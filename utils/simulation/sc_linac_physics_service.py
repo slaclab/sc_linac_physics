@@ -91,7 +91,7 @@ class SCLinacPhysicsService(Service):
 
                 cryo_prefix = f"CLL:CM{cm_name}:2601:US:"
                 cm_prefix = f"ACCL:{linac_name}:{cm_name}"
-                rfs_prefix = cm_prefix + f"00:"
+                rfs_prefix = cm_prefix + "00:"
 
                 magnet_infix = f"{linac_name}:{cm_name}85:"
 
