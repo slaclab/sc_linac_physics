@@ -94,6 +94,7 @@ class StepperPVGroup(PVGroup):
 
             await self.cavity_group.detune.write(new_detune)
             await self.cavity_group.detune_rfs.write(new_detune)
+            await self.cavity_group.detune_chirp.write(new_detune)
             await sleep(1)
 
         if self.abort.value == 1:
@@ -122,6 +123,7 @@ class StepperPVGroup(PVGroup):
             )
         await self.cavity_group.detune.write(new_detune)
         await self.cavity_group.detune_rfs.write(new_detune)
+        await self.cavity_group.detune_chirp.write(new_detune)
 
         await self.motor_moving.write("Not Moving")
         await self.motor_done.write("Done")
@@ -201,6 +203,7 @@ class PiezoPVGroup(PVGroup):
     integrator_lim_status = SeverityProp(name="INTEG_AT_LIM", value=0)
 
     voltage: PvpropertyInteger = pvproperty(name="V", value=17, dtype=ChannelType.INT)
+    scale: PvpropertyInteger = pvproperty(name="SCALE", value=20, dtype=ChannelType.INT)
 
     def __init__(self, prefix, cavity_group):
         super().__init__(prefix)
