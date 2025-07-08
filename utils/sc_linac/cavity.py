@@ -188,14 +188,6 @@ class Cavity(linac_utils.SCLinacObject):
         return f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
 
     @property
-    def rfs_addr(self) -> str:
-        base = self.compute_rfs_base()
-        return f"{base}{self.rack.rack_name}"
-
-    def compute_rfs_base(self) -> str:
-        return "RFS1" if self.number % 4 in (1, 2) else "RFS2"
-
-    @property
     def pv_prefix(self):
         return self._pv_prefix
 
@@ -307,9 +299,9 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def measured_loaded_q_in_tolerance(self) -> bool:
         return (
-            self.loaded_q_lower_limit
-            <= self.measured_loaded_q
-            <= self.loaded_q_upper_limit
+                self.loaded_q_lower_limit
+                <= self.measured_loaded_q
+                <= self.loaded_q_upper_limit
         )
 
     def push_loaded_q(self):
@@ -326,9 +318,9 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def measured_scale_factor_in_tolerance(self) -> bool:
         return (
-            self.scale_factor_lower_limit
-            <= self.measured_scale_factor
-            <= self.scale_factor_upper_limit
+                self.scale_factor_lower_limit
+                <= self.measured_scale_factor
+                <= self.scale_factor_upper_limit
         )
 
     def push_scale_factor(self):
@@ -345,13 +337,13 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def characterization_running(self) -> bool:
         return (
-            self.characterization_status == linac_utils.CHARACTERIZATION_RUNNING_VALUE
+                self.characterization_status == linac_utils.CHARACTERIZATION_RUNNING_VALUE
         )
 
     @property
     def characterization_crashed(self) -> bool:
         return (
-            self.characterization_status == linac_utils.CHARACTERIZATION_CRASHED_VALUE
+                self.characterization_status == linac_utils.CHARACTERIZATION_CRASHED_VALUE
         )
 
     @property
@@ -605,10 +597,10 @@ class Cavity(linac_utils.SCLinacObject):
             return self.detune_best_pv_obj.severity == EPICS_INVALID_VAL
 
     def _auto_tune(
-        self,
-        delta_hz_func: Callable,
-        tolerance: int = 50,
-        reset_signed_steps: bool = False,
+            self,
+            delta_hz_func: Callable,
+            tolerance: int = 50,
+            reset_signed_steps: bool = False,
     ):
         if self.detune_invalid:
             raise linac_utils.DetuneError(f"{self} detune invalid")
