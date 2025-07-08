@@ -1,7 +1,5 @@
 from caproto.server import PVGroup, pvproperty, PvpropertyString, PvpropertyBoolEnum
 
-from utils.simulation.severity_prop import SeverityProp
-
 
 class HeaterPVGroup(PVGroup):
     setpoint = pvproperty(name="MANPOS_RQST", value=24.0)
@@ -37,11 +35,13 @@ class JTPVGroup(PVGroup):
     async def man_pos(self, instance, value):
         await self.readback.write(value)
 
+    @auto.putter
+    async def auto(self, instance, value):
+        if value == 1:
+            await self.mode.write(1)
+            print(f"Setting JT to auto")
+
 
 class LiquidLevelPVGroup(PVGroup):
     upstream = pvproperty(name="2601:US:LVL", value=75.0)
     downstream = pvproperty(name="2301:DS:LVL", value=93.0)
-
-
-class CryoPVGroup(PVGroup):
-    uhl = SeverityProp(name="LVL", value=0)

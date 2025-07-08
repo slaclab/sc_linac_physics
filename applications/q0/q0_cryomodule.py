@@ -20,9 +20,9 @@ from utils.sc_linac.cryomodule import Cryomodule
 
 class Q0Cryomodule(Cryomodule):
     def __init__(
-        self,
-        cryo_name,
-        linac_object,
+            self,
+            cryo_name,
+            linac_object,
     ):
         super().__init__(cryo_name, linac_object)
 
@@ -267,10 +267,10 @@ class Q0Cryomodule(Cryomodule):
         )
 
     def launchHeaterRun(
-        self,
-        heater_setpoint,
-        target_ll_diff: float = q0_utils.TARGET_LL_DIFF,
-        is_cal=True,
+            self,
+            heater_setpoint,
+            target_ll_diff: float = q0_utils.TARGET_LL_DIFF,
+            is_cal=True,
     ) -> None:
         self.heater_power = heater_setpoint
 
@@ -315,10 +315,10 @@ class Q0Cryomodule(Cryomodule):
 
     # to be called after setup_for_q0 and each cavity's setup_SELA
     def takeNewQ0Measurement(
-        self,
-        desiredAmplitudes: Dict[int, float],
-        desired_ll: float = q0_utils.MAX_DS_LL,
-        ll_drop: float = q0_utils.TARGET_LL_DIFF,
+            self,
+            desiredAmplitudes: Dict[int, float],
+            desired_ll: float = q0_utils.MAX_DS_LL,
+            ll_drop: float = q0_utils.TARGET_LL_DIFF,
     ):
         self.setup_cryo_for_measurement(desired_ll, turn_cavities_off=False)
 
@@ -374,12 +374,12 @@ class Q0Cryomodule(Cryomodule):
         duration = (end_time - start_time).total_seconds() / 3600
         print("Duration in hours: {DUR}".format(DUR=duration))
 
-        print("Caluclated Q0: ", self.q0_measurement.q0)
+        print("Calculated Q0: ", self.q0_measurement.q0)
         self.q0_measurement.save_results()
         self.restore_cryo()
 
     def setup_for_q0(
-        self, desiredAmplitudes, desired_ll, jt_search_end, jt_search_start
+            self, desiredAmplitudes, desired_ll, jt_search_end, jt_search_start
     ):
         self.q0_measurement = Q0Measurement(cryomodule=self)
         self.q0_measurement.amplitudes = desiredAmplitudes
@@ -404,14 +404,14 @@ class Q0Cryomodule(Cryomodule):
         self.q0_measurement.load_data(time_stamp)
 
     def take_new_calibration(
-        self,
-        jt_search_start: datetime = None,
-        jt_search_end: datetime = None,
-        desired_ll: float = q0_utils.MAX_DS_LL,
-        ll_drop: float = q0_utils.TARGET_LL_DIFF,
-        num_cal_steps: int = q0_utils.NUM_CAL_STEPS,
-        heat_start: float = 130,
-        heat_end: float = 160,
+            self,
+            jt_search_start: datetime = None,
+            jt_search_end: datetime = None,
+            desired_ll: float = q0_utils.MAX_DS_LL,
+            ll_drop: float = q0_utils.TARGET_LL_DIFF,
+            num_cal_steps: int = q0_utils.NUM_CAL_STEPS,
+            heat_start: float = 130,
+            heat_end: float = 160,
     ):
         if not self.valveParams:
             self.valveParams = self.getRefValveParams(
