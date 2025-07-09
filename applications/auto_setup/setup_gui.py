@@ -34,17 +34,17 @@ class SetupGUI(Display):
 
         self.machine_setup_button: QPushButton = QPushButton("Set Up Machine")
         self.machine_setup_popup = make_sanity_check_popup(
-            f"This will set up all {num_total_cavities} cavities"
+            f"This will set up all online cavities"
         )
 
         self.machine_shutdown_button: QPushButton = QPushButton("Shut Down Machine")
         self.machine_shutdown_popup = make_sanity_check_popup(
-            f"This will turn off all {num_total_cavities} cavities and SSAs"
+            f"This will turn off all online cavities and SSAs"
         )
 
         self.machine_abort_button: QPushButton = QPushButton("Abort Machine")
         self.machine_abort_popup = make_sanity_check_popup(
-            f"This will abort all scripts running on all {num_total_cavities} cavities"
+            f"This will abort all scripts running on all online cavities"
         )
 
         self.machine_button_layout: QHBoxLayout = QHBoxLayout()
