@@ -19,7 +19,6 @@ from applications.auto_setup.frontend.gui_linac import GUILinac
 from applications.auto_setup.frontend.utils import Settings
 from utils.qt import make_sanity_check_popup
 from utils.sc_linac import linac_utils
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 class SetupGUI(Display):
@@ -30,21 +29,22 @@ class SetupGUI(Display):
         self.main_layout: QVBoxLayout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
-        num_total_cavities = len(ALL_CRYOMODULES) * 8
+        # commenting out in case of potential need in future
+        # num_total_cavities = len(ALL_CRYOMODULES) * 8
 
         self.machine_setup_button: QPushButton = QPushButton("Set Up Machine")
         self.machine_setup_popup = make_sanity_check_popup(
-            f"This will set up all online cavities"
+            "This will set up all online cavities"
         )
 
         self.machine_shutdown_button: QPushButton = QPushButton("Shut Down Machine")
         self.machine_shutdown_popup = make_sanity_check_popup(
-            f"This will turn off all online cavities and SSAs"
+            "This will turn off all online cavities and SSAs"
         )
 
         self.machine_abort_button: QPushButton = QPushButton("Abort Machine")
         self.machine_abort_popup = make_sanity_check_popup(
-            f"This will abort all scripts running on all online cavities"
+            "This will abort all scripts running on all online cavities"
         )
 
         self.machine_button_layout: QHBoxLayout = QHBoxLayout()
