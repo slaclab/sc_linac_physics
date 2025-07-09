@@ -1,6 +1,7 @@
 from caproto.server import PVGroup, pvproperty, PvpropertyString, PvpropertyBoolEnum
 
 from applications.q0 import q0_utils
+from utils.simulation.severity_prop import SeverityProp
 
 
 class HeaterPVGroup(PVGroup):
@@ -25,6 +26,10 @@ class HeaterPVGroup(PVGroup):
 
 
 class JTPVGroup(PVGroup):
+    def __init__(self, prefix, ll_group):
+        super().__init__(prefix)
+        self.ll_group: LiquidLevelPVGroup = ll_group
+
     readback = pvproperty(name="ORBV", value=30.0)
     ds_setpoint = pvproperty(name="SP_RQST", value=30.0)
     manual = pvproperty(name="MANUAL", value=0)
@@ -33,8 +38,13 @@ class JTPVGroup(PVGroup):
     man_pos = pvproperty(name="MANPOS_RQST", value=40.0)
     mode_string: PvpropertyString = pvproperty(name="MODE_STRING", value="AUTO")
 
-    def trigger_jt_feedback_script(self):
-        raise NotImplementedError
+    async def trigger_jt_feedback_script(self):
+        starting_ll = self.ll_group.downstream.value
+        if starting_ll != q0_utils.MAX_DS_LL:
+            target_ll_diff = q0_utils.MAX_DS_LL - self.ll_group.downstream.value
+            print("Waiting for downstream liquid level to reach 93")
+            await self.ll_group.downstream.write(starting_ll + target_ll_diff)
+            print(f"Liquid level is at {self.ll_group.downstream.value}")
 
     @man_pos.putter
     async def man_pos(self, instance, value):
@@ -63,11 +73,5 @@ class LiquidLevelPVGroup(PVGroup):
     downstream = pvproperty(name="2301:DS:LVL", value=93.0)
 
 
-class CryoPVGroup(JTPVGroup, HeaterPVGroup, LiquidLevelPVGroup):
-    async def trigger_jt_feedback_script(self):
-        starting_ll = self.downstream.value
-        if starting_ll != q0_utils.MAX_DS_LL:
-            target_ll_diff = q0_utils.MAX_DS_LL - self.downstream.value
-            print("Waiting for downstream liquid level to reach 93")
-            await self.downstream.write(starting_ll + target_ll_diff)
-            print(f"Liquic level is at {self.downstream.value}")
+class CryoPVGroup(PVGroup):
+    uhl = SeverityProp(name="LVL", value=0)
