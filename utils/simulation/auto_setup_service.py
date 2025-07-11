@@ -137,9 +137,7 @@ class AutoSetupCavityPVGroup(AutoSetupPVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("Ready", "Running", "Error"),
     )
-    status_message: PvpropertyChar = pvproperty(
-        name="MSG", value="Ready", dtype=ChannelType.CHAR
-    )
+    status_message: PvpropertyChar = pvproperty(name="MSG", value="Ready")
 
     time_stamp: PvpropertyChar = pvproperty(
         name="TS",
