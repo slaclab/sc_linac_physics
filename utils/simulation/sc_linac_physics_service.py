@@ -80,7 +80,7 @@ class SCLinacPhysicsService(Service):
             for cm_name in cm_list:
                 is_hl = cm_name in L1BHL
                 heater_prefix = f"CPIC:CM{cm_name}:0000:EHCV:"
-                self.add_pvs(HeaterPVGroup(prefix=heater_prefix))
+                heater_group = (HeaterPVGroup(prefix=heater_prefix))
 
                 self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(
                     enum_strings=("Close", "Open"), value=1
@@ -130,8 +130,9 @@ class SCLinacPhysicsService(Service):
                     )
                     self.add_pvs(CavFaultPVGroup(prefix=cav_prefix))
 
-                    self.add_pvs(JTPVGroup(prefix=jt_prefix))
-                    self.add_pvs(LiquidLevelPVGroup(prefix=liquid_level_prefix))
+                    ll_group = LiquidLevelPVGroup(prefix=liquid_level_prefix)
+                    self.add_pvs(JTPVGroup(prefix=jt_prefix, ll_group=ll_group, heater_group=heater_group))
+                    self.add_pvs(ll_group)
 
                     # Rack PVs are stupidly inconsistent
                     if cav_num in rackA:
