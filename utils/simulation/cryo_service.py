@@ -1,6 +1,7 @@
+from asyncio import sleep
+
 from caproto.server import PVGroup, pvproperty, PvpropertyString, PvpropertyBoolEnum
 
-from applications.q0 import q0_utils
 from utils.simulation.severity_prop import SeverityProp
 
 
@@ -16,9 +17,15 @@ class HeaterPVGroup(PVGroup):
     manual: PvpropertyBoolEnum = pvproperty(name="MANUAL")
     sequencer: PvpropertyBoolEnum = pvproperty(name="SEQUENCER")
 
+    async def trigger_heater_sequencer(self):
+        heat = 10  # this will be Pdiss calculated using Q0
+        heater_power = 48 - heat
+        await self.setpoint.write(heater_power)
+
     @setpoint.putter
     async def setpoint(self, instance, value):
-        await self.readback.write(value)
+        if self.sequencer != 1:
+            await self.readback.write(value)
 
     @manual.putter
     async def manual(self, instance, value):
@@ -32,9 +39,14 @@ class HeaterPVGroup(PVGroup):
             await self.mode.write(1)
             await self.mode_string.write("SEQUENCER")
 
+    @mode.putter
+    async def mode(self, instance, value):
+        if value == 1:
+            await self.trigger_heater_sequencer()
+
     @readback.putter
     async def readback(self, instance, value):
-        await self.jt_group.adjust_liquid_level()
+        await self.jt_group.trigger_jt_man_feedback()
 
 
 class JTPVGroup(PVGroup):
@@ -44,36 +56,90 @@ class JTPVGroup(PVGroup):
         self.heater_group: HeaterPVGroup = heater_group
 
     readback = pvproperty(name="ORBV", value=30.0)
-    ds_setpoint = pvproperty(name="SP_RQST", value=30.0)
+    ds_setpoint = pvproperty(
+        name="SP_RQST", value=30.0
+    )  # I'm actually a little confused about this PV.
+    # Is this the actual liquid level setpoint or the jt position for that liquid level?
     manual = pvproperty(name="MANUAL", value=0)
     auto = pvproperty(name="AUTO", value=0)
     mode = pvproperty(name="MODE", value=0)
     man_pos = pvproperty(name="MANPOS_RQST", value=40.0)
     mode_string: PvpropertyString = pvproperty(name="MODE_STRING", value="AUTO")
 
-    async def trigger_jt_feedback(self):
-        starting_ll = self.ll_group.downstream.value
-        if starting_ll != q0_utils.MAX_DS_LL:
-            target_ll_diff = q0_utils.MAX_DS_LL - self.ll_group.downstream.value
-            print("Waiting for downstream liquid level to reach 93")
-            await self.ll_group.downstream.write(starting_ll + target_ll_diff)
-            print(f"Liquid level is at {self.ll_group.downstream.value}")
+    async def trigger_jt_auto_feedback(self):
+        while self.ll_group.downstream.value != self.ds_setpoint.value:
+            print("Waiting for liquid level to reach downstream setpoint")
+            if self.ll_group.downstream.value > self.ds_setpoint.value:
+                await self.ll_group.downstream.write(
+                    self.ll_group.downstream.value - 0.2
+                )
+            elif self.ll_group.downstream.value < self.ds_setpoint.value:
+                await self.ll_group.downstream.write(
+                    self.ll_group.downstream.value + 0.2
+                )
+            await sleep(1)
+        print(f"Downstream level is at {self.ll_group.downstream.value}")
 
-    async def adjust_liquid_level(self):
-        if self.auto == 0:
-            jt_steady_state = 40  # baseline JT valve position
-            current_pos = self.readback.value
-            delta_pos = current_pos - jt_steady_state
+    # for this function, I'm using the assumption that 48W is the stability point
+    # the cryoplant wants to see from RF + heater
+    async def trigger_jt_man_feedback(self):
+        net_heat_load = (
+            10  # The ten is just a placeholder. I think net_heat_load here is
+        )
+        # Pdiss that I'll calculate using the cavity's Q0
+        current_total_heat_load = net_heat_load + self.heater_group.readback.value
+        stable_heat_load = 48
+        current_jt_pos = self.readback.value
+        stable_jt_pos = (
+            40  # this is a number I got from calibration files, jt valve seems to be
+            # in the range of 35 - 40 when total heat load is 48 W
+        )
 
-            ll_slope = 8.174374050765241e-05 * 10  # assuming Q0 of 2.7e10, we expect heat load of 10W
+        # I know there should probably be some sort of looping behavior for the following if-else blocks
+        # I'm still thinking through what would make sense for the loop conditions
+        if (
+            current_total_heat_load != stable_heat_load
+            and current_jt_pos == stable_jt_pos
+        ):
+            ll_slope = (
+                8.174374050765241e-05 * net_heat_load
+            )  # I'm using net_heat_load here because from my understanding, the calibration curve
+            # is a relationship between rate of change in liquid level and the rf heat load for that cavity
+            # and not between dll/dt and
+            # total heat load as seen by the cryoplant
+            if (
+                current_total_heat_load < stable_heat_load
+            ):  # if total heat load is less than stability point then
+                # decrease rate of change of liquid helium supply
+                await self.ll_group.downstream.write(
+                    self.ll_group.downstream.value - ll_slope
+                )
+                await sleep(1)
 
-            # 5 steps of valve movement = 1 unit of liquid level rate of change
-            expected_delta = 5 * ll_slope
+            elif (
+                current_total_heat_load > stable_heat_load
+            ):  # if total heat load is greater than stability point then
+                # increase rate of change of liquid helium supply
+                await self.ll_group.downstream.write(
+                    self.ll_group.downstream.value + ll_slope
+                )
+                await sleep(1)
 
-            if abs(expected_delta) != abs(delta_pos):
-                if delta_pos < 0:  # heater is turned down, RF heat load increased. Increase liquid helium level
-                    self.man_pos.write(jt_steady_state + expected_delta)
-                self.man_pos.write(jt_steady_state - expected_delta)
+        elif (
+            current_total_heat_load == stable_heat_load
+            and current_jt_pos != stable_jt_pos
+        ):
+            if current_jt_pos < stable_jt_pos:
+                await self.ll_group.downstream.write(
+                    self.ll_group.downstream.write - 0.2
+                )
+                await sleep(1)
+
+            elif current_jt_pos > stable_jt_pos:
+                await self.ll_group.downstream.write(
+                    self.ll_group.downstream.write + 0.2
+                )
+                await sleep(1)
 
     @man_pos.putter
     async def man_pos(self, instance, value):
@@ -96,11 +162,16 @@ class JTPVGroup(PVGroup):
     @mode.putter
     async def mode(self, instance, value):
         if value == 1:
-            await self.trigger_jt_feedback()
+            await self.trigger_jt_auto_feedback()
 
     @readback.putter
     async def readback(self, instance, value):
-        await self.adjust_liquid_level()
+        await self.trigger_jt_man_feedback()
+
+    @ds_setpoint.putter
+    async def ds_setpoint(self, instance, value):
+        if self.auto != 1:
+            await self.readback.write(value)
 
 
 class LiquidLevelPVGroup(PVGroup):
