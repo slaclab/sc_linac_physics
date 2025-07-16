@@ -1,3 +1,5 @@
+from typing import Optional
+
 from lcls_tools.common.controls.pyepics.utils import PV
 
 from utils.sc_linac.cavity import Cavity
@@ -9,9 +11,8 @@ from utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     CavityHWModeError,
     HW_MODE_READY_VALUE,
+    PARK_DETUNE,
 )
-
-PARK_DETUNE = 10000
 
 
 class TuneCavity(Cavity):
@@ -22,7 +23,10 @@ class TuneCavity(Cavity):
     ):
         super().__init__(cavity_num=cavity_num, rack_object=rack_object)
         self.df_cold_pv: str = self.pv_addr("DF_COLD")
-        self._df_cold_pv_obj: PV = None
+        self._df_cold_pv_obj: Optional[PV] = None
+
+        # TODO replace with actual status message PV when implemented
+        self.status_msg_pv: Optional[str] = self.pv_addr("FAKE")
 
     @property
     def hw_mode_str(self):
@@ -36,13 +40,41 @@ class TuneCavity(Cavity):
             self._df_cold_pv_obj = PV(self.df_cold_pv)
         return self._df_cold_pv_obj
 
-    def park(self, count_current: bool):
+    @property
+    def script_is_running(self) -> bool:
+        # TODO: check sonya's launcher PVs when implemented
+        return False
+        # return self.status == STATUS_RUNNING_VALUE
+
+    @property
+    def status_message(self):
+        # TODO: read from status PV when implemented
+        return ""
+        # return self.status_msg_pv_obj.get()
+
+    @status_message.setter
+    def status_message(self, message):
+        # TODO: write to status PV when implemented
+        print(message)
+        # self.status_msg_pv_obj.put(message)
+
+    def trigger_cold_landing(self):
+        # TODO write to cold pv when implemented
+        return
+        # self.start_pv_obj.put(1)
+
+    def trigger_park(self):
+        # TODO write to park pv when implemented
+        return
+        # self.start_pv_obj.put(1)
+
+    def park(self, reset_stepper_count: bool = True):
         if self.tune_config_pv_obj.get() == TUNE_CONFIG_PARKED_VALUE:
             return
 
         starting_config = self.tune_config_pv_obj.get()
 
-        if not count_current:
+        if reset_stepper_count:
             print(f"Resetting {self} stepper signed count")
             self.stepper_tuner.reset_signed_steps()
 

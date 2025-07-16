@@ -17,6 +17,7 @@ from caproto.server import (
 
 
 class CavityPVGroup(PVGroup):
+    fake = pvproperty(value="this is a fake PV", name="FAKE")
     acon: PvpropertyFloat = pvproperty(value=16.6, name="ACON", precision=2)
     ades: PvpropertyFloat = pvproperty(value=16.6, name="ADES", precision=1)
     aact: PvpropertyFloatRO = pvproperty(
