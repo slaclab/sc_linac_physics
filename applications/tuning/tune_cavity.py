@@ -97,7 +97,7 @@ class TuneCavity(Cavity):
         self.turn_off()
         self.ssa.turn_off()
 
-    def move_to_cold_landing(self, count_current: bool = False, use_rf=True):
+    def move_to_cold_landing(self, use_rf=True):
         if self.tune_config_pv_obj.get() == TUNE_CONFIG_COLD_VALUE:
             print(f"{self} at cold landing")
             print(f"Turning {self} and SSA off")
@@ -105,19 +105,17 @@ class TuneCavity(Cavity):
             self.ssa.turn_off()
             return
 
-        if not count_current:
-            print(f"Resetting {self} stepper signed count")
-            self.stepper_tuner.reset_signed_steps()
+        self.stepper_tuner.reset_signed_steps()
 
         if use_rf:
-            self.detune_with_rf(count_current)
+            self.detune_with_rf()
 
         else:
-            self.detune_no_rf(count_current)
+            self.detune_no_rf()
 
         self.tune_config_pv_obj.put(TUNE_CONFIG_COLD_VALUE)
 
-    def detune_no_rf(self, count_current=False):
+    def detune_no_rf(self):
         if self.hw_mode not in [
             HW_MODE_MAINTENANCE_VALUE,
             HW_MODE_ONLINE_VALUE,
@@ -130,11 +128,9 @@ class TuneCavity(Cavity):
         # exception before marking the cavity as at cold landing). This is
         # likely the case when we have lost site power and the cryoplant is
         # unable to support 2 K operation
-        self.stepper_tuner.move_to_cold_landing(
-            count_current=count_current, check_detune=False
-        )
+        self.stepper_tuner.move_to_cold_landing(check_detune=False)
 
-    def detune_with_rf(self, count_current=False):
+    def detune_with_rf(self):
         if self.hw_mode not in [HW_MODE_MAINTENANCE_VALUE, HW_MODE_ONLINE_VALUE]:
             raise CavityHWModeError(f"{self} not Online or in Maintenance")
 
@@ -150,23 +146,21 @@ class TuneCavity(Cavity):
             self._auto_tune(delta_hz_func=delta_func, tolerance=1000)
 
         else:
-            self.detune_by_steps(count_current)
+            self.detune_by_steps()
 
         self.tune_config_pv_obj.put(TUNE_CONFIG_COLD_VALUE)
         print("Turning cavity and SSA off")
         self.turn_off()
         self.ssa.turn_off()
 
-    def detune_by_steps(self, count_current):
+    def detune_by_steps(self):
         print("No cold landing frequency recorded, moving by steps instead")
         self.check_resonance()
         abs_est_detune = abs(
             self.stepper_tuner.steps_cold_landing_pv_obj.get() / self.microsteps_per_hz
         )
         self.setup_tuning(chirp_range=abs_est_detune + 50000)
-        self.stepper_tuner.move_to_cold_landing(
-            count_current=count_current, check_detune=True
-        )
+        self.stepper_tuner.move_to_cold_landing(check_detune=True)
 
     def check_resonance(self):
         if self.tune_config_pv_obj.get() != TUNE_CONFIG_RESONANCE_VALUE:
