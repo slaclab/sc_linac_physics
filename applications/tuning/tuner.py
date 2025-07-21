@@ -31,7 +31,6 @@ from utils.sc_linac.rack import Rack
 class LabeledSpinbox:
     def __init__(self, init_channel: str):
         self.spinbox: PyDMSpinbox = PyDMSpinbox(init_channel=init_channel)
-        self.spinbox.ctrl_limit_changed = lambda *args: None
         self.spinbox.showStepExponent = False
         self.label = QLabel(init_channel.split(":")[-1])
         self.layout = QHBoxLayout()
