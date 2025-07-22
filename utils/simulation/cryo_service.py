@@ -1,14 +1,17 @@
+import time
 from asyncio import sleep
 
 from caproto.server import PVGroup, pvproperty, PvpropertyString, PvpropertyBoolEnum
 
+from utils.simulation.cavity_service import CavityPVGroup
 from utils.simulation.severity_prop import SeverityProp
 
 
 class HeaterPVGroup(PVGroup):
-    def __init__(self, prefix, jt_group):
+    def __init__(self, prefix, jt_group, cavity_group):
         super().__init__(prefix)
         self.jt_group: JTPVGroup = jt_group
+        self.cavity_group: CavityPVGroup = cavity_group
 
     setpoint = pvproperty(name="MANPOS_RQST", value=24.0)
     readback = pvproperty(name="ORBV", value=24.0)
@@ -17,8 +20,15 @@ class HeaterPVGroup(PVGroup):
     manual: PvpropertyBoolEnum = pvproperty(name="MANUAL")
     sequencer: PvpropertyBoolEnum = pvproperty(name="SEQUENCER")
 
+    @property
+    def pdiss(self):
+        amplitude = self.cavity_group.amean.value
+        q0 = 2.7e10  # will be actual Q0 PV
+        pdiss = (amplitude * amplitude) / (1012 * q0)
+        return pdiss
+
     async def trigger_heater_sequencer(self):
-        heat = 10  # this will be Pdiss calculated using Q0
+        heat = self.pdiss
         heater_power = 48 - heat
         await self.setpoint.write(heater_power)
 
@@ -60,8 +70,57 @@ class JTPVGroup(PVGroup):
     man_pos = pvproperty(name="MANPOS_RQST", value=40.0)
     mode_string: PvpropertyString = pvproperty(name="MODE_STRING", value="AUTO")
 
-    def calculate_ll_diff(self, current, target):
-        return current - target
+    @property
+    def max_ll(self):
+        max_ll = 100
+        return max_ll
+
+    @property
+    def min_ll(self):
+        min_ll = 0
+        return min_ll
+
+    @property
+    def total_heat(self):
+        total_heat = self.heater_group.pdiss + self.heater_group.readback.value
+        return total_heat
+
+    @property
+    def stable_heat(self):
+        stable_heat = 48
+        return stable_heat
+
+    @property
+    def net_heat(self):
+        net_heat = self.total_heat - self.stable_heat
+        return net_heat
+
+    @property
+    def ll_delta(self):
+        dll_dt = -8.174374050765241e-05 * self.net_heat
+        dt = 1  # seconds
+        ll_delta = dll_dt * dt
+        return ll_delta
+
+    @property
+    def ll_diff(self):
+        current = self.ll_group.downstream.value
+        target = self.ds_setpoint.value
+        ll_diff = current - target
+        return ll_diff
+
+    def is_at_setpoint(self):
+        current = self.ll_group.downstream.value
+        target = self.ds_setpoint.value
+        return current == target
+
+    def is_at_max_fill(self):
+        current = self.ll_group.downstream.value
+        return current >= self.max_ll
+
+    def is_empty(self):
+        current = self.ll_group.downstream.value
+        return current <= self.min_ll
 
     # logic behind direction determination
     # Case 1: current > target
@@ -69,80 +128,94 @@ class JTPVGroup(PVGroup):
     # min(-ll_diff, +ll_delta) ==> returns -ll_diff
     # max(-ll_diff, -ll_delta) ==> returns -ll_diff if |ll_delta| > |ll_diff|, -ll_delta otherwise
     # direction = -some_number
+    #############################
+    #############################
     # Case 2: current < target
     # ll_diff = negative number
     # min(-ll_diff, +ll_delta) ==> returns +ll_diff if |ll_delta| > |ll_diff|, +ll_delta otherwise
     # max(+ll_diff, -ll_delta) ==> returns +ll_diff if |ll_delta| > |ll_diff|, +ll_delta otherwise
     # direction = +some_number
+    #############################
+    #############################
     # Case 3: current == target
     # ll_diff = 0
     # min(-ll_diff, +ll_delta) ==> returns 0
-    # max(-ll_diff, -ll_delta) ==> returns 0
+    # max(ll_diff, -ll_delta) ==> returns 0
     # direction = 0
-    def calculate_direction(self, ll_diff, ll_delta, current, target):
-        direction = max(min(-ll_diff, ll_delta), -ll_delta)
-
+    #############################
+    #############################
+    def get_step_direction(self, ll_delta):
+        direction = max(min(-self.ll_diff, ll_delta), -ll_delta)
         return direction
+
+    def get_jt_direction(self):
+        current_jt_pos = self.readback.value
+        stable_jt_pos = 40
+        if current_jt_pos < stable_jt_pos:
+            direction = -0.2
+
+        elif current_jt_pos > stable_jt_pos:
+            direction = 0.2
+        return direction
+
+    def get_net_step(self):
+        net_step = self.ll_delta + self.get_jt_direction()
+        return net_step
 
     async def trigger_jt_auto_feedback(self):
         ll_delta = 0.2
-        tolerance = 1
+
         while True:
             current = self.ll_group.downstream.value
-            target = self.ds_setpoint.value
 
-            ll_diff = self.calculate_ll_diff(current, target)
-
-            if abs(ll_diff) < tolerance:
+            if (
+                not self.is_at_setpoint()
+                or current == self.max_ll
+                or current == self.min_ll
+            ):
                 break
 
-            direction = self.calculate_direction(ll_diff, ll_delta, current, target)
+            direction = self.get_step_direction(ll_delta)
             await self.ll_group.downstream.write(current + direction)
             await sleep(1)
 
     # I'm using the assumption that 48W is the stability point
     # the cryoplant wants to see in total from RF + heater
     async def trigger_jt_manual_mode(self):
-        total_heat_load = 10 + self.heater_group.readback.value
-        stable_heat_load = 48
-
         current_jt_pos = self.readback.value
         stable_jt_pos = 40
+        start = time.time()
 
-        tolerance = 0.05
+        while (
+            not self.is_at_setpoint
+            and not self.is_at_max_fill()
+            and not self.is_empty()
+            and time.time() - start < 10  # 10s timeout
+        ):
+            if self.total_heat != self.stable_heat and current_jt_pos == stable_jt_pos:
+                direction = self.ll_delta
 
-        if total_heat_load != stable_heat_load and current_jt_pos == stable_jt_pos:
-            while True:
-                net_heat_load = total_heat_load - stable_heat_load
-                dll_dt = -8.174374050765241e-05 * net_heat_load
-                dt = 1  # seconds
-                delta_ll = dll_dt * dt
+            elif (
+                self.total_heat == self.stable_heat and current_jt_pos != stable_jt_pos
+            ):
+                direction = self.get_jt_direction()
 
-                if abs(net_heat_load) <= tolerance:
-                    break
+            elif (
+                self.total_heat != self.stable_heat and current_jt_pos != stable_jt_pos
+            ):
+                direction = self.get_net_step()
 
-                await self.ll_group.downstream.write(
-                    self.ll_group.downstream.value + delta_ll
-                )
-                await sleep(dt)
+            await self.ll_group.downstream.write(
+                self.ll_group.downstream.value + direction
+            )
 
-        elif total_heat_load == stable_heat_load and current_jt_pos != stable_jt_pos:
-            if current_jt_pos < stable_jt_pos:
-                await self.ll_group.downstream.write(
-                    self.ll_group.downstream.write - 0.2
-                )
-                await sleep(1)
-
-            elif current_jt_pos > stable_jt_pos:
-                await self.ll_group.downstream.write(
-                    self.ll_group.downstream.write + 0.2
-                )
-                await sleep(1)
+            await sleep(1)
 
     @man_pos.putter
     async def man_pos(self, instance, value):
         if self.auto != 1:
             self.readback.value = value
+            await self.trigger_jt_manual_mode()
 
     @auto.putter
     async def auto(self, instance, value):
