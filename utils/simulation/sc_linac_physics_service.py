@@ -80,7 +80,8 @@ class SCLinacPhysicsService(Service):
             for cm_name in cm_list:
                 is_hl = cm_name in L1BHL
                 heater_prefix = f"CPIC:CM{cm_name}:0000:EHCV:"
-                heater_group = (HeaterPVGroup(prefix=heater_prefix))
+                heater_group = HeaterPVGroup(prefix=heater_prefix)
+                self.add_pvs(heater_group)
 
                 self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(
                     enum_strings=("Close", "Open"), value=1
@@ -131,7 +132,13 @@ class SCLinacPhysicsService(Service):
                     self.add_pvs(CavFaultPVGroup(prefix=cav_prefix))
 
                     ll_group = LiquidLevelPVGroup(prefix=liquid_level_prefix)
-                    self.add_pvs(JTPVGroup(prefix=jt_prefix, ll_group=ll_group, heater_group=heater_group))
+                    self.add_pvs(
+                        JTPVGroup(
+                            prefix=jt_prefix,
+                            ll_group=ll_group,
+                            heater_group=heater_group,
+                        )
+                    )
                     self.add_pvs(ll_group)
 
                     # Rack PVs are stupidly inconsistent
@@ -151,8 +158,12 @@ class SCLinacPhysicsService(Service):
                             cav_num=cav_num,
                         )
                     )
-                    self.add_pvs(RFStationPVGroup(prefix=rfs_prefix + f"RFS1{rfs_infix}"))
-                    self.add_pvs(RFStationPVGroup(prefix=rfs_prefix + f"RFS2{rfs_infix}"))
+                    self.add_pvs(
+                        RFStationPVGroup(prefix=rfs_prefix + f"RFS1{rfs_infix}")
+                    )
+                    self.add_pvs(
+                        RFStationPVGroup(prefix=rfs_prefix + f"RFS2{rfs_infix}")
+                    )
 
                 self.add_pvs(CryoPVGroup(prefix=cryo_prefix))
                 self.add_pvs(BeamlineVacuumPVGroup(prefix=cm_prefix + "00:"))
