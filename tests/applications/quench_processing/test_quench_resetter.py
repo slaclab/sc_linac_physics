@@ -32,7 +32,7 @@ def cavities(monkeypatch):
 
     for cavity in cavity_lst:
         cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
-        cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
+        cavity._rf_control_pv_obj = make_mock_pv(get_val=1)
         cavity._quench_latch_pv_obj = make_mock_pv(get_val=0)
         cavity.reset_quench = MagicMock(return_value=False)
 
@@ -40,11 +40,11 @@ def cavities(monkeypatch):
 
 
 def test_check_cavities_quenched(cavities):
-    watcer_pv = make_mock_pv(get_val=0)
+    watcher_pv = make_mock_pv(get_val=0)
     quenched_cav = choice(cavities)
     quenched_cav._quench_latch_pv_obj = make_mock_pv(get_val=1)
 
-    check_cavities(cavities, watcer_pv)
+    check_cavities(cavities, watcher_pv)
     for cavity in cavities:
         if cavity == quenched_cav:
             cavity.reset_quench.assert_called()
@@ -53,7 +53,7 @@ def test_check_cavities_quenched(cavities):
 
 
 def test_check_cavities_not_online(cavities):
-    watcer_pv = make_mock_pv(get_val=0)
+    watcher_pv = make_mock_pv(get_val=0)
 
     for cavity in cavities:
         cavity._quench_latch_pv_obj = make_mock_pv(get_val=1)
@@ -70,7 +70,7 @@ def test_check_cavities_not_online(cavities):
         )
     )
 
-    check_cavities(cavities, watcer_pv)
+    check_cavities(cavities, watcher_pv)
     for cavity in cavities:
         if cavity == not_online_cav:
             cavity.reset_quench.assert_not_called()
@@ -79,15 +79,15 @@ def test_check_cavities_not_online(cavities):
 
 
 def test_check_cavities_not_on(cavities):
-    watcer_pv = make_mock_pv(get_val=0)
+    watcher_pv = make_mock_pv(get_val=0)
 
     for cavity in cavities:
         cavity._quench_latch_pv_obj = make_mock_pv(get_val=1)
 
     not_on_cav = choice(cavities)
-    not_on_cav._rf_state_pv_obj = make_mock_pv(get_val=0)
+    not_on_cav._rf_control_pv_obj = make_mock_pv(get_val=0)
 
-    check_cavities(cavities, watcer_pv)
+    check_cavities(cavities, watcher_pv)
     for cavity in cavities:
         if cavity == not_on_cav:
             cavity.reset_quench.assert_not_called()
