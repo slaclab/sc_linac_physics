@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 class Cavity(linac_utils.SCLinacObject):
     """
-    Python representation of LCLS II cavities. This class provides utility
+    Python representation of LCLS II cavities. This class provides utility self.rfs_addr = f"{self.generate_rfs_addr()}"
     functions for commonly used tasks including powering on/off, changing RF mode,
     setting amplitude, characterizing, and tuning to resonance
 
@@ -61,6 +61,7 @@ class Cavity(linac_utils.SCLinacObject):
         self.ctePrefix = f"CTE:CM{self.cryomodule.name}:1{self.number}"
 
         self.chirp_prefix = self._pv_prefix + "CHIRP:"
+
         self.abort_flag: bool = False
 
         # These need to be created after all the base cavity properties are defined
@@ -530,8 +531,12 @@ class Cavity(linac_utils.SCLinacObject):
         return self.rf_state_pv_obj.get()
 
     @property
-    def is_on(self):
+    def is_on(self) -> bool:
         return self.rf_state == 1
+
+    @property
+    def turned_off(self) -> bool:
+        return self.rf_control == 0
 
     def delta_piezo(self):
         delta_volts = self.piezo.voltage - linac_utils.PIEZO_CENTER_VOLTAGE

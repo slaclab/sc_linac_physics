@@ -122,6 +122,9 @@ class CavityPVGroup(PVGroup):
     detune_rfs: PvpropertyInteger = pvproperty(
         value=landing_freq, name="DF", dtype=ChannelType.INT
     )
+    detune_chirp: PvpropertyInteger = pvproperty(
+        value=landing_freq, name="CHIRP:DF", dtype=ChannelType.INT
+    )
     tune_config: PvpropertyEnum = pvproperty(
         name="TUNE_CONFIG",
         value=0,
@@ -233,6 +236,10 @@ class CavityPVGroup(PVGroup):
             self.length = 0.346
         else:
             self.length = 1.038
+
+    @rf_mode_des.putter
+    async def rf_mode_des(self, instance, value):
+        await self.rf_mode_act.write(value)
 
     @probe_cal_start.putter
     async def probe_cal_start(self, instance, value):

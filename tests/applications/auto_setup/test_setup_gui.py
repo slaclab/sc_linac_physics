@@ -1,15 +1,10 @@
 from unittest.mock import patch
 
 import pytest
-from PyQt5.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
 from applications.auto_setup.setup_gui import SetupGUI
-
-
-class MockWidget(QWidget):
-    def __init__(self, **kwargs):
-        super().__init__()
+from utils.qt import MockWidget
 
 
 @pytest.fixture

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 from os.path import isfile
 from time import sleep
@@ -46,10 +47,12 @@ class Q0Cryomodule(Cryomodule):
 
         self.valveParams: Optional[q0_utils.ValveParams] = None
 
-        self._calib_idx_file = "calibrations/cm{CM}.json".format(CM=self.name)
-        self._calib_data_file = f"data/calibrations/cm{self.name}.json"
-        self._q0_idx_file = "q0_measurements/cm{CM}.json".format(CM=self.name)
-        self._q0_data_file = f"data/q0_measurements/cm{self.name}.json"
+        base_dir = os.path.dirname(os.path.realpath(__file__))
+
+        self._calib_idx_file = f"{base_dir}/calibrations/cm{self.name}.json"
+        self._calib_data_file = f"{base_dir}/data/calibrations/cm{self.name}.json"
+        self._q0_idx_file = f"{base_dir}/q0_measurements/cm{self.name}.json"
+        self._q0_data_file = f"{base_dir}/data/q0_measurements/cm{self.name}.json"
 
         self.ll_buffer: np.array = np.empty(q0_utils.NUM_LL_POINTS_TO_AVG)
         self.ll_buffer[:] = np.nan

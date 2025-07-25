@@ -20,13 +20,19 @@ from utils.sc_linac.linac_utils import (
     HW_MODE_READY_VALUE,
     HW_MODE_ONLINE_VALUE,
 )
+from utils.sc_linac.rfstation import RFStation
 from utils.sc_linac.ssa import SSA
 
 
 @pytest.fixture
 def cavity():
-    cavity = SetupCavity(cavity_num=randint(1, 8), rack_object=MagicMock())
+    cavity_num = randint(1, 8)
+    rack: MagicMock = MagicMock()
+    rack.rack_name = "A" if cavity_num <= 4 else "B"
+    cavity = SetupCavity(cavity_num=cavity_num, rack_object=rack)
     cavity.ssa = SSA(cavity)
+    cavity.rack.rfs1 = RFStation(num=1, rack_object=rack)
+    cavity.rack.rfs2 = RFStation(num=2, rack_object=rack)
     yield cavity
 
 
@@ -137,6 +143,8 @@ def test_request_ssa_cal_true(cavity):
     cavity.turn_off = MagicMock()
     cavity.ssa.calibrate = MagicMock()
     cavity.ssa._saved_drive_max_pv_obj = make_mock_pv()
+    cavity.rack.rfs1._dac_amp_pv_obj = make_mock_pv()
+    cavity.rack.rfs2._dac_amp_pv_obj = make_mock_pv()
 
     cavity.request_ssa_cal()
     cavity._ssa_cal_requested_pv_obj.get.assert_called()
@@ -146,6 +154,8 @@ def test_request_ssa_cal_true(cavity):
     cavity._status_msg_pv_obj.put.assert_called()
     cavity._progress_pv_obj.put.assert_called()
     cavity.check_abort.assert_called()
+    cavity.rack.rfs2._dac_amp_pv_obj.put.assert_called()
+    cavity.rack.rfs1._dac_amp_pv_obj.put.assert_called()
 
 
 def test_request_auto_tune_false(cavity):
