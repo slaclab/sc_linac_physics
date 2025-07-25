@@ -323,7 +323,6 @@ class TimeSeriesPlot(BasePlot):
         """Override clear_plot to also clear time series specific data structures"""
         # Call parent method first
         super().clear_plot()
-
         # Clear time series specific data structures
         self._original_data = {}
         self._decimated_data = {}

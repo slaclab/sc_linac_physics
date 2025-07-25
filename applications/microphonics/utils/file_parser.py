@@ -106,9 +106,6 @@ def _parse_channel_pvs(header_lines: List[str], marker_index: int) -> List[str]:
         raise FileParserError("Internal error: Marker index out of bounds for header lines")
     # Get specific line containing channel info
     channel_line = header_lines[marker_index].strip()
-    # Safety check -> the line at marker_index should always start w/ header marker
-    if not channel_line.startswith(HEADER_MARKER):
-        logging.warning(f"Line at marker index {marker_index} doesn't start with {HEADER_MARKER}: '{channel_line}'")
 
     try:
         # Remove marker prefix, whitespace, newlines and split by whitespace to get individual channel names
@@ -142,9 +139,6 @@ def _parse_numerical_data(data_content_lines: List[str], num_expected_columns: i
         # Use numpy to parse all numerical data at once
         # ndmin=2 makes sure we always get a 2D array even w/ single row
         data_array = np.loadtxt(data_io, comments='#', ndmin=2, dtype=float)
-        # Additional validation -> if we have data lines but numpy returned empty array
-        if data_array.size == 0 and len(data_content_lines) > 0:
-            raise FileParserError("np.loadtxt failed to parse data content.")
         return data_array
     except ValueError as e:
         raise FileParserError(f"Could not parse numerical data: {e}")
