@@ -1,6 +1,6 @@
 from typing import List
 
-from PyQt5.QtCore import QThreadPool, QObject
+from PyQt5.QtCore import QObject
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QTabWidget,
@@ -15,13 +15,13 @@ from PyQt5.QtWidgets import (
 from edmbutton import PyDMEDMDisplayButton
 from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
 from pydm import Display
-from pydm.widgets import PyDMTimePlot, PyDMSpinbox, PyDMEnumComboBox
+from pydm.widgets import PyDMTimePlot, PyDMSpinbox, PyDMEnumComboBox, PyDMLabel
+from pydm.widgets.display_format import DisplayFormat
 from pydm.widgets.timeplot import updateMode
 from qtpy import QtCore
 
 from applications.tuning.tune_cavity import TuneCavity
 from applications.tuning.tune_stepper import TuneStepper
-from applications.tuning.tune_utils import ColdWorker
 from utils.qt import make_rainbow, CollapsibleGroupBox
 from utils.sc_linac.linac import Machine
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
@@ -63,7 +63,9 @@ class CavitySection(QObject):
             init_channel=cavity.stepper_tuner.max_steps_pv
         )
 
-        self.groupbox = QGroupBox(f"Cavity {cavity.number}")
+        self.groupbox = QGroupBox(
+            f"Cavity {cavity.number}"
+        )
         layout = QVBoxLayout()
         self.groupbox.setLayout(layout)
         spinbox_layout = QGridLayout()
@@ -82,13 +84,11 @@ class CavitySection(QObject):
         button_layout = QHBoxLayout()
 
         self.cold_button: QPushButton = QPushButton("Move to Cold Landing")
-        self.cold_button.clicked.connect(self.move_to_cold_landing)
-        self.status_label = QLabel("Ready")
-        self.cold_worker: ColdWorker = ColdWorker(
-            cavity=self.cavity,
-            cold_button=self.cold_button,
-            status_label=self.status_label,
-        )
+        self.cold_button.clicked.connect(self.trigger_cold_landing)
+
+        self.status_label = PyDMLabel(init_channel=cavity.status_msg_pv)
+        self.status_label.displayFormat = DisplayFormat.String
+
         button_layout.addWidget(self.cold_button)
         layout.addWidget(self.status_label)
 
@@ -104,8 +104,8 @@ class CavitySection(QObject):
         self.cavity.stepper_tuner.abort_flag = True
         self.cavity.abort_flag = True
 
-    def move_to_cold_landing(self):
-        self.parent.threadpool.start(self.cold_worker)
+    def trigger_cold_landing(self):
+        self.cavity.trigger_cold_landing()
 
 
 class RackScreen(QObject):
@@ -154,7 +154,7 @@ class RackScreen(QObject):
 
     def move_cavities_to_cold(self):
         for cav_section in self.cav_sections:
-            cav_section.move_to_cold_landing()
+            cav_section.trigger_cold_landing()
 
     def abort(self):
         for cav_section in self.cav_sections:
@@ -198,8 +198,6 @@ class Tuner(Display):
         self.setLayout(layout)
         layout.addWidget(self.tab_widget)
         self.machine = Machine(cavity_class=TuneCavity, stepper_class=TuneStepper)
-
-        self.threadpool: QThreadPool = QThreadPool()
 
         for cm_name in ALL_CRYOMODULES:
             cm = self.machine.cryomodules[cm_name]
