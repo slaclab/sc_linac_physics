@@ -62,13 +62,14 @@ def test_get_data_with_pot(qtbot: QtBot, window):
 
 
 @pytest.mark.skip("this will be updated when fault suppression is generalized")
-def test_get_data_without_pot(qtbot: QtBot, window):
+def test_get_data_with_data_in_tlc_omitted(qtbot: QtBot, window):
     qtbot.addWidget(window)
 
     q_dt = QDateTime.fromSecsSinceEpoch(int(datetime.now().timestamp()))
     window.start_selector.setDateTime(q_dt)
     window.end_selector.setDateTime(q_dt)
 
+    window.hide_fault_combo_box.setCurrentText("POT")
     window.hide_pot_checkbox.isChecked = MagicMock(return_value=True)
 
     window.cavity = next(non_hl_iterator)
