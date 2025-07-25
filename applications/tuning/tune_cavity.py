@@ -27,6 +27,16 @@ class TuneCavity(Cavity):
 
         # TODO replace with actual status message PV when implemented
         self.status_msg_pv: Optional[str] = self.pv_addr("FAKE")
+        self.use_rf_pv: Optional[str] = self.pv_addr("FAKE")
+        self._use_rf_pv_obj: Optional[PV] = None
+
+    @property
+    def use_rf(self) -> bool:
+        # TODO update when PV is live
+        # if not self._use_rf_pv_obj:
+        #     self._use_rf_pv_obj = PV(self.use_rf_pv)
+        # return self._use_rf_pv_obj.get()
+        return True
 
     @property
     def hw_mode_str(self):
@@ -97,7 +107,7 @@ class TuneCavity(Cavity):
         self.turn_off()
         self.ssa.turn_off()
 
-    def move_to_cold_landing(self, use_rf=True):
+    def move_to_cold_landing(self):
         if self.tune_config_pv_obj.get() == TUNE_CONFIG_COLD_VALUE:
             print(f"{self} at cold landing")
             print(f"Turning {self} and SSA off")
@@ -107,7 +117,7 @@ class TuneCavity(Cavity):
 
         self.stepper_tuner.reset_signed_steps()
 
-        if use_rf:
+        if self.use_rf:
             self.detune_with_rf()
 
         else:
