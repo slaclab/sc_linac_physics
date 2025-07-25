@@ -251,13 +251,6 @@ class ConfigPanel(QWidget):
             # Converting decimation text to int ("2" -> 2)
             decimation_num = int(decimation_text)
 
-            # Validate decimation (just a safety check)
-            if decimation_num <= 0:
-                self.label_sampling_rate.setText("Error")
-                self.label_acq_time.setText("Error")
-                print(f"Error: Invalid decimation value: {decimation_num}")
-                return
-
             # Calculate sampling rate
             sampling_rate = BASE_HARDWARE_SAMPLE_RATE / decimation_num
 
@@ -362,31 +355,15 @@ class ConfigPanel(QWidget):
         )
 
     def validate_cavity_selection(self, is_bulk_action: bool = False) -> Optional[str]:
-        """Validate cavity selection
+        """Validate cavity selection"""
 
+        # Get selected cavities
+        selected_a = [num for num, cb in self.cavity_checks_a.items() if cb.isChecked()]
+        selected_b = [num for num, cb in self.cavity_checks_b.items() if cb.isChecked()]
 
-        Args:
-            is_bulk_action: If True, skip the at least one cavity check for bulk operations
-
-
-        Returns:
-            Error message string if validation fails, None if validation passes
-        """
-        # Only perform validation for cavity related actions, not for initial setup
-        sender = self.sender()
-        if isinstance(sender, QCheckBox) or isinstance(sender, QPushButton) and sender in [self.select_all_a,
-                                                                                           self.select_all_b]:
-            # Get selected cavities
-            selected_a = [num for num, cb in self.cavity_checks_a.items() if cb.isChecked()]
-            selected_b = [num for num, cb in self.cavity_checks_b.items() if cb.isChecked()]
-
-            # For individual selections check if any cavities are selected
-            if not is_bulk_action and not selected_a and not selected_b:
-                return "Please select at least one cavity"
-
-            # This prevents cross rack selection
-            if selected_a and selected_b:
-                return "Cannot measure cavities from both racks simultaneously"
+        # For individual selections check if any cavities are selected
+        if not is_bulk_action and not selected_a and not selected_b:
+            return "Please select at least one cavity"
 
         return None
 

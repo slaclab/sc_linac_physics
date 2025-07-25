@@ -127,64 +127,6 @@ def create_pushbuttons(
     return buttons
 
 
-def create_pushbuttons(
-        parent: QWidget,
-        items: Dict[Any, str],
-        layout: QLayout,
-        checkable: bool = False,
-        connect_to: Optional[Callable] = None,
-        custom_properties: Optional[Dict[str, Dict[str, Any]]] = None,
-        grid_layout: bool = False,
-        max_cols: int = 4
-) -> Dict[Any, QPushButton]:
-    """
-    Create a group of push buttons with consistent configuration.
-
-    Args:
-        parent: Parent widget
-        items: Dictionary mapping identifier to button text
-        layout: Layout to add buttons to
-        checkable: Whether buttons should be checkable
-        connect_to: Function to connect clicked signal to (will be called with the item_id)
-        custom_properties: Dictionary mapping item_id to dict of custom properties to set
-        grid_layout: If True put in grid pattern
-        max_cols: Maximum columns when using grid layout
-
-    Returns:
-        Dictionary of created QPushButton widgets indexed by their identifiers
-    """
-    buttons = {}
-
-    if grid_layout and not isinstance(layout, QGridLayout):
-        raise TypeError("Grid layout required for grid_layout=True")
-
-    row = col = 0
-    for item_id, text in items.items():
-        btn = QPushButton(text)
-        btn.setCheckable(checkable)
-
-        if connect_to:
-            btn.clicked.connect(lambda checked, btn_id=item_id: connect_to(btn_id))
-
-        # Set custom properties if provided
-        if custom_properties and item_id in custom_properties:
-            for prop_name, prop_value in custom_properties[item_id].items():
-                btn.setProperty(prop_name, prop_value)
-
-        buttons[item_id] = btn
-
-        if grid_layout:
-            layout.addWidget(btn, row, col)
-            col += 1
-            if col >= max_cols:
-                col = 0
-                row += 1
-        else:
-            layout.addWidget(btn)
-
-    return buttons
-
-
 def create_status_widgets(
         parent: QWidget,
         items: List[int],

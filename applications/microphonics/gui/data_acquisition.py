@@ -71,13 +71,6 @@ class DataAcquisitionManager(QObject):
 
             measurement_cfg = config['config']  # MeasurementConfig object
             selected_cavities = sorted(config['cavities'])
-
-            # Check CM boundary crossing
-            low_cm = any(c <= 4 for c in config['cavities'])
-            high_cm = any(c > 4 for c in config['cavities'])
-            if low_cm and high_cm:
-                raise ValueError("ERROR: Cavity selection crosses half-CM")
-
             process = QProcess()
 
             # Filename and Directory Logic
@@ -126,7 +119,6 @@ class DataAcquisitionManager(QObject):
                 lambda exit_code, exit_status: self.handle_finished(chassis_id, process, exit_code, exit_status))
 
             # Store process info
-            output_path = data_dir / filename
             self.active_processes[chassis_id] = {
                 'process': process,
                 'output_path': output_path,
