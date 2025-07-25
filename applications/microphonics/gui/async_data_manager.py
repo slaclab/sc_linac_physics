@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from PyQt5.QtCore import QObject, QTimer
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QObject, QThread
+from PyQt5.QtCore import pyqtSignal
 
 from applications.microphonics.gui.data_acquisition import DataAcquisitionManager
 
@@ -26,19 +26,11 @@ class MeasurementConfig:
             return f"Invalid buffer count: {self.buffer_count}. Must be positive"
         return None
 
-    def to_acquisition_config(self) -> Dict:
-        """Converting to format needed by data acquisition manager"""
-        return {
-            'decimation': self.decimation,
-            'buffer_count': self.buffer_count,
-            'channels': self.channels
-        }
-
 
 class AsyncDataManager(QObject):
-    """Manages asynch data acquisition across multiple chassis using res_data_acq.py
+    """Manages asynch data acquisition across chassis using res_data_acq.py
 
-    So this class provides a high level interface for data acquisition, where it handles:
+    Provides an interface for data acquisition, where it handles:
     - Configuration validation
     - Acquisition management
     - Signal routing from the data acquisition manager
@@ -46,36 +38,24 @@ class AsyncDataManager(QObject):
     acquisitionProgress = pyqtSignal(str, int, int)  # chassis_id, cavity_num, progress
     acquisitionError = pyqtSignal(str, str)  # chassis_id, error_message
     acquisitionComplete = pyqtSignal(str)  # chassis_id
-    dataReceived = pyqtSignal(str, dict)  # chassis_id, data_dict
+    # Job level signals
+    jobProgress = pyqtSignal(int)  # overall job progress percentage
+    jobError = pyqtSignal(str)  # job level error message
+    jobComplete = pyqtSignal(dict)  # aggregated data from all racks
 
     def __init__(self):
         super().__init__()
-        self.thread = QThread()
-        self.data_manager = DataAcquisitionManager()
-
-        # This connects signals 1st
-        self.data_manager.acquisitionComplete.connect(self.acquisitionComplete)
-        self.data_manager.acquisitionProgress.connect(self.acquisitionProgress)
-        self.data_manager.acquisitionError.connect(self.acquisitionError)
-        self.data_manager.dataReceived.connect(self.dataReceived)
-
-        # Then add active acquisitions tracking
-        self.active_acquisitions = set()
-
-        # Then move to thread after connecting
-        self.data_manager.moveToThread(self.thread)
-        self.thread.start()
+        # Track workers and their threads
+        self.active_workers = {}
+        self.worker_progress = {}
+        self.worker_data = {}
+        self.job_chassis_ids = set()
+        self.job_running = False
 
     def _validate_chassis_config(self, chassis_id: str, config: dict) -> Optional[str]:
         """Validate individual chassis configuration"""
         if not config.get('cavities'):
             return "No cavities specified for chassis"
-
-        # THis checks for CM boundary crossing
-        low_cm = any(c <= 4 for c in config['cavities'])
-        high_cm = any(c > 4 for c in config['cavities'])
-        if low_cm and high_cm:
-            return "ERROR: Cavity selection crosses half-CM"
 
         if not config.get('pv_base'):
             return "Missing PV base address"
@@ -102,40 +82,184 @@ class AsyncDataManager(QObject):
 
     def initiate_measurement(self, chassis_config: Dict):
         """Called from main thread to start measurement"""
+        if self.job_running:
+            self.jobError.emit("A measurement job is already running")
+            return
         errors = self._validate_all_configs(chassis_config)
         if errors:
             for chassis_id, error in errors:
                 self.acquisitionError.emit(chassis_id, error)
             return
+        # Initialize job tracking
+        self.job_running = True
+        self.job_chassis_ids = set(chassis_config.keys())
+        self.worker_progress.clear()
+        self.worker_data.clear()
 
-        # Tracking active acquisitions
-        for chassis_id in chassis_config.keys():
-            self.active_acquisitions.add(chassis_id)
+        # Initialize progress for all chassis
+        for chassis_id in self.job_chassis_ids:
+            self.worker_progress[chassis_id] = 0
 
-        # All configs are valid, now we start acquisitions
+        # Start parallel acquisitions
         for chassis_id, config in chassis_config.items():
-            print(f"DEBUG: Scheduling start_acquisition for {chassis_id}")
-            QTimer.singleShot(0, lambda cid=chassis_id, cfg=config:
-            self.data_manager.start_acquisition(cid, cfg))
+            self._start_worker_for_chassis(chassis_id, config)
+
+    def _start_worker_for_chassis(self, chassis_id: str, config: dict):
+        """Create and start a worker thread for one chassis"""
+        print(f"DEBUG: Starting worker for {chassis_id}")
+
+        # Create thread and worker
+        thread = QThread()
+        worker = DataAcquisitionManager()
+
+        # Connect worker signals to our handlers
+        worker.acquisitionProgress.connect(
+            lambda cid, cav, prog: self._handle_worker_progress(cid, cav, prog))
+        worker.acquisitionError.connect(
+            lambda cid, err: self._handle_worker_error(cid, err))
+        worker.acquisitionComplete.connect(
+            lambda cid: self._handle_worker_complete(cid))
+        worker.dataReceived.connect(
+            lambda cid, data: self._handle_worker_data(cid, data))
+
+        # Move worker to thread
+        worker.moveToThread(thread)
+        # Store worker and thread
+        self.active_workers[chassis_id] = (thread, worker)
+
+        # Schedule acquisition start
+        thread.started.connect(lambda: worker.start_acquisition(chassis_id, config))
+        thread.start()
+
+    def _handle_worker_progress(self, chassis_id: str, cavity_num: int, progress: int):
+        """Handle progress from individual worker"""
+        # Update worker progress
+        self.worker_progress[chassis_id] = progress
+
+        # Forward the progress
+        self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
+
+        # Calculate and emit overall job progress
+        if self.job_chassis_ids:
+            total_progress = sum(self.worker_progress.values()) / len(self.job_chassis_ids)
+            self.jobProgress.emit(int(total_progress))
+
+    def _handle_worker_error(self, chassis_id: str, error: str):
+        """Handle error from one worker will stop entire job"""
+        print(f"ERROR: Worker {chassis_id} failed: {error}")
+
+        # Forward individual error
+        self.acquisitionError.emit(chassis_id, error)
+
+        # Emit job level error
+        self.jobError.emit(f"Job failed - {chassis_id}: {error}")
+
+        # Stop all workers for this job
+        self._stop_all_workers()
+
+    def _handle_worker_data(self, chassis_id: str, data: dict):
+        """Store data from individual worker"""
+        print(f"DEBUG: Received data from {chassis_id}")
+        self.worker_data[chassis_id] = data
+
+    def _handle_worker_complete(self, chassis_id: str):
+        """Handle completion from individual worker"""
+        print(f"DEBUG: Worker {chassis_id} completed")
+
+        # Forward individual completion
+        self.acquisitionComplete.emit(chassis_id)
+
+        # Check if all workers are done
+        if set(self.worker_data.keys()) == self.job_chassis_ids:
+            print("DEBUG: All workers finished, aggregating data")
+            self._complete_job()
+
+    def _complete_job(self):
+        """Aggregate data and emit job completion"""
+        # Aggregate all cavity data
+        aggregated_data = {
+            'cavities': {},
+            'cavity_list': [],
+            'source': 'multi-chassis',
+            'decimation': None
+        }
+
+        # Combine data from all workers
+        for chassis_id, data in self.worker_data.items():
+            if 'cavities' in data:
+                aggregated_data['cavities'].update(data['cavities'])
+            if 'cavity_list' in data:
+                aggregated_data['cavity_list'].extend(data['cavity_list'])
+            # Use decimation from first worker
+            if aggregated_data['decimation'] is None and 'decimation' in data:
+                aggregated_data['decimation'] = data['decimation']
+
+        # Sort cavity list
+        aggregated_data['cavity_list'] = sorted(set(aggregated_data['cavity_list']))
+
+        # Emit aggregated data
+        self.jobComplete.emit(aggregated_data)
+
+        # Clean up
+        self._cleanup_workers()
+        self.job_running = False
 
     def stop_measurement(self, chassis_id: str):
         """Stop measurement for specific chassis"""
-        try:
-            if chassis_id in self.active_acquisitions:
-                self.data_manager.stop_acquisition(chassis_id)
-                self.active_acquisitions.remove(chassis_id)
-        except Exception as e:
-            self.acquisitionError.emit(chassis_id, f"Error stopping measurement: {str(e)}")
+        if chassis_id:
+            self._stop_worker(chassis_id)
+        else:
+            self._stop_all_workers()
 
     def stop_all(self):
         """Stop all measurements and cleanup thread"""
-        if hasattr(self, 'thread') and self.thread.isRunning():
-            # This stops all active acquisitions
-            for chassis_id in list(self.active_acquisitions):
-                self.stop_measurement(chassis_id)
+        self._stop_all_workers()
+        self.job_running = False
 
-            # Cleaning up thread
-            self.thread.quit()
-            if not self.thread.wait(5000):
-                self.thread.terminate()
-                self.thread.wait()
+    def _stop_all_workers(self):
+        """Stop all active workers"""
+        print("DEBUG: Stopping all workers")
+
+        for chassis_id in list(self.active_workers.keys()):
+            self._stop_worker(chassis_id)
+
+        self.job_running = False
+
+    def _stop_worker(self, chassis_id: str):
+        """Stop a specific worker"""
+        if chassis_id in self.active_workers:
+            thread, worker = self.active_workers[chassis_id]
+
+            # Stop acquisition
+            worker.stop_acquisition(chassis_id)
+
+            # Clean up thread
+            thread.quit()
+            if not thread.wait(5000):
+                thread.terminate()
+                thread.wait()
+
+            # Remove from tracking
+            del self.active_workers[chassis_id]
+
+    def _cleanup_workers(self):
+        """Clean up all worker threads after job completion"""
+        for chassis_id in list(self.active_workers.keys()):
+            thread, worker = self.active_workers[chassis_id]
+
+            # Disconnect signals
+            try:
+                worker.acquisitionProgress.disconnect()
+                worker.acquisitionError.disconnect()
+                worker.acquisitionComplete.disconnect()
+                worker.dataReceived.disconnect()
+            except:
+                pass
+
+            # Clean up thread
+            thread.quit()
+            if not thread.wait(2000):
+                thread.terminate()
+                thread.wait()
+
+        self.active_workers.clear()

@@ -14,7 +14,7 @@ from pydm import Display
 from applications.microphonics.components.components import (
     ChannelSelectionGroup, DataLoadingGroup
 )
-from applications.microphonics.gui.async_data_manager import AsyncDataManager, MeasurementConfig
+from applications.microphonics.gui.async_data_manager import MeasurementConfig, AsyncDataManager
 from applications.microphonics.gui.config_panel import ConfigPanel
 from applications.microphonics.gui.data_loader import DataLoader
 from applications.microphonics.gui.statistics_calculator import StatisticsCalculator
@@ -37,13 +37,17 @@ class MicrophonicsGUI(Display):
         # Error signal connection
         self.measurementError.connect(self._handle_measurement_error)
 
-        # Data manager
+        # Data Manager
         self.data_manager = AsyncDataManager()
+
+        # Connect job level signals
+        self.data_manager.jobProgress.connect(self._handle_job_progress)
+        self.data_manager.jobError.connect(self._handle_job_error)
+        self.data_manager.jobComplete.connect(self._handle_job_complete)
 
         # Connect data manager signals
         self.data_manager.acquisitionProgress.connect(self._handle_progress)
         self.data_manager.acquisitionError.connect(self._handle_error)
-        self.data_manager.dataReceived.connect(self._handle_new_data)
         self.data_manager.acquisitionComplete.connect(self._handle_completion)
 
         # Main Layout
@@ -71,7 +75,7 @@ class MicrophonicsGUI(Display):
         self.setup_left_panel(left_layout)
         self.setup_right_panel(right_layout)
 
-        # Add panels to main layout with adjusted proportions
+        # Add panels to main layout w/ adjusted proportions
         main_layout.addWidget(left_panel, stretch=4)  # 40% width
         main_layout.addWidget(right_panel, stretch=6)  # 60% width
 
@@ -170,12 +174,11 @@ class MicrophonicsGUI(Display):
 
             for cavity_num, is_selected in config['cavities'].items():
                 print(f"Debug: Checking cavity {cavity_num}: {is_selected}")
-                if is_selected:  # Only add selected cavities
+                if is_selected:  # Only process selected cavities
                     if cavity_num <= 4:
                         rack_a_cavities.append(cavity_num)
                     else:
                         rack_b_cavities.append(cavity_num)
-
             print(f"Debug: Rack A cavities: {rack_a_cavities}")
             print(f"Debug: Rack B cavities: {rack_b_cavities}")
 
@@ -222,12 +225,12 @@ class MicrophonicsGUI(Display):
             QMessageBox.critical(self, "Error", str(e))
 
     def _handle_measurement_error(self, error_msg):
-        """Handle measurement errors with non-modal dialog"""
+        """Handle measurement errors"""
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Critical)
         msg_box.setText(error_msg)
         msg_box.setWindowTitle("Error")
-        msg_box.setModal(False)  # Make dialog non-modal
+        msg_box.setModal(False)
         msg_box.show()
 
     def _start_measurement_async(self):
@@ -237,12 +240,12 @@ class MicrophonicsGUI(Display):
             config = self.config_panel.get_config()
             print("Current config:", config)
 
-            # Check for cross-CM cavity selection
+            # Check for cross CM cavity selection
             selected_cavities = [num for num, selected in config['cavities'].items() if selected]
             low_cm = any(c <= 4 for c in selected_cavities)
             high_cm = any(c > 4 for c in selected_cavities)
             if low_cm and high_cm:
-                raise ValueError("ERROR: Cavity selection crosses half-CM")
+                print("Note: Cavities span both racks - will use parallel acquisition")
 
             if not any(config['cavities'].values()):
                 raise ValueError("No cavities selected - please select at least one cavity")
@@ -296,21 +299,41 @@ class MicrophonicsGUI(Display):
         msg_box.setIcon(QMessageBox.Critical)
         msg_box.setText(error_msg)
         msg_box.setWindowTitle("Error")
-        msg_box.setModal(True)  # Force modal for test detection
+        msg_box.setModal(True)
         msg_box.show()
 
-    def _handle_completion(self, chassis_id: str):
-        """Handle measurement completion"""
-        # Check if all measurements are complete by checking active acquisitions
-        if chassis_id in self.data_manager.active_acquisitions:
-            self.data_manager.active_acquisitions.remove(chassis_id)
+    def _handle_job_progress(self, overall_progress: int):
+        """Handle overall job progress"""
+        print(f"Overall job progress: {overall_progress}%")
 
-        if not self.data_manager.active_acquisitions:
-            # All acquisitions are complete, reset GUI state
-            self.measurement_running = False
-            self.config_panel.set_measurement_running(False)
-            self.channel_selection.setEnabled(True)
-            self.data_loading.setEnabled(True)
+    def _handle_job_error(self, error_msg: str):
+        """Handle job-level errors"""
+        print(f"Job error: {error_msg}")
+        # Reset UI state
+        self.measurement_running = False
+        self.config_panel.set_measurement_running(False)
+        self.channel_selection.setEnabled(True)
+        self.data_loading.setEnabled(True)
+
+        # Show error to user
+        QMessageBox.critical(self, "Measurement Failed", error_msg)
+
+    def _handle_job_complete(self, aggregated_data: dict):
+        """Handle job completion w/ aggregated data from all racks"""
+        print("DEBUG: Job completed, processing aggregated data")
+
+        # Process aggregated data
+        self._handle_new_data("measurement", aggregated_data)
+
+        # Reset UI state
+        self.measurement_running = False
+        self.config_panel.set_measurement_running(False)
+        self.channel_selection.setEnabled(True)
+        self.data_loading.setEnabled(True)
+
+    def _handle_completion(self, chassis_id: str):
+        """Handle rack completion"""
+        print(f"DEBUG: Rack {chassis_id} completed")
 
     def _handle_progress(self, chassis_id: str, cavity_num: int, progress: int):
         """Handle progress updates from measurement"""
@@ -326,7 +349,7 @@ class MicrophonicsGUI(Display):
         print(f"DEBUG: _handle_new_data received from '{source}'")
 
         try:
-            # Get the list of cavities and the nested cavity data
+            # Get list of cavities and nested cavity data
             cavity_list = data_dict.get('cavity_list', [])
             all_cavity_data = data_dict.get('cavities', {})
 
@@ -344,23 +367,23 @@ class MicrophonicsGUI(Display):
 
                 df_data = cavity_channel_data.get('DF')
 
-                # Check if DF data is valid for statistics
+                # Check if DF data is valid for stats
                 if df_data is not None and isinstance(df_data, np.ndarray) and df_data.size > 0:
                     try:
                         stats = self.stats_calculator.calculate_statistics(df_data)
                         panel_stats = self.stats_calculator.convert_to_panel_format(stats)
 
-                        # Update statistics display in the status panel
+                        # Update stats display in the status panel
                         self.status_panel.update_statistics(cavity_num, panel_stats)
                     except Exception as stat_err:
                         # Log error but continue processing other cavities/plots
                         print(f"ERROR: Failed to calculate/update stats for Cav {cavity_num}: {stat_err}")
-                        traceback.print_exc()  # Print traceback for stat errors
+                        traceback.print_exc()
                 else:
                     # Log if DF data is missing or invalid for stats
                     print(f"WARN: No valid 'DF' data found for statistics for cavity {cavity_num}.")
 
-            print(f"DEBUG: Calling plot_panel.update_plots with data for cavities: {cavity_list}")
+            print(f"DEBUG: Calling plot_panel.update_plots w/ data for cavities: {cavity_list}")
             self.plot_panel.update_plots(data_dict)
 
         except KeyError as ke:
