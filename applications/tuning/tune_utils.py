@@ -4,14 +4,6 @@ from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import QLabel, QPushButton
 from lcls_tools.common.frontend.display.util import WorkerSignals
 
-from utils.sc_linac.linac_utils import (
-    CavityAbortError,
-    CavityHWModeError,
-    DetuneError,
-    StepperAbortError,
-    StepperError,
-)
-
 if TYPE_CHECKING:
     pass
 
