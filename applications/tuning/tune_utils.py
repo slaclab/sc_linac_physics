@@ -5,7 +5,8 @@ from PyQt5.QtCore import QRunnable
 from PyQt5.QtWidgets import QLabel, QPushButton
 from epics.ca import withInitialContext
 from lcls_tools.common.frontend.display.util import WorkerSignals
-from lcls_tools.superconducting.sc_linac_utils import (
+
+from utils.sc_linac.linac_utils import (
     CavityAbortError,
     CavityHWModeError,
     DetuneError,

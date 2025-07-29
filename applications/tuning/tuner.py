@@ -1,6 +1,6 @@
 from typing import List
 
-from PyQt5.QtCore import QThreadPool
+from PyQt5.QtCore import QThreadPool, QObject
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QTabWidget,
@@ -38,8 +38,9 @@ class LabeledSpinbox:
         self.layout.addWidget(self.spinbox)
 
 
-class CavitySection:
+class CavitySection(QObject):
     def __init__(self, cavity: TuneCavity, parent=None):
+        super().__init__(parent)
         self.parent = parent
         self.cavity: TuneCavity = cavity
         self.tune_state: PyDMEnumComboBox = PyDMEnumComboBox(
@@ -62,7 +63,7 @@ class CavitySection:
             init_channel=cavity.stepper_tuner.max_steps_pv
         )
 
-        self.groupbox = QGroupBox(cavity.__str__().split()[-2] + " " + cavity.__str__().split()[-1])
+        self.groupbox = QGroupBox(f"Cavity {cavity.number}")
         layout = QVBoxLayout()
         self.groupbox.setLayout(layout)
         spinbox_layout = QGridLayout()
@@ -107,8 +108,9 @@ class CavitySection:
         self.parent.threadpool.start(self.cold_worker)
 
 
-class RackScreen:
+class RackScreen(QObject):
     def __init__(self, rack: Rack, parent=None):
+        super().__init__(parent)
         self.detune_plot: PyDMTimePlot = PyDMTimePlot()
         self.detune_plot.setTimeSpan(3600)
         self.detune_plot.updateMode = updateMode.AtFixedRate
