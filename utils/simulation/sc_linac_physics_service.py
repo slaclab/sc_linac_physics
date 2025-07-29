@@ -79,9 +79,28 @@ class SCLinacPhysicsService(Service):
             )
             for cm_name in cm_list:
                 is_hl = cm_name in L1BHL
+                cm_prefix = f"ACCL:{linac_name}:{cm_name}"
+                cm_group = CryomodulePVGroup(prefix=cm_prefix + "00:")
+
+                liquid_level_prefix = f"CLL:CM{cm_name}:"
+                ll_group = LiquidLevelPVGroup(prefix=liquid_level_prefix)
+
                 heater_prefix = f"CPIC:CM{cm_name}:0000:EHCV:"
-                heater_group = HeaterPVGroup(prefix=heater_prefix)
+                heater_group = HeaterPVGroup(
+                    prefix=heater_prefix, cm_group=cm_group, ll_group=ll_group
+                )
+
                 self.add_pvs(heater_group)
+                self.add_pvs(ll_group)
+
+                jt_prefix = f"CLIC:CM{cm_name}:3001:PVJT:"
+                jt_group = JTPVGroup(
+                    prefix=jt_prefix,
+                    ll_group=ll_group,
+                    heater_group=heater_group,
+                )
+
+                self.add_pvs(jt_group)
 
                 self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(
                     enum_strings=("Close", "Open"), value=1
@@ -91,8 +110,6 @@ class SCLinacPhysicsService(Service):
                 )
 
                 cryo_prefix = f"CLL:CM{cm_name}:2601:US:"
-                cm_prefix = f"ACCL:{linac_name}:{cm_name}"
-                rfs_prefix = cm_prefix + "00:"
 
                 magnet_infix = f"{linac_name}:{cm_name}85:"
 
@@ -104,16 +121,19 @@ class SCLinacPhysicsService(Service):
                     AutoSetupCMPVGroup(prefix=cm_prefix + "00:", cm_name=cm_name)
                 )
 
+                rfs_prefix = cm_prefix + "00:"
+
                 for cav_num in range(1, 9):
                     cav_prefix = cm_prefix + f"{cav_num}0:"
 
-                    jt_prefix = f"CLIC:CM{cm_name}:3001:PVJT:"
-                    liquid_level_prefix = f"CLL:CM{cm_name}:"
-
                     HOM_prefix = f"CTE:CM{cm_name}:1{cav_num}"
 
-                    cavityGroup = CavityPVGroup(prefix=cav_prefix, isHL=is_hl)
+                    cavityGroup = CavityPVGroup(
+                        prefix=cav_prefix, isHL=is_hl, heater_group=heater_group
+                    )
                     self.add_pvs(cavityGroup)
+                    cm_group.add_cavity(cavityGroup)
+
                     self.add_pvs(
                         SSAPVGroup(prefix=cav_prefix + "SSA:", cavityGroup=cavityGroup)
                     )
@@ -130,16 +150,6 @@ class SCLinacPhysicsService(Service):
                         )
                     )
                     self.add_pvs(CavFaultPVGroup(prefix=cav_prefix))
-
-                    ll_group = LiquidLevelPVGroup(prefix=liquid_level_prefix)
-                    self.add_pvs(
-                        JTPVGroup(
-                            prefix=jt_prefix,
-                            ll_group=ll_group,
-                            heater_group=heater_group,
-                        )
-                    )
-                    self.add_pvs(ll_group)
 
                     # Rack PVs are stupidly inconsistent
                     if cav_num in rackA:
@@ -168,7 +178,7 @@ class SCLinacPhysicsService(Service):
                 self.add_pvs(CryoPVGroup(prefix=cryo_prefix))
                 self.add_pvs(BeamlineVacuumPVGroup(prefix=cm_prefix + "00:"))
                 self.add_pvs(CouplerVacuumPVGroup(prefix=cm_prefix + "10:"))
-                self.add_pvs(CryomodulePVGroup(prefix=cm_prefix + "00:"))
+                self.add_pvs(cm_group)
 
 
 def main():
