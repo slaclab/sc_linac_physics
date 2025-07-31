@@ -1,3 +1,5 @@
+from asyncio import sleep
+
 from caproto.server import PVGroup, pvproperty, PvpropertyString, PvpropertyBoolEnum
 
 from utils.simulation.cryomodule_service import CryomodulePVGroup
@@ -55,9 +57,17 @@ class HeaterPVGroup(PVGroup):
             await self.mode_string.write("SEQUENCER")
 
     async def manual_mode_start(self):
-        await self.ll_group.downstream.write(
-            self.ll_group.downstream.value + self.ll_delta
-        )
+        while True:
+            if (
+                self.ll_group.downstream.value <= self.ll_group.min_ll
+                or self.ll_group.downstream.value >= self.ll_group.max_ll
+                or self.mode_string.value == "SEQUENCER"
+            ):
+                break
+            await self.ll_group.downstream.write(
+                self.ll_group.downstream.value + self.ll_delta
+            )
+            await sleep(1)
 
 
 class JTPVGroup(PVGroup):
@@ -74,11 +84,62 @@ class JTPVGroup(PVGroup):
     man_pos = pvproperty(name="MANPOS_RQST", value=40.0)
     mode_string: PvpropertyString = pvproperty(name="MODE_STRING", value="AUTO")
 
+    async def feedback_start(self):
+        delta = 0.2
+        target = self.ds_setpoint.value
+        actual = self.ll_group.downstream.value
+        while abs(target - actual) > delta:
+            direction = -0.2 if target - actual > 0 else 0.2
+            await self.ll_group.downstream.write(actual + direction)
+            await sleep(1)
+        await self.ll_group.downstream.write(target)
+
+    async def manual_mode_start(self):
+        current_jt_pos = self.readback.value
+        stable_jt_pos = 40
+
+        while True:
+            if (
+                self.ll_group.downstream.value <= self.ll_group.min_ll
+                or self.ll_group.downstream.value >= self.ll_group.max_ll
+                or self.mode_string.value == "AUTO"
+            ):
+                break
+
+        def get_jt_direction():
+            return -0.2 if current_jt_pos < stable_jt_pos else 0.2
+
+        def get_net_step():
+            return self.heater_group.ll_delta + get_jt_direction()
+
+        direction = 0.0  # Default fallback
+
+        if (
+            self.heater_group.total_heat != self.heater_group.stable_heat
+            and current_jt_pos == stable_jt_pos
+        ):
+            direction = self.heater_group.ll_delta
+
+        elif (
+            self.heater_group.total_heat == self.heater_group.stable_heat
+            and current_jt_pos != stable_jt_pos
+        ):
+            direction = get_jt_direction()
+
+        elif (
+            self.heater_group.total_heat != self.heater_group.stable_heat
+            and current_jt_pos != stable_jt_pos
+        ):
+            direction = get_net_step()
+
+        await self.ll_group.downstream.write(self.ll_group.downstream.value + direction)
+        await sleep(1)
+
     @man_pos.putter
     async def man_pos(self, instance, value):
         if self.auto != 1:
             self.readback.value = value
-            # await self.trigger_jt_manual_mode()
+            await self.manual_mode_start()
 
     @auto.putter
     async def auto(self, instance, value):
@@ -96,10 +157,10 @@ class JTPVGroup(PVGroup):
 
     @ds_setpoint.putter
     async def ds_setpoint(self, instance, value):
-        if self.auto != 1:
+        if self.mode_string.value == "AUTO":
             await self.ll_group.downstream.write(value)
-            # await self.manual_mode_start()
-        # await self.auto_feedback_start()
+            await self.manual_mode_start()
+        await self.feedback_start()
 
 
 class LiquidLevelPVGroup(PVGroup):

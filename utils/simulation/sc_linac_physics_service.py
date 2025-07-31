@@ -132,7 +132,7 @@ class SCLinacPhysicsService(Service):
                         prefix=cav_prefix, isHL=is_hl, heater_group=heater_group
                     )
                     self.add_pvs(cavityGroup)
-                    cm_group.add_cavity(cavityGroup)
+                    cm_group.cavities[cav_num] = cavityGroup
 
                     self.add_pvs(
                         SSAPVGroup(prefix=cav_prefix + "SSA:", cavityGroup=cavityGroup)

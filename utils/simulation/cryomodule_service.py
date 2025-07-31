@@ -1,6 +1,6 @@
 from caproto import ChannelType
 from caproto.server import PVGroup, pvproperty
-from typing import List
+from typing import Dict
 
 from utils.simulation.cavity_service import CavityPVGroup
 from utils.simulation.severity_prop import SeverityProp
@@ -16,14 +16,15 @@ class CryomodulePVGroup(PVGroup):
 
     def __init__(self, prefix):
         super().__init__(prefix=prefix)
-        self.cavities: List[CavityPVGroup] = []
-
-    def add_cavity(self, cavity: CavityPVGroup):
-        self.cavities.append(cavity)
+        self.cavities: Dict[int, CavityPVGroup] = {}
 
     @property
     def total_power(self) -> float:
-        return sum(cav.power.value for cav in self.cavities)
+        total_power = 0.0
+        for cav_num, cavity in self.cavities.items():
+            power = cavity.power.value
+            total_power += power
+        return total_power
 
 
 class HOMPVGroup(PVGroup):
