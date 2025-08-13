@@ -31,12 +31,16 @@ class TuneCavity(Cavity):
         self._use_rf_pv_obj: Optional[PV] = None
 
     @property
+    def use_rf_pv_obj(self):
+        # TODO update when PV is live
+        if not self._use_rf_pv_obj:
+            self._use_rf_pv_obj = PV(self.use_rf_pv)
+        return self._use_rf_pv_obj
+
+    @property
     def use_rf(self) -> bool:
         # TODO update when PV is live
-        # if not self._use_rf_pv_obj:
-        #     self._use_rf_pv_obj = PV(self.use_rf_pv)
-        # return self._use_rf_pv_obj.get()
-        return True
+        return self.use_rf_pv_obj.get()
 
     @property
     def hw_mode_str(self):
