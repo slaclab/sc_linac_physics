@@ -1,6 +1,7 @@
 import argparse
 
 from applications.tuning.tune_cavity import TuneCavity
+from applications.tuning.tune_rack import TuneRack
 from applications.tuning.tune_stepper import TuneStepper
 from utils.sc_linac.linac import Machine
 from utils.sc_linac.linac_utils import (
@@ -13,7 +14,9 @@ from utils.sc_linac.linac_utils import (
     CavityHWModeError,
 )
 
-TUNE_MACHINE = Machine(cavity_class=TuneCavity, stepper_class=TuneStepper)
+TUNE_MACHINE = Machine(
+    cavity_class=TuneCavity, stepper_class=TuneStepper, rack_class=TuneRack
+)
 
 
 def detune_cavity(cavity: TuneCavity, args: argparse.Namespace):
