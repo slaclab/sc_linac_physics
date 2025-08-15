@@ -307,3 +307,6 @@ class CavityFaultError(Exception):
 
 class CavityHWModeError(Exception):
     pass
+
+
+PARK_DETUNE = 10000
