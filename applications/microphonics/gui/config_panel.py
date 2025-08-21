@@ -158,7 +158,9 @@ class ConfigPanel(QWidget):
             if isinstance(child, QTabWidget):
                 layout.addWidget(child)
                 break
-
+        self.select_all_btn = QPushButton("Select All (1-8)")
+        self.select_all_btn.clicked.connect(self.select_all_cavities)
+        layout.addWidget(self.select_all_btn)
         group.setLayout(layout)
         return group
 
@@ -199,6 +201,37 @@ class ConfigPanel(QWidget):
                 self.configChanged.emit(config)
 
 
+        finally:
+            self.is_updating = False
+
+    def select_all_cavities(self):
+        """Select all cavities across both racks"""
+        if self.is_updating:
+            return
+
+        self.is_updating = True
+        try:
+            # Check if all cavities are picked
+            all_selected = (
+                    all(cb.isChecked() for cb in self.cavity_checks_a.values()) and
+                    all(cb.isChecked() for cb in self.cavity_checks_b.values())
+            )
+
+            # Toggle to opposite state
+            new_state = not all_selected
+
+            # Apply new state to all checkboxes
+            for cb in self.cavity_checks_a.values():
+                cb.setChecked(new_state)
+            for cb in self.cavity_checks_b.values():
+                cb.setChecked(new_state)
+
+            # Update main button text
+            self.select_all_btn.setText("Deselect All (1-8)" if new_state else "Select All (1-8)")
+
+            # Emit configuration
+            config = self.get_config()
+            self.configChanged.emit(config)
         finally:
             self.is_updating = False
 
