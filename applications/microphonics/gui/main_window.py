@@ -236,23 +236,23 @@ class MicrophonicsGUI(Display):
     def _start_measurement_async(self):
         """Async portion of start measurement"""
         try:
-            self.plot_panel.clear_plots()  # Clear old plots before starting new measurement
             config = self.config_panel.get_config()
+            # A check to see if any cavities are selected
+            selected_cavities = [num for num, selected in config['cavities'].items() if selected]
+            if not selected_cavities:
+                self.measurementError.emit("Please select at least one cavity before starting.")
+                return
+            self.plot_panel.clear_plots()  # Clear old plots before starting new measurement
             print("Current config:", config)
 
             # Check for cross CM cavity selection
-            selected_cavities = [num for num, selected in config['cavities'].items() if selected]
             low_cm = any(c <= 4 for c in selected_cavities)
             high_cm = any(c > 4 for c in selected_cavities)
             if low_cm and high_cm:
                 print("Note: Cavities span both racks - will use parallel acquisition")
 
-            if not any(config['cavities'].values()):
-                raise ValueError("No cavities selected - please select at least one cavity")
-
             chassis_config = self._split_chassis_config(config)
             if not chassis_config:
-                selected_cavities = [num for num, selected in config['cavities'].items() if selected]
                 raise ValueError(f"No valid chassis configuration created. Selected cavities: {selected_cavities}")
 
             print("Chassis config:", chassis_config)
