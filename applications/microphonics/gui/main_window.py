@@ -38,7 +38,7 @@ class MicrophonicsGUI(Display):
         self.measurementError.connect(self._handle_measurement_error)
 
         # Data Manager
-        self.data_manager = AsyncDataManager()
+        self.data_manager = AsyncDataManager(self)
 
         # Connect job level signals
         self.data_manager.jobProgress.connect(self._handle_job_progress)
