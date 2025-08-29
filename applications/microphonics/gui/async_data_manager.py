@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from PyQt5.QtCore import QObject, QThread
+from PyQt5.QtCore import QObject, QThread, Qt
 from PyQt5.QtCore import pyqtSignal
 
 from applications.microphonics.gui.data_acquisition import DataAcquisitionManager
@@ -43,8 +43,8 @@ class AsyncDataManager(QObject):
     jobError = pyqtSignal(str)  # job level error message
     jobComplete = pyqtSignal(dict)  # aggregated data from all racks
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
         # Track workers and their threads
         self.active_workers = {}
         self.worker_progress = {}
@@ -109,26 +109,25 @@ class AsyncDataManager(QObject):
         print(f"DEBUG: Starting worker for {chassis_id}")
 
         # Create thread and worker
-        thread = QThread()
+        thread = QThread(self)
         worker = DataAcquisitionManager()
 
         # Connect worker signals to our handlers
-        worker.acquisitionProgress.connect(
-            lambda cid, cav, prog: self._handle_worker_progress(cid, cav, prog))
-        worker.acquisitionError.connect(
-            lambda cid, err: self._handle_worker_error(cid, err))
-        worker.acquisitionComplete.connect(
-            lambda cid: self._handle_worker_complete(cid))
-        worker.dataReceived.connect(
-            lambda cid, data: self._handle_worker_data(cid, data))
+        worker.acquisitionProgress.connect(self._handle_worker_progress, Qt.QueuedConnection)
+        worker.acquisitionError.connect(self._handle_worker_error, Qt.QueuedConnection)
+        worker.acquisitionComplete.connect(self._handle_worker_complete, Qt.QueuedConnection)
+        worker.dataReceived.connect(self._handle_worker_data, Qt.QueuedConnection)
 
         # Move worker to thread
         worker.moveToThread(thread)
         # Store worker and thread
         self.active_workers[chassis_id] = (thread, worker)
 
-        # Schedule acquisition start
+        # Automatic cleanup
         thread.started.connect(lambda: worker.start_acquisition(chassis_id, config))
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(lambda: self.active_workers.pop(chassis_id, None))
+        # Schedule acquisition start
         thread.start()
 
     def _handle_worker_progress(self, chassis_id: str, cavity_num: int, progress: int):
@@ -247,16 +246,6 @@ class AsyncDataManager(QObject):
         for chassis_id in list(self.active_workers.keys()):
             thread, worker = self.active_workers[chassis_id]
 
-            # Disconnect signals
-            try:
-                worker.acquisitionProgress.disconnect()
-                worker.acquisitionError.disconnect()
-                worker.acquisitionComplete.disconnect()
-                worker.dataReceived.disconnect()
-            except:
-                pass
-
-            # Clean up thread
             thread.quit()
             if not thread.wait(2000):
                 thread.terminate()
