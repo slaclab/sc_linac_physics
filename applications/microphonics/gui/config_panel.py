@@ -3,7 +3,7 @@ from typing import Optional
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
-    QLabel, QComboBox, QCheckBox, QSpinBox,
+    QLabel, QComboBox, QSpinBox,
     QPushButton, QGridLayout, QScrollArea, QMessageBox, QTabWidget
 )
 
@@ -42,7 +42,7 @@ class ConfigPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_linac = None
-        self.is_updating = False
+        self.is_updating = True
 
         self.cavity_checks_a = {}
         self.cavity_checks_b = {}
@@ -63,6 +63,9 @@ class ConfigPanel(QWidget):
         self.connect_signals()
 
         self._update_daq_parameters()
+
+        self.is_updating = False
+        self._emit_config_changed()
 
     def setup_ui(self):
         """Initialize user interface"""
@@ -188,18 +191,7 @@ class ConfigPanel(QWidget):
             # Update button text
             button.setText("Deselect All" if new_state else "Select All")
 
-            # Validate w/ is_bulk_action=True to skip the at least one cavity check
-            if error_msg := self.validate_cavity_selection(is_bulk_action=True):
-                # Reset checkboxes if validation fails
-                for cb in checks.values():
-                    cb.setChecked(current_state)
-                button.setText("Deselect All" if current_state else "Select All")
-                QMessageBox.warning(self, "Invalid Selection", error_msg)
-            else:
-                # For config emission after bulk action, still use standard validation
-                config = self.get_config()
-                self.configChanged.emit(config)
-
+            self._emit_config_changed()
 
         finally:
             self.is_updating = False
@@ -342,7 +334,7 @@ class ConfigPanel(QWidget):
 
             self.selected_linac = linac
             self._update_cryomodule_buttons()
-            self._emit_config_if_valid()
+            self._emit_config_changed()
         finally:
             self.is_updating = False
 
@@ -381,7 +373,7 @@ class ConfigPanel(QWidget):
             button_items,
             self.cryo_layout,
             checkable=True,
-            connect_to=lambda _: self._emit_config_if_valid(),
+            connect_to=lambda _: self._emit_config_changed(),
             custom_properties=custom_properties,
             grid_layout=True,
             max_cols=6
@@ -400,13 +392,9 @@ class ConfigPanel(QWidget):
 
         return None
 
-    def _emit_config_if_valid(self):
-        """Emit configuration only if valid """
+    def _emit_config_changed(self):
+        """Emit configuration whenever it changes """
         if not self.is_updating:
-            # For normal config changes, use standard validation
-            if error_msg := self.validate_cavity_selection(is_bulk_action=False):
-                QMessageBox.warning(self, "Invalid Selection", error_msg)
-                return
             config = self.get_config()
             self.configChanged.emit(config)
 
@@ -427,7 +415,7 @@ class ConfigPanel(QWidget):
         if hasattr(self, 'buffer_spin'):
             self.buffer_spin.valueChanged.connect(self._update_daq_parameters)
             self.buffer_spin.valueChanged.connect(
-                lambda: self._emit_config_if_valid() if not self.is_updating else None)
+                lambda: self._emit_config_changed() if not self.is_updating else None)
         else:
             print("WARNING (ConfigPanel): self.buffer_spin not found during signal connection.")
 
@@ -465,7 +453,7 @@ class ConfigPanel(QWidget):
 
         # Emit general config change if not updating
         if not self.is_updating:
-            self._emit_config_if_valid()
+            self._emit_config_changed()
 
     def _on_start_clicked(self):
         """Handle start button click w/ validation"""
@@ -490,23 +478,8 @@ class ConfigPanel(QWidget):
             all_b_selected = all(cb.isChecked() for cb in self.cavity_checks_b.values())
             self.select_all_b.setText("Deselect All" if all_b_selected else "Select All")
 
-            # For individual cavity selection, use normal validation
-            error_msg = self.validate_cavity_selection(is_bulk_action=False)
-            if error_msg:
-                msg_box = QMessageBox(self)
-                msg_box.setIcon(QMessageBox.Warning)
-                msg_box.setText(error_msg)
-                msg_box.setWindowTitle("Invalid Selection")
-                msg_box.setStandardButtons(QMessageBox.Ok)
-                msg_box.setModal(False)
-                msg_box.show()
+            self._emit_config_changed()
 
-                # Reset the checkbox that was just changed
-                sender = self.sender()
-                if isinstance(sender, QCheckBox):
-                    sender.setChecked(False)
-            else:
-                self._emit_config_if_valid()
         finally:
             self.is_updating = False
 
