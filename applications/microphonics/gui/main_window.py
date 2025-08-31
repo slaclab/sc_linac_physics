@@ -38,7 +38,7 @@ class MicrophonicsGUI(Display):
         self.measurementError.connect(self._handle_measurement_error)
 
         # Data Manager
-        self.data_manager = AsyncDataManager(self)
+        self.data_manager = AsyncDataManager()
 
         # Connect job level signals
         self.data_manager.jobProgress.connect(self._handle_job_progress)
@@ -93,10 +93,6 @@ class MicrophonicsGUI(Display):
         self.data_loader.loadError.connect(self._handle_load_error)
         self.data_loader.loadProgress.connect(self._handle_load_progress)
 
-    def ui_filename(self):
-        """Return None because this display is created only in Python."""
-        return None
-
     def init_panels(self):
         """Initialize all panels"""
         # Left panel components
@@ -106,7 +102,7 @@ class MicrophonicsGUI(Display):
         self.data_loading = DataLoadingGroup()
 
         # Right panel components
-        self.plot_panel = PlotPanel(self, config_panel_ref=self.config_panel)
+        self.plot_panel = PlotPanel(config_panel_ref=self.config_panel)
 
     def setup_left_panel(self, layout: QVBoxLayout):
         """Setup left side of the window"""
