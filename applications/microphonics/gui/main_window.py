@@ -1,44 +1,6 @@
-import importlib
 import os
-import sys
 
-print("+" + "=" * 78 + "+")
-print("|" + " " * 24 + "ENVIRONMENT DIAGNOSTIC REPORT" + " " * 25 + "|")
-print("+" + "=" * 78 + "+")
-
-print(f"\n[INFO] Python Version: {sys.version}")
-print(f"[INFO] Initial QT_API Environment Variable: {os.environ.get('QT_API', 'Not Set')}")
-
-print("\n[CHECK] Checking for installed Qt bindings...")
-installed_bindings = []
-qt_bindings_to_check = ['PyQt5', 'PySide2', 'PyQt6', 'PySide6']
-for binding in qt_bindings_to_check:
-    try:
-        importlib.import_module(binding)
-        print(f"  - [FOUND]     {binding}")
-        installed_bindings.append(binding)
-    except ImportError:
-        print(f"  - [NOT FOUND] {binding}")
-
-if len(installed_bindings) > 1:
-    print("\n[WARNING] Multiple Qt bindings are installed.")
-else:
-    print("\n[INFO] Only one Qt binding was found.")
-
-# What pydm chooses by default before forcing it
-try:
-    from pydm.utilities import qt_api
-
-    print(f"\n[PYDM] By default, pydm is configured to use: '{qt_api.QT_API}'")
-    print(f"[PYDM] The actual binding pydm has loaded is: '{qt_api.binding_name}'")
-    if qt_api.binding_name != 'PyQt5':
-        print("[CRITICAL] pydm has loaded a different binding than what my code expects (PyQt5)!")
-except Exception as e:
-    print(f"\n[ERROR] Could not determine pydm's default choice. Error: {e}")
-
-print("\n" + "=" * 80)
-print("DIAGNOSTIC COMPLETE. Continuing with application startup...")
-print("=" * 80 + "\n")
+os.environ['QT_API'] = 'pyqt5'
 import traceback
 from pathlib import Path
 from typing import Dict
