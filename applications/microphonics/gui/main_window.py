@@ -1,6 +1,3 @@
-import os
-
-os.environ['QT_API'] = 'pyqt5'
 import traceback
 from pathlib import Path
 from typing import Dict
