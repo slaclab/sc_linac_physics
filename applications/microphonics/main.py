@@ -1,3 +1,6 @@
+import os
+
+os.environ['QT_API'] = 'pyqt5'
 import pyqtgraph as pg
 from pydm import PyDMApplication
 
