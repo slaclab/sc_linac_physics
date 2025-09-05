@@ -16,7 +16,6 @@ def calculate_fft(data: np.ndarray, effective_sample_rate: float):
     Returns:
         tuple: (frequencies, amplitudes) arrays in linear scale
     """
-    # Handle empty or invalid data
     if data is None or len(data) == 0:
         print("Warning: calculate_fft received empty data.")
         return np.array([]), np.array([])

@@ -31,42 +31,27 @@ def create_checkboxes(
      Returns:
         Dictionary of created QCheckbox widgets indexed by their identifiers
     """
-    # initialize empty dictionary for checkboxes
     checkboxes = {}
     # If grid layout is True and layout is not a QGridLayout
     if grid_layout and not isinstance(layout, QGridLayout):
         raise TypeError("Grid layout required for grid_layout=True")
 
     row = col = 0
-    # For each item_id and label in items
     for item_id, label in items.items():
-        # Create a new QCheckbox with label text
         checkbox = QCheckBox(label)
-        # Set checkbox checked state to checked parameter
         checkbox.setChecked(checked)
-        # Set checkbox enabled state to enabled parameter
         checkbox.setEnabled(enabled)
-        # If callback is provided
         if callback:
-            # Connect checkbox's stateChanged signal to callback
             checkbox.stateChanged.connect(callback)
-        # Store checkbox in dictionary with item_id as key
         checkboxes[item_id] = checkbox
-        # If grid_layout is True
         if grid_layout:
-            # Add checkbox to layout at position
             layout.addWidget(checkbox, row, col)
-            # Increment column
             col += 1
             if col >= max_cols:
-                # Reset column to 0
                 col = 0
-                # Increment row
                 row += 1
         else:
-            # Add checkbox to layout
             layout.addWidget(checkbox)
-    # Return the dictionary of checkboxes
     return checkboxes
 
 

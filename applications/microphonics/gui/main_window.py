@@ -125,7 +125,7 @@ class MicrophonicsGUI(Display):
         self.config_panel.decimationSettingChanged.connect(self.plot_panel.refresh_plots_if_decimation_changed)
 
         # Data loading signals
-        self.data_loading.fileSelected.connect(self.load_data)
+        self.data_loading.file_selected.connect(self.load_data)
 
     def on_config_changed(self, config: Dict):
         print("Configuration changed:", config)

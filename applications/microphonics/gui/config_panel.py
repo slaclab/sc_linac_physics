@@ -71,7 +71,7 @@ class ConfigPanel(QWidget):
         """Initialize user interface"""
         layout = QVBoxLayout(self)
 
-        # This creates a scrollable area
+        # Scrollable area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content_widget = QWidget()
@@ -175,7 +175,7 @@ class ConfigPanel(QWidget):
 
         self.is_updating = True
         try:
-            # This gets the relevant checkboxes and button
+            # Gets relevant checkboxes and button
             checks = self.cavity_checks_a if rack == 'A' else self.cavity_checks_b
             button = self.select_all_a if rack == 'A' else self.select_all_b
 
@@ -328,7 +328,7 @@ class ConfigPanel(QWidget):
 
         self.is_updating = True
         try:
-            # This updates button states
+            # Updates button states
             for l, btn in self.linac_buttons.items():
                 btn.setChecked(l == linac)
 
@@ -340,7 +340,7 @@ class ConfigPanel(QWidget):
 
     def _update_cryomodule_buttons(self):
         """Update cryomodule buttons based on selected linac"""
-        # This clears existing buttons
+        # Clears existing buttons
         for btn in self.cryo_buttons.values():
             self.cryo_layout.removeWidget(btn)
             btn.deleteLater()
@@ -404,7 +404,7 @@ class ConfigPanel(QWidget):
             for cb in checks.values():
                 cb.stateChanged.connect(self._on_cavity_selection_changed)
 
-        # This connects start/stop buttons
+        # Connects start/stop buttons
         self.start_button.clicked.connect(self._on_start_clicked)
         self.stop_button.clicked.connect(self.measurementStopped.emit)
 
@@ -456,7 +456,7 @@ class ConfigPanel(QWidget):
             self._emit_config_changed()
 
     def _on_start_clicked(self):
-        """Handle start button click w/ validation"""
+        """Start button click w/ validation"""
         error_msg = self.validate_cavity_selection(is_bulk_action=False)
         if error_msg:
             QMessageBox.warning(self, "Invalid Selection", error_msg)
