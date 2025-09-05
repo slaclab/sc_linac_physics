@@ -24,7 +24,10 @@ class QuenchCryomodule(Cryomodule):
         self.logger = logger.custom_logger(f"{self} quench resetter")
         self.logger.setLevel(logging.DEBUG)
 
-        self.logfile = f"logfiles/cm{self.name}/cm{self.name}_quench_reset.log"
+        this_dir = os.path.dirname(os.path.abspath(__file__))
+        self.logfile = os.path.join(
+            this_dir, f"logfiles/cm{self.name}/cm{self.name}_quench_reset.log"
+        )
         os.makedirs(os.path.dirname(self.logfile), exist_ok=True)
 
         self.file_handler = logging.FileHandler(self.logfile, mode="a")
