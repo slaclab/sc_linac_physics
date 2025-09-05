@@ -46,8 +46,6 @@ def test_get_data_with_pot(qtbot: QtBot, window):
     window.start_selector.setDateTime(q_dt)
     window.end_selector.setDateTime(q_dt)
 
-    # window.hide_pot_checkbox.isChecked = MagicMock(return_value=False)
-
     window.cavity = next(non_hl_iterator)
     faults = randint(0, 100)
     invalids = randint(0, 100)
@@ -55,7 +53,6 @@ def test_get_data_with_pot(qtbot: QtBot, window):
     window.cavity.get_fault_counts = MagicMock(return_value=result)
     window.get_data()
     window.cavity.get_fault_counts.assert_called()
-    # window.hide_pot_checkbox.isChecked.assert_called()
     assert window.y_data == ["POT"]
     assert window.num_faults == [faults]
     assert window.num_invalids == [invalids]

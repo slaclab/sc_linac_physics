@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import pyqtgraph as pg
 from PyQt5.QtCore import QDateTime
@@ -25,7 +25,7 @@ from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 class FaultCountDisplay(Display):
-    fault_tlc_list = sorted(
+    fault_tlc_list: List[str] = sorted(
         set(map(lambda d: d["Three Letter Code"], utils.parse_csv()))
     )
 
