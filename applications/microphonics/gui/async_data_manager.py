@@ -72,7 +72,7 @@ class AsyncDataManager(QObject):
         if self.job_running:
             self.jobError.emit("A measurement job is already running")
             return
-        errors = self._validate_all_configs(chassis_config)
+        errors = self._validate_all_chassis_config(chassis_config)
         if errors:
             for chassis_id, error in errors:
                 self.acquisitionError.emit(chassis_id, error)
