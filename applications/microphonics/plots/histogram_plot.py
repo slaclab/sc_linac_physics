@@ -127,7 +127,6 @@ class HistogramPlot(BasePlot):
         x_values.append(bins[-1])
         y_values.append(1)
 
-        # Convert to numpy arrays
         x_values = np.array(x_values)
         y_values = np.array(y_values)
 

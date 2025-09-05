@@ -52,30 +52,17 @@ class AsyncDataManager(QObject):
         self.job_chassis_ids = set()
         self.job_running = False
 
-    def _validate_chassis_config(self, chassis_id: str, config: dict) -> Optional[str]:
-        """Validate individual chassis configuration"""
-        if not config.get('cavities'):
-            return "No cavities specified for chassis"
-
-        if not config.get('pv_base'):
-            return "Missing PV base address"
-
-        return None
-
-    def _validate_all_configs(self, chassis_config: Dict) -> List[Tuple[str, str]]:
-        """Centralized validation for all chassis configs"""
+    def _validate_all_chassis_config(self, chassis_config: Dict) -> List[Tuple[str, str]]:
+        """Validate for all chassis configuration"""
         if not chassis_config:
             return [("", "No chassis configurations provided")]
-
         errors = []
         for chassis_id, config in chassis_config.items():
-            # This validates chassis configurations
-            if error := self._validate_chassis_config(chassis_id, config):
-                errors.append((chassis_id, error))
-                continue
-
-            # This validates measurement configurations
-            if error := config['config'].validate():
+            if not config.get('cavities'):
+                errors.append((chassis_id, "No cavities specified for chassis"))
+            if not config.get('pv_base'):
+                errors.append((chassis_id, "Missing PV base address"))
+            if 'config' in config and (error := config['config'].validate()):
                 errors.append((chassis_id, error))
 
         return errors
@@ -93,12 +80,8 @@ class AsyncDataManager(QObject):
         # Initialize job tracking
         self.job_running = True
         self.job_chassis_ids = set(chassis_config.keys())
-        self.worker_progress.clear()
+        self.worker_progress = {chassis_id: 0 for chassis_id in self.job_chassis_ids}
         self.worker_data.clear()
-
-        # Initialize progress for all chassis
-        for chassis_id in self.job_chassis_ids:
-            self.worker_progress[chassis_id] = 0
 
         # Start parallel acquisitions
         for chassis_id, config in chassis_config.items():
@@ -106,7 +89,6 @@ class AsyncDataManager(QObject):
 
     def _start_worker_for_chassis(self, chassis_id: str, config: dict):
         """Create and start a worker thread for one chassis"""
-        print(f"DEBUG: Starting worker for {chassis_id}")
 
         # Create thread and worker
         thread = QThread(self)
@@ -158,19 +140,15 @@ class AsyncDataManager(QObject):
 
     def _handle_worker_data(self, chassis_id: str, data: dict):
         """Store data from individual worker"""
-        print(f"DEBUG: Received data from {chassis_id}")
         self.worker_data[chassis_id] = data
 
     def _handle_worker_complete(self, chassis_id: str):
         """Handle completion from individual worker"""
-        print(f"DEBUG: Worker {chassis_id} completed")
-
         # Forward individual completion
         self.acquisitionComplete.emit(chassis_id)
 
         # Check if all workers are done
         if set(self.worker_data.keys()) == self.job_chassis_ids:
-            print("DEBUG: All workers finished, aggregating data")
             self._complete_job()
 
     def _complete_job(self):
@@ -217,7 +195,6 @@ class AsyncDataManager(QObject):
 
     def _stop_all_workers(self):
         """Stop all active workers"""
-        print("DEBUG: Stopping all workers")
 
         for chassis_id in list(self.active_workers.keys()):
             self._stop_worker(chassis_id)

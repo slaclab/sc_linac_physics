@@ -10,9 +10,7 @@ from PyQt5.QtWidgets import (
 class ChannelSelectionGroup(QGroupBox):
     """
     UI component that shows what data channels will be measured.
-
-    Component splits channels into two types:
-    - Primary channels (DF): Always on and can't be turned off
+    - Primary channel (DF): Always on and can't be turned off
     """
     FIXED_CHANNELS = {
         'DF': {'label': "DF (Detune Frequency)", 'default_state': True, 'enabled': False}
@@ -48,11 +46,7 @@ class ChannelSelectionGroup(QGroupBox):
     def get_selected_channels(self):
         """This will get a list of selected channel names by reading current state
         of managed QCheckBox widgets."""
-        channels = []
-        for name, checkbox_widget in self.channel_widgets.items():
-            if checkbox_widget.isChecked():
-                channels.append(name)
-        return channels
+        return [name for name, checkbox in self.channel_widgets.items() if checkbox.isChecked()]
 
 
 class DataLoadingGroup(QGroupBox):
@@ -61,7 +55,7 @@ class DataLoadingGroup(QGroupBox):
     """
     PREFERRED_DEFAULT_DATA_PATH = Path("/u1/lcls/physics/rf_lcls2/microphonics")
     # Signal emitted when the load button is clicked and a file is selected
-    fileSelected = pyqtSignal(Path)
+    file_selected = pyqtSignal(Path)
 
     def __init__(self, parent=None):
         super().__init__("Data Loading", parent)
@@ -71,39 +65,47 @@ class DataLoadingGroup(QGroupBox):
         """Create the UI components"""
         layout = QVBoxLayout()
 
-        # This creates load button
+        # Load button
         self.load_button = QPushButton("Load Previous Data")
-        self.load_button.clicked.connect(self._handle_button_click)
+        self.load_button.clicked.connect(self._show_file_dialog)
         layout.addWidget(self.load_button)
 
-        # This creates info label
-        self.file_info = QLabel("No file loaded")
-        layout.addWidget(self.file_info)
+        # Info label
+        self.file_info_label = QLabel("No file loaded")
+        layout.addWidget(self.file_info_label)
 
         self.setLayout(layout)
 
-    def _handle_button_click(self):
-        """Handle the load button being clicked"""
-        preferred_path = self.PREFERRED_DEFAULT_DATA_PATH
-        home_path = Path.home()
+    def _get_start_directory(self) -> str:
+        """Figures the best starting directory for the file dialog."""
+        if self.PREFERRED_DEFAULT_DATA_PATH.is_dir():
+            return str(self.PREFERRED_DEFAULT_DATA_PATH)
 
-        if preferred_path.is_dir():
-            start_directory_str = str(preferred_path)
-        elif home_path.is_dir():
-            start_directory_str = str(home_path)
-        else:
-            start_directory_str = str(Path("."))
-        file_path, _ = QFileDialog.getOpenFileName(
+        home_path = Path.home()
+        if home_path.is_dir():
+            return str(home_path)
+
+        # Last resort, use current working directory.
+        return "."
+
+    def _show_file_dialog(self):
+        """Opens file dialog to let user select data file."""
+        start_directory = self._get_start_directory()
+
+        file_filters = "All Files (*);;Text Files (*.txt);;Data Files (*.dat)"
+
+        file_path_str, _ = QFileDialog.getOpenFileName(
             self,
             "Load Previous Data",
-            start_directory_str,
-            "All Files (*);;Text Files (*.txt);;Data Files (*.dat)"
+            start_directory,
+            file_filters
         )
-        if file_path:
-            path = Path(file_path)
-            self.file_info.setText(f"Selected: {path.name}")
-            self.fileSelected.emit(path)
+
+        if file_path_str:
+            file_path = Path(file_path_str)
+            self.file_info_label.setText(f"Selected: {file_path.name}")
+            self.file_selected.emit(file_path)
 
     def update_file_info(self, status: str):
         """Update the file info label with a status message"""
-        self.file_info.setText(status)
+        self.file_info_label.setText(status)

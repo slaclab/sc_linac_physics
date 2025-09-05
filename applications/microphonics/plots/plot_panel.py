@@ -62,7 +62,7 @@ class PlotPanel(QWidget):
         self.visibility_layout.setContentsMargins(5, 5, 5, 5)
         self.visibility_layout.setSpacing(2)
 
-        # This creates horizontal layout for group selection buttons
+        # Horizontal layout for group selection buttons
         group_buttons_layout = QHBoxLayout()
         group_buttons_layout.setSpacing(5)
 
