@@ -39,7 +39,7 @@ def test_get_data_no_data(qtbot: QtBot, window):
     assert window.num_invalids == []
 
 
-def test_get_data_with_pot(qtbot: QtBot, window):
+def test_get_data(qtbot: QtBot, window):
     qtbot.addWidget(window)
 
     q_dt = QDateTime.fromSecsSinceEpoch(int(datetime.now().timestamp()))
