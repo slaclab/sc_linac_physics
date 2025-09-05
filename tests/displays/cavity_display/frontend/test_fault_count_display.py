@@ -58,7 +58,7 @@ def test_get_data(qtbot: QtBot, window):
     assert window.num_invalids == [invalids]
 
 
-def test_get_data_with_data_in_tlc_omitted(qtbot: QtBot, window):
+def test_get_data_with_tlc_omitted(qtbot: QtBot, window):
     qtbot.addWidget(window)
 
     q_dt = QDateTime.fromSecsSinceEpoch(int(datetime.now().timestamp()))
