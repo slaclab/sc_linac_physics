@@ -15,6 +15,8 @@ from caproto.server import (
     PvpropertyBoolEnum,
 )
 
+from utils.simulation.cryo_service import HeaterPVGroup
+
 
 class CavityPVGroup(PVGroup):
     acon: PvpropertyFloat = pvproperty(value=16.6, name="ACON", precision=2)
@@ -227,15 +229,23 @@ class CavityPVGroup(PVGroup):
         dtype=ChannelType.FLOAT,
     )
 
-    def __init__(self, prefix, isHL: bool):
+    def __init__(self, prefix, isHL: bool, heater_group):
         super().__init__(prefix)
 
+        self.heater_group: HeaterPVGroup = heater_group
         self.is_hl = isHL
 
         if isHL:
             self.length = 0.346
         else:
             self.length = 1.038
+
+    @property
+    def power(self):
+        amplitude = self.amean.value
+        q0 = self.q0.value
+        power = (amplitude * amplitude) / (1012 * q0)
+        return power
 
     @rf_mode_des.putter
     async def rf_mode_des(self, instance, value):
@@ -263,11 +273,20 @@ class CavityPVGroup(PVGroup):
 
     @ades.putter
     async def ades(self, instance, value):
+        power_prev = self.power
         await self.aact.write(value)
         await self.amean.write(value)
+        power_new = self.power
+        delta = -(power_new - power_prev)
         gradient = value / self.length
         if self.gact.value != gradient:
             await self.gdes.write(gradient)
+        if self.heater_group.mode.value == 2:
+            await self.heater_group.setpoint.write(
+                self.heater_group.setpoint.value + delta
+            )
+        if self.heater_group.mode.value == 0:
+            await self.heater_group.manual_mode_start()
 
     @pdes.putter
     async def pdes(self, instance, value):
