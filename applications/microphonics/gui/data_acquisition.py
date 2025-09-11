@@ -64,7 +64,7 @@ class DataAcquisitionManager(QObject):
 
             measurement_cfg = config['config']  # MeasurementConfig object
             selected_cavities = sorted(config['cavities'])
-            process = QProcess(self)
+            process = QProcess()
 
             # Filename and Directory Logic
             # Extract CM number from chassis_id
