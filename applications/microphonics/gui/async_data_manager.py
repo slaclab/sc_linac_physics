@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from PyQt5.QtCore import QObject, QThread, Qt
+from PyQt5.QtCore import QObject, QThread
 from PyQt5.QtCore import pyqtSignal
 
 from applications.microphonics.gui.data_acquisition import DataAcquisitionManager
@@ -91,23 +91,25 @@ class AsyncDataManager(QObject):
         """Create and start a worker thread for one chassis"""
 
         # Create thread and worker
-        thread = QThread(self)
+        thread = QThread()
         worker = DataAcquisitionManager()
 
-        # Connect worker signals to our handlers
-        worker.acquisitionProgress.connect(self._handle_worker_progress, Qt.QueuedConnection)
-        worker.acquisitionError.connect(self._handle_worker_error, Qt.QueuedConnection)
-        worker.acquisitionComplete.connect(self._handle_worker_complete, Qt.QueuedConnection)
-        worker.dataReceived.connect(self._handle_worker_data, Qt.QueuedConnection)
-
-        # Move worker to thread
         worker.moveToThread(thread)
+        # Connect worker signals to our handlers
+        worker.acquisitionProgress.connect(self._handle_worker_progress)
+        worker.acquisitionError.connect(self._handle_worker_error)
+        worker.acquisitionComplete.connect(self._handle_worker_complete)
+        worker.dataReceived.connect(self._handle_worker_data)
+
         # Store worker and thread
         self.active_workers[chassis_id] = (thread, worker)
 
         # Automatic cleanup
         thread.started.connect(lambda: worker.start_acquisition(chassis_id, config))
+        worker.acquisitionComplete.connect(thread.quit)
+        worker.acquisitionError.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
         thread.finished.connect(lambda: self.active_workers.pop(chassis_id, None))
         # Schedule acquisition start
         thread.start()
@@ -177,8 +179,6 @@ class AsyncDataManager(QObject):
         # Emit aggregated data
         self.jobComplete.emit(aggregated_data)
 
-        # Clean up
-        self._cleanup_workers()
         self.job_running = False
 
     def stop_measurement(self, chassis_id: str):
@@ -217,15 +217,3 @@ class AsyncDataManager(QObject):
 
             # Remove from tracking
             del self.active_workers[chassis_id]
-
-    def _cleanup_workers(self):
-        """Clean up all worker threads after job completion"""
-        for chassis_id in list(self.active_workers.keys()):
-            thread, worker = self.active_workers[chassis_id]
-
-            thread.quit()
-            if not thread.wait(2000):
-                thread.terminate()
-                thread.wait()
-
-        self.active_workers.clear()
