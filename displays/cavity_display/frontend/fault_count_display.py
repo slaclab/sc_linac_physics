@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import pyqtgraph as pg
 from PyQt5.QtCore import QDateTime
@@ -20,10 +20,15 @@ from displays.cavity_display.frontend.cavity_widget import (
     PURPLE_FILL_COLOR,
     YELLOW_FILL_COLOR,
 )
+from displays.cavity_display.utils import utils
 from utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 class FaultCountDisplay(Display):
+    fault_tlc_list: List[str] = sorted(
+        set(map(lambda d: d["Three Letter Code"], utils.parse_csv()))
+    )
+
     def __init__(self, lazy_fault_pvs=True):
         super().__init__()
         self.setWindowTitle("Fault Count Display")
@@ -32,12 +37,14 @@ class FaultCountDisplay(Display):
 
         main_v_layout = QVBoxLayout()
         input_h_layout = QHBoxLayout()
+        omit_fault_h_layout = QHBoxLayout()
 
         self.plot_window = pg.plot()
         self.plot_window.setBackground(DARK_GRAY_COLOR)
 
         main_v_layout.addLayout(input_h_layout)
         main_v_layout.addWidget(self.plot_window)
+        main_v_layout.addLayout(omit_fault_h_layout)
         self.setLayout(main_v_layout)
 
         self.cm_combo_box = QComboBox()
@@ -59,11 +66,10 @@ class FaultCountDisplay(Display):
         self.start_selector.editingFinished.connect(self.update_plot)
         self.end_selector.editingFinished.connect(self.update_plot)
 
-        # removing for now as POT faults no longer seem to be much of an issue
-        # in terms of distorting the data
-        # TODO: generalize ability to suppress any fault(s)
-        # self.hide_pot_checkbox = QCheckBox(text="Hide POT faults")
-        # self.hide_pot_checkbox.stateChanged.connect(self.update_plot)
+        self.omit_tlc_text = QLabel(text="Select a fault to omit:")
+        self.hide_fault_combo_box = QComboBox()
+        self.hide_fault_combo_box.addItems(["No fault selected"] + self.fault_tlc_list)
+        self.hide_fault_combo_box.currentIndexChanged.connect(self.update_plot)
 
         input_h_layout.addWidget(QLabel("Cryomodule:"))
         input_h_layout.addWidget(self.cm_combo_box)
@@ -74,7 +80,10 @@ class FaultCountDisplay(Display):
         input_h_layout.addWidget(self.start_selector)
         input_h_layout.addWidget(QLabel("End:"))
         input_h_layout.addWidget(self.end_selector)
-        # main_v_layout.addWidget(self.hide_pot_checkbox)
+
+        omit_fault_h_layout.addWidget(self.omit_tlc_text)
+        omit_fault_h_layout.addWidget(self.hide_fault_combo_box)
+        omit_fault_h_layout.addStretch()
 
         self.cm_combo_box.addItems([""] + ALL_CRYOMODULES)
         self.cav_combo_box.addItems([""] + [str(i) for i in range(1, 9)])
@@ -117,9 +126,9 @@ class FaultCountDisplay(Display):
         """
         data: Dict[str, FaultCounter] = self.cavity.get_fault_counts(start, end)
 
-        # TODO generalize fault suppression
-        # if self.hide_pot_checkbox.isChecked():
-        #     data.pop("POT")
+        fault_tlc = self.hide_fault_combo_box.currentText()
+        if fault_tlc in data:
+            data.pop(fault_tlc)
 
         for tlc, counter_obj in data.items():
             self.y_data.append(tlc)
@@ -140,7 +149,8 @@ class FaultCountDisplay(Display):
             ticks.append((idy, y_val))
             y_vals_ints.append(idy)
 
-        # Create pyqt5graph bar graph for faults, then stack invalid faults on same bars
+        # Create pyqt5graph bar graph for faults
+        # then stack invalid then warning faults on same bars
         fault_bars = pg.BarGraphItem(
             x0=0,
             y=y_vals_ints,
@@ -172,3 +182,5 @@ class FaultCountDisplay(Display):
         self.plot_window.addItem(fault_bars)
         self.plot_window.addItem(invalid_bars)
         self.plot_window.addItem(warning_bars)
+
+        print("Displaying plot for", self.cavity.cryomodule, self.cavity.number)
