@@ -21,7 +21,7 @@ def stepper(monkeypatch):
     monkeypatch.setattr("time.sleep", mock_func)
     rack = MagicMock()
     rack.cryomodule.name = choice(ALL_CRYOMODULES)
-    rack.cryomodule.linac.name = f"L{randint(0,3)}B"
+    rack.cryomodule.linac.name = f"L{randint(0, 3)}B"
     cavity = Cavity(cavity_num=randint(1, 8), rack_object=rack)
 
     yield StepperTuner(cavity=cavity)

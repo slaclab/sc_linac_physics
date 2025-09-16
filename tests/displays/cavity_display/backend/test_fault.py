@@ -98,7 +98,7 @@ class TestFaultCounter(TestCase):
 
         self.fault_counter = FaultCounter(
             ok_count=self.ok_count,
-            fault_count=self.fault_count,
+            alarm_count=self.fault_count,
             invalid_count=self.invalid_count,
         )
 
@@ -108,7 +108,7 @@ class TestFaultCounter(TestCase):
 
         self.fault_counter2 = FaultCounter(
             ok_count=self.ok_count2,
-            fault_count=self.fault_count2,
+            alarm_count=self.fault_count2,
             invalid_count=self.invalid_count2,
         )
 

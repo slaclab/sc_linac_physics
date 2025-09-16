@@ -150,8 +150,8 @@ class SRFHome(Display):
                 filename=f"$EDM/cryo/cryo_l{linac}b_main.edl"
             )
             cryo_button.setToolTip(f"L{linac}B Cryo")
-            magnet_button = PyDMEDMDisplayButton(
-                filename=f"$EDM/lcls/mgnt_l{linac}b_main.edl"
+            magnet_button = PyDMRelatedDisplayButton(
+                filename=f"$PYDM/mgnt/l{linac}b_main.ui"
             )
             magnet_button.setToolTip(f"L{linac}B Magnets")
             vacuum_button = PyDMRelatedDisplayButton(
@@ -163,9 +163,9 @@ class SRFHome(Display):
             mini_home_groupbox_layout.addWidget(magnet_button, 3, col)
             mini_home_groupbox_layout.addWidget(vacuum_button, 4, col)
 
-        global_rf_button = PyDMEDMDisplayButton(filename="$EDM/lcls/rf_global_main.edl")
-        global_cryo_button = PyDMEDMDisplayButton(
-            filename="$EDM/cryo/cryo_global_main.edl"
+        global_rf_button = PyDMRelatedDisplayButton(filename="$PYDM/rf/global_main.ui")
+        global_cryo_button = PyDMRelatedDisplayButton(
+            filename="$PYDM/cryo/global_main.ui"
         )
         mini_home_groupbox_layout.addWidget(global_rf_button, 1, 1)
         mini_home_groupbox_layout.addWidget(global_cryo_button, 2, 1)

@@ -21,7 +21,7 @@ from utils.sc_linac.magnet import Magnet
 def cryomodule():
     linac = MagicMock()
     linac.magnet_class = Magnet
-    linac.name = f"L{randint(0,3)}B"
+    linac.name = f"L{randint(0, 3)}B"
     yield Cryomodule(cryo_name=choice(ALL_CRYOMODULES_NO_HL), linac_object=linac)
 
 

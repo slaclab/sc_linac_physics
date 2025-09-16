@@ -1,6 +1,7 @@
 from typing import Type, Dict, TYPE_CHECKING
 
 from utils.sc_linac.linac_utils import SCLinacObject
+from utils.sc_linac.rfstation import RFStation
 
 if TYPE_CHECKING:
     from cavity import Cavity
@@ -15,9 +16,9 @@ class Rack(SCLinacObject):
     """
 
     def __init__(
-        self,
-        rack_name: str,
-        cryomodule_object: "Cryomodule",
+            self,
+            rack_name: str,
+            cryomodule_object: "Cryomodule",
     ):
         """
         Parameters
@@ -38,6 +39,8 @@ class Rack(SCLinacObject):
         self._pv_prefix = self.cryomodule.pv_addr(
             "RACK{RACK}:".format(RACK=self.rack_name)
         )
+        self.rfs1 = RFStation(num=1, rack_object=self)
+        self.rfs2 = RFStation(num=2, rack_object=self)
 
         if rack_name == "A":
             # rack A always has cavities 1 - 4

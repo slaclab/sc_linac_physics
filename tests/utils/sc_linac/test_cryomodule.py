@@ -11,7 +11,7 @@ from utils.sc_linac.rack import Rack
 @pytest.fixture
 def cryomodule():
     linac = MagicMock()
-    linac.name = f"L{randint(0,3)}B"
+    linac.name = f"L{randint(0, 3)}B"
     linac.rack_class = Rack
     yield Cryomodule(cryo_name=choice(ALL_CRYOMODULES), linac_object=linac)
 

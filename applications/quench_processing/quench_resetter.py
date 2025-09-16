@@ -23,7 +23,7 @@ def check_cavities(cavity_list: List[QuenchCavity], watcher_pv: PV):
         issued_reset = False
         for quench_cav in cavity_list:
             logger = quench_cav.cryomodule.logger
-            if quench_cav.hw_mode == HW_MODE_ONLINE_VALUE and quench_cav.is_on:
+            if quench_cav.hw_mode == HW_MODE_ONLINE_VALUE and not quench_cav.turned_off:
                 if quench_cav.is_quenched:
                     issued_reset = quench_cav.reset_quench()
 
