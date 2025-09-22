@@ -99,10 +99,7 @@ class SSA(linac_utils.SCLinacObject):
                        between HL SSAs)
         @return: Full PV address of the form ACCL:L{X}B:{CM}{CAV}0:SSA:SUFFIX
         """
-        if (
-            self.cavity.cryomodule.is_harmonic_linearizer
-            and suffix in linac_utils.HL_SSA_SHARED_PVS
-        ):
+        if self.cavity.cryomodule.is_harmonic_linearizer and suffix in linac_utils.HL_SSA_SHARED_PVS:
             return self.hl_prefix + suffix
         else:
             return self.pv_prefix + suffix
@@ -139,11 +136,7 @@ class SSA(linac_utils.SCLinacObject):
         if not self._saved_drive_max_pv_obj:
             self._saved_drive_max_pv_obj = PV(self.saved_drive_max_pv)
         saved_val = self._saved_drive_max_pv_obj.get()
-        return (
-            saved_val
-            if saved_val
-            else (1 if self.cavity.cryomodule.is_harmonic_linearizer else 0.8)
-        )
+        return saved_val if saved_val else (1 if self.cavity.cryomodule.is_harmonic_linearizer else 0.8)
 
     @drive_max.setter
     def drive_max(self, value: float):
@@ -248,13 +241,8 @@ class SSA(linac_utils.SCLinacObject):
 
             self.wait_while_resetting()
 
-            if (
-                self.is_faulted
-                and reset_attempt >= linac_utils.INTERLOCK_RESET_ATTEMPTS
-            ):
-                raise linac_utils.SSAFaultError(
-                    f"{self} failed to reset {linac_utils.INTERLOCK_RESET_ATTEMPTS}x"
-                )
+            if self.is_faulted and reset_attempt >= linac_utils.INTERLOCK_RESET_ATTEMPTS:
+                raise linac_utils.SSAFaultError(f"{self} failed to reset {linac_utils.INTERLOCK_RESET_ATTEMPTS}x")
 
             reset_attempt += 1
 
@@ -264,14 +252,10 @@ class SSA(linac_utils.SCLinacObject):
         start = datetime.now()
         while self.is_resetting:
             self.cavity.check_abort()
-            print(
-                f"{datetime.now().replace(microsecond=0)} Waiting for {self} to finish resetting"
-            )
+            print(f"{datetime.now().replace(microsecond=0)} Waiting for {self} to finish resetting")
             time.sleep(5)
             if (datetime.now() - start).total_seconds() >= 90:
-                raise linac_utils.SSAFaultError(
-                    f"{self} took too long to reset, inspect and try again"
-                )
+                raise linac_utils.SSAFaultError(f"{self} took too long to reset, inspect and try again")
 
     def start_calibration(self):
         if not self._calibration_start_pv_obj:
@@ -300,10 +284,7 @@ class SSA(linac_utils.SCLinacObject):
 
     @property
     def calibration_result_good(self) -> bool:
-        return (
-            self.cal_result_status_pv_obj.get()
-            == linac_utils.SSA_RESULT_GOOD_STATUS_VALUE
-        )
+        return self.cal_result_status_pv_obj.get() == linac_utils.SSA_RESULT_GOOD_STATUS_VALUE
 
     def run_calibration(self, save_slope: bool = False):
         """
@@ -335,14 +316,10 @@ class SSA(linac_utils.SCLinacObject):
             raise linac_utils.SSACalibrationError(f"{self} calibration result not good")
 
         if self.max_fwd_pwr < self.fwd_power_lower_limit:
-            raise linac_utils.SSACalibrationToleranceError(
-                f"{self.cavity} SSA forward power too low"
-            )
+            raise linac_utils.SSACalibrationToleranceError(f"{self.cavity} SSA forward power too low")
 
         if not self.measured_slope_in_tolerance:
-            raise linac_utils.SSACalibrationToleranceError(
-                f"{self.cavity} SSA Slope out of tolerance"
-            )
+            raise linac_utils.SSACalibrationToleranceError(f"{self.cavity} SSA Slope out of tolerance")
 
         print(f"Pushing SSA calibration results for {self.cavity}")
         self.cavity.push_ssa_slope()
@@ -358,8 +335,4 @@ class SSA(linac_utils.SCLinacObject):
 
     @property
     def measured_slope_in_tolerance(self) -> bool:
-        return (
-            linac_utils.SSA_SLOPE_LOWER_LIMIT
-            < self.measured_slope
-            < linac_utils.SSA_SLOPE_UPPER_LIMIT
-        )
+        return linac_utils.SSA_SLOPE_LOWER_LIMIT < self.measured_slope < linac_utils.SSA_SLOPE_UPPER_LIMIT

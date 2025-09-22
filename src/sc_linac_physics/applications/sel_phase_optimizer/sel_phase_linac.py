@@ -80,12 +80,7 @@ class SELCavity(Cavity):
         return self._fit_intercept_pv_obj
 
     def can_be_straightened(self) -> bool:
-        return (
-            self.is_online
-            and self.is_on
-            and self.rf_mode == RF_MODE_SELAP
-            and self.aact > 1
-        )
+        return self.is_online and self.is_on and self.rf_mode == RF_MODE_SELAP and self.aact > 1
 
     def straighten_iq_plot(self) -> float:
         """
@@ -108,16 +103,12 @@ class SELCavity(Cavity):
         if not np.isnan(slop):
             chisum = 0
             for nn, yy in enumerate(iwf):
-                chisum += (yy - (slop * qwf[nn] + inter)) ** 2 / (
-                    slop * qwf[nn] + inter
-                )
+                chisum += (yy - (slop * qwf[nn] + inter)) ** 2 / (slop * qwf[nn] + inter)
 
             step = slop * MULT
             if abs(step) > MAX_STEP:
                 step = MAX_STEP * np.sign(step)
-                self.logger.warning(
-                    f"Desired SEL Phase Offset change too large, moving by {step} instead"
-                )
+                self.logger.warning(f"Desired SEL Phase Offset change too large, moving by {step} instead")
 
             if start_val + step < -180:
                 step = step + 360
@@ -129,9 +120,7 @@ class SELCavity(Cavity):
             self.fit_slope_pv_obj.put(slop)
             self.fit_intercept_pv_obj.put(inter)
 
-            self.logger.info(
-                f"Changed SEL Phase Offset by {step:5.2f} with chi^2 {chisum:.2g}"
-            )
+            self.logger.info(f"Changed SEL Phase Offset by {step:5.2f} with chi^2 {chisum:.2g}")
             return step
 
         else:

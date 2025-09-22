@@ -92,9 +92,7 @@ class CavFaultPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("Online", "Maintenance", "Offline", "Maintenance Done", "Ready"),
     )
-    check_phase: PvpropertyInteger = pvproperty(
-        name="CKPSUM", value=0, dtype=ChannelType.INT
-    )
+    check_phase: PvpropertyInteger = pvproperty(name="CKPSUM", value=0, dtype=ChannelType.INT)
     quench_interlock: PvpropertyEnum = pvproperty(
         name="QUENCH_BYP_RBV",
         value=0,
@@ -112,12 +110,8 @@ class CavFaultPVGroup(PVGroup):
     local_oscillator: PvpropertyEnum = pvproperty(
         name="LO_LTCH", value=0, dtype=ChannelType.ENUM, enum_strings=("Ok", "Fault")
     )
-    waveform_acquisition: PvpropertyDouble = pvproperty(
-        name="WFACQSUM", value=0, dtype=ChannelType.DOUBLE
-    )
-    detune_feedback: PvpropertyDouble = pvproperty(
-        name="FBSTATSUM", value=0, dtype=ChannelType.DOUBLE
-    )
+    waveform_acquisition: PvpropertyDouble = pvproperty(name="WFACQSUM", value=0, dtype=ChannelType.DOUBLE)
+    detune_feedback: PvpropertyDouble = pvproperty(name="FBSTATSUM", value=0, dtype=ChannelType.DOUBLE)
 
 
 class PPSPVGroup(PVGroup):

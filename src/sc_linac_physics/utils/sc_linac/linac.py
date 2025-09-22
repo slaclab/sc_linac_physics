@@ -59,14 +59,11 @@ class Linac:
             f"{self.vacuum_prefix}{infix}:COMBO_P" for infix in beamline_vacuum_infixes
         ]
         self.insulating_vacuum_pvs: List[str] = [
-            f"{self.vacuum_prefix}{cm}96:COMBO_P"
-            for cm in insulating_vacuum_cryomodules
+            f"{self.vacuum_prefix}{cm}96:COMBO_P" for cm in insulating_vacuum_cryomodules
         ]
 
         for cm_name in linac_utils.LINAC_CM_MAP[linac_section]:
-            self.cryomodules[cm_name] = self.cryomodule_class(
-                cryo_name=cm_name, linac_object=self
-            )
+            self.cryomodules[cm_name] = self.cryomodule_class(cryo_name=cm_name, linac_object=self)
 
     def __str__(self):
         return self.name
@@ -112,12 +109,8 @@ class Machine:
             self.linacs.append(
                 linac_class(
                     linac_section=section,
-                    beamline_vacuum_infixes=linac_utils.BEAMLINE_VACUUM_INFIXES[
-                        section
-                    ],
-                    insulating_vacuum_cryomodules=linac_utils.INSULATING_VACUUM_CRYOMODULES[
-                        section
-                    ],
+                    beamline_vacuum_infixes=linac_utils.BEAMLINE_VACUUM_INFIXES[section],
+                    insulating_vacuum_cryomodules=linac_utils.INSULATING_VACUUM_CRYOMODULES[section],
                     machine=self,
                 )
             )

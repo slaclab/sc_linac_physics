@@ -35,25 +35,18 @@ class EnumLabel(PyDMLabel):
             if self.fault.is_currently_faulted():
                 self.setText("FAULTED")
                 self.setStyleSheet(
-                    "background-color: rgb(255,0,0); font-weight: "
-                    "bold; border: 2px solid black; color: white;"
+                    "background-color: rgb(255,0,0); font-weight: " "bold; border: 2px solid black; color: white;"
                 )
                 self.code_label.setStyleSheet("font-weight:bold;")
 
             else:
                 self.setText("OK")
-                self.setStyleSheet(
-                    "background-color: rgb(0,255,0);font-weight: bold; "
-                    "border: 2px solid black;"
-                )
+                self.setStyleSheet("background-color: rgb(0,255,0);font-weight: bold; " "border: 2px solid black;")
                 self.code_label.setStyleSheet("font-weight:plain;")
 
         except PVInvalidError:
             self.setText("INVALID")
-            self.setStyleSheet(
-                "background-color: rgb(255,0,255);font-weight: bold;"
-                "border: 2px solid black;"
-            )
+            self.setStyleSheet("background-color: rgb(255,0,255);font-weight: bold;" "border: 2px solid black;")
             self.code_label.setStyleSheet("font-weight:bold;")
 
 

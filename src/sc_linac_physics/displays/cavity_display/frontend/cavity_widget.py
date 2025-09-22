@@ -76,11 +76,7 @@ class CavityWidget(PyDMDrawingPolygon):
     def mouseReleaseEvent(self, event: QMouseEvent):
         # ensure that the left button was pressed *and* released within the
         # geometry of the widget; if so, emit the signal;
-        if (
-            self.press_pos is not None
-            and event.button() == Qt.LeftButton
-            and event.pos() in self.rect()
-        ):
+        if self.press_pos is not None and event.button() == Qt.LeftButton and event.pos() in self.rect():
             self.clicked.emit()
         self.press_pos = None
 
@@ -98,9 +94,7 @@ class CavityWidget(PyDMDrawingPolygon):
 
     @description_channel.setter
     def description_channel(self, value: str):
-        self._description_channel = PyDMChannel(
-            address=value, value_slot=self.description_changed
-        )
+        self._description_channel = PyDMChannel(address=value, value_slot=self.description_changed)
         self._description_channel.connect()
 
     @Slot(np.ndarray)
@@ -118,18 +112,12 @@ class CavityWidget(PyDMDrawingPolygon):
 
     @severity_channel.setter
     def severity_channel(self, value: str):
-        self._severity_channel = PyDMChannel(
-            address=value, value_slot=self.severity_channel_value_changed
-        )
+        self._severity_channel = PyDMChannel(address=value, value_slot=self.severity_channel_value_changed)
         self._severity_channel.connect()
 
     @Slot(int)
     def severity_channel_value_changed(self, value: int):
-        self.change_shape(
-            SHAPE_PARAMETER_DICT[value]
-            if value in SHAPE_PARAMETER_DICT
-            else SHAPE_PARAMETER_DICT[3]
-        )
+        self.change_shape(SHAPE_PARAMETER_DICT[value] if value in SHAPE_PARAMETER_DICT else SHAPE_PARAMETER_DICT[3])
 
     def change_shape(self, shape_parameter_object):
         self.brush.setColor(shape_parameter_object.fillColor)

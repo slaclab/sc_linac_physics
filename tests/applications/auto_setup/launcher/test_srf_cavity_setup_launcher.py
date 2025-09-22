@@ -28,9 +28,7 @@ def cavity():
 def test_setup(cavity):
     args = MagicMock()
     args.shutdown = False
-    cavity._status_pv_obj.get = MagicMock(
-        return_value=choice([STATUS_READY_VALUE, STATUS_ERROR_VALUE])
-    )
+    cavity._status_pv_obj.get = MagicMock(return_value=choice([STATUS_READY_VALUE, STATUS_ERROR_VALUE]))
     setup_cavity(cavity, args)
     cavity.setup.assert_called()
 
@@ -48,9 +46,7 @@ def test_setup_running(cavity):
 def test_shutdown(cavity):
     args = MagicMock()
     args.shutdown = True
-    cavity._status_pv_obj.get = MagicMock(
-        return_value=choice([STATUS_READY_VALUE, STATUS_ERROR_VALUE])
-    )
+    cavity._status_pv_obj.get = MagicMock(return_value=choice([STATUS_READY_VALUE, STATUS_ERROR_VALUE]))
     setup_cavity(cavity, args)
     cavity.setup.assert_not_called()
     cavity.shut_down.assert_called()

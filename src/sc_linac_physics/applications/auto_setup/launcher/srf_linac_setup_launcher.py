@@ -16,12 +16,8 @@ def setup_cryomodule(cryomodule_object: SetupCryomodule):
 
     else:
         cryomodule_object.ssa_cal_requested = cryomodule_object.linac.ssa_cal_requested
-        cryomodule_object.auto_tune_requested = (
-            cryomodule_object.linac.auto_tune_requested
-        )
-        cryomodule_object.cav_char_requested = (
-            cryomodule_object.linac.cav_char_requested
-        )
+        cryomodule_object.auto_tune_requested = cryomodule_object.linac.auto_tune_requested
+        cryomodule_object.cav_char_requested = cryomodule_object.linac.cav_char_requested
         cryomodule_object.rf_ramp_requested = cryomodule_object.linac.rf_ramp_requested
 
         cryomodule_object.trigger_setup()
@@ -38,9 +34,7 @@ if __name__ == "__main__":
         help="Linac number as an int",
     )
 
-    parser.add_argument(
-        "--shutdown", "-off", action="store_true", help="Turn off cavity and SSA"
-    )
+    parser.add_argument("--shutdown", "-off", action="store_true", help="Turn off cavity and SSA")
 
     args = parser.parse_args()
     print(args)

@@ -35,10 +35,7 @@ def hl():
 
 def test_pv_prefix_quad(cryomodule):
 
-    assert (
-        cryomodule.quad.pv_prefix
-        == f"QUAD:{cryomodule.linac.name}:{cryomodule.name}85:"
-    )
+    assert cryomodule.quad.pv_prefix == f"QUAD:{cryomodule.linac.name}:{cryomodule.name}85:"
 
 
 def test_pv_prefix_quad_hl(hl):
@@ -57,17 +54,11 @@ def test_pv_prefix_ycor_hl(hl):
 
 
 def test_pv_prefix_xcor(cryomodule):
-    assert (
-        cryomodule.xcor.pv_prefix
-        == f"XCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
-    )
+    assert cryomodule.xcor.pv_prefix == f"XCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
 
 
 def test_pv_prefix_ycor(cryomodule):
-    assert (
-        cryomodule.ycor.pv_prefix
-        == f"YCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
-    )
+    assert cryomodule.ycor.pv_prefix == f"YCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
 
 
 def test_bdes(cryomodule):

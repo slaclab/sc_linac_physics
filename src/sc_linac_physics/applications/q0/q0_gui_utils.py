@@ -58,9 +58,7 @@ class CryoParamSetupWorker(Worker):
 
 
 class CryoParamWorker(Worker):
-    def __init__(
-        self, cryomodule: Q0Cryomodule, start_time: datetime, end_time: datetime
-    ):
+    def __init__(self, cryomodule: Q0Cryomodule, start_time: datetime, end_time: datetime):
         super().__init__()
         self.cryomodule: Q0Cryomodule = cryomodule
         self.start_time: datetime = start_time
@@ -69,9 +67,7 @@ class CryoParamWorker(Worker):
     def run(self) -> None:
         try:
             self.status.emit("Getting new reference cryo parameters")
-            self.cryomodule.getRefValveParams(
-                start_time=self.start_time, end_time=self.end_time
-            )
+            self.cryomodule.getRefValveParams(start_time=self.start_time, end_time=self.end_time)
             self.finished.emit("New reference cryo params loaded")
         except (CavityAbortError, q0_utils.Q0AbortError) as e:
             self.error.emit(str(e))
@@ -143,9 +139,7 @@ class CavityRampWorker(Worker):
         try:
             self.status.emit(f"Ramping Cavity {self.cavity.number} to {self.des_amp}")
             self.cavity.setup_rf(self.des_amp)
-            self.finished.emit(
-                f"Cavity {self.cavity.number} ramped up to {self.des_amp}"
-            )
+            self.finished.emit(f"Cavity {self.cavity.number} ramped up to {self.des_amp}")
         except (CavityAbortError, q0_utils.Q0AbortError) as e:
             self.error.emit(str(e))
 
@@ -235,9 +229,7 @@ class Q0Options(QObject):
     def __init__(self, cryomodule: Q0Cryomodule):
         super().__init__()
         self.cryomodule = cryomodule
-        self.main_groupbox: QGroupBox = QGroupBox(
-            f"Q0 Measurements for CM{cryomodule.name}"
-        )
+        self.main_groupbox: QGroupBox = QGroupBox(f"Q0 Measurements for CM{cryomodule.name}")
         grid_layout: QGridLayout = QGridLayout()
         self.main_groupbox.setLayout(grid_layout)
 
@@ -247,12 +239,8 @@ class Q0Options(QObject):
             col_count = get_dimensions(timestamps)
             for idx, time_stamp in enumerate(timestamps):
                 cav_amps = q0_measurements[time_stamp]["Cavity Amplitudes"]
-                radio_button: QRadioButton = QRadioButton(
-                    f"{time_stamp}: \n{json.dumps(cav_amps, indent=4)}"
-                )
-                grid_layout.addWidget(
-                    radio_button, int(idx / col_count), idx % col_count
-                )
+                radio_button: QRadioButton = QRadioButton(f"{time_stamp}: \n{json.dumps(cav_amps, indent=4)}")
+                grid_layout.addWidget(radio_button, int(idx / col_count), idx % col_count)
                 radio_button.clicked.connect(partial(self.load_q0, time_stamp))
 
     @pyqtSlot()
@@ -271,9 +259,7 @@ class CalibrationOptions(QObject):
     def __init__(self, cryomodule: Q0Cryomodule):
         super().__init__()
         self.cryomodule = cryomodule
-        self.main_groupbox: QGroupBox = QGroupBox(
-            f"Calibrations for CM{cryomodule.name}"
-        )
+        self.main_groupbox: QGroupBox = QGroupBox(f"Calibrations for CM{cryomodule.name}")
         grid_layout: QGridLayout = QGridLayout()
         self.main_groupbox.setLayout(grid_layout)
 
@@ -283,9 +269,7 @@ class CalibrationOptions(QObject):
 
             for idx, time_stamp in enumerate(calibrations.keys()):
                 radio_button: QRadioButton = QRadioButton(time_stamp)
-                grid_layout.addWidget(
-                    radio_button, int(idx / col_count), idx % col_count
-                )
+                grid_layout.addWidget(radio_button, int(idx / col_count), idx % col_count)
                 radio_button.clicked.connect(partial(self.load_calibration, time_stamp))
 
     @pyqtSlot()

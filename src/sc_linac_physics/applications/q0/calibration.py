@@ -33,9 +33,7 @@ class Calibration:
                     heater_run_data[q0_utils.JSON_START_KEY],
                     q0_utils.DATETIME_FORMATTER,
                 )
-                run._end_time = datetime.strptime(
-                    heater_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
-                )
+                run._end_time = datetime.strptime(heater_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER)
 
                 ll_data = {}
                 for timestamp_str, val in heater_run_data[q0_utils.JSON_LL_KEY].items():
@@ -72,9 +70,7 @@ class Calibration:
 
             new_data[key] = heater_data
 
-        q0_utils.update_json_data(
-            self.cryomodule.calib_data_file, self.time_stamp, new_data
-        )
+        q0_utils.update_json_data(self.cryomodule.calib_data_file, self.time_stamp, new_data)
 
     def save_results(self):
         newData = {
@@ -85,9 +81,7 @@ class Calibration:
             "Total Reference Heater Readback": self.cryomodule.valveParams.refHeatLoadAct,
             "JT Valve Position": self.cryomodule.valveParams.refValvePos,
         }
-        q0_utils.update_json_data(
-            self.cryomodule.calib_idx_file, self.time_stamp, newData
-        )
+        q0_utils.update_json_data(self.cryomodule.calib_idx_file, self.time_stamp, newData)
 
     @property
     def dLLdt_dheat(self):

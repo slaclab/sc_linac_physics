@@ -29,9 +29,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 class FaultCountDisplay(Display):
-    fault_tlc_list: List[str] = sorted(
-        set(map(lambda d: d["Three Letter Code"], utils.parse_csv()))
-    )
+    fault_tlc_list: List[str] = sorted(set(map(lambda d: d["Three Letter Code"], utils.parse_csv())))
 
     def __init__(self, lazy_fault_pvs=True):
         super().__init__()
@@ -109,9 +107,7 @@ class FaultCountDisplay(Display):
         if not cm_name or not cav_num:
             return
 
-        self.cavity: BackendCavity = self.machine.cryomodules[cm_name].cavities[
-            int(cav_num)
-        ]
+        self.cavity: BackendCavity = self.machine.cryomodules[cm_name].cavities[int(cav_num)]
         self.update_plot()
 
     def get_data(self):
@@ -170,9 +166,7 @@ class FaultCountDisplay(Display):
             width=self.num_invalids,
             brush=PURPLE_FILL_COLOR,
         )
-        warning_starts = list(
-            map(lambda a, b: a + b, self.num_faults, self.num_invalids)
-        )
+        warning_starts = list(map(lambda a, b: a + b, self.num_faults, self.num_invalids))
         warning_bars = pg.BarGraphItem(
             x0=warning_starts,
             y=y_vals_ints,

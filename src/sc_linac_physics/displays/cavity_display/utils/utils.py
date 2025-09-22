@@ -32,14 +32,7 @@ def display_hash(
     suffix: str,
     prefix: str,
 ):
-    return (
-        hash(rack)
-        ^ hash(fault_condition)
-        ^ hash(ok_condition)
-        ^ hash(tlc)
-        ^ hash(suffix)
-        ^ hash(prefix)
-    )
+    return hash(rack) ^ hash(fault_condition) ^ hash(ok_condition) ^ hash(tlc) ^ hash(suffix) ^ hash(prefix)
 
 
 class SpreadsheetError(Exception):
@@ -52,9 +45,7 @@ def severity_of_fault(timestamp: datetime, severities: ArchiveDataHandler):
     sevr = None
     for severity_timestamp, severity in zip(severities.timestamps, severities.values):
         try:
-            rounded_ts = severity_timestamp.replace(
-                microsecond=round(severity_timestamp.microsecond / 10000) * 10000
-            )
+            rounded_ts = severity_timestamp.replace(microsecond=round(severity_timestamp.microsecond / 10000) * 10000)
         except ValueError:
             rounded_ts = severity_timestamp + timedelta(seconds=1)
         if (timestamp - rounded_ts).total_seconds() >= 0:

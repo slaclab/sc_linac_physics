@@ -54,9 +54,7 @@ class Cavity(linac_utils.SCLinacObject):
             self.scale_factor_lower_limit = linac_utils.CAVITY_SCALE_LOWER_LIMIT
             self.scale_factor_upper_limit = linac_utils.CAVITY_SCALE_UPPER_LIMIT
 
-        self._pv_prefix = (
-            f"ACCL:{self.linac.name}:{self.cryomodule.name}{self.number}0:"
-        )
+        self._pv_prefix = f"ACCL:{self.linac.name}:{self.cryomodule.name}{self.number}0:"
 
         self.ctePrefix = f"CTE:CM{self.cryomodule.name}:1{self.number}"
 
@@ -298,11 +296,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def measured_loaded_q_in_tolerance(self) -> bool:
-        return (
-            self.loaded_q_lower_limit
-            <= self.measured_loaded_q
-            <= self.loaded_q_upper_limit
-        )
+        return self.loaded_q_lower_limit <= self.measured_loaded_q <= self.loaded_q_upper_limit
 
     def push_loaded_q(self):
         if not self._push_loaded_q_pv_obj:
@@ -317,11 +311,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def measured_scale_factor_in_tolerance(self) -> bool:
-        return (
-            self.scale_factor_lower_limit
-            <= self.measured_scale_factor
-            <= self.scale_factor_upper_limit
-        )
+        return self.scale_factor_lower_limit <= self.measured_scale_factor <= self.scale_factor_upper_limit
 
     def push_scale_factor(self):
         if not self._push_scale_factor_pv_obj:
@@ -336,15 +326,11 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def characterization_running(self) -> bool:
-        return (
-            self.characterization_status == linac_utils.CHARACTERIZATION_RUNNING_VALUE
-        )
+        return self.characterization_status == linac_utils.CHARACTERIZATION_RUNNING_VALUE
 
     @property
     def characterization_crashed(self) -> bool:
-        return (
-            self.characterization_status == linac_utils.CHARACTERIZATION_CRASHED_VALUE
-        )
+        return self.characterization_status == linac_utils.CHARACTERIZATION_CRASHED_VALUE
 
     @property
     def pulse_on_time(self):
@@ -636,9 +622,7 @@ class Cavity(linac_utils.SCLinacObject):
             steps_moved += abs(est_steps)
 
             if steps_moved > expected_steps * stepper_tol_factor:
-                raise linac_utils.DetuneError(
-                    f"{self} motor moved more steps than expected"
-                )
+                raise linac_utils.DetuneError(f"{self} motor moved more steps than expected")
 
             # this should catch if the chirp range is wrong or if the cavity is off
             self.check_detune()
@@ -650,9 +634,7 @@ class Cavity(linac_utils.SCLinacObject):
             if self.rf_mode == linac_utils.RF_MODE_CHIRP:
                 self.find_chirp_range(self.chirp_freq_start * 1.1)
             else:
-                raise linac_utils.DetuneError(
-                    f"Cannot tune {self} in SELA with invalid detune"
-                )
+                raise linac_utils.DetuneError(f"Cannot tune {self} in SELA with invalid detune")
 
     def check_and_set_on_time(self):
         """
@@ -664,11 +646,7 @@ class Cavity(linac_utils.SCLinacObject):
         """
         print("Checking RF Pulse On Time...")
         if self.pulse_on_time != linac_utils.NOMINAL_PULSED_ONTIME:
-            print(
-                "Setting RF Pulse On Time to {ontime} ms".format(
-                    ontime=linac_utils.NOMINAL_PULSED_ONTIME
-                )
-            )
+            print("Setting RF Pulse On Time to {ontime} ms".format(ontime=linac_utils.NOMINAL_PULSED_ONTIME))
             self.pulse_on_time = linac_utils.NOMINAL_PULSED_ONTIME
             self.push_go_button()
 
@@ -738,9 +716,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     def setup_rf(self, des_amp):
         if des_amp > self.ades_max:
-            print(
-                f"Requested amplitude for {self} too high - ramping up to AMAX instead"
-            )
+            print(f"Requested amplitude for {self} too high - ramping up to AMAX instead")
             des_amp = self.ades_max
         print(f"setting up {self}")
         self.turn_off()
@@ -784,9 +760,7 @@ class Cavity(linac_utils.SCLinacObject):
             print(f"setting {self} piezo DC voltage offset to 0V")
             self.piezo.dc_setpoint = 0
 
-            print(
-                f"setting {self} drive level to {linac_utils.SAFE_PULSED_DRIVE_LEVEL}"
-            )
+            print(f"setting {self} drive level to {linac_utils.SAFE_PULSED_DRIVE_LEVEL}")
             self.drive_level = linac_utils.SAFE_PULSED_DRIVE_LEVEL
 
             print(f"setting {self} RF to chirp")
@@ -810,9 +784,7 @@ class Cavity(linac_utils.SCLinacObject):
             if chirp_range < 400000:
                 self.find_chirp_range(int(chirp_range * 1.1))
             else:
-                raise linac_utils.DetuneError(
-                    f"{self}: No valid detune found within" f"+/-400000Hz chirp range"
-                )
+                raise linac_utils.DetuneError(f"{self}: No valid detune found within" f"+/-400000Hz chirp range")
 
     def reset_interlocks(self, wait: int = 3, attempt: int = 0):
         # TODO see if it makes more sense to implement this non-recursively
@@ -828,9 +800,7 @@ class Cavity(linac_utils.SCLinacObject):
         if self.rf_inhibited:
             if attempt >= linac_utils.INTERLOCK_RESET_ATTEMPTS:
                 raise linac_utils.CavityFaultError(
-                    f"{self} still faulted after"
-                    f" {linac_utils.INTERLOCK_RESET_ATTEMPTS} "
-                    f"reset attempts"
+                    f"{self} still faulted after" f" {linac_utils.INTERLOCK_RESET_ATTEMPTS} " f"reset attempts"
                 )
             else:
                 print(f"{self} reset {attempt} unsuccessful; retrying")
@@ -861,10 +831,7 @@ class Cavity(linac_utils.SCLinacObject):
 
         if (datetime.now() - self.characterization_timestamp).total_seconds() < 60:
             if self.characterization_status == 1:
-                print(
-                    f"{self} successful characterization within the last minute,"
-                    f" not starting a new one"
-                )
+                print(f"{self} successful characterization within the last minute," f" not starting a new one")
                 self.finish_characterization()
                 return
 
@@ -882,30 +849,22 @@ class Cavity(linac_utils.SCLinacObject):
 
         if self.characterization_status == linac_utils.CALIBRATION_COMPLETE_VALUE:
             if (datetime.now() - self.characterization_timestamp).total_seconds() > 300:
-                raise linac_utils.CavityCharacterizationError(
-                    f"No valid {self} characterization within the last 5 min"
-                )
+                raise linac_utils.CavityCharacterizationError(f"No valid {self} characterization within the last 5 min")
             self.finish_characterization()
 
         if self.characterization_crashed:
-            raise linac_utils.CavityCharacterizationError(
-                f"{self} characterization crashed"
-            )
+            raise linac_utils.CavityCharacterizationError(f"{self} characterization crashed")
 
     def finish_characterization(self):
         print(f"pushing {self} characterization results")
         if self.measured_loaded_q_in_tolerance:
             self.push_loaded_q()
         else:
-            raise linac_utils.CavityQLoadedCalibrationError(
-                f"{self} loaded Q out of tolerance"
-            )
+            raise linac_utils.CavityQLoadedCalibrationError(f"{self} loaded Q out of tolerance")
         if self.measured_scale_factor_in_tolerance:
             self.push_scale_factor()
         else:
-            raise linac_utils.CavityScaleFactorCalibrationError(
-                f"{self} scale factor out of tolerance"
-            )
+            raise linac_utils.CavityScaleFactorCalibrationError(f"{self} scale factor out of tolerance")
 
         self.reset_data_decimation()
         print(f"restoring {self} piezo feedback setpoint to 0")
@@ -919,9 +878,7 @@ class Cavity(linac_utils.SCLinacObject):
         while self.ades <= (des_amp - step_size):
             self.check_abort()
             if self.is_quenched:
-                raise linac_utils.QuenchError(
-                    f"{self} quench detected, aborting RF ramp"
-                )
+                raise linac_utils.QuenchError(f"{self} quench detected, aborting RF ramp")
             self.ades = self.ades + step_size
             # to avoid tripping sensitive interlock
             time.sleep(0.1)

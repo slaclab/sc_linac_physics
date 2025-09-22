@@ -112,9 +112,7 @@ class DataRun:
     @property
     def average_heat(self) -> float:
         if not self._average_heat:
-            self._average_heat = (
-                np.mean(self.heater_readback_buffer) - self.reference_heat
-            )
+            self._average_heat = np.mean(self.heater_readback_buffer) - self.reference_heat
         return self._average_heat
 
     @average_heat.setter
@@ -145,9 +143,7 @@ class DataRun:
     def dll_dt(self) -> float:
         if not self._dll_dt:
             if USE_SIEGELSLOPES:
-                slope, intercept = siegelslopes(
-                    list(self.ll_data.values()), list(self.ll_data.keys())
-                )
+                slope, intercept = siegelslopes(list(self.ll_data.values()), list(self.ll_data.keys()))
             else:
                 slope, intercept, r_val, p_val, std_err = linregress(
                     list(self.ll_data.keys()), list(self.ll_data.values())
@@ -209,9 +205,7 @@ def calc_q0(
     c7 = c2 - (c3 * c4) + (c5 * (c4**2))
 
     corrected_q0 = c1 / (
-        (c7 / 2) * np.exp(c6 / 2)
-        + c1 / uncorrected_q0
-        - (c7 / temp_from_press) * np.exp(c6 / temp_from_press)
+        (c7 / 2) * np.exp(c6 / 2) + c1 / uncorrected_q0 - (c7 / temp_from_press) * np.exp(c6 / temp_from_press)
     )
     print(f"Corrected Q0: {corrected_q0}")
 

@@ -33,9 +33,7 @@ class GUICavity:
         self.shutdown_button.clicked.connect(self.trigger_shutdown)
 
         self.setup_button.clicked.connect(self.trigger_setup)
-        self.aact_readback_label: PyDMLabel = PyDMLabel(
-            init_channel=self.prefix + "AACTMEAN"
-        )
+        self.aact_readback_label: PyDMLabel = PyDMLabel(init_channel=self.prefix + "AACTMEAN")
         self.aact_readback_label.alarmSensitiveBorder = True
         self.aact_readback_label.alarmSensitiveContent = True
         self.aact_readback_label.showUnits = True
@@ -61,17 +59,15 @@ class GUICavity:
         self.status_label.alarmSensitiveBorder = True
         self.status_label.alarmSensitiveContent = True
 
-        self.progress_bar: analog_indicator.PyDMAnalogIndicator = (
-            analog_indicator.PyDMAnalogIndicator(init_channel=self.cavity.progress_pv)
+        self.progress_bar: analog_indicator.PyDMAnalogIndicator = analog_indicator.PyDMAnalogIndicator(
+            init_channel=self.cavity.progress_pv
         )
         self.progress_bar.backgroundSizeRate = 0.2
         self.progress_bar.sizePolicy().setVerticalPolicy(QSizePolicy.Maximum)
 
         self.expert_screen_button: PyDMEDMDisplayButton = PyDMEDMDisplayButton()
         self.expert_screen_button.filenames = ["$EDM/llrf/rf_srf_cavity_main.edl"]
-        self.expert_screen_button.macros = self.cavity.edm_macro_string + (
-            "," + "SELTAB=0,SELCHAR=3"
-        )
+        self.expert_screen_button.macros = self.cavity.edm_macro_string + ("," + "SELTAB=0,SELCHAR=3")
         self.expert_screen_button.setToolTip("EDM expert screens")
 
         self.note_label: PyDMLabel = PyDMLabel(init_channel=self.cavity.note_pv)
@@ -86,9 +82,7 @@ class GUICavity:
     @property
     def cavity(self) -> SetupCavity:
         if not self._cavity:
-            self._cavity: SetupCavity = SETUP_MACHINE.cryomodules[self.cm].cavities[
-                self.number
-            ]
+            self._cavity: SetupCavity = SETUP_MACHINE.cryomodules[self.cm].cavities[self.number]
         return self._cavity
 
     def trigger_shutdown(self):
@@ -106,9 +100,7 @@ class GUICavity:
             return
         else:
             self.cavity.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
-            self.cavity.auto_tune_requested = (
-                self.settings.auto_tune_checkbox.isChecked()
-            )
+            self.cavity.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
             self.cavity.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
             self.cavity.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
 

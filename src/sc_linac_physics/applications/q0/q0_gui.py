@@ -17,9 +17,7 @@ from sc_linac_physics.utils.qt import make_error_popup
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
-Q0_CRYOMODULES: Dict[str, Q0Cryomodule] = Machine(
-    cryomodule_class=Q0Cryomodule, cavity_class=Q0Cavity
-).cryomodules
+Q0_CRYOMODULES: Dict[str, Q0Cryomodule] = Machine(cryomodule_class=Q0Cryomodule, cavity_class=Q0Cavity).cryomodules
 
 
 class Q0GUI(Display):
@@ -44,9 +42,7 @@ class Q0GUI(Display):
         self.main_widget.new_cal_button.clicked.connect(self.takeNewCalibration)
         self.main_widget.load_cal_button.clicked.connect(self.load_calibration)
         self.cal_option_windows: Dict[str, Display] = {}
-        self.main_widget.show_cal_data_button.clicked.connect(
-            self.show_calibration_data
-        )
+        self.main_widget.show_cal_data_button.clicked.connect(self.show_calibration_data)
 
         self.main_widget.new_rf_button.clicked.connect(self.take_new_q0_measurement)
         self.main_widget.load_rf_button.clicked.connect(self.load_q0)
@@ -55,9 +51,7 @@ class Q0GUI(Display):
 
         self.calibration_worker: Optional[CalibrationWorker] = None
         self.q0_setup_worker: Optional[q0_gui_utils.Q0SetupWorker] = None
-        self.q0_ramp_workers: Dict[int, q0_gui_utils.CavityRampWorker] = {
-            i: None for i in range(1, 9)
-        }
+        self.q0_ramp_workers: Dict[int, q0_gui_utils.CavityRampWorker] = {i: None for i in range(1, 9)}
         self.q0_meas_worker: Optional[q0_gui_utils.Q0Worker] = None
         self.cryo_param_setup_worker: Optional[q0_gui_utils.CryoParamSetupWorker] = None
 
@@ -81,9 +75,7 @@ class Q0GUI(Display):
         for i in range(8):
             cav_amp_control = q0_gui_utils.CavAmpControl()
             self.cav_amp_controls[i + 1] = cav_amp_control
-            self.main_widget.cavity_layout.addWidget(
-                cav_amp_control.groupbox, int(i / 4), int(i % 4)
-            )
+            self.main_widget.cavity_layout.addWidget(cav_amp_control.groupbox, int(i / 4), int(i % 4))
 
         self.main_widget.heater_setpoint_spinbox.ctrl_limit_changed = lambda *args: None
         self.main_widget.jt_setpoint_spinbox.ctrl_limit_changed = lambda *args: None
@@ -123,33 +115,17 @@ class Q0GUI(Display):
             self.main_widget.perm_byte.channel = self.selected_cm.cryo_access_pv
             self.main_widget.perm_label.channel = self.selected_cm.cryo_access_pv
 
-            self.main_widget.jt_man_button.channel = (
-                self.selected_cm.jt_manual_select_pv
-            )
+            self.main_widget.jt_man_button.channel = self.selected_cm.jt_manual_select_pv
             self.main_widget.jt_auto_button.channel = self.selected_cm.jt_auto_select_pv
             self.main_widget.jt_mode_label.channel = self.selected_cm.jt_mode_str_pv
-            self.main_widget.jt_setpoint_spinbox.channel = (
-                self.selected_cm.jt_man_pos_setpoint_pv
-            )
-            self.main_widget.jt_setpoint_readback.channel = (
-                self.selected_cm.jt_valve_readback_pv
-            )
+            self.main_widget.jt_setpoint_spinbox.channel = self.selected_cm.jt_man_pos_setpoint_pv
+            self.main_widget.jt_setpoint_readback.channel = self.selected_cm.jt_valve_readback_pv
 
-            self.main_widget.heater_man_button.channel = (
-                self.selected_cm.heater_manual_pv
-            )
-            self.main_widget.heater_seq_button.channel = (
-                self.selected_cm.heater_sequencer_pv
-            )
-            self.main_widget.heater_mode_label.channel = (
-                self.selected_cm.heater_mode_string_pv
-            )
-            self.main_widget.heater_setpoint_spinbox.channel = (
-                self.selected_cm.heater_setpoint_pv
-            )
-            self.main_widget.heater_readback_label.channel = (
-                self.selected_cm.heater_readback_pv
-            )
+            self.main_widget.heater_man_button.channel = self.selected_cm.heater_manual_pv
+            self.main_widget.heater_seq_button.channel = self.selected_cm.heater_sequencer_pv
+            self.main_widget.heater_mode_label.channel = self.selected_cm.heater_mode_string_pv
+            self.main_widget.heater_setpoint_spinbox.channel = self.selected_cm.heater_setpoint_pv
+            self.main_widget.heater_readback_label.channel = self.selected_cm.heater_readback_pv
 
             for cavity in self.selected_cm.cavities.values():
                 self.cav_amp_controls[cavity.number].connect(cavity)
@@ -222,9 +198,7 @@ class Q0GUI(Display):
             self.calibration_window.setLayout(layout)
 
         while self.calibration_data_plot_items:
-            self.calibration_data_plot.removeItem(
-                self.calibration_data_plot_items.pop()
-            )
+            self.calibration_data_plot.removeItem(self.calibration_data_plot_items.pop())
 
         while self.calibration_fit_plot_items:
             self.calibration_fit_plot.removeItem(self.calibration_fit_plot_items.pop())
@@ -233,24 +207,16 @@ class Q0GUI(Display):
 
         for heater_run in self.selected_cm.calibration.heater_runs:
             self.calibration_data_plot_items.append(
-                self.calibration_data_plot.plot(
-                    list(heater_run.ll_data.keys()), list(heater_run.ll_data.values())
-                )
+                self.calibration_data_plot.plot(list(heater_run.ll_data.keys()), list(heater_run.ll_data.values()))
             )
             dll_dts.append(heater_run.dll_dt)
             self.calibration_fit_plot_items.append(
-                self.calibration_fit_plot.plot(
-                    [heater_run.average_heat], [heater_run.dll_dt], pen=None, symbol="o"
-                )
+                self.calibration_fit_plot.plot([heater_run.average_heat], [heater_run.dll_dt], pen=None, symbol="o")
             )
 
-        heat_loads = [
-            self.selected_cm.calibration.get_heat(dll_dt) for dll_dt in dll_dts
-        ]
+        heat_loads = [self.selected_cm.calibration.get_heat(dll_dt) for dll_dt in dll_dts]
 
-        self.calibration_fit_plot_items.append(
-            self.calibration_fit_plot.plot(heat_loads, dll_dts)
-        )
+        self.calibration_fit_plot_items.append(self.calibration_fit_plot.plot(heat_loads, dll_dts))
 
         showDisplay(self.calibration_window)
 
@@ -268,17 +234,11 @@ class Q0GUI(Display):
     def load_calibration(self):
         if self.selected_cm.name not in self.cal_option_windows:
             option_window: Display = Display()
-            option_window.setWindowTitle(
-                f"CM {self.selected_cm.name} Calibration Options"
-            )
+            option_window.setWindowTitle(f"CM {self.selected_cm.name} Calibration Options")
             cal_options = q0_gui_utils.CalibrationOptions(self.selected_cm)
             cal_options.cal_loaded_signal.connect(self.handle_cal_status)
-            cal_options.cal_loaded_signal.connect(
-                partial(self.main_widget.rf_groupbox.setEnabled, True)
-            )
-            cal_options.cal_loaded_signal.connect(
-                partial(self.main_widget.show_cal_data_button.setEnabled, True)
-            )
+            cal_options.cal_loaded_signal.connect(partial(self.main_widget.rf_groupbox.setEnabled, True))
+            cal_options.cal_loaded_signal.connect(partial(self.main_widget.show_cal_data_button.setEnabled, True))
             cal_options.cal_loaded_signal.connect(self.show_calibration_data)
             cal_options.cal_loaded_signal.connect(self.update_cryo_params)
             window_layout = QVBoxLayout()
@@ -301,9 +261,7 @@ class Q0GUI(Display):
     def load_q0(self):
         if self.selected_cm.name not in self.rf_option_windows:
             option_window: Display = Display()
-            option_window.setWindowTitle(
-                f"CM {self.selected_cm.name} RF Measurement Options"
-            )
+            option_window.setWindowTitle(f"CM {self.selected_cm.name} RF Measurement Options")
             rf_options = q0_gui_utils.Q0Options(self.selected_cm)
             rf_options.q0_loaded_signal.connect(self.handle_rf_status)
             rf_options.q0_loaded_signal.connect(self.show_q0_data)
@@ -320,12 +278,8 @@ class Q0GUI(Display):
 
     @pyqtSlot()
     def update_cryo_params(self):
-        self.main_widget.ref_heat_spinbox.setValue(
-            self.selected_cm.valveParams.refHeatLoadDes
-        )
-        self.main_widget.jt_pos_spinbox.setValue(
-            self.selected_cm.valveParams.refValvePos
-        )
+        self.main_widget.ref_heat_spinbox.setValue(self.selected_cm.valveParams.refHeatLoadDes)
+        self.main_widget.jt_pos_spinbox.setValue(self.selected_cm.valveParams.refValvePos)
 
     @pyqtSlot()
     def setup_for_cryo_params(self):
@@ -334,9 +288,7 @@ class Q0GUI(Display):
             heater_setpoint=self.main_widget.ref_heat_spinbox.value(),
             jt_setpoint=self.main_widget.jt_pos_spinbox.value(),
         )
-        self.cryo_param_setup_worker.error.connect(
-            partial(make_error_popup, "Cryo Setup Error")
-        )
+        self.cryo_param_setup_worker.error.connect(partial(make_error_popup, "Cryo Setup Error"))
         self.cryo_param_setup_worker.start()
 
     @pyqtSlot()
@@ -360,12 +312,8 @@ class Q0GUI(Display):
         self.calibration_worker.status.connect(self.handle_cal_status)
         self.calibration_worker.finished.connect(self.handle_cal_status)
         self.calibration_worker.error.connect(self.handle_cal_error)
-        self.calibration_worker.finished.connect(
-            partial(self.main_widget.rf_groupbox.setEnabled, True)
-        )
-        self.calibration_worker.finished.connect(
-            partial(self.main_widget.show_cal_data_button.setEnabled, True)
-        )
+        self.calibration_worker.finished.connect(partial(self.main_widget.rf_groupbox.setEnabled, True))
+        self.calibration_worker.finished.connect(partial(self.main_widget.show_cal_data_button.setEnabled, True))
         self.calibration_worker.start()
 
     @property
@@ -398,9 +346,7 @@ class Q0GUI(Display):
             ll_drop=self.main_widget.ll_drop_spinbox.value(),
             desired_amplitudes=self.desiredCavityAmplitudes,
         )
-        self.q0_meas_worker.error.connect(
-            partial(make_error_popup, "Q0 Measurement Error")
-        )
+        self.q0_meas_worker.error.connect(partial(make_error_popup, "Q0 Measurement Error"))
         self.q0_meas_worker.error.connect(self.selected_cm.shut_off)
         self.q0_meas_worker.finished.connect(self.handle_rf_status)
         self.q0_meas_worker.status.connect(self.handle_rf_status)

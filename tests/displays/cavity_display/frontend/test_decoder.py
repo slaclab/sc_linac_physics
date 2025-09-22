@@ -59,9 +59,7 @@ def test_scroll_area_configuration(qtbot: QtBot, display):
     # Content should resize with the window
     assert display.scroll_area.widgetResizable()
     # Scroll area should adjust to show all the content
-    assert (
-        display.scroll_area.sizeAdjustPolicy() == QAbstractScrollArea.AdjustToContents
-    )
+    assert display.scroll_area.sizeAdjustPolicy() == QAbstractScrollArea.AdjustToContents
 
 
 def test_visual_properties(qtbot: QtBot, display):

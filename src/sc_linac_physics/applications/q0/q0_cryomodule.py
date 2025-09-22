@@ -198,9 +198,7 @@ class Q0Cryomodule(Cryomodule):
             self.check_abort()
             print(f"\nChecking window {window_start} to {window_end}")
 
-            data = get_values_over_time_range(
-                pv_list=[self.ds_level_pv], start_time=window_start, end_time=window_end
-            )
+            data = get_values_over_time_range(pv_list=[self.ds_level_pv], start_time=window_start, end_time=window_end)
             llVals = medfilt(data.values[self.ds_level_pv])
 
             # Fit a line to the liquid level over the last [numHours] hours
@@ -217,14 +215,10 @@ class Q0Cryomodule(Cryomodule):
                     self.heater_readback_pv,
                 ]
 
-                data = get_values_over_time_range(
-                    pv_list=signals, start_time=window_start, end_time=window_end
-                )
+                data = get_values_over_time_range(pv_list=signals, start_time=window_start, end_time=window_end)
 
                 des_val_set = set(data.values[self.heater_setpoint_pv])
-                print(
-                    f"number of heater setpoints during this time: {len(des_val_set)}"
-                )
+                print(f"number of heater setpoints during this time: {len(des_val_set)}")
 
                 # We only want to use time periods in which there were no
                 # changes made to the heater settings
@@ -237,9 +231,7 @@ class Q0Cryomodule(Cryomodule):
                     print(f"Desired JT valve position: {des_pos}")
                     print(f"Total heater des setting: {heater_des}")
 
-                    self.valveParams = q0_utils.ValveParams(
-                        des_pos, heater_des, heater_act
-                    )
+                    self.valveParams = q0_utils.ValveParams(des_pos, heater_des, heater_act)
                     return self.valveParams
 
             window_end += q0_utils.JT_SEARCH_OVERLAP_DELTA
@@ -381,25 +373,19 @@ class Q0Cryomodule(Cryomodule):
         self.q0_measurement.save_results()
         self.restore_cryo()
 
-    def setup_for_q0(
-        self, desiredAmplitudes, desired_ll, jt_search_end, jt_search_start
-    ):
+    def setup_for_q0(self, desiredAmplitudes, desired_ll, jt_search_end, jt_search_start):
         self.q0_measurement = Q0Measurement(cryomodule=self)
         self.q0_measurement.amplitudes = desiredAmplitudes
         self.q0_measurement.heater_run_heatload = q0_utils.FULL_MODULE_CALIBRATION_LOAD
 
         if not self.valveParams:
-            self.valveParams = self.getRefValveParams(
-                start_time=jt_search_start, end_time=jt_search_end
-            )
+            self.valveParams = self.getRefValveParams(start_time=jt_search_start, end_time=jt_search_end)
 
         camonitor(self.ds_level_pv, callback=self.monitor_ll)
         self.fill(desired_ll)
 
     def load_calibration(self, time_stamp: str):
-        self.calibration: Calibration = Calibration(
-            time_stamp=time_stamp, cryomodule=self
-        )
+        self.calibration: Calibration = Calibration(time_stamp=time_stamp, cryomodule=self)
         self.calibration.load_data()
 
     def load_q0_measurement(self, time_stamp):
@@ -417,14 +403,10 @@ class Q0Cryomodule(Cryomodule):
         heat_end: float = 160,
     ):
         if not self.valveParams:
-            self.valveParams = self.getRefValveParams(
-                start_time=jt_search_start, end_time=jt_search_end
-            )
+            self.valveParams = self.getRefValveParams(start_time=jt_search_start, end_time=jt_search_end)
 
         startTime = datetime.now().replace(microsecond=0)
-        self.calibration = Calibration(
-            time_stamp=startTime.strftime(q0_utils.DATETIME_FORMATTER), cryomodule=self
-        )
+        self.calibration = Calibration(time_stamp=startTime.strftime(q0_utils.DATETIME_FORMATTER), cryomodule=self)
 
         print(f"setting {self} heater to {self.valveParams.refHeatLoadDes} W")
         self.heater_power = self.valveParams.refHeatLoadDes
@@ -506,9 +488,7 @@ class Q0Cryomodule(Cryomodule):
         while (desiredLiquidLevel - self.averaged_liquid_level) > 0.01:
             self.check_abort()
             avgLevel_rounded = round_for_printing(self.averaged_liquid_level)
-            print(
-                f"Current averaged level is {avgLevel_rounded}; waiting 10 seconds for more data."
-            )
+            print(f"Current averaged level is {avgLevel_rounded}; waiting 10 seconds for more data.")
             sleep(10)
 
         print("downstream liquid level at required value.")

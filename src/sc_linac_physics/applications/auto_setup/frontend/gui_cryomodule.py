@@ -24,9 +24,7 @@ class GUICryomodule:
     def __post_init__(self):
         self._cryomodule: Optional[SetupCryomodule] = None
 
-        self.readback_label: PyDMLabel = PyDMLabel(
-            init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM"
-        )
+        self.readback_label: PyDMLabel = PyDMLabel(init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM")
         self.readback_label.alarmSensitiveBorder = True
         self.readback_label.alarmSensitiveContent = True
         self.readback_label.showUnits = True
@@ -40,9 +38,7 @@ class GUICryomodule:
         self.turn_off_button: QPushButton = QPushButton(f"Turn off CM{self.name}")
         self.turn_off_button.clicked.connect(self.trigger_shutdown)
 
-        self.acon_button: QPushButton = QPushButton(
-            f"Push all CM{self.name} ADES to ACON"
-        )
+        self.acon_button: QPushButton = QPushButton(f"Push all CM{self.name} ADES to ACON")
         self.acon_button.clicked.connect(self.capture_acon)
 
         self.gui_cavities: Dict[int, GUICavity] = {}
@@ -74,17 +70,9 @@ class GUICryomodule:
         return self._cryomodule
 
     def trigger_setup(self):
-        self.cryomodule_object.ssa_cal_requested = (
-            self.settings.ssa_cal_checkbox.isChecked()
-        )
-        self.cryomodule_object.auto_tune_requested = (
-            self.settings.auto_tune_checkbox.isChecked()
-        )
-        self.cryomodule_object.cav_char_requested = (
-            self.settings.cav_char_checkbox.isChecked()
-        )
-        self.cryomodule_object.rf_ramp_requested = (
-            self.settings.rf_ramp_checkbox.isChecked()
-        )
+        self.cryomodule_object.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
+        self.cryomodule_object.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
+        self.cryomodule_object.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
+        self.cryomodule_object.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
 
         self.cryomodule_object.trigger_setup()

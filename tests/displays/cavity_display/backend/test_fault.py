@@ -14,9 +14,7 @@ from sc_linac_physics.displays.cavity_display import FaultCounter, Fault
 
 archiver_value = ArchiverValue()
 get_data_at_time_mock = MagicMock(return_value={"PV": archiver_value})
-get_values_over_time_range_mock = MagicMock(
-    return_value={"PV": ArchiveDataHandler([archiver_value])}
-)
+get_values_over_time_range_mock = MagicMock(return_value={"PV": ArchiveDataHandler([archiver_value])})
 
 
 @patch.multiple(
@@ -66,9 +64,7 @@ class TestFault(TestCase):
         pv: MagicMock = make_mock_pv()
         self.assertRaises(Exception, self.fault.is_faulted, pv)
 
-    @patch(
-        "displays.cavity_display.backend.fault.get_data_at_time", get_data_at_time_mock
-    )
+    @patch("displays.cavity_display.backend.fault.get_data_at_time", get_data_at_time_mock)
     def test_was_faulted(self):
         self.fault.pv = "PV"
         self.fault.is_faulted = MagicMock()
@@ -113,9 +109,7 @@ class TestFaultCounter(TestCase):
         )
 
     def test_sum_fault_count(self):
-        self.assertEqual(
-            self.fault_count + self.invalid_count, self.fault_counter.sum_fault_count
-        )
+        self.assertEqual(self.fault_count + self.invalid_count, self.fault_counter.sum_fault_count)
 
     def test_ratio_ok(self):
         self.skipTest("Not yet implemented")

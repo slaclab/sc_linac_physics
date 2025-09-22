@@ -19,9 +19,7 @@ class RFStation(SCLinacObject):
         self.rack: "Rack" = rack_object
         self.num = num
 
-        self._pv_prefix = self.rack.cryomodule.pv_addr(
-            f"RFS{self.num}{self.rack.rack_name}:"
-        )
+        self._pv_prefix = self.rack.cryomodule.pv_addr(f"RFS{self.num}{self.rack.rack_name}:")
 
         self.dac_amp_pv: str = self.pv_addr("DAC_AMPLITUDE")
         self._dac_amp_pv_obj: Optional[PV] = None

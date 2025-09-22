@@ -87,14 +87,10 @@ class Cryomodule(SCLinacObject):
                 self.linac.vacuum_prefix + "{cm}19:COMBO_P".format(cm=self.name),
             ]
         else:
-            self.coupler_vacuum_pvs: List[str] = [
-                self.linac.vacuum_prefix + "{cm}14:COMBO_P".format(cm=self.name)
-            ]
+            self.coupler_vacuum_pvs: List[str] = [self.linac.vacuum_prefix + "{cm}14:COMBO_P".format(cm=self.name)]
 
         self.vacuum_pvs: List[str] = (
-            self.coupler_vacuum_pvs
-            + self.linac.beamline_vacuum_pvs
-            + self.linac.insulating_vacuum_pvs
+            self.coupler_vacuum_pvs + self.linac.beamline_vacuum_pvs + self.linac.insulating_vacuum_pvs
         )
 
     def __str__(self):

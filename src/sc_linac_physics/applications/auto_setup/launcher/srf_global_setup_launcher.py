@@ -28,13 +28,9 @@ def setup_cryomodule(cryomodule_object: SetupCryomodule):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--no_hl", "-no_hl", action="store_true", help="Exclude HLs from setup script"
-    )
+    parser.add_argument("--no_hl", "-no_hl", action="store_true", help="Exclude HLs from setup script")
 
-    parser.add_argument(
-        "--shutdown", "-off", action="store_true", help="Turn off cavity and SSA"
-    )
+    parser.add_argument("--shutdown", "-off", action="store_true", help="Turn off cavity and SSA")
 
     args = parser.parse_args()
     machine: SetupMachine = SetupMachine()

@@ -62,12 +62,8 @@ class Q0Measurement:
 
             heater_run_data: Dict = q0_meas_data[q0_utils.JSON_HEATER_RUN_KEY]
 
-            self.heater_run_heatload = heater_run_data[
-                q0_utils.JSON_HEATER_READBACK_KEY
-            ]
-            self.heater_run.average_heat = heater_run_data[
-                q0_utils.JSON_HEATER_READBACK_KEY
-            ]
+            self.heater_run_heatload = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
+            self.heater_run.average_heat = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
             self.heater_run.start_time = datetime.strptime(
                 heater_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
             )
@@ -88,9 +84,7 @@ class Q0Measurement:
             self.rf_run.start_time = datetime.strptime(
                 rf_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
             )
-            self.rf_run.end_time = datetime.strptime(
-                rf_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
-            )
+            self.rf_run.end_time = datetime.strptime(rf_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER)
             self.rf_run.average_heat = rf_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
 
             ll_data = {}
@@ -127,9 +121,7 @@ class Q0Measurement:
             q0_utils.JSON_RF_RUN_KEY: rf_data,
         }
 
-        q0_utils.update_json_data(
-            self.cryomodule.q0_data_file, self.start_time, new_data
-        )
+        q0_utils.update_json_data(self.cryomodule.q0_data_file, self.start_time, new_data)
 
     def save_results(self):
         newData = {
@@ -153,9 +145,7 @@ class Q0Measurement:
     @property
     def adjustment(self):
         if not self._adjustment:
-            heater_run_raw_heat = self.cryomodule.calibration.get_heat(
-                self.heater_run.dll_dt
-            )
+            heater_run_raw_heat = self.cryomodule.calibration.get_heat(self.heater_run.dll_dt)
             self._adjustment = self.heater_run.average_heat - heater_run_raw_heat
         return self._adjustment
 

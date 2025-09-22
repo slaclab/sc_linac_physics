@@ -37,9 +37,7 @@ class AutoSetupPVGroup(PVGroup):
 
     note: PvpropertyChar = pvproperty(
         name="NOTE",
-        value="This is as long of a "
-        "sentence as I can type "
-        "in order to test wrapping",
+        value="This is as long of a " "sentence as I can type " "in order to test wrapping",
     )
 
     abort: PvpropertyEnum = pvproperty(
@@ -128,18 +126,14 @@ class AutoSetupGlobalPVGroup(AutoSetupPVGroup):
 
 
 class AutoSetupCavityPVGroup(AutoSetupPVGroup):
-    progress: PvpropertyFloat = pvproperty(
-        name="PROG", value=0.0, dtype=ChannelType.FLOAT
-    )
+    progress: PvpropertyFloat = pvproperty(name="PROG", value=0.0, dtype=ChannelType.FLOAT)
     status_sevr: SeverityProp = SeverityProp(name="STATUS", value=0)
     status: PvpropertyEnum = pvproperty(
         name="STATUS",
         dtype=ChannelType.ENUM,
         enum_strings=("Ready", "Running", "Error"),
     )
-    status_message: PvpropertyChar = pvproperty(
-        name="MSG", value="Ready", dtype=ChannelType.CHAR
-    )
+    status_message: PvpropertyChar = pvproperty(name="MSG", value="Ready", dtype=ChannelType.CHAR)
 
     time_stamp: PvpropertyChar = pvproperty(
         name="TS",

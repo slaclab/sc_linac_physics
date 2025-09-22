@@ -40,9 +40,7 @@ class TuneStepper(StepperTuner):
             self._step_signed_pv_obj = PV(self.step_signed_pv)
         return self._step_signed_pv_obj
 
-    def move_to_cold_landing(
-        self, count_current: bool = False, check_detune: bool = False
-    ):
+    def move_to_cold_landing(self, count_current: bool = False, check_detune: bool = False):
         recorded_steps = self.nsteps_cold_pv_obj.get()
         if count_current:
             steps = recorded_steps - self.step_signed_pv_obj.get()

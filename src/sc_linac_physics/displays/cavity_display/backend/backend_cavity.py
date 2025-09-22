@@ -27,9 +27,7 @@ from sc_linac_physics.utils.sc_linac.cavity import Cavity
 
 class BackendCavity(Cavity):
     def __init__(self, cavity_num, rack_object):
-        super(BackendCavity, self).__init__(
-            cavity_num=cavity_num, rack_object=rack_object
-        )
+        super(BackendCavity, self).__init__(cavity_num=cavity_num, rack_object=rack_object)
         self.status_pv: str = self.pv_addr(STATUS_SUFFIX)
         self._status_pv_obj: Optional[PV] = None
         self.severity_pv: str = self.pv_addr(SEVERITY_SUFFIX)
@@ -84,9 +82,7 @@ class BackendCavity(Cavity):
                 pv: str = prefix + suffix
 
             elif level == "CRYO":
-                prefix = csv_fault_dict["PV Prefix"].format(
-                    CRYOMODULE=self.cryomodule.name, CAVITY=self.number
-                )
+                prefix = csv_fault_dict["PV Prefix"].format(CRYOMODULE=self.cryomodule.name, CAVITY=self.number)
                 pv: str = prefix + suffix
                 macros = self.cryo_edm_macro_string
 
@@ -152,9 +148,7 @@ class BackendCavity(Cavity):
                 lazy_pv=self.rack.cryomodule.linac.machine.lazy_fault_pvs,
             )
 
-    def get_fault_counts(
-        self, start_time: datetime, end_time: datetime
-    ) -> DefaultDict[str, FaultCounter]:
+    def get_fault_counts(self, start_time: datetime, end_time: datetime) -> DefaultDict[str, FaultCounter]:
         """
         Using max function to get the maximum fault or invalid count for duplicate TLCs
             i.e. MGT tlc has three PVs associated with it (X, Y, and Q) but we
@@ -177,9 +171,7 @@ class BackendCavity(Cavity):
                 continue
 
             try:
-                ts = status_ts.replace(
-                    microsecond=round(status_ts.microsecond / 10000) * 10000
-                )
+                ts = status_ts.replace(microsecond=round(status_ts.microsecond / 10000) * 10000)
             except ValueError:
                 ts = status_ts + timedelta(seconds=1)
 

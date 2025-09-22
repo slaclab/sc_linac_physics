@@ -64,9 +64,7 @@ class Decarad(SCLinacObject):
         self.power_status_pv = self.pv_addr("HVSTATUS")
         self.voltage_readback_pv = self.pv_addr("HVMON")
 
-        self.heads: Dict[int, DecaradHead] = {
-            head: DecaradHead(number=head, decarad=self) for head in range(1, 11)
-        }
+        self.heads: Dict[int, DecaradHead] = {head: DecaradHead(number=head, decarad=self) for head in range(1, 11)}
 
     def __eq__(self, other):
         return isinstance(other, Decarad) and other.number == self.number

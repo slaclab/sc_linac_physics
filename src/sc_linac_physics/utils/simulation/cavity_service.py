@@ -19,16 +19,10 @@ from caproto.server import (
 class CavityPVGroup(PVGroup):
     acon: PvpropertyFloat = pvproperty(value=16.6, name="ACON", precision=2)
     ades: PvpropertyFloat = pvproperty(value=16.6, name="ADES", precision=1)
-    aact: PvpropertyFloatRO = pvproperty(
-        value=16.6, name="AACT", read_only=True, precision=1
-    )
-    amean: PvpropertyFloatRO = pvproperty(
-        value=16.6, name="AACTMEAN", read_only=True, precision=1
-    )
+    aact: PvpropertyFloatRO = pvproperty(value=16.6, name="AACT", read_only=True, precision=1)
+    amean: PvpropertyFloatRO = pvproperty(value=16.6, name="AACTMEAN", read_only=True, precision=1)
     gdes: PvpropertyFloat = pvproperty(value=16.0, name="GDES", precision=1)
-    gact: PvpropertyFloatRO = pvproperty(
-        value=16.0, name="GACT", read_only=True, precision=1
-    )
+    gact: PvpropertyFloatRO = pvproperty(value=16.0, name="GACT", read_only=True, precision=1)
     rf_state_des: PvpropertyEnum = pvproperty(
         value=1, name="RFCTRL", dtype=ChannelType.ENUM, enum_strings=("Off", "On")
     )
@@ -55,12 +49,8 @@ class CavityPVGroup(PVGroup):
         enum_strings=("SELAP", "SELA", "SEL", "SEL Raw", "Pulse", "Chirp"),
         read_only=True,
     )
-    adesMaxSRF: PvpropertyFloat = pvproperty(
-        value=21, name="ADES_MAX_SRF", dtype=ChannelType.FLOAT
-    )
-    adesMax: PvpropertyFloat = pvproperty(
-        value=21, name="ADES_MAX", dtype=ChannelType.FLOAT
-    )
+    adesMaxSRF: PvpropertyFloat = pvproperty(value=21, name="ADES_MAX_SRF", dtype=ChannelType.FLOAT)
+    adesMax: PvpropertyFloat = pvproperty(value=21, name="ADES_MAX", dtype=ChannelType.FLOAT)
 
     pdes: PvpropertyFloat = pvproperty(value=0.0, name="PDES")
     pmean: PvpropertyFloat = pvproperty(value=0.0, name="PMEAN")
@@ -85,9 +75,7 @@ class CavityPVGroup(PVGroup):
         record="mbbi",
     )
     # Cavity Summary Display PVs
-    cudStatus: PvpropertyString = pvproperty(
-        value="TLC", name="CUDSTATUS", dtype=ChannelType.STRING
-    )
+    cudStatus: PvpropertyString = pvproperty(value="TLC", name="CUDSTATUS", dtype=ChannelType.STRING)
     cudSevr: PvpropertyEnum = pvproperty(
         value=1,
         name="CUDSEVR",
@@ -102,9 +90,7 @@ class CavityPVGroup(PVGroup):
             "READY",
         ),
     )
-    cudDesc: PvpropertyChar = pvproperty(
-        value="Name", name="CUDDESC", dtype=ChannelType.CHAR
-    )
+    cudDesc: PvpropertyChar = pvproperty(value="Name", name="CUDDESC", dtype=ChannelType.CHAR)
     ssa_latch: PvpropertyEnum = pvproperty(
         value=0,
         name="SSA_LTCH",
@@ -112,31 +98,19 @@ class CavityPVGroup(PVGroup):
         enum_strings=("OK", "Fault"),
         record="mbbi",
     )
-    sel_aset: PvpropertyFloat = pvproperty(
-        value=0.0, name="SEL_ASET", dtype=ChannelType.FLOAT
-    )
+    sel_aset: PvpropertyFloat = pvproperty(value=0.0, name="SEL_ASET", dtype=ChannelType.FLOAT)
     landing_freq = randrange(-10000, 10000)
-    detune: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="DFBEST", dtype=ChannelType.INT
-    )
-    detune_rfs: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="DF", dtype=ChannelType.INT
-    )
-    detune_chirp: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="CHIRP:DF", dtype=ChannelType.INT
-    )
+    detune: PvpropertyInteger = pvproperty(value=landing_freq, name="DFBEST", dtype=ChannelType.INT)
+    detune_rfs: PvpropertyInteger = pvproperty(value=landing_freq, name="DF", dtype=ChannelType.INT)
+    detune_chirp: PvpropertyInteger = pvproperty(value=landing_freq, name="CHIRP:DF", dtype=ChannelType.INT)
     tune_config: PvpropertyEnum = pvproperty(
         name="TUNE_CONFIG",
         value=0,
         dtype=ChannelType.ENUM,
         enum_strings=("On resonance", "Cold landing", "Parked", "Other"),
     )
-    df_cold: PvpropertyFloat = pvproperty(
-        value=randint(-10000, 200000), name="DF_COLD", dtype=ChannelType.FLOAT
-    )
-    step_temp: PvpropertyFloat = pvproperty(
-        value=35.0, name="STEPTEMP", dtype=ChannelType.FLOAT
-    )
+    df_cold: PvpropertyFloat = pvproperty(value=randint(-10000, 200000), name="DF_COLD", dtype=ChannelType.FLOAT)
+    step_temp: PvpropertyFloat = pvproperty(value=35.0, name="STEPTEMP", dtype=ChannelType.FLOAT)
 
     fscan_stat: PvpropertyEnum = pvproperty(
         name="FSCAN:SEARCHSTAT",
@@ -192,34 +166,18 @@ class CavityPVGroup(PVGroup):
         value=datetime.now().strftime("%Y-%m-%d-%H:%M:%S"),
     )
 
-    ssa_overrange: PvpropertyInteger = pvproperty(
-        value=0, name="ASETSUB.VALQ", dtype=ChannelType.INT
-    )
+    ssa_overrange: PvpropertyInteger = pvproperty(value=0, name="ASETSUB.VALQ", dtype=ChannelType.INT)
 
-    push_ssa_slope: PvpropertyInteger = pvproperty(
-        value=0, name="PUSH_SSA_SLOPE.PROC", dtype=ChannelType.INT
-    )
-    push_loaded_q: PvpropertyInteger = pvproperty(
-        value=0, name="PUSH_QLOADED.PROC", dtype=ChannelType.INT
-    )
+    push_ssa_slope: PvpropertyInteger = pvproperty(value=0, name="PUSH_SSA_SLOPE.PROC", dtype=ChannelType.INT)
+    push_loaded_q: PvpropertyInteger = pvproperty(value=0, name="PUSH_QLOADED.PROC", dtype=ChannelType.INT)
 
-    push_cav_scale: PvpropertyInteger = pvproperty(
-        value=0, name="PUSH_CAV_SCALE.PROC", dtype=ChannelType.INT
-    )
+    push_cav_scale: PvpropertyInteger = pvproperty(value=0, name="PUSH_CAV_SCALE.PROC", dtype=ChannelType.INT)
 
-    data_decim_a: PvpropertyInteger = pvproperty(
-        value=255, name="ACQ_DECIM_SEL.A", dtype=ChannelType.INT
-    )
-    data_decim_c: PvpropertyInteger = pvproperty(
-        value=255, name="ACQ_DECIM_SEL.C", dtype=ChannelType.INT
-    )
+    data_decim_a: PvpropertyInteger = pvproperty(value=255, name="ACQ_DECIM_SEL.A", dtype=ChannelType.INT)
+    data_decim_c: PvpropertyInteger = pvproperty(value=255, name="ACQ_DECIM_SEL.C", dtype=ChannelType.INT)
 
-    calc_probe_q: PvpropertyInteger = pvproperty(
-        value=0, name="QPROBE_CALC1.PROC", dtype=ChannelType.INT
-    )
-    sel_poff: PvpropertyFloat = pvproperty(
-        value=0.0, name="SEL_POFF", dtype=ChannelType.FLOAT
-    )
+    calc_probe_q: PvpropertyInteger = pvproperty(value=0, name="QPROBE_CALC1.PROC", dtype=ChannelType.INT)
+    sel_poff: PvpropertyFloat = pvproperty(value=0.0, name="SEL_POFF", dtype=ChannelType.FLOAT)
 
     q0: PvpropertyFloat = pvproperty(
         value=randrange(int(2.5e10), int(3.5e10), step=int(0.1e10)),
@@ -244,9 +202,7 @@ class CavityPVGroup(PVGroup):
     @probe_cal_start.putter
     async def probe_cal_start(self, instance, value):
         if value == 1:
-            await self.probe_cal_time.write(
-                datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-            )
+            await self.probe_cal_time.write(datetime.now().strftime("%Y-%m-%d-%H:%M:%S"))
             await self.probe_cal_start.write(0)
 
     @interlock_reset.putter

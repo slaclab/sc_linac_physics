@@ -99,15 +99,11 @@ class QuenchGUI(Display):
         self.amp_rad_timeplot.setTimeSpan(60 * 60)
         self.amp_rad_timeplot.updateMode = updateMode.AtFixedRate
 
-        self.timeplot_params: Dict[str, TimePlotParams] = {
-            "LIVE_SIGNALS": TimePlotParams(plot=self.amp_rad_timeplot)
-        }
+        self.timeplot_params: Dict[str, TimePlotParams] = {"LIVE_SIGNALS": TimePlotParams(plot=self.amp_rad_timeplot)}
 
         plot_vlayout.addWidget(self.amp_rad_timeplot)
 
-        self.waveform_updater: WaveformPlotUpdater = WaveformPlotUpdater(
-            self.waveform_plot_params
-        )
+        self.waveform_updater: WaveformPlotUpdater = WaveformPlotUpdater(self.waveform_plot_params)
 
         self.cm_combobox.currentIndexChanged.connect(self.update_cm)
         self.cav_combobox.currentIndexChanged.connect(self.update_cm)
@@ -123,22 +119,16 @@ class QuenchGUI(Display):
         processing_controls_layout: QGridLayout = QGridLayout()
         processing_controls_groupbox.setLayout(processing_controls_layout)
         start_amp_row = 0
-        processing_controls_layout.addWidget(
-            QLabel("Starting Amplitude (MV):"), start_amp_row, 0
-        )
+        processing_controls_layout.addWidget(QLabel("Starting Amplitude (MV):"), start_amp_row, 0)
         processing_controls_layout.addWidget(self.start_amp_spinbox, start_amp_row, 1)
         stop_amp_row = 1
-        processing_controls_layout.addWidget(
-            QLabel("Ending Amplitude (MV):"), stop_amp_row, 0
-        )
+        processing_controls_layout.addWidget(QLabel("Ending Amplitude (MV):"), stop_amp_row, 0)
         processing_controls_layout.addWidget(self.stop_amp_spinbox, stop_amp_row, 1)
         step_row = 2
         processing_controls_layout.addWidget(QLabel("Step Size (MV):"))
         processing_controls_layout.addWidget(self.step_size_spinbox, step_row, 1)
         time_row = 3
-        processing_controls_layout.addWidget(
-            QLabel("Time Between Steps (s):"), time_row, 0
-        )
+        processing_controls_layout.addWidget(QLabel("Time Between Steps (s):"), time_row, 0)
         processing_controls_layout.addWidget(self.step_time_spinbox, time_row, 1)
 
         decarad_controls_groupbox: QGroupBox = QGroupBox("Decarad Controls")
@@ -251,12 +241,8 @@ class QuenchGUI(Display):
         self.amp_rad_timeplot.clearCurves()
 
         self.current_decarad = self.decarads[self.decarad_combobox.currentText()]
-        self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[
-            self.cm_combobox.currentText()
-        ]
-        self.current_cav: QuenchCavity = self.current_cm.cavities[
-            int(self.cav_combobox.currentText())
-        ]
+        self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[self.cm_combobox.currentText()]
+        self.current_cav: QuenchCavity = self.current_cm.cavities[int(self.cav_combobox.currentText())]
 
         channels = [self.current_cav.aact_pv]
         for head in self.current_decarad.heads.values():
@@ -272,9 +258,7 @@ class QuenchGUI(Display):
                 y_channel=channel,
                 useArchiveData=True,
                 color=rga_color,
-                yAxisName=(
-                    "Amplitude" if channel == self.current_cav.aact_pv else "Radiation"
-                ),
+                yAxisName=("Amplitude" if channel == self.current_cav.aact_pv else "Radiation"),
             )
 
     def update_decarad(self):
@@ -299,12 +283,8 @@ class QuenchGUI(Display):
 
         self.clear_all_connections()
 
-        self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[
-            self.cm_combobox.currentText()
-        ]
-        self.current_cav: QuenchCavity = self.current_cm.cavities[
-            int(self.cav_combobox.currentText())
-        ]
+        self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[self.cm_combobox.currentText()]
+        self.current_cav: QuenchCavity = self.current_cm.cavities[int(self.cav_combobox.currentText())]
 
         self.rf_controls.ssa_on_button.clicked.connect(self.current_cav.ssa.turn_on)
         self.rf_controls.ssa_off_button.clicked.connect(self.current_cav.ssa.turn_off)

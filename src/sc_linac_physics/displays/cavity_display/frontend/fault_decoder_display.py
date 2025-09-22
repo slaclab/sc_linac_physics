@@ -43,9 +43,7 @@ class DecoderDisplay(Display):
                 Row(
                     tlc=fault_row_dict["Three Letter Code"],
                     long_desc=fault_row_dict["Long Description"],
-                    gen_short_desc=fault_row_dict[
-                        "Generic Short Description for Decoder"
-                    ],
+                    gen_short_desc=fault_row_dict["Generic Short Description for Decoder"],
                     corrective_action=fault_row_dict["Recommended Corrective Actions"],
                 )
             )
@@ -72,9 +70,7 @@ class DecoderDisplay(Display):
         header_layout = QHBoxLayout()
         description_header_label = QLabel("Description")
         description_header_label.setMinimumSize(100, 30)
-        description_header_label.setSizePolicy(
-            QSizePolicy.Minimum, QSizePolicy.Preferred
-        )
+        description_header_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
         description_header_label.setStyleSheet("text-decoration: underline")
 
         # Name (aka short description) header

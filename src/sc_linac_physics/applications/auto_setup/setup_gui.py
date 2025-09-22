@@ -33,19 +33,13 @@ class SetupGUI(Display):
         # num_total_cavities = len(ALL_CRYOMODULES) * 8
 
         self.machine_setup_button: QPushButton = QPushButton("Set Up Machine")
-        self.machine_setup_popup = make_sanity_check_popup(
-            "This will set up all online cavities"
-        )
+        self.machine_setup_popup = make_sanity_check_popup("This will set up all online cavities")
 
         self.machine_shutdown_button: QPushButton = QPushButton("Shut Down Machine")
-        self.machine_shutdown_popup = make_sanity_check_popup(
-            "This will turn off all online cavities and SSAs"
-        )
+        self.machine_shutdown_popup = make_sanity_check_popup("This will turn off all online cavities and SSAs")
 
         self.machine_abort_button: QPushButton = QPushButton("Abort Machine")
-        self.machine_abort_popup = make_sanity_check_popup(
-            "This will abort all scripts running on all online cavities"
-        )
+        self.machine_abort_popup = make_sanity_check_popup("This will abort all scripts running on all online cavities")
 
         self.machine_button_layout: QHBoxLayout = QHBoxLayout()
         self.machine_button_layout.addStretch()
@@ -87,9 +81,7 @@ class SetupGUI(Display):
         self.linac_widgets: List[GUILinac] = []
         self.populate_linac_widgets()
 
-        self.linac_aact_pvs: List[PV] = [
-            PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)
-        ]
+        self.linac_aact_pvs: List[PV] = [PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)]
 
         self.populate_tabs()
 
@@ -135,12 +127,8 @@ class SetupGUI(Display):
         selection = self.machine_setup_popup.exec()
         if selection == QMessageBox.Yes:
             SETUP_MACHINE.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
-            SETUP_MACHINE.auto_tune_requested = (
-                self.settings.auto_tune_checkbox.isChecked()
-            )
-            SETUP_MACHINE.cav_char_requested = (
-                self.settings.cav_char_checkbox.isChecked()
-            )
+            SETUP_MACHINE.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
+            SETUP_MACHINE.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
             SETUP_MACHINE.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
             SETUP_MACHINE.trigger_setup()
 

@@ -29,9 +29,7 @@ def cavities(monkeypatch):
     monkeypatch.setattr("lcls_tools.common.logger.logger.custom_logger", mock_func)
     monkeypatch.setattr("logging.FileHandler", mock_func)
     cavity_lst: List[QuenchCavity] = list(
-        Machine(
-            cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule
-        ).all_iterator
+        Machine(cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule).all_iterator
     )
 
     for cavity in cavity_lst:

@@ -81,9 +81,7 @@ class GUICavity(BackendCavity):
 
         rule = [
             {
-                "channels": [
-                    {"channel": self.ssa.status_pv, "trigger": True, "use_enum": True}
-                ],
+                "channels": [{"channel": self.ssa.status_pv, "trigger": True, "use_enum": True}],
                 "property": "Opacity",
                 "expression": "ch[0] == 'SSA On'",
                 "initial_value": "0",
@@ -100,16 +98,12 @@ class GUICavity(BackendCavity):
             code_label.setAlignment(Qt.AlignCenter)
 
             short_description_label = QLabel(fault.short_description)
-            short_description_label.setSizePolicy(
-                QSizePolicy.Maximum, QSizePolicy.Preferred
-            )
+            short_description_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
             short_description_label.setAlignment(Qt.AlignLeft)
             short_description_label.setWordWrap(True)
 
             action_label = QLabel(fault.action)
-            action_label.setSizePolicy(
-                QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding
-            )
+            action_label.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
             action_label.setAlignment(Qt.AlignLeft)
             action_label.setWordWrap(True)
 
@@ -118,17 +112,13 @@ class GUICavity(BackendCavity):
 
             row_idx = idx + 1
             self.fault_display_grid_layout.addWidget(code_label, row_idx, 0)
-            self.fault_display_grid_layout.addWidget(
-                short_description_label, row_idx, 1
-            )
+            self.fault_display_grid_layout.addWidget(short_description_label, row_idx, 1)
             self.fault_display_grid_layout.addWidget(status_label, row_idx, 2)
 
             if fault.button_level == "EDM":
                 button = PyDMEDMDisplayButton()
                 button.filenames = [fault.button_command]
-                button.macros = fault.macros + (
-                    "," + fault.button_macro if fault.button_macro else ""
-                )
+                button.macros = fault.macros + ("," + fault.button_macro if fault.button_macro else "")
 
             elif fault.button_level == "SCRIPT":
                 button = PyDMShellCommand()
@@ -137,9 +127,7 @@ class GUICavity(BackendCavity):
             elif fault.button_level == "PYDM":
                 button = PyDMFaultButton(filename=fault.button_command)
                 button.openInNewWindow = True
-                button.macros = self.cryomodule.pydm_macros + (
-                    "," + fault.button_macro if fault.button_macro else ""
-                )
+                button.macros = self.cryomodule.pydm_macros + ("," + fault.button_macro if fault.button_macro else "")
 
             else:
                 button = PyDMRelatedDisplayButton()

@@ -26,16 +26,12 @@ from sc_linac_physics.displays.cavity_display.frontend.utils import make_line
 class CavityDisplayGUI(Display):
     def __init__(self, parent=None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
-        self.setStyleSheet(
-            "background-color: rgb(35, 35, 35); color: rgb(255, 255, 255); font-size: 15pt;"
-        )
+        self.setStyleSheet("background-color: rgb(35, 35, 35); color: rgb(255, 255, 255); font-size: 15pt;")
 
         self.gui_machine = GUIMachine()
 
         self.header = QHBoxLayout()
-        heartbeat_indicator = PyDMByteIndicator(
-            init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR"
-        )
+        heartbeat_indicator = PyDMByteIndicator(init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR")
         heartbeat_indicator.onColor = QColor(255, 0, 0)
         heartbeat_indicator.offColor = QColor(0, 255, 0)
         heartbeat_indicator.showLabels = False

@@ -38,9 +38,7 @@ if __name__ == "__main__":
         type=int,
         help="Cavity number as an int",
     )
-    parser.add_argument(
-        "--shutdown", "-off", action="store_true", help="Turn off cavity and SSA"
-    )
+    parser.add_argument("--shutdown", "-off", action="store_true", help="Turn off cavity and SSA")
 
     parsed_args: argparse.Namespace = parser.parse_args()
     cm_name = parsed_args.cryomodule

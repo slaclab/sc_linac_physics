@@ -23,6 +23,4 @@ class RACKPVGroup(PVGroup):
     fscan_thresh = pvproperty(value=0, name="FSCAN:RMS_THRESH")
     fscan_overlap = pvproperty(value=0, name="FSCAN:MODE_OVERLAP")
     prl = SeverityProp(value=0, name="PRLSUM")
-    pjt: PvpropertyDouble = pvproperty(
-        value=0, name="PRLJITSUM", dtype=ChannelType.DOUBLE
-    )
+    pjt: PvpropertyDouble = pvproperty(value=0, name="PRLJITSUM", dtype=ChannelType.DOUBLE)

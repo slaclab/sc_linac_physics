@@ -186,13 +186,7 @@ def test_validate_quench_true(cavity):
     time_data = linspace(-500e-3, 500e-3, num=500)
     amp_data = []
     for t in time_data:
-        amp_data.append(
-            16.6e6
-            * exp(
-                (-pi * cavity.frequency * t)
-                / (LOADED_Q_CHANGE_FOR_QUENCH * 0.5 * 4.5e7)
-            )
-        )
+        amp_data.append(16.6e6 * exp((-pi * cavity.frequency * t) / (LOADED_Q_CHANGE_FOR_QUENCH * 0.5 * 4.5e7)))
 
     cavity._fault_time_waveform_pv_obj = make_mock_pv(get_val=time_data)
     cavity._fault_waveform_pv_obj = make_mock_pv(get_val=amp_data)

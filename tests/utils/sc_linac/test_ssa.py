@@ -36,10 +36,7 @@ def ssa(monkeypatch):
 
 
 def test_pv_prefix(ssa):
-    assert (
-        ssa.pv_prefix
-        == f"ACCL:{ssa.cavity.linac.name}:{ssa.cavity.cryomodule.name}{ssa.cavity.number}0:SSA:"
-    )
+    assert ssa.pv_prefix == f"ACCL:{ssa.cavity.linac.name}:{ssa.cavity.cryomodule.name}{ssa.cavity.number}0:SSA:"
 
 
 def test_pv_addr(ssa):
@@ -210,9 +207,7 @@ def test_run_calibration(ssa):
 
     ssa._cal_result_status_pv_obj = make_mock_pv(get_val=SSA_RESULT_GOOD_STATUS_VALUE)
     ssa._max_fwd_pwr_pv_obj = make_mock_pv(get_val=ssa.fwd_power_lower_limit * 2)
-    ssa._measured_slope_pv_obj = make_mock_pv(
-        get_val=uniform(SSA_SLOPE_LOWER_LIMIT, SSA_SLOPE_UPPER_LIMIT)
-    )
+    ssa._measured_slope_pv_obj = make_mock_pv(get_val=uniform(SSA_SLOPE_LOWER_LIMIT, SSA_SLOPE_UPPER_LIMIT))
     ssa.cavity.push_ssa_slope = MagicMock()
 
     ssa.run_calibration()
