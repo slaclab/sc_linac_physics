@@ -23,7 +23,7 @@ class RouteChannel:
         setter=None,
         new_subscription=None,
         remove_subscription=None,
-        **kwargs
+        **kwargs,
     ):
         self.pvname = pvname
         self.getter = getter
