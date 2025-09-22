@@ -1,4 +1,3 @@
-import sys
 from time import sleep
 from typing import List
 
@@ -9,13 +8,12 @@ from lcls_tools.superconducting.sc_linac_utils import (
 )
 from numpy.linalg import LinAlgError
 
-sys.path.append("/home/physics/srf/sc_linac_physics")
-from sc_linac_physics.applications.quench_processing.quench_cryomodule import (  # noqa: E402
-    QUENCH_MACHINE,
-)
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
 )  # noqa: E402
+from sc_linac_physics.applications.quench_processing.quench_cryomodule import (  # noqa: E402
+    QUENCH_MACHINE,
+)
 
 
 def check_cavities(cavity_list: List[QuenchCavity], watcher_pv: PV):

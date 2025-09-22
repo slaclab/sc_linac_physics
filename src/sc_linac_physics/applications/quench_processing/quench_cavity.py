@@ -14,8 +14,8 @@ from sc_linac_physics.applications.quench_processing.quench_utils import (
     DECARAD_SETTLE_TIME,
     RADIATION_LIMIT,
 )
-from sc_linac_physics.utils import Decarad
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
+from sc_linac_physics.utils.sc_linac.decarad import Decarad
 from sc_linac_physics.utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
 
 

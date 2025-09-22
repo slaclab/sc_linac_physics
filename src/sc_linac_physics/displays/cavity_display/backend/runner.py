@@ -1,16 +1,14 @@
-import sys
 from datetime import datetime
 from time import sleep
 from typing import List, Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-sys.path.append("/home/physics/srf/sc_linac_physics")
-from sc_linac_physics.displays.cavity_display.backend.backend_machine import (
-    BackendMachine,
-)  # noqa: E402
 from sc_linac_physics.displays.cavity_display.backend.backend_cavity import (
     BackendCavity,
+)  # noqa: E402
+from sc_linac_physics.displays.cavity_display.backend.backend_machine import (
+    BackendMachine,
 )  # noqa: E402
 from sc_linac_physics.displays.cavity_display.utils.utils import (
     DEBUG,
