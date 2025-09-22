@@ -58,9 +58,6 @@ jobs:
         if: ${{ hashFiles('pyproject.toml') == '' && hashFiles('requirements.txt') != '' }}
         run: pip install -r requirements.txt
 
-      - name: Ensure dev tooling present
-        run: pip install -U pytest pytest-qt flake8 black
-
       - name: Ensure package importable (fallback to src on PYTHONPATH)
         shell: bash
         run: |
