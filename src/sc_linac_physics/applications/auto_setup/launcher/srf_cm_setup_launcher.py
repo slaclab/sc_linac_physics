@@ -4,16 +4,23 @@ from time import sleep
 
 sys.path.append("/home/physics/srf/sc_linac_physics")
 
+# noqa: E402
 from sc_linac_physics.applications.auto_setup.backend.setup_cavity import (
     SetupCavity,
-)  # noqa: E402
-from sc_linac_physics.applications.auto_setup.backend.setup_cryomodule import (  # noqa: E402
+)
+
+# noqa: E402
+from sc_linac_physics.applications.auto_setup.backend.setup_cryomodule import (
     SetupCryomodule,
 )
+
+# noqa: E402
 from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
     SETUP_MACHINE,
-)  # noqa: E402
-from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES  # noqa: E402
+)
+
+# noqa: E402
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 def setup_cavity(cavity_object: SetupCavity, args):
