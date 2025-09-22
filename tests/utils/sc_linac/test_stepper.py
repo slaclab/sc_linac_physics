@@ -4,16 +4,16 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from tests.utils.mock_utils import mock_func
-from utils.sc_linac.cavity import Cavity
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.utils.sc_linac.cavity import Cavity
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     StepperAbortError,
     STEPPER_ON_LIMIT_SWITCH_VALUE,
     DEFAULT_STEPPER_MAX_STEPS,
     DEFAULT_STEPPER_SPEED,
     ALL_CRYOMODULES,
 )
-from utils.sc_linac.stepper import StepperTuner
+from sc_linac_physics.utils.sc_linac.stepper import StepperTuner
+from tests.utils.mock_utils import mock_func
 
 
 @pytest.fixture

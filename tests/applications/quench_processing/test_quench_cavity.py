@@ -11,15 +11,15 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 from numpy import pi, exp, linspace
 
-from applications.quench_processing.quench_cavity import QuenchCavity
-from applications.quench_processing.quench_utils import (
+from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_utils import (
     QUENCH_AMP_THRESHOLD,
     LOADED_Q_CHANGE_FOR_QUENCH,
     QUENCH_STABLE_TIME,
     RADIATION_LIMIT,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
 from tests.utils.mock_utils import mock_func
-from utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
 
 
 @pytest.fixture

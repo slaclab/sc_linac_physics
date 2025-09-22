@@ -9,10 +9,9 @@ from lcls_tools.common.controls.pyepics.utils import (
     make_mock_pv,
 )
 
-from tests.utils.mock_utils import mock_func
-from utils.sc_linac.cavity import Cavity
-from utils.sc_linac.linac import MACHINE
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.utils.sc_linac.cavity import Cavity
+from sc_linac_physics.utils.sc_linac.linac import MACHINE
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     LOADED_Q_LOWER_LIMIT,
     LOADED_Q_LOWER_LIMIT_HL,
     LOADED_Q_UPPER_LIMIT,
@@ -42,7 +41,8 @@ from utils.sc_linac.linac_utils import (
     QuenchError,
     ALL_CRYOMODULES,
 )
-from utils.sc_linac.piezo import Piezo
+from sc_linac_physics.utils.sc_linac.piezo import Piezo
+from tests.utils.mock_utils import mock_func
 
 
 @pytest.fixture

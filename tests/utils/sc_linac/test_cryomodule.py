@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from utils.sc_linac.cryomodule import Cryomodule
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES, L1BHL
-from utils.sc_linac.rack import Rack
+from sc_linac_physics.utils import Cryomodule
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES, L1BHL
+from sc_linac_physics.utils.sc_linac.rack import Rack
 
 
 @pytest.fixture

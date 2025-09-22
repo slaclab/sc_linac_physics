@@ -6,9 +6,11 @@ import pytest
 from PyQt5.QtCore import QDateTime
 from pytestqt.qtbot import QtBot
 
-from displays.cavity_display.backend.backend_machine import BackendMachine
-from displays.cavity_display.backend.fault import FaultCounter
-from displays.cavity_display.frontend.fault_count_display import FaultCountDisplay
+from sc_linac_physics.displays.cavity_display import BackendMachine
+from sc_linac_physics.displays.cavity_display import FaultCounter
+from sc_linac_physics.displays.cavity_display.frontend.fault_count_display import (
+    FaultCountDisplay,
+)
 
 non_hl_iterator = BackendMachine(lazy_fault_pvs=True).non_hl_iterator
 

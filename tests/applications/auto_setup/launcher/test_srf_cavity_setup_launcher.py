@@ -4,13 +4,15 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from applications.auto_setup.backend.setup_cavity import SetupCavity
-from applications.auto_setup.backend.setup_utils import (
+from sc_linac_physics.applications.auto_setup.backend.setup_cavity import SetupCavity
+from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
     STATUS_RUNNING_VALUE,
     STATUS_READY_VALUE,
     STATUS_ERROR_VALUE,
 )
-from applications.auto_setup.launcher.srf_cavity_setup_launcher import setup_cavity
+from sc_linac_physics.applications.auto_setup.launcher.srf_cavity_setup_launcher import (
+    setup_cavity,
+)
 
 
 @pytest.fixture

@@ -10,7 +10,7 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 from lcls_tools.common.data.archiver import ArchiverValue, ArchiveDataHandler
 
-from displays.cavity_display.backend.fault import FaultCounter, Fault
+from sc_linac_physics.displays.cavity_display import FaultCounter, Fault
 
 archiver_value = ArchiverValue()
 get_data_at_time_mock = MagicMock(return_value={"PV": archiver_value})

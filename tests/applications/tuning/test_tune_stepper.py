@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from applications.tuning.tune_stepper import TuneStepper
+from sc_linac_physics.applications.tuning.tune_stepper import TuneStepper
 
 
 @pytest.fixture

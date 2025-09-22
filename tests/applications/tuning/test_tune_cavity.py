@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from applications.tuning.tune_cavity import TuneCavity
-from applications.tuning.tune_stepper import TuneStepper
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
+from sc_linac_physics.applications.tuning.tune_stepper import TuneStepper
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     TUNE_CONFIG_COLD_VALUE,
     TUNE_CONFIG_PARKED_VALUE,
     TUNE_CONFIG_OTHER_VALUE,
@@ -18,7 +18,7 @@ from utils.sc_linac.linac_utils import (
     HW_MODE_MAINTENANCE_VALUE,
     HW_MODE_ONLINE_VALUE,
 )
-from utils.sc_linac.ssa import SSA
+from sc_linac_physics.utils.sc_linac.ssa import SSA
 
 
 @pytest.fixture

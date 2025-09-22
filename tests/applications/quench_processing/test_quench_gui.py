@@ -5,16 +5,16 @@ import pytest
 from PyQt5.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
-from applications.quench_processing.quench_cavity import QuenchCavity
-from applications.quench_processing.quench_cryomodule import (
+from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
     QuenchCryomodule,
 )
-from applications.quench_processing.quench_gui import QuenchGUI
-from applications.quench_processing.quench_worker import QuenchWorker
-from utils.qt import make_rainbow
-from utils.sc_linac.decarad import Decarad
-from utils.sc_linac.linac import Machine
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.applications.quench_processing.quench_gui import QuenchGUI
+from sc_linac_physics.applications.quench_processing.quench_worker import QuenchWorker
+from sc_linac_physics.utils import Decarad
+from sc_linac_physics.utils.qt import make_rainbow
+from sc_linac_physics.utils.sc_linac.linac import Machine
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 @pytest.fixture

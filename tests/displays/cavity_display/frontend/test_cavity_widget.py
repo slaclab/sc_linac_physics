@@ -5,7 +5,7 @@ import pytest
 from PyQt5.QtCore import Qt, QPoint, QRect, QSize
 from pytestqt.qtbot import QtBot
 
-from displays.cavity_display.frontend.cavity_widget import (
+from sc_linac_physics.displays.cavity_display import (
     CavityWidget,
     SHAPE_PARAMETER_DICT,
 )

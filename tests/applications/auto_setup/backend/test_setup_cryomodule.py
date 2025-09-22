@@ -3,8 +3,10 @@ from unittest.mock import MagicMock
 import pytest
 from numpy.random import choice
 
-from applications.auto_setup.backend.setup_cryomodule import SetupCryomodule
-from applications.auto_setup.backend.setup_machine import SetupMachine
+from sc_linac_physics.applications.auto_setup.backend import SetupMachine
+from sc_linac_physics.applications.auto_setup.backend.setup_cryomodule import (
+    SetupCryomodule,
+)
 
 
 @pytest.fixture

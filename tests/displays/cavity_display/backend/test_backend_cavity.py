@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from displays.cavity_display.backend.backend_cavity import BackendCavity
-from displays.cavity_display.backend.fault import FaultCounter, Fault
+from sc_linac_physics.displays.cavity_display import BackendCavity
+from sc_linac_physics.displays.cavity_display import FaultCounter, Fault
 from tests.displays.cavity_display.test_utils.utils import mock_parse
 
 

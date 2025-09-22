@@ -4,14 +4,18 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from applications.auto_setup.backend.setup_cavity import SetupCavity
-from applications.auto_setup.backend.setup_cryomodule import SetupCryomodule
-from applications.auto_setup.backend.setup_utils import (
+from sc_linac_physics.applications.auto_setup.backend.setup_cavity import SetupCavity
+from sc_linac_physics.applications.auto_setup.backend.setup_cryomodule import (
+    SetupCryomodule,
+)
+from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
     STATUS_READY_VALUE,
     STATUS_ERROR_VALUE,
 )
-from applications.auto_setup.launcher.srf_cm_setup_launcher import setup_cavity
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.applications.auto_setup.launcher.srf_cm_setup_launcher import (
+    setup_cavity,
+)
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 @pytest.fixture

@@ -3,8 +3,8 @@ from unittest.mock import patch
 import pytest
 from pytestqt.qtbot import QtBot
 
-from applications.auto_setup.setup_gui import SetupGUI
-from utils.qt import MockWidget
+from sc_linac_physics.applications.auto_setup.setup_gui import SetupGUI
+from sc_linac_physics.utils.qt import MockWidget
 
 
 @pytest.fixture

@@ -4,9 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from tests.utils.mock_utils import mock_func
-from utils.sc_linac.cavity import Cavity
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.utils.sc_linac.cavity import Cavity
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     SSA_STATUS_ON_VALUE,
     SSA_STATUS_RESETTING_FAULTS_VALUE,
     SSA_STATUS_FAULTED_VALUE,
@@ -22,7 +21,8 @@ from utils.sc_linac.linac_utils import (
     ALL_CRYOMODULES,
     CavityAbortError,
 )
-from utils.sc_linac.ssa import SSA
+from sc_linac_physics.utils.sc_linac.ssa import SSA
+from tests.utils.mock_utils import mock_func
 
 
 @pytest.fixture

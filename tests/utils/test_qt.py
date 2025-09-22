@@ -1,7 +1,7 @@
 from random import randint
 from unittest import TestCase
 
-from utils.qt import make_rainbow, highlight_text
+from sc_linac_physics.utils.qt import make_rainbow, highlight_text
 
 
 class Test(TestCase):

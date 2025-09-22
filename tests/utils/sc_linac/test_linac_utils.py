@@ -1,6 +1,6 @@
 from random import randint
 
-from utils.sc_linac.linac_utils import stepper_tol_factor
+from sc_linac_physics.utils.sc_linac.linac_utils import stepper_tol_factor
 
 
 def test_stepper_tol_factor_low():
