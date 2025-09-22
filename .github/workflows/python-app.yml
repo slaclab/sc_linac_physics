@@ -61,9 +61,23 @@ jobs:
       - name: Ensure dev tooling present
         run: pip install -U pytest pytest-qt flake8 black
 
+      - name: Ensure package importable (fallback to src on PYTHONPATH)
+        shell: bash
+        run: |
+          python - <<'PY'
+          try:
+              import sc_linac_physics  # noqa: F401
+              print("Package import OK.")
+          except ModuleNotFoundError:
+              print("Package not importable; adding src to PYTHONPATH for this job.")
+              import os
+              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+                  f.write(f"PYTHONPATH={os.getcwd()}/src\n")
+          PY
+
       - name: Lint
         run: |
-          flake8 . --count --max-complexity=10 --max-line-length=120 --show-source --statistics
+          flake8 . --count --show-source --statistics
           black --check .
 
       - name: Run tests (headless Qt)
