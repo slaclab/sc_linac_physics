@@ -74,7 +74,7 @@ jobs:
 
       - name: Lint
         run: |
-          flake8 . --count --show-source --statistics
+          flake8 . --count --max-complexity=10 --max-line-length=120 --show-source --statistics
           black --check .
 
       - name: Run tests (headless Qt)
