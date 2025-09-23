@@ -32,7 +32,7 @@ class TestCavityDisplayGUI:
             mock_gui_machine.return_value.bottom_half = MagicMock()
 
             # Mock showDisplay function
-            with patch("lcls_tools.common.frontend.display.util.showDisplay") as mock_show_display:
+            with patch("lcls_tools.common.frontend.display.util.showDisplay") as _:
                 gui = CavityDisplayGUI()
                 yield gui
                 # Ensure cleanup
