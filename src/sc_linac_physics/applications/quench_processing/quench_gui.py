@@ -28,9 +28,9 @@ from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
     QuenchCryomodule,
 )
 from sc_linac_physics.applications.quench_processing.quench_worker import QuenchWorker
-from sc_linac_physics.utils import Cryomodule
-from sc_linac_physics.utils import Decarad
 from sc_linac_physics.utils.qt import RFControls, make_rainbow
+from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
+from sc_linac_physics.utils.sc_linac.decarad import Decarad
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 

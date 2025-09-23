@@ -11,10 +11,7 @@ from PyQt5.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 
-from sc_linac_physics.displays.cavity_display import (
-    DecoderDisplay,
-    Row,
-)
+from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display import DecoderDisplay, Row
 from tests.displays.cavity_display.test_utils.utils import mock_parse
 
 

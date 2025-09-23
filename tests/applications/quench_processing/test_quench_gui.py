@@ -11,8 +11,8 @@ from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
 )
 from sc_linac_physics.applications.quench_processing.quench_gui import QuenchGUI
 from sc_linac_physics.applications.quench_processing.quench_worker import QuenchWorker
-from sc_linac_physics.utils import Decarad
 from sc_linac_physics.utils.qt import make_rainbow
+from sc_linac_physics.utils.sc_linac.decarad import Decarad
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 

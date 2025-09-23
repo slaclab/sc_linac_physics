@@ -16,7 +16,7 @@ from sc_linac_physics.applications.q0.calibration import Calibration
 from sc_linac_physics.applications.q0.q0_utils import round_for_printing
 from sc_linac_physics.applications.q0.rf_measurement import Q0Measurement
 from sc_linac_physics.applications.q0.rf_run import RFRun
-from sc_linac_physics.utils import Cryomodule
+from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
 
 
 class Q0Cryomodule(Cryomodule):

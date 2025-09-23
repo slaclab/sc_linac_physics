@@ -1,7 +1,7 @@
 from sc_linac_physics.applications.auto_setup.backend.setup_linac_object import (
     SetupLinacObject,
 )
-from sc_linac_physics.utils import Cryomodule
+from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
 
 
 class SetupCryomodule(Cryomodule, SetupLinacObject):

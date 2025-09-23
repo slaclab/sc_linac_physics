@@ -5,7 +5,7 @@ import sys
 from lcls_tools.common.logger import logger
 
 from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
-from sc_linac_physics.utils import Cryomodule
+from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 

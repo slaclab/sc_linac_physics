@@ -5,10 +5,7 @@ import pytest
 from PyQt5.QtCore import Qt, QPoint, QRect, QSize
 from pytestqt.qtbot import QtBot
 
-from sc_linac_physics.displays.cavity_display import (
-    CavityWidget,
-    SHAPE_PARAMETER_DICT,
-)
+from sc_linac_physics.displays.cavity_display.frontend.cavity_widget import CavityWidget, SHAPE_PARAMETER_DICT
 
 test_str = "this is a test string"
 test_addr = "this is a test address"

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QVBoxLayout, QLabel
 
-from sc_linac_physics.utils import Cryomodule
+from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
 
 if TYPE_CHECKING:
     from sc_linac_physics.utils.sc_linac.linac import Linac
