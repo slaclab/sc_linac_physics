@@ -28,6 +28,7 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: 1
       PIP_NO_PYTHON_VERSION_WARNING: 1
       PYDM_DEFAULT_PROTOCOL: fake
+      PYTEST_ADDOPTS: -vv -ra --durations=10 --tb=long -l
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -80,22 +81,9 @@ jobs:
           flake8 . --count --max-complexity=10 --max-line-length=120 --show-source --statistics
           black --check .
 
-      - name: Run tests with coverage (headless Qt)
-        env:
-          COVERAGE_FILE: .coverage.${{ matrix.python-version }}
+      - name: Run tests (headless Qt)
         run: |
-          xvfb-run -a pytest -q \
-            --cov=sc_linac_physics \
-            --cov-branch \
-            --cov-report=term-missing
-
-      - name: Upload coverage data
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.python-version }}
-          path: .coverage.${{ matrix.python-version }}
-          if-no-files-found: error
-          retention-days: 7
+          xvfb-run -a pytest
 
       - name: Build sdist and wheel
         if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}

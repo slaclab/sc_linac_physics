@@ -46,6 +46,11 @@ line-length = 120
 max-line-length = 120
 max-complexity = 10
 
+[tool.pytest.ini_options]
+addopts = "-vv -ra --durations=10"
+log_cli = true
+log_cli_level = "INFO"
+
 [tool.setuptools]
 package-dir = { "" = "src" }
 
