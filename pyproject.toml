@@ -36,8 +36,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-qt"]
-dev = ["black", "flake8", "pytest", "pytest-qt"]
+test = ["pytest", "pytest-qt", "pytest-cov"]
+dev = ["black", "flake8", "pytest", "pytest-qt", "pytest-cov"]
 
 [tool.black]
 line-length = 120
