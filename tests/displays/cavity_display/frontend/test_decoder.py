@@ -17,7 +17,7 @@ from tests.displays.cavity_display.test_utils.utils import mock_parse
 
 @pytest.fixture
 def display():
-    with patch("displays.cavity_display.utils.utils.parse_csv", mock_parse):
+    with patch("sc_linac_physics.displays.cavity_display.utils.utils.parse_csv", mock_parse):
         yield DecoderDisplay()
 
 

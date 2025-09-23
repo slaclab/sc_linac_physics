@@ -20,7 +20,7 @@ def cavity():
     rack.rack_name = "A" if cav_num <= 4 else "B"
 
     rack.cryomodule.linac.machine.lazy_fault_pvs = True
-    with patch("displays.cavity_display.utils.utils.parse_csv", mock_parse):
+    with patch("sc_linac_physics.displays.cavity_display.utils.utils.parse_csv", mock_parse):
         cavity = BackendCavity(cavity_num=cav_num, rack_object=rack)
         cavity._status_pv_obj = make_mock_pv()
         cavity._severity_pv_obj = make_mock_pv()

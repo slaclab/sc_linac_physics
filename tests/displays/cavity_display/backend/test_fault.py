@@ -64,7 +64,7 @@ class TestFault(TestCase):
         pv: MagicMock = make_mock_pv()
         self.assertRaises(Exception, self.fault.is_faulted, pv)
 
-    @patch("displays.cavity_display.backend.fault.get_data_at_time", get_data_at_time_mock)
+    @patch("sc_linac_physics.displays.cavity_display.backend.fault.get_data_at_time", get_data_at_time_mock)
     def test_was_faulted(self):
         self.fault.pv = "PV"
         self.fault.is_faulted = MagicMock()
