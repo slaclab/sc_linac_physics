@@ -7,12 +7,13 @@ name = "sc_linac_physics"
 version = "0.1.0"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 license = { file = "LICENSE" }
 authors = [
     { name = "Lisa Zacarias", email = "zacarias@slac.stanford.edu" },
     { name = "Sebastian Aderhold", email = "aderhold@slac.stanford.edu" },
-    { name = "Derikka Bisi", email = "dabisi@slac.stanford.edu" }
+    { name = "Derikka Bisi", email = "dabisi@slac.stanford.edu" },
+    { name = "Haley Marts", email = "hmarts@slac.stanford.edu" }
 ]
 
 dependencies = [
