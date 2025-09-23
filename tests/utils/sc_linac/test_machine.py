@@ -1,7 +1,7 @@
 import pytest
 
-from utils.sc_linac.linac import Machine, Linac
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.utils.sc_linac.linac import Machine, Linac
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 @pytest.fixture

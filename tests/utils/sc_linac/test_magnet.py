@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from utils.sc_linac.cryomodule import Cryomodule
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     MAGNET_TRIM_VALUE,
     MAGNET_RESET_VALUE,
     MAGNET_ON_VALUE,
@@ -14,7 +14,7 @@ from utils.sc_linac.linac_utils import (
     ALL_CRYOMODULES_NO_HL,
     L1BHL,
 )
-from utils.sc_linac.magnet import Magnet
+from sc_linac_physics.utils.sc_linac.magnet import Magnet
 
 
 @pytest.fixture
@@ -35,10 +35,7 @@ def hl():
 
 def test_pv_prefix_quad(cryomodule):
 
-    assert (
-        cryomodule.quad.pv_prefix
-        == f"QUAD:{cryomodule.linac.name}:{cryomodule.name}85:"
-    )
+    assert cryomodule.quad.pv_prefix == f"QUAD:{cryomodule.linac.name}:{cryomodule.name}85:"
 
 
 def test_pv_prefix_quad_hl(hl):
@@ -57,17 +54,11 @@ def test_pv_prefix_ycor_hl(hl):
 
 
 def test_pv_prefix_xcor(cryomodule):
-    assert (
-        cryomodule.xcor.pv_prefix
-        == f"XCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
-    )
+    assert cryomodule.xcor.pv_prefix == f"XCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
 
 
 def test_pv_prefix_ycor(cryomodule):
-    assert (
-        cryomodule.ycor.pv_prefix
-        == f"YCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
-    )
+    assert cryomodule.ycor.pv_prefix == f"YCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
 
 
 def test_bdes(cryomodule):

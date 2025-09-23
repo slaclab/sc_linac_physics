@@ -1,7 +1,7 @@
 from random import randint
 from unittest import TestCase
 
-from utils.qt import make_rainbow, highlight_text
+from sc_linac_physics.utils.qt import make_rainbow, highlight_text
 
 
 class Test(TestCase):
@@ -10,9 +10,7 @@ class Test(TestCase):
         g = randint(0, 255)
         b = randint(0, 255)
         text = "text"
-        self.assertEqual(
-            f"\033[48;2;{r};{g};{b}m{text}\033[0m", highlight_text(r, g, b, text)
-        )
+        self.assertEqual(f"\033[48;2;{r};{g};{b}m{text}\033[0m", highlight_text(r, g, b, text))
 
     def test_make_rainbow(self):
         num_colors = randint(0, 100)

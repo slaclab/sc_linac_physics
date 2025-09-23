@@ -11,16 +11,13 @@ from PyQt5.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 
-from displays.cavity_display.frontend.fault_decoder_display import (
-    DecoderDisplay,
-    Row,
-)
+from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display import DecoderDisplay, Row
 from tests.displays.cavity_display.test_utils.utils import mock_parse
 
 
 @pytest.fixture
 def display():
-    with patch("displays.cavity_display.utils.utils.parse_csv", mock_parse):
+    with patch("sc_linac_physics.displays.cavity_display.utils.utils.parse_csv", mock_parse):
         yield DecoderDisplay()
 
 
@@ -59,9 +56,7 @@ def test_scroll_area_configuration(qtbot: QtBot, display):
     # Content should resize with the window
     assert display.scroll_area.widgetResizable()
     # Scroll area should adjust to show all the content
-    assert (
-        display.scroll_area.sizeAdjustPolicy() == QAbstractScrollArea.AdjustToContents
-    )
+    assert display.scroll_area.sizeAdjustPolicy() == QAbstractScrollArea.AdjustToContents
 
 
 def test_visual_properties(qtbot: QtBot, display):

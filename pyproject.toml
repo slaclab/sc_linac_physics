@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sc_linac_physics"
+version = "0.1.0"
+description = "Controls, analysis, and displays for SC Linac operations"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Lisa Zacarias", email = "zacarias@slac.stanford.edu" },
+    { name = "Sebastian Aderhold", email = "aderhold@slac.stanford.edu" },
+    { name = "Derikka Bisi", email = "dabisi@slac.stanford.edu" },
+    { name = "Haley Marts", email = "hmarts@slac.stanford.edu" }
+]
+
+dependencies = [
+    "pydm",
+    "numpy",
+    "qtpy",
+    "PyQt5",
+    "pyyaml",
+    "pydantic",
+    "h5py",
+    "requests",
+    "scipy",
+    "scikit-learn",
+    "matplotlib",
+    "caproto",
+    "pyqtgraph",
+    "urllib3",
+    "edmbutton @ git+https://github.com/slaclab/edmbutton.git",
+    "lcls-tools @ git+https://github.com/slaclab/lcls-tools.git"
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-qt", "pytest-cov"]
+dev = ["black", "flake8", "pytest", "pytest-qt", "pytest-cov"]
+
+[tool.black]
+line-length = 120
+
+[tool.flake8]
+max-line-length = 120
+max-complexity = 10
+
+[tool.pytest.ini_options]
+addopts = "-vv -ra --durations=10"
+log_cli = true
+log_cli_level = "INFO"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["sc_linac_physics*"]
+exclude = ["tests*", "docs*", "examples*", "logfiles*"]
+
+[tool.setuptools.package-data]
+"sc_linac_physics" = [
+    "displays/*",
+    "applications/q0/calibrations/*",
+    "applications/q0/data/*",
+    "*.ui",
+    "*.yaml",
+    "*.yml",
+    "*.json"
+]

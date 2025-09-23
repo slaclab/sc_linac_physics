@@ -5,16 +5,16 @@ import pytest
 from PyQt5.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
-from applications.quench_processing.quench_cavity import QuenchCavity
-from applications.quench_processing.quench_cryomodule import (
+from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
     QuenchCryomodule,
 )
-from applications.quench_processing.quench_gui import QuenchGUI
-from applications.quench_processing.quench_worker import QuenchWorker
-from utils.qt import make_rainbow
-from utils.sc_linac.decarad import Decarad
-from utils.sc_linac.linac import Machine
-from utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.applications.quench_processing.quench_gui import QuenchGUI
+from sc_linac_physics.applications.quench_processing.quench_worker import QuenchWorker
+from sc_linac_physics.utils.qt import make_rainbow
+from sc_linac_physics.utils.sc_linac.decarad import Decarad
+from sc_linac_physics.utils.sc_linac.linac import Machine
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 @pytest.fixture
@@ -26,9 +26,7 @@ def gui():
     gui.start_button.setEnabled = MagicMock()
     cm = choice(ALL_CRYOMODULES)
     gui.cm_combobox.currentText = MagicMock(return_value=cm)
-    gui.current_cm = Machine(
-        cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule
-    ).cryomodules[cm]
+    gui.current_cm = Machine(cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule).cryomodules[cm]
     cavity = randint(1, 8)
     gui.current_cav = gui.current_cm.cavities[cavity]
     gui.cav_combobox.currentText = MagicMock(return_value=str(cavity))
@@ -108,9 +106,7 @@ def test_update_timeplot(qtbot: QtBot, gui):
     gui.amp_rad_timeplot.addYChannel.assert_called()
 
     colors = make_rainbow(num_colors=11)
-    channels = [gui.current_cav.aact_pv] + [
-        head.raw_dose_rate_pv for head in gui.current_decarad.heads.values()
-    ]
+    channels = [gui.current_cav.aact_pv] + [head.raw_dose_rate_pv for head in gui.current_decarad.heads.values()]
     axes = ["Amplitude"] + ["Radiation" for _ in range(10)]
     calls = []
     for channel, (r, g, b, a), axis in zip(channels, colors, axes):
@@ -138,16 +134,10 @@ def test_update_decarad(qtbot: QtBot, gui):
     assert gui.current_decarad == Decarad(1)
     gui.update_timeplot.assert_called()
     gui.clear_connections.assert_called()
-    gui.decarad_on_button.clicked.connect.assert_called_with(
-        gui.current_decarad.turn_on
-    )
-    gui.decarad_off_button.clicked.connect.assert_called_with(
-        gui.current_decarad.turn_off
-    )
+    gui.decarad_on_button.clicked.connect.assert_called_with(gui.current_decarad.turn_on)
+    gui.decarad_off_button.clicked.connect.assert_called_with(gui.current_decarad.turn_off)
     assert gui.current_decarad.power_status_pv == gui.decarad_status_readback.channel
-    assert (
-        gui.current_decarad.voltage_readback_pv == gui.decarad_voltage_readback.channel
-    )
+    assert gui.current_decarad.voltage_readback_pv == gui.decarad_voltage_readback.channel
 
 
 def test_update_cm(qtbot: QtBot, gui):
@@ -164,9 +154,7 @@ def test_update_cm(qtbot: QtBot, gui):
     gui.waveform_updater.updatePlot.assert_called()
     cavity = gui.current_cav
     gui.rf_controls.ssa_on_button.clicked.connect.assert_called_with(cavity.ssa.turn_on)
-    gui.rf_controls.ssa_off_button.clicked.connect.assert_called_with(
-        cavity.ssa.turn_off
-    )
+    gui.rf_controls.ssa_off_button.clicked.connect.assert_called_with(cavity.ssa.turn_off)
     assert gui.rf_controls.ssa_readback_label.channel == cavity.ssa.status_pv
 
     assert gui.rf_controls.rf_mode_combobox.channel == cavity.rf_mode_ctrl_pv

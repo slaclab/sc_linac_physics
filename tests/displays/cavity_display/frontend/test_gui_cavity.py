@@ -4,7 +4,7 @@ import pytest
 from pydm import Display
 from pytestqt.qtbot import QtBot
 
-from displays.cavity_display.frontend.gui_cavity import GUICavity
+from sc_linac_physics.displays.cavity_display.frontend.gui_cavity import GUICavity
 
 
 def mock_ssa_class(**kwargs) -> MagicMock:

@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from applications.tuning.tune_cavity import TuneCavity
-from applications.tuning.tune_stepper import TuneStepper
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
+from sc_linac_physics.applications.tuning.tune_stepper import TuneStepper
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     TUNE_CONFIG_COLD_VALUE,
     TUNE_CONFIG_PARKED_VALUE,
     TUNE_CONFIG_OTHER_VALUE,
@@ -18,7 +18,7 @@ from utils.sc_linac.linac_utils import (
     HW_MODE_MAINTENANCE_VALUE,
     HW_MODE_ONLINE_VALUE,
 )
-from utils.sc_linac.ssa import SSA
+from sc_linac_physics.utils.sc_linac.ssa import SSA
 
 
 @pytest.fixture
@@ -110,18 +110,14 @@ def test_move_to_cold_landing_steps(cavity):
 
 
 def test_detune_no_rf_error(cavity):
-    cavity._hw_mode_pv_obj = make_mock_pv(
-        get_val=choice([HW_MODE_OFFLINE_VALUE, HW_MODE_MAIN_DONE_VALUE])
-    )
+    cavity._hw_mode_pv_obj = make_mock_pv(get_val=choice([HW_MODE_OFFLINE_VALUE, HW_MODE_MAIN_DONE_VALUE]))
     with pytest.raises(CavityHWModeError):
         cavity.detune_no_rf()
 
 
 def test_detune_no_rf(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(
-        get_val=choice(
-            [HW_MODE_ONLINE_VALUE, HW_MODE_MAINTENANCE_VALUE, HW_MODE_READY_VALUE]
-        )
+        get_val=choice([HW_MODE_ONLINE_VALUE, HW_MODE_MAINTENANCE_VALUE, HW_MODE_READY_VALUE])
     )
     cavity.check_resonance = MagicMock()
     cavity.stepper_tuner.move_to_cold_landing = MagicMock()
@@ -133,9 +129,7 @@ def test_detune_no_rf(cavity):
 
 def test_detune_with_rf_error(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(
-        get_val=choice(
-            [HW_MODE_OFFLINE_VALUE, HW_MODE_MAIN_DONE_VALUE, HW_MODE_READY_VALUE]
-        )
+        get_val=choice([HW_MODE_OFFLINE_VALUE, HW_MODE_MAIN_DONE_VALUE, HW_MODE_READY_VALUE])
     )
     cavity.setup_tuning = MagicMock()
     cavity.stepper_tuner.move_to_cold_landing = MagicMock()
@@ -149,9 +143,7 @@ def test_detune_with_rf_error(cavity):
 
 
 def test_detune_with_rf_cold_not_saved(cavity):
-    cavity._hw_mode_pv_obj = make_mock_pv(
-        get_val=choice([HW_MODE_ONLINE_VALUE, HW_MODE_MAINTENANCE_VALUE])
-    )
+    cavity._hw_mode_pv_obj = make_mock_pv(get_val=choice([HW_MODE_ONLINE_VALUE, HW_MODE_MAINTENANCE_VALUE]))
     cavity.setup_tuning = MagicMock()
     cavity._df_cold_pv_obj = make_mock_pv(get_val=None)
     cavity.detune_by_steps = MagicMock()
@@ -167,9 +159,7 @@ def test_detune_with_rf_cold_not_saved(cavity):
 
 
 def test_detune_with_rf_cold_saved(cavity):
-    cavity._hw_mode_pv_obj = make_mock_pv(
-        get_val=choice([HW_MODE_ONLINE_VALUE, HW_MODE_MAINTENANCE_VALUE])
-    )
+    cavity._hw_mode_pv_obj = make_mock_pv(get_val=choice([HW_MODE_ONLINE_VALUE, HW_MODE_MAINTENANCE_VALUE]))
     cavity.setup_tuning = MagicMock()
     cavity._df_cold_pv_obj = make_mock_pv(get_val=randint(50000, 200000))
     cavity.detune_by_steps = MagicMock()

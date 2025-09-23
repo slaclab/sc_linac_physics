@@ -9,10 +9,9 @@ from lcls_tools.common.controls.pyepics.utils import (
     make_mock_pv,
 )
 
-from tests.utils.mock_utils import mock_func
-from utils.sc_linac.cavity import Cavity
-from utils.sc_linac.linac import MACHINE
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.utils.sc_linac.cavity import Cavity
+from sc_linac_physics.utils.sc_linac.linac import MACHINE
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     LOADED_Q_LOWER_LIMIT,
     LOADED_Q_LOWER_LIMIT_HL,
     LOADED_Q_UPPER_LIMIT,
@@ -42,7 +41,8 @@ from utils.sc_linac.linac_utils import (
     QuenchError,
     ALL_CRYOMODULES,
 )
-from utils.sc_linac.piezo import Piezo
+from sc_linac_physics.utils.sc_linac.piezo import Piezo
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture
@@ -74,10 +74,7 @@ def make_rack(is_hl=False):
 
 
 def test_pv_prefix(cavity):
-    assert (
-        cavity.pv_prefix
-        == f"ACCL:{cavity.linac.name}:{cavity.cryomodule.name}{cavity.number}0:"
-    )
+    assert cavity.pv_prefix == f"ACCL:{cavity.linac.name}:{cavity.cryomodule.name}{cavity.number}0:"
 
 
 def test_loaded_q_limits(cavity):
@@ -346,10 +343,7 @@ def test_edm_macro_string_rack_b(cavity):
 
 
 def test_cryo_edm_macro_string(cavity):
-    assert (
-        cavity.cryo_edm_macro_string
-        == f"CM={cavity.cryomodule.name},AREA={cavity.linac.name}"
-    )
+    assert cavity.cryo_edm_macro_string == f"CM={cavity.cryomodule.name},AREA={cavity.linac.name}"
 
 
 def test_hw_mode(cavity):
@@ -525,9 +519,7 @@ def test__auto_tune_out_of_tol(cavity):
 def test_check_detune(cavity):
     cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
     cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_INVALID_VAL)
-    cavity._chirp_freq_start_pv_obj = make_mock_pv(
-        cavity.chirp_freq_start_pv, get_val=50000
-    )
+    cavity._chirp_freq_start_pv_obj = make_mock_pv(cavity.chirp_freq_start_pv, get_val=50000)
     cavity.find_chirp_range = MagicMock()
     cavity.check_detune()
     cavity.find_chirp_range.assert_called_with(50000 * 1.1)
@@ -541,9 +533,7 @@ def test_check_detune_sela(cavity):
 
 
 def test_check_and_set_on_time(cavity):
-    cavity._pulse_on_time_pv_obj = make_mock_pv(
-        cavity.pulse_on_time_pv, NOMINAL_PULSED_ONTIME * 0.9
-    )
+    cavity._pulse_on_time_pv_obj = make_mock_pv(cavity.pulse_on_time_pv, NOMINAL_PULSED_ONTIME * 0.9)
     cavity.push_go_button = MagicMock()
     cavity.check_and_set_on_time()
     cavity._pulse_on_time_pv_obj.put.assert_called_with(NOMINAL_PULSED_ONTIME)
@@ -708,9 +698,7 @@ def test_characterize(cavity):
     cavity._char_timestamp_pv_obj = make_mock_pv(get_val=char_time)
     cavity.finish_characterization = MagicMock()
     cavity.start_characterization = MagicMock()
-    cavity._characterization_status_pv_obj = make_mock_pv(
-        get_val=CALIBRATION_COMPLETE_VALUE
-    )
+    cavity._characterization_status_pv_obj = make_mock_pv(get_val=CALIBRATION_COMPLETE_VALUE)
 
     cavity.characterize()
     cavity.reset_interlocks.assert_called()
@@ -725,9 +713,7 @@ def test_characterize_fail(cavity):
     char_time = (datetime.now() - timedelta(seconds=100)).strftime("%Y-%m-%d-%H:%M:%S")
     cavity._char_timestamp_pv_obj = make_mock_pv(get_val=char_time)
     cavity.start_characterization = MagicMock()
-    cavity._characterization_status_pv_obj = make_mock_pv(
-        get_val=CHARACTERIZATION_CRASHED_VALUE
-    )
+    cavity._characterization_status_pv_obj = make_mock_pv(get_val=CHARACTERIZATION_CRASHED_VALUE)
     with pytest.raises(CavityCharacterizationError):
         cavity.characterize()
     cavity.reset_interlocks.assert_called()
@@ -741,9 +727,7 @@ def test_characterize_recent(cavity):
     char_time = (datetime.now() - timedelta(seconds=10)).strftime("%Y-%m-%d-%H:%M:%S")
     cavity._char_timestamp_pv_obj = make_mock_pv(get_val=char_time)
     cavity.finish_characterization = MagicMock()
-    cavity._characterization_status_pv_obj = make_mock_pv(
-        get_val=CALIBRATION_COMPLETE_VALUE
-    )
+    cavity._characterization_status_pv_obj = make_mock_pv(get_val=CALIBRATION_COMPLETE_VALUE)
 
     cavity.characterize()
     cavity.reset_interlocks.assert_called()
