@@ -3,8 +3,6 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from sc_linac_physics.displays.cavity_display.cavity_display import CavityDisplayGUI
-from sc_linac_physics.displays.cavity_display.frontend.fault_count_display import FaultCountDisplay
-from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display import DecoderDisplay
 
 
 class TestCavityDisplayGUI:
@@ -25,8 +23,8 @@ class TestCavityDisplayGUI:
         ):
 
             # Configure return values
-            mock_fault_count.return_value = MagicMock(spec=FaultCountDisplay)
-            mock_decoder.return_value = MagicMock(spec=DecoderDisplay)
+            mock_fault_count.return_value = MagicMock()
+            mock_decoder.return_value = MagicMock()
             mock_gui_machine.return_value = MagicMock()
             mock_gui_machine.return_value.top_half = MagicMock()
             mock_gui_machine.return_value.bottom_half = MagicMock()
