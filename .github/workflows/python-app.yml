@@ -106,6 +106,7 @@ jobs:
           coverage html -d htmlcov
 
       - name: Upload combined coverage artifacts
+        if: ${{ matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-merged
