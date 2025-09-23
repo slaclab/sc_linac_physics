@@ -20,7 +20,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     HW_MODE_MAIN_DONE_VALUE,
     HW_MODE_READY_VALUE,
 )
-from tests.utils.mock_utils import mock_func
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture

@@ -22,7 +22,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityAbortError,
 )
 from sc_linac_physics.utils.sc_linac.ssa import SSA
-from tests.utils.mock_utils import mock_func
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture

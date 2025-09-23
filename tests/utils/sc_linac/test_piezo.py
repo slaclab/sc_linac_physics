@@ -12,7 +12,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     PIEZO_FEEDBACK_VALUE,
 )
 from sc_linac_physics.utils.sc_linac.piezo import Piezo
-from tests.utils.mock_utils import mock_func
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture

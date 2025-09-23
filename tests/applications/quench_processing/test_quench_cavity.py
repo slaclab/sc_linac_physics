@@ -19,7 +19,7 @@ from sc_linac_physics.applications.quench_processing.quench_utils import (
     RADIATION_LIMIT,
 )
 from sc_linac_physics.utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
-from tests.utils.mock_utils import mock_func
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture

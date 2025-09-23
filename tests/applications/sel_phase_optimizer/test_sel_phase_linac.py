@@ -18,7 +18,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     RF_MODE_PULSE,
     RF_MODE_CHIRP,
 )
-from tests.utils.mock_utils import mock_func
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture
