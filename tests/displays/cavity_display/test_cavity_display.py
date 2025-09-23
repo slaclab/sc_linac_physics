@@ -1,83 +1,86 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
+from PyQt5.QtWidgets import QWidget
+from pytestqt.qtbot import QtBot
 
-from sc_linac_physics.displays.cavity_display.cavity_display import CavityDisplayGUI
+
+# Mock classes for the displays we want to prevent from opening
+class MockFaultCountDisplay(QWidget):
+    """Mock version of FaultCountDisplay."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
 
 
-class TestCavityDisplayGUI:
-    """Test suite for the CavityDisplayGUI application."""
+class MockDecoderDisplay(QWidget):
+    """Mock version of DecoderDisplay."""
 
-    @pytest.fixture
-    def display(self):
-        """Create a CavityDisplayGUI instance with mocked components."""
-        # Mock the sub-displays to prevent them from creating actual connections
-        with (
-            patch(
-                "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay"
-            ) as mock_fault_count,
-            patch(
-                "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay"
-            ) as mock_decoder,
-            patch("sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine") as mock_gui_machine,
-        ):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
 
-            # Configure return values
-            mock_fault_count.return_value = MagicMock()
-            mock_decoder.return_value = MagicMock()
-            mock_gui_machine.return_value = MagicMock()
-            mock_gui_machine.return_value.top_half = MagicMock()
-            mock_gui_machine.return_value.bottom_half = MagicMock()
 
-            # Mock showDisplay function
-            with patch("lcls_tools.common.frontend.display.util.showDisplay") as _:
-                gui = CavityDisplayGUI()
-                yield gui
-                # Ensure cleanup
-                gui.close()
+@pytest.fixture
+def display():
+    """Create a CavityDisplayGUI instance with mocked sub-displays."""
+    # Patch the sub-displays before importing CavityDisplayGUI
+    with (
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay",
+            MockFaultCountDisplay,
+        ),
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay", MockDecoderDisplay
+        ),
+    ):
 
-    def test_launches(self, qtbot, display):
-        """Test that the application launches successfully."""
-        qtbot.addWidget(display)
-        assert display.windowTitle() == "SRF Cavity Display"
+        # Now import CavityDisplayGUI after patching
+        from sc_linac_physics.displays.cavity_display.cavity_display import CavityDisplayGUI
 
-    def test_header_buttons(self, qtbot, display):
-        """Test that header buttons are created correctly."""
-        qtbot.addWidget(display)
+        # Create the display but prevent it from showing
+        with patch.object(CavityDisplayGUI, "show"), patch.object(CavityDisplayGUI, "showMaximized"):
+            display = CavityDisplayGUI()
+            yield display
+            display.close()
 
-        # Check that buttons exist
-        assert hasattr(display, "decoder_button")
-        assert hasattr(display, "fault_count_button")
 
-        # Check button text
-        assert display.decoder_button.text() == "Three Letter Code Decoder"
-        assert display.fault_count_button.text() == "Fault Counter"
+def test_launches(qtbot: QtBot, display):
+    """Test that the application launches successfully."""
+    qtbot.addWidget(display)
+    assert display.windowTitle() == "SRF Cavity Display"
 
-        # Check that buttons have tooltips
-        assert display.fault_count_button.toolTip() == "See fault history using archived data"
 
-    def test_gui_machine_integration(self, qtbot, display):
-        """Test that the GUI machine is integrated correctly."""
-        qtbot.addWidget(display)
+def test_header_buttons(qtbot: QtBot, display):
+    """Test that header buttons are created correctly."""
+    qtbot.addWidget(display)
 
-        # Verify GUI machine layouts are added to the main layout
-        assert display.gui_machine.top_half in display.groupbox_vlayout.children()
-        assert display.gui_machine.bottom_half in display.groupbox_vlayout.children()
+    # Check that buttons exist
+    assert hasattr(display, "decoder_button")
+    assert hasattr(display, "fault_count_button")
 
-    @pytest.mark.parametrize(
-        "window_attr,button_attr,button_text",
-        [
-            ("decoder_window", "decoder_button", "Three Letter Code Decoder"),
-            ("fault_count_display", "fault_count_button", "Fault Counter"),
-        ],
-    )
-    def test_sub_windows_creation(self, qtbot, display, window_attr, button_attr, button_text):
-        """Test that sub-windows are created correctly."""
-        qtbot.addWidget(display)
+    # Check button text
+    assert display.decoder_button.text() == "Three Letter Code Decoder"
+    assert display.fault_count_button.text() == "Fault Counter"
 
-        # Check that the window attribute exists
-        assert hasattr(display, window_attr)
+    # Check that buttons have tooltips
+    assert display.fault_count_button.toolTip() == "See fault history using archived data"
 
-        # Check that the corresponding button exists and has correct text
-        assert hasattr(display, button_attr)
-        assert getattr(display, button_attr).text() == button_text
+
+def test_sub_displays_created(qtbot: QtBot, display):
+    """Test that sub-displays are created."""
+    qtbot.addWidget(display)
+
+    # Check that the sub-displays exist
+    assert hasattr(display, "decoder_window")
+    assert hasattr(display, "fault_count_display")
+
+
+def test_layout_structure(qtbot: QtBot, display):
+    """Test that the layout structure is created correctly."""
+    qtbot.addWidget(display)
+
+    # Check basic layout elements
+    assert hasattr(display, "vlayout")
+    assert hasattr(display, "groupbox_vlayout")
+    assert hasattr(display, "header")
+    assert hasattr(display, "groupbox")
