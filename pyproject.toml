@@ -73,7 +73,6 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
 [tool.semantic_release]
 version_source = "commit"
 branch = "main"
-commit_parser = "angular"
 changelog_file = "CHANGELOG.md"
 build_command = "python -m build"
 upload_to_repository = false
