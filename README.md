@@ -6,12 +6,10 @@ Controls, analysis, and displays for SC Linac operations.
 - GUI stack: PyDM + PyQt5/Qt
 - Includes packaged displays, configuration YAML/JSON, and example data
 
-Badges (replace <org>/<repo> with your GitHub org/repo):
-
--
+### Badges:
 
 CI: [![CI](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-app.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-app.yml)
--
+
 Release: [![Release](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml)
 
 ## Features
