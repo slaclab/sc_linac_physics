@@ -10,9 +10,9 @@ Badges (replace <org>/<repo> with your GitHub org/repo):
 
 -
 
-CI: [![CI](https://github.com/<org>/<repo>/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/<org>/<repo>/actions/workflows/ci.yml)
+CI: [![CI](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-app.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-app.yml)
 -
-Release: [![Release](https://github.com/<org>/<repo>/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/<org>/<repo>/actions/workflows/release.yml)
+Release: [![Release](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml)
 
 ## Features
 
