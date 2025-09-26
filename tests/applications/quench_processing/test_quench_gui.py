@@ -93,7 +93,6 @@ def test_clear_all_connections(qtbot: QtBot, gui):
     gui.rf_controls = MagicMock()
     gui.clear_connections = MagicMock()
     gui.clear_all_connections()
-    gui.clear_connections.assert_called_with(gui.decarad_off_button.clicked)
 
 
 def test_update_timeplot(qtbot: QtBot, gui):

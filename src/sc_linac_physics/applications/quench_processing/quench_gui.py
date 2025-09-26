@@ -125,7 +125,7 @@ class QuenchGUI(Display):
         processing_controls_layout.addWidget(QLabel("Ending Amplitude (MV):"), stop_amp_row, 0)
         processing_controls_layout.addWidget(self.stop_amp_spinbox, stop_amp_row, 1)
         step_row = 2
-        processing_controls_layout.addWidget(QLabel("Step Size (MV):"))
+        processing_controls_layout.addWidget(QLabel("Step Size (MV):"), step_row, 0)
         processing_controls_layout.addWidget(self.step_size_spinbox, step_row, 1)
         time_row = 3
         processing_controls_layout.addWidget(QLabel("Time Between Steps (s):"), time_row, 0)
@@ -193,6 +193,9 @@ class QuenchGUI(Display):
         self.start_button.setEnabled(True)
 
     def process(self):
+        if not (self.current_cav and self.current_decarad):
+            self.handle_error("Please select a Cryomodule, Cavity, and Decarad before starting.")
+            return
         self.start_button.setEnabled(False)
         self.current_cav.decarad = self.current_decarad
         self.make_quench_worker()
@@ -225,8 +228,6 @@ class QuenchGUI(Display):
             self.rf_controls.rf_off_button.clicked,
             self.start_button.clicked,
             self.abort_button.clicked,
-            self.decarad_on_button.clicked,
-            self.decarad_off_button.clicked,
         ]:
             self.clear_connections(signal)
 
