@@ -18,22 +18,44 @@ from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 @pytest.fixture
-def gui():
-    gui = QuenchGUI()
-    gui.rf_controls = MagicMock()
-    gui.status_label.setText = MagicMock()
-    gui.status_label.setStyleSheet = MagicMock()
-    gui.start_button.setEnabled = MagicMock()
+def gui(monkeypatch):
+    from PyQt5.QtWidgets import QWidget
+
+    # Minimal dummy to avoid pyqtgraph/PyDM internals during tests
+    class DummyWaveformPlot(QWidget):
+        def __init__(self, *a, **k):
+            super().__init__()
+
+        def clearCurves(self, *a, **k):
+            pass
+
+        def addYChannel(self, *a, **k):
+            pass
+
+        def removeChannel(self, *a, **k):
+            pass
+
+    # Patch the symbol actually used by QuenchGUI.__init__
+    import sc_linac_physics.applications.quench_processing.quench_gui as gui_mod
+
+    monkeypatch.setattr(gui_mod, "PyDMWaveformPlot", DummyWaveformPlot, raising=False)
+
+    # Now construct the GUI safely
+    g = QuenchGUI()
+    g.rf_controls = MagicMock()
+    g.status_label.setText = MagicMock()
+    g.status_label.setStyleSheet = MagicMock()
+    g.start_button.setEnabled = MagicMock()
     cm = choice(ALL_CRYOMODULES)
-    gui.cm_combobox.currentText = MagicMock(return_value=cm)
-    gui.current_cm = Machine(cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule).cryomodules[cm]
+    g.cm_combobox.currentText = MagicMock(return_value=cm)
+    g.current_cm = Machine(cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule).cryomodules[cm]
     cavity = randint(1, 8)
-    gui.current_cav = gui.current_cm.cavities[cavity]
-    gui.cav_combobox.currentText = MagicMock(return_value=str(cavity))
+    g.current_cav = g.current_cm.cavities[cavity]
+    g.cav_combobox.currentText = MagicMock(return_value=str(cavity))
     decarad = choice([1, 2])
-    gui.decarad_combobox.currentText = MagicMock(return_value=str(decarad))
-    gui.current_decarad = Decarad(decarad)
-    return gui
+    g.decarad_combobox.currentText = MagicMock(return_value=str(decarad))
+    g.current_decarad = Decarad(decarad)
+    return g
 
 
 def test_handle_status(qtbot: QtBot, gui):
