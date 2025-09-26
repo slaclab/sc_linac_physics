@@ -551,11 +551,28 @@ def test_setup_cryo_for_measurement(q0_cryomodule):
             # Set up mock valve params
             q0_cryomodule.valveParams = ValveParams(30.0, 120.0, 118.5)
 
-            # Call setup_cryo_for_measurement
+            # Test case 1: with default turn_cavities_off=True
             q0_cryomodule.setup_cryo_for_measurement(90.0)
 
             # Verify fill called
             mock_fill.assert_called_with(90.0, turn_cavities_off=True)
+
+            # Verify JT position set
+            mock_jt.assert_called_with(30.0)
+
+            # Verify heater power set
+            mock_heater.assert_called_with(120.0)
+
+            # Reset the mocks
+            mock_fill.reset_mock()
+            mock_jt.reset_mock()
+            mock_heater.reset_mock()
+
+            # Test case 2: with turn_cavities_off=False
+            q0_cryomodule.setup_cryo_for_measurement(92.0, turn_cavities_off=False)
+
+            # Verify fill called
+            mock_fill.assert_called_with(92.0, turn_cavities_off=False)
 
             # Verify JT position set
             mock_jt.assert_called_with(30.0)
