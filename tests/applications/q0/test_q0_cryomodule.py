@@ -4,37 +4,8 @@ from unittest.mock import patch, MagicMock, call, PropertyMock
 import numpy as np
 import pytest
 
-# Patch epics and PV before importing anything else
-epics_patch = patch("epics.PV")
-epics_patch.start()
-
-epics_caget_patch = patch("epics.caget")
-epics_caget_patch.start()
-
-epics_caput_patch = patch("epics.caput")
-epics_caput_patch.start()
-
-# Patch lcls_tools.common.controls.pyepics.utils.PV
-pv_patch = patch("lcls_tools.common.controls.pyepics.utils.PV")
-mock_pv_class = pv_patch.start()
-
-# Configure the mock PV class
-mock_pv_obj = MagicMock()
-mock_pv_obj.get.return_value = 85.0
-mock_pv_obj.put.return_value = 1
-mock_pv_class.return_value = mock_pv_obj
-
-# Now import the code under test
-from sc_linac_physics.applications.q0.q0_utils import Q0AbortError, ValveParams
 from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
-
-
-# Stop the patches at the end of the module
-def teardown_module():
-    epics_patch.stop()
-    epics_caget_patch.stop()
-    epics_caput_patch.stop()
-    pv_patch.stop()
+from sc_linac_physics.applications.q0.q0_utils import Q0AbortError, ValveParams
 
 
 # Fixtures
@@ -289,7 +260,7 @@ def test_fill(q0_cryomodule):
         patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
         patch.object(q0_cryomodule, "waitForLL"),
         patch.object(q0_cryomodule, "check_abort"),
-        patch.object(type(q0_cryomodule), "heater_power", new_callable=PropertyMock) as mock_heater_power,
+        patch.object(type(q0_cryomodule), "heater_power", new_callable=PropertyMock),
     ):
 
         # Create mock cavities
