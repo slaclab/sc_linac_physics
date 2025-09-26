@@ -89,7 +89,7 @@ jobs:
             --cov=sc_linac_physics \
             --cov-branch \
             --cov-report=term-missing \
-      #            --cov-fail-under=80
+            --cov-fail-under=80
 
       - name: Download coverage from matrix
         uses: actions/download-artifact@v4
