@@ -80,3 +80,4 @@ upload_to_release = true
 major_on_zero = false
 version_toml = ["pyproject.toml:project.version"]
 tag_format = "v{version}"
+commit_message = "chore(release): {version} [skip ci]"
