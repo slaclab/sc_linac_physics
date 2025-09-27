@@ -1,12 +1,8 @@
-import os
 import sys
 from unittest.mock import Mock, patch
 
 import pytest
 from PyQt5.QtWidgets import QApplication
-
-# Set environment variable
-os.environ["PYDM_DEFAULT_PROTOCOL"] = "ca://"
 
 from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
