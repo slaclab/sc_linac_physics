@@ -9,9 +9,15 @@ concurrency:
 
 permissions:
   contents: write
+
 jobs:
-  release:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,18 +26,61 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            **/requirements*.txt
+      - name: Install system packages (for headless Qt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - name: Install project and test deps
+        run: |
+          python -m pip install -U pip
+          pip install -e .[test]
+      - name: Configure test environment
+        run: |
+          echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
+          echo "QT_OPENGL=software" >> $GITHUB_ENV
+          echo "PYDM_DEFAULT_PROTOCOL=fake" >> $GITHUB_ENV
+          echo "MPLBACKEND=Agg" >> $GITHUB_ENV
+      - name: Run tests (with coverage)
+        run: |
+          xvfb-run -a pytest --cov=sc_linac_physics --cov-report=xml
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: warn
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
           python-version: '3.12'
+          cache: pip
       - name: Install tooling
         run: |
           python -m pip install -U pip
-          pip install python-semantic-release build
-
+          pip install -U python-semantic-release build
+      - name: Ensure tags are available
+        run: git fetch --tags --force
       - name: Configure git user
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: semantic-release publish
