@@ -16,7 +16,7 @@ if not hasattr(pg.PlotWidget, 'autoRangeEnabled'):
             return (False, False)
 
     pg.PlotWidget.autoRangeEnabled = autoRangeEnabled
-    
+
 
 def main():
     """Main application entry point"""
