@@ -3,11 +3,11 @@ from unittest.mock import Mock, AsyncMock, patch
 
 import pytest
 
-# Make sure pytest-asyncio is configured
-pytest_plugins = ("pytest_asyncio",)
-
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
 from sc_linac_physics.utils.simulation.tuner_service import StepperPVGroup, PiezoPVGroup
+
+# Make sure pytest-asyncio is configured
+pytest_plugins = ("pytest_asyncio",)
 
 
 @pytest.fixture
@@ -419,7 +419,7 @@ class TestIntegration:
             patch.object(stepper.motor_done, "write", new_callable=AsyncMock),
             patch.object(stepper.step_tot, "write", new_callable=AsyncMock),
             patch.object(stepper.step_signed, "write", new_callable=AsyncMock),
-            patch.object(piezo.voltage, "write", new_callable=AsyncMock) as mock_piezo_write,
+            patch.object(piezo.voltage, "write", new_callable=AsyncMock),
             patch("sc_linac_physics.utils.simulation.tuner_service.PIEZO_HZ_PER_VOLT", 10),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
@@ -450,7 +450,7 @@ class TestIntegration:
             patch.object(stepper.motor_done, "write", new_callable=AsyncMock),
             patch.object(stepper.step_tot, "write", new_callable=AsyncMock),
             patch.object(stepper.step_signed, "write", new_callable=AsyncMock),
-            patch.object(piezo.voltage, "write", new_callable=AsyncMock) as mock_piezo_write,
+            patch.object(piezo.voltage, "write", new_callable=AsyncMock),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
 
@@ -585,8 +585,8 @@ class TestCavityTypeSpecificBehavior:
         stepper_regular = StepperPVGroup("TEST:REG:", mock_cavity_regular, mock_piezo)
 
         # Verify the setup is correct for different cavity types
-        assert stepper_hl.cavity_group.is_hl == True
-        assert stepper_regular.cavity_group.is_hl == False
+        assert stepper_hl.cavity_group.is_hl is True
+        assert stepper_regular.cavity_group.is_hl is False
 
         # Verify they have different conversion factors as expected
         assert stepper_hl.steps_per_hertz == 256 / 18.3
