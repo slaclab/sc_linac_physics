@@ -29,10 +29,33 @@ class Q0Measurement:
     def amplitudes(self):
         return self._amplitudes
 
+    def _reset_calculated_properties(self):
+        """Reset all calculated properties when base data changes"""
+        self._raw_heat = None
+        self._adjustment = None
+        self._heat_load = None
+        self._q0 = None
+
     @amplitudes.setter
     def amplitudes(self, amplitudes: Dict[int, float]):
+        """Set amplitudes with validation"""
+        if not isinstance(amplitudes, dict):
+            raise TypeError("Amplitudes must be a dictionary")
+
+        if not amplitudes:
+            raise ValueError("Amplitudes dictionary cannot be empty")
+
+        # Validate amplitude values
+        for cav_num, amp in amplitudes.items():
+            if not isinstance(cav_num, int):
+                raise TypeError(f"Cavity number must be integer, got {type(cav_num)}")
+            if not isinstance(amp, (int, float)):
+                raise TypeError(f"Amplitude must be numeric, got {type(amp)}")
+            if amp < 0:
+                raise ValueError(f"Amplitude cannot be negative: {amp}")
         self._amplitudes = amplitudes
         self.rf_run = RFRun(amplitudes)
+        self._reset_calculated_properties()  # Reset when data changes
 
     @property
     def heater_run_heatload(self):
@@ -44,7 +67,7 @@ class Q0Measurement:
         self.heater_run = q0_utils.HeaterRun(heat_load)
 
     @property
-    def start_time(self):
+    def start_time(self) -> Optional[str]:
         return self._start_time
 
     @start_time.setter
@@ -53,48 +76,64 @@ class Q0Measurement:
             self._start_time = start_time.strftime(q0_utils.DATETIME_FORMATTER)
 
     def load_data(self, time_stamp: str):
-        # TODO need to load the other parameters
-        self.start_time = datetime.strptime(time_stamp, q0_utils.DATETIME_FORMATTER)
+        """Load measurement data with improved error handling"""
+        try:
+            self.start_time = datetime.strptime(time_stamp, q0_utils.DATETIME_FORMATTER)
+        except ValueError as e:
+            raise ValueError(f"Invalid timestamp format: {time_stamp}") from e
 
-        with open(self.cryomodule.q0_data_file, "r+") as f:
-            all_data: Dict = json.load(f)
-            q0_meas_data: Dict = all_data[time_stamp]
+        try:
+            with open(self.cryomodule.q0_data_file, "r") as f:  # Changed from "r+"
+                all_data: Dict = json.load(f)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Q0 data file not found: {self.cryomodule.q0_data_file}")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in Q0 data file: {e}")
 
-            heater_run_data: Dict = q0_meas_data[q0_utils.JSON_HEATER_RUN_KEY]
+        if time_stamp not in all_data:
+            raise KeyError(f"No data found for timestamp: {time_stamp}")
 
-            self.heater_run_heatload = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
-            self.heater_run.average_heat = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
-            self.heater_run.start_time = datetime.strptime(
-                heater_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
-            )
-            self.heater_run.end_time = datetime.strptime(
-                heater_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
-            )
-            ll_data = {}
-            for time_str, val in heater_run_data[q0_utils.JSON_LL_KEY].items():
-                ll_data[float(time_str)] = val
-            self.heater_run.ll_data = ll_data
+        try:
+            q0_meas_data = all_data[time_stamp]
+            self._load_heater_run_data(q0_meas_data)
+            self._load_rf_run_data(q0_meas_data)
+            self.save_data()
+        except KeyError as e:
+            raise ValueError(f"Missing required data field: {e}")
 
-            rf_run_data: Dict = q0_meas_data[q0_utils.JSON_RF_RUN_KEY]
-            cav_amps = {}
-            for cav_num_str, amp in rf_run_data[q0_utils.JSON_CAV_AMPS_KEY].items():
-                cav_amps[int(cav_num_str)] = amp
+    def _load_rf_run_data(self, q0_meas_data: dict):
+        rf_run_data: Dict = q0_meas_data[q0_utils.JSON_RF_RUN_KEY]
+        cav_amps = {}
+        for cav_num_str, amp in rf_run_data[q0_utils.JSON_CAV_AMPS_KEY].items():
+            cav_amps[int(cav_num_str)] = amp
 
-            self.amplitudes = cav_amps
-            self.rf_run.start_time = datetime.strptime(
-                rf_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
-            )
-            self.rf_run.end_time = datetime.strptime(rf_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER)
-            self.rf_run.average_heat = rf_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
+        self.amplitudes = cav_amps
+        self.rf_run.start_time = datetime.strptime(rf_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER)
+        self.rf_run.end_time = datetime.strptime(rf_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER)
+        self.rf_run.average_heat = rf_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
 
-            ll_data = {}
-            for time_str, val in rf_run_data[q0_utils.JSON_LL_KEY].items():
-                ll_data[float(time_str)] = val
-            self.rf_run.ll_data = ll_data
+        ll_data = {}
+        for time_str, val in rf_run_data[q0_utils.JSON_LL_KEY].items():
+            ll_data[float(time_str)] = val
+        self.rf_run.ll_data = ll_data
 
-            self.rf_run.avg_pressure = rf_run_data[q0_utils.JSON_AVG_PRESS_KEY]
+        self.rf_run.avg_pressure = rf_run_data[q0_utils.JSON_AVG_PRESS_KEY]
 
-        self.save_data()
+    def _load_heater_run_data(self, q0_meas_data: dict):
+        heater_run_data: Dict = q0_meas_data[q0_utils.JSON_HEATER_RUN_KEY]
+
+        self.heater_run_heatload = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
+        self.heater_run.average_heat = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
+        self.heater_run.start_time = datetime.strptime(
+            heater_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
+        )
+        self.heater_run.end_time = datetime.strptime(
+            heater_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
+        )
+        ll_data = {}
+        for time_str, val in heater_run_data[q0_utils.JSON_LL_KEY].items():
+            ll_data[float(time_str)] = val
+        self.heater_run.ll_data = ll_data
 
     def save_data(self):
         q0_utils.make_json_file(self.cryomodule.q0_data_file)
