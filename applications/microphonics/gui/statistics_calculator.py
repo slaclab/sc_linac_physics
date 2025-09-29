@@ -7,6 +7,7 @@ import numpy as np
 @dataclass
 class CavityStatistics:
     """Container for cavity statistics"""
+
     mean: float
     std: float
     min: float
@@ -61,7 +62,7 @@ class StatisticsCalculator:
             max=max_val,
             outliers=int(outliers),
             rms=rms,
-            peak_to_peak=peak_to_peak
+            peak_to_peak=peak_to_peak,
         )
 
     def convert_to_panel_format(self, stats: CavityStatistics) -> Dict:
@@ -75,9 +76,9 @@ class StatisticsCalculator:
             Dictionary formatted for StatisticsPanel.update_statistics()
         """
         return {
-            'mean': stats.mean,
-            'std': stats.std,
-            'min': stats.min,
-            'max': stats.max,
-            'outliers': stats.outliers
+            "mean": stats.mean,
+            "std": stats.std,
+            "min": stats.min,
+            "max": stats.max,
+            "outliers": stats.outliers,
         }

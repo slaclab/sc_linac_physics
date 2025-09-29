@@ -146,8 +146,12 @@ class SCLinacPhysicsService(Service):
                             cav_num=cav_num,
                         )
                     )
-                    self.add_pvs(RFStationPVGroup(prefix=rfs_prefix + f"RFS1{rfs_infix}"))
-                    self.add_pvs(RFStationPVGroup(prefix=rfs_prefix + f"RFS2{rfs_infix}"))
+                    self.add_pvs(
+                        RFStationPVGroup(prefix=rfs_prefix + f"RFS1{rfs_infix}")
+                    )
+                    self.add_pvs(
+                        RFStationPVGroup(prefix=rfs_prefix + f"RFS2{rfs_infix}")
+                    )
 
                 self.add_pvs(CryoPVGroup(prefix=cryo_prefix))
                 self.add_pvs(BeamlineVacuumPVGroup(prefix=cm_prefix + "00:"))

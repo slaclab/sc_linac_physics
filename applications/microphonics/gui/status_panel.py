@@ -1,6 +1,4 @@
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QGroupBox, QGridLayout
-)
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGroupBox, QGridLayout
 
 from applications.microphonics.utils.ui_utils import create_status_widgets
 
@@ -28,19 +26,20 @@ class StatusPanel(QWidget):
             grid_layout=grid_layout,
             headers=["Cavity", "Status", "Progress", "Message"],
             initial_status="Not configured",
-            initial_message=""
+            initial_message="",
         )
         group.setLayout(grid_layout)
         layout.addWidget(group)
 
-    def update_cavity_status(self, cavity_num: int, status: str, progress: int, message: str):
-        """Update status for a single cavity
-        """
+    def update_cavity_status(
+        self, cavity_num: int, status: str, progress: int, message: str
+    ):
+        """Update status for a single cavity"""
         if cavity_num in self.status_widgets:
             widgets = self.status_widgets[cavity_num]
-            widgets['status'].setText(status)
-            widgets['progress'].setValue(progress)
-            widgets['message'].setText(message)
+            widgets["status"].setText(status)
+            widgets["progress"].setValue(progress)
+            widgets["message"].setText(message)
 
     def update_statistics(self, cavity_num: int, stats: dict):
         """Update stats information for a cavity
@@ -53,21 +52,18 @@ class StatusPanel(QWidget):
             widgets = self.status_widgets[cavity_num]
 
             # Format stat values
-            message = (f"Mean: {stats['mean']:.2f}, "
-                       f"Std: {stats['std']:.2f}, "
-                       f"Range: [{stats['min']:.2f}, {stats['max']:.2f}], "
-                       f"Outliers: {stats['outliers']}")
+            message = (
+                f"Mean: {stats['mean']:.2f}, "
+                f"Std: {stats['std']:.2f}, "
+                f"Range: [{stats['min']:.2f}, {stats['max']:.2f}], "
+                f"Outliers: {stats['outliers']}"
+            )
 
             # Update status widgets
-            widgets['status'].setText("Running")
-            widgets['message'].setText(message)
+            widgets["status"].setText("Running")
+            widgets["message"].setText(message)
 
     def reset_all(self):
         """Reset all cavities to initial state"""
         for cavity_num in range(1, 9):
-            self.update_cavity_status(
-                cavity_num,
-                "Not configured",
-                0,
-                ""
-            )
+            self.update_cavity_status(cavity_num, "Not configured", 0, "")

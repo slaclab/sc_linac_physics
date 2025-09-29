@@ -15,7 +15,9 @@ def _validate_fft_inputs(data, effective_sample_rate):
         try:
             data = np.asarray(data, dtype=np.float64)
         except (TypeError, ValueError) as e:
-            print(f"Error (calculate_fft): Could not convert input data to NumPy array: {e}")
+            print(
+                f"Error (calculate_fft): Could not convert input data to NumPy array: {e}"
+            )
             return None
 
     nan_mask = np.isnan(data)
@@ -28,7 +30,9 @@ def _validate_fft_inputs(data, effective_sample_rate):
         return None
 
     if effective_sample_rate <= 0:
-        print(f"Error calculating FFT: Invalid effective_sample_rate ({effective_sample_rate})")
+        print(
+            f"Error calculating FFT: Invalid effective_sample_rate ({effective_sample_rate})"
+        )
         return None
 
     return data
@@ -44,12 +48,14 @@ def _compute_fft_results(data, effective_sample_rate):
     if num_points == 1:
         return np.array([0.0]), np.abs(yf)
 
-    xf = fftfreq(num_points, sample_spacing)[:num_points // 2]
-    amplitudes = 2.0 / num_points * np.abs(yf[0:num_points // 2])
+    xf = fftfreq(num_points, sample_spacing)[: num_points // 2]
+    amplitudes = 2.0 / num_points * np.abs(yf[0 : num_points // 2])
 
     min_len = min(len(xf), len(amplitudes))
     if len(xf) != min_len or len(amplitudes) != min_len:
-        print("Warning (calculate_fft): Adjusting length mismatch between freqs and amps.")
+        print(
+            "Warning (calculate_fft): Adjusting length mismatch between freqs and amps."
+        )
         xf = xf[:min_len]
         amplitudes = amplitudes[:min_len]
 
@@ -144,14 +150,16 @@ def calculate_spectrogram(data, sample_rate=2000, nperseg=None):
             fs=sample_rate,
             nperseg=nperseg,
             noverlap=noverlap,
-            window='hann',  # Use Hann window for consistency w/ FFT
-            scaling='density'
+            window="hann",  # Use Hann window for consistency w/ FFT
+            scaling="density",
         )
 
         # Convert to dB scale w/ safety floor to avoid log(0)
         Sxx_db = 10 * np.log10(Sxx + 1e-12)
     except ValueError as e:
-        print(f"Error calculating spectrogram (likely due to segment length/data size): {e}")
+        print(
+            f"Error calculating spectrogram (likely due to segment length/data size): {e}"
+        )
         return np.array([]), np.array([]), np.array([[]])
     except Exception as e:
         print(f"Unexpected error calculating spectrogram: {e}")

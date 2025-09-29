@@ -2,8 +2,13 @@ from pathlib import Path
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
-    QVBoxLayout, QGroupBox, QLabel, QPushButton,
-    QGridLayout, QCheckBox, QFileDialog
+    QVBoxLayout,
+    QGroupBox,
+    QLabel,
+    QPushButton,
+    QGridLayout,
+    QCheckBox,
+    QFileDialog,
 )
 
 
@@ -12,8 +17,13 @@ class ChannelSelectionGroup(QGroupBox):
     UI component that shows what data channels will be measured.
     - Primary channel (DF): Always on and can't be turned off
     """
+
     FIXED_CHANNELS = {
-        'DF': {'label': "DF (Detune Frequency)", 'default_state': True, 'enabled': False}
+        "DF": {
+            "label": "DF (Detune Frequency)",
+            "default_state": True,
+            "enabled": False,
+        }
     }
 
     def __init__(self, parent=None):
@@ -31,9 +41,9 @@ class ChannelSelectionGroup(QGroupBox):
         if self.FIXED_CHANNELS:
             col_idx = 0
             for name, config in self.FIXED_CHANNELS.items():
-                checkbox = QCheckBox(config['label'])
-                checkbox.setChecked(config['default_state'])
-                checkbox.setEnabled(config['enabled'])
+                checkbox = QCheckBox(config["label"])
+                checkbox.setChecked(config["default_state"])
+                checkbox.setEnabled(config["enabled"])
                 self.channel_widgets[name] = checkbox
                 layout.addWidget(checkbox, current_row, col_idx)
                 col_idx += 1
@@ -46,13 +56,18 @@ class ChannelSelectionGroup(QGroupBox):
     def get_selected_channels(self):
         """This will get a list of selected channel names by reading current state
         of managed QCheckBox widgets."""
-        return [name for name, checkbox in self.channel_widgets.items() if checkbox.isChecked()]
+        return [
+            name
+            for name, checkbox in self.channel_widgets.items()
+            if checkbox.isChecked()
+        ]
 
 
 class DataLoadingGroup(QGroupBox):
     """
     Component lets people load previously saved data files.
     """
+
     PREFERRED_DEFAULT_DATA_PATH = Path("/u1/lcls/physics/rf_lcls2/microphonics")
     # Signal emitted when the load button is clicked and a file is selected
     file_selected = pyqtSignal(Path)
@@ -95,10 +110,7 @@ class DataLoadingGroup(QGroupBox):
         file_filters = "All Files (*);;Text Files (*.txt);;Data Files (*.dat)"
 
         file_path_str, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load Previous Data",
-            start_directory,
-            file_filters
+            self, "Load Previous Data", start_directory, file_filters
         )
 
         if file_path_str:

@@ -3,9 +3,7 @@ from typing import Tuple, Optional
 import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QSizePolicy
-)
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSizePolicy
 
 
 class BasePlot(QWidget):
@@ -63,23 +61,23 @@ class BasePlot(QWidget):
         # Default configuration if none provided
         if not config:
             config = {
-                'title': f"{plot_type.replace('_', ' ').title()} Plot",
-                'grid': True
+                "title": f"{plot_type.replace('_', ' ').title()} Plot",
+                "grid": True,
             }
 
-        widget = pg.PlotWidget(title=config.get('title', ''))
+        widget = pg.PlotWidget(title=config.get("title", ""))
 
         # Set labels if provided
-        if 'x_label' in config:
-            widget.setLabel('bottom', config['x_label'][0], units=config['x_label'][1])
-        if 'y_label' in config:
-            widget.setLabel('left', config['y_label'][0], units=config['y_label'][1])
+        if "x_label" in config:
+            widget.setLabel("bottom", config["x_label"][0], units=config["x_label"][1])
+        if "y_label" in config:
+            widget.setLabel("left", config["y_label"][0], units=config["y_label"][1])
 
         # Common configuration
-        widget.setBackground('w')
-        widget.getAxis('bottom').setPen('k')
-        widget.getAxis('left').setPen('k')
-        if config.get('grid', False):
+        widget.setBackground("w")
+        widget.getAxis("bottom").setPen("k")
+        widget.getAxis("left").setPen("k")
+        if config.get("grid", False):
             widget.showGrid(x=True, y=True, alpha=0.3)
 
         widget.setMinimumSize(600, 400)
@@ -92,14 +90,14 @@ class BasePlot(QWidget):
         widget.addLegend(offset=(-30, 30))
 
         # Set log mode
-        if config.get('log_y', False):
+        if config.get("log_y", False):
             widget.setLogMode(y=True)
 
         # Set ranges if provided
-        if 'x_range' in config:
-            widget.setXRange(*config['x_range'])
-        if 'y_range' in config:
-            widget.setYRange(*config['y_range'])
+        if "x_range" in config:
+            widget.setXRange(*config["x_range"])
+        if "y_range" in config:
+            widget.setYRange(*config["y_range"])
 
         # Connect signal for tooltips
         widget.scene().sigMouseMoved.connect(
@@ -119,8 +117,14 @@ class BasePlot(QWidget):
             pg.mkPen: Pen object for the cavity
         """
         colors = [
-            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
-            '#9467bd', '#8c564b', '#e377c2', '#7f7f7f'
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
         ]
         line_styles = [Qt.SolidLine, Qt.DashLine, Qt.DotLine, Qt.DashDotLine]
 
@@ -156,8 +160,8 @@ class BasePlot(QWidget):
                     self.tooltips[plot_type] = pg.TextItem(
                         text=tooltip,
                         color=(255, 255, 255),
-                        border='k',
-                        fill=(0, 0, 0, 180)
+                        border="k",
+                        fill=(0, 0, 0, 180),
                     )
                     plot.addItem(self.tooltips[plot_type])
 
@@ -181,8 +185,9 @@ class BasePlot(QWidget):
         """
         return f"X: {x:.2f}, Y: {y:.2f}"
 
-    def _preprocess_data(self, cavity_channel_data: dict,
-                         channel_type: str = 'DF') -> Tuple[Optional[np.ndarray], bool]:
+    def _preprocess_data(
+        self, cavity_channel_data: dict, channel_type: str = "DF"
+    ) -> Tuple[Optional[np.ndarray], bool]:
         """
         Validate and preprocess data, centralizing common operations
 
@@ -199,7 +204,11 @@ class BasePlot(QWidget):
         data_array = cavity_channel_data.get(channel_type)
 
         # Validate data
-        if data_array is None or not isinstance(data_array, np.ndarray) or data_array.size == 0:
+        if (
+            data_array is None
+            or not isinstance(data_array, np.ndarray)
+            or data_array.size == 0
+        ):
             return None, False
 
         # Make sure data is numpy array w/ float64 type
@@ -214,7 +223,9 @@ class BasePlot(QWidget):
 
             return data_array, True
         except (TypeError, ValueError) as e:
-            print(f"BasePlot: Error converting channel '{channel_type}' data to float64: {e}")
+            print(
+                f"BasePlot: Error converting channel '{channel_type}' data to float64: {e}"
+            )
             return None, False
 
     def toggle_cavity_visibility(self, cavity_num, state):
@@ -258,19 +269,19 @@ class BasePlot(QWidget):
         self.config = config
 
         # Get plot type specific config if available
-        if self.plot_type == 'fft' and 'fft' in config:
-            plot_config = config['fft']
-        elif self.plot_type == 'histogram' and 'histogram' in config:
-            plot_config = config['histogram']
-        elif self.plot_type == 'spectrogram' and 'spectrogram' in config:
-            plot_config = config['spectrogram']
+        if self.plot_type == "fft" and "fft" in config:
+            plot_config = config["fft"]
+        elif self.plot_type == "histogram" and "histogram" in config:
+            plot_config = config["histogram"]
+        elif self.plot_type == "spectrogram" and "spectrogram" in config:
+            plot_config = config["spectrogram"]
         else:
             plot_config = {}
 
         # Apply configuration to the plot widget
-        if hasattr(self, 'plot_widget'):
+        if hasattr(self, "plot_widget"):
             # Update plot ranges if provided
-            if 'x_range' in plot_config:
-                self.plot_widget.setXRange(*plot_config['x_range'])
-            if 'y_range' in plot_config:
-                self.plot_widget.setYRange(*plot_config['y_range'])
+            if "x_range" in plot_config:
+                self.plot_widget.setXRange(*plot_config["x_range"])
+            if "y_range" in plot_config:
+                self.plot_widget.setYRange(*plot_config["y_range"])

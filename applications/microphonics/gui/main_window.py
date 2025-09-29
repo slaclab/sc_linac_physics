@@ -4,17 +4,17 @@ from typing import Dict
 
 import numpy as np
 from PyQt5.QtCore import QTimer, pyqtSignal
-from PyQt5.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout,
-    QMessageBox
-
-)
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QMessageBox
 from pydm import Display
 
 from applications.microphonics.components.components import (
-    ChannelSelectionGroup, DataLoadingGroup
+    ChannelSelectionGroup,
+    DataLoadingGroup,
 )
-from applications.microphonics.gui.async_data_manager import MeasurementConfig, AsyncDataManager
+from applications.microphonics.gui.async_data_manager import (
+    MeasurementConfig,
+    AsyncDataManager,
+)
 from applications.microphonics.gui.config_panel import ConfigPanel
 from applications.microphonics.gui.data_loader import DataLoader
 from applications.microphonics.gui.statistics_calculator import StatisticsCalculator
@@ -25,6 +25,7 @@ from applications.microphonics.utils.pv_utils import format_pv_base
 
 class MicrophonicsGUI(Display):
     """Main window for the Microphonics GUI Measurement system"""
+
     measurementError = pyqtSignal(str)
 
     def __init__(self, parent=None, args=None, macros=None):
@@ -89,7 +90,9 @@ class MicrophonicsGUI(Display):
         self.data_loader = DataLoader()
 
         # Connect data loader signals
-        self.data_loader.dataLoaded.connect(lambda data: self._handle_new_data("file", data))
+        self.data_loader.dataLoaded.connect(
+            lambda data: self._handle_new_data("file", data)
+        )
         self.data_loader.loadError.connect(self._handle_load_error)
         self.data_loader.loadProgress.connect(self._handle_load_progress)
 
@@ -122,7 +125,9 @@ class MicrophonicsGUI(Display):
         self.config_panel.configChanged.connect(self.on_config_changed)
         self.config_panel.measurementStarted.connect(self.start_measurement)
         self.config_panel.measurementStopped.connect(self.stop_measurement)
-        self.config_panel.decimationSettingChanged.connect(self.plot_panel.refresh_plots_if_decimation_changed)
+        self.config_panel.decimationSettingChanged.connect(
+            self.plot_panel.refresh_plots_if_decimation_changed
+        )
 
         # Data loading signals
         self.data_loading.file_selected.connect(self.load_data)
@@ -133,13 +138,10 @@ class MicrophonicsGUI(Display):
             # Update UI based on new configuration
             if not self.measurement_running:
                 self.status_panel.reset_all()
-                selected_cavities = config['cavities']
+                selected_cavities = config["cavities"]
                 for cavity in selected_cavities:
                     self.status_panel.update_cavity_status(
-                        cavity,
-                        "Ready",
-                        0,
-                        "Configured for measurement"
+                        cavity, "Ready", 0, "Configured for measurement"
                     )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Configuration error: {str(e)}")
@@ -156,19 +158,19 @@ class MicrophonicsGUI(Display):
         channels_for_script = selected_channels_ui
         print(f"Debug: Channels actually sent to script: {channels_for_script}")
 
-        if not config.get('modules'):
+        if not config.get("modules"):
             print("Debug: No modules in config")
             return result
 
-        for module in config['modules']:
+        for module in config["modules"]:
             print(f"\nDebug: Processing module: {module}")
-            base_channel = module['base_channel']
+            base_channel = module["base_channel"]
 
             # Group cavities by rack (A/B)
             rack_a_cavities = []
             rack_b_cavities = []
 
-            for cavity_num, is_selected in config['cavities'].items():
+            for cavity_num, is_selected in config["cavities"].items():
                 print(f"Debug: Checking cavity {cavity_num}: {is_selected}")
                 if is_selected:  # Only process selected cavities
                     if cavity_num <= 4:
@@ -182,30 +184,34 @@ class MicrophonicsGUI(Display):
             if rack_a_cavities:
                 chassis_id = f"{base_channel}:RESA"
                 result[chassis_id] = {
-                    'pv_base': format_pv_base(base_channel, 'A'),
-                    'config': MeasurementConfig(
+                    "pv_base": format_pv_base(base_channel, "A"),
+                    "config": MeasurementConfig(
                         channels=channels_for_script,
-                        decimation=config['decimation'],
-                        buffer_count=config['buffer_count']
+                        decimation=config["decimation"],
+                        buffer_count=config["buffer_count"],
                     ),
-                    'cavities': rack_a_cavities
+                    "cavities": rack_a_cavities,
                 }
                 # Check which channels were actually used
-                print(f"Debug: Added Rack A config (using {channels_for_script}): {result[chassis_id]}")
+                print(
+                    f"Debug: Added Rack A config (using {channels_for_script}): {result[chassis_id]}"
+                )
 
             if rack_b_cavities:
                 chassis_id = f"{base_channel}:RESB"
                 result[chassis_id] = {
-                    'pv_base': format_pv_base(base_channel, 'B'),
-                    'config': MeasurementConfig(
+                    "pv_base": format_pv_base(base_channel, "B"),
+                    "config": MeasurementConfig(
                         channels=channels_for_script,
-                        decimation=config['decimation'],
-                        buffer_count=config['buffer_count']
+                        decimation=config["decimation"],
+                        buffer_count=config["buffer_count"],
                     ),
-                    'cavities': rack_b_cavities
+                    "cavities": rack_b_cavities,
                 }
                 # Checking which channel was used
-                print(f"Debug: Added Rack B config (using {channels_for_script}): {result[chassis_id]}")
+                print(
+                    f"Debug: Added Rack B config (using {channels_for_script}): {result[chassis_id]}"
+                )
 
         print(f"\nDebug: Final result: {result}")
         return result
@@ -234,9 +240,13 @@ class MicrophonicsGUI(Display):
         try:
             config = self.config_panel.get_config()
             # A check to see if any cavities are selected
-            selected_cavities = [num for num, selected in config['cavities'].items() if selected]
+            selected_cavities = [
+                num for num, selected in config["cavities"].items() if selected
+            ]
             if not selected_cavities:
-                self.measurementError.emit("Please select at least one cavity before starting.")
+                self.measurementError.emit(
+                    "Please select at least one cavity before starting."
+                )
                 return
             self.plot_panel.clear_plots()  # Clear old plots before starting new measurement
             print("Current config:", config)
@@ -249,7 +259,9 @@ class MicrophonicsGUI(Display):
 
             chassis_config = self._split_chassis_config(config)
             if not chassis_config:
-                raise ValueError(f"No valid chassis configuration created. Selected cavities: {selected_cavities}")
+                raise ValueError(
+                    f"No valid chassis configuration created. Selected cavities: {selected_cavities}"
+                )
 
             print("Chassis config:", chassis_config)
 
@@ -281,13 +293,10 @@ class MicrophonicsGUI(Display):
             self.data_loading.setEnabled(True)
 
             for cavity_num in range(1, 9):
-                self.status_panel.update_statistics(cavity_num, {
-                    'mean': 0.0,
-                    'std': 0.0,
-                    'min': 0.0,
-                    'max': 0.0,
-                    'outliers': 0
-                })
+                self.status_panel.update_statistics(
+                    cavity_num,
+                    {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0, "outliers": 0},
+                )
 
     def _handle_error(self, chassis_id: str, error_msg: str):
         """Show modal error dialogs during tests"""
@@ -334,10 +343,7 @@ class MicrophonicsGUI(Display):
     def _handle_progress(self, chassis_id: str, cavity_num: int, progress: int):
         """Handle progress updates from measurement"""
         self.status_panel.update_cavity_status(
-            cavity_num,
-            "Running",
-            progress,
-            f"Buffer acquisition: {progress}%"
+            cavity_num, "Running", progress, f"Buffer acquisition: {progress}%"
         )
 
     def _handle_new_data(self, source: str, data_dict: dict):
@@ -346,11 +352,13 @@ class MicrophonicsGUI(Display):
 
         try:
             # Get list of cavities and nested cavity data
-            cavity_list = data_dict.get('cavity_list', [])
-            all_cavity_data = data_dict.get('cavities', {})
+            cavity_list = data_dict.get("cavity_list", [])
+            all_cavity_data = data_dict.get("cavities", {})
 
             if not cavity_list:
-                print("WARN: _handle_new_data received empty cavity list or missing 'cavity_list' key.")
+                print(
+                    "WARN: _handle_new_data received empty cavity list or missing 'cavity_list' key."
+                )
                 return  # Nothing to process
 
             # Update stats for each cavity present i
@@ -358,37 +366,55 @@ class MicrophonicsGUI(Display):
                 cavity_channel_data = all_cavity_data.get(cavity_num)
 
                 if not cavity_channel_data:
-                    print(f"WARN: No channel data found for cavity {cavity_num} in data_dict['cavities'].")
+                    print(
+                        f"WARN: No channel data found for cavity {cavity_num} in data_dict['cavities']."
+                    )
                     continue
 
-                df_data = cavity_channel_data.get('DF')
+                df_data = cavity_channel_data.get("DF")
 
                 # Check if DF data is valid for stats
-                if df_data is not None and isinstance(df_data, np.ndarray) and df_data.size > 0:
+                if (
+                    df_data is not None
+                    and isinstance(df_data, np.ndarray)
+                    and df_data.size > 0
+                ):
                     try:
                         stats = self.stats_calculator.calculate_statistics(df_data)
-                        panel_stats = self.stats_calculator.convert_to_panel_format(stats)
+                        panel_stats = self.stats_calculator.convert_to_panel_format(
+                            stats
+                        )
 
                         # Update stats display in the status panel
                         self.status_panel.update_statistics(cavity_num, panel_stats)
                     except Exception as stat_err:
                         # Log error but continue processing other cavities/plots
-                        print(f"ERROR: Failed to calculate/update stats for Cav {cavity_num}: {stat_err}")
+                        print(
+                            f"ERROR: Failed to calculate/update stats for Cav {cavity_num}: {stat_err}"
+                        )
                         traceback.print_exc()
                 else:
                     # Log if DF data is missing or invalid for stats
-                    print(f"WARN: No valid 'DF' data found for statistics for cavity {cavity_num}.")
+                    print(
+                        f"WARN: No valid 'DF' data found for statistics for cavity {cavity_num}."
+                    )
 
-            print(f"DEBUG: Calling plot_panel.update_plots w/ data for cavities: {cavity_list}")
+            print(
+                f"DEBUG: Calling plot_panel.update_plots w/ data for cavities: {cavity_list}"
+            )
             self.plot_panel.update_plots(data_dict)
 
         except KeyError as ke:
             # Catch errors if expected keys are missing from data_dict
-            print(f"ERROR in _handle_new_data: Missing key {ke} in received data dictionary.")
+            print(
+                f"ERROR in _handle_new_data: Missing key {ke} in received data dictionary."
+            )
             traceback.print_exc()
         except Exception as e:
             # Catch any other unexpected errors during processing
-            print(f"CRITICAL ERROR in _handle_new_data processing data from '{source}': {str(e)}")
+            print(
+                f"CRITICAL ERROR in _handle_new_data processing data from '{source}': {str(e)}"
+            )
             traceback.print_exc()
 
     def load_data(self, file_path: Path):
@@ -415,6 +441,6 @@ class MicrophonicsGUI(Display):
 
     def closeEvent(self, event):
         """Ensure clean shutdown"""
-        if hasattr(self, 'data_manager'):
+        if hasattr(self, "data_manager"):
             self.data_manager.stop_all()
         super().closeEvent(event)

@@ -26,17 +26,14 @@ class SpectrogramPlot(BasePlot):
         self.master_plot_item_for_linking = None
 
         # Colorbar
-        self.colormap = pg.colormap.get('viridis')
+        self.colormap = pg.colormap.get("viridis")
         self.colorbar = None
 
         # Grid controls
         self.grid_controls_widget = None
         self.columns_spinbox = None
-        config = {
-            'title': "Spectrogram",
-            'grid': False
-        }
-        super().__init__(parent, plot_type='spectrogram', config=config)
+        config = {"title": "Spectrogram", "grid": False}
+        super().__init__(parent, plot_type="spectrogram", config=config)
 
     def setup_ui(self):
         """Setup UI w/ grid controls"""
@@ -71,9 +68,10 @@ class SpectrogramPlot(BasePlot):
         """Setup plot widget"""
         # Create GraphicsLayoutWidget
         self.graphics_layout = pg.GraphicsLayoutWidget()
-        self.graphics_layout.setBackground('w')
-        self.graphics_layout.setSizePolicy(pg.QtWidgets.QSizePolicy.Expanding,
-                                           pg.QtWidgets.QSizePolicy.Expanding)
+        self.graphics_layout.setBackground("w")
+        self.graphics_layout.setSizePolicy(
+            pg.QtWidgets.QSizePolicy.Expanding, pg.QtWidgets.QSizePolicy.Expanding
+        )
 
         self.plot_widget = self.graphics_layout
 
@@ -92,8 +90,10 @@ class SpectrogramPlot(BasePlot):
         # Figure out which cavities to show
         visible_cavities = []
         for cavity_num in self.cavity_order:
-            if (self.cavity_is_visible_flags.get(cavity_num, False) and
-                    cavity_num in self.cavity_data_cache):
+            if (
+                self.cavity_is_visible_flags.get(cavity_num, False)
+                and cavity_num in self.cavity_data_cache
+            ):
                 visible_cavities.append(cavity_num)
 
         if not visible_cavities:
@@ -109,17 +109,16 @@ class SpectrogramPlot(BasePlot):
             col = idx % self.grid_columns
 
             plot_item = self.graphics_layout.addPlot(
-                row=row, col=col,
-                title=f"Cavity {cavity_num}"
+                row=row, col=col, title=f"Cavity {cavity_num}"
             )
 
             # Configure plot
-            plot_item.setLabel('left', 'Frequency', units='Hz')
-            plot_item.setLabel('bottom', 'Time', units='s')
+            plot_item.setLabel("left", "Frequency", units="Hz")
+            plot_item.setLabel("bottom", "Time", units="s")
             plot_item.showGrid(x=True, y=True, alpha=0.3)
-            plot_item.getViewBox().setBackgroundColor('w')
-            plot_item.getAxis('bottom').setPen('k')
-            plot_item.getAxis('left').setPen('k')
+            plot_item.getViewBox().setBackgroundColor("w")
+            plot_item.getAxis("bottom").setPen("k")
+            plot_item.getAxis("left").setPen("k")
 
             img = pg.ImageItem()
             img.setLookupTable(self.colormap.getLookupTable())
@@ -136,10 +135,12 @@ class SpectrogramPlot(BasePlot):
                 plot_item.setYRange(f[0], f[-1], padding=0)
 
             # Link X-axis
-            if 'x_range' in self.config:
-                plot_item.setXRange(*self.config['x_range'])
-            elif 'spectrogram' in self.config and 'x_range' in self.config['spectrogram']:
-                plot_item.setXRange(*self.config['spectrogram']['x_range'])
+            if "x_range" in self.config:
+                plot_item.setXRange(*self.config["x_range"])
+            elif (
+                "spectrogram" in self.config and "x_range" in self.config["spectrogram"]
+            ):
+                plot_item.setXRange(*self.config["spectrogram"]["x_range"])
             else:
                 plot_item.setXRange(t[0], t[-1], padding=0)
 
@@ -154,7 +155,9 @@ class SpectrogramPlot(BasePlot):
         return f"Time: {x:.3f} s\nFrequency: {y:.1f} Hz"
 
     def update_plot(self, cavity_num, cavity_channel_data):
-        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type='DF')
+        df_data, is_valid = self._preprocess_data(
+            cavity_channel_data, channel_type="DF"
+        )
         if not is_valid:
             print(f"SpectrogramPlot: No valid 'DF' data for cavity {cavity_num}")
             if cavity_num in self.cavity_data_cache:
@@ -162,7 +165,7 @@ class SpectrogramPlot(BasePlot):
             self._refresh_grid_layout()
             return
 
-        decimation = cavity_channel_data.get('decimation', 1)
+        decimation = cavity_channel_data.get("decimation", 1)
         if not isinstance(decimation, (int, float)) or decimation <= 0:
             decimation = 1
         effective_sample_rate = BASE_HARDWARE_SAMPLE_RATE / decimation
@@ -172,7 +175,9 @@ class SpectrogramPlot(BasePlot):
             if Sxx is None or Sxx.size == 0 or t.size == 0 or f.size == 0:
                 raise ValueError("Spectrogram calculation returned empty arrays.")
         except Exception as e:
-            print(f"SpectrogramPlot: Error during spectrogram calculation for Cav {cavity_num}: {e}")
+            print(
+                f"SpectrogramPlot: Error during spectrogram calculation for Cav {cavity_num}: {e}"
+            )
             if cavity_num in self.cavity_data_cache:
                 del self.cavity_data_cache[cavity_num]
             self._refresh_grid_layout()
@@ -192,15 +197,13 @@ class SpectrogramPlot(BasePlot):
         # Create colorbar
         if self.colorbar is None:
             self.colorbar = pg.ColorBarItem(
-                values=(-120, 0),
-                colorMap=self.colormap,
-                label='Power (dB)',
-                width=15
+                values=(-120, 0), colorMap=self.colormap, label="Power (dB)", width=15
             )
 
         # Add to layout in right column
-        self.graphics_layout.addItem(self.colorbar, row=0, col=self.grid_columns,
-                                     rowspan=num_rows)
+        self.graphics_layout.addItem(
+            self.colorbar, row=0, col=self.grid_columns, rowspan=num_rows
+        )
 
         # Link to first available image
         if self.image_items:
@@ -214,8 +217,11 @@ class SpectrogramPlot(BasePlot):
 
     def _auto_arrange_grid(self):
         """Automatically figure optimal grid layout"""
-        num_visible = sum(1 for cav in self.cavity_order
-                          if self.cavity_is_visible_flags.get(cav, False))
+        num_visible = sum(
+            1
+            for cav in self.cavity_order
+            if self.cavity_is_visible_flags.get(cav, False)
+        )
 
         if num_visible == 0:
             return
@@ -240,11 +246,11 @@ class SpectrogramPlot(BasePlot):
     def set_plot_config(self, config):
         """Update plot settings based on config"""
         self.config = config
-        plot_specific_config = config.get('spectrogram', {})
+        plot_specific_config = config.get("spectrogram", {})
 
         # Check if grid columns changed
-        if 'grid_columns' in plot_specific_config:
-            new_columns = plot_specific_config['grid_columns']
+        if "grid_columns" in plot_specific_config:
+            new_columns = plot_specific_config["grid_columns"]
             if new_columns != self.grid_columns:
                 self.columns_spinbox.setValue(new_columns)
 

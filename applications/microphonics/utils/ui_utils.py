@@ -2,20 +2,25 @@ from typing import Dict, List, Optional, Callable, Tuple, Any, Union
 
 from PyQt5.QtWidgets import QTabWidget
 from PyQt5.QtWidgets import (
-    QWidget, QCheckBox, QLabel, QPushButton, QProgressBar,
-    QLayout, QGridLayout
+    QWidget,
+    QCheckBox,
+    QLabel,
+    QPushButton,
+    QProgressBar,
+    QLayout,
+    QGridLayout,
 )
 
 
 def create_checkboxes(
-        parent: "QWidget",
-        items: Dict[int, str],
-        layout: QLayout,
-        checked: bool = False,
-        enabled: bool = True,
-        callback: Optional[Callable] = None,
-        grid_layout: bool = False,
-        max_cols: int = 4
+    parent: "QWidget",
+    items: Dict[int, str],
+    layout: QLayout,
+    checked: bool = False,
+    enabled: bool = True,
+    callback: Optional[Callable] = None,
+    grid_layout: bool = False,
+    max_cols: int = 4,
 ) -> Dict[int, QCheckBox]:
     """
     Create group of checkboxes w/ consistent configuration
@@ -56,14 +61,14 @@ def create_checkboxes(
 
 
 def create_pushbuttons(
-        parent: QWidget,
-        items: Dict[Any, str],
-        layout: QLayout,
-        checkable: bool = False,
-        connect_to: Optional[Callable] = None,
-        custom_properties: Optional[Dict[str, Dict[str, Any]]] = None,
-        grid_layout: bool = False,
-        max_cols: int = 4
+    parent: QWidget,
+    items: Dict[Any, str],
+    layout: QLayout,
+    checkable: bool = False,
+    connect_to: Optional[Callable] = None,
+    custom_properties: Optional[Dict[str, Dict[str, Any]]] = None,
+    grid_layout: bool = False,
+    max_cols: int = 4,
 ) -> Dict[Any, QPushButton]:
     """
     Create group of push buttons w/ consistent configuration.
@@ -113,12 +118,12 @@ def create_pushbuttons(
 
 
 def create_status_widgets(
-        parent: QWidget,
-        items: List[int],
-        grid_layout: QGridLayout,
-        headers: List[str] = ["Cavity", "Status", "Progress", "Message"],
-        initial_status: str = "Not configured",
-        initial_message: str = ""
+    parent: QWidget,
+    items: List[int],
+    grid_layout: QGridLayout,
+    headers: List[str] = ["Cavity", "Status", "Progress", "Message"],
+    initial_status: str = "Not configured",
+    initial_message: str = "",
 ) -> Dict[int, Dict[str, QWidget]]:
     """
     Create status widgets (labels, progress bars) for items like cavities.
@@ -162,18 +167,18 @@ def create_status_widgets(
 
         # Store references to widgets
         status_widgets[item_id] = {
-            'status': status_label,
-            'progress': progress_bar,
-            'message': msg_label
+            "status": status_label,
+            "progress": progress_bar,
+            "message": msg_label,
         }
 
     return status_widgets
 
 
 def create_cavity_selection_tabs(
-        parent: QWidget,
-        rack_config: Dict[str, Dict[str, Union[str, List[int]]]],
-        select_all_callback: Callable[[str], None]
+    parent: QWidget,
+    rack_config: Dict[str, Dict[str, Union[str, List[int]]]],
+    select_all_callback: Callable[[str], None],
 ) -> Tuple[Dict[str, Dict[int, QCheckBox]], Dict[str, QPushButton]]:
     """
     Create cavity selection tabs with select all buttons for each rack.
@@ -200,22 +205,24 @@ def create_cavity_selection_tabs(
         layout = QGridLayout(tab)
 
         # Create cavity checkboxes
-        cavity_items = {cav_num: f"Cavity {cav_num}" for cav_num in config['cavities']}
+        cavity_items = {cav_num: f"Cavity {cav_num}" for cav_num in config["cavities"]}
         checkboxes = create_checkboxes(
             tab,
             cavity_items,
             layout,
             grid_layout=True,
-            max_cols=len(config['cavities'])
+            max_cols=len(config["cavities"]),
         )
         cavity_checkboxes[rack_id] = checkboxes
 
         # Create Select All button
         select_all_btn = QPushButton("Select All")
         select_all_btn.clicked.connect(lambda _, r=rack_id: select_all_callback(r))
-        layout.addWidget(select_all_btn, 1, 0, 1, len(config['cavities']))  # Span all columns
+        layout.addWidget(
+            select_all_btn, 1, 0, 1, len(config["cavities"])
+        )  # Span all columns
         select_all_buttons[rack_id] = select_all_btn
 
-        tabs.addTab(tab, config['title'])
+        tabs.addTab(tab, config["title"])
 
     return cavity_checkboxes, select_all_buttons

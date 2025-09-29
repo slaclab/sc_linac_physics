@@ -1,6 +1,10 @@
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QTabWidget, QGroupBox,
-    QHBoxLayout, QSizePolicy
+    QWidget,
+    QVBoxLayout,
+    QTabWidget,
+    QGroupBox,
+    QHBoxLayout,
+    QSizePolicy,
 )
 
 from applications.microphonics.gui.config_panel import ConfigPanel
@@ -8,7 +12,10 @@ from applications.microphonics.plots.fft_plot import FFTPlot
 from applications.microphonics.plots.histogram_plot import HistogramPlot
 from applications.microphonics.plots.spectrogram_plot import SpectrogramPlot
 from applications.microphonics.plots.time_series_plot import TimeSeriesPlot
-from applications.microphonics.utils.ui_utils import create_checkboxes, create_pushbuttons
+from applications.microphonics.utils.ui_utils import (
+    create_checkboxes,
+    create_pushbuttons,
+)
 
 
 class PlotPanel(QWidget):
@@ -20,19 +27,10 @@ class PlotPanel(QWidget):
 
         # Default configuration
         self.config = {
-            'plot_type': 'FFT Analysis',
-            'fft': {
-                'window_size': 1024,
-                'max_freq': 150
-            },
-            'histogram': {
-                'bins': 100,
-                'range': 200
-            },
-            'spectrogram': {
-                'window': 1.0,
-                'colormap': 'viridis'
-            }
+            "plot_type": "FFT Analysis",
+            "fft": {"window_size": 1024, "max_freq": 150},
+            "histogram": {"bins": 100, "range": 200},
+            "spectrogram": {"window": 1.0, "colormap": "viridis"},
         }
         self._last_data_dict_processed = None
         self._current_plotting_decimation = None
@@ -67,18 +65,11 @@ class PlotPanel(QWidget):
         group_buttons_layout.setSpacing(5)
 
         # This creates toggle buttons for each rack
-        button_items = {
-            'lower': "Select Rack A (1-4)",
-            'upper': "Select Rack B (5-8)"
-        }
-        buttons = create_pushbuttons(
-            self,
-            button_items,
-            group_buttons_layout
-        )
+        button_items = {"lower": "Select Rack A (1-4)", "upper": "Select Rack B (5-8)"}
+        buttons = create_pushbuttons(self, button_items, group_buttons_layout)
         # Assign buttons to class attributes
-        self.select_lower_btn = buttons['lower']
-        self.select_upper_btn = buttons['upper']
+        self.select_lower_btn = buttons["lower"]
+        self.select_upper_btn = buttons["upper"]
         # Connect button signals
         self.select_lower_btn.clicked.connect(self.toggle_lower_cavities)
         self.select_upper_btn.clicked.connect(self.toggle_upper_cavities)
@@ -93,10 +84,7 @@ class PlotPanel(QWidget):
         # Create checkboxes for each cavity
         checkbox_items = {i: f"Cavity {i}" for i in range(1, 9)}
         self.cavity_checkboxes = create_checkboxes(
-            self,
-            checkbox_items,
-            checkbox_layout,
-            checked=False
+            self, checkbox_items, checkbox_layout, checked=False
         )
         # Connect signals afterward
         for cavity_num, checkbox in self.cavity_checkboxes.items():
@@ -141,27 +129,28 @@ class PlotPanel(QWidget):
         Handle tab changes by updating the plot type in configuration
         """
         tab_mapping = {
-            0: 'FFT Analysis',
-            1: 'Histogram',
-            2: 'Time Series',
-            3: 'Spectrogram'
+            0: "FFT Analysis",
+            1: "Histogram",
+            2: "Time Series",
+            3: "Spectrogram",
         }
-        self.config['plot_type'] = tab_mapping.get(index, 'FFT Analysis')
+        self.config["plot_type"] = tab_mapping.get(index, "FFT Analysis")
 
     def _apply_config_to_all_plots(self):
         """Apply configuration to all plot types"""
         import copy
+
         fft_config = copy.deepcopy(self.config)
-        fft_config['plot_type'] = 'fft'
+        fft_config["plot_type"] = "fft"
 
         hist_config = copy.deepcopy(self.config)
-        hist_config['plot_type'] = 'histogram'
+        hist_config["plot_type"] = "histogram"
 
         time_config = copy.deepcopy(self.config)
-        time_config['plot_type'] = 'time_series'
+        time_config["plot_type"] = "time_series"
 
         spec_config = copy.deepcopy(self.config)
-        spec_config['plot_type'] = 'spectrogram'
+        spec_config["plot_type"] = "spectrogram"
 
         # Apply to each plot
         self.fft_plot.set_plot_config(fft_config)
@@ -203,14 +192,16 @@ class PlotPanel(QWidget):
         if self.config_panel:
             return self.config_panel.get_selected_decimation()
         else:
-            print("PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation.")
+            print(
+                "PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation."
+            )
             return ConfigPanel.DEFAULT_DECIMATION_VALUE
 
     def update_plots(self, data_dict: dict):
         """Update all plots w/ new data"""
         self._last_data_dict_processed = data_dict
-        cavity_list = data_dict.get('cavity_list', [])
-        all_cavity_data = data_dict.get('cavities', {})
+        cavity_list = data_dict.get("cavity_list", [])
+        all_cavity_data = data_dict.get("cavities", {})
         actual_plotting_decimation = self._get_decimation_for_plotting()
         self._current_plotting_decimation = actual_plotting_decimation
 
@@ -218,14 +209,16 @@ class PlotPanel(QWidget):
             cavity_data_from_source = all_cavity_data.get(cavity_num)
             if cavity_data_from_source:
                 data_for_this_plot_call = cavity_data_from_source.copy()
-                data_for_this_plot_call['decimation'] = actual_plotting_decimation
+                data_for_this_plot_call["decimation"] = actual_plotting_decimation
                 # Pass dictionary of channel data for this cavity to each plot types update method
                 self.fft_plot.update_plot(cavity_num, data_for_this_plot_call)
                 self.histogram_plot.update_plot(cavity_num, data_for_this_plot_call)
                 self.time_series_plot.update_plot(cavity_num, data_for_this_plot_call)
                 self.spectrogram_plot.update_plot(cavity_num, data_for_this_plot_call)
             else:
-                print(f"PlotPanel: No data found for cavity {cavity_num} in received data_dict.")
+                print(
+                    f"PlotPanel: No data found for cavity {cavity_num} in received data_dict."
+                )
 
     def refresh_plots_if_decimation_changed(self):
         """
@@ -236,7 +229,10 @@ class PlotPanel(QWidget):
             return
 
         new_ui_decimation = self.config_panel.get_selected_decimation()
-        if self._current_plotting_decimation is None or self._current_plotting_decimation != new_ui_decimation:
+        if (
+            self._current_plotting_decimation is None
+            or self._current_plotting_decimation != new_ui_decimation
+        ):
             print(
                 f"PlotPanel: UI Decimation changed from {self._current_plotting_decimation} "
                 f"to {new_ui_decimation}. Refreshing plots."

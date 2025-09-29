@@ -12,6 +12,7 @@ BASE_HARDWARE_SAMPLE_RATE = 2000
 @dataclass
 class MeasurementConfig:
     """Configuration for measurement parameters"""
+
     channels: List[str]
     decimation: int = 2
     buffer_count: int = 1
@@ -35,6 +36,7 @@ class AsyncDataManager(QObject):
     - Acquisition management
     - Signal routing from the data acquisition manager
     """
+
     acquisitionProgress = pyqtSignal(str, int, int)  # chassis_id, cavity_num, progress
     acquisitionError = pyqtSignal(str, str)  # chassis_id, error_message
     acquisitionComplete = pyqtSignal(str)  # chassis_id
@@ -52,17 +54,19 @@ class AsyncDataManager(QObject):
         self.job_chassis_ids = set()
         self.job_running = False
 
-    def _validate_all_chassis_config(self, chassis_config: Dict) -> List[Tuple[str, str]]:
+    def _validate_all_chassis_config(
+        self, chassis_config: Dict
+    ) -> List[Tuple[str, str]]:
         """Validate for all chassis configuration"""
         if not chassis_config:
             return [("", "No chassis configurations provided")]
         errors = []
         for chassis_id, config in chassis_config.items():
-            if not config.get('cavities'):
+            if not config.get("cavities"):
                 errors.append((chassis_id, "No cavities specified for chassis"))
-            if not config.get('pv_base'):
+            if not config.get("pv_base"):
                 errors.append((chassis_id, "Missing PV base address"))
-            if 'config' in config and (error := config['config'].validate()):
+            if "config" in config and (error := config["config"].validate()):
                 errors.append((chassis_id, error))
 
         return errors
@@ -124,7 +128,9 @@ class AsyncDataManager(QObject):
 
         # Calculate and emit overall job progress
         if self.job_chassis_ids:
-            total_progress = sum(self.worker_progress.values()) / len(self.job_chassis_ids)
+            total_progress = sum(self.worker_progress.values()) / len(
+                self.job_chassis_ids
+            )
             self.jobProgress.emit(int(total_progress))
 
     def _handle_worker_error(self, chassis_id: str, error: str):
@@ -157,24 +163,24 @@ class AsyncDataManager(QObject):
         """Aggregate data and emit job completion"""
         # Aggregate all cavity data
         aggregated_data = {
-            'cavities': {},
-            'cavity_list': [],
-            'source': 'multi-chassis',
-            'decimation': None
+            "cavities": {},
+            "cavity_list": [],
+            "source": "multi-chassis",
+            "decimation": None,
         }
 
         # Combine data from all workers
         for chassis_id, data in self.worker_data.items():
-            if 'cavities' in data:
-                aggregated_data['cavities'].update(data['cavities'])
-            if 'cavity_list' in data:
-                aggregated_data['cavity_list'].extend(data['cavity_list'])
+            if "cavities" in data:
+                aggregated_data["cavities"].update(data["cavities"])
+            if "cavity_list" in data:
+                aggregated_data["cavity_list"].extend(data["cavity_list"])
             # Use decimation from first worker
-            if aggregated_data['decimation'] is None and 'decimation' in data:
-                aggregated_data['decimation'] = data['decimation']
+            if aggregated_data["decimation"] is None and "decimation" in data:
+                aggregated_data["decimation"] = data["decimation"]
 
         # Sort cavity list
-        aggregated_data['cavity_list'] = sorted(set(aggregated_data['cavity_list']))
+        aggregated_data["cavity_list"] = sorted(set(aggregated_data["cavity_list"]))
 
         # Emit aggregated data
         self.jobComplete.emit(aggregated_data)

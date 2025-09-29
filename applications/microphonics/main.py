@@ -7,11 +7,12 @@ from pydm import PyDMApplication
 from applications.microphonics.gui.main_window import MicrophonicsGUI
 
 # Monkey patch for compatibility w/ PyQtGraph versions
-if not hasattr(pg.PlotWidget, 'autoRangeEnabled'):
+if not hasattr(pg.PlotWidget, "autoRangeEnabled"):
+
     def autoRangeEnabled(self):
         try:
             vb = self.plotItem.vb
-            return (vb.state['autoRange'][0], vb.state['autoRange'][1])
+            return (vb.state["autoRange"][0], vb.state["autoRange"][1])
         except (AttributeError, KeyError):
             return (False, False)
 
@@ -22,7 +23,9 @@ def main():
     """Main application entry point"""
     try:
         # Creates Qt Application
-        app = PyDMApplication(ui_file=None, command_line_args=sys.argv, use_main_window=False)
+        app = PyDMApplication(
+            ui_file=None, command_line_args=sys.argv, use_main_window=False
+        )
 
         # Handles signals in main thread
         signal.signal(signal.SIGINT, signal.SIG_DFL)
