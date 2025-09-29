@@ -47,9 +47,7 @@ class HistogramPlot(BasePlot):
             max_val = np.max(df_data)
             range_padding = max(0.05 * (max_val - min_val), 0.5)
             self.data_range = (min_val - range_padding, max_val + range_padding)
-            self.plot_widget.setTitle(
-                f"Histogram ({self.data_range[0]:.1f} to {self.data_range[1]:.1f} Hz)"
-            )
+            self.plot_widget.setTitle(f"Histogram ({self.data_range[0]:.1f} to {self.data_range[1]:.1f} Hz)")
             self.plot_widget.setXRange(*self.data_range)
             return True
         except ValueError:
@@ -69,9 +67,7 @@ class HistogramPlot(BasePlot):
             cavity_channel_data: Dictionary containing detuning data
         """
         # Preprocess data get the DF channel
-        df_data, is_valid = self._preprocess_data(
-            cavity_channel_data, channel_type="DF"
-        )
+        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type="DF")
 
         if not is_valid or df_data.size == 0:
             print(f"HistogramPlot: No valid 'DF' data for cavity {cavity_num}")
@@ -85,37 +81,25 @@ class HistogramPlot(BasePlot):
 
         # Skip if data range still not set
         if self.data_range is None:
-            print(
-                f"HistogramPlot: Data range not set for Cav {cavity_num}, skipping histogram calculation."
-            )
+            print(f"HistogramPlot: Data range not set for Cav {cavity_num}, skipping histogram calculation.")
             return
 
         # Calculate and update histogram
         try:
-            bins, counts = calculate_histogram(
-                df_data, bin_range=self.data_range, num_bins=self.num_bins
-            )
+            bins, counts = calculate_histogram(df_data, bin_range=self.data_range, num_bins=self.num_bins)
             self.update_histogram_plot(cavity_num, bins, counts)
         except Exception as e:
-            print(
-                f"HistogramPlot: Error during histogram calculation for Cav {cavity_num}: {e}"
-            )
+            print(f"HistogramPlot: Error during histogram calculation for Cav {cavity_num}: {e}")
 
-    def _create_step_data(
-        self, bins: np.ndarray, counts: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _create_step_data(self, bins: np.ndarray, counts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         x_coords = np.repeat(bins, 2)
-
-        y_coords = np.insert(np.repeat(counts, 2), 0, 1)
-        y_coords[-1] = 1
-
+        y_coords = np.r_[1, np.repeat(counts, 2), 1]
+        y_coords = np.maximum(y_coords, 1)
         return x_coords, y_coords
 
     def update_histogram_plot(self, cavity_num, bins, counts):
         if len(bins) != len(counts) + 1:
-            print(
-                f"HistogramPlot Error (Cav {cavity_num}): Mismatch between bins and counts."
-            )
+            print(f"HistogramPlot Error (Cav {cavity_num}): Mismatch between bins and counts.")
             return
 
         pen = self._get_cavity_pen(cavity_num)
@@ -125,9 +109,7 @@ class HistogramPlot(BasePlot):
         x_values, y_values = self._create_step_data(bins, valid_counts)
 
         if cavity_num not in self.plot_curves:
-            curve = self.plot_widget.plot(
-                x_values, y_values, pen=pen, name=f"Cavity {cavity_num}"
-            )
+            curve = self.plot_widget.plot(x_values, y_values, pen=pen, name=f"Cavity {cavity_num}")
             self.plot_curves[cavity_num] = curve
         else:
             self.plot_curves[cavity_num].setData(x_values, y_values)
