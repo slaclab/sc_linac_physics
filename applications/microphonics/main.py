@@ -13,12 +13,9 @@ if not hasattr(pg.PlotWidget, 'autoRangeEnabled'):
             vb = self.plotItem.vb
             return (vb.state['autoRange'][0], vb.state['autoRange'][1])
         except (AttributeError, KeyError):
-            # Fallback if something is missing
             return (False, False)
 
-
     pg.PlotWidget.autoRangeEnabled = autoRangeEnabled
-
 
 def main():
     """Main application entry point"""
