@@ -143,7 +143,7 @@ class DataAcquisitionManager(QObject):
 
                 if acquired == total:
                     logger.info(
-                        f"Final buffer acquired for {chassis_id} (progress {acquired}/{total}). Setting completion flag.")
+                        f"Final buffer acquired for {chassis_id} (progress {acquired}/{total}). Completion flag set.")
 
         except Exception as e_parse:
             logger.warning(f"Could not parse progress from line '{line}': {e_parse}")

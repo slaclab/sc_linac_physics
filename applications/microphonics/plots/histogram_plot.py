@@ -51,7 +51,7 @@ class HistogramPlot(BasePlot):
             self.plot_widget.setXRange(*self.data_range)
             return True
         except ValueError:
-            print(f"HistogramPlot: Could not calculate range (likely empty data).")
+            print("HistogramPlot: Could not calculate range (likely empty data).")
             return False
 
     def _clear_cavity_curve(self, cavity_num):
