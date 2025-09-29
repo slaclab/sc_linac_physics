@@ -83,14 +83,10 @@ class PlotPanel(QWidget):
 
         # Create checkboxes for each cavity
         checkbox_items = {i: f"Cavity {i}" for i in range(1, 9)}
-        self.cavity_checkboxes = create_checkboxes(
-            self, checkbox_items, checkbox_layout, checked=False
-        )
+        self.cavity_checkboxes = create_checkboxes(self, checkbox_items, checkbox_layout, checked=False)
         # Connect signals afterward
         for cavity_num, checkbox in self.cavity_checkboxes.items():
-            checkbox.stateChanged.connect(
-                lambda state, cav=cavity_num: self.toggle_cavity_visibility(cav, state)
-            )
+            checkbox.stateChanged.connect(lambda state, cav=cavity_num: self.toggle_cavity_visibility(cav, state))
 
         # Add checkbox layout to visibility layout
         self.visibility_layout.addLayout(checkbox_layout)
@@ -172,9 +168,7 @@ class PlotPanel(QWidget):
             self.cavity_checkboxes[i].setChecked(self.lower_selected)
 
         # Update button text
-        self.select_lower_btn.setText(
-            "Deselect Rack A (1-4)" if self.lower_selected else "Select Rack A (1-4)"
-        )
+        self.select_lower_btn.setText("Deselect Rack A (1-4)" if self.lower_selected else "Select Rack A (1-4)")
 
     def toggle_upper_cavities(self):
         """Toggle selection of upper half cavities (5-8)"""
@@ -183,18 +177,14 @@ class PlotPanel(QWidget):
             self.cavity_checkboxes[i].setChecked(self.upper_selected)
 
         # Update button text
-        self.select_upper_btn.setText(
-            "Deselect Rack B (5-8)" if self.upper_selected else "Select Rack B (5-8)"
-        )
+        self.select_upper_btn.setText("Deselect Rack B (5-8)" if self.upper_selected else "Select Rack B (5-8)")
 
     def _get_decimation_for_plotting(self) -> int:
         """Determines the decimation to use for plotting based on UI."""
         if self.config_panel:
             return self.config_panel.get_selected_decimation()
         else:
-            print(
-                "PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation."
-            )
+            print("PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation.")
             return ConfigPanel.DEFAULT_DECIMATION_VALUE
 
     def update_plots(self, data_dict: dict):
@@ -216,9 +206,7 @@ class PlotPanel(QWidget):
                 self.time_series_plot.update_plot(cavity_num, data_for_this_plot_call)
                 self.spectrogram_plot.update_plot(cavity_num, data_for_this_plot_call)
             else:
-                print(
-                    f"PlotPanel: No data found for cavity {cavity_num} in received data_dict."
-                )
+                print(f"PlotPanel: No data found for cavity {cavity_num} in received data_dict.")
 
     def refresh_plots_if_decimation_changed(self):
         """
@@ -229,10 +217,7 @@ class PlotPanel(QWidget):
             return
 
         new_ui_decimation = self.config_panel.get_selected_decimation()
-        if (
-            self._current_plotting_decimation is None
-            or self._current_plotting_decimation != new_ui_decimation
-        ):
+        if self._current_plotting_decimation is None or self._current_plotting_decimation != new_ui_decimation:
             print(
                 f"PlotPanel: UI Decimation changed from {self._current_plotting_decimation} "
                 f"to {new_ui_decimation}. Refreshing plots."

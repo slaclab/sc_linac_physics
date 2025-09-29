@@ -35,29 +35,18 @@ class FFTPlot(BasePlot):
             else:
                 self.current_max_freq = self.config.get("x_range", (0, 150))[1]
 
-            if (
-                not isinstance(self.current_max_freq, (int, float))
-                or self.current_max_freq <= 0
-            ):
-                print(
-                    f"Warning (FFTPlot): Invalid max_freq '{self.current_max_freq}', defaulting to 150 Hz."
-                )
+            if not isinstance(self.current_max_freq, (int, float)) or self.current_max_freq <= 0:
+                print(f"Warning (FFTPlot): Invalid max_freq '{self.current_max_freq}', defaulting to 150 Hz.")
                 self.current_max_freq = 150
 
             self.plot_widget.setXRange(0, self.current_max_freq, padding=0)
-            self.plot_widget.setTitle(
-                f"FFT Analysis (0-{self.current_max_freq:.0f} Hz)"
-            )
+            self.plot_widget.setTitle(f"FFT Analysis (0-{self.current_max_freq:.0f} Hz)")
 
             y_range_to_set = self.config.get("y_range")
             if "y_range" in fft_sub_config:
                 y_range_to_set = fft_sub_config["y_range"]
 
-            if (
-                y_range_to_set
-                and isinstance(y_range_to_set, (list, tuple))
-                and len(y_range_to_set) == 2
-            ):
+            if y_range_to_set and isinstance(y_range_to_set, (list, tuple)) and len(y_range_to_set) == 2:
                 self.plot_widget.setYRange(*y_range_to_set)
             else:
                 default_y_range = self.config.get("y_range", (0, 1.5))
@@ -83,9 +72,7 @@ class FFTPlot(BasePlot):
             cavity_num: Cavity number (1-8)
             buffer_data: Dictionary containing detuning data
         """
-        df_data, is_valid = self._preprocess_data(
-            cavity_channel_data, channel_type="DF"
-        )
+        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type="DF")
         if not is_valid:
             print(f"FFTPlot: No valid DF data for cavity {cavity_num}")
             # Optionally clear/hide existing curve
@@ -95,9 +82,7 @@ class FFTPlot(BasePlot):
 
         decimation = cavity_channel_data.get("decimation", 1)
         if not isinstance(decimation, (int, float)) or decimation <= 0:
-            print(
-                f"WARN (FFTPlot Cav {cavity_num}): Invalid decimation value '{decimation}'. Using 1."
-            )
+            print(f"WARN (FFTPlot Cav {cavity_num}): Invalid decimation value '{decimation}'. Using 1.")
             decimation = 1
         effective_sample_rate = BASE_HARDWARE_SAMPLE_RATE / decimation
 
@@ -144,6 +129,4 @@ class FFTPlot(BasePlot):
             self.plot_curves[cavity_num] = curve
         else:
             # Update existing curve
-            self.plot_curves[cavity_num].setData(
-                freqs, amplitudes, skipFiniteCheck=True
-            )
+            self.plot_curves[cavity_num].setData(freqs, amplitudes, skipFiniteCheck=True)

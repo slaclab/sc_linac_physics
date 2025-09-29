@@ -218,9 +218,7 @@ def create_cavity_selection_tabs(
         # Create Select All button
         select_all_btn = QPushButton("Select All")
         select_all_btn.clicked.connect(lambda _, r=rack_id: select_all_callback(r))
-        layout.addWidget(
-            select_all_btn, 1, 0, 1, len(config["cavities"])
-        )  # Span all columns
+        layout.addWidget(select_all_btn, 1, 0, 1, len(config["cavities"]))  # Span all columns
         select_all_buttons[rack_id] = select_all_btn
 
         tabs.addTab(tab, config["title"])

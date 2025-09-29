@@ -100,9 +100,7 @@ class BasePlot(QWidget):
             widget.setYRange(*config["y_range"])
 
         # Connect signal for tooltips
-        widget.scene().sigMouseMoved.connect(
-            lambda ev: self._show_tooltip(plot_type, ev)
-        )
+        widget.scene().sigMouseMoved.connect(lambda ev: self._show_tooltip(plot_type, ev))
 
         return widget
 
@@ -204,11 +202,7 @@ class BasePlot(QWidget):
         data_array = cavity_channel_data.get(channel_type)
 
         # Validate data
-        if (
-            data_array is None
-            or not isinstance(data_array, np.ndarray)
-            or data_array.size == 0
-        ):
+        if data_array is None or not isinstance(data_array, np.ndarray) or data_array.size == 0:
             return None, False
 
         # Make sure data is numpy array w/ float64 type
@@ -223,9 +217,7 @@ class BasePlot(QWidget):
 
             return data_array, True
         except (TypeError, ValueError) as e:
-            print(
-                f"BasePlot: Error converting channel '{channel_type}' data to float64: {e}"
-            )
+            print(f"BasePlot: Error converting channel '{channel_type}' data to float64: {e}")
             return None, False
 
     def toggle_cavity_visibility(self, cavity_num, state):

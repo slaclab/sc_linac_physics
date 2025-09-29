@@ -45,7 +45,7 @@ def _compute_fft_results(data, effective_sample_rate):
         return np.array([0.0]), np.abs(yf)
 
     xf = fftfreq(num_points, sample_spacing)[: num_points // 2]
-    amplitudes = 2.0 / num_points * np.abs(yf[0:num_points // 2])
+    amplitudes = 2.0 / num_points * np.abs(yf[0 : num_points // 2])
 
     min_len = min(len(xf), len(amplitudes))
     if len(xf) != min_len or len(amplitudes) != min_len:

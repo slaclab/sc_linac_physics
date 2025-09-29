@@ -28,9 +28,7 @@ class DataLoader(QObject):
             self.loadProgress.emit(10)  # Indicate start
             final_data_dict = load_and_process_file(file_path)
             self.loadProgress.emit(90)  # Indicate processing done
-            print(
-                f"DEBUG DataLoader: Emitting dataLoaded signal for file {file_path.name}..."
-            )
+            print(f"DEBUG DataLoader: Emitting dataLoaded signal for file {file_path.name}...")
             self.dataLoaded.emit(final_data_dict)
             self.loadProgress.emit(100)
         except FileParserError as e:

@@ -54,9 +54,7 @@ class AsyncDataManager(QObject):
         self.job_chassis_ids = set()
         self.job_running = False
 
-    def _validate_all_chassis_config(
-        self, chassis_config: Dict
-    ) -> List[Tuple[str, str]]:
+    def _validate_all_chassis_config(self, chassis_config: Dict) -> List[Tuple[str, str]]:
         """Validate for all chassis configuration"""
         if not chassis_config:
             return [("", "No chassis configurations provided")]
@@ -128,9 +126,7 @@ class AsyncDataManager(QObject):
 
         # Calculate and emit overall job progress
         if self.job_chassis_ids:
-            total_progress = sum(self.worker_progress.values()) / len(
-                self.job_chassis_ids
-            )
+            total_progress = sum(self.worker_progress.values()) / len(self.job_chassis_ids)
             self.jobProgress.emit(int(total_progress))
 
     def _handle_worker_error(self, chassis_id: str, error: str):

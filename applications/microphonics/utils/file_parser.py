@@ -53,16 +53,12 @@ def _read_and_parse_header(
                     data_content_lines.append(line)
 
         if marker_index is None:
-            raise FileParserError(
-                f"Essential channel header line ('{HEADER_MARKER}') not found in {file_path.name}"
-            )
+            raise FileParserError(f"Essential channel header line ('{HEADER_MARKER}') not found in {file_path.name}")
 
         return header_lines, data_content_lines, decimation, marker_index
 
     except Exception as e:
-        logging.error(
-            f"Unexpected error reading or parsing header for {file_path.name}: {e}\n{traceback.format_exc()}"
-        )
+        logging.error(f"Unexpected error reading or parsing header for {file_path.name}: {e}\n{traceback.format_exc()}")
         raise FileParserError(f"Error reading file {file_path.name}: {e}")
 
 
@@ -80,17 +76,13 @@ def _parse_channel_pvs(header_lines: List[str], marker_index: int) -> List[str]:
         FileParserError: If the marker line cant be parsed
     """
     if marker_index >= len(header_lines):
-        raise FileParserError(
-            "Internal error: Marker index out of bounds for header lines"
-        )
+        raise FileParserError("Internal error: Marker index out of bounds for header lines")
     channel_line = header_lines[marker_index].strip()
 
     try:
         parsed_channels = channel_line.strip("# \n").split()
         if not parsed_channels:
-            raise FileParserError(
-                f"Found '{HEADER_MARKER}' line but no channels listed after it: '{channel_line}'"
-            )
+            raise FileParserError(f"Found '{HEADER_MARKER}' line but no channels listed after it: '{channel_line}'")
         stripped_result_for_log = channel_line.strip("# \n")
         logging.debug(f"Original channel line: '{channel_line}'")
         logging.debug(f"Result of strip('# \\n'): '{stripped_result_for_log}'")
@@ -98,12 +90,8 @@ def _parse_channel_pvs(header_lines: List[str], marker_index: int) -> List[str]:
 
         return parsed_channels
     except Exception as e:
-        logging.error(
-            f"Failed to split/parse the channel marker line: {channel_line} - {e}"
-        )
-        raise FileParserError(
-            f"Failed to parse channel PVs from header line: {channel_line}"
-        )
+        logging.error(f"Failed to split/parse the channel marker line: {channel_line} - {e}")
+        raise FileParserError(f"Failed to parse channel PVs from header line: {channel_line}")
 
 
 def _parse_decimation(line: str, default: int) -> int:
@@ -114,16 +102,11 @@ def _parse_decimation(line: str, default: int) -> int:
         logging.debug(f"Parsed decimation '{decimation}' from header")
         return decimation
     except (IndexError, ValueError, TypeError) as e:
-        logging.warning(
-            f"Could not parse decimation from line: '{line}'. "
-            f"Using default {default}. Error: {e}"
-        )
+        logging.warning(f"Could not parse decimation from line: '{line}'. " f"Using default {default}. Error: {e}")
         return default
 
 
-def _parse_numerical_data(
-    data_content_lines: List[str], num_expected_columns: int, file_path: Path
-) -> np.ndarray:
+def _parse_numerical_data(data_content_lines: List[str], num_expected_columns: int, file_path: Path) -> np.ndarray:
     """Parses numerical data from data lines using numpy"""
     # Handle case where no data lines were found
     if not data_content_lines:
@@ -172,13 +155,9 @@ def _structure_parsed_data(
                 column_data = data_array[:, idx]
                 output_data["cavities"][cav_num][channel_type] = column_data
             else:
-                output_data["cavities"][cav_num][channel_type] = np.array(
-                    [], dtype=float
-                )
+                output_data["cavities"][cav_num][channel_type] = np.array([], dtype=float)
         else:
-            print(
-                f"Warning (FileParser): Skipping data column {idx} due to PV parsing failure: {pv_name}"
-            )
+            print(f"Warning (FileParser): Skipping data column {idx} due to PV parsing failure: {pv_name}")
     output_data["cavity_list"] = sorted(list(cavity_numbers_found))
     return output_data
 
@@ -188,16 +167,10 @@ def load_and_process_file(file_path: Path) -> Dict[str, Any]:
     print(f"DEBUG (FileParser): Processing file {file_path.name}")
     print(f"DEBUG (FileParser): Processing file {file_path.name}")
     try:
-        header_lines, data_content_lines, decimation, marker_index = (
-            _read_and_parse_header(file_path)
-        )
+        header_lines, data_content_lines, decimation, marker_index = _read_and_parse_header(file_path)
         channel_pvs = _parse_channel_pvs(header_lines, marker_index)
-        data_array = _parse_numerical_data(
-            data_content_lines, len(channel_pvs), file_path
-        )
-        structured_data = _structure_parsed_data(
-            channel_pvs, data_array, file_path, decimation
-        )
+        data_array = _parse_numerical_data(data_content_lines, len(channel_pvs), file_path)
+        structured_data = _structure_parsed_data(channel_pvs, data_array, file_path, decimation)
         print(
             f"DEBUG (FileParser): Successfully processed {file_path.name}. Cavities: {structured_data['cavity_list']}"
         )

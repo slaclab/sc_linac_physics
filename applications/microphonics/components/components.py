@@ -56,11 +56,7 @@ class ChannelSelectionGroup(QGroupBox):
     def get_selected_channels(self):
         """This will get a list of selected channel names by reading current state
         of managed QCheckBox widgets."""
-        return [
-            name
-            for name, checkbox in self.channel_widgets.items()
-            if checkbox.isChecked()
-        ]
+        return [name for name, checkbox in self.channel_widgets.items() if checkbox.isChecked()]
 
 
 class DataLoadingGroup(QGroupBox):
@@ -109,9 +105,7 @@ class DataLoadingGroup(QGroupBox):
 
         file_filters = "All Files (*);;Text Files (*.txt);;Data Files (*.dat)"
 
-        file_path_str, _ = QFileDialog.getOpenFileName(
-            self, "Load Previous Data", start_directory, file_filters
-        )
+        file_path_str, _ = QFileDialog.getOpenFileName(self, "Load Previous Data", start_directory, file_filters)
 
         if file_path_str:
             file_path = Path(file_path_str)

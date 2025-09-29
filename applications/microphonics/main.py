@@ -23,9 +23,7 @@ def main():
     """Main application entry point"""
     try:
         # Creates Qt Application
-        app = PyDMApplication(
-            ui_file=None, command_line_args=sys.argv, use_main_window=False
-        )
+        app = PyDMApplication(ui_file=None, command_line_args=sys.argv, use_main_window=False)
 
         # Handles signals in main thread
         signal.signal(signal.SIGINT, signal.SIG_DFL)
