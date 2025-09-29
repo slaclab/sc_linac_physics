@@ -50,6 +50,11 @@ max-complexity = 10
 addopts = "-vv -ra --durations=10"
 log_cli = true
 log_cli_level = "INFO"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
