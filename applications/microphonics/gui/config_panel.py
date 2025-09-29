@@ -101,7 +101,8 @@ class ConfigPanel(QWidget):
                                                   range(self.decim_combo.count())]:
             self.decim_combo.setCurrentText(str(self.DEFAULT_DECIMATION_VALUE))
         else:
-            if self.decim_combo.count() > 0: self.decim_combo.setCurrentIndex(0)
+            if self.decim_combo.count() > 0:
+                self.decim_combo.setCurrentIndex(0)
 
     def create_linac_section(self) -> QGroupBox:
         """Create linac and CM selection group"""
@@ -329,8 +330,8 @@ class ConfigPanel(QWidget):
         self.is_updating = True
         try:
             # Updates button states
-            for l, btn in self.linac_buttons.items():
-                btn.setChecked(l == linac)
+            for linac, btn in self.linac_buttons.items():
+                btn.setChecked(linac == linac)
 
             self.selected_linac = linac
             self._update_cryomodule_buttons()
@@ -357,9 +358,6 @@ class ConfigPanel(QWidget):
         custom_properties = {}
 
         for module in modules:
-            # Store full ACCL name pattern but display simple number
-            accl_name = format_accl_base(self.selected_linac, module)
-
             # Use simple display text
             display_text = module  # Just show "01", "02", "H1" etc.
             button_items[module] = display_text
@@ -432,7 +430,9 @@ class ConfigPanel(QWidget):
             print(f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}")
         except ValueError:
             print(
-                f"WARNING (ConfigPanel): Could not parse decimation value from combo box: {self.decim_combo.currentText()}")
+                f"WARNING (ConfigPanel): Could not parse decimation value from "
+                f"combo box: {self.decim_combo.currentText()}"
+            )
             pass
 
     def _handle_decimation_change(self):
@@ -444,12 +444,14 @@ class ConfigPanel(QWidget):
         try:
             # Get current decimation value from combo box
             dec_value = int(self.decim_combo.currentText())
-            # Emit signal w/ new decimation value 
+            # Emit signal w/ new decimation value
             self.decimationSettingChanged.emit(dec_value)
             print(f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}")
         except ValueError:
             print(
-                f"WARNING (ConfigPanel): Could not parse decimation value from combo box: {self.decim_combo.currentText()}")
+                f"WARNING (ConfigPanel): Could not parse decimation value from "
+                f"combo box: {self.decim_combo.currentText()}"
+            )
 
         # Emit general config change if not updating
         if not self.is_updating:

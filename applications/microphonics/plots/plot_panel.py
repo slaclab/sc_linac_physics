@@ -238,7 +238,9 @@ class PlotPanel(QWidget):
         new_ui_decimation = self.config_panel.get_selected_decimation()
         if self._current_plotting_decimation is None or self._current_plotting_decimation != new_ui_decimation:
             print(
-                f"PlotPanel: UI Decimation changed from {self._current_plotting_decimation} to {new_ui_decimation}. Refreshing plots.")
+                f"PlotPanel: UI Decimation changed from {self._current_plotting_decimation} "
+                f"to {new_ui_decimation}. Refreshing plots."
+            )
             self.update_plots(self._last_data_dict_processed.copy())
 
     def clear_plots(self):

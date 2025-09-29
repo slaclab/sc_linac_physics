@@ -181,8 +181,8 @@ class BasePlot(QWidget):
         """
         return f"X: {x:.2f}, Y: {y:.2f}"
 
-    def _preprocess_data(self, cavity_channel_data: dict, channel_type: str = 'DF') -> Tuple[
-        Optional[np.ndarray], bool]:
+    def _preprocess_data(self, cavity_channel_data: dict,
+                         channel_type: str = 'DF') -> Tuple[Optional[np.ndarray], bool]:
         """
         Validate and preprocess data, centralizing common operations
 

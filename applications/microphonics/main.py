@@ -1,8 +1,10 @@
-import os
+import signal
+import sys
 
-os.environ['QT_API'] = 'pyqt5'
 import pyqtgraph as pg
 from pydm import PyDMApplication
+
+from applications.microphonics.gui.main_window import MicrophonicsGUI
 
 # Monkey patch for compatibility w/ PyQtGraph versions
 if not hasattr(pg.PlotWidget, 'autoRangeEnabled'):
@@ -16,11 +18,6 @@ if not hasattr(pg.PlotWidget, 'autoRangeEnabled'):
 
 
     pg.PlotWidget.autoRangeEnabled = autoRangeEnabled
-
-import signal
-import sys
-
-from applications.microphonics.gui.main_window import MicrophonicsGUI
 
 
 def main():

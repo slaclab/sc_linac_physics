@@ -54,79 +54,67 @@ class DataAcquisitionManager(QObject):
         data_path.mkdir(parents=True, exist_ok=True)
         return data_path
 
+    def _prepare_acquisition_environment(self, chassis_id: str, config: Dict):
+        if not config.get('cavities'):
+            raise ValueError("No cavities specified")
+        if not config.get('config'):
+            raise ValueError("MeasurementConfig missing in config dict")
+
+        measurement_cfg = config['config']
+        selected_cavities = sorted(config['cavities'])
+
+        cm_num = chassis_id.split(':')[2][:2]
+        cavity_str = ''.join(map(str, selected_cavities))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"res_CM{cm_num}_cav{cavity_str}_c{measurement_cfg.buffer_count}_{timestamp}.dat"
+
+        data_dir = self._create_data_directory(chassis_id)
+        output_path = data_dir / filename
+
+        return output_path, selected_cavities
+
+    def _build_acquisition_args(self, config: Dict, output_path: Path, selected_cavities: list) -> list:
+        measurement_cfg = config['config']
+        return [
+            str(self.script_path),
+            '-D', str(output_path.parent),
+            '-a', config['pv_base'],
+            '-wsp', str(measurement_cfg.decimation),
+            '-acav', *map(str, selected_cavities),
+            '-ch', *measurement_cfg.channels,
+            '-c', str(measurement_cfg.buffer_count),
+            '-F', output_path.name
+        ]
+
     def start_acquisition(self, chassis_id: str, config: Dict):
         """Start acquisition using QProcess"""
         try:
-            if not config.get('cavities'):
-                raise ValueError("No cavities specified")
-            if not config.get('config'):
-                raise ValueError("MeasurementConfig missing in config dict")
+            output_path, selected_cavities = self._prepare_acquisition_environment(chassis_id, config)
+            command_args = self._build_acquisition_args(config, output_path, selected_cavities)
 
-            measurement_cfg = config['config']  # MeasurementConfig object
-            selected_cavities = sorted(config['cavities'])
             process = QProcess()
+            process.readyReadStandardOutput.connect(lambda: self.handle_stdout(chassis_id, process))
+            process.readyReadStandardError.connect(lambda: self.handle_stderr(chassis_id, process))
+            process.finished.connect(lambda code, status: self.handle_finished(chassis_id, process, code, status))
 
-            # Filename and Directory Logic
-            # Extract CM number from chassis_id
-            try:
-                cm_num = chassis_id.split(':')[2][:2]
-            except IndexError:
-                raise ValueError(f"Could not parse CM number from chassis_id: {chassis_id}")
-            cavity_str_for_filename = ''.join(map(str, selected_cavities))
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            cm_part = f"CM{cm_num}"
-            cav_part = f"cav{cavity_str_for_filename}"
-            buffer_part = f"c{measurement_cfg.buffer_count}"
-            filename = f"res_{cm_part}_{cav_part}_{buffer_part}_{timestamp}.dat"
-
-            data_dir = self._create_data_directory(chassis_id)
-            output_path = data_dir / filename
-
-            # Arguement construction
-            args = [
-                '-D', str(data_dir),
-                '-a', config['pv_base'],
-                '-wsp', str(measurement_cfg.decimation),
-                '-acav', *map(str, selected_cavities),
-                '-ch', *measurement_cfg.channels,
-                '-c', str(measurement_cfg.buffer_count),
-                '-F', filename
-            ]
-
-            python_executable = sys.executable
-            full_command_args = [str(self.script_path)] + args
-
-            # Connect signals
-            process.readyReadStandardOutput.connect(
-                lambda: self.handle_stdout(chassis_id, process))
-            process.readyReadStandardError.connect(
-                lambda: self.handle_stderr(chassis_id, process))
-            process.finished.connect(
-                lambda exit_code, exit_status: self.handle_finished(chassis_id, process, exit_code, exit_status))
-
-            # Store process info
+            measurement_cfg = config['config']
             self.active_processes[chassis_id] = {
                 'process': process,
                 'output_path': output_path,
-                # Store the actual config used for data parsing later
                 'decimation': measurement_cfg.decimation,
                 'expected_buffers': measurement_cfg.buffer_count,
-                'completion_signal_received': False,  # Flag to track script completion message
+                'completion_signal_received': False,
                 'last_progress': 0,
-                'cavity_num_for_progress': config['cavities'][0] if config['cavities'] else 0
-                # Use first cavity for progress reporting
+                'cavity_num_for_progress': selected_cavities[0] if selected_cavities else 0
             }
-            process.start(python_executable, full_command_args)
 
-            # Check for immediate start failure
+            process.start(sys.executable, command_args)
+
             if not process.waitForStarted(5000):
                 error_str = process.errorString()
                 if chassis_id in self.active_processes:
                     del self.active_processes[chassis_id]
-                # Emit error
-                self.acquisitionError.emit(chassis_id, f"Failed to start acquisition process: {error_str}")
-                return  # Stop further processing
-
+                self.acquisitionError.emit(chassis_id, f"Failed to start process: {error_str}")
 
         except Exception as e:
             logger.error(f"Failed to start acquisition for {chassis_id}: {e}", exc_info=True)
@@ -139,11 +127,13 @@ class DataAcquisitionManager(QObject):
         process_info = self.active_processes[chassis_id]
         try:
             current_process = process_info['process']
-            if not current_process: return
+            if not current_process:
+                return
             data = bytes(current_process.readAllStandardOutput()).decode(errors='ignore').strip()
             for line in data.splitlines():
                 line = line.strip()
-                if not line: continue
+                if not line:
+                    continue
                 # Check for completion markers first
                 if any(marker in line for marker in self.COMPLETION_MARKERS):
                     if not process_info['completion_signal_received']:
@@ -170,7 +160,9 @@ class DataAcquisitionManager(QObject):
                                         f"Progress ({chassis_id}, Cav {cavity_num}): {progress}% ({acquired}/{total})")
                                     if acquired == total:
                                         logger.info(
-                                            f"Final buffer acquired for {chassis_id} (progress {acquired}/{total}). Setting completion flag.")
+                                            f"Final buffer acquired for {chassis_id} (progress {acquired}/{total}). "
+                                            "Setting completion flag."
+                                        )
 
                         except Exception as e_parse:
                             logger.warning(f"Could not parse progress from line '{line}': {e_parse}")
@@ -188,78 +180,66 @@ class DataAcquisitionManager(QObject):
         except Exception as e:
             logger.error(f"Failed to handle stderr for {chassis_id}: {e}", exc_info=True)
 
-    def handle_finished(self, chassis_id: str, process: QProcess, exit_code: int, exit_status: QProcess.ExitStatus):
-        """Process completion checking for completion signal."""
+    def _was_acquisition_successful(self, exit_code: int, exit_status: QProcess.ExitStatus, process_info: dict) -> bool:
+        if not process_info.get('completion_signal_received'):
+            process = process_info.get('process')
+            if process:
+                stdout_final = bytes(process.readAllStandardOutput()).decode(errors='ignore').strip()
+                if any(marker in stdout_final for marker in self.COMPLETION_MARKERS):
+                    process_info['completion_signal_received'] = True
 
+        return (exit_code == 0 and
+                exit_status == QProcess.NormalExit and
+                process_info.get('completion_signal_received', False) and
+                process_info.get('output_path'))
+
+    def _report_acquisition_failure(self, chassis_id: str, exit_code: int, exit_status: QProcess.ExitStatus,
+                                    stderr: str, completion_received: bool):
+        details = [f"Acquisition for {chassis_id} failed."]
+        if exit_status != QProcess.NormalExit:
+            details.append("Process crashed.")
+        elif exit_code != 0:
+            details.append(f"Exit Code: {exit_code}.")
+        if not completion_received:
+            details.append("Script did not signal completion.")
+        if stderr:
+            details.append(f"Error Stream: '{stderr}'")
+
+        full_error_message = " ".join(details)
+        logger.error(f"Handling failure for {chassis_id}: {full_error_message}")
+        self.acquisitionError.emit(chassis_id, full_error_message)
+
+    def _cleanup_process_resources(self, process_info: dict):
+        process = process_info.get('process')
+        if not process:
+            return
+        for signal in [process.readyReadStandardOutput, process.readyReadStandardError, process.finished]:
+            try:
+                signal.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+        QTimer.singleShot(0, process.deleteLater)
+        process_info['process'] = None
+
+    def handle_finished(self, chassis_id: str, process: QProcess, exit_code: int, exit_status: QProcess.ExitStatus):
         if chassis_id not in self.active_processes:
             return
 
         process_info = self.active_processes.pop(chassis_id)
-        process = process_info.get('process')
-
         try:
-            status_str = "NormalExit" if exit_status == QProcess.NormalExit else "CrashExit"
-            completion_received = process_info.get('completion_signal_received', False)
-            output_path = process_info.get('output_path')
-
-            # Read remaining output/error streams
-            stdout_final = ""
-            if process.state() != QProcess.NotRunning:
-                try:
-                    process.waitForReadyRead(100)
-                    stderr_final = bytes(process.readAllStandardError()).decode(errors='ignore').strip()
-                    stdout_final = bytes(process.readAllStandardOutput()).decode(errors='ignore').strip()
-                    if stdout_final:
-                        # Last check for completion markers
-                        if not completion_received:
-                            for line in stdout_final.splitlines():
-                                if any(marker in line for marker in self.COMPLETION_MARKERS):
-                                    process_info['completion_signal_received'] = True
-                                    completion_received = True
-                                    break
-                except Exception as e_read:
-                    logger.warning(f"Error reading final process output for {chassis_id}: {e_read}")
-
-            # Worked Condition: Check exit code, status, and completion signal
-            if exit_code == 0 and exit_status == QProcess.NormalExit and completion_received and output_path:
-
-                # This is temporary I will change this
-                QTimer.singleShot(20000, lambda p=output_path, pi=process_info:
-                self._process_output_file_wrapper(chassis_id, p, pi))  # Calls wrapper directly
-
-            # Failure Conditions
+            if self._was_acquisition_successful(exit_code, exit_status, process_info):
+                output_path = process_info['output_path']
+                QTimer.singleShot(20000,
+                                  lambda: self._process_output_file_wrapper(chassis_id, output_path, process_info))
             else:
-                error_details = []
-                error_msg = f"Acquisition process for {chassis_id} failed or did not signal completion."
-                error_details.append(error_msg)
-                if exit_status != QProcess.NormalExit:
-                    error_msg += f" Status: {status_str}."
-                elif exit_code != 0:
-                    error_details.append(f"Exit Code: {exit_code}.")
-
-                if not completion_received:
-                    error_details.append("Script did not signal completion via stdout.")
+                stderr_final = bytes(process.readAllStandardError()).decode(errors='ignore').strip()
+                self._report_acquisition_failure(chassis_id, exit_code, exit_status,
+                                                 stderr_final, process_info['completion_signal_received'])
         except Exception as e:
             logger.critical(f"Unexpected error in handle_finished for {chassis_id}: {e}", exc_info=True)
             self.acquisitionError.emit(chassis_id, f"Unexpected error: {str(e)}")
-
         finally:
-            if process:
-                try:
-                    process.readyReadStandardOutput.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                try:
-                    process.readyReadStandardError.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                try:
-                    process.finished.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                # Schedule deletion
-                QTimer.singleShot(0, process.deleteLater)
-                if 'process' in process_info: process_info['process'] = None
+            self._cleanup_process_resources(process_info)
 
     def _process_output_file_wrapper(self, chassis_id: str, output_path: Path, process_info: dict):
         """

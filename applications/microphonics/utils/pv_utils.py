@@ -22,7 +22,7 @@ def extract_cavity_channel_from_pv(pv_string: str) -> Optional[Tuple[int, str]]:
                 return None
         else:
             return None
-    except(IndexError, ValueError) as e:
+    except (IndexError, ValueError):
         return None
 
 

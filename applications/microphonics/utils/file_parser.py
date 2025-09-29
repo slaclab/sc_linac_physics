@@ -56,7 +56,9 @@ def _read_and_parse_header(file_path: Path) -> Tuple[List[str], List[str], int, 
                     logging.debug(f"Parsed decimation '{decimation}' from header")
                 except (IndexError, ValueError, TypeError) as e:
                     logging.warning(
-                        f"Could not parse decimation from line: '{stripped_line}'. Using default {decimation}. Error: {e}")
+                        f"Could not parse decimation from line: '{stripped_line}'. "
+                        f"Using default {decimation}. Error: {e}"
+                    )
             if marker_index is None:
                 header_lines.append(line)
             elif i == marker_index:
@@ -135,7 +137,9 @@ def _structure_parsed_data(channel_pvs: List[str], data_array: np.ndarray, file_
     actual_cols = data_array.shape[1] if data_array.ndim == 2 else 0
     if data_array.size > 0 and actual_cols != expected_cols:
         print(
-            f"Warning (FileParser): Column mismatch in {file_path.name}! Header={expected_cols}, Data={actual_cols}. Assigning empty data.")
+            f"Warning (FileParser): Column mismatch in {file_path.name}! "
+            f"Header={expected_cols}, Data={actual_cols}. Assigning empty data."
+        )
         data_array = np.empty((0, expected_cols), dtype=float)
         actual_cols = expected_cols
     for idx, pv_name in enumerate(channel_pvs):
@@ -159,6 +163,7 @@ def _structure_parsed_data(channel_pvs: List[str], data_array: np.ndarray, file_
 
 def load_and_process_file(file_path: Path) -> Dict[str, Any]:
     """Main function to orchestrate the file loading and processing."""
+    print(f"DEBUG (FileParser): Processing file {file_path.name}")
     print(f"DEBUG (FileParser): Processing file {file_path.name}")
     try:
         header_lines, data_content_lines, decimation, marker_index = _read_and_parse_header(file_path)

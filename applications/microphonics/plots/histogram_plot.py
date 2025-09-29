@@ -89,59 +89,31 @@ class HistogramPlot(BasePlot):
             # Update plot using the helper method
         self.update_histogram_plot(cavity_num, bins, counts)
 
-    def update_histogram_plot(self, cavity_num, bins, counts):
-        """Update histogram plot w/ calculated bin data
+    def _create_step_data(self, bins: np.ndarray, counts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        x_coords = np.repeat(bins, 2)
 
-        Args:
-            cavity_num: Cavity number (1-8)
-            bins: Array of bin edges
-            counts: Array of count values
-        """
+        y_coords = np.insert(np.repeat(counts, 2), 0, 1)
+        y_coords[-1] = 1
+
+        return x_coords, y_coords
+
+    def update_histogram_plot(self, cavity_num, bins, counts):
         if len(bins) != len(counts) + 1:
-            print(
-                f"HistogramPlot Error (Cav {cavity_num}): Mismatch between bins ({len(bins)}) and counts ({len(counts)})")
+            print(f"HistogramPlot Error (Cav {cavity_num}): Mismatch between bins and counts.")
             return
 
         pen = self._get_cavity_pen(cavity_num)
-        counts = np.maximum(counts, 1)
+        
+        valid_counts = np.maximum(counts, 1)
 
-        # Create step plot data - to look like matplotlibs histogram
-        # This is a step histogram so we need to create points at each bin edge
-        x_values = []
-        y_values = []
-
-        x_values.append(bins[0])
-        y_values.append(1)
-
-        # This creates the step pattern for the histogram
-        for i in range(len(counts)):
-            # Vertical line up at the start of the bin
-            x_values.append(bins[i])
-            y_values.append(counts[i])
-
-            # Add the horizontal line at the current bin
-            x_values.append(bins[i + 1])
-            y_values.append(counts[i])
-
-        # End point at the bottom right
-        x_values.append(bins[-1])
-        y_values.append(1)
-
-        x_values = np.array(x_values)
-        y_values = np.array(y_values)
+        x_values, y_values = self._create_step_data(bins, valid_counts)
 
         if cavity_num not in self.plot_curves:
             curve = self.plot_widget.plot(
-                x_values,
-                y_values,
+                x_values, y_values,
                 pen=pen,
-                name=f"Cavity {cavity_num}",
-                stepMode="left"
+                name=f"Cavity {cavity_num}"
             )
             self.plot_curves[cavity_num] = curve
         else:
-            # Update existing curve
-            self.plot_curves[cavity_num].setData(
-                x_values,
-                y_values
-            )
+            self.plot_curves[cavity_num].setData(x_values, y_values)
