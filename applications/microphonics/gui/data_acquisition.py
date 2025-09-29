@@ -120,52 +120,62 @@ class DataAcquisitionManager(QObject):
             logger.error(f"Failed to start acquisition for {chassis_id}: {e}", exc_info=True)
             self.acquisitionError.emit(chassis_id, f"Failed to start acquisition: {str(e)}")
 
+    def _check_progress(self, line: str, chassis_id: str, process_info: dict):
+        """Check for progress updates in the line"""
+        match = self.PROGRESS_REGEX.search(line)
+        if not match:
+            return
+
+        try:
+            acquired = int(match.group(1))
+            total = int(match.group(2))
+
+            if total <= 0:
+                return
+
+            progress = int((acquired / total) * 100)
+
+            if progress > process_info['last_progress']:
+                process_info['last_progress'] = progress
+                cavity_num = process_info['cavity_num_for_progress']
+                self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
+                logger.debug(f"Progress ({chassis_id}, Cav {cavity_num}): {progress}% ({acquired}/{total})")
+
+                if acquired == total:
+                    logger.info(
+                        f"Final buffer acquired for {chassis_id} (progress {acquired}/{total}). Setting completion flag.")
+
+        except Exception as e_parse:
+            logger.warning(f"Could not parse progress from line '{line}': {e_parse}")
+
     def handle_stdout(self, chassis_id: str, process: QProcess):
         """Handle standard output from process"""
         if chassis_id not in self.active_processes:
             return
+
         process_info = self.active_processes[chassis_id]
+
         try:
             current_process = process_info['process']
             if not current_process:
                 return
+
             data = bytes(current_process.readAllStandardOutput()).decode(errors='ignore').strip()
+
             for line in data.splitlines():
                 line = line.strip()
                 if not line:
                     continue
-                # Check for completion markers first
-                if any(marker in line for marker in self.COMPLETION_MARKERS):
-                    if not process_info['completion_signal_received']:
+
+                if not process_info.get('completion_signal_received'):
+                    if any(marker in line for marker in self.COMPLETION_MARKERS):
                         process_info['completion_signal_received'] = True
                         if process_info['last_progress'] < 100:
                             cavity_num = process_info['cavity_num_for_progress']
                             self.acquisitionProgress.emit(chassis_id, cavity_num, 100)
                             process_info['last_progress'] = 100
-                # Check for progress
-                if not process_info['completion_signal_received']:
-                    match = self.PROGRESS_REGEX.search(line)
-                    if match:
-                        try:
-                            acquired = int(match.group(1))
-                            total = int(match.group(2))
-                            if total > 0:
-                                progress = int((acquired / total) * 100)
-                                # Only emit signal if progress has actually gone up
-                                if progress > process_info['last_progress']:
-                                    process_info['last_progress'] = progress
-                                    cavity_num = process_info['cavity_num_for_progress']
-                                    self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
-                                    logger.debug(
-                                        f"Progress ({chassis_id}, Cav {cavity_num}): {progress}% ({acquired}/{total})")
-                                    if acquired == total:
-                                        logger.info(
-                                            f"Final buffer acquired for {chassis_id} (progress {acquired}/{total}). "
-                                            "Setting completion flag."
-                                        )
-
-                        except Exception as e_parse:
-                            logger.warning(f"Could not parse progress from line '{line}': {e_parse}")
+                    else:
+                        self._check_progress(line, chassis_id, process_info)
 
         except Exception as e:
             logger.error(f"Error processing stdout for {chassis_id}: {e}", exc_info=True)

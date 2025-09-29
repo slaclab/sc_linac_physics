@@ -203,7 +203,7 @@ class PlotPanel(QWidget):
         if self.config_panel:
             return self.config_panel.get_selected_decimation()
         else:
-            print(f"PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation.")
+            print("PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation.")
             return ConfigPanel.DEFAULT_DECIMATION_VALUE
 
     def update_plots(self, data_dict: dict):

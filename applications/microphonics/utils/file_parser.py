@@ -21,54 +21,39 @@ class FileParserError(Exception):
 
 # Helper Functions
 def _read_and_parse_header(file_path: Path) -> Tuple[List[str], List[str], int, Optional[int]]:
-    """Reads the file, separates header and data lines, and parses decimation
-
-    Args:
-        file_path: Path to the data file
-
-    Returns:
-        Tuple with:
-        - header_lines
-        - data_content
-        - decimation
-        - marker_index
-
-    Raises:
-        FileParserError: If file cant be read or header marker is not there
-    """
+    """Reads the file, separates header and data lines, and parses decimation"""
     header_lines: List[str] = []
     data_content_lines: List[str] = []
     marker_index: Optional[int] = None
     decimation: int = 2
 
     try:
-        # Open file and read all lines at once and using error handling for encoding problems
+        # Read file with error handling for encoding problems
         with file_path.open('r', encoding='utf-8', errors='ignore') as f:
             all_lines = f.readlines()
+
         for i, line in enumerate(all_lines):
             stripped_line = line.strip()
+
+            # Check for header marker
             if stripped_line.startswith(HEADER_MARKER):
                 marker_index = i
+            # Check for decimation header
             elif stripped_line.startswith(DECIMATION_HEADER_KEY):
-                try:
-                    value_str = stripped_line.split(':')[1].strip()
-                    decimation = int(value_str, 0)
-                    logging.debug(f"Parsed decimation '{decimation}' from header")
-                except (IndexError, ValueError, TypeError) as e:
-                    logging.warning(
-                        f"Could not parse decimation from line: '{stripped_line}'. "
-                        f"Using default {decimation}. Error: {e}"
-                    )
-            if marker_index is None:
+                decimation = _parse_decimation(stripped_line, decimation)
+
+            # Categorize line into header or data
+            if marker_index is None or i <= marker_index:
                 header_lines.append(line)
-            elif i == marker_index:
-                header_lines.append(line)
-            if marker_index is not None and i > marker_index:
+            elif marker_index is not None and i > marker_index:
                 if stripped_line and not stripped_line.startswith(COMMENT_MARKER):
                     data_content_lines.append(line)
+
         if marker_index is None:
             raise FileParserError(f"Essential channel header line ('{HEADER_MARKER}') not found in {file_path.name}")
+
         return header_lines, data_content_lines, decimation, marker_index
+
     except Exception as e:
         logging.error(f"Unexpected error reading or parsing header for {file_path.name}: {e}\n{traceback.format_exc()}")
         raise FileParserError(f"Error reading file {file_path.name}: {e}")
@@ -106,11 +91,26 @@ def _parse_channel_pvs(header_lines: List[str], marker_index: int) -> List[str]:
         raise FileParserError(f"Failed to parse channel PVs from header line: {channel_line}")
 
 
+def _parse_decimation(line: str, default: int) -> int:
+    """Parse decimation value from header line"""
+    try:
+        value_str = line.split(':')[1].strip()
+        decimation = int(value_str, 0)
+        logging.debug(f"Parsed decimation '{decimation}' from header")
+        return decimation
+    except (IndexError, ValueError, TypeError) as e:
+        logging.warning(
+            f"Could not parse decimation from line: '{line}'. "
+            f"Using default {default}. Error: {e}"
+        )
+        return default
+
+
 def _parse_numerical_data(data_content_lines: List[str], num_expected_columns: int, file_path: Path) -> np.ndarray:
     """Parses numerical data from data lines using numpy"""
     # Handle case where no data lines were found
     if not data_content_lines:
-        print(f"Warning (FileParser): No numerical data lines found.")
+        print("Warning (FileParser): No numerical data lines found.")
         # Return empty array w/ right number of columns
         return np.empty((0, num_expected_columns), dtype=float)
     data_io = io.StringIO("".join(data_content_lines))
