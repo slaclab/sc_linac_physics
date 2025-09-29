@@ -46,6 +46,15 @@ def cavity_auto_setup():
     return AutoSetupCavityPVGroup("TEST:CM01:10:", "01", 1)
 
 
+@pytest.fixture
+def mock_subprocess():
+    """Create a properly configured subprocess mock."""
+    mock_process = AsyncMock()
+    mock_process.wait = AsyncMock(return_value=0)
+    mock_process.returncode = 0
+    return mock_process
+
+
 class TestAutoSetupPVGroupBase:
     """Test the base AutoSetupPVGroup class."""
 
@@ -175,13 +184,6 @@ class TestAutoSetupPVGroupBase:
         expected_launcher_dir = os.path.join(AutoSetupPVGroup.srf_root_dir, "applications/auto_setup/launcher")
         assert AutoSetupPVGroup.launcher_dir == expected_launcher_dir
 
-    @patch.dict(os.environ, {"SRF_ROOT_DIR": "/custom/path"})
-    def test_custom_srf_root_dir(self):
-        """Test custom SRF_ROOT_DIR environment variable."""
-        # Check if the custom path is reflected
-        custom_path = os.getenv("SRF_ROOT_DIR", "/")
-        assert custom_path == "/custom/path"
-
     def test_property_types_general(self, base_auto_setup):
         """Test that properties have expected caproto-like characteristics."""
         all_props = [
@@ -244,28 +246,28 @@ class TestAutoSetupCMPVGroup:
         assert cm_auto_setup.cm_name == "01"
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_trigger_setup_script(self, mock_subprocess, cm_auto_setup):
+    async def test_trigger_setup_script(self, cm_auto_setup, mock_subprocess):
         """Test CM setup script triggering."""
-        mock_subprocess.return_value = AsyncMock()
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
+            await cm_auto_setup.trigger_setup_script()
 
-        await cm_auto_setup.trigger_setup_script()
-
-        mock_subprocess.assert_called_once_with(
-            "python", os.path.join(cm_auto_setup.launcher_dir, "srf_cm_setup_launcher.py"), "-cm=01"
-        )
+            mock_create.assert_called_once_with(
+                "python", os.path.join(cm_auto_setup.launcher_dir, "srf_cm_setup_launcher.py"), "-cm=01"
+            )
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_trigger_shutdown_script(self, mock_subprocess, cm_auto_setup):
+    async def test_trigger_shutdown_script(self, cm_auto_setup, mock_subprocess):
         """Test CM shutdown script triggering."""
-        mock_subprocess.return_value = AsyncMock()
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
+            await cm_auto_setup.trigger_shutdown_script()
 
-        await cm_auto_setup.trigger_shutdown_script()
-
-        mock_subprocess.assert_called_once_with(
-            "python", os.path.join(cm_auto_setup.launcher_dir, "srf_cm_setup_launcher.py"), "-cm=01", "-off"
-        )
+            mock_create.assert_called_once_with(
+                "python", os.path.join(cm_auto_setup.launcher_dir, "srf_cm_setup_launcher.py"), "-cm=01", "-off"
+            )
 
     @pytest.mark.asyncio
     async def test_setup_integration(self, cm_auto_setup):
@@ -289,30 +291,30 @@ class TestAutoSetupLinacPVGroup:
         assert linac_auto_setup.linac_idx == 1
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_trigger_setup_script(self, mock_subprocess, linac_auto_setup):
+    async def test_trigger_setup_script(self, linac_auto_setup, mock_subprocess):
         """Test linac setup script triggering."""
-        mock_subprocess.return_value = AsyncMock()
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
+            await linac_auto_setup.trigger_setup_script()
 
-        await linac_auto_setup.trigger_setup_script()
-
-        mock_subprocess.assert_called_once_with(
-            "python",
-            os.path.join(linac_auto_setup.launcher_dir, "srf_linac_setup_launcher.py"),
-            "-cm=1",  # Note: uses linac_idx, not -linac=
-        )
+            mock_create.assert_called_once_with(
+                "python",
+                os.path.join(linac_auto_setup.launcher_dir, "srf_linac_setup_launcher.py"),
+                "-cm=1",  # Note: uses linac_idx, not -linac=
+            )
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_trigger_shutdown_script(self, mock_subprocess, linac_auto_setup):
+    async def test_trigger_shutdown_script(self, linac_auto_setup, mock_subprocess):
         """Test linac shutdown script triggering."""
-        mock_subprocess.return_value = AsyncMock()
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
+            await linac_auto_setup.trigger_shutdown_script()
 
-        await linac_auto_setup.trigger_shutdown_script()
-
-        mock_subprocess.assert_called_once_with(
-            "python", os.path.join(linac_auto_setup.launcher_dir, "srf_linac_setup_launcher.py"), "-cm=1", "-off"
-        )
+            mock_create.assert_called_once_with(
+                "python", os.path.join(linac_auto_setup.launcher_dir, "srf_linac_setup_launcher.py"), "-cm=1", "-off"
+            )
 
     def test_different_linac_indices(self):
         """Test AutoSetupLinacPVGroup with different linac indices."""
@@ -337,28 +339,28 @@ class TestAutoSetupGlobalPVGroup:
         assert global_auto_setup.prefix == "TEST:SYS:AUTO:"
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_trigger_setup_script(self, mock_subprocess, global_auto_setup):
+    async def test_trigger_setup_script(self, global_auto_setup, mock_subprocess):
         """Test global setup script triggering."""
-        mock_subprocess.return_value = AsyncMock()
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
+            await global_auto_setup.trigger_setup_script()
 
-        await global_auto_setup.trigger_setup_script()
-
-        mock_subprocess.assert_called_once_with(
-            "python", os.path.join(global_auto_setup.launcher_dir, "srf_global_setup_launcher.py")
-        )
+            mock_create.assert_called_once_with(
+                "python", os.path.join(global_auto_setup.launcher_dir, "srf_global_setup_launcher.py")
+            )
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_trigger_shutdown_script(self, mock_subprocess, global_auto_setup):
+    async def test_trigger_shutdown_script(self, global_auto_setup, mock_subprocess):
         """Test global shutdown script triggering."""
-        mock_subprocess.return_value = AsyncMock()
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
+            await global_auto_setup.trigger_shutdown_script()
 
-        await global_auto_setup.trigger_shutdown_script()
-
-        mock_subprocess.assert_called_once_with(
-            "python", os.path.join(global_auto_setup.launcher_dir, "srf_global_setup_launcher.py"), "-off"
-        )
+            mock_create.assert_called_once_with(
+                "python", os.path.join(global_auto_setup.launcher_dir, "srf_global_setup_launcher.py"), "-off"
+            )
 
 
 class TestAutoSetupCavityPVGroup:
@@ -443,32 +445,35 @@ class TestAutoSetupCavityPVGroup:
                 mock_write.assert_called_once_with(expected_output)
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_trigger_setup_script(self, mock_subprocess, cavity_auto_setup):
+    async def test_trigger_setup_script(self, cavity_auto_setup, mock_subprocess):
         """Test cavity setup script triggering."""
-        mock_subprocess.return_value = AsyncMock()
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
+            await cavity_auto_setup.trigger_setup_script()
 
-        await cavity_auto_setup.trigger_setup_script()
-
-        mock_subprocess.assert_called_once_with(
-            "python", os.path.join(cavity_auto_setup.launcher_dir, "srf_cavity_setup_launcher.py"), "-cm=01", "-cav=1"
-        )
+            mock_create.assert_called_once_with(
+                "python",
+                os.path.join(cavity_auto_setup.launcher_dir, "srf_cavity_setup_launcher.py"),
+                "-cm=01",
+                "-cav=1",
+            )
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_trigger_shutdown_script(self, mock_subprocess, cavity_auto_setup):
+    async def test_trigger_shutdown_script(self, cavity_auto_setup, mock_subprocess):
         """Test cavity shutdown script triggering."""
-        mock_subprocess.return_value = AsyncMock()
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
+            await cavity_auto_setup.trigger_shutdown_script()
 
-        await cavity_auto_setup.trigger_shutdown_script()
-
-        mock_subprocess.assert_called_once_with(
-            "python",
-            os.path.join(cavity_auto_setup.launcher_dir, "srf_cavity_setup_launcher.py"),
-            "-cm=01",
-            "-cav=1",
-            "-off",
-        )
+            mock_create.assert_called_once_with(
+                "python",
+                os.path.join(cavity_auto_setup.launcher_dir, "srf_cavity_setup_launcher.py"),
+                "-cm=01",
+                "-cav=1",
+                "-off",
+            )
 
     def test_different_cavity_configurations(self):
         """Test AutoSetupCavityPVGroup with different CM and cavity numbers."""
@@ -485,39 +490,41 @@ class TestSubprocessIntegration:
     """Test subprocess execution integration."""
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
-    async def test_subprocess_error_handling(self, mock_subprocess):
+    async def test_subprocess_error_handling(self):
         """Test subprocess execution with errors."""
-        # Mock subprocess that raises an exception
-        mock_subprocess.side_effect = OSError("Script not found")
-
         cm_group = AutoSetupCMPVGroup("TEST:", "01")
 
-        with pytest.raises(OSError):
-            await cm_group.trigger_setup_script()
+        # Mock subprocess that raises an exception
+        with patch(
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec",
+            side_effect=OSError("Script not found"),
+        ):
+            with pytest.raises(OSError):
+                await cm_group.trigger_setup_script()
 
     @pytest.mark.asyncio
-    @patch("sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec")
     async def test_subprocess_path_construction(self, mock_subprocess):
         """Test that subprocess paths are constructed correctly."""
-        mock_subprocess.return_value = AsyncMock()
-
         # Test different group types
-        groups = [
+        groups_and_scripts = [
             (AutoSetupCMPVGroup("TEST:", "01"), "srf_cm_setup_launcher.py"),
             (AutoSetupLinacPVGroup("TEST:", 1), "srf_linac_setup_launcher.py"),
             (AutoSetupGlobalPVGroup("TEST:"), "srf_global_setup_launcher.py"),
             (AutoSetupCavityPVGroup("TEST:", "01", 1), "srf_cavity_setup_launcher.py"),
         ]
 
-        for group, expected_script in groups:
-            await group.trigger_setup_script()
+        for group, expected_script in groups_and_scripts:
+            with patch(
+                "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec",
+                return_value=mock_subprocess,
+            ) as mock_create:
+                await group.trigger_setup_script()
 
-            # Verify the script path includes the expected launcher directory
-            call_args = mock_subprocess.call_args[0]
-            script_path = call_args[1]
-            assert expected_script in script_path
-            assert group.launcher_dir in script_path
+                # Verify the script path includes the expected launcher directory
+                call_args = mock_create.call_args[0]
+                script_path = call_args[1]
+                assert expected_script in script_path
+                assert group.launcher_dir in script_path
 
 
 class TestErrorHandling:
@@ -570,36 +577,32 @@ class TestIntegrationScenarios:
     """Test complete integration scenarios."""
 
     @pytest.mark.asyncio
-    async def test_complete_setup_workflow(self, cm_auto_setup):
+    async def test_complete_setup_workflow(self, cm_auto_setup, mock_subprocess):
         """Test a complete setup workflow."""
         with patch(
-            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", new_callable=AsyncMock
-        ) as mock_subprocess:
-            mock_subprocess.return_value = AsyncMock()
-
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
             # Trigger setup
             await cm_auto_setup.setup_start.putter(None, 1)
 
             # Verify setup script was called
-            assert mock_subprocess.call_count == 1
-            call_args = mock_subprocess.call_args[0]
+            assert mock_create.call_count == 1
+            call_args = mock_create.call_args[0]
             assert "srf_cm_setup_launcher.py" in call_args[1]
             assert "-cm=01" in call_args
 
     @pytest.mark.asyncio
-    async def test_complete_shutdown_workflow(self, linac_auto_setup):
+    async def test_complete_shutdown_workflow(self, linac_auto_setup, mock_subprocess):
         """Test a complete shutdown workflow."""
         with patch(
-            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", new_callable=AsyncMock
-        ) as mock_subprocess:
-            mock_subprocess.return_value = AsyncMock()
-
+            "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec", return_value=mock_subprocess
+        ) as mock_create:
             # Trigger shutdown
             await linac_auto_setup.off_start.putter(None, 1)
 
             # Verify shutdown script was called
-            assert mock_subprocess.call_count == 1
-            call_args = mock_subprocess.call_args[0]
+            assert mock_create.call_count == 1
+            call_args = mock_create.call_args[0]
             assert "srf_linac_setup_launcher.py" in call_args[1]
             assert "-cm=1" in call_args
             assert "-off" in call_args
@@ -675,8 +678,7 @@ class TestEnvironmentConfiguration:
             assert part in launcher_dir
 
     def test_srf_root_dir_affects_launcher_dir(self):
-        """Test that SRF_ROOT_DIR affects launcher directory."""
-        # Get current launcher dir
+        """Test that SRF_ROOT_DIR affects launcher directory."""  # Get current launcher dir
         current_launcher_dir = AutoSetupPVGroup.launcher_dir
         current_srf_root = AutoSetupPVGroup.srf_root_dir
 
