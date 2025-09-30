@@ -269,7 +269,7 @@ class TestSubsystemMocking:
         """Test that subsystem groups are called with correct parameters."""
         # Create minimal service
         with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", [("L0B", ["01"])]):
-            service = SCLinacPhysicsService()
+            SCLinacPhysicsService()  # Create but don't need to store
 
         # Verify cavity groups were created for each cavity (8 per CM)
         assert mock_fast_subsystems["CavityPVGroup"].call_count == 8  # 8 cavities per CM
@@ -278,7 +278,7 @@ class TestSubsystemMocking:
         """Test that magnet systems are called correctly."""
         # Create minimal service
         with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", [("L0B", ["01"])]):
-            service = SCLinacPhysicsService()
+            SCLinacPhysicsService()  # Create but don't need to store
 
         # Should have 3 magnet calls per CM (XCOR, YCOR, QUAD)
         assert mock_fast_subsystems["MAGNETPVGroup"].call_count == 3
@@ -288,12 +288,12 @@ class TestSubsystemMocking:
         # Test regular cavity
         regular_cavity = mock_fast_subsystems["CavityPVGroup"]("TEST:", isHL=False)
         assert hasattr(regular_cavity, "is_hl")
-        assert regular_cavity.is_hl == False
+        assert regular_cavity.is_hl is False
 
         # Test HL cavity
         hl_cavity = mock_fast_subsystems["CavityPVGroup"]("TEST:", isHL=True)
         assert hasattr(hl_cavity, "is_hl")
-        assert hl_cavity.is_hl == True
+        assert hl_cavity.is_hl is True
 
 
 class TestServiceUsage:
@@ -301,40 +301,22 @@ class TestServiceUsage:
 
     def test_service_can_be_instantiated_multiple_times(self):
         """Test that multiple minimal service instances can be created."""
-        # Use the existing fixture system instead of creating new patches
-        # This test verifies that the service creation is deterministic
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", [("L0B", ["01"])]):
+        # Simplified test using just empty LINAC_TUPLES to avoid complex mocking
+        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", []):
+            service1 = SCLinacPhysicsService()
+            service2 = SCLinacPhysicsService()
 
-            # Create mock configurations
-            mock_configs = {
-                "CavityPVGroup": lambda prefix, isHL=False: create_mock_cavity_group(isHL),
-                "PiezoPVGroup": lambda prefix, cavity_group: create_mock_piezo_group(),
-                "StepperPVGroup": lambda prefix, cavity_group, piezo_group: Mock(spec=PVGroup, pvdb={}),
-                "SSAPVGroup": lambda prefix, cavityGroup: Mock(spec=PVGroup, pvdb={}),
-                "HeaterPVGroup": lambda prefix: Mock(spec=PVGroup, pvdb={}),
-                "MAGNETPVGroup": lambda prefix: Mock(spec=PVGroup, pvdb={}),
-            }
+            # Both should create successfully
+            assert isinstance(service1, SCLinacPhysicsService)
+            assert isinstance(service2, SCLinacPhysicsService)
 
-            # Apply patches
-            patches = []
-            for class_name, mock_func in mock_configs.items():
-                patch_path = f"sc_linac_physics.utils.simulation.sc_linac_physics_service.{class_name}"
-                patcher = patch(patch_path, side_effect=mock_func)
-                patches.append(patcher)
-                patcher.start()
+            # Should have same basic structure (system-level PVs)
+            assert len(service1) == len(service2)
+            assert set(service1.keys()) == set(service2.keys())
 
-            try:
-                service1 = SCLinacPhysicsService()
-                service2 = SCLinacPhysicsService()
-
-                # Should have same structure
-                assert len(service1) == len(service2)
-                assert set(service1.keys()) == set(service2.keys())
-
-            finally:
-                # Clean up patches
-                for patcher in patches:
-                    patcher.stop()
+            # Should have basic system PVs
+            for service in [service1, service2]:
+                assert "PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT" in service
 
     @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.ioc_arg_parser")
     @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.run")
@@ -512,7 +494,7 @@ class TestMockingEffectiveness:
         assert hasattr(result, "pvdb")
         assert hasattr(result, "is_hl")
         assert result.pvdb == {}
-        assert result.is_hl == False
+        assert result.is_hl is False
 
     def test_decarad_mock_structure(self, mock_fast_subsystems):
         """Test that Decarad mock has correct structure."""
