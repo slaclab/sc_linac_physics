@@ -47,7 +47,7 @@ max-line-length = 120
 max-complexity = 10
 
 [tool.pytest.ini_options]
-addopts = "-vv -ra --durations=10 --cov=sc_linac_physics --cov-report=html --cov-report=term-missing"
+addopts = "-vv -ra --durations=10 --cov=sc_linac_physics --cov-report=term-missing --cov-report=html"
 log_cli = true
 log_cli_level = "INFO"
 asyncio_mode = "auto"
@@ -57,7 +57,21 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 
 [tool.coverage.run]
-data_file = ".coverage"
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:"
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }

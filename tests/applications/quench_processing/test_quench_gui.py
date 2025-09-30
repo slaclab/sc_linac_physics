@@ -1,25 +1,47 @@
-from random import choice, randint
+from random import choice
 from unittest.mock import MagicMock, call
 
 import pytest
 from PyQt5.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
-from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
-from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
-    QuenchCryomodule,
-)
 from sc_linac_physics.applications.quench_processing.quench_gui import QuenchGUI
 from sc_linac_physics.applications.quench_processing.quench_worker import QuenchWorker
 from sc_linac_physics.utils.qt import make_rainbow
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
-from sc_linac_physics.utils.sc_linac.linac import Machine
-from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 @pytest.fixture
 def gui(monkeypatch):
     from PyQt5.QtWidgets import QWidget
+    from unittest.mock import MagicMock
+
+    # Mock QuenchCryomodule BEFORE any imports that use it
+    class MockQuenchCryomodule:
+        def __init__(self, cryo_name, linac_object):
+            self.name = cryo_name
+            self.linac = linac_object
+            self.logger = MagicMock()
+            # Add any other attributes your tests need
+            self.cavities = {}
+            for i in range(1, 9):  # Assuming 8 cavities per cryomodule
+                self.cavities[i] = MagicMock()
+
+    # Patch it everywhere it might be used
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.quench_processing.quench_cryomodule.QuenchCryomodule", MockQuenchCryomodule
+    )
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.quench_processing.quench_gui.QuenchCryomodule", MockQuenchCryomodule
+    )
+
+    # Mock the file handler to prevent any file operations
+    def mock_file_handler(*args, **kwargs):
+        handler = MagicMock()
+        handler.setFormatter = MagicMock()
+        return handler
+
+    monkeypatch.setattr("logging.FileHandler", mock_file_handler)
 
     # Minimal dummy to avoid pyqtgraph/PyDM internals during tests
     class DummyWaveformPlot(QWidget):
@@ -46,15 +68,19 @@ def gui(monkeypatch):
     g.status_label.setText = MagicMock()
     g.status_label.setStyleSheet = MagicMock()
     g.start_button.setEnabled = MagicMock()
-    cm = choice(ALL_CRYOMODULES)
-    g.cm_combobox.currentText = MagicMock(return_value=cm)
-    g.current_cm = Machine(cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule).cryomodules[cm]
-    cavity = randint(1, 8)
-    g.current_cav = g.current_cm.cavities[cavity]
-    g.cav_combobox.currentText = MagicMock(return_value=str(cavity))
-    decarad = choice([1, 2])
-    g.decarad_combobox.currentText = MagicMock(return_value=str(decarad))
-    g.current_decarad = Decarad(decarad)
+
+    # Mock the Machine and its components
+    g.current_cm = MagicMock()
+    g.current_cm.name = "01"
+    g.cm_combobox.currentText = MagicMock(return_value="01")
+
+    g.current_cav = MagicMock()
+    g.current_cav.number = 1
+    g.cav_combobox.currentText = MagicMock(return_value="1")
+
+    g.current_decarad = MagicMock()
+    g.decarad_combobox.currentText = MagicMock(return_value="1")
+
     return g
 
 
