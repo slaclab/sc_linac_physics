@@ -49,193 +49,257 @@ def mock_calibration():
     return calibration
 
 
+def _create_mock_pv_names(cryo_name):
+    """Create PV names for mock cryomodule"""
+    return {
+        # JT valve PVs
+        "jt_mode_pv": f"CLIC:CM{cryo_name}:3001:PVJT:MODE",
+        "jt_mode_str_pv": f"CLIC:CM{cryo_name}:3001:PVJT:MODE_STRING",
+        "jt_manual_select_pv": f"CLIC:CM{cryo_name}:3001:PVJT:MANUAL",
+        "jt_auto_select_pv": f"CLIC:CM{cryo_name}:3001:PVJT:AUTO",
+        "ds_liq_lev_setpoint_pv": f"CLIC:CM{cryo_name}:3001:PVJT:SP_RQST",
+        "jt_man_pos_setpoint_pv": f"CLIC:CM{cryo_name}:3001:PVJT:MANPOS_RQST",
+        "jt_valve_readback_pv": f"CLIC:CM{cryo_name}:3001:PVJT:ORBV",
+        # Heater PVs
+        "heater_setpoint_pv": f"CPIC:CM{cryo_name}:0000:EHCV:MANPOS_RQST",
+        "heater_manual_pv": f"CPIC:CM{cryo_name}:0000:EHCV:MANUAL",
+        "heater_sequencer_pv": f"CPIC:CM{cryo_name}:0000:EHCV:SEQUENCER",
+        "heater_mode_string_pv": f"CPIC:CM{cryo_name}:0000:EHCV:MODE_STRING",
+        "heater_mode_pv": f"CPIC:CM{cryo_name}:0000:EHCV:MODE",
+        "heater_readback_pv": f"CPIC:CM{cryo_name}:0000:EHCV:ORBV",
+        # Other PVs
+        "cryo_access_pv": f"CRYO:CM{cryo_name}:0:CAS_ACCESS",
+        "ds_level_pv": f"CLL:CM{cryo_name}:2301:DS:LVL",
+        "ds_pressure_pv": f"CPT:CM{cryo_name}:2302:DS:PRESSURE",
+    }
+
+
+def _create_mock_buffers():
+    """Create buffer attributes for mock cryomodule"""
+    from sc_linac_physics.applications.q0 import q0_utils
+
+    ll_buffer = np.empty(q0_utils.NUM_LL_POINTS_TO_AVG)
+    ll_buffer[:] = np.nan
+
+    return {
+        "ll_buffer": ll_buffer,
+        "_ll_buffer_size": q0_utils.NUM_LL_POINTS_TO_AVG,
+        "ll_buffer_idx": 0,
+        "measurement_buffer": [],
+    }
+
+
+def _create_mock_file_paths(cryo_name):
+    """Create file paths for mock cryomodule"""
+    base_dir = "/tmp"
+    return {
+        "_calib_idx_file": f"{base_dir}/calibrations/cm{cryo_name}.json",
+        "_calib_data_file": f"{base_dir}/data/calibrations/cm{cryo_name}.json",
+        "_q0_idx_file": f"{base_dir}/q0_measurements/cm{cryo_name}.json",
+        "_q0_data_file": f"{base_dir}/data/q0_measurements/cm{cryo_name}.json",
+    }
+
+
+def _add_buffer_properties(cls):
+    """Add buffer-related properties to mock class"""
+
+    def ll_buffer_size_getter(self):
+        return self._ll_buffer_size
+
+    def ll_buffer_size_setter(self, value):
+        self._ll_buffer_size = value
+        self.ll_buffer = np.empty(value)
+        self.ll_buffer[:] = np.nan
+        self.ll_buffer_idx = 0
+
+    cls.ll_buffer_size = property(ll_buffer_size_getter, ll_buffer_size_setter)
+
+
+def _add_level_properties(cls):
+    """Add liquid level properties to mock class"""
+
+    def averaged_liquid_level_getter(self):
+        return 90.0
+
+    def ds_liquid_level_getter(self):
+        return 90.0
+
+    def ds_liquid_level_setter(self, value):
+        pass
+
+    cls.averaged_liquid_level = property(averaged_liquid_level_getter)
+    cls.ds_liquid_level = property(ds_liquid_level_getter, ds_liquid_level_setter)
+
+
+def _add_heater_properties(cls):
+    """Add heater properties to mock class"""
+
+    def heater_power_getter(self):
+        return 150.0
+
+    def heater_power_setter(self, value):
+        pass
+
+    cls.heater_power = property(heater_power_getter, heater_power_setter)
+
+
+def _add_jt_properties(cls):
+    """Add JT position properties to mock class"""
+
+    def jt_position_getter(self):
+        return 75.0
+
+    def jt_position_setter(self, value):
+        pass
+
+    cls.jt_position = property(jt_position_getter, jt_position_setter)
+
+
+def _add_file_properties(cls):
+    """Add file path properties to mock class"""
+
+    def calib_data_file_getter(self):
+        return self._calib_data_file
+
+    def q0_data_file_getter(self):
+        return self._q0_data_file
+
+    def calib_idx_file_getter(self):
+        return self._calib_idx_file
+
+    def q0_idx_file_getter(self):
+        return self._q0_idx_file
+
+    cls.calib_data_file = property(calib_data_file_getter)
+    cls.q0_data_file = property(q0_data_file_getter)
+    cls.calib_idx_file = property(calib_idx_file_getter)
+    cls.q0_idx_file = property(q0_idx_file_getter)
+
+
+def _add_mock_methods(cls):
+    """Add mock methods to class"""
+
+    def wait_for_ll_drop(self, target_ll_diff):
+        pass
+
+    def setup_cryo_for_measurement(self, *args, **kwargs):
+        pass
+
+    def restore_cryo(self):
+        pass
+
+    def waitForLL(self, *args, **kwargs):
+        pass
+
+    def fill(self, *args, **kwargs):
+        pass
+
+    def check_abort(self):
+        if self.abort_flag:
+            self.abort_flag = False
+            from sc_linac_physics.applications.q0 import q0_utils
+
+            raise q0_utils.Q0AbortError(f"Abort requested for {self}")
+
+    def getRefValveParams(self, *args, **kwargs):
+        from sc_linac_physics.applications.q0 import q0_utils
+
+        return q0_utils.ValveParams(75.0, 150.0, 148.5)
+
+    cls.wait_for_ll_drop = wait_for_ll_drop
+    cls.setup_cryo_for_measurement = setup_cryo_for_measurement
+    cls.restore_cryo = restore_cryo
+    cls.waitForLL = waitForLL
+    cls.fill = fill
+    cls.check_abort = check_abort
+    cls.getRefValveParams = getRefValveParams
+
+
+def _create_mock_q0_cryomodule_class():
+    """Create the mock Q0Cryomodule class - ultra-simplified"""
+
+    class FastMockQ0Cryomodule:
+        def __init__(self, cryo_name, linac_object):
+            self.name = cryo_name
+            self.linac = linac_object
+            self._setup_attributes(cryo_name)
+
+        def _setup_attributes(self, cryo_name):
+            """Set up all attributes"""
+            # PV names
+            pv_names = _create_mock_pv_names(cryo_name)
+            self.__dict__.update(pv_names)
+
+            # Buffers
+            buffer_attrs = _create_mock_buffers()
+            self.__dict__.update(buffer_attrs)
+
+            # File paths
+            file_paths = _create_mock_file_paths(cryo_name)
+            self.__dict__.update(file_paths)
+
+            # Q0 attributes
+            self.cavities = {}
+            self.ds_level_pv_obj = Mock()
+            self.q0_measurements = {}
+            self.calibrations = {}
+            self.valveParams = None
+            self.calibration = None
+            self.q0_measurement = None
+            self.current_data_run = None
+            self.cavity_amplitudes = {}
+            self.fill_data_run_buffer = False
+            self.abort_flag = False
+
+    # Add all properties and methods via helper functions
+    _add_buffer_properties(FastMockQ0Cryomodule)
+    _add_level_properties(FastMockQ0Cryomodule)
+    _add_heater_properties(FastMockQ0Cryomodule)
+    _add_jt_properties(FastMockQ0Cryomodule)
+    _add_file_properties(FastMockQ0Cryomodule)
+    _add_mock_methods(FastMockQ0Cryomodule)
+
+    return FastMockQ0Cryomodule
+
+
+def _add_real_methods_to_mock_class(mock_class):
+    """Add real methods from Q0Cryomodule to mock class"""
+    from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+
+    methods_to_copy = [
+        "launchHeaterRun",
+        "take_new_calibration",
+        "takeNewQ0Measurement",
+        "fill_heater_readback_buffer",
+        "fill_pressure_buffer",
+        "monitor_ll",
+        "clear_ll_buffer",
+    ]
+
+    for method_name in methods_to_copy:
+        if hasattr(Q0Cryomodule, method_name):
+            setattr(mock_class, method_name, getattr(Q0Cryomodule, method_name))
+
+
 @pytest.fixture
 def fast_q0_cryo(cryo_name, mock_linac_object):
     """Create Q0Cryomodule instance with all time-consuming operations mocked"""
 
-    # Mock ALL external dependencies including time-consuming ones
     with patch.multiple(
         "sc_linac_physics.applications.q0.q0_cryomodule",
         caget=Mock(return_value=50.0),
         caput=Mock(),
         camonitor=Mock(),
         camonitor_clear=Mock(),
-        sleep=Mock(),  # Mock sleep to prevent delays
+        sleep=Mock(),
         isfile=Mock(return_value=True),
     ):
-        # Create a mock Q0Cryomodule class that bypasses parent __init__
-        class FastMockQ0Cryomodule:
-            def __init__(self, cryo_name, linac_object):
-                # Initialize basic attributes
-                self.name = cryo_name
-                self.linac = linac_object
+        # Create mock class and add real methods
+        mock_class = _create_mock_q0_cryomodule_class()
+        _add_real_methods_to_mock_class(mock_class)
 
-                # Initialize Q0Cryomodule specific attributes
-                self.jt_mode_pv = f"CLIC:CM{cryo_name}:3001:PVJT:MODE"
-                self.jt_mode_str_pv = f"CLIC:CM{cryo_name}:3001:PVJT:MODE_STRING"
-                self.jt_manual_select_pv = f"CLIC:CM{cryo_name}:3001:PVJT:MANUAL"
-                self.jt_auto_select_pv = f"CLIC:CM{cryo_name}:3001:PVJT:AUTO"
-                self.ds_liq_lev_setpoint_pv = f"CLIC:CM{cryo_name}:3001:PVJT:SP_RQST"
-                self.jt_man_pos_setpoint_pv = f"CLIC:CM{cryo_name}:3001:PVJT:MANPOS_RQST"
-
-                self.heater_setpoint_pv = f"CPIC:CM{cryo_name}:0000:EHCV:MANPOS_RQST"
-                self.heater_manual_pv = f"CPIC:CM{cryo_name}:0000:EHCV:MANUAL"
-                self.heater_sequencer_pv = f"CPIC:CM{cryo_name}:0000:EHCV:SEQUENCER"
-                self.heater_mode_string_pv = f"CPIC:CM{cryo_name}:0000:EHCV:MODE_STRING"
-                self.heater_mode_pv = f"CPIC:CM{cryo_name}:0000:EHCV:MODE"
-
-                self.cryo_access_pv = f"CRYO:CM{cryo_name}:0:CAS_ACCESS"
-
-                # Set up parent class attributes that are needed
-                self.cavities = {}
-                self.ds_level_pv = f"CLL:CM{cryo_name}:2301:DS:LVL"
-                self.ds_level_pv_obj = Mock()
-                self.ds_pressure_pv = f"CPT:CM{cryo_name}:2302:DS:PRESSURE"
-                self.heater_readback_pv = f"CPIC:CM{cryo_name}:0000:EHCV:ORBV"
-                self.jt_valve_readback_pv = f"CLIC:CM{cryo_name}:3001:PVJT:ORBV"
-
-                # Initialize Q0Cryomodule specific attributes
-                self.q0_measurements = {}
-                self.calibrations = {}
-                self.valveParams = None
-
-                # Buffer attributes
-                from sc_linac_physics.applications.q0 import q0_utils
-
-                self.ll_buffer = np.empty(q0_utils.NUM_LL_POINTS_TO_AVG)
-                self.ll_buffer[:] = np.nan
-                self._ll_buffer_size = q0_utils.NUM_LL_POINTS_TO_AVG
-                self.ll_buffer_idx = 0
-
-                self.measurement_buffer = []
-                self.calibration = None
-                self.q0_measurement = None
-                self.current_data_run = None
-                self.cavity_amplitudes = {}
-
-                self.fill_data_run_buffer = False
-                self.abort_flag = False
-
-                # File paths
-                base_dir = "/tmp"  # Use temp dir for tests
-                self._calib_idx_file = f"{base_dir}/calibrations/cm{self.name}.json"
-                self._calib_data_file = f"{base_dir}/data/calibrations/cm{self.name}.json"
-                self._q0_idx_file = f"{base_dir}/q0_measurements/cm{self.name}.json"
-                self._q0_data_file = f"{base_dir}/data/q0_measurements/cm{self.name}.json"
-
-            # Fast properties that don't make real calls
-            @property
-            def ll_buffer_size(self):
-                return self._ll_buffer_size
-
-            @ll_buffer_size.setter
-            def ll_buffer_size(self, value):
-                self._ll_buffer_size = value
-                self.ll_buffer = np.empty(value)
-                self.ll_buffer[:] = np.nan
-                self.ll_buffer_idx = 0
-
-            @property
-            def averaged_liquid_level(self):
-                """Fast mock implementation"""
-                return 90.0  # Return a constant for speed
-
-            @property
-            def heater_power(self):
-                return 150.0  # Return a constant for speed
-
-            @heater_power.setter
-            def heater_power(self, value):
-                # Just record the call, don't do anything slow
-                pass
-
-            @property
-            def ds_liquid_level(self):
-                return 90.0
-
-            @ds_liquid_level.setter
-            def ds_liquid_level(self, value):
-                pass
-
-            @property
-            def jt_position(self):
-                return 75.0
-
-            @jt_position.setter
-            def jt_position(self, value):
-                pass
-
-            # File property methods
-            @property
-            def calib_data_file(self):
-                return self._calib_data_file
-
-            @property
-            def q0_data_file(self):
-                return self._q0_data_file
-
-            @property
-            def calib_idx_file(self):
-                return self._calib_idx_file
-
-            @property
-            def q0_idx_file(self):
-                return self._q0_idx_file
-
-            # Fast mock implementations of time-consuming methods
-            def wait_for_ll_drop(self, target_ll_diff):
-                """Fast mock - return immediately"""
-                pass
-
-            def setup_cryo_for_measurement(self, *args, **kwargs):
-                """Fast mock - return immediately"""
-                pass
-
-            def restore_cryo(self):
-                """Fast mock - return immediately"""
-                pass
-
-            def waitForLL(self, *args, **kwargs):
-                """Fast mock - return immediately"""
-                pass
-
-            def fill(self, *args, **kwargs):
-                """Fast mock - return immediately"""
-                pass
-
-            def check_abort(self):
-                """Fast mock - check abort without delays"""
-                if self.abort_flag:
-                    self.abort_flag = False
-                    from sc_linac_physics.applications.q0 import q0_utils
-
-                    raise q0_utils.Q0AbortError(f"Abort requested for {self}")
-
-            def getRefValveParams(self, *args, **kwargs):
-                """Fast mock - return valve params immediately"""
-                from sc_linac_physics.applications.q0 import q0_utils
-
-                return q0_utils.ValveParams(75.0, 150.0, 148.5)
-
-        # Import the actual methods from Q0Cryomodule and add them to our mock class
-        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
-
-        # Only copy specific methods we want to test, avoiding problematic ones
-        methods_to_copy = [
-            "launchHeaterRun",
-            "take_new_calibration",
-            "fill_heater_readback_buffer",
-            "fill_pressure_buffer",
-            "monitor_ll",
-            "clear_ll_buffer",
-        ]
-
-        for method_name in methods_to_copy:
-            if hasattr(Q0Cryomodule, method_name):
-                setattr(FastMockQ0Cryomodule, method_name, getattr(Q0Cryomodule, method_name))
-
-        # Create the mock instance
-        cryo = FastMockQ0Cryomodule(cryo_name, mock_linac_object)
+        # Create instance
+        cryo = mock_class(cryo_name, mock_linac_object)
 
         # Add helper methods
         cryo.make_jt_pv = lambda suffix: f"CLIC:CM{cryo_name}:3001:PVJT:{suffix}"
@@ -283,8 +347,8 @@ class TestQ0CryomoduleCoreFast:
         assert hasattr(fast_q0_cryo, "heater_setpoint_pv")
         assert hasattr(fast_q0_cryo, "q0_measurements")
         assert hasattr(fast_q0_cryo, "calibrations")
-        assert fast_q0_cryo.abort_flag == False
-        assert fast_q0_cryo.fill_data_run_buffer == False
+        assert fast_q0_cryo.abort_flag is False
+        assert fast_q0_cryo.fill_data_run_buffer is False
 
     def test_valve_params_storage(self, fast_q0_cryo, valve_params):
         """Test valve parameters storage and retrieval"""
@@ -1167,11 +1231,11 @@ class TestQ0CryomoduleJTPositionAlgorithmCoverage:
         # Test the boolean logic
         current_mode = manual_mode
         is_manual = current_mode == manual_mode
-        assert is_manual == True
+        assert is_manual is True
 
         current_mode = auto_mode
         is_manual = current_mode == manual_mode
-        assert is_manual == False
+        assert is_manual is False
 
 
 class TestQ0CryomoduleJTPositionDocumentation:
@@ -1253,7 +1317,7 @@ class TestQ0CryomodulePropertiesFast:
             fast_q0_cryo.check_abort()
 
         # Verify abort flag was reset
-        assert fast_q0_cryo.abort_flag == False
+        assert fast_q0_cryo.abort_flag is False
 
 
 class TestQ0CryomodulePerformance:
@@ -1813,7 +1877,7 @@ class TestQ0CryomoduleLiquidLevelIntegration:
             fast_q0_cryo.check_abort()
 
         # Verify abort flag was reset
-        assert fast_q0_cryo.abort_flag == False
+        assert fast_q0_cryo.abort_flag is False
 
     def test_liquid_level_mock_performance(self, fast_q0_cryo):
         """Test that our liquid level mocks are fast"""
@@ -1824,7 +1888,7 @@ class TestQ0CryomoduleLiquidLevelIntegration:
         # Test our mock implementations only
         for i in range(100):
             # These should all be fast mock operations
-            level = fast_q0_cryo.averaged_liquid_level
+            fast_q0_cryo.averaged_liquid_level
             fast_q0_cryo.ds_level_pv_obj.put(90.0 + i * 0.1)
             fast_q0_cryo.ds_level_pv_obj.get()
             fast_q0_cryo.setup_cryo_for_measurement(92.0)
@@ -1857,7 +1921,7 @@ class TestQ0CryomoduleFillMethodsSafe:
 
         # Test default values
         turn_cavities_param = sig.parameters["turn_cavities_off"]
-        assert turn_cavities_param.default == True
+        assert turn_cavities_param.default is True
 
     def test_fill_method_epics_operations(self, fast_q0_cryo):
         """Test EPICS operations that fill method should perform"""

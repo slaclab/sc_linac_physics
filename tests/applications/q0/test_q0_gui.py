@@ -229,7 +229,7 @@ class TestQ0GUICalibrationWorkflow:
 
         with (
             patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
-            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show,
+            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
 
             # Execute the method
@@ -544,12 +544,6 @@ class TestQ0GUIWorkerManagement:
         assert gui.q0_meas_worker is not None
 
 
-# Add this test method to your TestQ0GUICalibrationWorkflow class or create a new class
-
-
-# Replace the failing test method with this corrected version:
-
-
 class TestQ0GUIQ0LoadMethods:
     """Test Q0 data loading methods."""
 
@@ -562,7 +556,7 @@ class TestQ0GUIQ0LoadMethods:
 
         with (
             patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
-            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show,
+            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
 
             gui.load_q0()
@@ -587,7 +581,7 @@ class TestQ0GUIQ0LoadMethods:
         gui.rf_option_windows[mock_cryomodule.name] = existing_window
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
+            patch("sc_linac_physics.applications.q0.q0_gui.Display"),
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show,
         ):
 
@@ -759,9 +753,9 @@ class TestQ0GUIShowCalibrationData:
         gui.calibration_fit_plot_items = initial_fit_items.copy()
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
+            patch("sc_linac_physics.applications.q0.q0_gui.Display"),
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
-            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show_display,
+            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
 
             mock_plot_widget = Mock()
@@ -790,9 +784,9 @@ class TestQ0GUIShowCalibrationData:
         gui.selected_cm = mock_cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
+            patch("sc_linac_physics.applications.q0.q0_gui.Display"),
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
-            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show_display,
+            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
 
             mock_plot_widget = Mock()
@@ -860,9 +854,9 @@ class TestQ0GUIShowCalibrationData:
         gui.selected_cm = mock_cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
+            patch("sc_linac_physics.applications.q0.q0_gui.Display"),
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
-            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show_display,
+            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
 
             mock_plot_widget = Mock()
@@ -892,7 +886,7 @@ class TestQ0GUIShowCalibrationData:
         with (
             patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
-            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show_display,
+            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
             patch("sc_linac_physics.applications.q0.q0_gui.QHBoxLayout") as mock_layout,
         ):
 

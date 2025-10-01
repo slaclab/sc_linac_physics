@@ -195,7 +195,8 @@ class Q0Cryomodule(Cryomodule):
     #         self.check_abort()
     #         print(f"\nChecking window {window_start} to {window_end}")
     #
-    #         data = get_values_over_time_range(pv_list=[self.ds_level_pv], start_time=window_start, end_time=window_end)
+    #         data = get_values_over_time_range(pv_list=[self.ds_level_pv],
+    #         start_time=window_start, end_time=window_end)
     #         llVals = medfilt(data.values[self.ds_level_pv])
     #
     #         # Fit a line to the liquid level over the last [numHours] hours
