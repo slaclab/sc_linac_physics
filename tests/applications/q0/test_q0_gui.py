@@ -5,6 +5,8 @@ from unittest.mock import Mock, patch
 import pytest
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget
 
+from sc_linac_physics.applications.q0.q0_gui import make_non_blocking_error_popup, Q0GUI
+
 
 class MockCavAmpControl:
     def __init__(self):
@@ -135,10 +137,6 @@ def mock_q0_dependencies():
         },
     ):
         yield
-
-
-# Import after the fixture is defined
-from sc_linac_physics.applications.q0.q0_gui import make_non_blocking_error_popup, Q0GUI
 
 
 @pytest.fixture
