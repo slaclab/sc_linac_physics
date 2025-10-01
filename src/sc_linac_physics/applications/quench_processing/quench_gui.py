@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
 )
 from lcls_tools.common.frontend.plotting.util import WaveformPlotParams, TimePlotParams, WaveformPlotUpdater
-
 from pydm import Display
 from pydm.widgets import PyDMWaveformPlot, PyDMTimePlot, PyDMLabel
 from pydm.widgets.timeplot import updateMode

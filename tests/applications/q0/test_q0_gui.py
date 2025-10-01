@@ -7,20 +7,39 @@ from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget
 
 from sc_linac_physics.applications.q0.q0_gui import make_non_blocking_error_popup, Q0GUI
 
-# Mock the heavy dependencies before importing the main module
-sys.modules["lcls_tools"] = Mock()
-sys.modules["lcls_tools.common"] = Mock()
-sys.modules["lcls_tools.common.frontend"] = Mock()
-sys.modules["lcls_tools.common.frontend.display"] = Mock()
-sys.modules["lcls_tools.common.frontend.display.util"] = Mock()
-sys.modules["pyqtgraph"] = Mock()
-sys.modules["sc_linac_physics.applications.q0.q0_gui_utils"] = Mock()
-sys.modules["sc_linac_physics.applications.q0.q0_cavity"] = Mock()
-sys.modules["sc_linac_physics.applications.q0.q0_cryomodule"] = Mock()
-sys.modules["sc_linac_physics.applications.q0.q0_measurement_widget"] = Mock()
-sys.modules["sc_linac_physics.applications.q0.q0_utils"] = Mock()
-sys.modules["sc_linac_physics.utils.sc_linac.linac"] = Mock()
-sys.modules["sc_linac_physics.utils.sc_linac.linac_utils"] = Mock()
+
+@pytest.fixture(autouse=True, scope="function")
+def mock_q0_dependencies():
+    """Mock heavy dependencies only for Q0 GUI tests."""
+    with patch.dict(
+        "sys.modules",
+        {
+            "lcls_tools": Mock(),
+            "lcls_tools.common": Mock(),
+            "lcls_tools.common.frontend": Mock(),
+            "lcls_tools.common.frontend.display": Mock(),
+            "lcls_tools.common.frontend.display.util": Mock(),
+            "pyqtgraph": Mock(),
+            "sc_linac_physics.applications.q0.q0_gui_utils": Mock(),
+            "sc_linac_physics.applications.q0.q0_cavity": Mock(),
+            "sc_linac_physics.applications.q0.q0_cryomodule": Mock(),
+            "sc_linac_physics.applications.q0.q0_measurement_widget": Mock(),
+            "sc_linac_physics.applications.q0.q0_utils": Mock(),
+            "sc_linac_physics.utils.sc_linac.linac": Mock(),
+            "sc_linac_physics.utils.sc_linac.linac_utils": Mock(),
+        },
+    ):
+        # Setup the specific mocks that tests need
+        mock_pydm = Mock()
+        mock_pydm.Display = MockDisplay
+        sys.modules["pydm"] = mock_pydm
+
+        # Mock plot function
+        mock_plot = Mock()
+        sys.modules["pyqtgraph"].plot = mock_plot
+        sys.modules["pyqtgraph"].PlotWidget = Mock()
+
+        yield
 
 
 class MockCavAmpControl:
