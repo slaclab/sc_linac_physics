@@ -5,42 +5,6 @@ from unittest.mock import Mock, patch
 import pytest
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget
 
-from sc_linac_physics.applications.q0.q0_gui import make_non_blocking_error_popup, Q0GUI
-
-
-@pytest.fixture(autouse=True, scope="function")
-def mock_q0_dependencies():
-    """Mock heavy dependencies only for Q0 GUI tests."""
-    with patch.dict(
-        "sys.modules",
-        {
-            "lcls_tools": Mock(),
-            "lcls_tools.common": Mock(),
-            "lcls_tools.common.frontend": Mock(),
-            "lcls_tools.common.frontend.display": Mock(),
-            "lcls_tools.common.frontend.display.util": Mock(),
-            "pyqtgraph": Mock(),
-            "sc_linac_physics.applications.q0.q0_gui_utils": Mock(),
-            "sc_linac_physics.applications.q0.q0_cavity": Mock(),
-            "sc_linac_physics.applications.q0.q0_cryomodule": Mock(),
-            "sc_linac_physics.applications.q0.q0_measurement_widget": Mock(),
-            "sc_linac_physics.applications.q0.q0_utils": Mock(),
-            "sc_linac_physics.utils.sc_linac.linac": Mock(),
-            "sc_linac_physics.utils.sc_linac.linac_utils": Mock(),
-        },
-    ):
-        # Setup the specific mocks that tests need
-        mock_pydm = Mock()
-        mock_pydm.Display = MockDisplay
-        sys.modules["pydm"] = mock_pydm
-
-        # Mock plot function
-        mock_plot = Mock()
-        sys.modules["pyqtgraph"].plot = mock_plot
-        sys.modules["pyqtgraph"].PlotWidget = Mock()
-
-        yield
-
 
 class MockCavAmpControl:
     def __init__(self):
@@ -58,13 +22,9 @@ class MockCavAmpControl:
 
     def connect(self, cavity):
         """Mock implementation of connect method"""
-        # Store the cavity for potential assertions
         self.connected_cavity = cavity
-
-        # Mock the title setting
         self.groupbox.setTitle(f"Cavity {cavity.number}")
 
-        # Mock the online/offline logic
         if hasattr(cavity, "is_online") and not cavity.is_online:
             self.groupbox.setChecked(False)
             self.desAmpSpinbox.setRange(0, 0)
@@ -75,7 +35,6 @@ class MockCavAmpControl:
             self.desAmpSpinbox.setValue(desired_amp)
             self.desAmpSpinbox.setRange(0, max_amp)
 
-        # Mock channel assignment
         self.aact_label.channel = getattr(cavity, "aact_pv", "mock_aact_pv")
 
 
@@ -143,15 +102,43 @@ class MockMeasurementWidget(QWidget):
         self.ll_avg_spinbox.value.return_value = 10
 
 
-# Mock the pydm module with our custom Display
-mock_pydm = Mock()
-mock_pydm.Display = MockDisplay
-sys.modules["pydm"] = mock_pydm
+@pytest.fixture(autouse=True, scope="function")
+def mock_q0_dependencies():
+    """Mock heavy dependencies only for Q0 GUI tests."""
 
-# Mock plot function
-mock_plot = Mock()
-sys.modules["pyqtgraph"].plot = mock_plot
-sys.modules["pyqtgraph"].PlotWidget = Mock()
+    # Create all the mocks
+    mock_pydm = Mock()
+    mock_pydm.Display = MockDisplay
+
+    mock_pyqtgraph = Mock()
+    mock_pyqtgraph.plot = Mock()
+    mock_pyqtgraph.PlotWidget = Mock()
+
+    # Use patch.dict to temporarily modify sys.modules
+    with patch.dict(
+        "sys.modules",
+        {
+            "lcls_tools": Mock(),
+            "lcls_tools.common": Mock(),
+            "lcls_tools.common.frontend": Mock(),
+            "lcls_tools.common.frontend.display": Mock(),
+            "lcls_tools.common.frontend.display.util": Mock(),
+            "pydm": mock_pydm,  # Move this into the patch.dict
+            "pyqtgraph": mock_pyqtgraph,  # Move this into the patch.dict too
+            "sc_linac_physics.applications.q0.q0_gui_utils": Mock(),
+            "sc_linac_physics.applications.q0.q0_cavity": Mock(),
+            "sc_linac_physics.applications.q0.q0_cryomodule": Mock(),
+            "sc_linac_physics.applications.q0.q0_measurement_widget": Mock(),
+            "sc_linac_physics.applications.q0.q0_utils": Mock(),
+            "sc_linac_physics.utils.sc_linac.linac": Mock(),
+            "sc_linac_physics.utils.sc_linac.linac_utils": Mock(),
+        },
+    ):
+        yield
+
+
+# Import after the fixture is defined
+from sc_linac_physics.applications.q0.q0_gui import make_non_blocking_error_popup, Q0GUI
 
 
 @pytest.fixture
@@ -204,6 +191,7 @@ def mock_cryomodule():
     return mock_cm
 
 
+# All your test classes remain exactly the same...
 class TestMakeNonBlockingErrorPopup:
     """Test the error popup function."""
 
