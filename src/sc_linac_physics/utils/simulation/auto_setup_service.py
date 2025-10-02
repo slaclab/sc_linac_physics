@@ -12,16 +12,14 @@ from caproto.server import (
     PvpropertyChar,
 )
 
-from utils.simulation.launcher_pv_group import LauncherPVGroup
-from utils.simulation.severity_prop import SeverityProp
+from sc_linac_physics.utils.simulation.launcher_pv_group import LauncherPVGroup
+from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 
 class AutoSetupPVGroup(LauncherPVGroup):
 
     def __init__(self, prefix: str, script_args: List[str] = None):
-        self.launcher_dir = os.path.join(
-            self.srf_root_dir, "applications/auto_setup/launcher"
-        )
+        self.launcher_dir = os.path.join(self.srf_root_dir, "applications/auto_setup/launcher")
         super().__init__(prefix + "AUTO:")
         self.script_args = script_args
 
@@ -87,9 +85,7 @@ class AutoSetupGlobalPVGroup(AutoSetupPVGroup):
 
 
 class AutoSetupCavityPVGroup(AutoSetupPVGroup):
-    progress: PvpropertyFloat = pvproperty(
-        name="PROG", value=0.0, dtype=ChannelType.FLOAT
-    )
+    progress: PvpropertyFloat = pvproperty(name="PROG", value=0.0, dtype=ChannelType.FLOAT)
     status_sevr: SeverityProp = SeverityProp(name="STATUS", value=0)
     status: PvpropertyEnum = pvproperty(
         name="STATUS",
