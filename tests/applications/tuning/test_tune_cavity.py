@@ -75,8 +75,9 @@ def test_move_to_cold_landing_freq(cavity):
     )
     cavity.detune_with_rf = MagicMock()
     cavity.detune_no_rf = MagicMock()
+    cavity._use_rf_pv_obj = make_mock_pv(get_val=True)
 
-    cavity.move_to_cold_landing(use_rf=True)
+    cavity.move_to_cold_landing()
 
     cavity._tune_config_pv_obj.get.assert_called()
     cavity.turn_off.assert_not_called()
@@ -98,8 +99,9 @@ def test_move_to_cold_landing_steps(cavity):
     )
     cavity.detune_with_rf = MagicMock()
     cavity.detune_no_rf = MagicMock()
+    cavity._use_rf_pv_obj = make_mock_pv(get_val=False)
 
-    cavity.move_to_cold_landing(use_rf=False)
+    cavity.move_to_cold_landing()
 
     cavity._tune_config_pv_obj.get.assert_called()
     cavity.turn_off.assert_not_called()
