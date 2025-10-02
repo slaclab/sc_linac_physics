@@ -4,15 +4,15 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from tests.utils.mock_utils import mock_func
-from utils.sc_linac.cavity import Cavity
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.utils.sc_linac.cavity import Cavity
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     PIEZO_ENABLE_VALUE,
     PIEZO_DISABLE_VALUE,
     PIEZO_MANUAL_VALUE,
     PIEZO_FEEDBACK_VALUE,
 )
-from utils.sc_linac.piezo import Piezo
+from sc_linac_physics.utils.sc_linac.piezo import Piezo
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture

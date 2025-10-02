@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from displays.cavity_display.backend.backend_cavity import BackendCavity
-from displays.cavity_display.backend.fault import FaultCounter, Fault
+from sc_linac_physics.displays.cavity_display.backend.backend_cavity import BackendCavity
+from sc_linac_physics.displays.cavity_display.backend.fault import FaultCounter, Fault
 from tests.displays.cavity_display.test_utils.utils import mock_parse
 
 
@@ -20,7 +20,7 @@ def cavity():
     rack.rack_name = "A" if cav_num <= 4 else "B"
 
     rack.cryomodule.linac.machine.lazy_fault_pvs = True
-    with patch("displays.cavity_display.utils.utils.parse_csv", mock_parse):
+    with patch("sc_linac_physics.displays.cavity_display.utils.utils.parse_csv", mock_parse):
         cavity = BackendCavity(cavity_num=cav_num, rack_object=rack)
         cavity._status_pv_obj = make_mock_pv()
         cavity._severity_pv_obj = make_mock_pv()
@@ -51,23 +51,17 @@ def test_get_fault_counts(cavity):
         mock.Mock(
             tlc="OFF",
             pv="PV1",
-            get_fault_count_over_time_range=mock.Mock(
-                return_value=mock_fault_counter_1
-            ),
+            get_fault_count_over_time_range=mock.Mock(return_value=mock_fault_counter_1),
         ),
         mock.Mock(
             tlc="MGT",
             pv="PV2",
-            get_fault_count_over_time_range=mock.Mock(
-                return_value=mock_fault_counter_2
-            ),
+            get_fault_count_over_time_range=mock.Mock(return_value=mock_fault_counter_2),
         ),
         mock.Mock(
             tlc="MGT",
             pv="PV3",
-            get_fault_count_over_time_range=mock.Mock(
-                return_value=mock_fault_counter_3
-            ),
+            get_fault_count_over_time_range=mock.Mock(return_value=mock_fault_counter_3),
         ),
     ]
     # Now need to replace cavity1.faults w/ our mock faults.
@@ -78,9 +72,7 @@ def test_get_fault_counts(cavity):
     end_time = start_time + timedelta(minutes=1)
 
     # Calling function we are testing w/ our time range.
-    result: DefaultDict[str, FaultCounter] = cavity.get_fault_counts(
-        start_time, end_time
-    )
+    result: DefaultDict[str, FaultCounter] = cavity.get_fault_counts(start_time, end_time)
 
     # Our assertions
     # 1. results needs to be an instance of dict
@@ -94,16 +86,12 @@ def test_get_fault_counts(cavity):
 
     # Edge Case for Empty Fault
     cavity.faults = OrderedDict()
-    empty_result: DefaultDict[str, FaultCounter] = cavity.get_fault_counts(
-        start_time, end_time
-    )
+    empty_result: DefaultDict[str, FaultCounter] = cavity.get_fault_counts(start_time, end_time)
     assert len(empty_result) == 0
 
     # 4. Need to verify get_fault_count_over_time_range was called for each fault
     for fault in mock_faults:
-        fault.get_fault_count_over_time_range.assert_called_once_with(
-            start_time=start_time, end_time=end_time
-        )
+        fault.get_fault_count_over_time_range.assert_called_once_with(start_time=start_time, end_time=end_time)
 
 
 def test_run_through_faults_not_faulted(cavity):

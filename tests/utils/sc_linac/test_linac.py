@@ -1,7 +1,7 @@
 import pytest
 
-from utils.sc_linac.linac import Machine
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.utils.sc_linac.linac import Machine
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     BEAMLINE_VACUUM_INFIXES,
     INSULATING_VACUUM_CRYOMODULES,
     LINAC_CM_MAP,

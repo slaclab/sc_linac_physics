@@ -11,15 +11,15 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 from numpy import pi, exp, linspace
 
-from applications.quench_processing.quench_cavity import QuenchCavity
-from applications.quench_processing.quench_utils import (
+from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_utils import (
     QUENCH_AMP_THRESHOLD,
     LOADED_Q_CHANGE_FOR_QUENCH,
     QUENCH_STABLE_TIME,
     RADIATION_LIMIT,
 )
-from tests.utils.mock_utils import mock_func
-from utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
+from sc_linac_physics.utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture
@@ -186,13 +186,7 @@ def test_validate_quench_true(cavity):
     time_data = linspace(-500e-3, 500e-3, num=500)
     amp_data = []
     for t in time_data:
-        amp_data.append(
-            16.6e6
-            * exp(
-                (-pi * cavity.frequency * t)
-                / (LOADED_Q_CHANGE_FOR_QUENCH * 0.5 * 4.5e7)
-            )
-        )
+        amp_data.append(16.6e6 * exp((-pi * cavity.frequency * t) / (LOADED_Q_CHANGE_FOR_QUENCH * 0.5 * 4.5e7)))
 
     cavity._fault_time_waveform_pv_obj = make_mock_pv(get_val=time_data)
     cavity._fault_waveform_pv_obj = make_mock_pv(get_val=amp_data)
