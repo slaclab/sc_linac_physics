@@ -126,9 +126,7 @@ Run tests with coverage (Linux headless):
 
 ```bash
 export QT_QPA_PLATFORM=offscreen
-pytest -vv -ra --durations=10 --tb=long -l --cov=sc_linac_physics --cov-branch --cov-report=term-missing
-# Or with Xvfb:
-# xvfb-run -a pytest --cov=sc_linac_physics --cov-branch --cov-report=term-missing
+pytest
 ```
 
 Combine multi-version coverage (if you test with multiple Python versions):
