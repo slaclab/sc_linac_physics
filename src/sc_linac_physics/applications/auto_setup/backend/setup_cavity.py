@@ -6,13 +6,13 @@ from lcls_tools.common.controls.pyepics.utils import PVInvalidError
 from sc_linac_physics.applications.auto_setup.backend.setup_linac_object import (
     SetupLinacObject,
 )
-from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
+from sc_linac_physics.utils.sc_linac.cavity import Cavity, linac_utils
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    RF_MODE_SELA,
     STATUS_READY_VALUE,
     STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,
 )
-from sc_linac_physics.utils.sc_linac.cavity import Cavity, linac_utils
-from sc_linac_physics.utils.sc_linac.linac_utils import RF_MODE_SELA
 
 
 class SetupCavity(Cavity, SetupLinacObject):

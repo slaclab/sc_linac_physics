@@ -12,6 +12,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     DetuneError,
     StepperAbortError,
     StepperError,
+    AutoLinacObject,
 )
 
 if TYPE_CHECKING:
@@ -68,3 +69,9 @@ class ColdWorker(QRunnable):
             self.cavity.stepper_tuner.abort_flag = False
             self.cavity.abort_flag = False
             self.signals.error.emit(str(e))
+
+
+class TuningLinacObject(AutoLinacObject):
+    def __init__(self):
+        # TODO this will also need "PARK" whenever we start using that functionality
+        super().__init__(name="COLD")
