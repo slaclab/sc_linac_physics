@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import SELCavity
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     RF_MODE_SELAP,
@@ -22,10 +21,16 @@ from tests.mock_utils import mock_func
 
 
 @pytest.fixture
-def cavity(monkeypatch) -> SELCavity:
+def cavity(monkeypatch):
+    monkeypatch.setenv("SC_LINAC_DISABLE_FILE_LOGS", "1")
+    # Ensure no real files/dirs/loggers are created
     monkeypatch.setattr("os.makedirs", mock_func)
     monkeypatch.setattr("lcls_tools.common.logger.logger.custom_logger", mock_func)
     monkeypatch.setattr("logging.FileHandler", mock_func)
+
+    # Import after patching, so the module sees the patched handlers
+    from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import SELCavity
+
     yield SELCavity(randint(1, 8), rack_object=MagicMock())
 
 

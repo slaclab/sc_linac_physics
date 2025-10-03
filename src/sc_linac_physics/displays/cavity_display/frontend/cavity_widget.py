@@ -2,8 +2,10 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, QPoint, QRectF
-from PyQt5.QtGui import (
+from pydm import Display, PyDMChannel
+from pydm.widgets.drawing import PyDMDrawingPolygon
+from qtpy.QtCore import Signal, QPoint, QRectF, Property as qtProperty, Qt, Slot
+from qtpy.QtGui import (
     QColor,
     QCursor,
     QFontMetrics,
@@ -12,9 +14,6 @@ from PyQt5.QtGui import (
     QMouseEvent,
     QTextOption,
 )
-from pydm import Display, PyDMChannel
-from pydm.widgets.drawing import PyDMDrawingPolygon
-from qtpy.QtCore import Property as qtProperty, Qt, Slot
 
 GREEN_FILL_COLOR = QColor(9, 141, 0)
 YELLOW_FILL_COLOR = QColor(255, 165, 0, 200)
@@ -49,7 +48,7 @@ SHAPE_PARAMETER_DICT = {
 
 class CavityWidget(PyDMDrawingPolygon):
     press_pos: Optional[QPoint] = None
-    clicked = pyqtSignal()
+    clicked = Signal()  # Changed from pyqtSignal()
 
     def __init__(self, parent=None, init_channel=None):
         super(CavityWidget, self).__init__(parent, init_channel)
@@ -90,21 +89,19 @@ class CavityWidget(PyDMDrawingPolygon):
 
     @qtProperty(str)
     def description_channel(self):
-        return self._description_channel.address
+        if self._description_channel:
+            return self._description_channel.address
+        return ""
 
     @description_channel.setter
     def description_channel(self, value: str):
-        self._description_channel = PyDMChannel(address=value, value_slot=self.description_changed)
-        self._description_channel.connect()
+        # Clean up existing channel
+        if hasattr(self, "_description_channel") and self._description_channel:
+            self._description_channel.disconnect()
 
-    @Slot(np.ndarray)
-    def description_changed(self, value: np.ndarray):
-        try:
-            desc = "".join(chr(i) for i in value)
-            self.setToolTip(desc)
-        except TypeError:
-            self.setToolTip(value)
-        self.update()
+        if value:  # Only create channel if value is not empty
+            self._description_channel = PyDMChannel(address=value, value_slot=self.description_changed)
+            self._description_channel.connect()
 
     @qtProperty(str)
     def severity_channel(self):
@@ -117,7 +114,44 @@ class CavityWidget(PyDMDrawingPolygon):
 
     @Slot(int)
     def severity_channel_value_changed(self, value: int):
-        self.change_shape(SHAPE_PARAMETER_DICT[value] if value in SHAPE_PARAMETER_DICT else SHAPE_PARAMETER_DICT[3])
+        """Handle severity channel value changes with better error handling."""
+        try:
+            shape_params = SHAPE_PARAMETER_DICT.get(value, SHAPE_PARAMETER_DICT[3])
+            self.change_shape(shape_params)
+        except Exception as e:
+            print(f"Error updating severity: {e}")
+            # Fallback to default state
+            self.change_shape(SHAPE_PARAMETER_DICT[3])
+
+    @Slot()
+    @Slot(object)
+    @Slot(str)
+    @Slot(np.ndarray)
+    def description_changed(self, value=None):
+
+        if value is None:
+            self.setToolTip("No description available")
+        else:
+            try:
+                if isinstance(value, np.ndarray):
+                    # Handle numpy array
+                    if value.size == 0:
+                        desc = "Empty array"
+                    else:
+                        desc = "".join(chr(int(i)) for i in value if 0 <= int(i) <= 127)
+                elif isinstance(value, (bytes, bytearray)):
+                    # Handle bytes
+                    desc = value.decode("utf-8", errors="ignore")
+                else:
+                    # Handle string or other types
+                    desc = str(value)
+
+                self.setToolTip(desc.strip())
+            except Exception as e:
+                print(f"Error processing description: {e}")
+                self.setToolTip("Description processing error")
+
+        self.update()
 
     def change_shape(self, shape_parameter_object):
         self.brush.setColor(shape_parameter_object.fillColor)
