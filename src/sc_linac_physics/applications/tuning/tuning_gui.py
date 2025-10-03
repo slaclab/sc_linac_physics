@@ -1,3 +1,5 @@
+from typing import List
+
 from PyQt5.QtCore import QThreadPool, QObject
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
@@ -16,6 +18,7 @@ from pydm import Display
 from pydm.widgets import PyDMTimePlot, PyDMSpinbox, PyDMEnumComboBox
 from pydm.widgets.timeplot import updateMode
 from qtpy import QtCore
+
 from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
 from sc_linac_physics.applications.tuning.tune_stepper import TuneStepper
 from sc_linac_physics.applications.tuning.tune_utils import ColdWorker
@@ -23,7 +26,6 @@ from sc_linac_physics.utils.qt import make_rainbow, CollapsibleGroupBox
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 from sc_linac_physics.utils.sc_linac.rack import Rack
-from typing import List
 
 
 class LabeledSpinbox:
@@ -156,21 +158,19 @@ class RackScreen(QObject):
 
         for idx, (detune_pv, cold_pv) in enumerate(zip(detune_pvs, cold_pvs)):
             r, g, b, a = colors[idx * 2]
-            detune_color = QColor(r, g, b, a)
-            r, g, b, a = colors[idx * 2 + 1]
-            cold_color = QColor(r, g, b, a)
+            rga_color = QColor(r, g, b, a)
 
             self.detune_plot.addYChannel(
                 y_channel=detune_pv,
                 useArchiveData=True,
-                color=detune_color,
+                color=rga_color,
                 yAxisName="Detune (Hz)",
             )
-            cold_color.setAlpha(127)
+            rga_color.setAlpha(127)
             self.detune_plot.addYChannel(
                 y_channel=cold_pv,
                 useArchiveData=True,
-                color=cold_color,
+                color=rga_color,
                 yAxisName="Detune (Hz)",
                 lineStyle=QtCore.Qt.DashLine,
             )
