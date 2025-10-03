@@ -130,7 +130,7 @@ class SetupGUI(Display):
             SETUP_MACHINE.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
             SETUP_MACHINE.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
             SETUP_MACHINE.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
-            SETUP_MACHINE.trigger_setup()
+            SETUP_MACHINE.trigger_start()
 
     def trigger_machine_shutdown(self):
         selection = self.machine_shutdown_popup.exec()
