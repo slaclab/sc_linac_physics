@@ -4,16 +4,16 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from tests.utils.mock_utils import mock_func
-from utils.sc_linac.cavity import Cavity
-from utils.sc_linac.linac_utils import (
+from sc_linac_physics.utils.sc_linac.cavity import Cavity
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     StepperAbortError,
     STEPPER_ON_LIMIT_SWITCH_VALUE,
     DEFAULT_STEPPER_MAX_STEPS,
     DEFAULT_STEPPER_SPEED,
     ALL_CRYOMODULES,
 )
-from utils.sc_linac.stepper import StepperTuner
+from sc_linac_physics.utils.sc_linac.stepper import StepperTuner
+from tests.mock_utils import mock_func
 
 
 @pytest.fixture
@@ -93,27 +93,19 @@ def test_reset_signed_steps(stepper):
 
 def test_on_limit_switch_a(stepper):
     stepper._limit_switch_a_pv_obj = make_mock_pv(get_val=STEPPER_ON_LIMIT_SWITCH_VALUE)
-    stepper._limit_switch_b_pv_obj = make_mock_pv(
-        get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1
-    )
+    stepper._limit_switch_b_pv_obj = make_mock_pv(get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1)
     assert stepper.on_limit_switch
 
 
 def test_on_limit_switch_b(stepper):
-    stepper._limit_switch_a_pv_obj = make_mock_pv(
-        get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1
-    )
+    stepper._limit_switch_a_pv_obj = make_mock_pv(get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1)
     stepper._limit_switch_b_pv_obj = make_mock_pv(get_val=STEPPER_ON_LIMIT_SWITCH_VALUE)
     assert stepper.on_limit_switch
 
 
 def test_on_limit_switch_neither(stepper):
-    stepper._limit_switch_a_pv_obj = make_mock_pv(
-        get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1
-    )
-    stepper._limit_switch_b_pv_obj = make_mock_pv(
-        get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1
-    )
+    stepper._limit_switch_a_pv_obj = make_mock_pv(get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1)
+    stepper._limit_switch_b_pv_obj = make_mock_pv(get_val=STEPPER_ON_LIMIT_SWITCH_VALUE + 1)
     assert not (stepper.on_limit_switch)
 
 

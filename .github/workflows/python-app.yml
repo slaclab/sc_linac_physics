@@ -1,38 +1,131 @@
 # This workflow will install Python dependencies, run tests and lint with a single version of Python
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
-name: Python application
+name: CI
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-    merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.12' , '3.13' ]
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PIP_DISABLE_PIP_VERSION_CHECK: 1
+      PIP_NO_PYTHON_VERSION_WARNING: 1
+      PYDM_DEFAULT_PROTOCOL: fake
+      PYTEST_ADDOPTS: -vv -ra --durations=10 --tb=long -l
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-      - name: Install dependencies
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
+
+      - name: Install system packages (Xvfb for Qt tests)
         run: |
-          python -m pip install --upgrade pip
-          pip install flake8 pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: Lint with flake8
+          sudo apt-get update
+          sudo apt-get install -y xvfb libxkbcommon-x11-0 libglu1-mesa libxcb-xinerama0
+
+      - name: Upgrade pip tooling
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install project (pyproject)
+        if: ${{ hashFiles('pyproject.toml') != '' }}
         run: |
-          # stop the build if there are flake8 errors
+          pip install -e ".[test]" || pip install -e .
+
+      - name: Install requirements.txt (fallback)
+        if: ${{ hashFiles('pyproject.toml') == '' && hashFiles('requirements.txt') != '' }}
+        run: pip install -r requirements.txt
+
+      - name: Ensure package importable (fallback to src on PYTHONPATH)
+        shell: bash
+        run: |
+          python - <<'PY'
+          try:
+              import sc_linac_physics  # noqa: F401
+              print("Package import OK.")
+          except ModuleNotFoundError:
+              print("Package not importable; adding src to PYTHONPATH for this job.")
+              import os
+              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+                  f.write(f"PYTHONPATH={os.getcwd()}/src\n")
+          PY
+
+      - name: Ensure dev tooling present
+        run: pip install -U pytest pytest-qt pytest-cov flake8 black pytest-asyncio
+
+      - name: Lint
+        run: |
           flake8 . --count --max-complexity=10 --max-line-length=120 --show-source --statistics
-      - name: Test with pytest
+          black --check .
+
+      - name: Run tests with coverage (headless Qt)
+        env:
+          COVERAGE_FILE: .coverage.${{ matrix.python-version }}
         run: |
-          QT_QPA_PLATFORM=offscreen PYDM_DEFAULT_PROTOCOL=fake python -m pytest -rx
+          xvfb-run -a pytest \
+            --cov=sc_linac_physics \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+      - name: Download coverage from matrix
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Combine and generate reports
+        run: |
+          python -m pip install --upgrade coverage
+          coverage combine
+          coverage report -m
+          coverage xml -o coverage.xml
+          coverage html -d htmlcov
+
+      - name: Upload combined coverage artifacts
+        if: ${{ matrix.python-version == '3.12' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-merged
+          path: |
+            .coverage
+            coverage.xml
+            htmlcov/**
+          retention-days: 7
+
+      - name: Build sdist and wheel
+        if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
+        run: |
+          pip install build twine
+          python -m build
+          twine check dist/*
+
+      - name: Upload build artifacts
+        if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
