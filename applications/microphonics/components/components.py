@@ -36,19 +36,16 @@ class ChannelSelectionGroup(QGroupBox):
         layout = QGridLayout()
         self.setLayout(layout)
         current_row = 0
+        # Create checkboxes
+        for col_idx, (name, config) in enumerate(self.FIXED_CHANNELS.items()):
+            checkbox = QCheckBox(config["label"])
+            checkbox.setChecked(config["default_state"])
+            checkbox.setEnabled(config["enabled"])
+            self.channel_widgets[name] = checkbox
+            layout.addWidget(checkbox, current_row, col_idx)
 
-        # Create checkboxes for FIXED_CHANNELS
         if self.FIXED_CHANNELS:
-            col_idx = 0
-            for name, config in self.FIXED_CHANNELS.items():
-                checkbox = QCheckBox(config["label"])
-                checkbox.setChecked(config["default_state"])
-                checkbox.setEnabled(config["enabled"])
-                self.channel_widgets[name] = checkbox
-                layout.addWidget(checkbox, current_row, col_idx)
-                col_idx += 1
-            if col_idx > 0:
-                current_row += 1
+            current_row += 1
 
         # Adding stretch to push all UI elements to the top.
         layout.setRowStretch(current_row, 1)

@@ -24,7 +24,7 @@ class MeasurementConfig:
         if self.decimation not in {1, 2, 4, 8}:
             return f"Invalid decimation value: {self.decimation}. Must be 1, 2, 4, or 8"
         if self.buffer_count < 1:
-            return f"Invalid buffer count: {self.buffer_count}. Must be positive"
+            return f"Invalid buffer count: {self.buffer_count}. Must be greater than 0"
         return None
 
 
@@ -183,12 +183,12 @@ class AsyncDataManager(QObject):
 
         self.job_running = False
 
-    def stop_measurement(self, chassis_id: str):
+    def stop_measurement(self, chassis_id: Optional[str] = None):
         """Stop measurement for specific chassis"""
         if chassis_id:
             self._stop_worker(chassis_id)
         else:
-            self._stop_all_workers()
+            self.stop_all()
 
     def stop_all(self):
         """Stop all measurements and cleanup thread"""

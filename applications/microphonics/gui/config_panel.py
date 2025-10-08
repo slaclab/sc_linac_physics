@@ -105,7 +105,7 @@ class ConfigPanel(QWidget):
         try:
             return int(self.decim_combo.currentText())
         except ValueError:
-            print("Warning: Could not parse decimation from UI, defaulting to {self.DEFAULT_DECIMATION_VALUE}.")
+            print(f"Warning: Could not parse decimation from UI, defaulting to {self.DEFAULT_DECIMATION_VALUE}.")
             return self.DEFAULT_DECIMATION_VALUE
 
     def _set_default_decimation(self):
@@ -423,24 +423,6 @@ class ConfigPanel(QWidget):
             self.buffer_spin.valueChanged.connect(lambda: self._emit_config_changed() if not self.is_updating else None)
         else:
             print("WARNING (ConfigPanel): self.buffer_spin not found during signal connection.")
-
-    def _emit_decimation_change(self):
-        """
-        Slot connected to the decimation combo boxes currentIndexChanged signal.
-        Emits the decimationSettingChanged signal w/ new decimation value.
-        """
-
-        try:
-            # Get current text of combo box and convert to an integer
-            dec_value = int(self.decim_combo.currentText())
-            self.decimationSettingChanged.emit(dec_value)
-            print(f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}")
-        except ValueError:
-            print(
-                f"WARNING (ConfigPanel): Could not parse decimation value from "
-                f"combo box: {self.decim_combo.currentText()}"
-            )
-            pass
 
     def _handle_decimation_change(self):
         """Handle changes to decimation combo box"""

@@ -1,9 +1,8 @@
-import traceback
+import logging
 from pathlib import Path
 from typing import Dict
 
-import numpy as np
-from PyQt5.QtCore import QTimer, pyqtSignal
+from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QMessageBox
 from pydm import Display
 
@@ -22,11 +21,11 @@ from applications.microphonics.gui.status_panel import StatusPanel
 from applications.microphonics.plots.plot_panel import PlotPanel
 from applications.microphonics.utils.pv_utils import format_pv_base
 
+logger = logging.getLogger(__name__)
+
 
 class MicrophonicsGUI(Display):
     """Main window for the Microphonics GUI Measurement system"""
-
-    measurementError = pyqtSignal(str)
 
     def __init__(self, parent=None, args=None, macros=None):
         super().__init__(parent=parent, args=args, macros=macros)
@@ -34,9 +33,6 @@ class MicrophonicsGUI(Display):
         self.setMinimumSize(1200, 800)
 
         self.stats_calculator = StatisticsCalculator()
-
-        # Error signal connection
-        self.measurementError.connect(self._handle_measurement_error)
 
         # Data Manager
         self.data_manager = AsyncDataManager()
@@ -48,7 +44,9 @@ class MicrophonicsGUI(Display):
 
         # Connect data manager signals
         self.data_manager.acquisitionProgress.connect(self._handle_progress)
-        self.data_manager.acquisitionError.connect(self._handle_error)
+        self.data_manager.acquisitionError.connect(
+            lambda chassis_id, msg: self._show_error_message(f"Chassis {chassis_id}: {msg}", title="Acquisition Error")
+        )
         self.data_manager.acquisitionComplete.connect(self._handle_completion)
 
         # Main Layout
@@ -129,7 +127,7 @@ class MicrophonicsGUI(Display):
         self.data_loading.file_selected.connect(self.load_data)
 
     def on_config_changed(self, config: Dict):
-        print("Configuration changed:", config)
+        logger.info("Configuration changed: %s", config)
         try:
             # Update UI based on new configuration
             if not self.measurement_running:
@@ -146,18 +144,17 @@ class MicrophonicsGUI(Display):
 
         # Get selected channels from ChannelSelectionGroup
         selected_channels_ui = self.channel_selection.get_selected_channels()
-        print(f"Debug: Selected channels (from UI): {selected_channels_ui}")
+        logger.debug("Selected channels (from UI): %s", selected_channels_ui)
 
-        # For debug: hardcode channel selection
         channels_for_script = selected_channels_ui
-        print(f"Debug: Channels actually sent to script: {channels_for_script}")
+        logger.debug("Channels actually sent to script: %s", channels_for_script)
 
         if not config.get("modules"):
-            print("Debug: No modules in config")
+            logger.debug("No modules in config.")
             return result
 
         for module in config["modules"]:
-            print(f"\nDebug: Processing module: {module}")
+            logger.debug("Processing module: %s", module)
             base_channel = module["base_channel"]
 
             # Group cavities by rack (A/B)
@@ -165,14 +162,14 @@ class MicrophonicsGUI(Display):
             rack_b_cavities = []
 
             for cavity_num, is_selected in config["cavities"].items():
-                print(f"Debug: Checking cavity {cavity_num}: {is_selected}")
+                logger.debug("Checking cavity %s: selected=%s", cavity_num, is_selected)
                 if is_selected:  # Only process selected cavities
                     if cavity_num <= 4:
                         rack_a_cavities.append(cavity_num)
                     else:
                         rack_b_cavities.append(cavity_num)
-            print(f"Debug: Rack A cavities: {rack_a_cavities}")
-            print(f"Debug: Rack B cavities: {rack_b_cavities}")
+            logger.debug("Rack A cavities: %s", rack_a_cavities)
+            logger.debug("Rack B cavities: %s", rack_b_cavities)
 
             # Create configs for each rack that has selected cavities
             if rack_a_cavities:
@@ -186,8 +183,7 @@ class MicrophonicsGUI(Display):
                     ),
                     "cavities": rack_a_cavities,
                 }
-                # Check which channels were actually used
-                print(f"Debug: Added Rack A config (using {channels_for_script}): {result[chassis_id]}")
+                logger.debug("Added Rack A config: %s", result[chassis_id])
 
             if rack_b_cavities:
                 chassis_id = f"{base_channel}:RESB"
@@ -200,30 +196,20 @@ class MicrophonicsGUI(Display):
                     ),
                     "cavities": rack_b_cavities,
                 }
-                # Checking which channel was used
-                print(f"Debug: Added Rack B config (using {channels_for_script}): {result[chassis_id]}")
+                logger.debug("Added Rack B config: %s", result[chassis_id])
 
-        print(f"\nDebug: Final result: {result}")
+        logger.debug("Final chassis config: %s", result)
         return result
 
     def start_measurement(self):
         """Start the measurement process"""
-        print("Start measurement clicked")
+        logger.info("Start measurement clicked")
         try:
             # Remove cothread.Spawn and use QTimer
             QTimer.singleShot(0, self._start_measurement_async)
         except Exception as e:
-            print(f"Error in start_measurement: {str(e)}")
+            logger.exception("Unexpected error in start_measurement")
             QMessageBox.critical(self, "Error", str(e))
-
-    def _handle_measurement_error(self, error_msg):
-        """Handle measurement errors"""
-        msg_box = QMessageBox(self)
-        msg_box.setIcon(QMessageBox.Critical)
-        msg_box.setText(error_msg)
-        msg_box.setWindowTitle("Error")
-        msg_box.setModal(False)
-        msg_box.show()
 
     def _start_measurement_async(self):
         """Async portion of start measurement"""
@@ -232,34 +218,31 @@ class MicrophonicsGUI(Display):
             # A check to see if any cavities are selected
             selected_cavities = [num for num, selected in config["cavities"].items() if selected]
             if not selected_cavities:
-                self.measurementError.emit("Please select at least one cavity before starting.")
+                self._show_error_message("Please select at least one cavity before starting.", is_modal=False)
                 return
             self.plot_panel.clear_plots()  # Clear old plots before starting new measurement
-            print("Current config:", config)
+            logger.info("Current config: %s", config)
 
             # Check for cross CM cavity selection
             low_cm = any(c <= 4 for c in selected_cavities)
             high_cm = any(c > 4 for c in selected_cavities)
             if low_cm and high_cm:
-                print("Note: Cavities span both racks - will use parallel acquisition")
+                logger.info("Cavities span both racks, using parallel acquisition.")
 
             chassis_config = self._split_chassis_config(config)
             if not chassis_config:
                 raise ValueError(f"No valid chassis configuration created. Selected cavities: {selected_cavities}")
 
-            print("Chassis config:", chassis_config)
+            logger.info("Split chassis config: %s", chassis_config)
 
-            self.measurement_running = True
-            self.config_panel.set_measurement_running(True)
-            self.channel_selection.setEnabled(False)
-            self.data_loading.setEnabled(False)
+            self._reset_measurement_ui_state(is_running=True)
 
             self.data_manager.initiate_measurement(chassis_config)
-            print("Measurement started successfully")
+            logger.info("Measurement started successfully.")
 
         except Exception as e:
-            print(f"Error in _start_measurement_async: {str(e)}")
-            self.measurementError.emit(str(e))
+            logger.exception("Failed to start measurement")
+            self._show_error_message(str(e))
             self.measurement_running = False
             self.config_panel.set_measurement_running(False)
             self.channel_selection.setEnabled(True)
@@ -267,49 +250,45 @@ class MicrophonicsGUI(Display):
 
     def stop_measurement(self):
         """Stop the measurement process"""
-        print("Stop measurement called")
-        if self.measurement_running:
-            self.plot_panel.clear_plots()  # Clear plots when stopping
-            self.data_manager.stop_all()
-            self.measurement_running = False
-            self.config_panel.set_measurement_running(False)
-            self.channel_selection.setEnabled(True)
-            self.data_loading.setEnabled(True)
+        logger.info("Stop measurement called.")
+        self.data_manager.stop_all()
+        self._reset_measurement_ui_state(is_running=False)
+        self.plot_panel.clear_plots()
+        self.status_panel.reset_all()
 
-            for cavity_num in range(1, 9):
-                self.status_panel.update_statistics(
-                    cavity_num,
-                    {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0, "outliers": 0},
-                )
-
-    def _handle_error(self, chassis_id: str, error_msg: str):
-        """Show modal error dialogs during tests"""
+    def _show_error_message(self, message: str, title: str = "Error", is_modal: bool = True):
+        """Displays critical error message box."""
+        logger.error("Displaying error to user: %s - %s", title, message)
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Critical)
-        msg_box.setText(error_msg)
-        msg_box.setWindowTitle("Error")
-        msg_box.setModal(True)
+        msg_box.setText(message)
+        msg_box.setWindowTitle(title)
+        msg_box.setModal(is_modal)
         msg_box.show()
+
+    def _reset_measurement_ui_state(self, is_running: bool):
+        """Enable/disable UI components based on measurement state."""
+        self.measurement_running = is_running
+        self.config_panel.set_measurement_running(is_running)
+        self.channel_selection.setEnabled(not is_running)
+        self.data_loading.setEnabled(not is_running)
 
     def _handle_job_progress(self, overall_progress: int):
         """Handle overall job progress"""
-        print(f"Overall job progress: {overall_progress}%")
+        logger.info("Overall job progress: %s%%", overall_progress)
 
     def _handle_job_error(self, error_msg: str):
         """Handle job-level errors"""
-        print(f"Job error: {error_msg}")
+        logger.error("Job error: %s", error_msg)
         # Reset UI state
-        self.measurement_running = False
-        self.config_panel.set_measurement_running(False)
-        self.channel_selection.setEnabled(True)
-        self.data_loading.setEnabled(True)
+        self._reset_measurement_ui_state(is_running=False)
 
         # Show error to user
         QMessageBox.critical(self, "Measurement Failed", error_msg)
 
     def _handle_job_complete(self, aggregated_data: dict):
         """Handle job completion w/ aggregated data from all racks"""
-        print("DEBUG: Job completed, processing aggregated data")
+        logger.debug("Job completed, processing aggregated data.")
 
         # Process aggregated data
         self._handle_new_data("measurement", aggregated_data)
@@ -322,7 +301,7 @@ class MicrophonicsGUI(Display):
 
     def _handle_completion(self, chassis_id: str):
         """Handle rack completion"""
-        print(f"DEBUG: Rack {chassis_id} completed")
+        logger.debug("Rack %s completed.", chassis_id)
 
     def _handle_progress(self, chassis_id: str, cavity_num: int, progress: int):
         """Handle progress updates from measurement"""
@@ -330,54 +309,48 @@ class MicrophonicsGUI(Display):
 
     def _handle_new_data(self, source: str, data_dict: dict):
         """Handle new data from measurement or file"""
-        print(f"DEBUG: _handle_new_data received from '{source}'")
+        logger.debug("_handle_new_data received from '%s'", source)
 
         try:
-            # Get list of cavities and nested cavity data
             cavity_list = data_dict.get("cavity_list", [])
             all_cavity_data = data_dict.get("cavities", {})
 
             if not cavity_list:
-                print("WARN: _handle_new_data received empty cavity list or missing 'cavity_list' key.")
-                return  # Nothing to process
+                logger.warning("Received data with no cavities.")
+                return
 
-            # Update stats for each cavity present i
             for cavity_num in cavity_list:
                 cavity_channel_data = all_cavity_data.get(cavity_num)
 
                 if not cavity_channel_data:
-                    print(f"WARN: No channel data found for cavity {cavity_num} in data_dict['cavities'].")
+                    logger.warning("No channel data found for cavity %s in data_dict['cavities'].", cavity_num)
                     continue
 
                 df_data = cavity_channel_data.get("DF")
 
                 # Check if DF data is valid for stats
-                if df_data is not None and isinstance(df_data, np.ndarray) and df_data.size > 0:
-                    try:
+                try:
+                    if df_data is not None and df_data.size > 0:
                         stats = self.stats_calculator.calculate_statistics(df_data)
                         panel_stats = self.stats_calculator.convert_to_panel_format(stats)
-
-                        # Update stats display in the status panel
                         self.status_panel.update_statistics(cavity_num, panel_stats)
-                    except Exception as stat_err:
-                        # Log error but continue processing other cavities/plots
-                        print(f"ERROR: Failed to calculate/update stats for Cav {cavity_num}: {stat_err}")
-                        traceback.print_exc()
-                else:
-                    # Log if DF data is missing or invalid for stats
-                    print(f"WARN: No valid 'DF' data found for statistics for cavity {cavity_num}.")
+                    else:
+                        logger.warning("No valid 'DF' data for statistics for cavity %s.", cavity_num)
+                        self.status_panel.update_cavity_status(cavity_num, "Complete", 100, "No DF data for stats")
 
-            print(f"DEBUG: Calling plot_panel.update_plots w/ data for cavities: {cavity_list}")
+                except Exception:
+                    logger.exception("Failed to calculate statistics for Cavity %s", cavity_num)
+                    self._show_error_message(
+                        f"Could not calculate statistics for Cavity {cavity_num}.",
+                        title="Data Processing Warning",
+                        is_modal=False,
+                    )
+            logger.debug("Calling plot_panel.update_plots w/ data for cavities: %s", cavity_list)
             self.plot_panel.update_plots(data_dict)
 
-        except KeyError as ke:
-            # Catch errors if expected keys are missing from data_dict
-            print(f"ERROR in _handle_new_data: Missing key {ke} in received data dictionary.")
-            traceback.print_exc()
-        except Exception as e:
-            # Catch any other unexpected errors during processing
-            print(f"CRITICAL ERROR in _handle_new_data processing data from '{source}': {str(e)}")
-            traceback.print_exc()
+        except Exception:
+            logger.exception("Critical error while processing new data from source '%s'", source)
+            self._show_error_message("An unexpected error occurred while processing data.", title="Processing Error")
 
     def load_data(self, file_path: Path):
         """Load data from file and display using existing visualization code."""
@@ -393,7 +366,7 @@ class MicrophonicsGUI(Display):
 
     def _handle_load_error(self, error_msg: str):
         """Handle errors during data loading"""
-        print(f"Error loading data: {error_msg}")
+        logger.error("Error loading data: %s", error_msg)
         self.data_loading.update_file_info("Error loading file")
         QMessageBox.critical(self, "Error", error_msg)
 
