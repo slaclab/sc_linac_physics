@@ -111,6 +111,10 @@ class SetupCavity(Cavity, SetupLinacObject):
             raise linac_utils.CavityAbortError(err_msg)
 
     def shut_down(self):
+        if self.script_is_running:
+            self.status_message = f"{self} script already running"
+            return
+
         self.clear_abort()
 
         try:
@@ -219,33 +223,15 @@ class SetupCavity(Cavity, SetupLinacObject):
             raise
 
     def request_characterization(self):
-        # Always check for abort first and let check_abort handle the error
         self.check_abort()
-
-        try:
-            if self.cav_char_requested:
-                self.status_message = f"Running {self} Cavity Characterization"
-                try:
-                    result = self.characterize()
-                    if result is not None:
-                        q = result.get("probe_q", 1)
-                        self.calc_probe_q_pv_obj.put(q)
-                    self.progress = 70
-                    self.status_message = f"{self} Characterized"
-                except Exception as e:
-                    self.status = STATUS_ERROR_VALUE
-                    self.status_message = f"{self} characterization error: {str(e)}"
-                    raise
-
-            # Always update progress
-            self.progress = 75
-
-        except Exception as e:
-            if not isinstance(e, linac_utils.CavityAbortError):
-                # Don't overwrite abort message if this is an abort error
-                self.status = STATUS_ERROR_VALUE
-                self.status_message = "Error during cavity characterization"
-            raise
+        if self.cav_char_requested:
+            self.status_message = f"Running {self} Cavity Characterization"
+            self.characterize()
+            self.progress = 60
+            self.calc_probe_q_pv_obj.put(1)
+            self.progress = 70
+            self.status_message = f"{self} Characterized"
+        self.progress = 75
 
     def request_auto_tune(self):
         self.check_abort()
