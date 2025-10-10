@@ -190,7 +190,6 @@ class TestIntegration:
                 patch("asyncio.sleep", new_callable=AsyncMock),
                 patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock),
             ):
-
                 # Test stepper move operation using write method to avoid putter issues
                 if hasattr(stepper_group, "target"):
                     # Set a timeout to prevent hanging
@@ -215,7 +214,6 @@ class TestIntegration:
                 patch.object(piezo_group.cavity_group.detune, "write", new_callable=AsyncMock),
                 patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock),
             ):
-
                 # Test piezo adjustment using write method
                 if hasattr(piezo_group, "voltage"):
                     await asyncio.wait_for(piezo_group.voltage.write(25.0), timeout=1.0)
@@ -345,7 +343,6 @@ class TestAsyncResourceCleanup:
             patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock),
             patch.object(piezo_group.cavity_group.detune, "write", new_callable=AsyncMock),
         ):
-
             # Execute operations with timeout using write methods
             if hasattr(piezo_group, "voltage"):
                 await asyncio.wait_for(piezo_group.voltage.write(30.0), timeout=0.5)
@@ -373,7 +370,6 @@ class TestMockingStrategy:
             patch("asyncio.create_task", new_callable=AsyncMock) as mock_create_task,
             patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock) as mock_write,
         ):
-
             # Mock create_task to return a completed future
             mock_future = AsyncMock()
             mock_future.done.return_value = True

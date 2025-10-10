@@ -158,7 +158,6 @@ class TestAmplitudeControl:
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
             patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
         ):
-
             await regular_cavity.ades.putter(None, new_amplitude)
 
         # Verify amplitude readbacks are updated
@@ -179,7 +178,6 @@ class TestAmplitudeControl:
             patch.object(hl_cavity.amean, "write", new_callable=AsyncMock),
             patch.object(hl_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
         ):
-
             await hl_cavity.ades.putter(None, new_amplitude)
 
         # For HL cavity, length = 0.346
@@ -198,7 +196,6 @@ class TestAmplitudeControl:
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock),
             patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
         ):
-
             await regular_cavity.ades.putter(None, amplitude)
 
         # gdes.write should not be called since gact already matches
@@ -217,7 +214,6 @@ class TestGradientControl:
             patch.object(regular_cavity.gact, "write", new_callable=AsyncMock) as mock_gact,
             patch.object(regular_cavity.ades, "write", new_callable=AsyncMock) as mock_ades,
         ):
-
             await regular_cavity.gdes.putter(None, new_gradient)
 
         # Verify gradient readback is updated
@@ -236,7 +232,6 @@ class TestGradientControl:
             patch.object(hl_cavity.gact, "write", new_callable=AsyncMock),
             patch.object(hl_cavity.ades, "write", new_callable=AsyncMock) as mock_ades,
         ):
-
             await hl_cavity.gdes.putter(None, new_gradient)
 
         # For HL cavity, length = 0.346
@@ -254,7 +249,6 @@ class TestGradientControl:
             patch.object(regular_cavity.gact, "write", new_callable=AsyncMock),
             patch.object(regular_cavity.ades, "write", new_callable=AsyncMock) as mock_ades,
         ):
-
             await regular_cavity.gdes.putter(None, gradient)
 
         # ades.write should not be called since aact already matches
@@ -273,7 +267,6 @@ class TestPhaseControl:
             patch.object(regular_cavity.pact, "write", new_callable=AsyncMock) as mock_pact,
             patch.object(regular_cavity.pmean, "write", new_callable=AsyncMock) as mock_pmean,
         ):
-
             await regular_cavity.pdes.putter(None, new_phase)
 
         mock_pact.assert_called_once_with(new_phase)
@@ -294,7 +287,6 @@ class TestPhaseControl:
                 patch.object(regular_cavity.pact, "write", new_callable=AsyncMock) as mock_pact,
                 patch.object(regular_cavity.pmean, "write", new_callable=AsyncMock) as mock_pmean,
             ):
-
                 await regular_cavity.pdes.putter(None, input_phase)
 
             mock_pact.assert_called_once_with(expected_phase)
@@ -327,7 +319,6 @@ class TestRFStateControl:
             patch.object(regular_cavity.gact, "write", new_callable=AsyncMock) as mock_gact,
             patch.object(regular_cavity.rf_state_act, "write", new_callable=AsyncMock) as mock_rf_state,
         ):
-
             await regular_cavity.power_off()
 
         mock_amean.assert_called_once_with(0)
@@ -348,7 +339,6 @@ class TestRFStateControl:
             patch.object(regular_cavity.gact, "write", new_callable=AsyncMock) as mock_gact,
             patch.object(regular_cavity.rf_state_act, "write", new_callable=AsyncMock) as mock_rf_state,
         ):
-
             await regular_cavity.power_on()
 
         mock_aact.assert_called_once_with(20.0)
@@ -381,7 +371,6 @@ class TestInterlockSystem:
             patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact,
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
         ):
-
             await regular_cavity.quench_latch.putter(None, 1)  # Fault
 
         # Quench should zero the amplitude
@@ -399,7 +388,6 @@ class TestInterlockSystem:
             patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact,
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
         ):
-
             await regular_cavity.interlock_reset.putter(None, 1)  # Reset
 
         # Should clear quench latch and restore amplitude
@@ -419,7 +407,6 @@ class TestCalibrationAndMaintenance:
             patch.object(regular_cavity.probe_cal_start, "write", new_callable=AsyncMock) as mock_start,
             patch("sc_linac_physics.utils.simulation.cavity_service.datetime") as mock_datetime,
         ):
-
             mock_datetime.now.return_value.strftime.return_value = "2023-12-01-14:30:00"
 
             await regular_cavity.probe_cal_start.putter(None, 1)
@@ -435,7 +422,6 @@ class TestCalibrationAndMaintenance:
             patch.object(regular_cavity.probe_cal_time, "write", new_callable=AsyncMock) as mock_time,
             patch.object(regular_cavity.probe_cal_start, "write", new_callable=AsyncMock) as mock_start,
         ):
-
             await regular_cavity.probe_cal_start.putter(None, 0)
 
         # Should not update anything
@@ -576,7 +562,6 @@ class TestEdgeCasesAndErrorHandling:
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
             patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
         ):
-
             await regular_cavity.ades.putter(None, 0.0)
 
         mock_aact.assert_called_once_with(0.0)
@@ -602,7 +587,6 @@ class TestEdgeCasesAndErrorHandling:
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock),
             patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
         ):
-
             await regular_cavity.ades.putter(None, large_amplitude)
 
         expected_gradient = large_amplitude / regular_cavity.length

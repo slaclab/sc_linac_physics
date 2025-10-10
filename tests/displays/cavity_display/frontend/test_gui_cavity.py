@@ -23,7 +23,6 @@ def mock_dependencies():
         patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.EnumLabel") as mock_enum,
         patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMFaultButton") as mock_fault_btn,
     ):
-
         # Configure mocks to return reasonable defaults
         mock_header.return_value = Mock()
         mock_cavity_widget.return_value = Mock()

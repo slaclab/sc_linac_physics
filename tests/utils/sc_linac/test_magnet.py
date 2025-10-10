@@ -34,7 +34,6 @@ def hl():
 
 
 def test_pv_prefix_quad(cryomodule):
-
     assert cryomodule.quad.pv_prefix == f"QUAD:{cryomodule.linac.name}:{cryomodule.name}85:"
 
 

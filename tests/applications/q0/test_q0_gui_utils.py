@@ -342,7 +342,6 @@ class TestIntegration:
         # Arrange
         mock_caget.return_value = 1
         with patch("sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1):
-
             # Step 1: Setup cryo parameters
             setup_worker = CryoParamSetupWorker(mock_cryomodule)
             setup_worker.status = Mock()

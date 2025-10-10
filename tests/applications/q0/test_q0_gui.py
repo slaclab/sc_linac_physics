@@ -119,7 +119,6 @@ def setup_mocks():
         patch("sc_linac_physics.applications.q0.q0_gui.ALL_CRYOMODULES", ["01", "02"]),
         patch("sc_linac_physics.applications.q0.q0_gui.q0_gui_utils") as mock_utils,
     ):
-
         mock_utils.CavAmpControl = MockCavAmpControl
 
         # Create mock workers that don't try to connect to EPICS
@@ -231,7 +230,6 @@ class TestQ0GUICalibrationWorkflow:
             patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
-
             # Execute the method
             gui.load_calibration()
 
@@ -558,7 +556,6 @@ class TestQ0GUIQ0LoadMethods:
             patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
-
             gui.load_q0()
 
             # The method should create a window and store it
@@ -584,7 +581,6 @@ class TestQ0GUIQ0LoadMethods:
             patch("sc_linac_physics.applications.q0.q0_gui.Display"),
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show,
         ):
-
             gui.load_q0()
 
             # Should show the existing window
@@ -614,7 +610,6 @@ class TestQ0GUIQ0LoadMethods:
             patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup,
         ):
-
             # Make Display raise an exception
             mock_display.side_effect = Exception("Failed to create window")
 
@@ -636,7 +631,6 @@ class TestQ0GUIQ0LoadMethods:
             patch("sc_linac_physics.applications.q0.q0_gui.Display"),
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
-
             try:
                 gui.load_q0()
                 success = True
@@ -708,7 +702,6 @@ class TestQ0GUIShowCalibrationData:
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show_display,
         ):
-
             # Set up mock plot widgets
             mock_plot_widget = Mock()
             mock_plot_widget.plot.return_value = Mock()
@@ -757,7 +750,6 @@ class TestQ0GUIShowCalibrationData:
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
-
             mock_plot_widget = Mock()
             mock_plot_widget.plot.return_value = Mock()
             mock_plot_widget.removeItem = Mock()
@@ -788,7 +780,6 @@ class TestQ0GUIShowCalibrationData:
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
-
             mock_plot_widget = Mock()
             mock_plot_widget.plot.return_value = Mock()
             mock_plot_widget.removeItem = Mock()
@@ -819,7 +810,6 @@ class TestQ0GUIShowCalibrationData:
             patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup,
         ):
-
             # Make Display raise an exception
             mock_display.side_effect = Exception("Plot creation failed")
 
@@ -858,7 +848,6 @@ class TestQ0GUIShowCalibrationData:
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
-
             mock_plot_widget = Mock()
             mock_plot_item = Mock()
             mock_plot_widget.plot.return_value = mock_plot_item
@@ -889,7 +878,6 @@ class TestQ0GUIShowCalibrationData:
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
             patch("sc_linac_physics.applications.q0.q0_gui.QHBoxLayout") as mock_layout,
         ):
-
             mock_window = Mock()
             mock_display.return_value = mock_window
 
@@ -926,7 +914,6 @@ class TestQ0GUIShowCalibrationData:
             patch("sc_linac_physics.applications.q0.q0_gui.plot"),
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
-
             gui.show_calibration_data()
             # If we reach here, the method executed
             assert True

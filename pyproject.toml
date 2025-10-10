@@ -37,14 +37,46 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-qt", "pytest-cov", "pytest-asyncio"]
-dev = ["black", "flake8", "pytest", "pytest-qt", "pytest-cov", "pytest-asyncio"]
+dev = [
+    "black",
+    "flake8",
+    "pre-commit",
+    "pytest",
+    "pytest-qt",
+    "pytest-cov",
+    "pytest-asyncio"
+]
 
 [tool.black]
 line-length = 120
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+# A regex preceded with ^/ will apply only to files and directories
+# in the root of the project.
+^/build/
+^/dist/
+^/.eggs/
+^/docs/
+'''
 
 [tool.flake8]
 max-line-length = 120
 max-complexity = 10
+extend-ignore = [
+    "E203",  # whitespace before ':' - conflicts with black
+    "W503"   # line break before binary operator - conflicts with black
+]
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+per-file-ignores = [
+    "__init__.py:F401"  # ignore unused imports in __init__.py files
+]
 
 [tool.pytest.ini_options]
 addopts = "-vv -ra --durations=10 --cov=sc_linac_physics --cov-report=term-missing --cov-report=html"
