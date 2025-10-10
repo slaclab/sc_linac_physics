@@ -128,7 +128,6 @@ class CavityWidget(PyDMDrawingPolygon):
     @Slot(str)
     @Slot(np.ndarray)
     def description_changed(self, value=None):
-
         if value is None:
             self.setToolTip("No description available")
         else:
@@ -180,7 +179,6 @@ class CavityWidget(PyDMDrawingPolygon):
         fm = QFontMetrics(painter.font())
 
         if self._cavity_text:
-
             sx = rectf.width() / fm.horizontalAdvance(self._cavity_text)
 
             try:
