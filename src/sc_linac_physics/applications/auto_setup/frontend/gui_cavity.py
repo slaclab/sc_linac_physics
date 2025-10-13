@@ -104,4 +104,4 @@ class GUICavity:
             self.cavity.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
             self.cavity.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
 
-            self.cavity.trigger_setup()
+            self.cavity.trigger_start()
