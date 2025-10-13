@@ -93,7 +93,7 @@ def make_error_popup(title, message: str):
 
 def make_rainbow(num_colors) -> List[List[int]]:
     colormap = plt.cm.hsv
-    return colormap(np.linspace(0, 1, num_colors), bytes=True)
+    return colormap(np.linspace(0, 1, num_colors, endpoint=False), bytes=True)
 
 
 def highlight_text(r, g, b, text):
