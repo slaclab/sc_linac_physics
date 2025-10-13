@@ -68,7 +68,6 @@ from sc_linac_physics.applications.q0.q0_utils import (
 
 
 class TestDataRun(unittest.TestCase):
-
     def setUp(self):
         self.data_run = DataRun(reference_heat=5.0)
 
@@ -144,7 +143,6 @@ class TestDataRun(unittest.TestCase):
 
 
 class TestHeaterRun(unittest.TestCase):
-
     def test_initialization(self):
         """Test HeaterRun initialization"""
         heater_run = HeaterRun(heat_load=50.0, reference_heat=8.0)
@@ -166,7 +164,6 @@ class TestHeaterRun(unittest.TestCase):
 
 
 class TestValveParams(unittest.TestCase):
-
     def test_valve_params_dataclass(self):
         """Test ValveParams dataclass"""
         params = ValveParams(refValvePos=75.5, refHeatLoadDes=40.0, refHeatLoadAct=38.5)
@@ -176,7 +173,6 @@ class TestValveParams(unittest.TestCase):
 
 
 class TestCalcQ0(unittest.TestCase):
-
     @patch("builtins.print")  # Suppress print output during tests
     def test_calc_q0_uncorrected(self, mock_print):
         """Test Q0 calculation without correction"""
@@ -271,7 +267,6 @@ class TestCalcQ0(unittest.TestCase):
 
 
 class TestFileOperations(unittest.TestCase):
-
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
         self.test_file = os.path.join(self.temp_dir, "test_data.json")
@@ -367,7 +362,6 @@ class TestFileOperations(unittest.TestCase):
 
 
 class TestQ0Hash(unittest.TestCase):
-
     def test_q0_hash_single_item(self):
         """Test hash function with single item"""
         test_value = "test_string"
@@ -420,7 +414,6 @@ class TestQ0Hash(unittest.TestCase):
 
 
 class TestPlottingUtilities(unittest.TestCase):
-
     @patch("matplotlib.pyplot.figure")
     def test_gen_axis(self, mock_figure):
         """Test axis generation"""
@@ -471,7 +464,6 @@ class TestPlottingUtilities(unittest.TestCase):
 
 
 class TestUtilityFunctions(unittest.TestCase):
-
     def test_round_for_printing(self):
         """Test rounding function"""
         test_cases = [(3.14159265, 3.142), (2.0, 2.0), (1.9999, 2.0), (0.0001234, 0.0)]
@@ -495,7 +487,6 @@ class TestUtilityFunctions(unittest.TestCase):
 
 
 class TestExceptions(unittest.TestCase):
-
     def test_data_error(self):
         """Test DataError exception"""
         with self.assertRaises(DataError):
@@ -524,7 +515,6 @@ class TestExceptions(unittest.TestCase):
 
 
 class TestConstants(unittest.TestCase):
-
     def test_liquid_level_constants(self):
         """Test liquid level constants are valid"""
         self.assertIsInstance(MIN_DS_LL, (int, float))
