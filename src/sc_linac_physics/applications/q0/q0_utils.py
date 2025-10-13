@@ -186,7 +186,6 @@ def calc_q0(
     use_correction: bool = False,
     r_over_q=1012,
 ) -> float:
-
     if rf_heat_load <= 0:
         raise ValueError("RF heat load must be positive")
     if amplitude <= 0:

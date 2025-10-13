@@ -1,19 +1,18 @@
 from time import sleep
-from typing import Optional
 
 from epics.ca import CASeverityException
-from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
+from lcls_tools.common.controls.pyepics.utils import PVInvalidError
 
-from sc_linac_physics.applications.auto_setup.backend.setup_linac_object import (
-    SetupLinacObject,
-)
-from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
+from sc_linac_physics.utils.sc_linac.cavity import Cavity, linac_utils
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    RF_MODE_SELA,
     STATUS_READY_VALUE,
     STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,
 )
-from sc_linac_physics.utils.sc_linac.cavity import Cavity, linac_utils
-from sc_linac_physics.utils.sc_linac.linac_utils import RF_MODE_SELA
+from src.sc_linac_physics.applications.auto_setup.backend.setup_utils import (
+    SetupLinacObject,
+)
 
 
 class SetupCavity(Cavity, SetupLinacObject):
@@ -25,73 +24,8 @@ class SetupCavity(Cavity, SetupLinacObject):
         Cavity.__init__(self, cavity_num=cavity_num, rack_object=rack_object)
         SetupLinacObject.__init__(self)
 
-        self.progress_pv: str = self.auto_pv_addr("PROG")
-        self._progress_pv_obj: Optional[PV] = None
-
-        self.status_pv: str = self.auto_pv_addr("STATUS")
-        self._status_pv_obj: Optional[PV] = None
-
-        self.status_msg_pv: str = self.auto_pv_addr("MSG")
-        self._status_msg_pv_obj: Optional[PV] = None
-
-        self.note_pv: str = self.auto_pv_addr("NOTE")
-        self._note_pv_obj: Optional[PV] = None
-
     def capture_acon(self):
         self.acon = self.ades
-
-    @property
-    def note_pv_obj(self) -> PV:
-        if not self._note_pv_obj:
-            self._note_pv_obj = PV(self.note_pv)
-        return self._note_pv_obj
-
-    @property
-    def status_pv_obj(self):
-        if not self._status_pv_obj:
-            self._status_pv_obj = PV(self.status_pv)
-        return self._status_pv_obj
-
-    @property
-    def status(self):
-        return self.status_pv_obj.get()
-
-    @status.setter
-    def status(self, value: int):
-        self.status_pv_obj.put(value)
-
-    @property
-    def script_is_running(self) -> bool:
-        return self.status == STATUS_RUNNING_VALUE
-
-    @property
-    def progress_pv_obj(self):
-        if not self._progress_pv_obj:
-            self._progress_pv_obj = PV(self.progress_pv)
-        return self._progress_pv_obj
-
-    @property
-    def progress(self) -> float:
-        return self.progress_pv_obj.get()
-
-    @progress.setter
-    def progress(self, value: float):
-        self.progress_pv_obj.put(value)
-
-    @property
-    def status_msg_pv_obj(self) -> PV:
-        if not self._status_msg_pv_obj:
-            self._status_msg_pv_obj = PV(self.status_msg_pv)
-        return self._status_msg_pv_obj
-
-    @property
-    def status_message(self):
-        return self.status_msg_pv_obj.get()
-
-    @status_message.setter
-    def status_message(self, message):
-        print(message)
-        self.status_msg_pv_obj.put(message)
 
     def clear_abort(self):
         self.abort_pv_obj.put(0)

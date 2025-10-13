@@ -8,14 +8,10 @@ from sc_linac_physics.applications.auto_setup.backend.setup_cavity import SetupC
 from sc_linac_physics.applications.auto_setup.backend.setup_cryomodule import (
     SetupCryomodule,
 )
-from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
-    STATUS_READY_VALUE,
-    STATUS_ERROR_VALUE,
-)
 from sc_linac_physics.applications.auto_setup.launcher.srf_cm_setup_launcher import (
     setup_cavity,
 )
-from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES, STATUS_READY_VALUE, STATUS_ERROR_VALUE
 
 
 @pytest.fixture

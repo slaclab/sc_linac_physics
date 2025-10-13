@@ -13,9 +13,15 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     StepperAbortError,
     StepperError,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import LauncherLinacObject
 
 if TYPE_CHECKING:
     from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
+
+
+class ColdLinacObject(LauncherLinacObject):
+    def __init__(self):
+        super().__init__(name="COLD")
 
 
 class ParkSignals(WorkerSignals):

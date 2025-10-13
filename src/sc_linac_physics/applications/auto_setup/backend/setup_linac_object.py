@@ -2,61 +2,7 @@ from typing import Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-from sc_linac_physics.utils.sc_linac.linac_utils import SCLinacObject
-
-
-class LauncherLinacObject(SCLinacObject):
-    @property
-    def pv_prefix(self):
-        return super().pv_prefix
-
-    def auto_pv_addr(self, suffix: str):
-        return self.pv_addr(f"AUTO:{suffix}")
-
-    def __init__(self, name: str):
-        super().__init__()
-        self.abort_pv: str = self.auto_pv_addr("ABORT")
-        self._abort_pv_obj: Optional[PV] = None
-
-        self.stop_pv: str = self.auto_pv_addr(f"{name}STOP")
-        self._stop_pv_obj: Optional[PV] = None
-
-        self.start_pv: str = self.auto_pv_addr(f"{name}STRT")
-        self._start_pv_obj: Optional[PV] = None
-
-    @property
-    def start_pv_obj(self) -> PV:
-        if not self._start_pv_obj:
-            self._start_pv_obj = PV(self.start_pv)
-        return self._start_pv_obj
-
-    @property
-    def stop_pv_obj(self) -> PV:
-        if not self._stop_pv_obj:
-            self._stop_pv_obj = PV(self.stop_pv)
-        return self._stop_pv_obj
-
-    def trigger_abort(self):
-        self.abort_pv_obj.put(1)
-
-    def trigger_stop(self):
-        self.stop_pv_obj.put(1)
-
-    @property
-    def abort_pv_obj(self):
-        if not self._abort_pv_obj:
-            self._abort_pv_obj = PV(self.abort_pv)
-        return self._abort_pv_obj
-
-    @property
-    def abort_requested(self):
-        return bool(self.abort_pv_obj.get())
-
-    def clear_abort(self):
-        raise NotImplementedError
-
-    def trigger_start(self):
-        self.start_pv_obj.put(1)
+from src.sc_linac_physics.utils.sc_linac.linac_utils import LauncherLinacObject
 
 
 class SetupLinacObject(LauncherLinacObject):

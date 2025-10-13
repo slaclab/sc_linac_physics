@@ -6,11 +6,6 @@ import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
 from sc_linac_physics.applications.auto_setup.backend.setup_cavity import SetupCavity
-from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
-    STATUS_READY_VALUE,
-    STATUS_RUNNING_VALUE,
-    STATUS_ERROR_VALUE,
-)
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityAbortError,
     RF_MODE_SELA,
@@ -19,6 +14,9 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     HW_MODE_MAIN_DONE_VALUE,
     HW_MODE_READY_VALUE,
     HW_MODE_ONLINE_VALUE,
+    STATUS_READY_VALUE,
+    STATUS_RUNNING_VALUE,
+    STATUS_ERROR_VALUE,
 )
 from sc_linac_physics.utils.sc_linac.rfstation import RFStation
 from sc_linac_physics.utils.sc_linac.ssa import SSA
