@@ -2,15 +2,15 @@ from time import sleep
 
 from epics.ca import CASeverityException
 
+from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
+    SetupLinacObject,
+)
 from sc_linac_physics.utils.sc_linac.cavity import Cavity, linac_utils
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     RF_MODE_SELA,
     STATUS_READY_VALUE,
     STATUS_RUNNING_VALUE,
     STATUS_ERROR_VALUE,
-)
-from src.sc_linac_physics.applications.auto_setup.backend.setup_utils import (
-    SetupLinacObject,
 )
 
 

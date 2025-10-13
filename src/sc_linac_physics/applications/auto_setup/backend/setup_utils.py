@@ -2,7 +2,7 @@ from typing import Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-from src.sc_linac_physics.applications.auto_setup.backend.setup_linac_object import LauncherLinacObject
+from sc_linac_physics.applications.auto_setup.backend.setup_linac_object import LauncherLinacObject
 
 
 class SetupLinacObject(LauncherLinacObject):
