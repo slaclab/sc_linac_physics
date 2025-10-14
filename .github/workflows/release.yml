@@ -66,33 +66,38 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          token: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          persist-credentials: false
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
+      
       - name: Install tooling
         run: |
           python -m pip install -U pip
           pip install -U python-semantic-release build
+      
       - name: Ensure tags are available
         run: git fetch --tags --force
+      
       - name: Configure git user
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+      
       - name: Run semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
         run: |
-          echo "=== Semantic Release Info ==="
-          semantic-release --version
+          echo "=== Git Status ==="
+          git log --oneline -5
+          git tag -l | tail -5 || echo "No tags found"
           echo ""
-          echo "=== Commits since v0.1.0 ==="
-          git log --oneline v0.1.0..HEAD --pretty=format:"%h %s"
-          echo ""
-          echo "=== Running semantic-release version ==="
+          echo "=== Creating new version ==="
           semantic-release version
           echo ""
-          echo "=== Running semantic-release publish ==="
+          echo "=== Publishing to GitHub ==="
           semantic-release publish
