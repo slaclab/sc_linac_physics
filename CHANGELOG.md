@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v1.1.0 (2025-10-14)
+
+### Features
+
+- Add CLI launchers for PyDM displays and applications
+  ([#125](https://github.com/slaclab/sc_linac_physics/pull/125),
+  [`8afe31c`](https://github.com/slaclab/sc_linac_physics/commit/8afe31c3b5aab85d65e0cad6d7687bfcdb96599f))
+
+### Testing
+
+- **cli**: Add comprehensive test suite for CLI module
+  ([#125](https://github.com/slaclab/sc_linac_physics/pull/125),
+  [`8afe31c`](https://github.com/slaclab/sc_linac_physics/commit/8afe31c3b5aab85d65e0cad6d7687bfcdb96599f))
+
+
 ## v1.0.0 (2025-10-14)
 
 ### Bug Fixes
