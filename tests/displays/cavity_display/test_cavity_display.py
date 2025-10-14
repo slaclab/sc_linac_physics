@@ -54,7 +54,6 @@ def display(mock_show_display):
         ),
         patch("sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine", MockGUIMachine),
     ):
-
         # Now import CavityDisplayGUI after patching
         from sc_linac_physics.displays.cavity_display.cavity_display import CavityDisplayGUI
 

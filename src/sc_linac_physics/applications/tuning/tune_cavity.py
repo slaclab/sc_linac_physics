@@ -2,6 +2,7 @@ from typing import Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
+from sc_linac_physics.applications.tuning.tune_utils import ColdLinacObject
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     TUNE_CONFIG_PARKED_VALUE,
@@ -15,18 +16,17 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 )
 
 
-class TuneCavity(Cavity):
+class TuneCavity(Cavity, ColdLinacObject):
     def __init__(
         self,
         cavity_num,
         rack_object,
     ):
-        super().__init__(cavity_num=cavity_num, rack_object=rack_object)
+        Cavity.__init__(self, cavity_num=cavity_num, rack_object=rack_object)
+        ColdLinacObject.__init__(self)
         self.df_cold_pv: str = self.pv_addr("DF_COLD")
         self._df_cold_pv_obj: Optional[PV] = None
 
-        # TODO replace with actual status message PV when implemented
-        self.status_msg_pv: Optional[str] = self.pv_addr("FAKE")
         self.use_rf_pv: Optional[str] = self.pv_addr("FAKE")
         self._use_rf_pv_obj: Optional[PV] = None
 
@@ -53,24 +53,6 @@ class TuneCavity(Cavity):
         if not self._df_cold_pv_obj:
             self._df_cold_pv_obj = PV(self.df_cold_pv)
         return self._df_cold_pv_obj
-
-    @property
-    def script_is_running(self) -> bool:
-        # TODO: check sonya's launcher PVs when implemented
-        return False
-        # return self.status == STATUS_RUNNING_VALUE
-
-    @property
-    def status_message(self):
-        # TODO: read from status PV when implemented
-        return ""
-        # return self.status_msg_pv_obj.get()
-
-    @status_message.setter
-    def status_message(self, message):
-        # TODO: write to status PV when implemented
-        print(message)
-        # self.status_msg_pv_obj.put(message)
 
     def trigger_cold_landing(self):
         # TODO write to cold pv when implemented
@@ -109,7 +91,7 @@ class TuneCavity(Cavity):
         self.turn_off()
         self.ssa.turn_off()
 
-    def move_to_cold_landing(self):
+    def move_to_cold_landing(self, use_rf=True):
         if self.tune_config_pv_obj.get() == TUNE_CONFIG_COLD_VALUE:
             print(f"{self} at cold landing")
             print(f"Turning {self} and SSA off")
@@ -119,7 +101,7 @@ class TuneCavity(Cavity):
 
         self.stepper_tuner.reset_signed_steps()
 
-        if self.use_rf:
+        if use_rf:
             self.detune_with_rf()
 
         else:

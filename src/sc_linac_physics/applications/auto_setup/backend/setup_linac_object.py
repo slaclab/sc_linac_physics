@@ -2,11 +2,10 @@ from typing import Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-from sc_linac_physics.utils.sc_linac.linac_utils import AutoLinacObject
+from sc_linac_physics.utils.sc_linac.linac_utils import LauncherLinacObject
 
 
-class SetupLinacObject(AutoLinacObject):
-
+class SetupLinacObject(LauncherLinacObject):
     def __init__(self):
         super().__init__(name="SETUP")
 

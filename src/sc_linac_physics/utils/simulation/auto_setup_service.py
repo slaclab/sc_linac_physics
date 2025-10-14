@@ -17,7 +17,6 @@ from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 
 class AutoSetupPVGroup(LauncherPVGroup):
-
     def __init__(self, prefix: str, script_args: List[str] = None):
         self.launcher_dir = os.path.join(self.srf_root_dir, "applications/auto_setup/launcher")
         super().__init__(prefix + "AUTO:")

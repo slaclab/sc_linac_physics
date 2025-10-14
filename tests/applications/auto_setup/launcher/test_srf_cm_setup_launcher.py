@@ -23,6 +23,9 @@ def cavity():
     cavity._auto_tune_requested_pv_obj = make_mock_pv()
     cavity._cav_char_requested_pv_obj = make_mock_pv()
     cavity._rf_ramp_requested_pv_obj = make_mock_pv()
+    cavity._start_pv_obj = make_mock_pv()
+    cavity._stop_pv_obj = make_mock_pv()
+    cavity._abort_pv_obj = make_mock_pv()
     cavity.trigger_start = MagicMock()
     cavity.trigger_shutdown = MagicMock()
     cavity.cryomodule = SetupCryomodule(cryo_name=choice(ALL_CRYOMODULES), linac_object=MagicMock())
@@ -31,6 +34,9 @@ def cavity():
     cm._auto_tune_requested_pv_obj = make_mock_pv()
     cm._cav_char_requested_pv_obj = make_mock_pv()
     cm._rf_ramp_requested_pv_obj = make_mock_pv()
+    cm._start_pv_obj = make_mock_pv()
+    cm._stop_pv_obj = make_mock_pv()
+    cm._abort_pv_obj = make_mock_pv()
     yield cavity
 
 
