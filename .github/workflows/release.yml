@@ -93,7 +93,7 @@ jobs:
           git tag -l | tail -5 || echo "No tags found"
           echo ""
           echo "=== Running semantic-release version ==="
-          semantic-release version --verbosity=DEBUG
+          semantic-release version -vv
           echo ""
           echo "=== Running semantic-release publish ==="
-          semantic-release publish --verbosity=DEBUG
+          semantic-release publish -vv
