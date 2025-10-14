@@ -115,7 +115,7 @@ class DataAcquisitionManager(QObject):
                 "expected_buffers": measurement_cfg.buffer_count,
                 "completion_signal_received": False,
                 "last_progress": 0,
-                "cavity_num_for_progress": (selected_cavities[0] if selected_cavities else 0),
+                "cavities": selected_cavities,
             }
 
             process.start(sys.executable, command_args)
@@ -147,9 +147,12 @@ class DataAcquisitionManager(QObject):
 
             if progress > process_info["last_progress"]:
                 process_info["last_progress"] = progress
-                cavity_num = process_info["cavity_num_for_progress"]
-                self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
-                logger.debug(f"Progress ({chassis_id}, Cav {cavity_num}): {progress}% ({acquired}/{total})")
+                for cavity_num in process_info["cavities"]:
+                    self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
+
+                logger.debug(
+                    f"Progress ({chassis_id}, Cavities {process_info['cavities']}): {progress}% ({acquired}/{total})"
+                )
 
                 if acquired == total:
                     logger.info(
@@ -182,8 +185,8 @@ class DataAcquisitionManager(QObject):
                     if any(marker in line for marker in self.COMPLETION_MARKERS):
                         process_info["completion_signal_received"] = True
                         if process_info["last_progress"] < 100:
-                            cavity_num = process_info["cavity_num_for_progress"]
-                            self.acquisitionProgress.emit(chassis_id, cavity_num, 100)
+                            for cavity_num in process_info["cavities"]:
+                                self.acquisitionProgress.emit(chassis_id, cavity_num, 100)
                             process_info["last_progress"] = 100
                     else:
                         self._check_progress(line, chassis_id, process_info)
@@ -264,7 +267,7 @@ class DataAcquisitionManager(QObject):
         if chassis_id not in self.active_processes:
             return
 
-        process_info = self.active_processes.pop(chassis_id)
+        process_info = self.active_processes[chassis_id]
         try:
             if self._was_acquisition_successful(exit_code, exit_status, process_info):
                 output_path = process_info["output_path"]
@@ -281,12 +284,16 @@ class DataAcquisitionManager(QObject):
                     stderr_final,
                     process_info["completion_signal_received"],
                 )
+                if chassis_id in self.active_processes:
+                    del self.active_processes[chassis_id]
         except Exception as e:
             logger.critical(
                 f"Unexpected error in handle_finished for {chassis_id}: {e}",
                 exc_info=True,
             )
             self.acquisitionError.emit(chassis_id, f"Unexpected error: {str(e)}")
+            if chassis_id in self.active_processes:
+                del self.active_processes[chassis_id]
         finally:
             self._cleanup_process_resources(process_info)
 
@@ -341,6 +348,9 @@ class DataAcquisitionManager(QObject):
                 chassis_id,
                 f"Unexpected error processing file {output_path.name}: {str(e)}",
             )
+        finally:
+            if chassis_id in self.active_processes:
+                del self.active_processes[chassis_id]
 
     def stop_acquisition(self, chassis_id: str):
         """Stop a running acquisition process."""

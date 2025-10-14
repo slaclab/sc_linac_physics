@@ -58,7 +58,8 @@ class StatusPanel(QWidget):
             )
 
             # Update status widgets
-            widgets["status"].setText("Running")
+            widgets["status"].setText("Complete")
+            widgets["progress"].setValue(100)
             widgets["message"].setText(message)
 
     def reset_all(self):

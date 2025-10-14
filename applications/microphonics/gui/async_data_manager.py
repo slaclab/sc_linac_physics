@@ -133,6 +133,7 @@ class AsyncDataManager(QObject):
         """Handle error from one worker will stop entire job"""
         print(f"ERROR: Worker {chassis_id} failed: {error}")
 
+        self.job_running = False
         # Forward individual error
         self.acquisitionError.emit(chassis_id, error)
 
@@ -150,7 +151,8 @@ class AsyncDataManager(QObject):
         """Handle completion from individual worker"""
         # Forward individual completion
         self.acquisitionComplete.emit(chassis_id)
-
+        if not self.job_running:
+            return
         # Check if all workers are done
         if set(self.worker_data.keys()) == self.job_chassis_ids:
             self._complete_job()
@@ -200,8 +202,6 @@ class AsyncDataManager(QObject):
 
         for chassis_id in list(self.active_workers.keys()):
             self._stop_worker(chassis_id)
-
-        self.job_running = False
 
     def _stop_worker(self, chassis_id: str):
         """Stop a specific worker"""
