@@ -9,6 +9,8 @@ concurrency:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   test:
@@ -82,5 +84,16 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release publish
+        run: |
+          echo "=== Semantic Release Info ==="
+          semantic-release --version
+          echo ""
+          echo "=== Git Info ==="
+          git log --oneline -5
+          git tag -l | tail -5 || echo "No tags found"
+          echo ""
+          echo "=== Running semantic-release version ==="
+          semantic-release version --verbosity=DEBUG
+          echo ""
+          echo "=== Running semantic-release publish ==="
+          semantic-release publish --verbosity=DEBUG
