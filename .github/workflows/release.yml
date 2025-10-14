@@ -88,12 +88,11 @@ jobs:
           echo "=== Semantic Release Info ==="
           semantic-release --version
           echo ""
-          echo "=== Git Info ==="
-          git log --oneline -5
-          git tag -l | tail -5 || echo "No tags found"
+          echo "=== Commits since v0.1.0 ==="
+          git log --oneline v0.1.0..HEAD --pretty=format:"%h %s"
           echo ""
           echo "=== Running semantic-release version ==="
-          semantic-release version -vv
+          semantic-release version
           echo ""
           echo "=== Running semantic-release publish ==="
-          semantic-release publish -vv
+          semantic-release publish
