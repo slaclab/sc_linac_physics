@@ -67,8 +67,8 @@ def list_displays():
             print(f"  {name:15} - {info['description']}")
 
     print("\n" + "=" * 70)
-    print(f"\nUsage: sc-linac <name>")
-    print(f"       sc-linac-<name>  (direct launcher)\n")
+    print("\nUsage: sc-linac <name>")
+    print("       sc-linac-<name>  (direct launcher)\n")
 
 
 def launch_display(display_name: str, extra_args: list = None):
