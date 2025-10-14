@@ -223,6 +223,16 @@ class CavAmpControl:
         self.aact_label.channel = cavity.aact_pv
 
 
+# In q0_gui_utils.py
+def _handle_file_error(error: Exception, grid_layout: QGridLayout):
+    """Handle file loading errors gracefully"""
+    from PyQt5.QtWidgets import QLabel
+
+    error_label = QLabel(f"Error loading Q0 measurements: {str(error)}")
+    error_label.setStyleSheet("color: red; font-weight: bold;")
+    grid_layout.addWidget(error_label, 0, 0)
+
+
 class Q0Options(QObject):
     q0_loaded_signal = pyqtSignal(str)
 
@@ -233,15 +243,22 @@ class Q0Options(QObject):
         grid_layout: QGridLayout = QGridLayout()
         self.main_groupbox.setLayout(grid_layout)
 
-        with open(cryomodule.q0_idx_file, "r+") as f:
-            q0_measurements: Dict = json.load(f)
-            timestamps = list(q0_measurements.keys())
-            col_count = get_dimensions(timestamps)
-            for idx, time_stamp in enumerate(timestamps):
-                cav_amps = q0_measurements[time_stamp]["Cavity Amplitudes"]
-                radio_button: QRadioButton = QRadioButton(f"{time_stamp}: \n{json.dumps(cav_amps, indent=4)}")
-                grid_layout.addWidget(radio_button, int(idx / col_count), idx % col_count)
-                radio_button.clicked.connect(partial(self.load_q0, time_stamp))
+        try:
+            with open(cryomodule.q0_idx_file, "r") as f:  # Changed from "r+" to "r"
+                q0_measurements: Dict = json.load(f)
+            self._create_measurement_widgets(q0_measurements, grid_layout)
+        except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
+            _handle_file_error(e, grid_layout)
+
+    def _create_measurement_widgets(self, q0_measurements: Dict, grid_layout: QGridLayout):
+        """Create widgets for Q0 measurements"""
+        timestamps = list(q0_measurements.keys())
+        col_count = get_dimensions(timestamps)
+        for idx, time_stamp in enumerate(timestamps):
+            cav_amps = q0_measurements[time_stamp]["Cavity Amplitudes"]
+            radio_button: QRadioButton = QRadioButton(f"{time_stamp}: \n{json.dumps(cav_amps, indent=4)}")
+            grid_layout.addWidget(radio_button, int(idx / col_count), idx % col_count)
+            radio_button.clicked.connect(partial(self.load_q0, time_stamp))
 
     @pyqtSlot()
     def load_q0(self, timestamp: str):

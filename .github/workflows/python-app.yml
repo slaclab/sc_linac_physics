@@ -4,8 +4,6 @@
 name: CI
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
@@ -74,7 +72,7 @@ jobs:
           PY
 
       - name: Ensure dev tooling present
-        run: pip install -U pytest pytest-qt pytest-cov flake8 black
+        run: pip install -U pytest pytest-qt pytest-cov flake8 black pytest-asyncio
 
       - name: Lint
         run: |
@@ -89,7 +87,7 @@ jobs:
             --cov=sc_linac_physics \
             --cov-branch \
             --cov-report=term-missing \
-      #            --cov-fail-under=80
+            --cov-fail-under=80
 
       - name: Download coverage from matrix
         uses: actions/download-artifact@v4

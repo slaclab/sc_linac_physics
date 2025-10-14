@@ -18,7 +18,9 @@ from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 class AutoSetupPVGroup(PVGroup):
     srf_root_dir = os.getenv("SRF_ROOT_DIR", "/")
+    print(srf_root_dir)
     launcher_dir = os.path.join(srf_root_dir, "applications/auto_setup/launcher")
+    # print(launcher_dir)
 
     setup_start: PvpropertyBoolEnum = pvproperty(name="SETUPSTRT")
     setup_stop: PvpropertyBoolEnum = pvproperty(name="SETUPSTOP")
