@@ -186,6 +186,11 @@ def calc_q0(
     use_correction: bool = False,
     r_over_q=1012,
 ) -> float:
+    if rf_heat_load <= 0:
+        raise ValueError("RF heat load must be positive")
+    if amplitude <= 0:
+        raise ValueError("Amplitude must be positive")
+
     # The initial Q0 calculation doesn't account for the temperature
     # variation of the 2 K helium
 
@@ -261,11 +266,15 @@ def q0_hash(arg_list: List[Any]):
     data sessions.
     """
 
+    if not arg_list:
+        return 0
     if len(arg_list) == 1:
-        return hash(arg_list.pop())
+        return hash(arg_list[0])
 
-    for arg in arg_list:
-        return hash(arg) ^ q0_hash(arg_list[1:])
+    result = hash(arg_list[0])
+    for arg in arg_list[1:]:
+        result ^= hash(arg)
+    return result
 
 
 @dataclass

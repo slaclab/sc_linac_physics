@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sc_linac_physics"
-version = "0.1.0"
+version = "1.1.0"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -36,20 +36,74 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-qt", "pytest-cov"]
-dev = ["black", "flake8", "pytest", "pytest-qt", "pytest-cov"]
+test = ["pytest", "pytest-qt", "pytest-cov", "pytest-asyncio"]
+dev = [
+    "black",
+    "flake8",
+    "pre-commit",
+    "pytest",
+    "pytest-qt",
+    "pytest-cov",
+    "pytest-asyncio"
+]
 
 [tool.black]
 line-length = 120
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+# A regex preceded with ^/ will apply only to files and directories
+# in the root of the project.
+^/build/
+^/dist/
+^/.eggs/
+^/docs/
+'''
 
 [tool.flake8]
 max-line-length = 120
 max-complexity = 10
+extend-ignore = [
+    "E203", # whitespace before ':' - conflicts with black
+    "W503"   # line break before binary operator - conflicts with black
+]
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+per-file-ignores = [
+    "__init__.py:F401"  # ignore unused imports in __init__.py files
+]
 
 [tool.pytest.ini_options]
-addopts = "-vv -ra --durations=10"
+addopts = "-vv -ra --durations=10 --cov=sc_linac_physics --cov-report=term-missing --cov-report=html"
 log_cli = true
 log_cli_level = "INFO"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:"
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -71,12 +125,36 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
 ]
 
 [tool.semantic_release]
-version_source = "commit"
+version_toml = ["pyproject.toml:project.version"]
+version_variables = [
+    "src/sc_linac_physics/__init__.py:__version__",
+]
 branch = "main"
 changelog_file = "CHANGELOG.md"
 build_command = "python -m build"
 upload_to_repository = false
 upload_to_release = true
 major_on_zero = false
-version_toml = ["pyproject.toml:project.version"]
 tag_format = "v{version}"
+commit_message = "chore(release): {version} [skip ci]"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "perf", "docs", "style", "chore", "test", "build", "ci", "refactor"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf", "refactor"]
+
+[project.scripts]
+# Main CLI tool
+sc-linac = "sc_linac_physics.cli:main"
+
+# Display launchers
+sc-linac-srf-home = "sc_linac_physics.launchers:launch_srf_home"
+sc-linac-cavity = "sc_linac_physics.launchers:launch_cavity_display"
+sc-linac-fault-decoder = "sc_linac_physics.launchers:launch_fault_decoder"
+sc-linac-fault-count = "sc_linac_physics.launchers:launch_fault_count"
+
+# Application launchers
+sc-linac-quench = "sc_linac_physics.launchers:launch_quench_processing"
+sc-linac-setup = "sc_linac_physics.launchers:launch_auto_setup"
+sc-linac-q0 = "sc_linac_physics.launchers:launch_q0_measurement"
+sc-linac-tuning = "sc_linac_physics.launchers:launch_tuning"

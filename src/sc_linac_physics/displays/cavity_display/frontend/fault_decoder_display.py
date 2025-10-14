@@ -38,15 +38,26 @@ class DecoderDisplay(Display):
 
         rows: List[Row] = []
 
-        for fault_row_dict in utils.parse_csv():
-            rows.append(
-                Row(
-                    tlc=fault_row_dict["Three Letter Code"],
-                    long_desc=fault_row_dict["Long Description"],
-                    gen_short_desc=fault_row_dict["Generic Short Description for Decoder"],
-                    corrective_action=fault_row_dict["Recommended Corrective Actions"],
-                )
-            )
+        try:
+            csv_data = utils.parse_csv()
+            for fault_row_dict in csv_data:
+                try:
+                    rows.append(
+                        Row(
+                            tlc=fault_row_dict.get("Three Letter Code", ""),
+                            long_desc=fault_row_dict.get("Long Description", ""),
+                            gen_short_desc=fault_row_dict.get("Generic Short Description for Decoder", ""),
+                            corrective_action=fault_row_dict.get("Recommended Corrective Actions", ""),
+                        )
+                    )
+                except Exception as e:
+                    print(f"Error processing row {fault_row_dict}: {e}")
+                    # Skip this row and continue
+                    continue
+        except Exception as e:
+            print(f"Error parsing CSV: {e}")
+            # Continue with empty rows list
+            rows = []
 
         rows = sorted(rows)
 

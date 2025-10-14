@@ -1,15 +1,12 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from os.path import isfile
 from time import sleep
 from typing import Dict, Optional
 
 import numpy as np
 from epics import caget, caput, camonitor, camonitor_clear
-from lcls_tools.common.data.archiver import get_values_over_time_range
 from numpy import linspace, sign, floor
-from scipy.signal import medfilt
-from scipy.stats import linregress
 
 from sc_linac_physics.applications.q0 import q0_utils
 from sc_linac_physics.applications.q0.calibration import Calibration
@@ -190,76 +187,77 @@ class Q0Cryomodule(Cryomodule):
 
         self.jt_position = self.valveParams.refValvePos
 
-    def getRefValveParams(self, start_time: datetime, end_time: datetime):
-        print(f"\nSearching {start_time} to {end_time} for period of JT stability")
-        window_start = start_time
-        window_end = start_time + q0_utils.DELTA_NEEDED_FOR_FLATNESS
-        while window_end <= end_time:
-            self.check_abort()
-            print(f"\nChecking window {window_start} to {window_end}")
-
-            data = get_values_over_time_range(pv_list=[self.ds_level_pv], start_time=window_start, end_time=window_end)
-            llVals = medfilt(data.values[self.ds_level_pv])
-
-            # Fit a line to the liquid level over the last [numHours] hours
-            m, b, r, _, _ = linregress(range(len(llVals)), llVals)
-            print(f"r^2 of linear fit: {r ** 2}")
-            print(f"Slope: {m}")
-
-            # If the LL slope is small enough, this may be a good period from
-            # which to get a reference valve position & heater params
-            if np.log10(abs(m)) < -5:
-                signals = [
-                    self.jt_valve_readback_pv,
-                    self.heater_setpoint_pv,
-                    self.heater_readback_pv,
-                ]
-
-                data = get_values_over_time_range(pv_list=signals, start_time=window_start, end_time=window_end)
-
-                des_val_set = set(data.values[self.heater_setpoint_pv])
-                print(f"number of heater setpoints during this time: {len(des_val_set)}")
-
-                # We only want to use time periods in which there were no
-                # changes made to the heater settings
-                if len(des_val_set) == 1:
-                    des_pos = round(np.mean(data.values[self.jt_valve_readback_pv]), 1)
-                    heater_des = des_val_set.pop()
-                    heater_act = np.mean(data.values[self.heater_readback_pv])
-
-                    print("Stable period found.")
-                    print(f"Desired JT valve position: {des_pos}")
-                    print(f"Total heater des setting: {heater_des}")
-
-                    self.valveParams = q0_utils.ValveParams(des_pos, heater_des, heater_act)
-                    return self.valveParams
-
-            window_end += q0_utils.JT_SEARCH_OVERLAP_DELTA
-            window_start += q0_utils.JT_SEARCH_OVERLAP_DELTA
-
-        # If we broke out of the while loop without returning anything, that
-        # means that the LL hasn't been stable enough recently. Wait a while for
-        # it to stabilize and then try again.
-        print(
-            "Stable cryo conditions not found in search window  - determining"
-            " new JT valve position. Please do not adjust the heaters. Allow "
-            "the PID loop to regulate the JT valve position."
-        )
-
-        print("Waiting 30 minutes for LL to stabilize then retrying")
-
-        start = datetime.now()
-        while (datetime.now() - start) < timedelta(minutes=30):
-            self.check_abort()
-            sleep(5)
-
-        # Try again but only search the recent past. We have to manipulate the
-        # search range a little bit due to how the search start time is rounded
-        # down to the nearest half hour.
-        return self.getRefValveParams(
-            start_time=start_time + timedelta(minutes=30),
-            end_time=end_time + timedelta(minutes=30),
-        )
+    # def getRefValveParams(self, start_time: datetime, end_time: datetime):
+    #     print(f"\nSearching {start_time} to {end_time} for period of JT stability")
+    #     window_start = start_time
+    #     window_end = start_time + q0_utils.DELTA_NEEDED_FOR_FLATNESS
+    #     while window_end <= end_time:
+    #         self.check_abort()
+    #         print(f"\nChecking window {window_start} to {window_end}")
+    #
+    #         data = get_values_over_time_range(pv_list=[self.ds_level_pv],
+    #         start_time=window_start, end_time=window_end)
+    #         llVals = medfilt(data.values[self.ds_level_pv])
+    #
+    #         # Fit a line to the liquid level over the last [numHours] hours
+    #         m, b, r, _, _ = linregress(range(len(llVals)), llVals)
+    #         print(f"r^2 of linear fit: {r ** 2}")
+    #         print(f"Slope: {m}")
+    #
+    #         # If the LL slope is small enough, this may be a good period from
+    #         # which to get a reference valve position & heater params
+    #         if np.log10(abs(m)) < -5:
+    #             signals = [
+    #                 self.jt_valve_readback_pv,
+    #                 self.heater_setpoint_pv,
+    #                 self.heater_readback_pv,
+    #             ]
+    #
+    #             data = get_values_over_time_range(pv_list=signals, start_time=window_start, end_time=window_end)
+    #
+    #             des_val_set = set(data.values[self.heater_setpoint_pv])
+    #             print(f"number of heater setpoints during this time: {len(des_val_set)}")
+    #
+    #             # We only want to use time periods in which there were no
+    #             # changes made to the heater settings
+    #             if len(des_val_set) == 1:
+    #                 des_pos = round(np.mean(data.values[self.jt_valve_readback_pv]), 1)
+    #                 heater_des = des_val_set.pop()
+    #                 heater_act = np.mean(data.values[self.heater_readback_pv])
+    #
+    #                 print("Stable period found.")
+    #                 print(f"Desired JT valve position: {des_pos}")
+    #                 print(f"Total heater des setting: {heater_des}")
+    #
+    #                 self.valveParams = q0_utils.ValveParams(des_pos, heater_des, heater_act)
+    #                 return self.valveParams
+    #
+    #         window_end += q0_utils.JT_SEARCH_OVERLAP_DELTA
+    #         window_start += q0_utils.JT_SEARCH_OVERLAP_DELTA
+    #
+    #     # If we broke out of the while loop without returning anything, that
+    #     # means that the LL hasn't been stable enough recently. Wait a while for
+    #     # it to stabilize and then try again.
+    #     print(
+    #         "Stable cryo conditions not found in search window  - determining"
+    #         " new JT valve position. Please do not adjust the heaters. Allow "
+    #         "the PID loop to regulate the JT valve position."
+    #     )
+    #
+    #     print("Waiting 30 minutes for LL to stabilize then retrying")
+    #
+    #     start = datetime.now()
+    #     while (datetime.now() - start) < timedelta(minutes=30):
+    #         self.check_abort()
+    #         sleep(5)
+    #
+    #     # Try again but only search the recent past. We have to manipulate the
+    #     # search range a little bit due to how the search start time is rounded
+    #     # down to the nearest half hour.
+    #     return self.getRefValveParams(
+    #         start_time=start_time + timedelta(minutes=30),
+    #         end_time=end_time + timedelta(minutes=30),
+    #     )
 
     def launchHeaterRun(
         self,

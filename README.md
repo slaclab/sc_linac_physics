@@ -15,6 +15,7 @@ Release: [![Release](https://github.com/slaclab/sc_linac_physics/actions/workflo
 ## Features
 
 - PyDM-based operator displays for SC Linac
+- Unified command-line interface for all displays and applications
 - Analysis utilities using NumPy/SciPy/scikit-learn
 - Plotting with matplotlib and pyqtgraph
 - EPICS/Channel Access via caproto and pyepics
@@ -52,8 +53,6 @@ From source:
 ```bash
 git clone git@github.com:slaclab/sc_linac_physics.git
 cd sc_linac_physics
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -U pip setuptools wheel
 # Development + testing tools:
 pip install -e ".[dev,test]"
@@ -69,6 +68,67 @@ Notes:
 
 ## Quick start
 
+### Command Line Interface
+
+The package provides a unified CLI for launching all displays and applications:
+
+```bash
+# List all available applications
+sc-linac list
+
+# Launch main displays
+sc-linac srf-home          # SRF home overview display
+sc-linac cavity            # Cavity control and monitoring
+sc-linac fault-decoder     # Cavity fault decoder
+sc-linac fault-count       # Cavity fault count display
+
+# Launch applications
+sc-linac quench            # Quench processing application
+sc-linac setup             # Automated cavity setup
+sc-linac q0                # Q0 measurement application
+sc-linac tuning            # Cavity tuning interface
+
+# Pass additional arguments to PyDM
+sc-linac cavity arg1 arg2
+```
+
+#### Available Commands
+
+**Main Displays:**
+
+| Command                  | Description                                        |
+|--------------------------|----------------------------------------------------|
+| `sc-linac srf-home`      | SRF home overview display - main control interface |
+| `sc-linac cavity`        | Cavity control and monitoring display              |
+| `sc-linac fault-decoder` | Cavity fault decoder with detailed diagnostics     |
+| `sc-linac fault-count`   | Cavity fault count display and statistics          |
+
+**Applications:**
+
+| Command           | Description                                          |
+|-------------------|------------------------------------------------------|
+| `sc-linac quench` | Quench processing application for cavity recovery    |
+| `sc-linac setup`  | Automated cavity setup and configuration             |
+| `sc-linac q0`     | Q0 measurement application for cavity quality factor |
+| `sc-linac tuning` | Cavity tuning interface for frequency optimization   |
+
+**Direct Launchers:**
+
+Each command also has a direct launcher for convenience:
+
+```bash
+sc-linac-srf-home
+sc-linac-cavity
+sc-linac-fault-decoder
+sc-linac-fault-count
+sc-linac-quench
+sc-linac-setup
+sc-linac-q0
+sc-linac-tuning
+```
+
+### Python API
+
 Python import check:
 
 ```python
@@ -77,10 +137,27 @@ import sc_linac_physics
 print("Package version:", getattr(sc_linac_physics, "__version__", "unknown"))
 ```
 
-Running displays:
+Programmatic display launching:
 
-- The package includes PyDM UI files under the “displays” directory.
-- You can launch a display using PyDM, for example:
+```python
+from sc_linac_physics import launchers
+
+# Launch displays programmatically
+launchers.launch_srf_home()
+launchers.launch_cavity_display()
+launchers.launch_fault_decoder()
+launchers.launch_fault_count()
+
+# Launch applications
+launchers.launch_quench_processing()
+launchers.launch_auto_setup()
+launchers.launch_q0_measurement()
+launchers.launch_tuning()
+```
+
+### Using PyDM directly
+
+You can also launch displays using PyDM directly:
 
 ```bash
 pydm path/to/your_display.ui
@@ -90,6 +167,7 @@ Tip: Set PYDM_DEFAULT_PROTOCOL=fake to try displays without live PVs:
 
 ```bash
 export PYDM_DEFAULT_PROTOCOL=fake
+sc-linac cavity
 ```
 
 Headless usage (e.g., servers/CI):
@@ -97,7 +175,7 @@ Headless usage (e.g., servers/CI):
 ```bash
 export QT_QPA_PLATFORM=offscreen
 # or use Xvfb:
-xvfb-run -a pydm path/to/your_display.ui
+xvfb-run -a sc-linac srf-home
 ```
 
 ## Development
@@ -107,8 +185,6 @@ Set up environment:
 ```bash
 git clone git@github.com:slaclab/sc_linac_physics.git
 cd sc_linac_physics
-python -m venv .venv
-source .venv/bin/activate
 pip install -U pip setuptools wheel
 pip install -e ".[dev,test]"
 ```
@@ -126,9 +202,11 @@ Run tests with coverage (Linux headless):
 
 ```bash
 export QT_QPA_PLATFORM=offscreen
-pytest -vv -ra --durations=10 --tb=long -l --cov=sc_linac_physics --cov-branch --cov-report=term-missing
-# Or with Xvfb:
-# xvfb-run -a pytest --cov=sc_linac_physics --cov-branch --cov-report=term-missing
+pytest
+
+# Run specific test files
+pytest tests/test_cli.py -v
+pytest tests/test_launchers.py -v
 ```
 
 Combine multi-version coverage (if you test with multiple Python versions):
@@ -139,6 +217,37 @@ coverage combine
 coverage report -m
 coverage html -d htmlcov
 ```
+
+### Adding New Displays
+
+1. Create your display file in `src/sc_linac_physics/displays/`
+2. Add a launcher function in `launchers.py`:
+
+```python
+def launch_my_display():
+    """Launch my custom display."""
+    from pydm import PyDMApplication
+    from pathlib import Path
+
+    app = PyDMApplication()
+    display_path = Path(__file__).parent / "displays" / "my_display.ui"
+    app.make_main_window(str(display_path))
+    app.exec_()
+```
+
+3. Register it in `cli.py`:
+
+```python
+DISPLAYS = {
+    # ... existing displays ...
+    "my-display": {
+        "launcher": "launch_my_display",
+        "description": "My custom display description"
+    },
+}
+```
+
+4. Add tests in `tests/test_cli.py` and `tests/test_launchers.py`
 
 ## Release process
 
@@ -151,13 +260,15 @@ Releases are automated with semantic-release on pushes to the main branch.
 
 Commit message examples:
 
-- feat(q0): add automated calibration routine
-- fix(display): prevent crash when PV is disconnected
-- docs: update operator instructions
-- refactor: simplify analysis pipeline
-- chore: update CI Python versions
-- perf: speed up data loading
-- BREAKING CHANGE: rename module sc_linac_physics.foo to sc_linac_physics.bar
+- `feat(q0): add automated calibration routine`
+- `feat(cli): add unified command-line interface`
+- `fix(display): prevent crash when PV is disconnected`
+- `docs: update operator instructions`
+- `refactor: simplify analysis pipeline`
+- `chore: update CI Python versions`
+- `perf: speed up data loading`
+- `test(cli): add comprehensive CLI test coverage`
+- `BREAKING CHANGE: rename module sc_linac_physics.foo to sc_linac_physics.bar`
 
 Note: Upload to PyPI is disabled by default; artifacts are attached to GitHub Releases.
 
@@ -192,6 +303,9 @@ for p in display_dir.iterdir():
     - Use PYDM_DEFAULT_PROTOCOL=fake to test UI flow without EPICS
 - Import issues when developing:
     - Ensure editable install (-e) or add src/ to PYTHONPATH
+- CLI command not found after installation:
+    - Reinstall with `pip install -e .` or check that your virtual environment is activated
+    - Verify console_scripts entry points in pyproject.toml
 
 ## Contributing
 
@@ -214,3 +328,5 @@ This project is licensed under the terms described in the LICENSE file included 
 ## Changelog
 
 See CHANGELOG.md for release notes (auto-generated by semantic-release).
+
+```
