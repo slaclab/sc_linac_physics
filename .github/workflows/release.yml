@@ -67,7 +67,6 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           token: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-          persist-credentials: false
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -83,14 +82,16 @@ jobs:
       - name: Ensure tags are available
         run: git fetch --tags --force
       
-      - name: Configure git user
+      - name: Configure git credentials
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global url."https://x-access-token:${{ secrets.SEMANTIC_RELEASE_TOKEN }}@github.com/".insteadOf "https://github.com/"
       
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
         run: |
           echo "=== Git Status ==="
           git log --oneline -5
