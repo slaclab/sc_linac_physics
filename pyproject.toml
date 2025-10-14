@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sc_linac_physics"
-version = "0.1.0"
+version = "1.0.0"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -125,13 +125,20 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
 ]
 
 [tool.semantic_release]
-version_source = "commit"
+version_toml = ["pyproject.toml:project.version"]
+version_variables = [
+    "src/sc_linac_physics/__init__.py:__version__",
+]
 branch = "main"
 changelog_file = "CHANGELOG.md"
 build_command = "python -m build"
 upload_to_repository = false
 upload_to_release = true
 major_on_zero = false
-version_toml = ["pyproject.toml:project.version"]
 tag_format = "v{version}"
 commit_message = "chore(release): {version} [skip ci]"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "perf", "docs", "style", "chore", "test", "build", "ci", "refactor"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf", "refactor"]
