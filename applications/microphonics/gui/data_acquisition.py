@@ -181,19 +181,25 @@ class DataAcquisitionManager(QObject):
                 if not line:
                     continue
 
-                if not process_info.get("completion_signal_received"):
-                    if any(marker in line for marker in self.COMPLETION_MARKERS):
-                        process_info["completion_signal_received"] = True
-                        if process_info["last_progress"] < 100:
-                            for cavity_num in process_info["cavities"]:
-                                self.acquisitionProgress.emit(chassis_id, cavity_num, 100)
-                            process_info["last_progress"] = 100
-                    else:
-                        self._check_progress(line, chassis_id, process_info)
+                self._process_stdout_line(line, chassis_id, process_info)
 
         except Exception as e:
             logger.error(f"Error processing stdout for {chassis_id}: {e}", exc_info=True)
             self.acquisitionError.emit(chassis_id, f"Internal error processing script output: {str(e)}")
+
+    def _process_stdout_line(self, line: str, chassis_id: str, process_info: dict):
+        """Process a single line of stdout output"""
+        if process_info.get("completion_signal_received"):
+            return
+
+        if any(marker in line for marker in self.COMPLETION_MARKERS):
+            process_info["completion_signal_received"] = True
+            if process_info["last_progress"] < 100:
+                for cavity_num in process_info["cavities"]:
+                    self.acquisitionProgress.emit(chassis_id, cavity_num, 100)
+                process_info["last_progress"] = 100
+        else:
+            self._check_progress(line, chassis_id, process_info)
 
     def handle_stderr(self, chassis_id: str, process: QProcess):
         """Handle standard error from process"""
