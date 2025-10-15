@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from PyQt5.QtCore import QObject, QThread
 from PyQt5.QtCore import pyqtSignal
 
-from applications.microphonics.gui.data_acquisition import DataAcquisitionManager
+from sc_linac_physics.applications.microphonics.gui.data_acquisition import DataAcquisitionManager
 
 BASE_HARDWARE_SAMPLE_RATE = 2000
 

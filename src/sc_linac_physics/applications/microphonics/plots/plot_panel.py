@@ -7,12 +7,12 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
 )
 
-from applications.microphonics.gui.config_panel import ConfigPanel
-from applications.microphonics.plots.fft_plot import FFTPlot
-from applications.microphonics.plots.histogram_plot import HistogramPlot
-from applications.microphonics.plots.spectrogram_plot import SpectrogramPlot
-from applications.microphonics.plots.time_series_plot import TimeSeriesPlot
-from applications.microphonics.utils.ui_utils import (
+from sc_linac_physics.applications.microphonics.gui.config_panel import ConfigPanel
+from sc_linac_physics.applications.microphonics.plots.fft_plot import FFTPlot
+from sc_linac_physics.applications.microphonics.plots.histogram_plot import HistogramPlot
+from sc_linac_physics.applications.microphonics.plots.spectrogram_plot import SpectrogramPlot
+from sc_linac_physics.applications.microphonics.plots.time_series_plot import TimeSeriesPlot
+from sc_linac_physics.applications.microphonics.utils.ui_utils import (
     create_checkboxes,
     create_pushbuttons,
 )

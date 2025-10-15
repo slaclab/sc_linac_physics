@@ -16,9 +16,9 @@ from PyQt5.QtWidgets import (
     QTabWidget,
 )
 
-from applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
-from applications.microphonics.utils.pv_utils import format_accl_base
-from applications.microphonics.utils.ui_utils import (
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
+from sc_linac_physics.applications.microphonics.utils.pv_utils import format_accl_base
+from sc_linac_physics.applications.microphonics.utils.ui_utils import (
     create_cavity_selection_tabs,
     create_pushbuttons,
 )

@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGroupBox, QGridLayout
 
-from applications.microphonics.utils.ui_utils import create_status_widgets
+from sc_linac_physics.applications.microphonics.utils.ui_utils import create_status_widgets
 
 
 class StatusPanel(QWidget):

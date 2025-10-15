@@ -1,7 +1,7 @@
 import numpy as np
 
-from applications.microphonics.plots.base_plot import BasePlot
-from applications.microphonics.utils.data_processing import calculate_histogram
+from sc_linac_physics.applications.microphonics.plots.base_plot import BasePlot
+from sc_linac_physics.applications.microphonics.utils.data_processing import calculate_histogram
 
 
 class HistogramPlot(BasePlot):

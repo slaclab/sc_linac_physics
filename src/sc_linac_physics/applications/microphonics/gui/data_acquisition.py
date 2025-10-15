@@ -7,7 +7,7 @@ from typing import Dict
 
 from PyQt5.QtCore import QObject, pyqtSignal, QProcess, QTimer
 
-from applications.microphonics.utils.file_parser import (
+from sc_linac_physics.applications.microphonics.utils.file_parser import (
     FileParserError,
     load_and_process_file,
 )

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from applications.microphonics.utils.file_parser import (
+from sc_linac_physics.applications.microphonics.utils.file_parser import (
     load_and_process_file,
     FileParserError,
 )
