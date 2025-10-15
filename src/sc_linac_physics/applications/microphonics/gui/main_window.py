@@ -364,11 +364,15 @@ class MicrophonicsGUI(Display):
         except Exception as e:
             self._handle_load_error(f"Failed to load data: {str(e)}")
 
+    def _show_error_dialog(self, title: str, message: str):
+        """Show error dialog - this method exists to make testing easier"""
+        QMessageBox.critical(self, title, message)
+
     def _handle_load_error(self, error_msg: str):
         """Handle errors during data loading"""
         logger.error("Error loading data: %s", error_msg)
         self.data_loading.update_file_info("Error loading file")
-        QMessageBox.critical(self, "Error", error_msg)
+        self._show_error_dialog("Error", error_msg)
 
     def _handle_load_progress(self, progress: int):
         """Handle progress updates during data loading"""
