@@ -330,7 +330,7 @@ class ConfigPanel(QWidget):
         group.setLayout(layout)
         return group
 
-    def _on_linac_selected(self, linac):
+    def _on_linac_selected(self, selected_linac):
         """Handle linac selection"""
         if self.is_updating:
             return
@@ -339,9 +339,9 @@ class ConfigPanel(QWidget):
         try:
             # Updates button states
             for linac, btn in self.linac_buttons.items():
-                btn.setChecked(linac == linac)
+                btn.setChecked(linac == selected_linac)
 
-            self.selected_linac = linac
+            self.selected_linac = selected_linac
             self._update_cryomodule_buttons()
             self._emit_config_changed()
         finally:
@@ -412,7 +412,7 @@ class ConfigPanel(QWidget):
 
         # Connects start/stop buttons
         self.start_button.clicked.connect(self._on_start_clicked)
-        self.stop_button.clicked.connect(self.measurementStopped.emit)
+        self.stop_button.clicked.connect(lambda: self.measurementStopped.emit())
 
         if hasattr(self, "decim_combo"):
             self.decim_combo.currentIndexChanged.connect(self._handle_decimation_change)
