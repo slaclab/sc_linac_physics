@@ -339,7 +339,6 @@ class DataAcquisitionManager(QObject):
                 current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 logging.debug(f"[{current_time_end}] Successfully processed and emitted data for: {output_path}")
             else:
-
                 logging.error(
                     f"load_and_process_file did not return valid data for {chassis_id} from {output_path.name}."
                 )
