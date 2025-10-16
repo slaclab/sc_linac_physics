@@ -6,7 +6,7 @@ from typing import Tuple, List, Optional, Dict, Any
 
 import numpy as np
 
-from applications.microphonics.utils.pv_utils import extract_cavity_channel_from_pv
+from sc_linac_physics.applications.microphonics.utils.pv_utils import extract_cavity_channel_from_pv
 
 HEADER_MARKER = "# ACCL:"
 COMMENT_MARKER = "#"

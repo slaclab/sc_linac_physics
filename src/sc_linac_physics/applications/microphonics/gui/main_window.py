@@ -6,20 +6,20 @@ from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QMessageBox
 from pydm import Display
 
-from applications.microphonics.components.components import (
+from sc_linac_physics.applications.microphonics.components.components import (
     ChannelSelectionGroup,
     DataLoadingGroup,
 )
-from applications.microphonics.gui.async_data_manager import (
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
     MeasurementConfig,
     AsyncDataManager,
 )
-from applications.microphonics.gui.config_panel import ConfigPanel
-from applications.microphonics.gui.data_loader import DataLoader
-from applications.microphonics.gui.statistics_calculator import StatisticsCalculator
-from applications.microphonics.gui.status_panel import StatusPanel
-from applications.microphonics.plots.plot_panel import PlotPanel
-from applications.microphonics.utils.pv_utils import format_pv_base
+from sc_linac_physics.applications.microphonics.gui.config_panel import ConfigPanel
+from sc_linac_physics.applications.microphonics.gui.data_loader import DataLoader
+from sc_linac_physics.applications.microphonics.gui.statistics_calculator import StatisticsCalculator
+from sc_linac_physics.applications.microphonics.gui.status_panel import StatusPanel
+from sc_linac_physics.applications.microphonics.plots.plot_panel import PlotPanel
+from sc_linac_physics.applications.microphonics.utils.pv_utils import format_pv_base
 
 logger = logging.getLogger(__name__)
 
@@ -364,11 +364,15 @@ class MicrophonicsGUI(Display):
         except Exception as e:
             self._handle_load_error(f"Failed to load data: {str(e)}")
 
+    def _show_error_dialog(self, title: str, message: str):
+        """Show error dialog - this method exists to make testing easier"""
+        QMessageBox.critical(self, title, message)
+
     def _handle_load_error(self, error_msg: str):
         """Handle errors during data loading"""
         logger.error("Error loading data: %s", error_msg)
         self.data_loading.update_file_info("Error loading file")
-        QMessageBox.critical(self, "Error", error_msg)
+        self._show_error_dialog("Error", error_msg)
 
     def _handle_load_progress(self, progress: int):
         """Handle progress updates during data loading"""

@@ -1,8 +1,8 @@
 import numpy as np
 
-from applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
-from applications.microphonics.plots.base_plot import BasePlot
-from applications.microphonics.utils.data_processing import calculate_fft
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
+from sc_linac_physics.applications.microphonics.plots.base_plot import BasePlot
+from sc_linac_physics.applications.microphonics.utils.data_processing import calculate_fft
 
 
 class FFTPlot(BasePlot):

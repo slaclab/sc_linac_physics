@@ -87,6 +87,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+filterwarnings = [
+    "ignore:.*autoRangeEnabled.*:DeprecationWarning"
+]
 
 [tool.coverage.run]
 source = ["src"]

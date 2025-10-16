@@ -4,7 +4,7 @@ import sys
 import pyqtgraph as pg
 from pydm import PyDMApplication
 
-from applications.microphonics.gui.main_window import MicrophonicsGUI
+from sc_linac_physics.applications.microphonics.gui.main_window import MicrophonicsGUI
 
 # Monkey patch for compatibility w/ PyQtGraph versions
 if not hasattr(pg.PlotWidget, "autoRangeEnabled"):

@@ -7,7 +7,7 @@ from typing import Dict
 
 from PyQt5.QtCore import QObject, pyqtSignal, QProcess, QTimer
 
-from applications.microphonics.utils.file_parser import (
+from sc_linac_physics.applications.microphonics.utils.file_parser import (
     FileParserError,
     load_and_process_file,
 )
@@ -339,7 +339,6 @@ class DataAcquisitionManager(QObject):
                 current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 logging.debug(f"[{current_time_end}] Successfully processed and emitted data for: {output_path}")
             else:
-
                 logging.error(
                     f"load_and_process_file did not return valid data for {chassis_id} from {output_path.name}."
                 )
