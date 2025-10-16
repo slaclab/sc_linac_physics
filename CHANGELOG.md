@@ -2,6 +2,58 @@
 
 <!-- version list -->
 
+## v1.2.0 (2025-10-16)
+
+### Bug Fixes
+
+- **microphonics**: Correct variable shadowing in config panel
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+### Documentation
+
+- **readme**: Add CLI usage documentation and examples
+  ([`027946f`](https://github.com/slaclab/sc_linac_physics/commit/027946f9ff80f21c73c885a0c957252664cd0467))
+
+### Features
+
+- **tests**: Add TimeSeriesPlot test suite with Python 3.13 compatibility
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+### Refactoring
+
+- **microphonics**: Move application to src layout
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+### Testing
+
+- **async**: Add AsyncDataManager test suite (49/49 passing)
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+- **microphonics**: Add DataAcquisitionManager test suite
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+- **microphonics**: Add file_parser unit tests
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+- **microphonics**: Add main window test coverage
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+- **plots**: Add comprehensive PlotPanel test suite (45/45 passing)
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+- **plots**: Add comprehensive SpectrogramPlot test suite
+  ([#126](https://github.com/slaclab/sc_linac_physics/pull/126),
+  [`de18c2f`](https://github.com/slaclab/sc_linac_physics/commit/de18c2f4e11d4e9d90bb2583404255a4543e2316))
+
+
 ## v1.1.0 (2025-10-14)
 
 ### Features
