@@ -47,14 +47,6 @@ class CavitySection(QObject):
             init_channel=cavity.tune_config_pv
         )
 
-        self.chirp_start: LabeledSpinbox = LabeledSpinbox(
-            init_channel=cavity.chirp_freq_start_pv
-        )
-
-        self.chirp_stop: LabeledSpinbox = LabeledSpinbox(
-            init_channel=cavity.chirp_freq_stop_pv
-        )
-
         self.motor_speed: LabeledSpinbox = LabeledSpinbox(
             init_channel=cavity.stepper_tuner.speed_pv
         )
@@ -63,22 +55,26 @@ class CavitySection(QObject):
             init_channel=cavity.stepper_tuner.max_steps_pv
         )
 
+        # Create chirp button
+        self.chirp_button: QPushButton = QPushButton("Set Chirp ±400kHz")
+        self.chirp_button.clicked.connect(self.set_chirp_range)
+
         self.groupbox = QGroupBox(f"Cavity {cavity.number}")
         layout = QVBoxLayout()
         self.groupbox.setLayout(layout)
         spinbox_layout = QGridLayout()
         layout.addWidget(self.tune_state)
 
-        spinbox_layout.addLayout(self.chirp_start.layout, 0, 0)
-        spinbox_layout.addLayout(self.chirp_stop.layout, 0, 1)
-        spinbox_layout.addLayout(self.motor_speed.layout, 1, 0)
-        spinbox_layout.addLayout(self.max_steps.layout, 1, 1)
+        spinbox_layout.addLayout(self.motor_speed.layout, 0, 1)
+        spinbox_layout.addLayout(self.max_steps.layout, 0, 2)
+        spinbox_layout.addWidget(self.chirp_button, 1, 0, 1, 4)
 
         expert_options = CollapsibleGroupBox(
             f"Show {cavity} expert options", spinbox_layout
         )
         layout.addWidget(expert_options)
 
+        # Cold landing button and status
         button_layout = QHBoxLayout()
 
         self.cold_button: QPushButton = QPushButton("Move to Cold Landing")
@@ -106,6 +102,13 @@ class CavitySection(QObject):
 
     def move_to_cold_landing(self):
         self.parent.threadpool.start(self.cold_worker)
+
+    def set_chirp_range(self):
+        print(
+            "Setting start frequency to -400kHz and stop frequency to +400kHz"
+        )
+        self.cavity.chirp_freq_start = -400e3
+        self.cavity.chirp_freq_stop = 400e3
 
 
 class RackScreen(QObject):
