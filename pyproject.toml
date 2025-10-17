@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sc_linac_physics"
-version = "1.0.0"
+version = "1.2.0"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -64,7 +64,7 @@ extend-exclude = '''
 max-line-length = 120
 max-complexity = 10
 extend-ignore = [
-    "E203",  # whitespace before ':' - conflicts with black
+    "E203", # whitespace before ':' - conflicts with black
     "W503"   # line break before binary operator - conflicts with black
 ]
 exclude = [
@@ -87,6 +87,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+filterwarnings = [
+    "ignore:.*autoRangeEnabled.*:DeprecationWarning"
+]
 
 [tool.coverage.run]
 source = ["src"]
@@ -142,3 +145,19 @@ commit_message = "chore(release): {version} [skip ci]"
 allowed_tags = ["feat", "fix", "perf", "docs", "style", "chore", "test", "build", "ci", "refactor"]
 minor_tags = ["feat"]
 patch_tags = ["fix", "perf", "refactor"]
+
+[project.scripts]
+# Main CLI tool
+sc-linac = "sc_linac_physics.cli:main"
+
+# Display launchers
+sc-linac-srf-home = "sc_linac_physics.launchers:launch_srf_home"
+sc-linac-cavity = "sc_linac_physics.launchers:launch_cavity_display"
+sc-linac-fault-decoder = "sc_linac_physics.launchers:launch_fault_decoder"
+sc-linac-fault-count = "sc_linac_physics.launchers:launch_fault_count"
+
+# Application launchers
+sc-linac-quench = "sc_linac_physics.launchers:launch_quench_processing"
+sc-linac-setup = "sc_linac_physics.launchers:launch_auto_setup"
+sc-linac-q0 = "sc_linac_physics.launchers:launch_q0_measurement"
+sc-linac-tuning = "sc_linac_physics.launchers:launch_tuning"
