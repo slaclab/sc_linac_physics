@@ -4,8 +4,12 @@ import pytest
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QApplication
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
-from sc_linac_physics.applications.microphonics.gui.config_panel import ConfigPanel
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+    BASE_HARDWARE_SAMPLE_RATE,
+)
+from sc_linac_physics.applications.microphonics.gui.config_panel import (
+    ConfigPanel,
+)
 
 
 def pytest_configure(config):
@@ -44,7 +48,9 @@ def test_initial_state(config_panel):
     assert config_panel.is_updating is False
 
     # Check default decimation value
-    assert config_panel.decim_combo.currentText() == str(config_panel.DEFAULT_DECIMATION_VALUE)
+    assert config_panel.decim_combo.currentText() == str(
+        config_panel.DEFAULT_DECIMATION_VALUE
+    )
 
     # Check default buffer count
     assert config_panel.buffer_spin.value() == config_panel.DEFAULT_BUFFER_COUNT
@@ -64,7 +70,9 @@ def test_linac_selection(config_panel):
     assert config_panel.selected_linac == "L0B"
 
     # Check that the correct cryomodules are shown
-    assert len(config_panel.cryo_buttons) == len(config_panel.VALID_LINACS["L0B"])
+    assert len(config_panel.cryo_buttons) == len(
+        config_panel.VALID_LINACS["L0B"]
+    )
     assert "01" in config_panel.cryo_buttons
 
 
@@ -96,13 +104,19 @@ def test_decimation_settings(config_panel):
         # Check sampling rate calculation
         expected_rate = BASE_HARDWARE_SAMPLE_RATE / decimation
         displayed_rate = float(config_panel.label_sampling_rate.text())
-        assert abs(expected_rate - displayed_rate) < 0.1  # Allow for floating point rounding
+        assert (
+            abs(expected_rate - displayed_rate) < 0.1
+        )  # Allow for floating point rounding
 
         # Check acquisition time calculation with default buffer count
         buffer_count = config_panel.DEFAULT_BUFFER_COUNT
-        expected_time = (config_panel.BUFFER_LENGTH * decimation * buffer_count) / BASE_HARDWARE_SAMPLE_RATE
+        expected_time = (
+            config_panel.BUFFER_LENGTH * decimation * buffer_count
+        ) / BASE_HARDWARE_SAMPLE_RATE
         displayed_time = float(config_panel.label_acq_time.text())
-        assert abs(expected_time - displayed_time) < 0.01  # Allow for floating point rounding
+        assert (
+            abs(expected_time - displayed_time) < 0.01
+        )  # Allow for floating point rounding
 
 
 def test_measurement_control(config_panel):
@@ -202,7 +216,9 @@ def test_signal_emission(config_panel):
             config_panel.configChanged.connect(on_config_changed),
             config_panel.measurementStarted.connect(on_measurement_started),
             config_panel.measurementStopped.connect(on_measurement_stopped),
-            config_panel.decimationSettingChanged.connect(on_decimation_changed),
+            config_panel.decimationSettingChanged.connect(
+                on_decimation_changed
+            ),
         ]
     )
 
@@ -219,7 +235,9 @@ def test_signal_emission(config_panel):
     # Test measurement control
     config_panel.set_measurement_running(True)  # This enables the stop button
     config_panel.stop_button.click()
-    assert measurement_stopped_count == 1  # Config should have changed multiple times
+    assert (
+        measurement_stopped_count == 1
+    )  # Config should have changed multiple times
     assert config_changed_count > 0
 
     # Clean up signal connections

@@ -10,11 +10,16 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 from lcls_tools.common.data.archiver import ArchiverValue, ArchiveDataHandler
 
-from sc_linac_physics.displays.cavity_display.backend.fault import Fault, FaultCounter
+from sc_linac_physics.displays.cavity_display.backend.fault import (
+    Fault,
+    FaultCounter,
+)
 
 archiver_value = ArchiverValue()
 get_data_at_time_mock = MagicMock(return_value={"PV": archiver_value})
-get_values_over_time_range_mock = MagicMock(return_value={"PV": ArchiveDataHandler([archiver_value])})
+get_values_over_time_range_mock = MagicMock(
+    return_value={"PV": ArchiveDataHandler([archiver_value])}
+)
 
 
 @patch.multiple(
@@ -64,7 +69,10 @@ class TestFault(TestCase):
         pv: MagicMock = make_mock_pv()
         self.assertRaises(Exception, self.fault.is_faulted, pv)
 
-    @patch("sc_linac_physics.displays.cavity_display.backend.fault.get_data_at_time", get_data_at_time_mock)
+    @patch(
+        "sc_linac_physics.displays.cavity_display.backend.fault.get_data_at_time",
+        get_data_at_time_mock,
+    )
     def test_was_faulted(self):
         self.fault.pv = "PV"
         self.fault.is_faulted = MagicMock()
@@ -82,7 +90,9 @@ class TestFault(TestCase):
         )
 
         self.assertEqual(get_data_at_time, get_data_at_time_mock)
-        self.assertEqual(get_values_over_time_range, get_values_over_time_range_mock)
+        self.assertEqual(
+            get_values_over_time_range, get_values_over_time_range_mock
+        )
 
 
 class TestFaultCounter(TestCase):
@@ -109,19 +119,28 @@ class TestFaultCounter(TestCase):
         )
 
     def test_sum_fault_count(self):
-        self.assertEqual(self.fault_count + self.invalid_count, self.fault_counter.sum_fault_count)
+        self.assertEqual(
+            self.fault_count + self.invalid_count,
+            self.fault_counter.sum_fault_count,
+        )
 
     def test_ratio_ok(self):
         self.skipTest("Not yet implemented")
 
     def test_gt(self):
-        if self.fault_counter.sum_fault_count > self.fault_counter2.sum_fault_count:
+        if (
+            self.fault_counter.sum_fault_count
+            > self.fault_counter2.sum_fault_count
+        ):
             self.assertTrue(self.fault_counter > self.fault_counter2)
         else:
             self.assertFalse(self.fault_counter > self.fault_counter2)
 
     def test_eq(self):
-        if self.fault_counter.sum_fault_count == self.fault_counter2.sum_fault_count:
+        if (
+            self.fault_counter.sum_fault_count
+            == self.fault_counter2.sum_fault_count
+        ):
             self.assertTrue(self.fault_counter == self.fault_counter2)
         else:
             self.assertFalse(self.fault_counter == self.fault_counter2)

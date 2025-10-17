@@ -27,7 +27,9 @@ from sc_linac_physics.utils.sc_linac.cavity import Cavity
 
 class BackendCavity(Cavity):
     def __init__(self, cavity_num, rack_object):
-        super(BackendCavity, self).__init__(cavity_num=cavity_num, rack_object=rack_object)
+        super(BackendCavity, self).__init__(
+            cavity_num=cavity_num, rack_object=rack_object
+        )
         self.status_pv: str = self.pv_addr(STATUS_SUFFIX)
         self._status_pv_obj: Optional[PV] = None
         self.severity_pv: str = self.pv_addr(SEVERITY_SUFFIX)
@@ -82,14 +84,18 @@ class BackendCavity(Cavity):
                 pv: str = prefix + suffix
 
             elif level == "CRYO":
-                prefix = csv_fault_dict["PV Prefix"].format(CRYOMODULE=self.cryomodule.name, CAVITY=self.number)
+                prefix = csv_fault_dict["PV Prefix"].format(
+                    CRYOMODULE=self.cryomodule.name, CAVITY=self.number
+                )
                 pv: str = prefix + suffix
                 macros = self.cryo_edm_macro_string
 
             elif level == "SSA":
                 pv: str = self.ssa.pv_addr(suffix)
                 button_command = button_command.format(
-                    cm_OR_hl="hl" if self.cryomodule.is_harmonic_linearizer else "cm"
+                    cm_OR_hl=(
+                        "hl" if self.cryomodule.is_harmonic_linearizer else "cm"
+                    )
                 )
 
             elif level == "CAV":
@@ -103,8 +109,11 @@ class BackendCavity(Cavity):
                     CAVITY=self.number,
                 )
 
-                if (cm_type == "1.3" and self.cryomodule.is_harmonic_linearizer) or (
-                    cm_type == "3.9" and not self.cryomodule.is_harmonic_linearizer
+                if (
+                    cm_type == "1.3" and self.cryomodule.is_harmonic_linearizer
+                ) or (
+                    cm_type == "3.9"
+                    and not self.cryomodule.is_harmonic_linearizer
                 ):
                     continue
                 pv: str = prefix + suffix
@@ -114,7 +123,11 @@ class BackendCavity(Cavity):
                 pv: str = prefix + suffix
 
             else:
-                raise (SpreadsheetError("Unexpected fault level in fault spreadsheet"))
+                raise (
+                    SpreadsheetError(
+                        "Unexpected fault level in fault spreadsheet"
+                    )
+                )
 
             tlc: str = csv_fault_dict["Three Letter Code"]
             ok_condition: str = csv_fault_dict["OK If Equal To"]
@@ -148,7 +161,9 @@ class BackendCavity(Cavity):
                 lazy_pv=self.rack.cryomodule.linac.machine.lazy_fault_pvs,
             )
 
-    def get_fault_counts(self, start_time: datetime, end_time: datetime) -> DefaultDict[str, FaultCounter]:
+    def get_fault_counts(
+        self, start_time: datetime, end_time: datetime
+    ) -> DefaultDict[str, FaultCounter]:
         """
         Using max function to get the maximum fault or invalid count for duplicate TLCs
             i.e. MGT tlc has three PVs associated with it (X, Y, and Q) but we
@@ -171,7 +186,9 @@ class BackendCavity(Cavity):
                 continue
 
             try:
-                ts = status_ts.replace(microsecond=round(status_ts.microsecond / 10000) * 10000)
+                ts = status_ts.replace(
+                    microsecond=round(status_ts.microsecond / 10000) * 10000
+                )
             except ValueError:
                 ts = status_ts + timedelta(seconds=1)
 

@@ -7,7 +7,9 @@ import pytest
 from PyQt5.QtCore import QThread
 from PyQt5.QtWidgets import QApplication
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import AsyncDataManager
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+    AsyncDataManager,
+)
 
 
 @pytest.fixture(scope="session")
@@ -105,7 +107,12 @@ class TestConfigValidation:
 
     def test_validate_missing_cavities(self, async_manager):
         """Test validation with missing cavities"""
-        config = {"chassis_1": {"pv_base": "TEST:PV", "config": Mock(validate=Mock(return_value=None))}}
+        config = {
+            "chassis_1": {
+                "pv_base": "TEST:PV",
+                "config": Mock(validate=Mock(return_value=None)),
+            }
+        }
         errors = async_manager._validate_all_chassis_config(config)
         assert len(errors) == 1
         assert "chassis_1" in errors[0][0]
@@ -113,7 +120,12 @@ class TestConfigValidation:
 
     def test_validate_missing_pv_base(self, async_manager):
         """Test validation with missing PV base"""
-        config = {"chassis_1": {"cavities": [1, 2, 3], "config": Mock(validate=Mock(return_value=None))}}
+        config = {
+            "chassis_1": {
+                "cavities": [1, 2, 3],
+                "config": Mock(validate=Mock(return_value=None)),
+            }
+        }
         errors = async_manager._validate_all_chassis_config(config)
         assert len(errors) == 1
         assert "chassis_1" in errors[0][0]
@@ -124,7 +136,13 @@ class TestConfigValidation:
         mock_config = Mock()
         mock_config.validate.return_value = "Invalid configuration"
 
-        config = {"chassis_1": {"pv_base": "TEST:PV", "cavities": [1, 2, 3], "config": mock_config}}
+        config = {
+            "chassis_1": {
+                "pv_base": "TEST:PV",
+                "cavities": [1, 2, 3],
+                "config": mock_config,
+            }
+        }
         errors = async_manager._validate_all_chassis_config(config)
         assert len(errors) == 1
         assert "chassis_1" in errors[0][0]
@@ -154,7 +172,9 @@ class TestConfigValidation:
 class TestJobManagement:
     """Test job management and state"""
 
-    def test_initiate_measurement_while_running(self, async_manager, mock_chassis_config, qtbot):
+    def test_initiate_measurement_while_running(
+        self, async_manager, mock_chassis_config, qtbot
+    ):
         """Test that initiating while job running emits error"""
         async_manager.job_running = True
 
@@ -175,13 +195,17 @@ class TestJobManagement:
         with qtbot.waitSignal(async_manager.acquisitionError, timeout=1000):
             async_manager.initiate_measurement(invalid_config)
 
-    def test_initiate_measurement_sets_job_running(self, async_manager, mock_chassis_config):
+    def test_initiate_measurement_sets_job_running(
+        self, async_manager, mock_chassis_config
+    ):
         """Test that initiating sets job_running flag"""
         with patch.object(async_manager, "_start_worker_for_chassis"):
             async_manager.initiate_measurement(mock_chassis_config)
             assert async_manager.job_running is True
 
-    def test_initiate_measurement_initializes_tracking(self, async_manager, mock_chassis_config):
+    def test_initiate_measurement_initializes_tracking(
+        self, async_manager, mock_chassis_config
+    ):
         """Test that initiating initializes tracking structures"""
         with patch.object(async_manager, "_start_worker_for_chassis"):
             async_manager.initiate_measurement(mock_chassis_config)
@@ -191,7 +215,9 @@ class TestJobManagement:
             assert async_manager.worker_progress["chassis_1"] == 0
             assert async_manager.worker_data == {}
 
-    def test_initiate_measurement_multiple_chassis(self, async_manager, multi_chassis_config):
+    def test_initiate_measurement_multiple_chassis(
+        self, async_manager, multi_chassis_config
+    ):
         """Test initiating with multiple chassis"""
         with patch.object(async_manager, "_start_worker_for_chassis"):
             async_manager.initiate_measurement(multi_chassis_config)
@@ -227,9 +253,15 @@ class TestJobManagement:
 class TestWorkerManagement:
     """Test worker thread management"""
 
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread")
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager")
-    def test_start_worker_creates_thread(self, mock_dam_class, mock_qthread_class, async_manager):
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
+    )
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
+    )
+    def test_start_worker_creates_thread(
+        self, mock_dam_class, mock_qthread_class, async_manager
+    ):
         """Test that starting worker creates thread and worker"""
         mock_thread = Mock(spec=QThread)
         mock_worker = Mock()
@@ -245,9 +277,15 @@ class TestWorkerManagement:
         mock_dam_class.assert_called_once()
         mock_worker.moveToThread.assert_called_once_with(mock_thread)
 
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread")
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager")
-    def test_start_worker_connects_signals(self, mock_dam_class, mock_qthread_class, async_manager):
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
+    )
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
+    )
+    def test_start_worker_connects_signals(
+        self, mock_dam_class, mock_qthread_class, async_manager
+    ):
         """Test that worker signals are connected"""
         mock_thread = Mock(spec=QThread)
         mock_worker = Mock()
@@ -264,9 +302,15 @@ class TestWorkerManagement:
         assert mock_worker.acquisitionComplete.connect.called
         assert mock_worker.dataReceived.connect.called
 
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread")
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager")
-    def test_start_worker_stores_reference(self, mock_dam_class, mock_qthread_class, async_manager):
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
+    )
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
+    )
+    def test_start_worker_stores_reference(
+        self, mock_dam_class, mock_qthread_class, async_manager
+    ):
         """Test that worker reference is stored"""
         mock_thread = Mock(spec=QThread)
         mock_worker = Mock()
@@ -282,9 +326,15 @@ class TestWorkerManagement:
         assert thread == mock_thread
         assert worker == mock_worker
 
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread")
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager")
-    def test_start_worker_starts_thread(self, mock_dam_class, mock_qthread_class, async_manager):
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
+    )
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
+    )
+    def test_start_worker_starts_thread(
+        self, mock_dam_class, mock_qthread_class, async_manager
+    ):
         """Test that thread is started"""
         mock_thread = Mock(spec=QThread)
         mock_worker = Mock()
@@ -301,7 +351,9 @@ class TestWorkerManagement:
 class TestProgressHandling:
     """Test progress signal handling"""
 
-    def test_handle_worker_progress_updates_tracking(self, async_manager, qtbot):
+    def test_handle_worker_progress_updates_tracking(
+        self, async_manager, qtbot
+    ):
         """Test that worker progress updates tracking dict"""
         async_manager.job_chassis_ids = {"chassis_1"}
         async_manager.worker_progress = {"chassis_1": 0}
@@ -315,12 +367,16 @@ class TestProgressHandling:
         async_manager.job_chassis_ids = {"chassis_1"}
         async_manager.worker_progress = {"chassis_1": 0}
 
-        with qtbot.waitSignal(async_manager.acquisitionProgress, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.acquisitionProgress, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_progress("chassis_1", 1, 50)
 
         assert blocker.args == ["chassis_1", 1, 50]
 
-    def test_handle_worker_progress_calculates_job_progress(self, async_manager, qtbot):
+    def test_handle_worker_progress_calculates_job_progress(
+        self, async_manager, qtbot
+    ):
         """Test that job progress is calculated from all workers"""
         async_manager.job_chassis_ids = {"chassis_1", "chassis_2"}
         async_manager.worker_progress = {"chassis_1": 0, "chassis_2": 0}
@@ -329,7 +385,9 @@ class TestProgressHandling:
         async_manager._handle_worker_progress("chassis_1", 1, 50)
 
         # Second update should emit average
-        with qtbot.waitSignal(async_manager.jobProgress, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.jobProgress, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_progress("chassis_2", 5, 100)
 
         # The signal captures the LAST emission which is after second update
@@ -341,7 +399,9 @@ class TestProgressHandling:
         async_manager.job_chassis_ids = {"chassis_1"}
         async_manager.worker_progress = {"chassis_1": 0}
 
-        with qtbot.waitSignal(async_manager.jobProgress, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.jobProgress, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_progress("chassis_1", 1, 60)
 
         assert blocker.args[0] == 60
@@ -364,8 +424,12 @@ class TestErrorHandling:
         async_manager.job_running = True
         async_manager.job_chassis_ids = {"chassis_1"}
 
-        with qtbot.waitSignal(async_manager.acquisitionError, timeout=1000) as blocker1:
-            with qtbot.waitSignal(async_manager.jobError, timeout=1000) as blocker2:
+        with qtbot.waitSignal(
+            async_manager.acquisitionError, timeout=1000
+        ) as blocker1:
+            with qtbot.waitSignal(
+                async_manager.jobError, timeout=1000
+            ) as blocker2:
                 async_manager._handle_worker_error("chassis_1", "Test error")
 
         assert blocker1.args == ["chassis_1", "Test error"]
@@ -403,7 +467,10 @@ class TestDataHandling:
 
         test_data = {
             "cavity_list": [1, 2],
-            "cavities": {1: {"DF": np.array([1, 2, 3])}, 2: {"DF": np.array([4, 5, 6])}},
+            "cavities": {
+                1: {"DF": np.array([1, 2, 3])},
+                2: {"DF": np.array([4, 5, 6])},
+            },
         }
 
         async_manager._handle_worker_data("chassis_1", test_data)
@@ -427,7 +494,9 @@ class TestDataHandling:
 class TestCompletionHandling:
     """Test completion signal handling"""
 
-    def test_handle_worker_complete_all_triggers_job_complete(self, async_manager, qtbot):
+    def test_handle_worker_complete_all_triggers_job_complete(
+        self, async_manager, qtbot
+    ):
         """Test that completing all workers triggers job complete"""
         # Setup job state
         async_manager.job_running = True
@@ -437,7 +506,10 @@ class TestCompletionHandling:
         async_manager.worker_data = {
             "chassis_1": {
                 "cavity_list": [1, 2],
-                "cavities": {1: {"DF": np.array([1])}, 2: {"DF": np.array([2])}},
+                "cavities": {
+                    1: {"DF": np.array([1])},
+                    2: {"DF": np.array([2])},
+                },
                 "decimation": 1,
             }
         }
@@ -456,7 +528,9 @@ class TestCompletionHandling:
         }
 
         # Complete second chassis - should trigger job complete
-        with qtbot.waitSignal(async_manager.jobComplete, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.jobComplete, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_complete("chassis_2")
 
         # Job is complete
@@ -478,7 +552,10 @@ class TestCompletionHandling:
         async_manager.worker_data = {
             "chassis_1": {
                 "cavity_list": [1, 2],
-                "cavities": {1: {"DF": np.array([1.0])}, 2: {"DF": np.array([2.0])}},
+                "cavities": {
+                    1: {"DF": np.array([1.0])},
+                    2: {"DF": np.array([2.0])},
+                },
                 "decimation": 1,
             }
         }
@@ -489,12 +566,17 @@ class TestCompletionHandling:
         # Add second chassis data
         async_manager.worker_data["chassis_2"] = {
             "cavity_list": [3, 4],
-            "cavities": {3: {"DF": np.array([3.0])}, 4: {"DF": np.array([4.0])}},
+            "cavities": {
+                3: {"DF": np.array([3.0])},
+                4: {"DF": np.array([4.0])},
+            },
             "decimation": 1,
         }
 
         # Complete second worker - triggers completion
-        with qtbot.waitSignal(async_manager.jobComplete, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.jobComplete, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_complete("chassis_2")
 
         # Get the aggregated data from signal
@@ -512,7 +594,9 @@ class TestCompletionHandling:
         """Test that worker complete emits signal"""
         async_manager.job_chassis_ids = {"chassis_1"}
 
-        with qtbot.waitSignal(async_manager.acquisitionComplete, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.acquisitionComplete, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_complete("chassis_1")
 
         assert blocker.args == ["chassis_1"]
@@ -521,7 +605,13 @@ class TestCompletionHandling:
         """Test that job complete resets job_running"""
         async_manager.job_chassis_ids = {"chassis_1"}
         async_manager.job_running = True
-        async_manager.worker_data = {"chassis_1": {"cavity_list": [1], "cavities": {1: {}}, "decimation": 1}}
+        async_manager.worker_data = {
+            "chassis_1": {
+                "cavity_list": [1],
+                "cavities": {1: {}},
+                "decimation": 1,
+            }
+        }
 
         async_manager._handle_worker_complete("chassis_1")
 
@@ -577,10 +667,19 @@ class TestStopWorker:
 class TestIntegrationScenarios:
     """Test complete workflows"""
 
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread")
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager")
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
+    )
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
+    )
     def test_full_single_chassis_workflow(
-        self, mock_dam_class, mock_qthread_class, async_manager, mock_chassis_config, qtbot
+        self,
+        mock_dam_class,
+        mock_qthread_class,
+        async_manager,
+        mock_chassis_config,
+        qtbot,
     ):
         """Test complete workflow for single chassis"""
         mock_thread = Mock(spec=QThread)
@@ -607,20 +706,26 @@ class TestIntegrationScenarios:
         async_manager._handle_worker_data("chassis_1", test_data)
 
         # Simulate completion
-        with qtbot.waitSignal(async_manager.jobComplete, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.jobComplete, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_complete("chassis_1")
 
         assert async_manager.job_running is False
         assert blocker.args[0]["cavity_list"] == [1, 2, 3, 4]
 
-    def test_workflow_with_error(self, async_manager, multi_chassis_config, qtbot):
+    def test_workflow_with_error(
+        self, async_manager, multi_chassis_config, qtbot
+    ):
         """Test workflow when one worker errors"""
         with patch.object(async_manager, "_start_worker_for_chassis"):
             async_manager.initiate_measurement(multi_chassis_config)
 
             # Simulate error from one chassis
             with qtbot.waitSignal(async_manager.jobError, timeout=1000):
-                async_manager._handle_worker_error("chassis_1", "Connection failed")
+                async_manager._handle_worker_error(
+                    "chassis_1", "Connection failed"
+                )
 
             assert async_manager.job_running is False
 
@@ -633,7 +738,10 @@ class TestIntegrationScenarios:
             mock_thread = Mock(spec=QThread)
             mock_thread.wait.return_value = True
             mock_worker = Mock()
-            async_manager.active_workers["chassis_1"] = (mock_thread, mock_worker)
+            async_manager.active_workers["chassis_1"] = (
+                mock_thread,
+                mock_worker,
+            )
 
             # Stop - use correct method name
             async_manager.stop_all()
@@ -641,10 +749,19 @@ class TestIntegrationScenarios:
             assert async_manager.job_running is False
             assert len(async_manager.active_workers) == 0
 
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread")
-    @patch("sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager")
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
+    )
+    @patch(
+        "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
+    )
     def test_full_multi_chassis_workflow(
-        self, mock_dam_class, mock_qthread_class, async_manager, multi_chassis_config, qtbot
+        self,
+        mock_dam_class,
+        mock_qthread_class,
+        async_manager,
+        multi_chassis_config,
+        qtbot,
     ):
         """Test complete workflow for multiple chassis"""
         mock_thread = Mock(spec=QThread)
@@ -661,17 +778,27 @@ class TestIntegrationScenarios:
         # Simulate data from both chassis
         async_manager._handle_worker_data(
             "chassis_1",
-            {"cavity_list": [1, 2, 3, 4], "cavities": {i: {"DF": np.array([i])} for i in range(1, 5)}, "decimation": 1},
+            {
+                "cavity_list": [1, 2, 3, 4],
+                "cavities": {i: {"DF": np.array([i])} for i in range(1, 5)},
+                "decimation": 1,
+            },
         )
 
         async_manager._handle_worker_data(
             "chassis_2",
-            {"cavity_list": [5, 6, 7, 8], "cavities": {i: {"DF": np.array([i])} for i in range(5, 9)}, "decimation": 1},
+            {
+                "cavity_list": [5, 6, 7, 8],
+                "cavities": {i: {"DF": np.array([i])} for i in range(5, 9)},
+                "decimation": 1,
+            },
         )
 
         # The implementation completes on FIRST worker, not last
         # This is a known implementation behavior
-        with qtbot.waitSignal(async_manager.jobComplete, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.jobComplete, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_complete("chassis_1")
 
         # Job completes immediately
@@ -694,10 +821,14 @@ class TestEdgeCases:
         # Setup job state
         async_manager.job_running = True
         async_manager.job_chassis_ids = {"chassis_1"}
-        async_manager.worker_data = {"chassis_1": {"cavity_list": [], "cavities": {}, "decimation": 1}}
+        async_manager.worker_data = {
+            "chassis_1": {"cavity_list": [], "cavities": {}, "decimation": 1}
+        }
 
         # Complete the only chassis
-        with qtbot.waitSignal(async_manager.jobComplete, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.jobComplete, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_complete("chassis_1")
 
         call_args = blocker.args[0]
@@ -719,7 +850,9 @@ class TestEdgeCases:
         }
 
         # Complete the only chassis
-        with qtbot.waitSignal(async_manager.jobComplete, timeout=1000) as blocker:
+        with qtbot.waitSignal(
+            async_manager.jobComplete, timeout=1000
+        ) as blocker:
             async_manager._handle_worker_complete("chassis_1")
 
         call_args = blocker.args[0]
@@ -767,18 +900,29 @@ class TestMemoryManagement:
             mock_thread = Mock(spec=QThread)
             mock_thread.wait.return_value = True
             mock_worker = Mock()
-            async_manager.active_workers[f"chassis_{i}"] = (mock_thread, mock_worker)
+            async_manager.active_workers[f"chassis_{i}"] = (
+                mock_thread,
+                mock_worker,
+            )
 
         async_manager.stop_all()
 
         assert len(async_manager.active_workers) == 0
 
-    def test_repeated_measurements_cleanup(self, async_manager, mock_chassis_config):
+    def test_repeated_measurements_cleanup(
+        self, async_manager, mock_chassis_config
+    ):
         """Test that repeated measurements clean up properly"""
         with patch.object(async_manager, "_start_worker_for_chassis"):
             for _ in range(5):
                 async_manager.initiate_measurement(mock_chassis_config)
-                async_manager.worker_data = {"chassis_1": {"cavity_list": [1], "cavities": {1: {}}, "decimation": 1}}
+                async_manager.worker_data = {
+                    "chassis_1": {
+                        "cavity_list": [1],
+                        "cavities": {1: {}},
+                        "decimation": 1,
+                    }
+                }
                 async_manager._handle_worker_complete("chassis_1")
 
                 # Each completion should reset state

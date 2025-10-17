@@ -24,7 +24,9 @@ class SELCavity(Cavity):
         self,
         cavity_num,
         rack_object,
-        enable_file_logging: Optional[bool] = None,  # allow callers/tests to override
+        enable_file_logging: Optional[
+            bool
+        ] = None,  # allow callers/tests to override
     ):
         super().__init__(cavity_num=cavity_num, rack_object=rack_object)
         self._q_waveform_pv: Optional[PV] = None
@@ -41,14 +43,22 @@ class SELCavity(Cavity):
         # Decide if we should log to file
         if enable_file_logging is None:
             # Disable file logs if env var is set
-            disable = os.getenv("SC_LINAC_DISABLE_FILE_LOGS", "").lower() in ("1", "true", "yes", "on")
+            disable = os.getenv("SC_LINAC_DISABLE_FILE_LOGS", "").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
             enable_file_logging = not disable
 
         self.file_handler: Optional[logging.FileHandler] = None
 
         if enable_file_logging:
             file_directory = pathlib.Path(__file__).parent.resolve()
-            self.logfile = str(file_directory / f"logfiles/cm{self.cryomodule.name}/{self.number}_sel_phase_opt.log")
+            self.logfile = str(
+                file_directory
+                / f"logfiles/cm{self.cryomodule.name}/{self.number}_sel_phase_opt.log"
+            )
             os.makedirs(os.path.dirname(self.logfile), exist_ok=True)
 
             # Reuse a shared handler per logfile (avoid opening the same file repeatedly)
@@ -56,7 +66,9 @@ class SELCavity(Cavity):
             handler = self._HANDLERS.get(key)
             if handler is None:
                 # delay=True defers opening the file until the first emit
-                handler = logging.FileHandler(self.logfile, mode="a", delay=True)
+                handler = logging.FileHandler(
+                    self.logfile, mode="a", delay=True
+                )
                 handler.setFormatter(logging.Formatter(logger.FORMAT_STRING))
                 self._HANDLERS[key] = handler
 
@@ -124,7 +136,12 @@ class SELCavity(Cavity):
         return self._fit_intercept_pv_obj
 
     def can_be_straightened(self) -> bool:
-        return self.is_online and self.is_on and self.rf_mode == RF_MODE_SELAP and self.aact > 1
+        return (
+            self.is_online
+            and self.is_on
+            and self.rf_mode == RF_MODE_SELAP
+            and self.aact > 1
+        )
 
     def straighten_iq_plot(self) -> float:
         """
@@ -154,7 +171,9 @@ class SELCavity(Cavity):
             step = slop * MULT
             if abs(step) > MAX_STEP:
                 step = MAX_STEP * np.sign(step)
-                self.logger.warning(f"Desired SEL Phase Offset change too large, moving by {step} instead")
+                self.logger.warning(
+                    f"Desired SEL Phase Offset change too large, moving by {step} instead"
+                )
 
             if start_val + step < -180:
                 step = step + 360
@@ -166,11 +185,15 @@ class SELCavity(Cavity):
             self.fit_slope_pv_obj.put(slop)
             self.fit_intercept_pv_obj.put(inter)
 
-            self.logger.info(f"Changed SEL Phase Offset by {step:5.2f} with chi^2 {chisum:.2g}")
+            self.logger.info(
+                f"Changed SEL Phase Offset by {step:5.2f} with chi^2 {chisum:.2g}"
+            )
             return step
 
         else:
-            self.logger.warning("IQ slope is NaN, not changing SEL Phase Offset")
+            self.logger.warning(
+                "IQ slope is NaN, not changing SEL Phase Offset"
+            )
             return 0
 
 

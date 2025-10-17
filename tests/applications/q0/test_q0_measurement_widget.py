@@ -3,7 +3,16 @@ import sys
 from unittest.mock import patch
 
 import pytest
-from PyQt5.QtWidgets import QApplication, QWidget, QGroupBox, QLabel, QSpinBox, QDoubleSpinBox, QPushButton, QComboBox
+from PyQt5.QtWidgets import (
+    QApplication,
+    QWidget,
+    QGroupBox,
+    QLabel,
+    QSpinBox,
+    QDoubleSpinBox,
+    QPushButton,
+    QComboBox,
+)
 
 
 # Create mock PyDM widgets that inherit from QWidget so they can be added to layouts
@@ -138,7 +147,9 @@ def mock_pydm():
 
     # Clean up the import cache to force re-import with mocks
     if "sc_linac_physics.applications.q0.q0_measurement_widget" in sys.modules:
-        del sys.modules["sc_linac_physics.applications.q0.q0_measurement_widget"]
+        del sys.modules[
+            "sc_linac_physics.applications.q0.q0_measurement_widget"
+        ]
 
     yield
 
@@ -153,7 +164,9 @@ class TestQ0MeasurementWidgetInitialization:
     @pytest.fixture
     def widget(self, qapp, mock_pydm):
         """Create Q0MeasurementWidget instance for testing."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         return Q0MeasurementWidget()
 
@@ -292,7 +305,9 @@ class TestQ0MeasurementWidgetDefaults:
     @pytest.fixture
     def widget(self, qapp, mock_pydm):
         """Create Q0MeasurementWidget instance for testing."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         return Q0MeasurementWidget()
 
@@ -351,13 +366,20 @@ class TestQ0MeasurementWidgetStyling:
     @pytest.fixture
     def widget(self, qapp, mock_pydm):
         """Create Q0Measurement Widget instance for testing."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         return Q0MeasurementWidget()
 
     def test_group_box_fonts(self, widget):
         """Test that group boxes have bold fonts."""
-        group_boxes = [widget.groupBox_3, widget.groupBox, widget.groupBox_2, widget.rf_groupbox]
+        group_boxes = [
+            widget.groupBox_3,
+            widget.groupBox,
+            widget.groupBox_2,
+            widget.rf_groupbox,
+        ]
 
         for groupbox in group_boxes:
             font = groupbox.font()
@@ -390,7 +412,9 @@ class TestQ0MeasurementWidgetTooltips:
     @pytest.fixture
     def widget(self, qapp, mock_pydm):
         """Create Q0MeasurementWidget instance for testing."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         return Q0MeasurementWidget()
 
@@ -407,7 +431,9 @@ class TestQ0MeasurementWidgetLayout:
     @pytest.fixture
     def widget(self, qapp, mock_pydm):
         """Create Q0MeasurementWidget instance for testing."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         return Q0MeasurementWidget()
 
@@ -446,7 +472,9 @@ class TestQ0MeasurementWidgetFunctionality:
     @pytest.fixture
     def widget(self, qapp, mock_pydm):
         """Create Q0MeasurementWidget instance for testing."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         return Q0MeasurementWidget()
 
@@ -491,7 +519,9 @@ class TestQ0MeasurementWidgetEdgeCases:
     @pytest.fixture
     def widget(self, qapp, mock_pydm):
         """Create Q0MeasurementWidget instance for testing."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         return Q0MeasurementWidget()
 
@@ -499,14 +529,20 @@ class TestQ0MeasurementWidgetEdgeCases:
         """Test spinbox boundary values."""
         # Test minimum values
         widget.ll_start_spinbox.setValue(89.0)  # Below minimum
-        assert widget.ll_start_spinbox.value() == 90.0  # Should clamp to minimum
+        assert (
+            widget.ll_start_spinbox.value() == 90.0
+        )  # Should clamp to minimum
 
         widget.ll_start_spinbox.setValue(94.0)  # Above maximum
-        assert widget.ll_start_spinbox.value() == 93.0  # Should clamp to maximum
+        assert (
+            widget.ll_start_spinbox.value() == 93.0
+        )  # Should clamp to maximum
 
     def test_invalid_parent(self, mock_pydm):
         """Test widget creation with invalid parent."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         # Should not raise exception
         widget = Q0MeasurementWidget(parent=None)
@@ -530,7 +566,9 @@ class TestQ0MeasurementWidgetIntegration:
     @pytest.fixture
     def widget(self, qapp, mock_pydm):
         """Create Q0MeasurementWidget instance for testing."""
-        from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+        from sc_linac_physics.applications.q0.q0_measurement_widget import (
+            Q0MeasurementWidget,
+        )
 
         return Q0MeasurementWidget()
 

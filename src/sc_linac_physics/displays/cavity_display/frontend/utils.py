@@ -18,7 +18,9 @@ class EnumLabel(PyDMLabel):
     PyDMLabel subclass to change PyDMLabel Alarm channel text
     """
 
-    def __init__(self, fault: Fault, code_label: QLabel, parent=None, args=None):
+    def __init__(
+        self, fault: Fault, code_label: QLabel, parent=None, args=None
+    ):
         super(EnumLabel, self).__init__(parent=parent, init_channel=fault.pv)
         self.fault: Fault = fault
         self.code_label: QLabel = code_label
@@ -35,18 +37,25 @@ class EnumLabel(PyDMLabel):
             if self.fault.is_currently_faulted():
                 self.setText("FAULTED")
                 self.setStyleSheet(
-                    "background-color: rgb(255,0,0); font-weight: " "bold; border: 2px solid black; color: white;"
+                    "background-color: rgb(255,0,0); font-weight: "
+                    "bold; border: 2px solid black; color: white;"
                 )
                 self.code_label.setStyleSheet("font-weight:bold;")
 
             else:
                 self.setText("OK")
-                self.setStyleSheet("background-color: rgb(0,255,0);font-weight: bold; " "border: 2px solid black;")
+                self.setStyleSheet(
+                    "background-color: rgb(0,255,0);font-weight: bold; "
+                    "border: 2px solid black;"
+                )
                 self.code_label.setStyleSheet("font-weight:plain;")
 
         except PVInvalidError:
             self.setText("INVALID")
-            self.setStyleSheet("background-color: rgb(255,0,255);font-weight: bold;" "border: 2px solid black;")
+            self.setStyleSheet(
+                "background-color: rgb(255,0,255);font-weight: bold;"
+                "border: 2px solid black;"
+            )
             self.code_label.setStyleSheet("font-weight:bold;")
 
 

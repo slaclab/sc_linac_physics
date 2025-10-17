@@ -4,7 +4,9 @@ import sys
 import pyqtgraph as pg
 from pydm import PyDMApplication
 
-from sc_linac_physics.applications.microphonics.gui.main_window import MicrophonicsGUI
+from sc_linac_physics.applications.microphonics.gui.main_window import (
+    MicrophonicsGUI,
+)
 
 # Monkey patch for compatibility w/ PyQtGraph versions
 if not hasattr(pg.PlotWidget, "autoRangeEnabled"):
@@ -23,7 +25,9 @@ def main():
     """Main application entry point"""
     try:
         # Creates Qt Application
-        app = PyDMApplication(ui_file=None, command_line_args=sys.argv, use_main_window=False)
+        app = PyDMApplication(
+            ui_file=None, command_line_args=sys.argv, use_main_window=False
+        )
 
         # Handles signals in main thread
         signal.signal(signal.SIGINT, signal.SIG_DFL)

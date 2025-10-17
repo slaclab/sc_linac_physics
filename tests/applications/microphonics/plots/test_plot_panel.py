@@ -7,7 +7,9 @@ import pytest
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QCheckBox, QPushButton
 
-from sc_linac_physics.applications.microphonics.plots.plot_panel import PlotPanel
+from sc_linac_physics.applications.microphonics.plots.plot_panel import (
+    PlotPanel,
+)
 
 
 @pytest.fixture(scope="session")
@@ -204,10 +206,18 @@ class TestCavityVisibilityToggle:
     def test_toggle_cavity_visibility_calls_all_plots(self, plot_panel):
         """Test that toggling visibility updates all plot types"""
         with (
-            patch.object(plot_panel.fft_plot, "toggle_cavity_visibility") as mock_fft,
-            patch.object(plot_panel.histogram_plot, "toggle_cavity_visibility") as mock_hist,
-            patch.object(plot_panel.time_series_plot, "toggle_cavity_visibility") as mock_ts,
-            patch.object(plot_panel.spectrogram_plot, "toggle_cavity_visibility") as mock_spec,
+            patch.object(
+                plot_panel.fft_plot, "toggle_cavity_visibility"
+            ) as mock_fft,
+            patch.object(
+                plot_panel.histogram_plot, "toggle_cavity_visibility"
+            ) as mock_hist,
+            patch.object(
+                plot_panel.time_series_plot, "toggle_cavity_visibility"
+            ) as mock_ts,
+            patch.object(
+                plot_panel.spectrogram_plot, "toggle_cavity_visibility"
+            ) as mock_spec,
         ):
             plot_panel.toggle_cavity_visibility(1, Qt.Checked)
 
@@ -218,7 +228,9 @@ class TestCavityVisibilityToggle:
 
     def test_toggle_cavity_visibility_multiple_cavities(self, plot_panel):
         """Test toggling multiple cavities"""
-        with patch.object(plot_panel.fft_plot, "toggle_cavity_visibility") as mock_fft:
+        with patch.object(
+            plot_panel.fft_plot, "toggle_cavity_visibility"
+        ) as mock_fft:
             plot_panel.toggle_cavity_visibility(1, Qt.Checked)
             plot_panel.toggle_cavity_visibility(3, Qt.Checked)
             plot_panel.toggle_cavity_visibility(5, Qt.Unchecked)
@@ -236,15 +248,25 @@ class TestDataProcessing:
 
         # Use wraps to preserve original functionality while tracking calls
         with (
-            patch.object(plot_panel.fft_plot, "update_plot", wraps=plot_panel.fft_plot.update_plot) as mock_fft,
             patch.object(
-                plot_panel.histogram_plot, "update_plot", wraps=plot_panel.histogram_plot.update_plot
+                plot_panel.fft_plot,
+                "update_plot",
+                wraps=plot_panel.fft_plot.update_plot,
+            ) as mock_fft,
+            patch.object(
+                plot_panel.histogram_plot,
+                "update_plot",
+                wraps=plot_panel.histogram_plot.update_plot,
             ) as mock_hist,
             patch.object(
-                plot_panel.time_series_plot, "update_plot", wraps=plot_panel.time_series_plot.update_plot
+                plot_panel.time_series_plot,
+                "update_plot",
+                wraps=plot_panel.time_series_plot.update_plot,
             ) as mock_ts,
             patch.object(
-                plot_panel.spectrogram_plot, "update_plot", wraps=plot_panel.spectrogram_plot.update_plot
+                plot_panel.spectrogram_plot,
+                "update_plot",
+                wraps=plot_panel.spectrogram_plot.update_plot,
             ) as mock_spec,
         ):
             # Check cavity 1
@@ -283,13 +305,19 @@ class TestDataProcessing:
         with pytest.raises(AttributeError):
             plot_panel.update_plots(None)
 
-    def test_update_plots_multiple_cavities(self, plot_panel, mock_config_panel):
+    def test_update_plots_multiple_cavities(
+        self, plot_panel, mock_config_panel
+    ):
         """Test updating plots for multiple cavities"""
         plot_panel.config_panel = mock_config_panel
         test_data = self._create_test_data([1, 3, 5])
 
         # Use wraps to preserve original functionality while tracking calls
-        with patch.object(plot_panel.fft_plot, "update_plot", wraps=plot_panel.fft_plot.update_plot) as mock_fft:
+        with patch.object(
+            plot_panel.fft_plot,
+            "update_plot",
+            wraps=plot_panel.fft_plot.update_plot,
+        ) as mock_fft:
             # Check cavities 1, 3, 5
             for cav in [1, 3, 5]:
                 plot_panel.cavity_checkboxes[cav].setChecked(True)
@@ -299,7 +327,9 @@ class TestDataProcessing:
             # Should be called 3 times (once for each cavity)
             assert mock_fft.call_count == 3
 
-    def test_update_plots_no_cavities_selected(self, plot_panel, mock_config_panel):
+    def test_update_plots_no_cavities_selected(
+        self, plot_panel, mock_config_panel
+    ):
         """Test updating plots with no cavities selected"""
         plot_panel.config_panel = mock_config_panel
         test_data = self._create_test_data([1])
@@ -320,13 +350,19 @@ class TestDataProcessing:
         test_data = self._create_test_data([1])
         plot_panel.cavity_checkboxes[1].setChecked(True)
 
-        with patch.object(plot_panel.fft_plot, "update_plot", wraps=plot_panel.fft_plot.update_plot) as mock_fft:
+        with patch.object(
+            plot_panel.fft_plot,
+            "update_plot",
+            wraps=plot_panel.fft_plot.update_plot,
+        ) as mock_fft:
             plot_panel.update_plots(test_data)
 
             # Verify the data passed includes decimation
             call_args = mock_fft.call_args
             if call_args:
-                passed_data = call_args[0][1]  # Second argument (cavity_num, cavity_data)
+                passed_data = call_args[0][
+                    1
+                ]  # Second argument (cavity_num, cavity_data)
                 assert "decimation" in passed_data
                 assert passed_data["decimation"] == 10
 
@@ -361,7 +397,9 @@ class TestDecimationManagement:
         # Should not crash
         plot_panel.refresh_plots_if_decimation_changed()
 
-    def test_refresh_plots_if_decimation_changed_no_data(self, plot_panel, mock_config_panel):
+    def test_refresh_plots_if_decimation_changed_no_data(
+        self, plot_panel, mock_config_panel
+    ):
         """Test refresh with no previous data"""
         plot_panel.config_panel = mock_config_panel
         plot_panel._last_data_dict_processed = None
@@ -369,14 +407,22 @@ class TestDecimationManagement:
         # Should not crash
         plot_panel.refresh_plots_if_decimation_changed()
 
-    def test_refresh_plots_if_decimation_changed_same_decimation(self, plot_panel, mock_config_panel):
+    def test_refresh_plots_if_decimation_changed_same_decimation(
+        self, plot_panel, mock_config_panel
+    ):
         """Test refresh when decimation hasn't changed"""
         plot_panel.config_panel = mock_config_panel
         plot_panel._current_plotting_decimation = 1
         mock_config_panel.get_selected_decimation.return_value = 1
         test_data = {
             "cavity_list": [1],
-            "cavities": {1: {"DF": np.random.randn(100), "sample_rate": 1e6, "decimation": 1}},
+            "cavities": {
+                1: {
+                    "DF": np.random.randn(100),
+                    "sample_rate": 1e6,
+                    "decimation": 1,
+                }
+            },
         }
         plot_panel._last_data_dict_processed = test_data
 
@@ -385,7 +431,9 @@ class TestDecimationManagement:
             # Should not reprocess if decimation unchanged
             mock_update.assert_not_called()
 
-    def test_refresh_plots_if_decimation_changed_different_decimation(self, plot_panel, mock_config_panel):
+    def test_refresh_plots_if_decimation_changed_different_decimation(
+        self, plot_panel, mock_config_panel
+    ):
         """Test refresh when decimation has changed"""
         plot_panel.config_panel = mock_config_panel
         plot_panel._current_plotting_decimation = 1
@@ -395,7 +443,13 @@ class TestDecimationManagement:
 
         test_data = {
             "cavity_list": [1],
-            "cavities": {1: {"DF": np.random.randn(100), "sample_rate": 1e6, "decimation": 1}},
+            "cavities": {
+                1: {
+                    "DF": np.random.randn(100),
+                    "sample_rate": 1e6,
+                    "decimation": 1,
+                }
+            },
         }
         plot_panel._last_data_dict_processed = test_data
 
@@ -432,7 +486,9 @@ class TestPlotUpdates:
             patch.object(plot_panel.fft_plot, "clear_plot") as mock_fft,
             patch.object(plot_panel.histogram_plot, "clear_plot") as mock_hist,
             patch.object(plot_panel.time_series_plot, "clear_plot") as mock_ts,
-            patch.object(plot_panel.spectrogram_plot, "clear_plot") as mock_spec,
+            patch.object(
+                plot_panel.spectrogram_plot, "clear_plot"
+            ) as mock_spec,
         ):
             plot_panel.clear_plots()
 
@@ -456,10 +512,15 @@ class TestEdgeCases:
             # Expected behavior - just ensure it doesn't crash silently
             pass
 
-    def test_update_plots_malformed_cavity_data(self, plot_panel, mock_config_panel):
+    def test_update_plots_malformed_cavity_data(
+        self, plot_panel, mock_config_panel
+    ):
         """Test updating plots with malformed cavity data"""
         plot_panel.config_panel = mock_config_panel
-        malformed_data = {"cavity_list": [1, 2, 3], "cavities": {1: "not a dict", 2: None, 3: []}}
+        malformed_data = {
+            "cavity_list": [1, 2, 3],
+            "cavities": {1: "not a dict", 2: None, 3: []},
+        }
 
         plot_panel.cavity_checkboxes[1].setChecked(True)
 
@@ -531,7 +592,11 @@ class TestIntegrationScenarios:
             },
         }
 
-        with patch.object(plot_panel.fft_plot, "update_plot", wraps=plot_panel.fft_plot.update_plot):
+        with patch.object(
+            plot_panel.fft_plot,
+            "update_plot",
+            wraps=plot_panel.fft_plot.update_plot,
+        ):
             plot_panel.update_plots(test_data)
 
             # Switch tabs
@@ -552,7 +617,11 @@ class TestIntegrationScenarios:
             assert plot_panel.cavity_checkboxes[i].isChecked() is True
 
         # Add data with all required fields
-        test_data = {"cavity_list": list(range(1, 5)), "sample_rate": 1e6, "cavities": {}}
+        test_data = {
+            "cavity_list": list(range(1, 5)),
+            "sample_rate": 1e6,
+            "cavities": {},
+        }
         for i in range(1, 5):
             test_data["cavities"][i] = {
                 "DF": np.random.randn(1000),
@@ -565,7 +634,11 @@ class TestIntegrationScenarios:
             }
 
         # Use wraps to preserve functionality while tracking
-        with patch.object(plot_panel.fft_plot, "update_plot", wraps=plot_panel.fft_plot.update_plot) as mock_update:
+        with patch.object(
+            plot_panel.fft_plot,
+            "update_plot",
+            wraps=plot_panel.fft_plot.update_plot,
+        ) as mock_update:
             plot_panel.update_plots(test_data)
             assert mock_update.call_count == 4
 
@@ -578,7 +651,11 @@ class TestIntegrationScenarios:
         plot_panel.toggle_upper_cavities()
 
         # Create data for all cavities with all required fields
-        test_data = {"cavity_list": list(range(1, 9)), "sample_rate": 1e6, "cavities": {}}
+        test_data = {
+            "cavity_list": list(range(1, 9)),
+            "sample_rate": 1e6,
+            "cavities": {},
+        }
         for i in range(1, 9):
             test_data["cavities"][i] = {
                 "DF": np.random.randn(2000),
@@ -591,11 +668,17 @@ class TestIntegrationScenarios:
             }
 
         # Use wraps to preserve functionality while tracking
-        with patch.object(plot_panel.fft_plot, "update_plot", wraps=plot_panel.fft_plot.update_plot) as mock_update:
+        with patch.object(
+            plot_panel.fft_plot,
+            "update_plot",
+            wraps=plot_panel.fft_plot.update_plot,
+        ) as mock_update:
             plot_panel.update_plots(test_data)
             assert mock_update.call_count == 8
 
-    def test_workflow_with_decimation_change(self, plot_panel, mock_config_panel):
+    def test_workflow_with_decimation_change(
+        self, plot_panel, mock_config_panel
+    ):
         """Test workflow with changing decimation factor"""
         plot_panel.config_panel = mock_config_panel
         plot_panel.cavity_checkboxes[1].setChecked(True)
@@ -653,7 +736,9 @@ class TestUIResponsiveness:
 class TestMemoryManagement:
     """Test memory management and cleanup"""
 
-    def test_repeated_data_processing_doesnt_leak(self, plot_panel, mock_config_panel):
+    def test_repeated_data_processing_doesnt_leak(
+        self, plot_panel, mock_config_panel
+    ):
         """Test that repeated data processing doesn't leak memory"""
         plot_panel.config_panel = mock_config_panel
         plot_panel.cavity_checkboxes[1].setChecked(True)
@@ -671,7 +756,11 @@ class TestMemoryManagement:
                     }
                 },
             }
-            with patch.object(plot_panel.fft_plot, "update_plot", wraps=plot_panel.fft_plot.update_plot):
+            with patch.object(
+                plot_panel.fft_plot,
+                "update_plot",
+                wraps=plot_panel.fft_plot.update_plot,
+            ):
                 plot_panel.update_plots(test_data)
 
         # Only the last data should be stored

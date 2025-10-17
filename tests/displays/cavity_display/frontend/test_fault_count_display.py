@@ -6,7 +6,9 @@ import pytest
 from PyQt5.QtCore import QDateTime
 from pytestqt.qtbot import QtBot
 
-from sc_linac_physics.displays.cavity_display.backend.backend_machine import BackendMachine
+from sc_linac_physics.displays.cavity_display.backend.backend_machine import (
+    BackendMachine,
+)
 from sc_linac_physics.displays.cavity_display.backend.fault import FaultCounter
 from sc_linac_physics.displays.cavity_display.frontend.fault_count_display import (
     FaultCountDisplay,

@@ -27,7 +27,9 @@ class StatisticsCalculator:
     """
 
     def __init__(self):
-        self._outlier_threshold = 2.5  # Number of std devs for outlier detection
+        self._outlier_threshold = (
+            2.5  # Number of std devs for outlier detection
+        )
 
     def calculate_statistics(self, data: np.ndarray) -> CavityStatistics:
         """

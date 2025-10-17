@@ -63,7 +63,11 @@ class StepperPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("not at limit", "at limit"),
     )
-    hz_per_microstep = pvproperty(value=1 / ESTIMATED_MICROSTEPS_PER_HZ, name="SCALE", dtype=ChannelType.FLOAT)
+    hz_per_microstep = pvproperty(
+        value=1 / ESTIMATED_MICROSTEPS_PER_HZ,
+        name="SCALE",
+        dtype=ChannelType.FLOAT,
+    )
 
     def __init__(self, prefix, cavity_group, piezo_group):
         super().__init__(prefix)
@@ -79,16 +83,23 @@ class StepperPVGroup(PVGroup):
         await self.motor_moving.write("Moving")
         steps = 0
         step_change = move_sign_des * self.speed.value
-        freq_move_sign = move_sign_des if self.cavity_group.is_hl else -move_sign_des
+        freq_move_sign = (
+            move_sign_des if self.cavity_group.is_hl else -move_sign_des
+        )
         starting_detune = self.cavity_group.detune.value
 
-        while self.step_des.value - steps >= self.speed.value and self.abort.value != 1:
+        while (
+            self.step_des.value - steps >= self.speed.value
+            and self.abort.value != 1
+        ):
             await self.step_tot.write(self.step_tot.value + self.speed.value)
             await self.step_signed.write(self.step_signed.value + step_change)
 
             steps += self.speed.value
             delta = self.speed.value // self.steps_per_hertz
-            new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
+            new_detune = self.cavity_group.detune.value + (
+                freq_move_sign * delta
+            )
 
             await self.cavity_group.detune.write(new_detune)
             await self.cavity_group.detune_rfs.write(new_detune)
@@ -108,12 +119,19 @@ class StepperPVGroup(PVGroup):
         delta = remainder // self.steps_per_hertz
         new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
 
-        print(f"Piezo feedback status: {self.piezo_group.feedback_mode_stat.value}")
-        if self.piezo_group.enable_stat.value == 1 and self.piezo_group.feedback_mode_stat.value == "Feedback":
+        print(
+            f"Piezo feedback status: {self.piezo_group.feedback_mode_stat.value}"
+        )
+        if (
+            self.piezo_group.enable_stat.value == 1
+            and self.piezo_group.feedback_mode_stat.value == "Feedback"
+        ):
             freq_change = new_detune - starting_detune
             voltage_change = freq_change * (1 / PIEZO_HZ_PER_VOLT)
             print(f"Changing piezo voltage by {voltage_change} V")
-            await self.piezo_group.voltage.write(self.piezo_group.voltage.value + voltage_change)
+            await self.piezo_group.voltage.write(
+                self.piezo_group.voltage.value + voltage_change
+            )
         await self.cavity_group.detune.write(new_detune)
         await self.cavity_group.detune_rfs.write(new_detune)
         await self.cavity_group.detune_chirp.write(new_detune)
@@ -190,11 +208,17 @@ class PiezoPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("", "Minor Fault", "Fault"),
     )
-    integrator_sp: PvpropertyFloat = pvproperty(name="INTEG_SP", value=0, dtype=ChannelType.FLOAT)
+    integrator_sp: PvpropertyFloat = pvproperty(
+        name="INTEG_SP", value=0, dtype=ChannelType.FLOAT
+    )
     integrator_lim_status = SeverityProp(name="INTEG_AT_LIM", value=0)
 
-    voltage: PvpropertyInteger = pvproperty(name="V", value=17, dtype=ChannelType.INT)
-    scale: PvpropertyInteger = pvproperty(name="SCALE", value=20, dtype=ChannelType.INT)
+    voltage: PvpropertyInteger = pvproperty(
+        name="V", value=17, dtype=ChannelType.INT
+    )
+    scale: PvpropertyInteger = pvproperty(
+        name="SCALE", value=20, dtype=ChannelType.INT
+    )
 
     def __init__(self, prefix, cavity_group):
         super().__init__(prefix)

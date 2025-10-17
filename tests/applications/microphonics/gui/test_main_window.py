@@ -7,8 +7,12 @@ from PyQt5.QtGui import QCloseEvent
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QApplication, QWidget
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import MeasurementConfig
-from sc_linac_physics.applications.microphonics.gui.main_window import MicrophonicsGUI
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+    MeasurementConfig,
+)
+from sc_linac_physics.applications.microphonics.gui.main_window import (
+    MicrophonicsGUI,
+)
 
 
 # Create a signal emitter class for testing
@@ -41,23 +45,31 @@ class MockWidget(QWidget):
 def gui(qapp):
     """Create a fresh MicrophonicsGUI instance for each test."""
     with (
-        patch("sc_linac_physics.applications.microphonics.gui.main_window.AsyncDataManager") as mock_manager,
-        patch("sc_linac_physics.applications.microphonics.gui.main_window.StatisticsCalculator") as mock_stats,
         patch(
-            "sc_linac_physics.applications.microphonics.gui.main_window.PlotPanel", return_value=MockWidget()
+            "sc_linac_physics.applications.microphonics.gui.main_window.AsyncDataManager"
+        ) as mock_manager,
+        patch(
+            "sc_linac_physics.applications.microphonics.gui.main_window.StatisticsCalculator"
+        ) as mock_stats,
+        patch(
+            "sc_linac_physics.applications.microphonics.gui.main_window.PlotPanel",
+            return_value=MockWidget(),
         ) as mock_plot,
         patch(
-            "sc_linac_physics.applications.microphonics.gui.main_window.StatusPanel", return_value=MockWidget()
+            "sc_linac_physics.applications.microphonics.gui.main_window.StatusPanel",
+            return_value=MockWidget(),
         ) as mock_status,
         patch(
-            "sc_linac_physics.applications.microphonics.gui.main_window.ConfigPanel", return_value=MockWidget()
+            "sc_linac_physics.applications.microphonics.gui.main_window.ConfigPanel",
+            return_value=MockWidget(),
         ) as mock_config,
         patch(
             "sc_linac_physics.applications.microphonics.gui.main_window.ChannelSelectionGroup",
             return_value=MockWidget(),
         ) as mock_channel,
         patch(
-            "sc_linac_physics.applications.microphonics.gui.main_window.DataLoadingGroup", return_value=MockWidget()
+            "sc_linac_physics.applications.microphonics.gui.main_window.DataLoadingGroup",
+            return_value=MockWidget(),
         ) as mock_data,
     ):
         # Create MicrophonicsGUI instance
@@ -88,7 +100,9 @@ def gui(qapp):
 @pytest.fixture
 def mock_data_manager():
     """Create a mock AsyncDataManager."""
-    with patch("sc_linac_physics.applications.microphonics.gui.main_window.AsyncDataManager") as mock:
+    with patch(
+        "sc_linac_physics.applications.microphonics.gui.main_window.AsyncDataManager"
+    ) as mock:
         manager = Mock()
         mock.return_value = manager
         yield manager
@@ -97,7 +111,9 @@ def mock_data_manager():
 @pytest.fixture
 def mock_stats_calculator():
     """Create a mock StatisticsCalculator."""
-    with patch("sc_linac_physics.applications.microphonics.gui.main_window.StatisticsCalculator") as mock:
+    with patch(
+        "sc_linac_physics.applications.microphonics.gui.main_window.StatisticsCalculator"
+    ) as mock:
         calculator = Mock()
         mock.return_value = calculator
         yield calculator
@@ -111,7 +127,13 @@ def test_gui_initialization(gui):
     assert not gui.measurement_running
 
     # Check that all required panels are mocked and initialized
-    for panel in ["config_panel", "status_panel", "plot_panel", "channel_selection", "data_loading"]:
+    for panel in [
+        "config_panel",
+        "status_panel",
+        "plot_panel",
+        "channel_selection",
+        "data_loading",
+    ]:
         assert hasattr(gui, panel)
         assert getattr(gui, panel) is not None
 
@@ -133,7 +155,9 @@ def test_config_changed_handling(gui):
 
     # Verify status panel updates for active cavities
     status_calls = gui.status_panel.mock.update_cavity_status.call_args_list
-    assert len(status_calls) >= 2  # Should be called at least for cavities 1 and 3
+    assert (
+        len(status_calls) >= 2
+    )  # Should be called at least for cavities 1 and 3
     called_cavities = [args[0][0] for args in status_calls]
     assert 1 in called_cavities
     assert 3 in called_cavities
@@ -152,7 +176,10 @@ def test_measurement_start_stop(gui):
     gui.config_panel.mock.get_config.return_value = mock_config
 
     # Mock channel selection
-    gui.channel_selection.mock.get_selected_channels.return_value = ["DF", "FWD"]
+    gui.channel_selection.mock.get_selected_channels.return_value = [
+        "DF",
+        "FWD",
+    ]
 
     # Start measurement
     gui.start_measurement()
@@ -167,7 +194,9 @@ def test_measurement_start_stop(gui):
     expected_config = {
         "ACCL:L0B:0100:RESA": {
             "pv_base": "ca://ACCL:L0B:0100:RESA:",
-            "config": MeasurementConfig(channels=["DF", "FWD"], decimation=2, buffer_count=1),
+            "config": MeasurementConfig(
+                channels=["DF", "FWD"], decimation=2, buffer_count=1
+            ),
             "cavities": [1],
         }
     }
@@ -249,7 +278,9 @@ def test_data_loading_error(gui, temp_data_file):
     # Verify error handling
     expected_error = f"Failed to load data: {error_msg}"
     gui._show_error_dialog.assert_called_once_with("Error", expected_error)
-    gui.data_loading.update_file_info.assert_called_once_with("Error loading file")
+    gui.data_loading.update_file_info.assert_called_once_with(
+        "Error loading file"
+    )
 
     # Verify file loading was attempted
     gui.data_loader.load_file.assert_called_once_with(temp_data_file)
@@ -263,7 +294,10 @@ def test_handle_new_data(gui, mock_stats_calculator, source):
     mock_df_data = MagicMock()
     mock_df_data.size = 100  # Simulate non-empty data
 
-    test_data = {"cavity_list": [1, 2], "cavities": {1: {"DF": mock_df_data}, 2: {"DF": mock_df_data}}}
+    test_data = {
+        "cavity_list": [1, 2],
+        "cavities": {1: {"DF": mock_df_data}, 2: {"DF": mock_df_data}},
+    }
 
     # Mock statistics calculation
     mock_stats = {"rms": 1.0, "peak": 2.0}
@@ -291,7 +325,9 @@ def test_split_chassis_config(gui):
     }
 
     # Mock channel selection
-    gui.channel_selection.get_selected_channels = Mock(return_value=["DF", "FWD"])
+    gui.channel_selection.get_selected_channels = Mock(
+        return_value=["DF", "FWD"]
+    )
 
     # Get split configuration
     result = gui._split_chassis_config(test_config)
@@ -313,7 +349,9 @@ def test_error_handling(gui):
     # Test data processing error
     test_data = {"cavity_list": [1], "cavities": {1: {"DF": None}}}
     gui._handle_new_data("measurement", test_data)
-    gui.status_panel.mock.update_cavity_status.assert_called_with(1, "Complete", 100, "No DF data for stats")
+    gui.status_panel.mock.update_cavity_status.assert_called_with(
+        1, "Complete", 100, "No DF data for stats"
+    )
 
 
 def test_job_handling(gui):

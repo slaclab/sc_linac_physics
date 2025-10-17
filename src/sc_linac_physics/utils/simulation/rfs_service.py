@@ -7,4 +7,6 @@ from caproto.server import (
 
 
 class RFStationPVGroup(PVGroup):
-    rfs: PvpropertyFloat = pvproperty(value=5.0, name="DAC_AMPLITUDE", dtype=ChannelType.FLOAT)
+    rfs: PvpropertyFloat = pvproperty(
+        value=5.0, name="DAC_AMPLITUDE", dtype=ChannelType.FLOAT
+    )

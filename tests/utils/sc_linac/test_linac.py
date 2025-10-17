@@ -30,11 +30,17 @@ def test_beamline_vacuum_pvs(machine):
     for i in range(4):
         linac = machine.linacs[i]
         for infix in BEAMLINE_VACUUM_INFIXES[i]:
-            assert f"VGXX:{linac.name}:{infix}:COMBO_P" in linac.beamline_vacuum_pvs
+            assert (
+                f"VGXX:{linac.name}:{infix}:COMBO_P"
+                in linac.beamline_vacuum_pvs
+            )
 
 
 def test_insulating_vacuum_pvs(machine):
     for i in range(4):
         linac = machine.linacs[i]
         for cm in INSULATING_VACUUM_CRYOMODULES[i]:
-            assert f"VGXX:{linac.name}:{cm}96:COMBO_P" in linac.insulating_vacuum_pvs
+            assert (
+                f"VGXX:{linac.name}:{cm}96:COMBO_P"
+                in linac.insulating_vacuum_pvs
+            )

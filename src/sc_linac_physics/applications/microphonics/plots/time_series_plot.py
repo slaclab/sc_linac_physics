@@ -3,7 +3,9 @@ from typing import Optional
 import numpy as np
 from PyQt5.QtCore import QTimer
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+    BASE_HARDWARE_SAMPLE_RATE,
+)
 from sc_linac_physics.applications.microphonics.plots.base_plot import BasePlot
 
 
@@ -104,7 +106,9 @@ class TimeSeriesPlot(BasePlot):
 
         for level in levels:
             if data_len > level:
-                dec_times, dec_values = self._decimate_data(times, values, level)
+                dec_times, dec_values = self._decimate_data(
+                    times, values, level
+                )
                 result[level] = (dec_times, dec_values)
 
         return result
@@ -212,29 +216,45 @@ class TimeSeriesPlot(BasePlot):
                 if decimated:
                     times, values = decimated
                     # Further filter to visible area
-                    display_times, display_values = self._filter_to_view(times, values, x_min, x_max)
+                    display_times, display_values = self._filter_to_view(
+                        times, values, x_min, x_max
+                    )
 
                     # Update the curve
-                    self.plot_curves[cavity_num].setData(display_times, display_values, skipFiniteCheck=True)
+                    self.plot_curves[cavity_num].setData(
+                        display_times, display_values, skipFiniteCheck=True
+                    )
 
-    def _calculate_time_axis(self, num_points: int, decimation: int) -> Optional[np.ndarray]:
+    def _calculate_time_axis(
+        self, num_points: int, decimation: int
+    ) -> Optional[np.ndarray]:
         if not isinstance(decimation, (int, float)) or decimation <= 0:
-            print(f"WARN (TimeSeriesPlot): Invalid decimation '{decimation}'. Using 1.")
+            print(
+                f"WARN (TimeSeriesPlot): Invalid decimation '{decimation}'. Using 1."
+            )
             decimation = 1
         try:
             effective_sample_rate = BASE_HARDWARE_SAMPLE_RATE / decimation
             if effective_sample_rate <= 0:
-                raise ValueError(f"Non-positive effective sample rate: {effective_sample_rate}")
-            return np.linspace(0, (num_points - 1) / effective_sample_rate, num_points)
+                raise ValueError(
+                    f"Non-positive effective sample rate: {effective_sample_rate}"
+                )
+            return np.linspace(
+                0, (num_points - 1) / effective_sample_rate, num_points
+            )
         except (ValueError, ZeroDivisionError) as e:
             print(f"ERROR (TimeSeriesPlot): Could not calculate time axis: {e}")
             return None
 
-    def _create_or_update_curve(self, cavity_num: int, times: np.ndarray, values: np.ndarray):
+    def _create_or_update_curve(
+        self, cavity_num: int, times: np.ndarray, values: np.ndarray
+    ):
         pen = self._get_cavity_pen(cavity_num)
         if cavity_num not in self.plot_curves:
             display_times, display_values = (
-                self._decimate_data(times, values, 2000) if len(times) > 2000 else (times, values)
+                self._decimate_data(times, values, 2000)
+                if len(times) > 2000
+                else (times, values)
             )
             curve = self.plot_widget.plot(
                 display_times,
@@ -249,22 +269,32 @@ class TimeSeriesPlot(BasePlot):
         else:
             vb = self.plot_widget.getViewBox()
             x_min, x_max = vb.viewRange()[0]
-            decimated_times, decimated_values = self._get_optimal_decimation(cavity_num, x_max - x_min)
+            decimated_times, decimated_values = self._get_optimal_decimation(
+                cavity_num, x_max - x_min
+            )
             if decimated_times is not None:
-                display_times, display_values = self._filter_to_view(decimated_times, decimated_values, x_min, x_max)
-                self.plot_curves[cavity_num].setData(display_times, display_values, skipFiniteCheck=True)
+                display_times, display_values = self._filter_to_view(
+                    decimated_times, decimated_values, x_min, x_max
+                )
+                self.plot_curves[cavity_num].setData(
+                    display_times, display_values, skipFiniteCheck=True
+                )
 
     def _adjust_view(self, times: np.ndarray):
         if times.size > 0:
             view_window = 10  # seconds
             end_time = times[-1]
-            start_time = max(0, end_time - view_window) if end_time > view_window else 0
+            start_time = (
+                max(0, end_time - view_window) if end_time > view_window else 0
+            )
             self.plot_widget.setXRange(start_time, end_time)
         else:
             self.plot_widget.setXRange(0, 1)
 
     def update_plot(self, cavity_num, cavity_channel_data):
-        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type="DF")
+        df_data, is_valid = self._preprocess_data(
+            cavity_channel_data, channel_type="DF"
+        )
         if not is_valid or df_data.size == 0:
             if cavity_num in self.plot_curves:
                 self.plot_curves[cavity_num].setData([], [])
@@ -279,7 +309,9 @@ class TimeSeriesPlot(BasePlot):
             return
 
         self._original_data[cavity_num] = (times, df_data)
-        self._decimated_data[cavity_num] = self._create_decimated_levels(times, df_data)
+        self._decimated_data[cavity_num] = self._create_decimated_levels(
+            times, df_data
+        )
 
         self._create_or_update_curve(cavity_num, times, df_data)
 

@@ -3,7 +3,9 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 from PyQt5.QtCore import QProcess, QByteArray
 
-from sc_linac_physics.applications.microphonics.gui.data_acquisition import DataAcquisitionManager
+from sc_linac_physics.applications.microphonics.gui.data_acquisition import (
+    DataAcquisitionManager,
+)
 
 
 class TestDataAcquisition:
@@ -44,13 +46,21 @@ class TestDataAcquisition:
         """Fixture for acquisition config"""
         from types import SimpleNamespace
 
-        measurement_cfg = SimpleNamespace(decimation=1, buffer_count=100, channels=["0", "1"])
+        measurement_cfg = SimpleNamespace(
+            decimation=1, buffer_count=100, channels=["0", "1"]
+        )
 
-        return {"pv_base": "ACCL:L1B:0300:RESA", "cavities": [1, 2], "config": measurement_cfg}
+        return {
+            "pv_base": "ACCL:L1B:0300:RESA",
+            "cavities": [1, 2],
+            "config": measurement_cfg,
+        }
 
     # ===== Directory Creation Tests =====
 
-    def test_create_data_directory_valid_chassis(self, acquisition_manager, tmp_path):
+    def test_create_data_directory_valid_chassis(
+        self, acquisition_manager, tmp_path
+    ):
         """Test directory creation with valid chassis ID"""
         acquisition_manager.base_path = tmp_path
         chassis_id = "ACCL:L1B:0300:RESA"
@@ -67,7 +77,9 @@ class TestDataAcquisition:
         with pytest.raises(ValueError, match="Invalid chassis_id format"):
             acquisition_manager._create_data_directory("INVALID")
 
-    def test_create_data_directory_creates_hierarchy(self, acquisition_manager, tmp_path):
+    def test_create_data_directory_creates_hierarchy(
+        self, acquisition_manager, tmp_path
+    ):
         """Test that full directory hierarchy is created"""
         acquisition_manager.base_path = tmp_path
         chassis_id = "ACCL:L2B:1234:RESA"
@@ -81,26 +93,41 @@ class TestDataAcquisition:
 
     # ===== Environment Preparation Tests =====
 
-    def test_prepare_acquisition_environment_no_cavities(self, acquisition_manager, sample_config):
+    def test_prepare_acquisition_environment_no_cavities(
+        self, acquisition_manager, sample_config
+    ):
         """Test preparation fails when no cavities specified"""
         sample_config["cavities"] = []
 
         with pytest.raises(ValueError, match="No cavities specified"):
-            acquisition_manager._prepare_acquisition_environment("ACCL:L1B:0300:RESA", sample_config)
+            acquisition_manager._prepare_acquisition_environment(
+                "ACCL:L1B:0300:RESA", sample_config
+            )
 
-    def test_prepare_acquisition_environment_no_config(self, acquisition_manager):
+    def test_prepare_acquisition_environment_no_config(
+        self, acquisition_manager
+    ):
         """Test preparation fails when config is missing"""
         bad_config = {"cavities": [1, 2]}
 
         with pytest.raises(ValueError, match="MeasurementConfig missing"):
-            acquisition_manager._prepare_acquisition_environment("ACCL:L1B:0300:RESA", bad_config)
+            acquisition_manager._prepare_acquisition_environment(
+                "ACCL:L1B:0300:RESA", bad_config
+            )
 
-    def test_prepare_acquisition_environment_filename_format(self, acquisition_manager, sample_config, tmp_path):
+    def test_prepare_acquisition_environment_filename_format(
+        self, acquisition_manager, sample_config, tmp_path
+    ):
         """Test output filename format is correct"""
         acquisition_manager.base_path = tmp_path
         chassis_id = "ACCL:L1B:0300:RESA"
 
-        output_path, cavities = acquisition_manager._prepare_acquisition_environment(chassis_id, sample_config)
+        (
+            output_path,
+            cavities,
+        ) = acquisition_manager._prepare_acquisition_environment(
+            chassis_id, sample_config
+        )
 
         filename = output_path.name
         assert filename.startswith("res_CM03_cav12_c100_")
@@ -109,12 +136,16 @@ class TestDataAcquisition:
 
     # ===== Build Args Tests =====
 
-    def test_build_acquisition_args_structure(self, acquisition_manager, sample_config, tmp_path):
+    def test_build_acquisition_args_structure(
+        self, acquisition_manager, sample_config, tmp_path
+    ):
         """Test argument list structure"""
         output_path = tmp_path / "test.dat"
         selected_cavities = [1, 2]
 
-        args = acquisition_manager._build_acquisition_args(sample_config, output_path, selected_cavities)
+        args = acquisition_manager._build_acquisition_args(
+            sample_config, output_path, selected_cavities
+        )
 
         assert str(acquisition_manager.script_path) in args
         assert "-D" in args
@@ -134,7 +165,9 @@ class TestDataAcquisition:
 
     # ===== Start Acquisition Tests =====
 
-    def test_start_acquisition_success(self, acquisition_manager, sample_config, tmp_path):
+    def test_start_acquisition_success(
+        self, acquisition_manager, sample_config, tmp_path
+    ):
         """Test successful acquisition start"""
         acquisition_manager.base_path = tmp_path
         chassis_id = "ACCL:L1B:0300:RESA"
@@ -148,7 +181,8 @@ class TestDataAcquisition:
 
         # Patch the QProcess class constructor
         with patch(
-            "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess", return_value=mock_process
+            "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess",
+            return_value=mock_process,
         ):
             acquisition_manager.start_acquisition(chassis_id, sample_config)
 
@@ -160,7 +194,9 @@ class TestDataAcquisition:
             assert not process_info["completion_signal_received"]
             mock_process.start.assert_called_once()
 
-    def test_start_acquisition_process_fails_to_start(self, acquisition_manager, sample_config, tmp_path):
+    def test_start_acquisition_process_fails_to_start(
+        self, acquisition_manager, sample_config, tmp_path
+    ):
         """Test handling when process fails to start"""
         acquisition_manager.base_path = tmp_path
         chassis_id = "ACCL:L1B:0300:RESA"
@@ -174,7 +210,8 @@ class TestDataAcquisition:
 
         with (
             patch(
-                "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess", return_value=mock_process
+                "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess",
+                return_value=mock_process,
             ),
             patch.object(acquisition_manager, "acquisitionError") as mock_error,
         ):
@@ -184,18 +221,26 @@ class TestDataAcquisition:
             mock_error.emit.assert_called_once()
             assert "Failed to start process" in mock_error.emit.call_args[0][1]
 
-    def test_start_acquisition_exception_handling(self, acquisition_manager, sample_config):
+    def test_start_acquisition_exception_handling(
+        self, acquisition_manager, sample_config
+    ):
         """Test exception handling during start"""
         chassis_id = "ACCL:L1B:0300:RESA"
 
         with (
-            patch.object(acquisition_manager, "_prepare_acquisition_environment", side_effect=Exception("Test error")),
+            patch.object(
+                acquisition_manager,
+                "_prepare_acquisition_environment",
+                side_effect=Exception("Test error"),
+            ),
             patch.object(acquisition_manager, "acquisitionError") as mock_error,
         ):
             acquisition_manager.start_acquisition(chassis_id, sample_config)
 
             mock_error.emit.assert_called_once()
-            assert "Failed to start acquisition" in mock_error.emit.call_args[0][1]
+            assert (
+                "Failed to start acquisition" in mock_error.emit.call_args[0][1]
+            )
 
     # ===== Progress Checking Tests =====
 
@@ -205,7 +250,9 @@ class TestDataAcquisition:
         process_info = {"last_progress": 0, "cavities": [1, 2]}
         line = "Acquired 50 / 100 buffers"
 
-        with patch.object(acquisition_manager, "acquisitionProgress") as mock_signal:
+        with patch.object(
+            acquisition_manager, "acquisitionProgress"
+        ) as mock_signal:
             acquisition_manager._check_progress(line, chassis_id, process_info)
 
             assert process_info["last_progress"] == 50
@@ -229,7 +276,9 @@ class TestDataAcquisition:
         process_info = {"last_progress": 0, "cavities": [1]}
         line = "Acquired 10 / 0 buffers"
 
-        with patch.object(acquisition_manager, "acquisitionProgress") as mock_signal:
+        with patch.object(
+            acquisition_manager, "acquisitionProgress"
+        ) as mock_signal:
             acquisition_manager._check_progress(line, "chassis_1", process_info)
 
             # Should not emit when total is 0
@@ -241,7 +290,9 @@ class TestDataAcquisition:
         process_info = {"last_progress": 0, "cavities": [1]}
         line = "Acquired 100 / 100 buffers"
 
-        with patch.object(acquisition_manager, "acquisitionProgress") as mock_signal:
+        with patch.object(
+            acquisition_manager, "acquisitionProgress"
+        ) as mock_signal:
             acquisition_manager._check_progress(line, "chassis_1", process_info)
 
             assert process_info["last_progress"] == 100
@@ -252,7 +303,9 @@ class TestDataAcquisition:
         process_info = {"last_progress": 75, "cavities": [1]}
         line = "Acquired 50 / 100 buffers"
 
-        with patch.object(acquisition_manager, "acquisitionProgress") as mock_signal:
+        with patch.object(
+            acquisition_manager, "acquisitionProgress"
+        ) as mock_signal:
             acquisition_manager._check_progress(line, "chassis_1", process_info)
 
             # Should not emit since 50% < 75%
@@ -272,10 +325,18 @@ class TestDataAcquisition:
 
     def test_process_stdout_line_completion_marker(self, acquisition_manager):
         """Test detection of completion markers"""
-        process_info = {"completion_signal_received": False, "last_progress": 50, "cavities": [1, 2]}
+        process_info = {
+            "completion_signal_received": False,
+            "last_progress": 50,
+            "cavities": [1, 2],
+        }
 
-        with patch.object(acquisition_manager, "acquisitionProgress") as mock_signal:
-            acquisition_manager._process_stdout_line("Restoring acquisition settings...", "chassis_1", process_info)
+        with patch.object(
+            acquisition_manager, "acquisitionProgress"
+        ) as mock_signal:
+            acquisition_manager._process_stdout_line(
+                "Restoring acquisition settings...", "chassis_1", process_info
+            )
 
             assert process_info["completion_signal_received"]
             assert process_info["last_progress"] == 100
@@ -284,33 +345,53 @@ class TestDataAcquisition:
 
     def test_process_stdout_line_already_completed(self, acquisition_manager):
         """Test that completed acquisitions don't process more lines"""
-        process_info = {"completion_signal_received": True, "last_progress": 100, "cavities": [1]}
+        process_info = {
+            "completion_signal_received": True,
+            "last_progress": 100,
+            "cavities": [1],
+        }
 
         with patch.object(acquisition_manager, "_check_progress") as mock_check:
-            acquisition_manager._process_stdout_line("Acquired 50 / 100 buffers", "chassis_1", process_info)
+            acquisition_manager._process_stdout_line(
+                "Acquired 50 / 100 buffers", "chassis_1", process_info
+            )
 
             # Should not check progress if already completed
             mock_check.assert_not_called()
 
     def test_process_stdout_line_progress_update(self, acquisition_manager):
         """Test normal progress line processing"""
-        process_info = {"completion_signal_received": False, "last_progress": 0, "cavities": [1]}
+        process_info = {
+            "completion_signal_received": False,
+            "last_progress": 0,
+            "cavities": [1],
+        }
 
         with patch.object(acquisition_manager, "_check_progress") as mock_check:
-            acquisition_manager._process_stdout_line("Acquired 50 / 100 buffers", "chassis_1", process_info)
+            acquisition_manager._process_stdout_line(
+                "Acquired 50 / 100 buffers", "chassis_1", process_info
+            )
 
-            mock_check.assert_called_once_with("Acquired 50 / 100 buffers", "chassis_1", process_info)
+            mock_check.assert_called_once_with(
+                "Acquired 50 / 100 buffers", "chassis_1", process_info
+            )
 
-    def test_handle_stdout_multiple_lines(self, acquisition_manager, mock_process_info):
+    def test_handle_stdout_multiple_lines(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test handling multiple stdout lines at once"""
         chassis_id = "chassis_1"
         acquisition_manager.active_processes[chassis_id] = mock_process_info
 
         mock_process = mock_process_info["process"]
         output_data = b"Acquired 25 / 100 buffers\nAcquired 50 / 100 buffers\nAcquired 75 / 100 buffers"
-        mock_process.readAllStandardOutput.return_value = QByteArray(output_data)
+        mock_process.readAllStandardOutput.return_value = QByteArray(
+            output_data
+        )
 
-        with patch.object(acquisition_manager, "_process_stdout_line") as mock_process_line:
+        with patch.object(
+            acquisition_manager, "_process_stdout_line"
+        ) as mock_process_line:
             acquisition_manager.handle_stdout(chassis_id, mock_process)
 
             assert mock_process_line.call_count == 3
@@ -322,21 +403,29 @@ class TestDataAcquisition:
         # Should return early without error
         acquisition_manager.handle_stdout("nonexistent_chassis", mock_process)
 
-    def test_handle_stdout_empty_output(self, acquisition_manager, mock_process_info):
+    def test_handle_stdout_empty_output(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test handling empty stdout"""
         chassis_id = "chassis_1"
         acquisition_manager.active_processes[chassis_id] = mock_process_info
 
         mock_process = mock_process_info["process"]
-        mock_process.readAllStandardOutput.return_value = QByteArray(b"   \n\n   ")
+        mock_process.readAllStandardOutput.return_value = QByteArray(
+            b"   \n\n   "
+        )
 
-        with patch.object(acquisition_manager, "_process_stdout_line") as mock_process_line:
+        with patch.object(
+            acquisition_manager, "_process_stdout_line"
+        ) as mock_process_line:
             acquisition_manager.handle_stdout(chassis_id, mock_process)
 
             # Empty lines should be skipped
             mock_process_line.assert_not_called()
 
-    def test_handle_stdout_exception_handling(self, acquisition_manager, mock_process_info):
+    def test_handle_stdout_exception_handling(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test exception handling in stdout processing"""
         chassis_id = "chassis_1"
         acquisition_manager.active_processes[chassis_id] = mock_process_info
@@ -344,7 +433,9 @@ class TestDataAcquisition:
         mock_process = mock_process_info["process"]
         mock_process.readAllStandardOutput.side_effect = Exception("Read error")
 
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
             acquisition_manager.handle_stdout(chassis_id, mock_process)
 
             mock_error.emit.assert_called_once()
@@ -355,19 +446,27 @@ class TestDataAcquisition:
     def test_handle_stderr_with_error(self, acquisition_manager):
         """Test stderr handling with error message"""
         mock_process = Mock(spec=QProcess)
-        mock_process.readAllStandardError.return_value = QByteArray(b"Error: something went wrong")
+        mock_process.readAllStandardError.return_value = QByteArray(
+            b"Error: something went wrong"
+        )
 
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
             acquisition_manager.handle_stderr("chassis_1", mock_process)
 
-            mock_error.emit.assert_called_once_with("chassis_1", "Error: something went wrong")
+            mock_error.emit.assert_called_once_with(
+                "chassis_1", "Error: something went wrong"
+            )
 
     def test_handle_stderr_empty(self, acquisition_manager):
         """Test stderr handling with no error"""
         mock_process = Mock(spec=QProcess)
         mock_process.readAllStandardError.return_value = QByteArray(b"")
 
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
             acquisition_manager.handle_stderr("chassis_1", mock_process)
 
             mock_error.emit.assert_not_called()
@@ -388,7 +487,13 @@ class TestDataAcquisition:
             (0, QProcess.NormalExit, True, True, True),  # Success
             (1, QProcess.NormalExit, True, True, False),  # Bad exit code
             (0, QProcess.CrashExit, True, True, False),  # Crashed
-            (0, QProcess.NormalExit, False, True, False),  # No completion signal
+            (
+                0,
+                QProcess.NormalExit,
+                False,
+                True,
+                False,
+            ),  # No completion signal
             (0, QProcess.NormalExit, True, False, False),  # No output path
         ],
     )
@@ -408,20 +513,28 @@ class TestDataAcquisition:
         if not has_output:
             mock_process_info["output_path"] = None
 
-        result = acquisition_manager._was_acquisition_successful(exit_code, exit_status, mock_process_info)
+        result = acquisition_manager._was_acquisition_successful(
+            exit_code, exit_status, mock_process_info
+        )
 
         if expected_success:
             assert result == mock_process_info["output_path"]
         else:
             assert not result
 
-    def test_was_acquisition_successful_checks_final_stdout(self, acquisition_manager, mock_process_info):
+    def test_was_acquisition_successful_checks_final_stdout(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test that success check reads final stdout for completion markers"""
         mock_process_info["completion_signal_received"] = False
         mock_process = mock_process_info["process"]
-        mock_process.readAllStandardOutput.return_value = QByteArray(b"Restoring acquisition settings...\nDone")
+        mock_process.readAllStandardOutput.return_value = QByteArray(
+            b"Restoring acquisition settings...\nDone"
+        )
 
-        result = acquisition_manager._was_acquisition_successful(0, QProcess.NormalExit, mock_process_info)
+        result = acquisition_manager._was_acquisition_successful(
+            0, QProcess.NormalExit, mock_process_info
+        )
 
         # Should detect completion from stdout
         assert mock_process_info["completion_signal_received"]
@@ -431,7 +544,9 @@ class TestDataAcquisition:
 
     def test_report_acquisition_failure_crash(self, acquisition_manager):
         """Test failure reporting for crashed process"""
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
             acquisition_manager._report_acquisition_failure(
                 "chassis_1",
                 exit_code=1,
@@ -445,9 +560,13 @@ class TestDataAcquisition:
             assert "crashed" in error_msg.lower()
             assert "Segmentation fault" in error_msg
 
-    def test_report_acquisition_failure_no_completion(self, acquisition_manager):
+    def test_report_acquisition_failure_no_completion(
+        self, acquisition_manager
+    ):
         """Test failure reporting when completion signal not received"""
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
             acquisition_manager._report_acquisition_failure(
                 "chassis_1",
                 exit_code=0,
@@ -459,9 +578,13 @@ class TestDataAcquisition:
             error_msg = mock_error.emit.call_args[0][1]
             assert "did not signal completion" in error_msg
 
-    def test_report_acquisition_failure_bad_exit_code(self, acquisition_manager):
+    def test_report_acquisition_failure_bad_exit_code(
+        self, acquisition_manager
+    ):
         """Test failure reporting with non-zero exit code"""
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
             acquisition_manager._report_acquisition_failure(
                 "chassis_1",
                 exit_code=42,
@@ -475,7 +598,9 @@ class TestDataAcquisition:
 
     # ===== File Processing Tests =====
 
-    def test_process_output_file_wrapper_success(self, acquisition_manager, mock_process_info, tmp_path):
+    def test_process_output_file_wrapper_success(
+        self, acquisition_manager, mock_process_info, tmp_path
+    ):
         """Test successful file processing"""
         chassis_id = "chassis_1"
         output_file = tmp_path / "valid_output.dat"
@@ -488,13 +613,22 @@ class TestDataAcquisition:
         with patch(
             "sc_linac_physics.applications.microphonics.gui.data_acquisition.load_and_process_file"
         ) as mock_parser:
-            mock_parser.return_value = {"cavities": {"cav1": {"data": [1, 2, 3]}, "cav2": {"data": [4, 5, 6]}}}
+            mock_parser.return_value = {
+                "cavities": {
+                    "cav1": {"data": [1, 2, 3]},
+                    "cav2": {"data": [4, 5, 6]},
+                }
+            }
 
             with (
                 patch.object(acquisition_manager, "dataReceived") as mock_data,
-                patch.object(acquisition_manager, "acquisitionComplete") as mock_complete,
+                patch.object(
+                    acquisition_manager, "acquisitionComplete"
+                ) as mock_complete,
             ):
-                acquisition_manager._process_output_file_wrapper(chassis_id, output_file, mock_process_info)
+                acquisition_manager._process_output_file_wrapper(
+                    chassis_id, output_file, mock_process_info
+                )
 
                 mock_parser.assert_called_once_with(output_file)
 
@@ -511,20 +645,31 @@ class TestDataAcquisition:
                 # Verify cleanup
                 assert chassis_id not in acquisition_manager.active_processes
 
-    def test_process_output_file_wrapper_missing_file(self, acquisition_manager, tmp_path):
+    def test_process_output_file_wrapper_missing_file(
+        self, acquisition_manager, tmp_path
+    ):
         """Test handling of missing output file"""
         chassis_id = "chassis_1"
         output_file = tmp_path / "missing.dat"
         process_info = {"output_path": output_file, "cavities": []}
 
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
-            acquisition_manager._process_output_file_wrapper(chassis_id, output_file, process_info)
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
+            acquisition_manager._process_output_file_wrapper(
+                chassis_id, output_file, process_info
+            )
 
             mock_error.emit.assert_called_once()
             error_message = mock_error.emit.call_args[0][1]
-            assert "missing" in error_message.lower() or "not found" in error_message.lower()
+            assert (
+                "missing" in error_message.lower()
+                or "not found" in error_message.lower()
+            )
 
-    def test_process_output_file_wrapper_empty_file(self, acquisition_manager, tmp_path):
+    def test_process_output_file_wrapper_empty_file(
+        self, acquisition_manager, tmp_path
+    ):
         """Test handling of empty output file"""
         chassis_id = "chassis_1"
         output_file = tmp_path / "empty.dat"
@@ -532,19 +677,29 @@ class TestDataAcquisition:
 
         process_info = {"output_path": output_file, "cavities": []}
 
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
-            acquisition_manager._process_output_file_wrapper(chassis_id, output_file, process_info)
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
+            acquisition_manager._process_output_file_wrapper(
+                chassis_id, output_file, process_info
+            )
 
             mock_error.emit.assert_called_once()
             error_message = mock_error.emit.call_args[0][1]
             assert "empty" in error_message.lower()
 
-    def test_process_output_file_wrapper_no_cavity_data(self, acquisition_manager, tmp_path):
+    def test_process_output_file_wrapper_no_cavity_data(
+        self, acquisition_manager, tmp_path
+    ):
         """Test handling when parsed data has no cavities"""
         chassis_id = "chassis_1"
         output_file = tmp_path / "invalid.dat"
         output_file.write_text("data")
-        process_info = {"output_path": output_file, "cavities": [], "decimation": 1}
+        process_info = {
+            "output_path": output_file,
+            "cavities": [],
+            "decimation": 1,
+        }
 
         acquisition_manager.active_processes[chassis_id] = process_info
 
@@ -553,15 +708,26 @@ class TestDataAcquisition:
         ) as mock_parser:
             mock_parser.return_value = {}  # No cavities
 
-            with patch.object(acquisition_manager, "acquisitionError") as mock_error:
-                acquisition_manager._process_output_file_wrapper(chassis_id, output_file, process_info)
+            with patch.object(
+                acquisition_manager, "acquisitionError"
+            ) as mock_error:
+                acquisition_manager._process_output_file_wrapper(
+                    chassis_id, output_file, process_info
+                )
 
                 mock_error.emit.assert_called_once()
-                assert "Failed to parse valid data" in mock_error.emit.call_args[0][1]
+                assert (
+                    "Failed to parse valid data"
+                    in mock_error.emit.call_args[0][1]
+                )
 
-    def test_process_output_file_wrapper_parser_exception(self, acquisition_manager, tmp_path):
+    def test_process_output_file_wrapper_parser_exception(
+        self, acquisition_manager, tmp_path
+    ):
         """Test handling of parser exceptions"""
-        from sc_linac_physics.applications.microphonics.utils.file_parser import FileParserError
+        from sc_linac_physics.applications.microphonics.utils.file_parser import (
+            FileParserError,
+        )
 
         chassis_id = "chassis_1"
         output_file = tmp_path / "bad.dat"
@@ -572,18 +738,28 @@ class TestDataAcquisition:
             "sc_linac_physics.applications.microphonics.gui.data_acquisition.load_and_process_file",
             side_effect=FileParserError("Parse failed"),
         ):
-            with patch.object(acquisition_manager, "acquisitionError") as mock_error:
-                acquisition_manager._process_output_file_wrapper(chassis_id, output_file, process_info)
+            with patch.object(
+                acquisition_manager, "acquisitionError"
+            ) as mock_error:
+                acquisition_manager._process_output_file_wrapper(
+                    chassis_id, output_file, process_info
+                )
 
                 mock_error.emit.assert_called_once()
                 assert "Parse failed" in mock_error.emit.call_args[0][1]
 
-    def test_process_output_file_wrapper_unexpected_exception(self, acquisition_manager, tmp_path):
+    def test_process_output_file_wrapper_unexpected_exception(
+        self, acquisition_manager, tmp_path
+    ):
         """Test handling of unexpected exceptions"""
         chassis_id = "chassis_1"
         output_file = tmp_path / "test.dat"
         output_file.write_text("data")
-        process_info = {"output_path": output_file, "cavities": [], "decimation": 1}
+        process_info = {
+            "output_path": output_file,
+            "cavities": [],
+            "decimation": 1,
+        }
 
         acquisition_manager.active_processes[chassis_id] = process_info
 
@@ -591,15 +767,21 @@ class TestDataAcquisition:
             "sc_linac_physics.applications.microphonics.gui.data_acquisition.load_and_process_file",
             side_effect=RuntimeError("Unexpected error"),
         ):
-            with patch.object(acquisition_manager, "acquisitionError") as mock_error:
-                acquisition_manager._process_output_file_wrapper(chassis_id, output_file, process_info)
+            with patch.object(
+                acquisition_manager, "acquisitionError"
+            ) as mock_error:
+                acquisition_manager._process_output_file_wrapper(
+                    chassis_id, output_file, process_info
+                )
 
                 mock_error.emit.assert_called_once()
                 assert "Unexpected error" in mock_error.emit.call_args[0][1]
 
     # ===== Cleanup Tests =====
 
-    def test_cleanup_process_resources(self, acquisition_manager, mock_process_info):
+    def test_cleanup_process_resources(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test process cleanup"""
         mock_process = mock_process_info["process"]
 
@@ -613,10 +795,14 @@ class TestDataAcquisition:
         # Verify process is set to None
         assert mock_process_info["process"] is None
 
-    def test_cleanup_process_resources_already_disconnected(self, acquisition_manager, mock_process_info):
+    def test_cleanup_process_resources_already_disconnected(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test cleanup when signals are already disconnected"""
         mock_process = mock_process_info["process"]
-        mock_process.readyReadStandardOutput.disconnect.side_effect = TypeError("Not connected")
+        mock_process.readyReadStandardOutput.disconnect.side_effect = TypeError(
+            "Not connected"
+        )
 
         # Should not raise
         acquisition_manager._cleanup_process_resources(mock_process_info)
@@ -631,7 +817,9 @@ class TestDataAcquisition:
 
     # ===== Handle Finished Tests =====
 
-    def test_handle_finished_success_flow(self, acquisition_manager, mock_process_info):
+    def test_handle_finished_success_flow(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test successful completion flow"""
         chassis_id = "chassis_1"
         acquisition_manager.active_processes[chassis_id] = mock_process_info
@@ -643,22 +831,34 @@ class TestDataAcquisition:
             patch.object(acquisition_manager, "_process_output_file_wrapper"),
             patch("PyQt5.QtCore.QTimer.singleShot") as mock_timer,
         ):
-            acquisition_manager.handle_finished(chassis_id, mock_process, 0, QProcess.NormalExit)
+            acquisition_manager.handle_finished(
+                chassis_id, mock_process, 0, QProcess.NormalExit
+            )
 
             # Verify timer was called for file processing
-            assert any(call[0][0] == 20000 for call in mock_timer.call_args_list)
+            assert any(
+                call[0][0] == 20000 for call in mock_timer.call_args_list
+            )
 
-    def test_handle_finished_failure_flow(self, acquisition_manager, mock_process_info):
+    def test_handle_finished_failure_flow(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test failure handling in handle_finished"""
         chassis_id = "chassis_1"
         acquisition_manager.active_processes[chassis_id] = mock_process_info
         mock_process_info["completion_signal_received"] = False
 
         mock_process = mock_process_info["process"]
-        mock_process.readAllStandardError.return_value = QByteArray(b"Error occurred")
+        mock_process.readAllStandardError.return_value = QByteArray(
+            b"Error occurred"
+        )
 
-        with patch.object(acquisition_manager, "acquisitionError") as mock_error:
-            acquisition_manager.handle_finished(chassis_id, mock_process, 1, QProcess.NormalExit)
+        with patch.object(
+            acquisition_manager, "acquisitionError"
+        ) as mock_error:
+            acquisition_manager.handle_finished(
+                chassis_id, mock_process, 1, QProcess.NormalExit
+            )
 
             mock_error.emit.assert_called_once()
             assert chassis_id not in acquisition_manager.active_processes
@@ -668,9 +868,13 @@ class TestDataAcquisition:
         mock_process = Mock(spec=QProcess)
 
         # Should return early without error
-        acquisition_manager.handle_finished("nonexistent", mock_process, 0, QProcess.NormalExit)
+        acquisition_manager.handle_finished(
+            "nonexistent", mock_process, 0, QProcess.NormalExit
+        )
 
-    def test_handle_finished_exception_handling(self, acquisition_manager, mock_process_info):
+    def test_handle_finished_exception_handling(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test exception handling in handle_finished"""
         chassis_id = "chassis_1"
         acquisition_manager.active_processes[chassis_id] = mock_process_info
@@ -678,16 +882,24 @@ class TestDataAcquisition:
         mock_process = mock_process_info["process"]
 
         with (
-            patch.object(acquisition_manager, "_was_acquisition_successful", side_effect=Exception("Unexpected error")),
+            patch.object(
+                acquisition_manager,
+                "_was_acquisition_successful",
+                side_effect=Exception("Unexpected error"),
+            ),
             patch.object(acquisition_manager, "acquisitionError") as mock_error,
         ):
-            acquisition_manager.handle_finished(chassis_id, mock_process, 0, QProcess.NormalExit)
+            acquisition_manager.handle_finished(
+                chassis_id, mock_process, 0, QProcess.NormalExit
+            )
 
             mock_error.emit.assert_called()
             assert "Unexpected error" in mock_error.emit.call_args[0][1]
             assert chassis_id not in acquisition_manager.active_processes
 
-    def test_handle_finished_cleanup_always_called(self, acquisition_manager, mock_process_info):
+    def test_handle_finished_cleanup_always_called(
+        self, acquisition_manager, mock_process_info
+    ):
         """Test that cleanup is always called even on exception"""
         chassis_id = "chassis_1"
         acquisition_manager.active_processes[chassis_id] = mock_process_info
@@ -695,11 +907,19 @@ class TestDataAcquisition:
         mock_process = mock_process_info["process"]
 
         with (
-            patch.object(acquisition_manager, "_was_acquisition_successful", side_effect=Exception("Error")),
-            patch.object(acquisition_manager, "_cleanup_process_resources") as mock_cleanup,
+            patch.object(
+                acquisition_manager,
+                "_was_acquisition_successful",
+                side_effect=Exception("Error"),
+            ),
+            patch.object(
+                acquisition_manager, "_cleanup_process_resources"
+            ) as mock_cleanup,
             patch.object(acquisition_manager, "acquisitionError"),
         ):
-            acquisition_manager.handle_finished(chassis_id, mock_process, 0, QProcess.NormalExit)
+            acquisition_manager.handle_finished(
+                chassis_id, mock_process, 0, QProcess.NormalExit
+            )
 
             # Cleanup should be called in finally block
             mock_cleanup.assert_called_once_with(mock_process_info)
@@ -713,7 +933,9 @@ class TestDataAcquisition:
         mock_process.state.return_value = QProcess.Running
         mock_process.waitForFinished.return_value = True
 
-        acquisition_manager.active_processes[chassis_id] = {"process": mock_process}
+        acquisition_manager.active_processes[chassis_id] = {
+            "process": mock_process
+        }
 
         acquisition_manager.stop_acquisition(chassis_id)
 
@@ -726,9 +948,14 @@ class TestDataAcquisition:
         chassis_id = "chassis_1"
         mock_process = Mock(spec=QProcess)
         mock_process.state.return_value = QProcess.Running
-        mock_process.waitForFinished.side_effect = [False, True]  # First call fails, second succeeds
+        mock_process.waitForFinished.side_effect = [
+            False,
+            True,
+        ]  # First call fails, second succeeds
 
-        acquisition_manager.active_processes[chassis_id] = {"process": mock_process}
+        acquisition_manager.active_processes[chassis_id] = {
+            "process": mock_process
+        }
 
         acquisition_manager.stop_acquisition(chassis_id)
 
@@ -742,7 +969,9 @@ class TestDataAcquisition:
         mock_process = Mock(spec=QProcess)
         mock_process.state.return_value = QProcess.NotRunning
 
-        acquisition_manager.active_processes[chassis_id] = {"process": mock_process}
+        acquisition_manager.active_processes[chassis_id] = {
+            "process": mock_process
+        }
 
         acquisition_manager.stop_acquisition(chassis_id)
 
@@ -784,7 +1013,9 @@ class TestDataAcquisition:
 
     # ===== Integration Tests =====
 
-    def test_full_acquisition_cycle_success(self, acquisition_manager, sample_config, tmp_path):
+    def test_full_acquisition_cycle_success(
+        self, acquisition_manager, sample_config, tmp_path
+    ):
         """Integration test for complete successful acquisition cycle"""
         acquisition_manager.base_path = tmp_path
         chassis_id = "ACCL:L1B:0300:RESA"
@@ -794,9 +1025,15 @@ class TestDataAcquisition:
         complete_calls = []
         data_calls = []
 
-        acquisition_manager.acquisitionProgress.connect(lambda *args: progress_calls.append(args))
-        acquisition_manager.acquisitionComplete.connect(lambda *args: complete_calls.append(args))
-        acquisition_manager.dataReceived.connect(lambda *args: data_calls.append(args))
+        acquisition_manager.acquisitionProgress.connect(
+            lambda *args: progress_calls.append(args)
+        )
+        acquisition_manager.acquisitionComplete.connect(
+            lambda *args: complete_calls.append(args)
+        )
+        acquisition_manager.dataReceived.connect(
+            lambda *args: data_calls.append(args)
+        )
 
         # Create a mock QProcess
         mock_process = Mock(spec=QProcess)
@@ -808,7 +1045,8 @@ class TestDataAcquisition:
         mock_process.readAllStandardError.return_value = QByteArray(b"")
 
         with patch(
-            "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess", return_value=mock_process
+            "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess",
+            return_value=mock_process,
         ):
             # Start acquisition
             acquisition_manager.start_acquisition(chassis_id, sample_config)
@@ -818,13 +1056,17 @@ class TestDataAcquisition:
             process_info = acquisition_manager.active_processes[chassis_id]
 
             # Update the mock's return value for this specific call
-            mock_process.readAllStandardOutput.return_value = QByteArray(b"Acquired 50 / 100 buffers")
+            mock_process.readAllStandardOutput.return_value = QByteArray(
+                b"Acquired 50 / 100 buffers"
+            )
             acquisition_manager.handle_stdout(chassis_id, mock_process)
 
             assert len(progress_calls) > 0
 
             # Simulate completion
-            mock_process.readAllStandardOutput.return_value = QByteArray(b"Done")
+            mock_process.readAllStandardOutput.return_value = QByteArray(
+                b"Done"
+            )
             acquisition_manager.handle_stdout(chassis_id, mock_process)
 
             assert process_info["completion_signal_received"]
@@ -838,19 +1080,29 @@ class TestDataAcquisition:
             with patch(
                 "sc_linac_physics.applications.microphonics.gui.data_acquisition.load_and_process_file"
             ) as mock_parser:
-                mock_parser.return_value = {"cavities": {"cav1": {"data": [1, 2, 3]}}}
+                mock_parser.return_value = {
+                    "cavities": {"cav1": {"data": [1, 2, 3]}}
+                }
 
                 # Process file directly (skip timer)
-                acquisition_manager._process_output_file_wrapper(chassis_id, output_file, process_info)
+                acquisition_manager._process_output_file_wrapper(
+                    chassis_id, output_file, process_info
+                )
 
                 assert len(data_calls) > 0
                 assert len(complete_calls) > 0
 
-    def test_multiple_concurrent_acquisitions(self, acquisition_manager, sample_config, tmp_path):
+    def test_multiple_concurrent_acquisitions(
+        self, acquisition_manager, sample_config, tmp_path
+    ):
         """Test handling multiple concurrent acquisitions"""
         acquisition_manager.base_path = tmp_path
 
-        chassis_ids = ["ACCL:L1B:0300:RESA", "ACCL:L1B:0400:RESA", "ACCL:L2B:0100:RESA"]
+        chassis_ids = [
+            "ACCL:L1B:0300:RESA",
+            "ACCL:L1B:0400:RESA",
+            "ACCL:L2B:0100:RESA",
+        ]
 
         # Create mock processes
         mock_processes = []
@@ -865,7 +1117,8 @@ class TestDataAcquisition:
             mock_processes.append(mock_process)
 
         with patch(
-            "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess", side_effect=mock_processes
+            "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess",
+            side_effect=mock_processes,
         ):
             for chassis_id in chassis_ids:
                 acquisition_manager.start_acquisition(chassis_id, sample_config)

@@ -11,14 +11,19 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 from numpy import pi, exp, linspace
 
-from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_cavity import (
+    QuenchCavity,
+)
 from sc_linac_physics.applications.quench_processing.quench_utils import (
     QUENCH_AMP_THRESHOLD,
     LOADED_Q_CHANGE_FOR_QUENCH,
     QUENCH_STABLE_TIME,
     RADIATION_LIMIT,
 )
-from sc_linac_physics.utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    QuenchError,
+    RF_MODE_SELA,
+)
 from tests.mock_utils import mock_func
 
 
@@ -26,7 +31,9 @@ from tests.mock_utils import mock_func
 def cavity(monkeypatch):
     monkeypatch.setattr("time.sleep", mock_func)
     monkeypatch.setattr("os.makedirs", mock_func)
-    monkeypatch.setattr("lcls_tools.common.logger.logger.custom_logger", mock_func)
+    monkeypatch.setattr(
+        "lcls_tools.common.logger.logger.custom_logger", mock_func
+    )
     monkeypatch.setattr("logging.FileHandler", mock_func)
     yield QuenchCavity(randint(1, 8), MagicMock())
 
@@ -75,7 +82,9 @@ def test_fault_waveform_pv_obj(cavity):
 
 def test_fault_time_waveform_pv_obj(cavity):
     cavity._fault_time_waveform_pv_obj = make_mock_pv()
-    assert cavity._fault_time_waveform_pv_obj == cavity.fault_time_waveform_pv_obj
+    assert (
+        cavity._fault_time_waveform_pv_obj == cavity.fault_time_waveform_pv_obj
+    )
 
 
 def test_reset_interlocks(cavity):
@@ -186,7 +195,13 @@ def test_validate_quench_true(cavity):
     time_data = linspace(-500e-3, 500e-3, num=500)
     amp_data = []
     for t in time_data:
-        amp_data.append(16.6e6 * exp((-pi * cavity.frequency * t) / (LOADED_Q_CHANGE_FOR_QUENCH * 0.5 * 4.5e7)))
+        amp_data.append(
+            16.6e6
+            * exp(
+                (-pi * cavity.frequency * t)
+                / (LOADED_Q_CHANGE_FOR_QUENCH * 0.5 * 4.5e7)
+            )
+        )
 
     cavity._fault_time_waveform_pv_obj = make_mock_pv(get_val=time_data)
     cavity._fault_waveform_pv_obj = make_mock_pv(get_val=amp_data)

@@ -167,7 +167,9 @@ class SCLinacObject(ABC, object):
     @property
     @abstractmethod
     def pv_prefix(self):
-        raise NotImplementedError("SC Linac Objects need to implement pv_prefix")
+        raise NotImplementedError(
+            "SC Linac Objects need to implement pv_prefix"
+        )
 
     def pv_addr(self, suffix: str):
         return self.pv_prefix + suffix
@@ -192,7 +194,14 @@ def stepper_tol_factor(num_steps) -> float:
     if num_steps <= 10000:
         return 5
 
-    step_tol_des = {10e3: 5, 100e3: 2.5, 1e6: 1.25, 5e6: 1.1, 10e6: 1.05, 50e6: 1.01}
+    step_tol_des = {
+        10e3: 5,
+        100e3: 2.5,
+        1e6: 1.25,
+        5e6: 1.1,
+        10e6: 1.05,
+        50e6: 1.01,
+    }
     ranges = [(10e3, 100e3), (100e3, 1e6), (1e6, 5e6), (5e6, 50e6)]
 
     for start, end in ranges:
