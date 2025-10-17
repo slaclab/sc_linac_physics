@@ -97,8 +97,9 @@ class CavitySection(QObject):
 
     def set_chirp_range(self):
         print("Setting start frequency to -400kHz and stop frequency to +400kHz")
-        self.cavity.chirp_freq_start_pv = -400e3
-        self.cavity.chirp_freq_stop_pv = 400e3
+        self.cavity.chirp_freq_start = -400e3
+        self.cavity.chirp_freq_stop = 400e3
+
 
 class RackScreen(QObject):
     def __init__(self, rack: Rack, parent=None):
