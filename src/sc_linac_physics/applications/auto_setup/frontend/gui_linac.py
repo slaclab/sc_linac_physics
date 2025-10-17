@@ -75,7 +75,7 @@ class GUILinac:
         self.linac_object.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
         self.linac_object.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
         self.linac_object.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
-        self.linac_object.trigger_setup()
+        self.linac_object.trigger_start()
 
     def capture_acon(self):
         for gui_cm in self.gui_cryomodules.values():
