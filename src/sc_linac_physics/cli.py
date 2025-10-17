@@ -15,7 +15,7 @@ DISPLAYS = {
     "setup": {"launcher": "launch_auto_setup", "description": "Automated cavity setup"},
     "q0": {"launcher": "launch_q0_measurement", "description": "Q0 measurement application"},
     "tuning": {"launcher": "launch_tuning", "description": "Cavity tuning interface"},
-    "microphonics": {"launcher": "launch_microphonics", "description": "Microphonics data analysis interface"},
+    "microphonics": {"launcher": "launch_microphonics", "description": "Microphonics data acquisition and analysis interface"},
 }
 
 
