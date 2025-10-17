@@ -261,9 +261,9 @@ class TestTimeSeriesPlot:
 
         # Store data first
         plot_widget._original_data[cavity_num] = (times, values)
-        plot_widget._decimated_data[
-            cavity_num
-        ] = plot_widget._create_decimated_levels(times, values)
+        plot_widget._decimated_data[cavity_num] = (
+            plot_widget._create_decimated_levels(times, values)
+        )
 
         result = plot_widget._get_optimal_decimation(cavity_num, view_width=10)
 
@@ -397,9 +397,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 100, 1000)
         values = np.sin(times)
         plot_widget._original_data[cavity_num] = (times, values)
-        plot_widget._decimated_data[
-            cavity_num
-        ] = plot_widget._create_decimated_levels(times, values)
+        plot_widget._decimated_data[cavity_num] = (
+            plot_widget._create_decimated_levels(times, values)
+        )
         plot_widget.plot_curves[cavity_num] = Mock()
 
         plot_widget._on_range_changed()
@@ -415,9 +415,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 100, 1000)
         values = np.sin(times)
         plot_widget._original_data[cavity_num] = (times, values)
-        plot_widget._decimated_data[
-            cavity_num
-        ] = plot_widget._create_decimated_levels(times, values)
+        plot_widget._decimated_data[cavity_num] = (
+            plot_widget._create_decimated_levels(times, values)
+        )
         plot_widget.plot_curves[cavity_num] = Mock()
 
         plot_widget._end_zoom()

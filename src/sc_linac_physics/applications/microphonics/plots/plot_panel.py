@@ -226,9 +226,9 @@ class PlotPanel(QWidget):
             cavity_data_from_source = all_cavity_data.get(cavity_num)
             if cavity_data_from_source:
                 data_for_this_plot_call = cavity_data_from_source.copy()
-                data_for_this_plot_call[
-                    "decimation"
-                ] = actual_plotting_decimation
+                data_for_this_plot_call["decimation"] = (
+                    actual_plotting_decimation
+                )
                 # Pass dictionary of channel data for this cavity to each plot types update method
                 self.fft_plot.update_plot(cavity_num, data_for_this_plot_call)
                 self.histogram_plot.update_plot(

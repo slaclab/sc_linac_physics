@@ -935,9 +935,9 @@ class TestErrorHandling(unittest.TestCase):
         self.assertAlmostEqual(first_result, -5.0, places=5)
 
         # Modify ll_data - this should not affect the cached result
-        data_run.ll_data[
-            3.0
-        ] = 100.0  # Add point that would create positive slope
+        data_run.ll_data[3.0] = (
+            100.0  # Add point that would create positive slope
+        )
 
         # Access again - should return cached value, not recalculate
         second_result = data_run.dll_dt

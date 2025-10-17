@@ -98,10 +98,8 @@ def mock_fast_subsystems():
             mocks[subsystem].return_value = mock_instance
 
         # Configure special mocks with proper attributes
-        mocks[
-            "CavityPVGroup"
-        ].side_effect = lambda prefix, isHL=False: create_mock_cavity_group(
-            isHL
+        mocks["CavityPVGroup"].side_effect = (
+            lambda prefix, isHL=False: create_mock_cavity_group(isHL)
         )
         mocks["PiezoPVGroup"].return_value = create_mock_piezo_group()
 
