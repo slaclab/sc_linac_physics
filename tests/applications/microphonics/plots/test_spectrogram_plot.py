@@ -6,7 +6,9 @@ import pytest
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
-from sc_linac_physics.applications.microphonics.plots.spectrogram_plot import SpectrogramPlot
+from sc_linac_physics.applications.microphonics.plots.spectrogram_plot import (
+    SpectrogramPlot,
+)
 
 
 @pytest.fixture(scope="session")
@@ -228,7 +230,9 @@ class TestDataProcessing:
         """Helper to create test data in the correct format"""
         time = np.arange(num_samples) / sample_rate
         # Create signal with multiple frequencies
-        data = np.sin(2 * np.pi * 1000 * time) + 0.5 * np.sin(2 * np.pi * 5000 * time)
+        data = np.sin(2 * np.pi * 1000 * time) + 0.5 * np.sin(
+            2 * np.pi * 5000 * time
+        )
         return {"DF": data}
 
 
@@ -344,7 +348,9 @@ class TestVisibilityControl:
 
         # Should only show one plot
         visible_count = sum(
-            1 for cav in spectrogram_plot.cavity_order if spectrogram_plot.cavity_is_visible_flags.get(cav, False)
+            1
+            for cav in spectrogram_plot.cavity_order
+            if spectrogram_plot.cavity_is_visible_flags.get(cav, False)
         )
         assert visible_count == 1
 
@@ -567,7 +573,10 @@ class TestEdgeCases:
         for i in range(1, spectrogram_plot.max_cavities + 1):
             spectrogram_plot.update_plot(i, test_data)
 
-        assert len(spectrogram_plot.cavity_data_cache) == spectrogram_plot.max_cavities
+        assert (
+            len(spectrogram_plot.cavity_data_cache)
+            == spectrogram_plot.max_cavities
+        )
 
     def test_cavity_zero(self, spectrogram_plot):
         """Test with cavity number 0"""

@@ -1,6 +1,8 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGroupBox, QGridLayout
 
-from sc_linac_physics.applications.microphonics.utils.ui_utils import create_status_widgets
+from sc_linac_physics.applications.microphonics.utils.ui_utils import (
+    create_status_widgets,
+)
 
 
 class StatusPanel(QWidget):
@@ -31,7 +33,9 @@ class StatusPanel(QWidget):
         group.setLayout(grid_layout)
         layout.addWidget(group)
 
-    def update_cavity_status(self, cavity_num: int, status: str, progress: int, message: str):
+    def update_cavity_status(
+        self, cavity_num: int, status: str, progress: int, message: str
+    ):
         """Update status for a single cavity"""
         if cavity_num in self.status_widgets:
             widgets = self.status_widgets[cavity_num]

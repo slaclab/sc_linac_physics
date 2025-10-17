@@ -63,7 +63,11 @@ class TestCavityPVGroupInitialization:
             assert hasattr(prop, "write")  # Should be writable
 
         # Test read-only float-like properties
-        ro_float_props = [regular_cavity.aact, regular_cavity.amean, regular_cavity.gact]
+        ro_float_props = [
+            regular_cavity.aact,
+            regular_cavity.amean,
+            regular_cavity.gact,
+        ]
         for prop in ro_float_props:
             assert hasattr(prop, "value")
             assert isinstance(prop.value, (int, float))
@@ -154,9 +158,15 @@ class TestAmplitudeControl:
         new_amplitude = 20.0
 
         with (
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact,
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
-            patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
+            patch.object(
+                regular_cavity.aact, "write", new_callable=AsyncMock
+            ) as mock_aact,
+            patch.object(
+                regular_cavity.amean, "write", new_callable=AsyncMock
+            ) as mock_amean,
+            patch.object(
+                regular_cavity.gdes, "write", new_callable=AsyncMock
+            ) as mock_gdes,
         ):
             await regular_cavity.ades.putter(None, new_amplitude)
 
@@ -176,7 +186,9 @@ class TestAmplitudeControl:
         with (
             patch.object(hl_cavity.aact, "write", new_callable=AsyncMock),
             patch.object(hl_cavity.amean, "write", new_callable=AsyncMock),
-            patch.object(hl_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
+            patch.object(
+                hl_cavity.gdes, "write", new_callable=AsyncMock
+            ) as mock_gdes,
         ):
             await hl_cavity.ades.putter(None, new_amplitude)
 
@@ -188,13 +200,17 @@ class TestAmplitudeControl:
     async def test_ades_putter_no_gradient_update_if_same(self, regular_cavity):
         """Test that gradient is not updated if it's already correct."""
         # Set up cavity so gact already matches expected gradient
-        amplitude = 20.76  # This should give gradient of 20.0 for regular cavity
+        amplitude = (
+            20.76  # This should give gradient of 20.0 for regular cavity
+        )
         regular_cavity.gact._data["value"] = 20.0
 
         with (
             patch.object(regular_cavity.aact, "write", new_callable=AsyncMock),
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock),
-            patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
+            patch.object(
+                regular_cavity.gdes, "write", new_callable=AsyncMock
+            ) as mock_gdes,
         ):
             await regular_cavity.ades.putter(None, amplitude)
 
@@ -211,8 +227,12 @@ class TestGradientControl:
         new_gradient = 25.0
 
         with (
-            patch.object(regular_cavity.gact, "write", new_callable=AsyncMock) as mock_gact,
-            patch.object(regular_cavity.ades, "write", new_callable=AsyncMock) as mock_ades,
+            patch.object(
+                regular_cavity.gact, "write", new_callable=AsyncMock
+            ) as mock_gact,
+            patch.object(
+                regular_cavity.ades, "write", new_callable=AsyncMock
+            ) as mock_ades,
         ):
             await regular_cavity.gdes.putter(None, new_gradient)
 
@@ -230,7 +250,9 @@ class TestGradientControl:
 
         with (
             patch.object(hl_cavity.gact, "write", new_callable=AsyncMock),
-            patch.object(hl_cavity.ades, "write", new_callable=AsyncMock) as mock_ades,
+            patch.object(
+                hl_cavity.ades, "write", new_callable=AsyncMock
+            ) as mock_ades,
         ):
             await hl_cavity.gdes.putter(None, new_gradient)
 
@@ -239,7 +261,9 @@ class TestGradientControl:
         mock_ades.assert_called_once_with(expected_amplitude)
 
     @pytest.mark.asyncio
-    async def test_gdes_putter_no_amplitude_update_if_same(self, regular_cavity):
+    async def test_gdes_putter_no_amplitude_update_if_same(
+        self, regular_cavity
+    ):
         """Test that amplitude is not updated if it's already correct."""
         # Set up cavity so aact already matches expected amplitude
         gradient = 20.0
@@ -247,7 +271,9 @@ class TestGradientControl:
 
         with (
             patch.object(regular_cavity.gact, "write", new_callable=AsyncMock),
-            patch.object(regular_cavity.ades, "write", new_callable=AsyncMock) as mock_ades,
+            patch.object(
+                regular_cavity.ades, "write", new_callable=AsyncMock
+            ) as mock_ades,
         ):
             await regular_cavity.gdes.putter(None, gradient)
 
@@ -264,8 +290,12 @@ class TestPhaseControl:
         new_phase = 45.0
 
         with (
-            patch.object(regular_cavity.pact, "write", new_callable=AsyncMock) as mock_pact,
-            patch.object(regular_cavity.pmean, "write", new_callable=AsyncMock) as mock_pmean,
+            patch.object(
+                regular_cavity.pact, "write", new_callable=AsyncMock
+            ) as mock_pact,
+            patch.object(
+                regular_cavity.pmean, "write", new_callable=AsyncMock
+            ) as mock_pmean,
         ):
             await regular_cavity.pdes.putter(None, new_phase)
 
@@ -284,8 +314,12 @@ class TestPhaseControl:
 
         for input_phase, expected_phase in test_cases:
             with (
-                patch.object(regular_cavity.pact, "write", new_callable=AsyncMock) as mock_pact,
-                patch.object(regular_cavity.pmean, "write", new_callable=AsyncMock) as mock_pmean,
+                patch.object(
+                    regular_cavity.pact, "write", new_callable=AsyncMock
+                ) as mock_pact,
+                patch.object(
+                    regular_cavity.pmean, "write", new_callable=AsyncMock
+                ) as mock_pmean,
             ):
                 await regular_cavity.pdes.putter(None, input_phase)
 
@@ -299,14 +333,18 @@ class TestRFStateControl:
     @pytest.mark.asyncio
     async def test_rf_state_des_putter_off(self, regular_cavity):
         """Test turning RF off."""
-        with patch.object(regular_cavity, "power_off", new_callable=AsyncMock) as mock_power_off:
+        with patch.object(
+            regular_cavity, "power_off", new_callable=AsyncMock
+        ) as mock_power_off:
             await regular_cavity.rf_state_des.putter(None, "Off")
             mock_power_off.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_rf_state_des_putter_on(self, regular_cavity):
         """Test turning RF on."""
-        with patch.object(regular_cavity, "power_on", new_callable=AsyncMock) as mock_power_on:
+        with patch.object(
+            regular_cavity, "power_on", new_callable=AsyncMock
+        ) as mock_power_on:
             await regular_cavity.rf_state_des.putter(None, "On")
             mock_power_on.assert_called_once()
 
@@ -314,10 +352,18 @@ class TestRFStateControl:
     async def test_power_off_method(self, regular_cavity):
         """Test the power_off method."""
         with (
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact,
-            patch.object(regular_cavity.gact, "write", new_callable=AsyncMock) as mock_gact,
-            patch.object(regular_cavity.rf_state_act, "write", new_callable=AsyncMock) as mock_rf_state,
+            patch.object(
+                regular_cavity.amean, "write", new_callable=AsyncMock
+            ) as mock_amean,
+            patch.object(
+                regular_cavity.aact, "write", new_callable=AsyncMock
+            ) as mock_aact,
+            patch.object(
+                regular_cavity.gact, "write", new_callable=AsyncMock
+            ) as mock_gact,
+            patch.object(
+                regular_cavity.rf_state_act, "write", new_callable=AsyncMock
+            ) as mock_rf_state,
         ):
             await regular_cavity.power_off()
 
@@ -334,10 +380,18 @@ class TestRFStateControl:
         regular_cavity.gdes._data["value"] = 25.0
 
         with (
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact,
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
-            patch.object(regular_cavity.gact, "write", new_callable=AsyncMock) as mock_gact,
-            patch.object(regular_cavity.rf_state_act, "write", new_callable=AsyncMock) as mock_rf_state,
+            patch.object(
+                regular_cavity.aact, "write", new_callable=AsyncMock
+            ) as mock_aact,
+            patch.object(
+                regular_cavity.amean, "write", new_callable=AsyncMock
+            ) as mock_amean,
+            patch.object(
+                regular_cavity.gact, "write", new_callable=AsyncMock
+            ) as mock_gact,
+            patch.object(
+                regular_cavity.rf_state_act, "write", new_callable=AsyncMock
+            ) as mock_rf_state,
         ):
             await regular_cavity.power_on()
 
@@ -355,7 +409,9 @@ class TestRFModeControl:
         """Test that setting RF mode desired updates actual mode."""
         new_mode = 2  # SEL mode
 
-        with patch.object(regular_cavity.rf_mode_act, "write", new_callable=AsyncMock) as mock_mode_act:
+        with patch.object(
+            regular_cavity.rf_mode_act, "write", new_callable=AsyncMock
+        ) as mock_mode_act:
             await regular_cavity.rf_mode_des.putter(None, new_mode)
 
         mock_mode_act.assert_called_once_with(new_mode)
@@ -368,8 +424,12 @@ class TestInterlockSystem:
     async def test_quench_latch_putter(self, regular_cavity):
         """Test quench latch behavior."""
         with (
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact,
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
+            patch.object(
+                regular_cavity.aact, "write", new_callable=AsyncMock
+            ) as mock_aact,
+            patch.object(
+                regular_cavity.amean, "write", new_callable=AsyncMock
+            ) as mock_amean,
         ):
             await regular_cavity.quench_latch.putter(None, 1)  # Fault
 
@@ -384,9 +444,15 @@ class TestInterlockSystem:
         regular_cavity.ades._data["value"] = 18.0
 
         with (
-            patch.object(regular_cavity.quench_latch, "write", new_callable=AsyncMock) as mock_quench,
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact,
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
+            patch.object(
+                regular_cavity.quench_latch, "write", new_callable=AsyncMock
+            ) as mock_quench,
+            patch.object(
+                regular_cavity.aact, "write", new_callable=AsyncMock
+            ) as mock_aact,
+            patch.object(
+                regular_cavity.amean, "write", new_callable=AsyncMock
+            ) as mock_amean,
         ):
             await regular_cavity.interlock_reset.putter(None, 1)  # Reset
 
@@ -403,11 +469,19 @@ class TestCalibrationAndMaintenance:
     async def test_probe_cal_start_putter(self, regular_cavity):
         """Test probe calibration start."""
         with (
-            patch.object(regular_cavity.probe_cal_time, "write", new_callable=AsyncMock) as mock_time,
-            patch.object(regular_cavity.probe_cal_start, "write", new_callable=AsyncMock) as mock_start,
-            patch("sc_linac_physics.utils.simulation.cavity_service.datetime") as mock_datetime,
+            patch.object(
+                regular_cavity.probe_cal_time, "write", new_callable=AsyncMock
+            ) as mock_time,
+            patch.object(
+                regular_cavity.probe_cal_start, "write", new_callable=AsyncMock
+            ) as mock_start,
+            patch(
+                "sc_linac_physics.utils.simulation.cavity_service.datetime"
+            ) as mock_datetime,
         ):
-            mock_datetime.now.return_value.strftime.return_value = "2023-12-01-14:30:00"
+            mock_datetime.now.return_value.strftime.return_value = (
+                "2023-12-01-14:30:00"
+            )
 
             await regular_cavity.probe_cal_start.putter(None, 1)
 
@@ -416,11 +490,17 @@ class TestCalibrationAndMaintenance:
         mock_start.assert_called_once_with(0)
 
     @pytest.mark.asyncio
-    async def test_probe_cal_start_putter_no_action_for_zero(self, regular_cavity):
+    async def test_probe_cal_start_putter_no_action_for_zero(
+        self, regular_cavity
+    ):
         """Test that probe calibration doesn't start for value 0."""
         with (
-            patch.object(regular_cavity.probe_cal_time, "write", new_callable=AsyncMock) as mock_time,
-            patch.object(regular_cavity.probe_cal_start, "write", new_callable=AsyncMock) as mock_start,
+            patch.object(
+                regular_cavity.probe_cal_time, "write", new_callable=AsyncMock
+            ) as mock_time,
+            patch.object(
+                regular_cavity.probe_cal_start, "write", new_callable=AsyncMock
+            ) as mock_start,
         ):
             await regular_cavity.probe_cal_start.putter(None, 0)
 
@@ -432,7 +512,9 @@ class TestCalibrationAndMaintenance:
         """Test that default probe calibration timestamp has correct format."""
         timestamp = regular_cavity.probe_cal_time.value
         # Should be in format YYYY-MM-DD-HH:MM:SS
-        assert len(timestamp.split("-")) == 4  # YYYY-MM-DD-HH:MM:SS has 4 parts split by '-'
+        assert (
+            len(timestamp.split("-")) == 4
+        )  # YYYY-MM-DD-HH:MM:SS has 4 parts split by '-'
         assert ":" in timestamp  # Should contain time separator
 
 
@@ -499,7 +581,9 @@ class TestChannelTypeSpecifications:
             is_readonly_type = "RO" in class_name or "ReadOnly" in class_name
 
             # All these properties should be read-only based on the original definition
-            assert is_readonly_type, f"{name} should be read-only (type: {class_name})"
+            assert (
+                is_readonly_type
+            ), f"{name} should be read-only (type: {class_name})"
 
     def test_enum_string_consistency(self, regular_cavity):
         """Test that enum properties have consistent string configurations."""
@@ -558,9 +642,15 @@ class TestEdgeCasesAndErrorHandling:
     async def test_zero_amplitude_handling(self, regular_cavity):
         """Test handling of zero amplitude values."""
         with (
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact,
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean,
-            patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
+            patch.object(
+                regular_cavity.aact, "write", new_callable=AsyncMock
+            ) as mock_aact,
+            patch.object(
+                regular_cavity.amean, "write", new_callable=AsyncMock
+            ) as mock_amean,
+            patch.object(
+                regular_cavity.gdes, "write", new_callable=AsyncMock
+            ) as mock_gdes,
         ):
             await regular_cavity.ades.putter(None, 0.0)
 
@@ -571,7 +661,9 @@ class TestEdgeCasesAndErrorHandling:
     @pytest.mark.asyncio
     async def test_negative_phase_wrapping(self, regular_cavity):
         """Test handling of negative phase values."""
-        with patch.object(regular_cavity.pact, "write", new_callable=AsyncMock) as mock_pact:
+        with patch.object(
+            regular_cavity.pact, "write", new_callable=AsyncMock
+        ) as mock_pact:
             await regular_cavity.pdes.putter(None, -45.0)
 
         # -45 % 360 = 315
@@ -585,7 +677,9 @@ class TestEdgeCasesAndErrorHandling:
         with (
             patch.object(regular_cavity.aact, "write", new_callable=AsyncMock),
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock),
-            patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
+            patch.object(
+                regular_cavity.gdes, "write", new_callable=AsyncMock
+            ) as mock_gdes,
         ):
             await regular_cavity.ades.putter(None, large_amplitude)
 
@@ -637,7 +731,9 @@ class TestIntegrationScenarios:
             await regular_cavity.pdes.putter(None, 15.0)
 
         # 3. Turn on RF
-        with patch.object(regular_cavity, "power_on", new_callable=AsyncMock) as mock_power_on:
+        with patch.object(
+            regular_cavity, "power_on", new_callable=AsyncMock
+        ) as mock_power_on:
             await regular_cavity.rf_state_des.putter(None, "On")
             mock_power_on.assert_called_once()
 
@@ -649,8 +745,12 @@ class TestIntegrationScenarios:
 
         # 1. Simulate quench fault
         with (
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact1,
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean1,
+            patch.object(
+                regular_cavity.aact, "write", new_callable=AsyncMock
+            ) as mock_aact1,
+            patch.object(
+                regular_cavity.amean, "write", new_callable=AsyncMock
+            ) as mock_amean1,
         ):
             await regular_cavity.quench_latch.putter(None, 1)
 
@@ -659,9 +759,15 @@ class TestIntegrationScenarios:
 
         # 2. Reset interlocks
         with (
-            patch.object(regular_cavity.quench_latch, "write", new_callable=AsyncMock) as mock_quench,
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock) as mock_aact2,
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock) as mock_amean2,
+            patch.object(
+                regular_cavity.quench_latch, "write", new_callable=AsyncMock
+            ) as mock_quench,
+            patch.object(
+                regular_cavity.aact, "write", new_callable=AsyncMock
+            ) as mock_aact2,
+            patch.object(
+                regular_cavity.amean, "write", new_callable=AsyncMock
+            ) as mock_amean2,
         ):
             await regular_cavity.interlock_reset.putter(None, 1)
 
@@ -673,7 +779,9 @@ class TestIntegrationScenarios:
     async def test_mode_change_sequence(self, regular_cavity):
         """Test changing RF mode."""
         # Change from default (Pulse=4) to SEL (2)
-        with patch.object(regular_cavity.rf_mode_act, "write", new_callable=AsyncMock) as mock_mode:
+        with patch.object(
+            regular_cavity.rf_mode_act, "write", new_callable=AsyncMock
+        ) as mock_mode:
             await regular_cavity.rf_mode_des.putter(None, 2)
             mock_mode.assert_called_once_with(2)
 
@@ -684,9 +792,13 @@ class TestIntegrationScenarios:
         with (
             patch.object(regular_cavity.aact, "write", new_callable=AsyncMock),
             patch.object(regular_cavity.amean, "write", new_callable=AsyncMock),
-            patch.object(regular_cavity.gdes, "write", new_callable=AsyncMock) as mock_gdes,
+            patch.object(
+                regular_cavity.gdes, "write", new_callable=AsyncMock
+            ) as mock_gdes,
         ):
-            await regular_cavity.ades.putter(None, 20.76)  # Should give gradient of 20.0
+            await regular_cavity.ades.putter(
+                None, 20.76
+            )  # Should give gradient of 20.0
 
         expected_gradient = 20.76 / regular_cavity.length
         mock_gdes.assert_called_once_with(expected_gradient)
@@ -694,7 +806,9 @@ class TestIntegrationScenarios:
         # Setting gradient should update amplitude
         with (
             patch.object(regular_cavity.gact, "write", new_callable=AsyncMock),
-            patch.object(regular_cavity.ades, "write", new_callable=AsyncMock) as mock_ades,
+            patch.object(
+                regular_cavity.ades, "write", new_callable=AsyncMock
+            ) as mock_ades,
         ):
             await regular_cavity.gdes.putter(None, 25.0)
 

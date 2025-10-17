@@ -12,18 +12,26 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QDoubleSpinBox,
 )
-from lcls_tools.common.frontend.plotting.util import WaveformPlotParams, TimePlotParams, WaveformPlotUpdater
+from lcls_tools.common.frontend.plotting.util import (
+    WaveformPlotParams,
+    TimePlotParams,
+    WaveformPlotUpdater,
+)
 from pydm import Display
 from pydm.widgets import PyDMWaveformPlot, PyDMTimePlot, PyDMLabel
 from pydm.widgets.timeplot import updateMode
 from qtpy.QtCore import Signal
 
-from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_cavity import (
+    QuenchCavity,
+)
 from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
     QUENCH_MACHINE,
     QuenchCryomodule,
 )
-from sc_linac_physics.applications.quench_processing.quench_worker import QuenchWorker
+from sc_linac_physics.applications.quench_processing.quench_worker import (
+    QuenchWorker,
+)
 from sc_linac_physics.utils.qt import RFControls, make_rainbow
 from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
@@ -80,7 +88,9 @@ class QuenchGUI(Display):
         self.current_cav: Optional[QuenchCavity] = None
 
         self.cav_waveform_plot = PyDMWaveformPlot()
-        self.cav_waveform_plot.title = "Most Recent Fault Waveform (Not Real Time)"
+        self.cav_waveform_plot.title = (
+            "Most Recent Fault Waveform (Not Real Time)"
+        )
         self.cav_waveform_plot.showLegend = True
 
         self.waveform_plot_params: Dict[str, WaveformPlotParams] = {
@@ -95,11 +105,15 @@ class QuenchGUI(Display):
         self.amp_rad_timeplot.setTimeSpan(60 * 60)
         self.amp_rad_timeplot.updateMode = updateMode.AtFixedRate
 
-        self.timeplot_params: Dict[str, TimePlotParams] = {"LIVE_SIGNALS": TimePlotParams(plot=self.amp_rad_timeplot)}
+        self.timeplot_params: Dict[str, TimePlotParams] = {
+            "LIVE_SIGNALS": TimePlotParams(plot=self.amp_rad_timeplot)
+        }
 
         plot_vlayout.addWidget(self.amp_rad_timeplot)
 
-        self.waveform_updater: WaveformPlotUpdater = WaveformPlotUpdater(self.waveform_plot_params)
+        self.waveform_updater: WaveformPlotUpdater = WaveformPlotUpdater(
+            self.waveform_plot_params
+        )
 
         self.cm_combobox.currentIndexChanged.connect(self.update_cm)
         self.cav_combobox.currentIndexChanged.connect(self.update_cm)
@@ -111,21 +125,39 @@ class QuenchGUI(Display):
         self.quench_worker: Optional[QuenchWorker] = None
 
     def add_controls(self):
-        processing_controls_groupbox: QGroupBox = QGroupBox("Processing Controls")
+        processing_controls_groupbox: QGroupBox = QGroupBox(
+            "Processing Controls"
+        )
         processing_controls_layout: QGridLayout = QGridLayout()
         processing_controls_groupbox.setLayout(processing_controls_layout)
         start_amp_row = 0
-        processing_controls_layout.addWidget(QLabel("Starting Amplitude (MV):"), start_amp_row, 0)
-        processing_controls_layout.addWidget(self.start_amp_spinbox, start_amp_row, 1)
+        processing_controls_layout.addWidget(
+            QLabel("Starting Amplitude (MV):"), start_amp_row, 0
+        )
+        processing_controls_layout.addWidget(
+            self.start_amp_spinbox, start_amp_row, 1
+        )
         stop_amp_row = 1
-        processing_controls_layout.addWidget(QLabel("Ending Amplitude (MV):"), stop_amp_row, 0)
-        processing_controls_layout.addWidget(self.stop_amp_spinbox, stop_amp_row, 1)
+        processing_controls_layout.addWidget(
+            QLabel("Ending Amplitude (MV):"), stop_amp_row, 0
+        )
+        processing_controls_layout.addWidget(
+            self.stop_amp_spinbox, stop_amp_row, 1
+        )
         step_row = 2
-        processing_controls_layout.addWidget(QLabel("Step Size (MV):"), step_row, 0)
-        processing_controls_layout.addWidget(self.step_size_spinbox, step_row, 1)
+        processing_controls_layout.addWidget(
+            QLabel("Step Size (MV):"), step_row, 0
+        )
+        processing_controls_layout.addWidget(
+            self.step_size_spinbox, step_row, 1
+        )
         time_row = 3
-        processing_controls_layout.addWidget(QLabel("Time Between Steps (s):"), time_row, 0)
-        processing_controls_layout.addWidget(self.step_time_spinbox, time_row, 1)
+        processing_controls_layout.addWidget(
+            QLabel("Time Between Steps (s):"), time_row, 0
+        )
+        processing_controls_layout.addWidget(
+            self.step_time_spinbox, time_row, 1
+        )
 
         decarad_controls_groupbox: QGroupBox = QGroupBox("Decarad Controls")
         decarad_controls_layout: QHBoxLayout = QHBoxLayout()
@@ -190,7 +222,9 @@ class QuenchGUI(Display):
 
     def process(self):
         if not (self.current_cav and self.current_decarad):
-            self.handle_error("Please select a Cryomodule, Cavity, and Decarad before starting.")
+            self.handle_error(
+                "Please select a Cryomodule, Cavity, and Decarad before starting."
+            )
             return
         self.start_button.setEnabled(False)
         self.current_cav.decarad = self.current_decarad
@@ -237,9 +271,15 @@ class QuenchGUI(Display):
 
         self.amp_rad_timeplot.clearCurves()
 
-        self.current_decarad = self.decarads[self.decarad_combobox.currentText()]
-        self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[self.cm_combobox.currentText()]
-        self.current_cav: QuenchCavity = self.current_cm.cavities[int(self.cav_combobox.currentText())]
+        self.current_decarad = self.decarads[
+            self.decarad_combobox.currentText()
+        ]
+        self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[
+            self.cm_combobox.currentText()
+        ]
+        self.current_cav: QuenchCavity = self.current_cm.cavities[
+            int(self.cav_combobox.currentText())
+        ]
 
         channels = [self.current_cav.aact_pv]
         for head in self.current_decarad.heads.values():
@@ -255,14 +295,20 @@ class QuenchGUI(Display):
                 y_channel=channel,
                 useArchiveData=True,
                 color=rga_color,
-                yAxisName=("Amplitude" if channel == self.current_cav.aact_pv else "Radiation"),
+                yAxisName=(
+                    "Amplitude"
+                    if channel == self.current_cav.aact_pv
+                    else "Radiation"
+                ),
             )
 
     def update_decarad(self):
         if not self.decarad_combobox.currentText():
             return
 
-        self.current_decarad = self.decarads[self.decarad_combobox.currentText()]
+        self.current_decarad = self.decarads[
+            self.decarad_combobox.currentText()
+        ]
 
         self.update_timeplot()
 
@@ -271,32 +317,59 @@ class QuenchGUI(Display):
 
         self.decarad_on_button.clicked.connect(self.current_decarad.turn_on)
         self.decarad_off_button.clicked.connect(self.current_decarad.turn_off)
-        self.decarad_status_readback.channel = self.current_decarad.power_status_pv
-        self.decarad_voltage_readback.channel = self.current_decarad.voltage_readback_pv
+        self.decarad_status_readback.channel = (
+            self.current_decarad.power_status_pv
+        )
+        self.decarad_voltage_readback.channel = (
+            self.current_decarad.voltage_readback_pv
+        )
 
     def update_cm(self):
-        if not self.cm_combobox.currentText() or not self.cav_combobox.currentText():
+        if (
+            not self.cm_combobox.currentText()
+            or not self.cav_combobox.currentText()
+        ):
             return
 
         self.clear_all_connections()
 
-        self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[self.cm_combobox.currentText()]
-        self.current_cav: QuenchCavity = self.current_cm.cavities[int(self.cav_combobox.currentText())]
+        self.current_cm: Cryomodule = QUENCH_MACHINE.cryomodules[
+            self.cm_combobox.currentText()
+        ]
+        self.current_cav: QuenchCavity = self.current_cm.cavities[
+            int(self.cav_combobox.currentText())
+        ]
 
-        self.rf_controls.ssa_on_button.clicked.connect(self.current_cav.ssa.turn_on)
-        self.rf_controls.ssa_off_button.clicked.connect(self.current_cav.ssa.turn_off)
-        self.rf_controls.ssa_readback_label.channel = self.current_cav.ssa.status_pv
+        self.rf_controls.ssa_on_button.clicked.connect(
+            self.current_cav.ssa.turn_on
+        )
+        self.rf_controls.ssa_off_button.clicked.connect(
+            self.current_cav.ssa.turn_off
+        )
+        self.rf_controls.ssa_readback_label.channel = (
+            self.current_cav.ssa.status_pv
+        )
 
-        self.rf_controls.rf_mode_combobox.channel = self.current_cav.rf_mode_ctrl_pv
-        self.rf_controls.rf_mode_readback_label.channel = self.current_cav.rf_mode_pv
+        self.rf_controls.rf_mode_combobox.channel = (
+            self.current_cav.rf_mode_ctrl_pv
+        )
+        self.rf_controls.rf_mode_readback_label.channel = (
+            self.current_cav.rf_mode_pv
+        )
         self.rf_controls.rf_on_button.clicked.connect(self.current_cav.turn_on)
-        self.rf_controls.rf_off_button.clicked.connect(self.current_cav.turn_off)
-        self.rf_controls.rf_status_readback_label.channel = self.current_cav.rf_state_pv
+        self.rf_controls.rf_off_button.clicked.connect(
+            self.current_cav.turn_off
+        )
+        self.rf_controls.rf_status_readback_label.channel = (
+            self.current_cav.rf_state_pv
+        )
 
         self.rf_controls.ades_spinbox.channel = self.current_cav.ades_pv
         self.rf_controls.aact_readback_label.channel = self.current_cav.aact_pv
         self.rf_controls.srf_max_spinbox.channel = self.current_cav.srf_max_pv
-        self.rf_controls.srf_max_readback_label.channel = self.current_cav.srf_max_pv
+        self.rf_controls.srf_max_readback_label.channel = (
+            self.current_cav.srf_max_pv
+        )
 
         self.start_button.clicked.connect(self.process)
         self.abort_button.clicked.connect(self.current_cav.request_abort)

@@ -166,7 +166,9 @@ class TestHeaterRun(unittest.TestCase):
 class TestValveParams(unittest.TestCase):
     def test_valve_params_dataclass(self):
         """Test ValveParams dataclass"""
-        params = ValveParams(refValvePos=75.5, refHeatLoadDes=40.0, refHeatLoadAct=38.5)
+        params = ValveParams(
+            refValvePos=75.5, refHeatLoadDes=40.0, refHeatLoadAct=38.5
+        )
         self.assertEqual(params.refValvePos, 75.5)
         self.assertEqual(params.refHeatLoadDes, 40.0)
         self.assertEqual(params.refHeatLoadAct, 38.5)
@@ -181,7 +183,13 @@ class TestCalcQ0(unittest.TestCase):
         avg_pressure = 1000.0
         cav_length = 0.7
 
-        result = calc_q0(amplitude, rf_heat_load, avg_pressure, cav_length, use_correction=False)
+        result = calc_q0(
+            amplitude,
+            rf_heat_load,
+            avg_pressure,
+            cav_length,
+            use_correction=False,
+        )
 
         expected = ((amplitude * 1e6) ** 2) / (1012 * rf_heat_load)
         self.assertAlmostEqual(result, expected, places=2)
@@ -194,7 +202,13 @@ class TestCalcQ0(unittest.TestCase):
         avg_pressure = 1000.0
         cav_length = 0.7
 
-        result = calc_q0(amplitude, rf_heat_load, avg_pressure, cav_length, use_correction=True)
+        result = calc_q0(
+            amplitude,
+            rf_heat_load,
+            avg_pressure,
+            cav_length,
+            use_correction=True,
+        )
 
         # Test that correction is applied (result should be different from uncorrected)
         uncorrected = ((amplitude * 1e6) ** 2) / (1012 * rf_heat_load)
@@ -211,7 +225,12 @@ class TestCalcQ0(unittest.TestCase):
         custom_r_over_q = 500
 
         result = calc_q0(
-            amplitude, rf_heat_load, avg_pressure, cav_length, use_correction=False, r_over_q=custom_r_over_q
+            amplitude,
+            rf_heat_load,
+            avg_pressure,
+            cav_length,
+            use_correction=False,
+            r_over_q=custom_r_over_q,
         )
 
         expected = ((amplitude * 1e6) ** 2) / (custom_r_over_q * rf_heat_load)
@@ -302,7 +321,9 @@ class TestFileOperations(unittest.TestCase):
 
     def test_make_json_file_nested_directory(self):
         """Test creating JSON file in nested directory"""
-        nested_path = os.path.join(self.temp_dir, "subdir", "nested", "test.json")
+        nested_path = os.path.join(
+            self.temp_dir, "subdir", "nested", "test.json"
+        )
         make_json_file(nested_path)
 
         self.assertTrue(os.path.exists(nested_path))
@@ -466,7 +487,12 @@ class TestPlottingUtilities(unittest.TestCase):
 class TestUtilityFunctions(unittest.TestCase):
     def test_round_for_printing(self):
         """Test rounding function"""
-        test_cases = [(3.14159265, 3.142), (2.0, 2.0), (1.9999, 2.0), (0.0001234, 0.0)]
+        test_cases = [
+            (3.14159265, 3.142),
+            (2.0, 2.0),
+            (1.9999, 2.0),
+            (0.0001234, 0.0),
+        ]
 
         for input_val, expected in test_cases:
             with self.subTest(input_val=input_val):
@@ -664,15 +690,23 @@ class TestIntegration(unittest.TestCase):
         data_run.heater_readback_buffer = [45.0, 46.0, 44.0, 45.5]
 
         # Test that all properties work
-        self.assertEqual(data_run.start_time, start_time.strftime(DATETIME_FORMATTER))
-        self.assertEqual(data_run.end_time, end_time.strftime(DATETIME_FORMATTER))
-        self.assertAlmostEqual(data_run.average_heat, np.mean([45.0, 46.0, 44.0, 45.5]) - 10.0)
+        self.assertEqual(
+            data_run.start_time, start_time.strftime(DATETIME_FORMATTER)
+        )
+        self.assertEqual(
+            data_run.end_time, end_time.strftime(DATETIME_FORMATTER)
+        )
+        self.assertAlmostEqual(
+            data_run.average_heat, np.mean([45.0, 46.0, 44.0, 45.5]) - 10.0
+        )
         self.assertIsInstance(data_run.dll_dt, float)
 
     def test_heater_run_with_json_export(self):
         """Test heater run with JSON data export"""
         # Create heater run
-        heater_run = HeaterRun(heat_load=50.0, reference_heat=8.0)  # Set up data
+        heater_run = HeaterRun(
+            heat_load=50.0, reference_heat=8.0
+        )  # Set up data
         heater_run.ll_data = {1.0: 92.0, 2.0: 91.0, 3.0: 90.0}
         heater_run.heater_readback_buffer = [58.0, 59.0, 57.0]
 
@@ -694,7 +728,9 @@ class TestIntegration(unittest.TestCase):
         # Verify JSON export
         with open(json_file, "r") as f:
             data = json.load(f)
-            self.assertEqual(data[timestamp][JSON_HEATER_RUN_KEY]["heat_load_des"], 50.0)
+            self.assertEqual(
+                data[timestamp][JSON_HEATER_RUN_KEY]["heat_load_des"], 50.0
+            )
             self.assertIn("average_heat", data[timestamp][JSON_HEATER_RUN_KEY])
             self.assertIn("dll_dt", data[timestamp][JSON_HEATER_RUN_KEY])
 
@@ -708,11 +744,25 @@ class TestIntegration(unittest.TestCase):
         cav_length = 0.7  # m
 
         # Calculate both corrected and uncorrected Q0
-        q0_uncorrected = calc_q0(amplitude, rf_heat_load, avg_pressure, cav_length, use_correction=False)
-        q0_corrected = calc_q0(amplitude, rf_heat_load, avg_pressure, cav_length, use_correction=True)
+        q0_uncorrected = calc_q0(
+            amplitude,
+            rf_heat_load,
+            avg_pressure,
+            cav_length,
+            use_correction=False,
+        )
+        q0_corrected = calc_q0(
+            amplitude,
+            rf_heat_load,
+            avg_pressure,
+            cav_length,
+            use_correction=True,
+        )
 
         # Verify results are in reasonable range for superconducting cavities
-        self.assertGreater(q0_uncorrected, 1e9)  # Should be > 1E9 for good cavities
+        self.assertGreater(
+            q0_uncorrected, 1e9
+        )  # Should be > 1E9 for good cavities
         self.assertLess(q0_uncorrected, 1e12)  # But not unrealistically high
         self.assertGreater(q0_corrected, 1e9)
         self.assertLess(q0_corrected, 1e12)
@@ -746,7 +796,13 @@ class TestErrorHandling(unittest.TestCase):
             # If no exception is raised, result might be nan, inf, or some other value
             # This is acceptable as long as it's a number
             self.assertIsInstance(result, (int, float, np.number))
-        except (ValueError, KeyError, IndexError, TypeError, np.linalg.LinAlgError):
+        except (
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+            np.linalg.LinAlgError,
+        ):
             # These exceptions are also acceptable for empty data
             pass
 
@@ -789,7 +845,9 @@ class TestErrorHandling(unittest.TestCase):
     def test_json_file_permission_error(self):
         """Test handling of file permission errors"""
         # Create a real file that we can test permissions on
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        ) as temp_file:
             temp_file.write('{"existing": "data"}')
             temp_filename = temp_file.name
 
@@ -818,13 +876,19 @@ class TestErrorHandling(unittest.TestCase):
         """Test handling of file permission errors using mock"""
         # Mock just the file opening in update_json_data, after make_json_file succeeds
         with patch("sc_linac_physics.applications.q0.q0_utils.make_json_file"):
-            with patch("builtins.open", side_effect=PermissionError("File locked")):
+            with patch(
+                "builtins.open", side_effect=PermissionError("File locked")
+            ):
                 with self.assertRaises(PermissionError):
-                    update_json_data("some_file.json", "timestamp", {"data": "test"})
+                    update_json_data(
+                        "some_file.json", "timestamp", {"data": "test"}
+                    )
 
     def test_invalid_json_data(self):
         """Test handling of invalid JSON data"""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        ) as temp_file:
             temp_file.write("invalid json content {")
             temp_filename = temp_file.name
 
@@ -859,7 +923,10 @@ class TestErrorHandling(unittest.TestCase):
     def test_data_run_dll_dt_caching(self):
         """Test that dll_dt is cached correctly"""
         data_run = DataRun()
-        data_run.ll_data = {1.0: 95.0, 2.0: 90.0}  # Simple case with clear slope of -5
+        data_run.ll_data = {
+            1.0: 95.0,
+            2.0: 90.0,
+        }  # Simple case with clear slope of -5
 
         # First access should calculate and cache
         first_result = data_run.dll_dt
@@ -868,12 +935,16 @@ class TestErrorHandling(unittest.TestCase):
         self.assertAlmostEqual(first_result, -5.0, places=5)
 
         # Modify ll_data - this should not affect the cached result
-        data_run.ll_data[3.0] = 100.0  # Add point that would create positive slope
+        data_run.ll_data[
+            3.0
+        ] = 100.0  # Add point that would create positive slope
 
         # Access again - should return cached value, not recalculate
         second_result = data_run.dll_dt
         self.assertEqual(second_result, first_result)
-        self.assertAlmostEqual(second_result, -5.0, places=5)  # Still the cached value
+        self.assertAlmostEqual(
+            second_result, -5.0, places=5
+        )  # Still the cached value
 
         # Reset cache manually
         data_run._dll_dt = None
@@ -893,13 +964,17 @@ class TestErrorHandling(unittest.TestCase):
         data_run.ll_data = {1.0: 92.0, 2.0: 91.0, 3.0: 90.0, 4.0: 89.0}
 
         # Test with siegelslopes
-        with patch("sc_linac_physics.applications.q0.q0_utils.USE_SIEGELSLOPES", True):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.USE_SIEGELSLOPES", True
+        ):
             data_run._dll_dt = None  # Reset cache
             result_siegel = data_run.dll_dt
             self.assertIsInstance(result_siegel, (int, float, np.number))
 
         # Test with linregress
-        with patch("sc_linac_physics.applications.q0.q0_utils.USE_SIEGELSLOPES", False):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.USE_SIEGELSLOPES", False
+        ):
             data_run._dll_dt = None  # Reset cache
             result_linregress = data_run.dll_dt
             self.assertIsInstance(result_linregress, (int, float, np.number))

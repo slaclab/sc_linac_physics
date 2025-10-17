@@ -4,7 +4,9 @@ import sys
 
 from lcls_tools.common.logger import logger
 
-from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_cavity import (
+    QuenchCavity,
+)
 from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -25,7 +27,9 @@ class QuenchCryomodule(Cryomodule):
         self.logger.setLevel(logging.DEBUG)
 
         this_dir = os.path.dirname(os.path.abspath(__file__))
-        self.logfile = os.path.join(this_dir, f"logfiles/cm{self.name}/cm{self.name}_quench_reset.log")
+        self.logfile = os.path.join(
+            this_dir, f"logfiles/cm{self.name}/cm{self.name}_quench_reset.log"
+        )
         os.makedirs(os.path.dirname(self.logfile), exist_ok=True)
 
         self.file_handler = logging.FileHandler(self.logfile, mode="a")
@@ -35,4 +39,6 @@ class QuenchCryomodule(Cryomodule):
         self.logger.addHandler(self.console_handler)
 
 
-QUENCH_MACHINE = Machine(cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule)
+QUENCH_MACHINE = Machine(
+    cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule
+)

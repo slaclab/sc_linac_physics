@@ -3,7 +3,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sc_linac_physics.applications.auto_setup.backend.setup_machine import SetupMachine
+from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+    SetupMachine,
+)
 
 
 @pytest.fixture

@@ -16,7 +16,10 @@ from sc_linac_physics.applications.quench_processing.quench_utils import (
 )
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
-from sc_linac_physics.utils.sc_linac.linac_utils import QuenchError, RF_MODE_SELA
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    QuenchError,
+    RF_MODE_SELA,
+)
 
 
 class QuenchCavity(Cavity):
@@ -79,7 +82,9 @@ class QuenchCavity(Cavity):
             self._fault_time_waveform_pv_obj = PV(self.fault_time_waveform_pv)
         return self._fault_time_waveform_pv_obj
 
-    def reset_interlocks(self, wait: int = 0, attempt: int = 0, time_after_reset=1):
+    def reset_interlocks(
+        self, wait: int = 0, attempt: int = 0, time_after_reset=1
+    ):
         """Overwriting base function to skip wait/reset cycle"""
         print(f"Resetting interlocks for {self}")
 
@@ -110,14 +115,22 @@ class QuenchCavity(Cavity):
                 return
         time.sleep(seconds - int(seconds))
 
-    def wait_for_quench(self, time_to_wait=MAX_WAIT_TIME_FOR_QUENCH) -> Optional[float]:
+    def wait_for_quench(
+        self, time_to_wait=MAX_WAIT_TIME_FOR_QUENCH
+    ) -> Optional[float]:
         # wait 1s before resetting just in case
         time.sleep(1)
         self.reset_interlocks()
         time_start = datetime.datetime.now()
-        print(f"{datetime.datetime.now()} Waiting {time_to_wait}s for {self} to quench")
+        print(
+            f"{datetime.datetime.now()} Waiting {time_to_wait}s for {self} to quench"
+        )
 
-        while not self.is_quenched and (datetime.datetime.now() - time_start).total_seconds() < time_to_wait:
+        while (
+            not self.is_quenched
+            and (datetime.datetime.now() - time_start).total_seconds()
+            < time_to_wait
+        ):
             self.check_abort()
             time.sleep(1)
 
@@ -127,9 +140,13 @@ class QuenchCavity(Cavity):
 
     def wait_for_decarads(self):
         if self.is_quenched:
-            print(f"Detected {self} quench, waiting {DECARAD_SETTLE_TIME}s for decarads to settle")
+            print(
+                f"Detected {self} quench, waiting {DECARAD_SETTLE_TIME}s for decarads to settle"
+            )
             start = datetime.datetime.now()
-            while (datetime.datetime.now() - start).total_seconds() < DECARAD_SETTLE_TIME:
+            while (
+                datetime.datetime.now() - start
+            ).total_seconds() < DECARAD_SETTLE_TIME:
                 super().check_abort()
                 time.sleep(1)
 
@@ -141,7 +158,11 @@ class QuenchCavity(Cavity):
             raise QuenchError("Potential uncaught quench detected")
 
     def has_uncaught_quench(self) -> bool:
-        return self.is_on and self.rf_mode == RF_MODE_SELA and self.aact <= QUENCH_AMP_THRESHOLD * self.ades
+        return (
+            self.is_on
+            and self.rf_mode == RF_MODE_SELA
+            and self.aact <= QUENCH_AMP_THRESHOLD * self.ades
+        )
 
     def quench_process(
         self,
@@ -182,7 +203,10 @@ class QuenchCavity(Cavity):
 
                 # if time_to_quench >= MAX_WAIT_TIME_FOR_QUENCH, the cavity was
                 # stable
-                while time_to_quench < MAX_WAIT_TIME_FOR_QUENCH and attempt < MAX_QUENCH_RETRIES:
+                while (
+                    time_to_quench < MAX_WAIT_TIME_FOR_QUENCH
+                    and attempt < MAX_QUENCH_RETRIES
+                ):
                     super().check_abort()
                     time_to_quench = self.wait_for_quench()
                     running_times.append(time_to_quench)
@@ -197,7 +221,10 @@ class QuenchCavity(Cavity):
                     print(f"Running times: {running_times}")
                     raise QuenchError("Quench processing failed")
 
-        while self.wait_for_quench(time_to_wait=QUENCH_STABLE_TIME) < QUENCH_STABLE_TIME:
+        while (
+            self.wait_for_quench(time_to_wait=QUENCH_STABLE_TIME)
+            < QUENCH_STABLE_TIME
+        ):
             print(
                 f"{datetime.datetime.now()}{self} made it to target amplitude, "
                 f"waiting {QUENCH_STABLE_TIME}s to prove stability"
@@ -252,14 +279,24 @@ class QuenchCavity(Cavity):
 
         self.pre_quench_amp = fault_data[0]
 
-        exponential_term = np.polyfit(time_data, np.log(self.pre_quench_amp / fault_data), 1)[0]
+        exponential_term = np.polyfit(
+            time_data, np.log(self.pre_quench_amp / fault_data), 1
+        )[0]
         loaded_q = (np.pi * self.frequency) / exponential_term
 
         thresh_for_quench = LOADED_Q_CHANGE_FOR_QUENCH * saved_loaded_q
-        self.cryomodule.logger.info(f"{self} Saved Loaded Q: {saved_loaded_q:.2e}")
-        self.cryomodule.logger.info(f"{self} Last recorded amplitude: {fault_data[0]}")
-        self.cryomodule.logger.info(f"{self} Threshold: {thresh_for_quench:.2e}")
-        self.cryomodule.logger.info(f"{self} Calculated Loaded Q: {loaded_q:.2e}")
+        self.cryomodule.logger.info(
+            f"{self} Saved Loaded Q: {saved_loaded_q:.2e}"
+        )
+        self.cryomodule.logger.info(
+            f"{self} Last recorded amplitude: {fault_data[0]}"
+        )
+        self.cryomodule.logger.info(
+            f"{self} Threshold: {thresh_for_quench:.2e}"
+        )
+        self.cryomodule.logger.info(
+            f"{self} Calculated Loaded Q: {loaded_q:.2e}"
+        )
 
         is_real = loaded_q < thresh_for_quench
         print("Validation: ", is_real)
@@ -269,10 +306,14 @@ class QuenchCavity(Cavity):
     def reset_quench(self) -> bool:
         is_real = self.validate_quench(wait_for_update=True)
         if not is_real:
-            self.cryomodule.logger.info(f"{self} FAKE quench detected, resetting")
+            self.cryomodule.logger.info(
+                f"{self} FAKE quench detected, resetting"
+            )
             super().reset_interlocks()
             return True
 
         else:
-            self.cryomodule.logger.warning(f"{self} REAL quench detected, not resetting")
+            self.cryomodule.logger.warning(
+                f"{self} REAL quench detected, not resetting"
+            )
             return False

@@ -7,11 +7,19 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
 )
 
-from sc_linac_physics.applications.microphonics.gui.config_panel import ConfigPanel
+from sc_linac_physics.applications.microphonics.gui.config_panel import (
+    ConfigPanel,
+)
 from sc_linac_physics.applications.microphonics.plots.fft_plot import FFTPlot
-from sc_linac_physics.applications.microphonics.plots.histogram_plot import HistogramPlot
-from sc_linac_physics.applications.microphonics.plots.spectrogram_plot import SpectrogramPlot
-from sc_linac_physics.applications.microphonics.plots.time_series_plot import TimeSeriesPlot
+from sc_linac_physics.applications.microphonics.plots.histogram_plot import (
+    HistogramPlot,
+)
+from sc_linac_physics.applications.microphonics.plots.spectrogram_plot import (
+    SpectrogramPlot,
+)
+from sc_linac_physics.applications.microphonics.plots.time_series_plot import (
+    TimeSeriesPlot,
+)
 from sc_linac_physics.applications.microphonics.utils.ui_utils import (
     create_checkboxes,
     create_pushbuttons,
@@ -65,7 +73,10 @@ class PlotPanel(QWidget):
         group_buttons_layout.setSpacing(5)
 
         # This creates toggle buttons for each rack
-        button_items = {"lower": "Select Rack A (1-4)", "upper": "Select Rack B (5-8)"}
+        button_items = {
+            "lower": "Select Rack A (1-4)",
+            "upper": "Select Rack B (5-8)",
+        }
         buttons = create_pushbuttons(self, button_items, group_buttons_layout)
         # Assign buttons to class attributes
         self.select_lower_btn = buttons["lower"]
@@ -83,10 +94,16 @@ class PlotPanel(QWidget):
 
         # Create checkboxes for each cavity
         checkbox_items = {i: f"Cavity {i}" for i in range(1, 9)}
-        self.cavity_checkboxes = create_checkboxes(self, checkbox_items, checkbox_layout, checked=False)
+        self.cavity_checkboxes = create_checkboxes(
+            self, checkbox_items, checkbox_layout, checked=False
+        )
         # Connect signals afterward
         for cavity_num, checkbox in self.cavity_checkboxes.items():
-            checkbox.stateChanged.connect(lambda state, cav=cavity_num: self.toggle_cavity_visibility(cav, state))
+            checkbox.stateChanged.connect(
+                lambda state, cav=cavity_num: self.toggle_cavity_visibility(
+                    cav, state
+                )
+            )
 
         # Add checkbox layout to visibility layout
         self.visibility_layout.addLayout(checkbox_layout)
@@ -168,7 +185,11 @@ class PlotPanel(QWidget):
             self.cavity_checkboxes[i].setChecked(self.lower_selected)
 
         # Update button text
-        self.select_lower_btn.setText("Deselect Rack A (1-4)" if self.lower_selected else "Select Rack A (1-4)")
+        self.select_lower_btn.setText(
+            "Deselect Rack A (1-4)"
+            if self.lower_selected
+            else "Select Rack A (1-4)"
+        )
 
     def toggle_upper_cavities(self):
         """Toggle selection of upper half cavities (5-8)"""
@@ -177,14 +198,20 @@ class PlotPanel(QWidget):
             self.cavity_checkboxes[i].setChecked(self.upper_selected)
 
         # Update button text
-        self.select_upper_btn.setText("Deselect Rack B (5-8)" if self.upper_selected else "Select Rack B (5-8)")
+        self.select_upper_btn.setText(
+            "Deselect Rack B (5-8)"
+            if self.upper_selected
+            else "Select Rack B (5-8)"
+        )
 
     def _get_decimation_for_plotting(self) -> int:
         """Determines the decimation to use for plotting based on UI."""
         if self.config_panel:
             return self.config_panel.get_selected_decimation()
         else:
-            print("PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation.")
+            print(
+                "PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation."
+            )
             return ConfigPanel.DEFAULT_DECIMATION_VALUE
 
     def update_plots(self, data_dict: dict):
@@ -199,14 +226,24 @@ class PlotPanel(QWidget):
             cavity_data_from_source = all_cavity_data.get(cavity_num)
             if cavity_data_from_source:
                 data_for_this_plot_call = cavity_data_from_source.copy()
-                data_for_this_plot_call["decimation"] = actual_plotting_decimation
+                data_for_this_plot_call[
+                    "decimation"
+                ] = actual_plotting_decimation
                 # Pass dictionary of channel data for this cavity to each plot types update method
                 self.fft_plot.update_plot(cavity_num, data_for_this_plot_call)
-                self.histogram_plot.update_plot(cavity_num, data_for_this_plot_call)
-                self.time_series_plot.update_plot(cavity_num, data_for_this_plot_call)
-                self.spectrogram_plot.update_plot(cavity_num, data_for_this_plot_call)
+                self.histogram_plot.update_plot(
+                    cavity_num, data_for_this_plot_call
+                )
+                self.time_series_plot.update_plot(
+                    cavity_num, data_for_this_plot_call
+                )
+                self.spectrogram_plot.update_plot(
+                    cavity_num, data_for_this_plot_call
+                )
             else:
-                print(f"PlotPanel: No data found for cavity {cavity_num} in received data_dict.")
+                print(
+                    f"PlotPanel: No data found for cavity {cavity_num} in received data_dict."
+                )
 
     def refresh_plots_if_decimation_changed(self):
         """
@@ -217,7 +254,10 @@ class PlotPanel(QWidget):
             return
 
         new_ui_decimation = self.config_panel.get_selected_decimation()
-        if self._current_plotting_decimation is None or self._current_plotting_decimation != new_ui_decimation:
+        if (
+            self._current_plotting_decimation is None
+            or self._current_plotting_decimation != new_ui_decimation
+        ):
             print(
                 f"PlotPanel: UI Decimation changed from {self._current_plotting_decimation} "
                 f"to {new_ui_decimation}. Refreshing plots."

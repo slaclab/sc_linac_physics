@@ -19,27 +19,37 @@ from sc_linac_physics.displays.cavity_display.frontend.fault_count_display impor
 from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display import (
     DecoderDisplay,
 )
-from sc_linac_physics.displays.cavity_display.frontend.gui_machine import GUIMachine
+from sc_linac_physics.displays.cavity_display.frontend.gui_machine import (
+    GUIMachine,
+)
 from sc_linac_physics.displays.cavity_display.frontend.utils import make_line
 
 
 class CavityDisplayGUI(Display):
     def __init__(self, parent=None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
-        self.setStyleSheet("background-color: rgb(35, 35, 35); color: rgb(255, 255, 255); font-size: 15pt;")
+        self.setStyleSheet(
+            "background-color: rgb(35, 35, 35); color: rgb(255, 255, 255); font-size: 15pt;"
+        )
 
         self.gui_machine = GUIMachine()
 
         self.header = QHBoxLayout()
-        heartbeat_indicator = PyDMByteIndicator(init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR")
+        heartbeat_indicator = PyDMByteIndicator(
+            init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR"
+        )
         heartbeat_indicator.onColor = QColor(255, 0, 0)
         heartbeat_indicator.offColor = QColor(0, 255, 0)
         heartbeat_indicator.showLabels = False
         heartbeat_indicator.circles = True
         heartbeat_indicator.showLabels = False
 
-        heartbeat_label = PyDMLabel(init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR")
-        heartbeat_counter = PyDMLabel(init_channel="PHYS:SYS0:1:SC_CAV_FAULT_HEARTBEAT")
+        heartbeat_label = PyDMLabel(
+            init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR"
+        )
+        heartbeat_counter = PyDMLabel(
+            init_channel="PHYS:SYS0:1:SC_CAV_FAULT_HEARTBEAT"
+        )
 
         self.header.addWidget(heartbeat_indicator)
         self.header.addWidget(heartbeat_label)
@@ -69,8 +79,12 @@ class CavityDisplayGUI(Display):
 
         self.fault_count_display: FaultCountDisplay = FaultCountDisplay()
         self.fault_count_button: QPushButton = QPushButton("Fault Counter")
-        self.fault_count_button.setToolTip("See fault history using archived data")
-        self.add_header_button(self.fault_count_button, self.fault_count_display)
+        self.fault_count_button.setToolTip(
+            "See fault history using archived data"
+        )
+        self.add_header_button(
+            self.fault_count_button, self.fault_count_display
+        )
 
     def add_header_button(self, button: QPushButton, display: Display):
         button.clicked.connect(partial(showDisplay, display))

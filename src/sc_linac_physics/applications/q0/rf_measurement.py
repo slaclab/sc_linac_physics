@@ -48,7 +48,9 @@ class Q0Measurement:
         # Validate amplitude values
         for cav_num, amp in amplitudes.items():
             if not isinstance(cav_num, int):
-                raise TypeError(f"Cavity number must be integer, got {type(cav_num)}")
+                raise TypeError(
+                    f"Cavity number must be integer, got {type(cav_num)}"
+                )
             if not isinstance(amp, (int, float)):
                 raise TypeError(f"Amplitude must be numeric, got {type(amp)}")
             if amp < 0:
@@ -78,15 +80,21 @@ class Q0Measurement:
     def load_data(self, time_stamp: str):
         """Load measurement data with improved error handling"""
         try:
-            self.start_time = datetime.strptime(time_stamp, q0_utils.DATETIME_FORMATTER)
+            self.start_time = datetime.strptime(
+                time_stamp, q0_utils.DATETIME_FORMATTER
+            )
         except ValueError as e:
             raise ValueError(f"Invalid timestamp format: {time_stamp}") from e
 
         try:
-            with open(self.cryomodule.q0_data_file, "r") as f:  # Changed from "r+"
+            with open(
+                self.cryomodule.q0_data_file, "r"
+            ) as f:  # Changed from "r+"
                 all_data: Dict = json.load(f)
         except FileNotFoundError:
-            raise FileNotFoundError(f"Q0 data file not found: {self.cryomodule.q0_data_file}")
+            raise FileNotFoundError(
+                f"Q0 data file not found: {self.cryomodule.q0_data_file}"
+            )
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in Q0 data file: {e}")
 
@@ -108,9 +116,15 @@ class Q0Measurement:
             cav_amps[int(cav_num_str)] = amp
 
         self.amplitudes = cav_amps
-        self.rf_run.start_time = datetime.strptime(rf_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER)
-        self.rf_run.end_time = datetime.strptime(rf_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER)
-        self.rf_run.average_heat = rf_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
+        self.rf_run.start_time = datetime.strptime(
+            rf_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
+        )
+        self.rf_run.end_time = datetime.strptime(
+            rf_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
+        )
+        self.rf_run.average_heat = rf_run_data[
+            q0_utils.JSON_HEATER_READBACK_KEY
+        ]
 
         ll_data = {}
         for time_str, val in rf_run_data[q0_utils.JSON_LL_KEY].items():
@@ -122,10 +136,15 @@ class Q0Measurement:
     def _load_heater_run_data(self, q0_meas_data: dict):
         heater_run_data: Dict = q0_meas_data[q0_utils.JSON_HEATER_RUN_KEY]
 
-        self.heater_run_heatload = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
-        self.heater_run.average_heat = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
+        self.heater_run_heatload = heater_run_data[
+            q0_utils.JSON_HEATER_READBACK_KEY
+        ]
+        self.heater_run.average_heat = heater_run_data[
+            q0_utils.JSON_HEATER_READBACK_KEY
+        ]
         self.heater_run.start_time = datetime.strptime(
-            heater_run_data[q0_utils.JSON_START_KEY], q0_utils.DATETIME_FORMATTER
+            heater_run_data[q0_utils.JSON_START_KEY],
+            q0_utils.DATETIME_FORMATTER,
         )
         self.heater_run.end_time = datetime.strptime(
             heater_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER
@@ -160,7 +179,9 @@ class Q0Measurement:
             q0_utils.JSON_RF_RUN_KEY: rf_data,
         }
 
-        q0_utils.update_json_data(self.cryomodule.q0_data_file, self.start_time, new_data)
+        q0_utils.update_json_data(
+            self.cryomodule.q0_data_file, self.start_time, new_data
+        )
 
     def save_results(self):
         newData = {
@@ -173,19 +194,27 @@ class Q0Measurement:
             "Calibration Used": self.cryomodule.calibration.time_stamp,
         }
 
-        q0_utils.update_json_data(self.cryomodule.q0_idx_file, self.start_time, newData)
+        q0_utils.update_json_data(
+            self.cryomodule.q0_idx_file, self.start_time, newData
+        )
 
     @property
     def raw_heat(self):
         if not self._raw_heat:
-            self._raw_heat = self.cryomodule.calibration.get_heat(self.rf_run.dll_dt)
+            self._raw_heat = self.cryomodule.calibration.get_heat(
+                self.rf_run.dll_dt
+            )
         return self._raw_heat
 
     @property
     def adjustment(self):
         if not self._adjustment:
-            heater_run_raw_heat = self.cryomodule.calibration.get_heat(self.heater_run.dll_dt)
-            self._adjustment = self.heater_run.average_heat - heater_run_raw_heat
+            heater_run_raw_heat = self.cryomodule.calibration.get_heat(
+                self.heater_run.dll_dt
+            )
+            self._adjustment = (
+                self.heater_run.average_heat - heater_run_raw_heat
+            )
         return self._adjustment
 
     @property

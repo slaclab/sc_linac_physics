@@ -1,8 +1,13 @@
 import logging
 
-from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_cavity import (
+    QuenchCavity,
+)
 from sc_linac_physics.utils.qt import Worker
-from sc_linac_physics.utils.sc_linac.linac_utils import CavityAbortError, QuenchError
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    CavityAbortError,
+    QuenchError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +68,9 @@ class QuenchWorker(Worker):
 
         if self.start_amp > self.end_amp:
             # If descending ramps are intended, remove this and rely on quench_process behavior.
-            self.error.emit(f"{self.cavity}: Starting Amplitude must be <= Ending Amplitude.")
+            self.error.emit(
+                f"{self.cavity}: Starting Amplitude must be <= Ending Amplitude."
+            )
             return False
 
         return True
@@ -83,7 +90,9 @@ class QuenchWorker(Worker):
         Args:
             exception: The CavityAbortError that was raised.
         """
-        self.status.emit(f"{self.cavity} quench processing aborted: {exception}")
+        self.status.emit(
+            f"{self.cavity} quench processing aborted: {exception}"
+        )
         self._safe_turn_off("abort")
         # Use finished to drive UI cleanup; message clarifies it was aborted.
         self.finished.emit(f"{self.cavity} quench processing aborted")
@@ -117,4 +126,6 @@ class QuenchWorker(Worker):
         try:
             self.cavity.turn_off()
         except Exception as off_e:
-            self.status.emit(f"{self.cavity}: Turn-off after {context} failed: {off_e}")
+            self.status.emit(
+                f"{self.cavity}: Turn-off after {context} failed: {off_e}"
+            )

@@ -2,9 +2,13 @@ import pyqtgraph as pg
 from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QSpinBox, QPushButton
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+    BASE_HARDWARE_SAMPLE_RATE,
+)
 from sc_linac_physics.applications.microphonics.plots.base_plot import BasePlot
-from sc_linac_physics.applications.microphonics.utils.data_processing import calculate_spectrogram
+from sc_linac_physics.applications.microphonics.utils.data_processing import (
+    calculate_spectrogram,
+)
 
 
 class SpectrogramPlot(BasePlot):
@@ -69,7 +73,10 @@ class SpectrogramPlot(BasePlot):
         # Create GraphicsLayoutWidget
         self.graphics_layout = pg.GraphicsLayoutWidget()
         self.graphics_layout.setBackground("w")
-        self.graphics_layout.setSizePolicy(pg.QtWidgets.QSizePolicy.Expanding, pg.QtWidgets.QSizePolicy.Expanding)
+        self.graphics_layout.setSizePolicy(
+            pg.QtWidgets.QSizePolicy.Expanding,
+            pg.QtWidgets.QSizePolicy.Expanding,
+        )
 
         self.plot_widget = self.graphics_layout
 
@@ -88,7 +95,10 @@ class SpectrogramPlot(BasePlot):
         # Figure out which cavities to show
         visible_cavities = []
         for cavity_num in self.cavity_order:
-            if self.cavity_is_visible_flags.get(cavity_num, False) and cavity_num in self.cavity_data_cache:
+            if (
+                self.cavity_is_visible_flags.get(cavity_num, False)
+                and cavity_num in self.cavity_data_cache
+            ):
                 visible_cavities.append(cavity_num)
 
         if not visible_cavities:
@@ -103,7 +113,9 @@ class SpectrogramPlot(BasePlot):
             row = idx // self.grid_columns
             col = idx % self.grid_columns
 
-            plot_item = self.graphics_layout.addPlot(row=row, col=col, title=f"Cavity {cavity_num}")
+            plot_item = self.graphics_layout.addPlot(
+                row=row, col=col, title=f"Cavity {cavity_num}"
+            )
 
             # Configure plot
             plot_item.setLabel("left", "Frequency", units="Hz")
@@ -130,7 +142,10 @@ class SpectrogramPlot(BasePlot):
             # Link X-axis
             if "x_range" in self.config:
                 plot_item.setXRange(*self.config["x_range"])
-            elif "spectrogram" in self.config and "x_range" in self.config["spectrogram"]:
+            elif (
+                "spectrogram" in self.config
+                and "x_range" in self.config["spectrogram"]
+            ):
                 plot_item.setXRange(*self.config["spectrogram"]["x_range"])
             else:
                 plot_item.setXRange(t[0], t[-1], padding=0)
@@ -146,9 +161,13 @@ class SpectrogramPlot(BasePlot):
         return f"Time: {x:.3f} s\nFrequency: {y:.1f} Hz"
 
     def update_plot(self, cavity_num, cavity_channel_data):
-        df_data, is_valid = self._preprocess_data(cavity_channel_data, channel_type="DF")
+        df_data, is_valid = self._preprocess_data(
+            cavity_channel_data, channel_type="DF"
+        )
         if not is_valid:
-            print(f"SpectrogramPlot: No valid 'DF' data for cavity {cavity_num}")
+            print(
+                f"SpectrogramPlot: No valid 'DF' data for cavity {cavity_num}"
+            )
             if cavity_num in self.cavity_data_cache:
                 del self.cavity_data_cache[cavity_num]
             self._refresh_grid_layout()
@@ -162,9 +181,13 @@ class SpectrogramPlot(BasePlot):
         try:
             f, t, Sxx = calculate_spectrogram(df_data, effective_sample_rate)
             if Sxx is None or Sxx.size == 0 or t.size == 0 or f.size == 0:
-                raise ValueError("Spectrogram calculation returned empty arrays.")
+                raise ValueError(
+                    "Spectrogram calculation returned empty arrays."
+                )
         except Exception as e:
-            print(f"SpectrogramPlot: Error during spectrogram calculation for Cav {cavity_num}: {e}")
+            print(
+                f"SpectrogramPlot: Error during spectrogram calculation for Cav {cavity_num}: {e}"
+            )
             if cavity_num in self.cavity_data_cache:
                 del self.cavity_data_cache[cavity_num]
             self._refresh_grid_layout()
@@ -183,10 +206,17 @@ class SpectrogramPlot(BasePlot):
         """Add colorbar to the grid layout"""
         # Create colorbar
         if self.colorbar is None:
-            self.colorbar = pg.ColorBarItem(values=(-120, 0), colorMap=self.colormap, label="Power (dB)", width=15)
+            self.colorbar = pg.ColorBarItem(
+                values=(-120, 0),
+                colorMap=self.colormap,
+                label="Power (dB)",
+                width=15,
+            )
 
         # Add to layout in right column
-        self.graphics_layout.addItem(self.colorbar, row=0, col=self.grid_columns, rowspan=num_rows)
+        self.graphics_layout.addItem(
+            self.colorbar, row=0, col=self.grid_columns, rowspan=num_rows
+        )
 
         # Link to first available image
         if self.image_items:
@@ -200,7 +230,11 @@ class SpectrogramPlot(BasePlot):
 
     def _auto_arrange_grid(self):
         """Automatically figure optimal grid layout"""
-        num_visible = sum(1 for cav in self.cavity_order if self.cavity_is_visible_flags.get(cav, False))
+        num_visible = sum(
+            1
+            for cav in self.cavity_order
+            if self.cavity_is_visible_flags.get(cav, False)
+        )
 
         if num_visible == 0:
             return

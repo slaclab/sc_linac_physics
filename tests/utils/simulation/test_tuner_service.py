@@ -5,7 +5,10 @@ import pytest
 from caproto.server import PVGroup
 
 # Import your tuner service modules
-from sc_linac_physics.utils.simulation.tuner_service import StepperPVGroup, PiezoPVGroup
+from sc_linac_physics.utils.simulation.tuner_service import (
+    StepperPVGroup,
+    PiezoPVGroup,
+)
 
 # Make sure pytest-asyncio is configured
 pytest_plugins = ("pytest_asyncio",)
@@ -54,7 +57,9 @@ def async_event_loop():
         task.cancel()
     # Wait for all tasks to complete cancellation
     if pending:
-        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        loop.run_until_complete(
+            asyncio.gather(*pending, return_exceptions=True)
+        )
     loop.close()
 
 
@@ -83,11 +88,17 @@ class TestPiezoPVGroup:
 
     # In test_tuner_service.py, fix line 89:
     @pytest.mark.asyncio
-    async def test_piezo_voltage_change(self, piezo_group, mock_pvproperty_instance):
+    async def test_piezo_voltage_change(
+        self, piezo_group, mock_pvproperty_instance
+    ):
         """Test piezo voltage change affects cavity detune."""
         # Mock the piezo voltage putter if it exists
-        if hasattr(piezo_group, "voltage") and hasattr(piezo_group.voltage, "putter"):
-            with patch.object(piezo_group.cavity_group.detune, "write", new_callable=AsyncMock):
+        if hasattr(piezo_group, "voltage") and hasattr(
+            piezo_group.voltage, "putter"
+        ):
+            with patch.object(
+                piezo_group.cavity_group.detune, "write", new_callable=AsyncMock
+            ):
                 # Use proper instance instead of None
                 await piezo_group.voltage.putter(mock_pvproperty_instance, 50.0)
                 # Test completed without error (don't need to check if write was called)
@@ -97,7 +108,9 @@ class TestPiezoPVGroup:
     async def test_piezo_voltage_write_directly(self, piezo_group):
         """Test piezo voltage using write method instead of putter."""
         if hasattr(piezo_group, "voltage"):
-            with patch.object(piezo_group.cavity_group.detune, "write", new_callable=AsyncMock):
+            with patch.object(
+                piezo_group.cavity_group.detune, "write", new_callable=AsyncMock
+            ):
                 # Use write method which doesn't need instance parameter
                 await piezo_group.voltage.write(75.0)
                 # Test completed without error
@@ -123,7 +136,9 @@ class TestStepperPVGroup:
         """Test that StepperPVGroup inherits from PVGroup."""
         assert isinstance(stepper_group, PVGroup)
 
-    def test_initialization(self, stepper_group, mock_cavity_group, piezo_group):
+    def test_initialization(
+        self, stepper_group, mock_cavity_group, piezo_group
+    ):
         """Test StepperPVGroup initialization."""
         assert stepper_group.prefix == "TEST:STEP:"
         assert stepper_group.cavity_group == mock_cavity_group
@@ -144,10 +159,18 @@ class TestStepperPVGroup:
     async def test_stepper_move(self, stepper_group, mock_pvproperty_instance):
         """Test stepper motor movement."""
         # Mock the stepper move functionality if it exists
-        if hasattr(stepper_group, "target") and hasattr(stepper_group.target, "putter"):
-            with patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock):
+        if hasattr(stepper_group, "target") and hasattr(
+            stepper_group.target, "putter"
+        ):
+            with patch.object(
+                stepper_group.cavity_group.detune,
+                "write",
+                new_callable=AsyncMock,
+            ):
                 # Use proper instance instead of None
-                await stepper_group.target.putter(mock_pvproperty_instance, 1000)
+                await stepper_group.target.putter(
+                    mock_pvproperty_instance, 1000
+                )
                 # The test should complete without hanging
                 assert True
 
@@ -155,7 +178,11 @@ class TestStepperPVGroup:
     async def test_stepper_write_directly(self, stepper_group):
         """Test stepper using write method instead of putter."""
         if hasattr(stepper_group, "target"):
-            with patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock):
+            with patch.object(
+                stepper_group.cavity_group.detune,
+                "write",
+                new_callable=AsyncMock,
+            ):
                 # Use write method which doesn't need instance parameter
                 await stepper_group.target.write(500)
                 # Test completed without error
@@ -180,7 +207,9 @@ class TestIntegration:
     """Test integration between stepper and piezo systems."""
 
     @pytest.mark.asyncio
-    async def test_stepper_move_without_piezo_feedback(self, stepper_group, mock_pvproperty_instance, async_event_loop):
+    async def test_stepper_move_without_piezo_feedback(
+        self, stepper_group, mock_pvproperty_instance, async_event_loop
+    ):
         """Test stepper movement without piezo feedback causing issues."""
         asyncio.set_event_loop(async_event_loop)
 
@@ -188,12 +217,18 @@ class TestIntegration:
             # Mock any async operations to prevent them from hanging
             with (
                 patch("asyncio.sleep", new_callable=AsyncMock),
-                patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock),
+                patch.object(
+                    stepper_group.cavity_group.detune,
+                    "write",
+                    new_callable=AsyncMock,
+                ),
             ):
                 # Test stepper move operation using write method to avoid putter issues
                 if hasattr(stepper_group, "target"):
                     # Set a timeout to prevent hanging
-                    await asyncio.wait_for(stepper_group.target.write(500), timeout=1.0)
+                    await asyncio.wait_for(
+                        stepper_group.target.write(500), timeout=1.0
+                    )
 
                 # Test should complete without issues
                 assert True
@@ -204,23 +239,37 @@ class TestIntegration:
             pytest.fail(f"Stepper move operation failed: {e}")
 
     @pytest.mark.asyncio
-    async def test_piezo_stepper_coordination(self, piezo_group, stepper_group, async_event_loop):
+    async def test_piezo_stepper_coordination(
+        self, piezo_group, stepper_group, async_event_loop
+    ):
         """Test coordination between piezo and stepper systems."""
         asyncio.set_event_loop(async_event_loop)
 
         try:
             with (
                 patch("asyncio.sleep", new_callable=AsyncMock),
-                patch.object(piezo_group.cavity_group.detune, "write", new_callable=AsyncMock),
-                patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock),
+                patch.object(
+                    piezo_group.cavity_group.detune,
+                    "write",
+                    new_callable=AsyncMock,
+                ),
+                patch.object(
+                    stepper_group.cavity_group.detune,
+                    "write",
+                    new_callable=AsyncMock,
+                ),
             ):
                 # Test piezo adjustment using write method
                 if hasattr(piezo_group, "voltage"):
-                    await asyncio.wait_for(piezo_group.voltage.write(25.0), timeout=1.0)
+                    await asyncio.wait_for(
+                        piezo_group.voltage.write(25.0), timeout=1.0
+                    )
 
                 # Test stepper adjustment using write method
                 if hasattr(stepper_group, "target"):
-                    await asyncio.wait_for(stepper_group.target.write(750), timeout=1.0)
+                    await asyncio.wait_for(
+                        stepper_group.target.write(750), timeout=1.0
+                    )
 
                 # Both operations should complete successfully
                 assert True
@@ -233,7 +282,13 @@ class TestIntegration:
     def test_system_properties_accessible(self, piezo_group, stepper_group):
         """Test that system properties are accessible."""
         # Test piezo properties
-        piezo_props = ["voltage", "position", "enabled", "range_min", "range_max"]
+        piezo_props = [
+            "voltage",
+            "position",
+            "enabled",
+            "range_min",
+            "range_max",
+        ]
         for prop_name in piezo_props:
             if hasattr(piezo_group, prop_name):
                 prop = getattr(piezo_group, prop_name)
@@ -247,7 +302,9 @@ class TestIntegration:
                 assert hasattr(prop, "value")
 
     @pytest.mark.asyncio
-    async def test_property_modification_via_assignment(self, piezo_group, stepper_group):
+    async def test_property_modification_via_assignment(
+        self, piezo_group, stepper_group
+    ):
         """Test property modification via direct assignment."""
         try:
             # Test piezo voltage assignment
@@ -278,10 +335,14 @@ class TestErrorHandling:
     async def test_piezo_limits(self, piezo_group):
         """Test piezo voltage limits."""
         if hasattr(piezo_group, "voltage"):
-            with patch.object(piezo_group.cavity_group.detune, "write", new_callable=AsyncMock):
+            with patch.object(
+                piezo_group.cavity_group.detune, "write", new_callable=AsyncMock
+            ):
                 try:
                     # Test extreme values using write method
-                    await asyncio.wait_for(piezo_group.voltage.write(999.0), timeout=1.0)
+                    await asyncio.wait_for(
+                        piezo_group.voltage.write(999.0), timeout=1.0
+                    )
                     # Should handle extreme values gracefully
                     assert True
                 except asyncio.TimeoutError:
@@ -291,10 +352,16 @@ class TestErrorHandling:
     async def test_stepper_error_conditions(self, stepper_group):
         """Test stepper error conditions."""
         if hasattr(stepper_group, "target"):
-            with patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock):
+            with patch.object(
+                stepper_group.cavity_group.detune,
+                "write",
+                new_callable=AsyncMock,
+            ):
                 try:
                     # Test invalid target position using write method
-                    await asyncio.wait_for(stepper_group.target.write(-9999), timeout=1.0)
+                    await asyncio.wait_for(
+                        stepper_group.target.write(-9999), timeout=1.0
+                    )
                     # Should handle invalid positions gracefully
                     assert True
                 except asyncio.TimeoutError:
@@ -340,22 +407,34 @@ class TestAsyncResourceCleanup:
         # Perform operations with proper mocking
         with (
             patch("asyncio.sleep", new_callable=AsyncMock),
-            patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock),
-            patch.object(piezo_group.cavity_group.detune, "write", new_callable=AsyncMock),
+            patch.object(
+                stepper_group.cavity_group.detune,
+                "write",
+                new_callable=AsyncMock,
+            ),
+            patch.object(
+                piezo_group.cavity_group.detune, "write", new_callable=AsyncMock
+            ),
         ):
             # Execute operations with timeout using write methods
             if hasattr(piezo_group, "voltage"):
-                await asyncio.wait_for(piezo_group.voltage.write(30.0), timeout=0.5)
+                await asyncio.wait_for(
+                    piezo_group.voltage.write(30.0), timeout=0.5
+                )
 
             if hasattr(stepper_group, "target"):
-                await asyncio.wait_for(stepper_group.target.write(600), timeout=0.5)
+                await asyncio.wait_for(
+                    stepper_group.target.write(600), timeout=0.5
+                )
 
         # Allow brief time for cleanup
         await asyncio.sleep(0.1)
 
         # Check that we haven't created excessive tasks
         final_tasks = len(asyncio.all_tasks())
-        assert final_tasks <= initial_tasks + 2  # Allow for some reasonable task creation
+        assert (
+            final_tasks <= initial_tasks + 2
+        )  # Allow for some reasonable task creation
 
 
 class TestMockingStrategy:
@@ -367,8 +446,14 @@ class TestMockingStrategy:
         # Ensure all async operations are mocked
         with (
             patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
-            patch("asyncio.create_task", new_callable=AsyncMock) as mock_create_task,
-            patch.object(stepper_group.cavity_group.detune, "write", new_callable=AsyncMock) as mock_write,
+            patch(
+                "asyncio.create_task", new_callable=AsyncMock
+            ) as mock_create_task,
+            patch.object(
+                stepper_group.cavity_group.detune,
+                "write",
+                new_callable=AsyncMock,
+            ) as mock_write,
         ):
             # Mock create_task to return a completed future
             mock_future = AsyncMock()
@@ -377,7 +462,9 @@ class TestMockingStrategy:
 
             # Test operation using write method
             if hasattr(stepper_group, "target"):
-                await asyncio.wait_for(stepper_group.target.write(400), timeout=0.5)
+                await asyncio.wait_for(
+                    stepper_group.target.write(400), timeout=0.5
+                )
 
             # Verify mocks were called appropriately
             # Don't require specific call counts, just that they're callable
@@ -422,7 +509,9 @@ class TestPropertyBehavior:
         if hasattr(stepper_group, "target"):
             assert isinstance(stepper_group.target.value, (int, float))
 
-    def test_property_names_contain_expected_strings(self, piezo_group, stepper_group):
+    def test_property_names_contain_expected_strings(
+        self, piezo_group, stepper_group
+    ):
         """Test that property names contain expected strings."""
         # Test piezo property names
         if hasattr(piezo_group, "voltage"):
@@ -441,11 +530,15 @@ class TestPropertyBehavior:
         try:
             # Test piezo write operations
             if hasattr(piezo_group, "voltage"):
-                await asyncio.wait_for(piezo_group.voltage.write(10.0), timeout=1.0)
+                await asyncio.wait_for(
+                    piezo_group.voltage.write(10.0), timeout=1.0
+                )
 
             # Test stepper write operations
             if hasattr(stepper_group, "target"):
-                await asyncio.wait_for(stepper_group.target.write(100), timeout=1.0)
+                await asyncio.wait_for(
+                    stepper_group.target.write(100), timeout=1.0
+                )
 
             # All operations completed successfully
             assert True

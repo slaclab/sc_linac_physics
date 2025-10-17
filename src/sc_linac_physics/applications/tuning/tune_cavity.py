@@ -54,8 +54,12 @@ class TuneCavity(Cavity):
             self._auto_tune(delta_hz_func=delta_detune, tolerance=1000)
 
         if starting_config == TUNE_CONFIG_RESONANCE_VALUE:
-            print(f"Updating stored steps to park to current step count for {self}")
-            self.stepper_tuner.nsteps_park_pv_obj.put(self.stepper_tuner.step_tot_pv_obj.get())
+            print(
+                f"Updating stored steps to park to current step count for {self}"
+            )
+            self.stepper_tuner.nsteps_park_pv_obj.put(
+                self.stepper_tuner.step_tot_pv_obj.get()
+            )
 
         self.tune_config_pv_obj.put(TUNE_CONFIG_PARKED_VALUE)
 
@@ -96,10 +100,15 @@ class TuneCavity(Cavity):
         # exception before marking the cavity as at cold landing). This is
         # likely the case when we have lost site power and the cryoplant is
         # unable to support 2 K operation
-        self.stepper_tuner.move_to_cold_landing(count_current=count_current, check_detune=False)
+        self.stepper_tuner.move_to_cold_landing(
+            count_current=count_current, check_detune=False
+        )
 
     def detune_with_rf(self, count_current=False):
-        if self.hw_mode not in [HW_MODE_MAINTENANCE_VALUE, HW_MODE_ONLINE_VALUE]:
+        if self.hw_mode not in [
+            HW_MODE_MAINTENANCE_VALUE,
+            HW_MODE_ONLINE_VALUE,
+        ]:
             raise CavityHWModeError(f"{self} not Online or in Maintenance")
 
         df_cold = self.df_cold_pv_obj.get()
@@ -124,10 +133,17 @@ class TuneCavity(Cavity):
     def detune_by_steps(self, count_current):
         print("No cold landing frequency recorded, moving by steps instead")
         self.check_resonance()
-        abs_est_detune = abs(self.stepper_tuner.steps_cold_landing_pv_obj.get() / self.microsteps_per_hz)
+        abs_est_detune = abs(
+            self.stepper_tuner.steps_cold_landing_pv_obj.get()
+            / self.microsteps_per_hz
+        )
         self.setup_tuning(chirp_range=abs_est_detune + 50000)
-        self.stepper_tuner.move_to_cold_landing(count_current=count_current, check_detune=True)
+        self.stepper_tuner.move_to_cold_landing(
+            count_current=count_current, check_detune=True
+        )
 
     def check_resonance(self):
         if self.tune_config_pv_obj.get() != TUNE_CONFIG_RESONANCE_VALUE:
-            raise CavityHWModeError(f"{self} not on resonance, not moving to cold landing by steps")
+            raise CavityHWModeError(
+                f"{self} not on resonance, not moving to cold landing by steps"
+            )

@@ -4,7 +4,9 @@ import pytest
 from caproto import ChannelEnum, ChannelFloat, ChannelInteger
 from caproto.server import PVGroup
 
-from sc_linac_physics.utils.simulation.sc_linac_physics_service import SCLinacPhysicsService
+from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+    SCLinacPhysicsService,
+)
 from sc_linac_physics.utils.simulation.service import Service
 
 # Make sure pytest-asyncio is configured
@@ -70,10 +72,18 @@ def mock_fast_subsystems():
         patches[subsystem] = patch(patch_path)
 
     # Special patches for interconnected components
-    patches["CavityPVGroup"] = patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.CavityPVGroup")
-    patches["PiezoPVGroup"] = patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.PiezoPVGroup")
-    patches["StepperPVGroup"] = patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.StepperPVGroup")
-    patches["Decarad"] = patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.Decarad")
+    patches["CavityPVGroup"] = patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.CavityPVGroup"
+    )
+    patches["PiezoPVGroup"] = patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.PiezoPVGroup"
+    )
+    patches["StepperPVGroup"] = patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.StepperPVGroup"
+    )
+    patches["Decarad"] = patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.Decarad"
+    )
 
     # Start all patches
     for name, patch_obj in patches.items():
@@ -88,7 +98,11 @@ def mock_fast_subsystems():
             mocks[subsystem].return_value = mock_instance
 
         # Configure special mocks with proper attributes
-        mocks["CavityPVGroup"].side_effect = lambda prefix, isHL=False: create_mock_cavity_group(isHL)
+        mocks[
+            "CavityPVGroup"
+        ].side_effect = lambda prefix, isHL=False: create_mock_cavity_group(
+            isHL
+        )
         mocks["PiezoPVGroup"].return_value = create_mock_piezo_group()
 
         # Configure StepperPVGroup mock
@@ -99,7 +113,10 @@ def mock_fast_subsystems():
         # Configure decarad mock
         mock_decarad_obj = Mock()
         mock_decarad_obj.pv_prefix = "DRAD:SYS0:1:"
-        mock_decarad_obj.heads = {1: Mock(pv_prefix="DRAD:SYS0:1:HEAD1:"), 2: Mock(pv_prefix="DRAD:SYS0:1:HEAD2:")}
+        mock_decarad_obj.heads = {
+            1: Mock(pv_prefix="DRAD:SYS0:1:HEAD1:"),
+            2: Mock(pv_prefix="DRAD:SYS0:1:HEAD2:"),
+        }
         mocks["Decarad"].return_value = mock_decarad_obj
 
         yield mocks
@@ -115,7 +132,8 @@ def minimal_service(mock_fast_subsystems):
     """Create a minimal SCLinacPhysicsService with limited scope for fast testing."""
     # Temporarily reduce LINAC_TUPLES to minimal set for testing
     with patch(
-        "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", [("L0B", ["01"])]
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+        [("L0B", ["01"])],
     ):  # Just one linac with one CM
         service = SCLinacPhysicsService()
         return service
@@ -139,25 +157,40 @@ def simulated_full_service():
         patches.append(patcher)
 
     # Mock special components
-    cavity_patcher = patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.CavityPVGroup")
-    piezo_patcher = patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.PiezoPVGroup")
-    stepper_patcher = patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.StepperPVGroup")
-    decarad_patcher = patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.Decarad")
+    cavity_patcher = patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.CavityPVGroup"
+    )
+    piezo_patcher = patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.PiezoPVGroup"
+    )
+    stepper_patcher = patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.StepperPVGroup"
+    )
+    decarad_patcher = patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.Decarad"
+    )
 
-    patches.extend([cavity_patcher, piezo_patcher, stepper_patcher, decarad_patcher])
+    patches.extend(
+        [cavity_patcher, piezo_patcher, stepper_patcher, decarad_patcher]
+    )
 
     cavity_mock = cavity_patcher.start()
     piezo_mock = piezo_patcher.start()
     stepper_mock = stepper_patcher.start()
     decarad_class_mock = decarad_patcher.start()
 
-    cavity_mock.side_effect = lambda prefix, isHL=False: create_mock_cavity_group(isHL)
+    cavity_mock.side_effect = (
+        lambda prefix, isHL=False: create_mock_cavity_group(isHL)
+    )
     piezo_mock.return_value = create_mock_piezo_group()
     stepper_mock.return_value = Mock(spec=PVGroup, pvdb={})
 
     mock_decarad_obj = Mock()
     mock_decarad_obj.pv_prefix = "DRAD:SYS0:1:"
-    mock_decarad_obj.heads = {1: Mock(pv_prefix="DRAD:SYS0:1:HEAD1:"), 2: Mock(pv_prefix="DRAD:SYS0:1:HEAD2:")}
+    mock_decarad_obj.heads = {
+        1: Mock(pv_prefix="DRAD:SYS0:1:HEAD1:"),
+        2: Mock(pv_prefix="DRAD:SYS0:1:HEAD2:"),
+    }
     decarad_class_mock.return_value = mock_decarad_obj
 
     try:
@@ -267,7 +300,9 @@ class TestServiceIntegrity:
         total_pvs = len(minimal_service)
 
         # With mocking, minimal service should have basic system PVs
-        assert 10 <= total_pvs <= 100  # Conservative bounds for minimal mocked service
+        assert (
+            10 <= total_pvs <= 100
+        )  # Conservative bounds for minimal mocked service
 
     def test_pv_name_uniqueness(self, minimal_service):
         """Test that all PV names are unique."""
@@ -300,7 +335,9 @@ class TestServiceIntegrity:
             assert hasattr(channel, "value")
 
             # Channel types should be one of the expected types or have value attribute
-            assert isinstance(channel, (ChannelInteger, ChannelFloat, ChannelEnum)) or hasattr(channel, "value")
+            assert isinstance(
+                channel, (ChannelInteger, ChannelFloat, ChannelEnum)
+            ) or hasattr(channel, "value")
 
 
 class TestSubsystemMocking:
@@ -315,16 +352,24 @@ class TestSubsystemMocking:
     def test_subsystem_group_calls(self, mock_fast_subsystems):
         """Test that subsystem groups are called with correct parameters ."""
         # Create minimal service
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", [("L0B", ["01"])]):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [("L0B", ["01"])],
+        ):
             SCLinacPhysicsService()  # Create but don't need to store
 
         # Verify cavity groups were created for each cavity (8 per CM)
-        assert mock_fast_subsystems["CavityPVGroup"].call_count == 8  # 8 cavities per CM
+        assert (
+            mock_fast_subsystems["CavityPVGroup"].call_count == 8
+        )  # 8 cavities per CM
 
     def test_magnet_system_calls(self, mock_fast_subsystems):
         """Test that magnet systems are called correctly."""
         # Create minimal service
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", [("L0B", ["01"])]):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [("L0B", ["01"])],
+        ):
             SCLinacPhysicsService()  # Create but don't need to store
 
         # Should have 3 magnet calls per CM (XCOR, YCOR, QUAD)
@@ -333,7 +378,9 @@ class TestSubsystemMocking:
     def test_cavity_mock_attributes(self, mock_fast_subsystems):
         """Test that cavity mocks have required attributes."""
         # Test regular cavity
-        regular_cavity = mock_fast_subsystems["CavityPVGroup"]("TEST:", isHL=False)
+        regular_cavity = mock_fast_subsystems["CavityPVGroup"](
+            "TEST:", isHL=False
+        )
         assert hasattr(regular_cavity, "is_hl")
         assert regular_cavity.is_hl is False
 
@@ -349,7 +396,10 @@ class TestServiceUsage:
     def test_service_can_be_instantiated_multiple_times(self):
         """Test that multiple minimal service instances can be created."""
         # Simplified test using just empty LINAC_TUPLES to avoid complex mocking
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", []):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [],
+        ):
             service1 = SCLinacPhysicsService()
             service2 = SCLinacPhysicsService()
 
@@ -365,16 +415,26 @@ class TestServiceUsage:
             for service in [service1, service2]:
                 assert "PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT" in service
 
-    @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.ioc_arg_parser")
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.ioc_arg_parser"
+    )
     @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.run")
     def test_main_function(self, mock_run, mock_arg_parser):
         """Test the main function with comprehensive mocking to speed it up."""
         # Mock all heavy subsystems to make this test fast
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", []):
-            from sc_linac_physics.utils.simulation.sc_linac_physics_service import main
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [],
+        ):
+            from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+                main,
+            )
 
             # Setup mocks
-            mock_arg_parser.return_value = (None, {"host": "0.0.0.0", "port": 5064})
+            mock_arg_parser.return_value = (
+                None,
+                {"host": "0.0.0.0", "port": 5064},
+            )
 
             # Call main
             main()
@@ -395,7 +455,10 @@ class TestServiceUsage:
 
         # Create a simple mock PV group
         mock_group = Mock(spec=PVGroup)
-        mock_group.pvdb = {"TEST:PV1": ChannelInteger(value=1), "TEST:PV2": ChannelFloat(value=2.0)}
+        mock_group.pvdb = {
+            "TEST:PV1": ChannelInteger(value=1),
+            "TEST:PV2": ChannelFloat(value=2.0),
+        }
 
         # Add the group
         minimal_service.add_pvs(mock_group)
@@ -408,7 +471,10 @@ class TestServiceUsage:
     def test_service_basic_functionality(self):
         """Test basic service functionality without complex mocking."""
         # Test that we can create a service with minimal configuration
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", []):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [],
+        ):
             service = SCLinacPhysicsService()
 
             # Should have basic system PVs
@@ -423,7 +489,10 @@ class TestErrorHandling:
 
     def test_empty_linac_tuples(self):
         """Test behavior with empty LINAC_TUPLES."""
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", []):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [],
+        ):
             # Should still create basic system-level PVs
             service = SCLinacPhysicsService()
 
@@ -446,7 +515,10 @@ class TestPerformance:
         import time
 
         # Use simple mocking to make this fast
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", []):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [],
+        ):
             start_time = time.time()
             service = SCLinacPhysicsService()
             creation_time = time.time() - start_time
@@ -479,7 +551,9 @@ class TestFullServiceIntegration:
 
         # Adjust expectations based on what we actually get with mocking
         # With heavy mocking, we mainly get system-level PVs
-        assert total_pvs >= 15  # Should have basic system PVs + some linac structure
+        assert (
+            total_pvs >= 15
+        )  # Should have basic system PVs + some linac structure
         assert total_pvs < 1000  # Reasonable upper bound for simulated service
 
         # Verify service structure instead of just count
@@ -495,7 +569,11 @@ class TestFullServiceIntegration:
 
         # Should have some linac-related PVs
         linac_indicators = ["L0B", "L1B", "ACCL:", "CRYO:"]
-        found_indicators = [indicator for indicator in linac_indicators if indicator in pv_name_str]
+        found_indicators = [
+            indicator
+            for indicator in linac_indicators
+            if indicator in pv_name_str
+        ]
 
         # Should find at least some linac-related content
         assert (
@@ -519,7 +597,9 @@ class TestFullServiceIntegration:
         found_prefixes = set(prefix_counts.keys())
 
         for expected in expected_prefixes:
-            assert expected in found_prefixes, f"Missing expected prefix: {expected}, found: {found_prefixes}"
+            assert (
+                expected in found_prefixes
+            ), f"Missing expected prefix: {expected}, found: {found_prefixes}"
 
     @pytest.mark.slow
     def test_service_integration_functionality(self, simulated_full_service):
@@ -540,7 +620,10 @@ class TestFullServiceIntegration:
     def test_realistic_service_behavior(self):
         """Test realistic service behavior without slow setup."""
         # This test doesn't use the slow fixture at all
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", [("L0B", ["01"])]):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [("L0B", ["01"])],
+        ):
             service = SCLinacPhysicsService()
 
             # Should have basic structure - test specific expected PVs rather than count
@@ -559,7 +642,9 @@ class TestFullServiceIntegration:
 
             # Check that we have the expected PVs
             for expected_pv in expected_pvs:
-                assert expected_pv in service, f"Missing expected PV: {expected_pv}"
+                assert (
+                    expected_pv in service
+                ), f"Missing expected PV: {expected_pv}"
 
             # Verify we have at least the expected number of PVs
             assert len(service) >= len(expected_pvs)
@@ -571,7 +656,10 @@ class TestFullServiceIntegration:
     def test_service_consistency_check(self):
         """Test service consistency without expensive fixture."""
         # Create two services and verify they're consistent
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", []):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [],
+        ):
             service1 = SCLinacPhysicsService()
             service2 = SCLinacPhysicsService()
 
@@ -582,7 +670,10 @@ class TestFullServiceIntegration:
     def test_minimal_service_structure(self):
         """Test minimal service structure."""
         # Test with minimal configuration
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", []):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [],
+        ):
             service = SCLinacPhysicsService()
 
             # Should have at least system-level PVs
@@ -600,7 +691,10 @@ class TestFullServiceIntegration:
 
     def test_service_with_multiple_cms(self):
         """Test service with multiple cryomodules."""
-        with patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES", [("L0B", ["01", "02"])]):
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+            [("L0B", ["01", "02"])],
+        ):
             service = SCLinacPhysicsService()
 
             # Should have PVs for both CMs
@@ -656,7 +750,9 @@ class TestMockingEffectiveness:
 # Pytest configuration
 def pytest_configure(config):
     """Configure pytest markers."""
-    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
 
 
 if __name__ == "__main__":
