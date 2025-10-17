@@ -47,7 +47,9 @@ class CavitySection(QObject):
             init_channel=cavity.tune_config_pv
         )
 
-        self.motor_speed: LabeledSpinbox = LabeledSpinbox(init_channel=cavity.stepper_tuner.speed_pv)
+        self.motor_speed: LabeledSpinbox = LabeledSpinbox(
+            init_channel=cavity.stepper_tuner.speed_pv
+        )
 
         self.max_steps: LabeledSpinbox = LabeledSpinbox(
             init_channel=cavity.stepper_tuner.max_steps_pv
@@ -102,7 +104,9 @@ class CavitySection(QObject):
         self.parent.threadpool.start(self.cold_worker)
 
     def set_chirp_range(self):
-        print("Setting start frequency to -400kHz and stop frequency to +400kHz")
+        print(
+            "Setting start frequency to -400kHz and stop frequency to +400kHz"
+        )
         self.cavity.chirp_freq_start = -400e3
         self.cavity.chirp_freq_stop = 400e3
 
