@@ -15,6 +15,7 @@ DISPLAYS = {
     "setup": {"launcher": "launch_auto_setup", "description": "Automated cavity setup"},
     "q0": {"launcher": "launch_q0_measurement", "description": "Q0 measurement application"},
     "tuning": {"launcher": "launch_tuning", "description": "Cavity tuning interface"},
+    "microphonics": {"launcher": "launch_microphonics", "description": "Microphonics data acquisition and analysis interface"},
 }
 
 
@@ -61,7 +62,7 @@ def list_displays():
             print(f"  {name:15} - {info['description']}")
 
     print("\n APPLICATIONS:")
-    for name in ["quench", "setup", "q0", "tuning"]:
+    for name in ["quench", "setup", "q0", "tuning", "microphonics"]:
         if name in DISPLAYS:
             info = DISPLAYS[name]
             print(f"  {name:15} - {info['description']}")
