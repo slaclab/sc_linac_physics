@@ -12,7 +12,9 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 class DecaradHead(SCLinacObject):
     def __init__(self, number: int, decarad: "Decarad"):
         if number not in range(1, 11):
-            raise AttributeError("Decarad Head number need to be between 1 and 10")
+            raise AttributeError(
+                "Decarad Head number need to be between 1 and 10"
+            )
 
         self.decarad: Decarad = decarad
         self.number: int = number
@@ -45,11 +47,15 @@ class DecaradHead(SCLinacObject):
 
     @property
     def normalized_avg_dose(self) -> float:
-        return max(self.avg_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING_AVG, 0)
+        return max(
+            self.avg_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING_AVG, 0
+        )
 
     @property
     def normalized_raw_dose(self) -> float:
-        return max(self.raw_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING_RAW, 0)
+        return max(
+            self.raw_dose_rate_pv_obj.get() - DECARAD_BACKGROUND_READING_RAW, 0
+        )
 
 
 class Decarad(SCLinacObject):
@@ -64,7 +70,10 @@ class Decarad(SCLinacObject):
         self.power_status_pv = self.pv_addr("HVSTATUS")
         self.voltage_readback_pv = self.pv_addr("HVMON")
 
-        self.heads: Dict[int, DecaradHead] = {head: DecaradHead(number=head, decarad=self) for head in range(1, 11)}
+        self.heads: Dict[int, DecaradHead] = {
+            head: DecaradHead(number=head, decarad=self)
+            for head in range(1, 11)
+        }
 
     def __eq__(self, other):
         return isinstance(other, Decarad) and other.number == self.number

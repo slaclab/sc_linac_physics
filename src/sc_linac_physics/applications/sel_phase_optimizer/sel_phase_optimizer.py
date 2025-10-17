@@ -39,18 +39,25 @@ def run():
 
         for cavity in cavities:
             try:
-                num_large_steps += 1 if cavity.straighten_iq_plot() >= MAX_STEP else 0
+                num_large_steps += (
+                    1 if cavity.straighten_iq_plot() >= MAX_STEP else 0
+                )
                 HEARTBEAT_PV.put(HEARTBEAT_PV.get() + 1)
             except (PVInvalidError, TypeError) as e:
                 cavity.logger.error(e)
 
         if num_large_steps > 5:
-            print(f"\033[91mPhase change limited to 5 deg {num_large_steps} times." f" Re-running program.\033[0m")
+            print(
+                f"\033[91mPhase change limited to 5 deg {num_large_steps} times."
+                f" Re-running program.\033[0m"
+            )
             update_heartbeat(5)
         else:
             timi = time.localtime()
             current_time = time.strftime("%m/%d/%y %H:%M:%S", timi)
-            print(f"\033[94mThanks for your help! The current date/time is {current_time}\033[0m")
+            print(
+                f"\033[94mThanks for your help! The current date/time is {current_time}\033[0m"
+            )
 
             update_heartbeat(600)
 

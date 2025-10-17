@@ -112,15 +112,24 @@ class Fault:
             return obj.val == self.fault_value
 
         else:
-            raise Exception(f"Fault for {self.pv} has neither 'Fault if equal to' nor" " 'OK if equal to' parameter")
+            raise Exception(
+                f"Fault for {self.pv} has neither 'Fault if equal to' nor"
+                " 'OK if equal to' parameter"
+            )
 
     def was_faulted(self, time: datetime) -> bool:
-        archiver_result: Dict[str, ArchiverValue] = get_data_at_time(pv_list=[self.pv], time_requested=time)
+        archiver_result: Dict[str, ArchiverValue] = get_data_at_time(
+            pv_list=[self.pv], time_requested=time
+        )
         archiver_value: ArchiverValue = archiver_result[self.pv]
         return self.is_faulted(archiver_value)
 
-    def get_fault_count_over_time_range(self, start_time: datetime, end_time: datetime) -> FaultCounter:
-        result = get_values_over_time_range(pv_list=[self.pv], start_time=start_time, end_time=end_time)
+    def get_fault_count_over_time_range(
+        self, start_time: datetime, end_time: datetime
+    ) -> FaultCounter:
+        result = get_values_over_time_range(
+            pv_list=[self.pv], start_time=start_time, end_time=end_time
+        )
 
         data_handler: ArchiveDataHandler = result[self.pv]
 

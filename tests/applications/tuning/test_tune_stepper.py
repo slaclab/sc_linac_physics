@@ -14,7 +14,9 @@ def stepper():
 
 def test_steps_cold_landing_pv_obj(stepper):
     stepper._steps_cold_landing_pv_obj = make_mock_pv()
-    assert stepper.steps_cold_landing_pv_obj == stepper._steps_cold_landing_pv_obj
+    assert (
+        stepper.steps_cold_landing_pv_obj == stepper._steps_cold_landing_pv_obj
+    )
 
 
 @pytest.mark.skip("Not currently using this functionality")

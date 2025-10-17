@@ -141,4 +141,8 @@ class Service(dict):
                 value=default_values[data_type],
             )
         else:
-            raise ValueError("Router doesn't know what EPICS type to use for Python type {}".format(data_type))
+            raise ValueError(
+                "Router doesn't know what EPICS type to use for Python type {}".format(
+                    data_type
+                )
+            )

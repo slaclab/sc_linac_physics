@@ -38,7 +38,6 @@ repos:
     rev: 23.10.0
     hooks:
       - id: black
-        args: [ --line-length=80 ]
         exclude: *exclude_patterns
 
   - repo: https://github.com/pycqa/flake8

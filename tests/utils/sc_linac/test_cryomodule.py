@@ -24,7 +24,10 @@ def test_is_harmonic_linearizer_true(cryomodule):
 
 
 def test_pv_prefix(cryomodule):
-    assert cryomodule.pv_prefix == f"ACCL:{cryomodule.linac.name}:{cryomodule.name}00:"
+    assert (
+        cryomodule.pv_prefix
+        == f"ACCL:{cryomodule.linac.name}:{cryomodule.name}00:"
+    )
 
 
 def test_num_cavities(cryomodule):

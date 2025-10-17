@@ -19,7 +19,9 @@ from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 class AutoSetupPVGroup(PVGroup):
     srf_root_dir = os.getenv("SRF_ROOT_DIR", "/")
     print(srf_root_dir)
-    launcher_dir = os.path.join(srf_root_dir, "applications/auto_setup/launcher")
+    launcher_dir = os.path.join(
+        srf_root_dir, "applications/auto_setup/launcher"
+    )
     # print(launcher_dir)
 
     setup_start: PvpropertyBoolEnum = pvproperty(name="SETUPSTRT")
@@ -39,7 +41,9 @@ class AutoSetupPVGroup(PVGroup):
 
     note: PvpropertyChar = pvproperty(
         name="NOTE",
-        value="This is as long of a " "sentence as I can type " "in order to test wrapping",
+        value="This is as long of a "
+        "sentence as I can type "
+        "in order to test wrapping",
     )
 
     abort: PvpropertyEnum = pvproperty(
@@ -128,14 +132,18 @@ class AutoSetupGlobalPVGroup(AutoSetupPVGroup):
 
 
 class AutoSetupCavityPVGroup(AutoSetupPVGroup):
-    progress: PvpropertyFloat = pvproperty(name="PROG", value=0.0, dtype=ChannelType.FLOAT)
+    progress: PvpropertyFloat = pvproperty(
+        name="PROG", value=0.0, dtype=ChannelType.FLOAT
+    )
     status_sevr: SeverityProp = SeverityProp(name="STATUS", value=0)
     status: PvpropertyEnum = pvproperty(
         name="STATUS",
         dtype=ChannelType.ENUM,
         enum_strings=("Ready", "Running", "Error"),
     )
-    status_message: PvpropertyChar = pvproperty(name="MSG", value="Ready", dtype=ChannelType.CHAR)
+    status_message: PvpropertyChar = pvproperty(
+        name="MSG", value="Ready", dtype=ChannelType.CHAR
+    )
 
     time_stamp: PvpropertyChar = pvproperty(
         name="TS",
@@ -159,7 +167,9 @@ class AutoSetupCavityPVGroup(AutoSetupPVGroup):
         if isinstance(value, int):
             await self.status_sevr.write(value)
         else:
-            await self.status_sevr.write(["Ready", "Running", "Error"].index(value))
+            await self.status_sevr.write(
+                ["Ready", "Running", "Error"].index(value)
+            )
 
     async def trigger_setup_script(self):
         await create_subprocess_exec(

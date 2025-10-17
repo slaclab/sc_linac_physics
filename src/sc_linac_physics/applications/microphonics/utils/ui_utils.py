@@ -97,7 +97,9 @@ def create_pushbuttons(
         btn.setCheckable(checkable)
 
         if connect_to:
-            btn.clicked.connect(lambda checked, btn_id=item_id: connect_to(btn_id))
+            btn.clicked.connect(
+                lambda checked, btn_id=item_id: connect_to(btn_id)
+            )
 
         if custom_properties and item_id in custom_properties:
             for prop_name, prop_value in custom_properties[item_id].items():
@@ -205,7 +207,9 @@ def create_cavity_selection_tabs(
         layout = QGridLayout(tab)
 
         # Create cavity checkboxes
-        cavity_items = {cav_num: f"Cavity {cav_num}" for cav_num in config["cavities"]}
+        cavity_items = {
+            cav_num: f"Cavity {cav_num}" for cav_num in config["cavities"]
+        }
         checkboxes = create_checkboxes(
             tab,
             cavity_items,
@@ -217,8 +221,12 @@ def create_cavity_selection_tabs(
 
         # Create Select All button
         select_all_btn = QPushButton("Select All")
-        select_all_btn.clicked.connect(lambda _, r=rack_id: select_all_callback(r))
-        layout.addWidget(select_all_btn, 1, 0, 1, len(config["cavities"]))  # Span all columns
+        select_all_btn.clicked.connect(
+            lambda _, r=rack_id: select_all_callback(r)
+        )
+        layout.addWidget(
+            select_all_btn, 1, 0, 1, len(config["cavities"])
+        )  # Span all columns
         select_all_buttons[rack_id] = select_all_btn
 
         tabs.addTab(tab, config["title"])
