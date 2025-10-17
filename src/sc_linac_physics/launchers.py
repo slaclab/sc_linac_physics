@@ -75,5 +75,12 @@ def launch_tuning():
     launch_python_display("sc_linac_physics.applications.tuning.tuning_gui", "Tuner", *sys.argv[1:])
 
 
+def launch_microphonics():
+    """launch the microphonics GUI"""
+    launch_python_display(
+        module_path="sc_linac_physics.applications.microphonics.gui.main_window", class_name="MicrophonicsGUI"
+    )
+
+
 if __name__ == "__main__":
     launch_srf_home()
