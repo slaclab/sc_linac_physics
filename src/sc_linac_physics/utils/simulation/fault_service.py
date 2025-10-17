@@ -13,7 +13,10 @@ from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 class CavFaultPVGroup(PVGroup):
     prl_fault: SeverityProp = SeverityProp(name="PRLSUM", value=0)
     cryo_summary: PvpropertyEnum = pvproperty(
-        value=0, name="CRYO_LTCH", dtype=ChannelType.ENUM, enum_strings=("Ok", "Fault")
+        value=0,
+        name="CRYO_LTCH",
+        dtype=ChannelType.ENUM,
+        enum_strings=("Ok", "Fault"),
     )
     res_link_latch: PvpropertyEnum = pvproperty(
         value=0,
@@ -22,10 +25,16 @@ class CavFaultPVGroup(PVGroup):
         enum_strings=("OK", "Fault"),
     )
     pll_latch: PvpropertyEnum = pvproperty(
-        value=0, name="PLL_LTCH", dtype=ChannelType.ENUM, enum_strings=("Ok", "Fault")
+        value=0,
+        name="PLL_LTCH",
+        dtype=ChannelType.ENUM,
+        enum_strings=("Ok", "Fault"),
     )
     pll_fault: PvpropertyEnum = pvproperty(
-        value=0, name="PLL_FLT", dtype=ChannelType.ENUM, enum_strings=("Ok", "Fault")
+        value=0,
+        name="PLL_FLT",
+        dtype=ChannelType.ENUM,
+        enum_strings=("Ok", "Fault"),
     )
     ioc_watchdog_latch: PvpropertyEnum = pvproperty(
         value=0,
@@ -66,19 +75,31 @@ class CavFaultPVGroup(PVGroup):
         value=0,
         name="AMPFB_SUM",
         dtype=ChannelType.ENUM,
-        enum_strings=("Not clipped", "Clipped RF-only mode", "Clipped beam mode"),
+        enum_strings=(
+            "Not clipped",
+            "Clipped RF-only mode",
+            "Clipped beam mode",
+        ),
     )
     phase_feedback_sum: PvpropertyEnum = pvproperty(
         value=0,
         name="PHAFB_SUM",
         dtype=ChannelType.ENUM,
-        enum_strings=("Not clipped", "Clipped RF-only mode", "Clipped beam mode"),
+        enum_strings=(
+            "Not clipped",
+            "Clipped RF-only mode",
+            "Clipped beam mode",
+        ),
     )
     feedback_sum: PvpropertyEnum = pvproperty(
         value=0,
         name="FB_SUM",
         dtype=ChannelType.ENUM,
-        enum_strings=("Not clipped", "Clipped RF-only mode", "Clipped beam mode"),
+        enum_strings=(
+            "Not clipped",
+            "Clipped RF-only mode",
+            "Clipped beam mode",
+        ),
     )
     cavity_characterization: PvpropertyEnum = pvproperty(
         value=0,
@@ -90,9 +111,17 @@ class CavFaultPVGroup(PVGroup):
         name="HWMODE",
         value=0,
         dtype=ChannelType.ENUM,
-        enum_strings=("Online", "Maintenance", "Offline", "Maintenance Done", "Ready"),
+        enum_strings=(
+            "Online",
+            "Maintenance",
+            "Offline",
+            "Maintenance Done",
+            "Ready",
+        ),
     )
-    check_phase: PvpropertyInteger = pvproperty(name="CKPSUM", value=0, dtype=ChannelType.INT)
+    check_phase: PvpropertyInteger = pvproperty(
+        name="CKPSUM", value=0, dtype=ChannelType.INT
+    )
     quench_interlock: PvpropertyEnum = pvproperty(
         name="QUENCH_BYP_RBV",
         value=0,
@@ -108,10 +137,17 @@ class CavFaultPVGroup(PVGroup):
         value=0,
     )
     local_oscillator: PvpropertyEnum = pvproperty(
-        name="LO_LTCH", value=0, dtype=ChannelType.ENUM, enum_strings=("Ok", "Fault")
+        name="LO_LTCH",
+        value=0,
+        dtype=ChannelType.ENUM,
+        enum_strings=("Ok", "Fault"),
     )
-    waveform_acquisition: PvpropertyDouble = pvproperty(name="WFACQSUM", value=0, dtype=ChannelType.DOUBLE)
-    detune_feedback: PvpropertyDouble = pvproperty(name="FBSTATSUM", value=0, dtype=ChannelType.DOUBLE)
+    waveform_acquisition: PvpropertyDouble = pvproperty(
+        name="WFACQSUM", value=0, dtype=ChannelType.DOUBLE
+    )
+    detune_feedback: PvpropertyDouble = pvproperty(
+        name="FBSTATSUM", value=0, dtype=ChannelType.DOUBLE
+    )
 
 
 class PPSPVGroup(PVGroup):

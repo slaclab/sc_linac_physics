@@ -21,7 +21,9 @@ class Magnet(linac_utils.SCLinacObject):
         @param cryomodule: the cryomodule object in which this magnet is contained
         """
 
-        self._pv_prefix = f"{magnet_type}:{cryomodule.linac.name}:{cryomodule.name}85:"
+        self._pv_prefix = (
+            f"{magnet_type}:{cryomodule.linac.name}:{cryomodule.name}85:"
+        )
 
         self.name = magnet_type
         self.cryomodule: "Cryomodule" = cryomodule

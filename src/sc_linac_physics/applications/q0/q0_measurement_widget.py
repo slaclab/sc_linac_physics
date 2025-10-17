@@ -14,7 +14,12 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QComboBox,
 )
-from pydm.widgets import PyDMSpinbox, PyDMLabel, PyDMPushButton, PyDMByteIndicator
+from pydm.widgets import (
+    PyDMSpinbox,
+    PyDMLabel,
+    PyDMPushButton,
+    PyDMByteIndicator,
+)
 
 
 class Q0MeasurementWidget(QWidget):
@@ -51,11 +56,15 @@ class Q0MeasurementWidget(QWidget):
 
         # Calibration
         self.groupBox_2 = self._create_calibration_group()
-        main_layout.addWidget(self.groupBox_2, 4, 0, 1, 2)  # Row 4, span 2 columns
+        main_layout.addWidget(
+            self.groupBox_2, 4, 0, 1, 2
+        )  # Row 4, span 2 columns
 
         # RF Measurement
         self.rf_groupbox = self._create_rf_measurement_group()
-        main_layout.addWidget(self.rf_groupbox, 5, 0, 1, 2)  # Row 5, span 2 columns
+        main_layout.addWidget(
+            self.rf_groupbox, 5, 0, 1, 2
+        )  # Row 5, span 2 columns
 
         # Adjust row/column stretch factors if needed
         main_layout.setRowStretch(5, 1)  # Stretch the last row (RF)
@@ -67,7 +76,9 @@ class Q0MeasurementWidget(QWidget):
         bold_font = QFont()
         bold_font.setBold(True)
 
-        layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        layout.addSpacerItem(
+            QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        )
 
         label_4 = QLabel("Cryomodule:")
         label_4.setFont(bold_font)
@@ -77,7 +88,9 @@ class Q0MeasurementWidget(QWidget):
 
         layout.addWidget(label_4)
         layout.addWidget(self.cm_combobox)
-        layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        layout.addSpacerItem(
+            QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        )
 
         label_3 = QLabel("Cryo Permission:")
         self.perm_byte = PyDMByteIndicator()
@@ -90,7 +103,9 @@ class Q0MeasurementWidget(QWidget):
         layout.addWidget(label_3)
         layout.addWidget(self.perm_byte)
         layout.addWidget(self.perm_label)
-        layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        layout.addSpacerItem(
+            QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        )
 
         return layout
 
@@ -158,12 +173,18 @@ class Q0MeasurementWidget(QWidget):
         heater_layout.addWidget(self.heater_readback_label, 1, 2)
 
         # Restore Button
-        self.restore_cryo_button = QPushButton("Restore Cryo to Standard Values")
+        self.restore_cryo_button = QPushButton(
+            "Restore Cryo to Standard Values"
+        )
 
         # Add sub groups and button to main Cryo Controls layout
-        layout.addWidget(jt_groupbox, 0, 0, 1, 2)  # JT covers first 2 columns in row 0
+        layout.addWidget(
+            jt_groupbox, 0, 0, 1, 2
+        )  # JT covers first 2 columns in row 0
         layout.addWidget(heater_groupbox, 0, 2)  # Heater is in 3rd column row 0
-        layout.addWidget(self.restore_cryo_button, 1, 0, 1, 3)  # Covering all columns in row 1
+        layout.addWidget(
+            self.restore_cryo_button, 1, 0, 1, 3
+        )  # Covering all columns in row 1
 
         return groupbox
 
@@ -213,7 +234,9 @@ class Q0MeasurementWidget(QWidget):
         ref_layout = QGridLayout(self.manual_cryo_groupbox)
 
         self.setup_param_button = QPushButton("Set Up for New Parameters")
-        self.setup_param_button.setToolTip("Sets the heater to manual at 48 so that the JT can settle")
+        self.setup_param_button.setToolTip(
+            "Sets the heater to manual at 48 so that the JT can settle"
+        )
 
         label_1 = QLabel("JT Valve Position")
         self.jt_pos_spinbox = QDoubleSpinBox()
@@ -235,7 +258,9 @@ class Q0MeasurementWidget(QWidget):
 
         label_12 = QLabel("Starting heater setpoint:")
         self.start_heat_spinbox = QDoubleSpinBox()
-        self.start_heat_spinbox.setRange(75.0, 130.0)  # Use setRange for min/max
+        self.start_heat_spinbox.setRange(
+            75.0, 130.0
+        )  # Use setRange for min/max
         self.start_heat_spinbox.setValue(130.0)
 
         label_13 = QLabel("End heater setpoint:")
@@ -259,19 +284,29 @@ class Q0MeasurementWidget(QWidget):
         self.load_cal_button = QPushButton("Load Existing Calibration")
         self.new_cal_button = QPushButton("Take New Calibration")
         self.show_cal_data_button = QPushButton("Show Calibration Data")
-        self.show_cal_data_button.setEnabled(False)  # Keep non default enabled state
+        self.show_cal_data_button.setEnabled(
+            False
+        )  # Keep non default enabled state
         self.abort_cal_button = QPushButton("Abort Calibration")
-        self.abort_cal_button.setStyleSheet("color: rgb(252, 33, 37);")  # Keep specific style
+        self.abort_cal_button.setStyleSheet(
+            "color: rgb(252, 33, 37);"
+        )  # Keep specific style
 
         # Status Labels
         label_8 = QLabel("Status:")
-        label_8.setAlignment(Qt.AlignRight | Qt.AlignVCenter)  # Keep non default alignment
+        label_8.setAlignment(
+            Qt.AlignRight | Qt.AlignVCenter
+        )  # Keep non default alignment
         self.cal_status_label = QLabel()  # Text set dynamically
         self.cal_status_label.setWordWrap(True)
 
         # Add items to Calibration layout
-        layout.addWidget(self.manual_cryo_groupbox, 0, 0, 4, 1)  # Row 0, Col 0, Span 4 rows, 1 col
-        layout.addWidget(settings_groupbox, 0, 1, 4, 1)  # Row 0, Col 1, Span 4 rows, 1 col
+        layout.addWidget(
+            self.manual_cryo_groupbox, 0, 0, 4, 1
+        )  # Row 0, Col 0, Span 4 rows, 1 col
+        layout.addWidget(
+            settings_groupbox, 0, 1, 4, 1
+        )  # Row 0, Col 1, Span 4 rows, 1 col
 
         layout.addWidget(self.load_cal_button, 0, 2)  # Row 0, Col 2
         layout.addWidget(self.new_cal_button, 1, 2)  # Row 1, Col 2
@@ -279,7 +314,9 @@ class Q0MeasurementWidget(QWidget):
         layout.addWidget(self.abort_cal_button, 3, 2)  # Row 3, Col 2
 
         layout.addWidget(label_8, 4, 0)  # Row 4, Col 0
-        layout.addWidget(self.cal_status_label, 4, 1, 1, 2)  # Row 4, Col 1, Span 1 row, 2 cols
+        layout.addWidget(
+            self.cal_status_label, 4, 1, 1, 2
+        )  # Row 4, Col 1, Span 1 row, 2 cols
 
         return groupbox
 

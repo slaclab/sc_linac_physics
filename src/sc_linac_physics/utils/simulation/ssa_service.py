@@ -9,8 +9,18 @@ from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 
 class SSAPVGroup(PVGroup):
-    on: PvpropertyEnum = pvproperty(value=1, name="PowerOn", dtype=ChannelType.ENUM, enum_strings=("False", "True"))
-    off: PvpropertyEnum = pvproperty(value=0, name="PowerOff", dtype=ChannelType.ENUM, enum_strings=("False", "True"))
+    on: PvpropertyEnum = pvproperty(
+        value=1,
+        name="PowerOn",
+        dtype=ChannelType.ENUM,
+        enum_strings=("False", "True"),
+    )
+    off: PvpropertyEnum = pvproperty(
+        value=0,
+        name="PowerOff",
+        dtype=ChannelType.ENUM,
+        enum_strings=("False", "True"),
+    )
     reset: PvpropertyEnum = pvproperty(
         value=0,
         name="FaultReset",
@@ -52,7 +62,10 @@ class SSAPVGroup(PVGroup):
     )
 
     cal_start: PvpropertyEnum = pvproperty(
-        value=0, name="CALSTRT", dtype=ChannelType.ENUM, enum_strings=("Start", "Start")
+        value=0,
+        name="CALSTRT",
+        dtype=ChannelType.ENUM,
+        enum_strings=("Start", "Start"),
     )
     cal_status: PvpropertyEnum = pvproperty(
         value=1,
@@ -66,13 +79,28 @@ class SSAPVGroup(PVGroup):
         name="CALSTAT",
         enum_strings=("Success", "Crash"),
     )
-    slope_old: PvpropertyFloat = pvproperty(value=0.0, name="SLOPE", dtype=ChannelType.FLOAT)
-    slope_new: PvpropertyFloat = pvproperty(value=0.0, name="SLOPE_NEW", dtype=ChannelType.FLOAT)
-    drive_max: PvpropertyFloat = pvproperty(name="DRV_MAX_REQ", value=0.8, dtype=ChannelType.FLOAT)
-    drive_max_save: PvpropertyFloat = pvproperty(name="DRV_MAX_SAVE", value=0.8, dtype=ChannelType.FLOAT)
-    power: PvpropertyFloat = pvproperty(name="CALPWR", value=4000, dtype=ChannelType.FLOAT)
+    slope_old: PvpropertyFloat = pvproperty(
+        value=0.0, name="SLOPE", dtype=ChannelType.FLOAT
+    )
+    slope_new: PvpropertyFloat = pvproperty(
+        value=0.0, name="SLOPE_NEW", dtype=ChannelType.FLOAT
+    )
+    drive_max: PvpropertyFloat = pvproperty(
+        name="DRV_MAX_REQ", value=0.8, dtype=ChannelType.FLOAT
+    )
+    drive_max_save: PvpropertyFloat = pvproperty(
+        name="DRV_MAX_SAVE", value=0.8, dtype=ChannelType.FLOAT
+    )
+    power: PvpropertyFloat = pvproperty(
+        name="CALPWR", value=4000, dtype=ChannelType.FLOAT
+    )
 
-    nirp: PvpropertyEnum = pvproperty(value=1, name="NRP_PRMT", dtype=ChannelType.ENUM, enum_strings=("FAULT", "OK"))
+    nirp: PvpropertyEnum = pvproperty(
+        value=1,
+        name="NRP_PRMT",
+        dtype=ChannelType.ENUM,
+        enum_strings=("FAULT", "OK"),
+    )
     fault_sum: PvpropertyEnum = SeverityProp(
         value=0,
         name="FaultSummary",

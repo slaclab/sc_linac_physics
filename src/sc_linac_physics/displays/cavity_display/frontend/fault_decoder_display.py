@@ -45,9 +45,15 @@ class DecoderDisplay(Display):
                     rows.append(
                         Row(
                             tlc=fault_row_dict.get("Three Letter Code", ""),
-                            long_desc=fault_row_dict.get("Long Description", ""),
-                            gen_short_desc=fault_row_dict.get("Generic Short Description for Decoder", ""),
-                            corrective_action=fault_row_dict.get("Recommended Corrective Actions", ""),
+                            long_desc=fault_row_dict.get(
+                                "Long Description", ""
+                            ),
+                            gen_short_desc=fault_row_dict.get(
+                                "Generic Short Description for Decoder", ""
+                            ),
+                            corrective_action=fault_row_dict.get(
+                                "Recommended Corrective Actions", ""
+                            ),
                         )
                     )
                 except Exception as e:
@@ -71,7 +77,9 @@ class DecoderDisplay(Display):
         self.groupbox = QGroupBox()
         self.scroll_area.setWidget(self.groupbox)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.scroll_area.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+        self.scroll_area.setSizeAdjustPolicy(
+            QAbstractScrollArea.AdjustToContents
+        )
         self.scroll_area.setWidgetResizable(True)
 
         scroll_area_layout: QVBoxLayout = QVBoxLayout()
@@ -81,25 +89,33 @@ class DecoderDisplay(Display):
         header_layout = QHBoxLayout()
         description_header_label = QLabel("Description")
         description_header_label.setMinimumSize(100, 30)
-        description_header_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        description_header_label.setSizePolicy(
+            QSizePolicy.Minimum, QSizePolicy.Preferred
+        )
         description_header_label.setStyleSheet("text-decoration: underline")
 
         # Name (aka short description) header
         name_header_label = QLabel("Name")
         name_header_label.setMinimumSize(100, 30)
-        name_header_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        name_header_label.setSizePolicy(
+            QSizePolicy.Preferred, QSizePolicy.Preferred
+        )
         name_header_label.setStyleSheet("text-decoration: underline")
 
         # Three-Letter Code header
         code_header_label = QLabel("Code")
         code_header_label.setMinimumSize(30, 30)
-        code_header_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        code_header_label.setSizePolicy(
+            QSizePolicy.Preferred, QSizePolicy.Preferred
+        )
         code_header_label.setStyleSheet("text-decoration: underline")
 
         # Corrective Action header
         action_header_label = QLabel("Corrective Action")
         action_header_label.setMinimumSize(100, 30)
-        action_header_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        action_header_label.setSizePolicy(
+            QSizePolicy.Minimum, QSizePolicy.Preferred
+        )
         action_header_label.setStyleSheet("text-decoration: underline")
 
         header_layout.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
@@ -116,17 +132,23 @@ class DecoderDisplay(Display):
             horizontal_layout = QHBoxLayout()
             description_label = QLabel(row.long_desc)
             description_label.setMinimumSize(100, 50)
-            description_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+            description_label.setSizePolicy(
+                QSizePolicy.Minimum, QSizePolicy.Minimum
+            )
             description_label.setWordWrap(True)
 
             code_label = QLabel(row.tlc)
             code_label.setMinimumSize(30, 30)
-            code_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            code_label.setSizePolicy(
+                QSizePolicy.Preferred, QSizePolicy.Preferred
+            )
 
             name_label = QLabel()
             name_label.setText(row.gen_short_desc)
             name_label.setMinimumSize(100, 50)
-            name_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            name_label.setSizePolicy(
+                QSizePolicy.Preferred, QSizePolicy.Preferred
+            )
             name_label.setWordWrap(True)
 
             action_label = QLabel(row.corrective_action)

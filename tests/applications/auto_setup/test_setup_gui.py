@@ -42,13 +42,20 @@ def setup_gui():
     pv_mock.callbacks = []
 
     with (
-        patch("lcls_tools.common.controls.pyepics.utils.PV", return_value=pv_mock),
-        patch("sc_linac_physics.applications.auto_setup.setup_gui.SETUP_MACHINE", SETUP_MACHINE),
+        patch(
+            "lcls_tools.common.controls.pyepics.utils.PV", return_value=pv_mock
+        ),
+        patch(
+            "sc_linac_physics.applications.auto_setup.setup_gui.SETUP_MACHINE",
+            SETUP_MACHINE,
+        ),
     ):
         gui = SetupGUI()
         # Mock the sanity check popups to always return Yes
         gui.machine_setup_popup.exec = MagicMock(return_value=QMessageBox.Yes)
-        gui.machine_shutdown_popup.exec = MagicMock(return_value=QMessageBox.Yes)
+        gui.machine_shutdown_popup.exec = MagicMock(
+            return_value=QMessageBox.Yes
+        )
         gui.machine_abort_popup.exec = MagicMock(return_value=QMessageBox.Yes)
 
         # Get all PyDMAnalogIndicator widgets and set up their mock channels
@@ -112,10 +119,22 @@ def test_machine_setup_button(qtbot: QtBot, setup_gui):
     qtbot.mouseClick(setup_gui.machine_setup_button, Qt.LeftButton)
 
     # Verify SETUP_MACHINE settings were updated
-    assert SETUP_MACHINE.ssa_cal_requested == setup_gui.ssa_cal_checkbox.isChecked()
-    assert SETUP_MACHINE.auto_tune_requested == setup_gui.autotune_checkbox.isChecked()
-    assert SETUP_MACHINE.cav_char_requested == setup_gui.cav_char_checkbox.isChecked()
-    assert SETUP_MACHINE.rf_ramp_requested == setup_gui.rf_ramp_checkbox.isChecked()
+    assert (
+        SETUP_MACHINE.ssa_cal_requested
+        == setup_gui.ssa_cal_checkbox.isChecked()
+    )
+    assert (
+        SETUP_MACHINE.auto_tune_requested
+        == setup_gui.autotune_checkbox.isChecked()
+    )
+    assert (
+        SETUP_MACHINE.cav_char_requested
+        == setup_gui.cav_char_checkbox.isChecked()
+    )
+    assert (
+        SETUP_MACHINE.rf_ramp_requested
+        == setup_gui.rf_ramp_checkbox.isChecked()
+    )
 
     # Verify setup was triggered
     assert SETUP_MACHINE.trigger_setup.call_count == 1
@@ -182,8 +201,13 @@ def setup_gui_with_no_dialogs():
     pv_mock.callbacks = []
 
     with (
-        patch("lcls_tools.common.controls.pyepics.utils.PV", return_value=pv_mock),
-        patch("sc_linac_physics.applications.auto_setup.setup_gui.SETUP_MACHINE", SETUP_MACHINE),
+        patch(
+            "lcls_tools.common.controls.pyepics.utils.PV", return_value=pv_mock
+        ),
+        patch(
+            "sc_linac_physics.applications.auto_setup.setup_gui.SETUP_MACHINE",
+            SETUP_MACHINE,
+        ),
     ):
         gui = SetupGUI()
         # Mock the sanity check popups to return No
@@ -225,7 +249,9 @@ def test_dialog_cancellation(qtbot: QtBot, setup_gui_with_no_dialogs):
     setup_gui_with_no_dialogs.machine_abort_popup.exec.reset_mock()
 
     # Setup button with No response
-    qtbot.mouseClick(setup_gui_with_no_dialogs.machine_setup_button, Qt.LeftButton)
+    qtbot.mouseClick(
+        setup_gui_with_no_dialogs.machine_setup_button, Qt.LeftButton
+    )
     assert setup_gui_with_no_dialogs.machine_setup_popup.exec.call_count == 1
     assert SETUP_MACHINE.trigger_setup.call_count == 0
 
@@ -234,7 +260,9 @@ def test_dialog_cancellation(qtbot: QtBot, setup_gui_with_no_dialogs):
     setup_gui_with_no_dialogs.machine_setup_popup.exec.reset_mock()
 
     # Shutdown button with No response
-    qtbot.mouseClick(setup_gui_with_no_dialogs.machine_shutdown_button, Qt.LeftButton)
+    qtbot.mouseClick(
+        setup_gui_with_no_dialogs.machine_shutdown_button, Qt.LeftButton
+    )
     assert setup_gui_with_no_dialogs.machine_shutdown_popup.exec.call_count == 1
     assert SETUP_MACHINE.trigger_shutdown.call_count == 0
 
@@ -243,7 +271,9 @@ def test_dialog_cancellation(qtbot: QtBot, setup_gui_with_no_dialogs):
     setup_gui_with_no_dialogs.machine_shutdown_popup.exec.reset_mock()
 
     # Abort button with No response
-    qtbot.mouseClick(setup_gui_with_no_dialogs.machine_abort_button, Qt.LeftButton)
+    qtbot.mouseClick(
+        setup_gui_with_no_dialogs.machine_abort_button, Qt.LeftButton
+    )
     assert setup_gui_with_no_dialogs.machine_abort_popup.exec.call_count == 1
     assert SETUP_MACHINE.trigger_abort.call_count == 0
 
@@ -307,7 +337,10 @@ def test_error_conditions(qtbot: QtBot, setup_gui):
         setup_gui.linac_widgets[99].setup_button.click()
 
     # Test PV connection error simulation
-    with patch("lcls_tools.common.controls.pyepics.utils.PV", side_effect=Exception("PV Connection Error")):
+    with patch(
+        "lcls_tools.common.controls.pyepics.utils.PV",
+        side_effect=Exception("PV Connection Error"),
+    ):
         # Creating a new GUI should handle PV creation errors gracefully
         gui = SetupGUI()
         assert gui is not None  # GUI should still be created
@@ -322,13 +355,18 @@ def test_error_conditions(qtbot: QtBot, setup_gui):
     setup_gui.ssa_cal_checkbox.setChecked(True)  # Should not crash
 
     # Test with missing SETUP_MACHINE (simulate module import error)
-    with patch("sc_linac_physics.applications.auto_setup.setup_gui.SETUP_MACHINE", None):
+    with patch(
+        "sc_linac_physics.applications.auto_setup.setup_gui.SETUP_MACHINE", None
+    ):
         gui = SetupGUI()
         assert gui is not None  # GUI should still be created
 
         # Verify error stylesheet is applied to abort button
         stylesheet = setup_gui.machine_abort_button.styleSheet().lower()
-        assert "color: rgb(128, 0, 2)" in stylesheet or "background-color: #ff9994" in stylesheet
+        assert (
+            "color: rgb(128, 0, 2)" in stylesheet
+            or "background-color: #ff9994" in stylesheet
+        )
 
 
 def test_analog_indicators(qtbot: QtBot, setup_gui):

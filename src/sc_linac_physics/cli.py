@@ -6,15 +6,43 @@ import sys
 
 DISPLAYS = {
     # Main displays
-    "srf-home": {"launcher": "launch_srf_home", "description": "SRF home overview display"},
-    "cavity": {"launcher": "launch_cavity_display", "description": "Cavity control and monitoring display"},
-    "fault-decoder": {"launcher": "launch_fault_decoder", "description": "Cavity fault decoder display"},
-    "fault-count": {"launcher": "launch_fault_count", "description": "Cavity fault count display"},
+    "srf-home": {
+        "launcher": "launch_srf_home",
+        "description": "SRF home overview display",
+    },
+    "cavity": {
+        "launcher": "launch_cavity_display",
+        "description": "Cavity control and monitoring display",
+    },
+    "fault-decoder": {
+        "launcher": "launch_fault_decoder",
+        "description": "Cavity fault decoder display",
+    },
+    "fault-count": {
+        "launcher": "launch_fault_count",
+        "description": "Cavity fault count display",
+    },
     # Applications
-    "quench": {"launcher": "launch_quench_processing", "description": "Quench processing application"},
-    "setup": {"launcher": "launch_auto_setup", "description": "Automated cavity setup"},
-    "q0": {"launcher": "launch_q0_measurement", "description": "Q0 measurement application"},
-    "tuning": {"launcher": "launch_tuning", "description": "Cavity tuning interface"},
+    "quench": {
+        "launcher": "launch_quench_processing",
+        "description": "Quench processing application",
+    },
+    "setup": {
+        "launcher": "launch_auto_setup",
+        "description": "Automated cavity setup",
+    },
+    "q0": {
+        "launcher": "launch_q0_measurement",
+        "description": "Q0 measurement application",
+    },
+    "tuning": {
+        "launcher": "launch_tuning",
+        "description": "Cavity tuning interface",
+    },
+    "microphonics": {
+        "launcher": "launch_microphonics",
+        "description": "Microphonics data acquisition and analysis interface",
+    },
 }
 
 
@@ -38,8 +66,14 @@ Examples:
     )
 
     display_choices = list(DISPLAYS.keys()) + ["list"]
-    parser.add_argument("display", choices=display_choices, help="Display or application to launch")
-    parser.add_argument("args", nargs="*", help="Additional arguments to pass to PyDM")
+    parser.add_argument(
+        "display",
+        choices=display_choices,
+        help="Display or application to launch",
+    )
+    parser.add_argument(
+        "args", nargs="*", help="Additional arguments to pass to PyDM"
+    )
 
     args = parser.parse_args()
 
@@ -61,7 +95,7 @@ def list_displays():
             print(f"  {name:15} - {info['description']}")
 
     print("\n APPLICATIONS:")
-    for name in ["quench", "setup", "q0", "tuning"]:
+    for name in ["quench", "setup", "q0", "tuning", "microphonics"]:
         if name in DISPLAYS:
             info = DISPLAYS[name]
             print(f"  {name:15} - {info['description']}")

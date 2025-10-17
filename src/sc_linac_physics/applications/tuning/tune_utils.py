@@ -46,7 +46,11 @@ class ColdWorker(QRunnable):
     ):
         super().__init__()
         self.setAutoDelete(False)
-        self.signals = ParkSignals(status_label=status_label, park_button=park_button, cold_button=cold_button)
+        self.signals = ParkSignals(
+            status_label=status_label,
+            park_button=park_button,
+            cold_button=cold_button,
+        )
         self.cavity: "TuneCavity" = cavity
 
     @withInitialContext

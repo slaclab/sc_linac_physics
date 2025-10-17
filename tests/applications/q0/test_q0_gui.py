@@ -114,10 +114,18 @@ def mock_cryomodule():
 def setup_mocks():
     """Set up all the necessary mocks."""
     with (
-        patch("sc_linac_physics.applications.q0.q0_gui.Q0MeasurementWidget", MockMeasurementWidget),
+        patch(
+            "sc_linac_physics.applications.q0.q0_gui.Q0MeasurementWidget",
+            MockMeasurementWidget,
+        ),
         patch("sc_linac_physics.applications.q0.q0_gui.Q0_CRYOMODULES", {}),
-        patch("sc_linac_physics.applications.q0.q0_gui.ALL_CRYOMODULES", ["01", "02"]),
-        patch("sc_linac_physics.applications.q0.q0_gui.q0_gui_utils") as mock_utils,
+        patch(
+            "sc_linac_physics.applications.q0.q0_gui.ALL_CRYOMODULES",
+            ["01", "02"],
+        ),
+        patch(
+            "sc_linac_physics.applications.q0.q0_gui.q0_gui_utils"
+        ) as mock_utils,
     ):
         mock_utils.CavAmpControl = MockCavAmpControl
 
@@ -165,7 +173,10 @@ class TestQ0GUIBasicFunctionality:
         """Test cryomodule selection."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.Q0_CRYOMODULES", {"01": mock_cryomodule}):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.Q0_CRYOMODULES",
+            {"01": mock_cryomodule},
+        ):
             gui = Q0GUI()
             gui.update_cm("01")
             assert gui.selected_cm == mock_cryomodule
@@ -177,7 +188,9 @@ class TestQ0GUIBasicFunctionality:
         gui = Q0GUI()
         gui.selected_cm = None
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+        ) as mock_popup:
             result = gui._require_cm()
             assert result is False
             mock_popup.assert_called_once()
@@ -192,7 +205,9 @@ class TestQ0GUIBasicFunctionality:
         # Set up mock controls
         for i in range(1, 9):
             gui.cav_amp_controls[i].groupbox.isChecked.return_value = i <= 3
-            gui.cav_amp_controls[i].desAmpSpinbox.value.return_value = float(i * 5)
+            gui.cav_amp_controls[i].desAmpSpinbox.value.return_value = float(
+                i * 5
+            )
 
         amplitudes = gui.desiredCavityAmplitudes
 
@@ -210,7 +225,9 @@ class TestQ0GUICalibrationWorkflow:
         """Test starting new calibration."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.ValveParams") as mock_valve_params:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.ValveParams"
+        ) as mock_valve_params:
             gui = Q0GUI()
             gui.selected_cm = mock_cryomodule
 
@@ -227,7 +244,9 @@ class TestQ0GUICalibrationWorkflow:
         gui.selected_cm = mock_cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.Display"
+            ) as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
             # Execute the method
@@ -243,7 +262,9 @@ class TestQ0GUICalibrationWorkflow:
             window_exists = mock_cryomodule.name in gui.cal_option_windows
 
             # At least one of these should be true
-            assert display_called or window_exists, "load_calibration should create or reuse a window"
+            assert (
+                display_called or window_exists
+            ), "load_calibration should create or reuse a window"
 
     def test_show_calibration_data_no_data(self, qapp, mock_cryomodule):
         """Test showing calibration data when none exists."""
@@ -253,7 +274,9 @@ class TestQ0GUICalibrationWorkflow:
         gui.selected_cm = mock_cryomodule
         mock_cryomodule.calibration = None
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+        ) as mock_popup:
             gui.show_calibration_data()
             mock_popup.assert_called_once()
 
@@ -277,7 +300,9 @@ class TestQ0GUIQ0MeasurementWorkflow:
         """Test starting new Q0 measurement."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.ValveParams") as mock_valve_params:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.ValveParams"
+        ) as mock_valve_params:
             gui = Q0GUI()
             gui.selected_cm = mock_cryomodule
 
@@ -296,7 +321,9 @@ class TestQ0GUIQ0MeasurementWorkflow:
         # Set up mock controls with some amplitudes
         for i in range(1, 9):
             gui.cav_amp_controls[i].groupbox.isChecked.return_value = i <= 2
-            gui.cav_amp_controls[i].desAmpSpinbox.value.return_value = 10.0 if i <= 2 else 0.0
+            gui.cav_amp_controls[i].desAmpSpinbox.value.return_value = (
+                10.0 if i <= 2 else 0.0
+            )
 
         gui.ramp_cavities()
 
@@ -311,7 +338,9 @@ class TestQ0GUIQ0MeasurementWorkflow:
         gui.selected_cm = mock_cryomodule
         mock_cryomodule.q0_measurement = None
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+        ) as mock_popup:
             gui.show_q0_data()
             mock_popup.assert_called_once()
 
@@ -398,8 +427,12 @@ class TestQ0GUIStatusHandling:
         gui = Q0GUI()
         gui.handle_cal_status("Calibration running")
 
-        gui.main_widget.cal_status_label.setText.assert_called_with("Calibration running")
-        gui.main_widget.cal_status_label.setStyleSheet.assert_called_with("color: blue;")
+        gui.main_widget.cal_status_label.setText.assert_called_with(
+            "Calibration running"
+        )
+        gui.main_widget.cal_status_label.setStyleSheet.assert_called_with(
+            "color: blue;"
+        )
 
     def test_handle_cal_error(self, qapp):
         """Test calibration error handling."""
@@ -408,8 +441,12 @@ class TestQ0GUIStatusHandling:
         gui = Q0GUI()
         gui.handle_cal_error("Calibration failed")
 
-        gui.main_widget.cal_status_label.setText.assert_called_with("Calibration failed")
-        gui.main_widget.cal_status_label.setStyleSheet.assert_called_with("color: red;")
+        gui.main_widget.cal_status_label.setText.assert_called_with(
+            "Calibration failed"
+        )
+        gui.main_widget.cal_status_label.setStyleSheet.assert_called_with(
+            "color: red;"
+        )
 
     def test_handle_rf_status(self, qapp):
         """Test RF status handling."""
@@ -418,8 +455,12 @@ class TestQ0GUIStatusHandling:
         gui = Q0GUI()
         gui.handle_rf_status("RF measurement running")
 
-        gui.main_widget.rf_status_label.setText.assert_called_with("RF measurement running")
-        gui.main_widget.rf_status_label.setStyleSheet.assert_called_with("color: blue;")
+        gui.main_widget.rf_status_label.setText.assert_called_with(
+            "RF measurement running"
+        )
+        gui.main_widget.rf_status_label.setStyleSheet.assert_called_with(
+            "color: blue;"
+        )
 
     def test_handle_rf_error(self, qapp):
         """Test RF error handling."""
@@ -428,8 +469,12 @@ class TestQ0GUIStatusHandling:
         gui = Q0GUI()
         gui.handle_rf_error("RF measurement failed")
 
-        gui.main_widget.rf_status_label.setText.assert_called_with("RF measurement failed")
-        gui.main_widget.rf_status_label.setStyleSheet.assert_called_with("color: red;")
+        gui.main_widget.rf_status_label.setText.assert_called_with(
+            "RF measurement failed"
+        )
+        gui.main_widget.rf_status_label.setStyleSheet.assert_called_with(
+            "color: red;"
+        )
 
 
 class TestQ0GUIExceptionHandling:
@@ -443,7 +488,9 @@ class TestQ0GUIExceptionHandling:
         gui.selected_cm = mock_cryomodule
         mock_cryomodule.restore_cryo.side_effect = Exception("Restore failed")
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+        ) as mock_popup:
             gui.restore_cryo()
             mock_popup.assert_called_once()
 
@@ -521,7 +568,9 @@ class TestQ0GUIWorkerManagement:
         # Verify it ran successfully
         assert gui.q0_meas_worker is not None
 
-    def test_on_ramp_finished_calls_start_q0_worker(self, qapp, mock_cryomodule):
+    def test_on_ramp_finished_calls_start_q0_worker(
+        self, qapp, mock_cryomodule
+    ):
         """Test that _on_ramp_finished calls _start_q0_worker when appropriate."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -553,7 +602,9 @@ class TestQ0GUIQ0LoadMethods:
         gui.selected_cm = mock_cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.Display"
+            ) as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
         ):
             gui.load_q0()
@@ -564,7 +615,9 @@ class TestQ0GUIQ0LoadMethods:
             window_exists = mock_cryomodule.name in gui.rf_option_windows
 
             # At least one should be true
-            assert display_called or window_exists, "load_q0 should create or manage a window"
+            assert (
+                display_called or window_exists
+            ), "load_q0 should create or manage a window"
 
     def test_load_q0_existing_window(self, qapp, mock_cryomodule):
         """Test loading Q0 measurement - reuses existing window."""
@@ -579,7 +632,9 @@ class TestQ0GUIQ0LoadMethods:
 
         with (
             patch("sc_linac_physics.applications.q0.q0_gui.Display"),
-            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.showDisplay"
+            ) as mock_show,
         ):
             gui.load_q0()
 
@@ -593,11 +648,15 @@ class TestQ0GUIQ0LoadMethods:
         gui = Q0GUI()
         gui.selected_cm = None
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+        ) as mock_popup:
             gui.load_q0()
 
             # Should show error popup
-            mock_popup.assert_called_once_with("No Cryomodule Selected", "Please select a cryomodule first.")
+            mock_popup.assert_called_once_with(
+                "No Cryomodule Selected", "Please select a cryomodule first."
+            )
 
     def test_load_q0_exception_handling(self, qapp, mock_cryomodule):
         """Test load_q0 exception handling."""
@@ -607,8 +666,12 @@ class TestQ0GUIQ0LoadMethods:
         gui.selected_cm = mock_cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
-            patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.Display"
+            ) as mock_display,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+            ) as mock_popup,
         ):
             # Make Display raise an exception
             mock_display.side_effect = Exception("Failed to create window")
@@ -657,9 +720,13 @@ class TestQ0GUIShowCalibrationData:
         gui.selected_cm = mock_cryomodule
         mock_cryomodule.calibration = None
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+        ) as mock_popup:
             gui.show_calibration_data()
-            mock_popup.assert_called_once_with("No Calibration Data", "No calibration data available.")
+            mock_popup.assert_called_once_with(
+                "No Calibration Data", "No calibration data available."
+            )
 
     def test_show_calibration_data_no_cryomodule(self, qapp):
         """Test showing calibration data when no cryomodule selected."""
@@ -668,11 +735,17 @@ class TestQ0GUIShowCalibrationData:
         gui = Q0GUI()
         gui.selected_cm = None
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+        ) as mock_popup:
             gui.show_calibration_data()
-            mock_popup.assert_called_once_with("No Cryomodule Selected", "Please select a cryomodule first.")
+            mock_popup.assert_called_once_with(
+                "No Cryomodule Selected", "Please select a cryomodule first."
+            )
 
-    def test_show_calibration_data_with_data_new_window(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_with_data_new_window(
+        self, qapp, mock_cryomodule
+    ):
         """Test showing calibration data when data exists - creates new window."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -698,9 +771,13 @@ class TestQ0GUIShowCalibrationData:
         gui.calibration_window = None  # Ensure no existing window
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.Display"
+            ) as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
-            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay") as mock_show_display,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.showDisplay"
+            ) as mock_show_display,
         ):
             # Set up mock plot widgets
             mock_plot_widget = Mock()
@@ -715,9 +792,13 @@ class TestQ0GUIShowCalibrationData:
             show_called = mock_show_display.called
 
             # At least one should be true (window creation or display)
-            assert display_called or show_called, "Should create or show calibration window"
+            assert (
+                display_called or show_called
+            ), "Should create or show calibration window"
 
-    def test_show_calibration_data_with_existing_window(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_with_existing_window(
+        self, qapp, mock_cryomodule
+    ):
         """Test showing calibration data when window already exists."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -761,7 +842,9 @@ class TestQ0GUIShowCalibrationData:
             # More flexible assertion - just check it didn't crash
             assert True  # If we get here, method executed successfully
 
-    def test_show_calibration_data_empty_heater_runs(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_empty_heater_runs(
+        self, qapp, mock_cryomodule
+    ):
         """Test showing calibration data with empty heater runs."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -794,7 +877,9 @@ class TestQ0GUIShowCalibrationData:
 
             assert success, "Should handle empty heater runs gracefully"
 
-    def test_show_calibration_data_exception_handling(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_exception_handling(
+        self, qapp, mock_cryomodule
+    ):
         """Test show_calibration_data exception handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -807,8 +892,12 @@ class TestQ0GUIShowCalibrationData:
         gui.selected_cm = mock_cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
-            patch("sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup") as mock_popup,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.Display"
+            ) as mock_display,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+            ) as mock_popup,
         ):
             # Make Display raise an exception
             mock_display.side_effect = Exception("Plot creation failed")
@@ -817,7 +906,9 @@ class TestQ0GUIShowCalibrationData:
 
             # Should handle exception and show error popup
             mock_popup.assert_called_once()
-            assert "Failed to show calibration data" in mock_popup.call_args[0][1]
+            assert (
+                "Failed to show calibration data" in mock_popup.call_args[0][1]
+            )
 
     def test_show_calibration_data_plot_operations(self, qapp, mock_cryomodule):
         """Test that show_calibration_data performs operations."""
@@ -836,7 +927,9 @@ class TestQ0GUIShowCalibrationData:
 
         mock_calibration = Mock()
         mock_calibration.heater_runs = [mock_heater_run1, mock_heater_run2]
-        mock_calibration.get_heat.side_effect = lambda dll_dt: 100.0 + dll_dt * 10  # Mock function
+        mock_calibration.get_heat.side_effect = (
+            lambda dll_dt: 100.0 + dll_dt * 10
+        )  # Mock function
 
         mock_cryomodule.calibration = mock_calibration
 
@@ -873,10 +966,14 @@ class TestQ0GUIShowCalibrationData:
         gui.selected_cm = mock_cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_gui.Display") as mock_display,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.Display"
+            ) as mock_display,
             patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
             patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
-            patch("sc_linac_physics.applications.q0.q0_gui.QHBoxLayout") as mock_layout,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.QHBoxLayout"
+            ) as mock_layout,
         ):
             mock_window = Mock()
             mock_display.return_value = mock_window

@@ -15,7 +15,10 @@ from PyQt5.QtWidgets import (
 )
 
 # Import your module with the correct path
-from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display import DecoderDisplay, Row
+from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display import (
+    DecoderDisplay,
+    Row,
+)
 
 
 # Fixture to ensure QApplication exists
@@ -65,9 +68,15 @@ class MockDisplay(QWidget):
 @pytest.fixture
 def decoder_display(qapp, mock_csv_data):
     """Create a DecoderDisplay instance for testing."""
-    with patch("sc_linac_physics.displays.cavity_display.utils.utils.parse_csv", return_value=mock_csv_data):
+    with patch(
+        "sc_linac_physics.displays.cavity_display.utils.utils.parse_csv",
+        return_value=mock_csv_data,
+    ):
         # Patch Display at the correct import location
-        with patch("sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.Display", MockDisplay):
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.Display",
+            MockDisplay,
+        ):
             display = DecoderDisplay()
             yield display
             display.deleteLater()
@@ -78,7 +87,12 @@ class TestRow:
 
     def test_row_creation(self):
         """Test creating a Row instance."""
-        row = Row(tlc="ABC", long_desc="Test description", gen_short_desc="Test", corrective_action="Test action")
+        row = Row(
+            tlc="ABC",
+            long_desc="Test description",
+            gen_short_desc="Test",
+            corrective_action="Test action",
+        )
         assert row.tlc == "ABC"
         assert row.long_desc == "Test description"
         assert row.gen_short_desc == "Test"
@@ -97,8 +111,12 @@ class TestRow:
     def test_row_comparison_eq(self):
         """Test Row equality comparison."""
         row1 = Row("ABC", "desc1", "short1", "action1")
-        row2 = Row("ABC", "desc2", "short2", "action2")  # Same TLC, different other fields
-        row3 = Row("XYZ", "desc1", "short1", "action1")  # Different TLC, same other fields
+        row2 = Row(
+            "ABC", "desc2", "short2", "action2"
+        )  # Same TLC, different other fields
+        row3 = Row(
+            "XYZ", "desc1", "short1", "action1"
+        )  # Different TLC, same other fields
 
         assert row1 == row2  # Same TLC
         assert not (row1 == row3)  # Different TLC
@@ -122,8 +140,12 @@ class TestDecoderDisplayInitialization:
     """Test DecoderDisplay initialization."""
 
     @patch("sc_linac_physics.displays.cavity_display.utils.utils.parse_csv")
-    @patch("sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.Display")
-    def test_initialization_with_empty_csv(self, mock_display_class, mock_parse_csv, qapp):
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.Display"
+    )
+    def test_initialization_with_empty_csv(
+        self, mock_display_class, mock_parse_csv, qapp
+    ):
         """Test initialization with empty CSV data."""
         # Configure the mock Display class
         mock_display_instance = QWidget()
@@ -152,7 +174,10 @@ class TestDecoderDisplayInitialization:
         scroll_area = decoder_display.scroll_area
 
         assert scroll_area.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOn
-        assert scroll_area.sizeAdjustPolicy() == QAbstractScrollArea.AdjustToContents
+        assert (
+            scroll_area.sizeAdjustPolicy()
+            == QAbstractScrollArea.AdjustToContents
+        )
         assert scroll_area.widgetResizable() is True
         assert scroll_area.widget() == decoder_display.groupbox
 
@@ -287,8 +312,12 @@ class TestDecoderDisplaySimplified:
                 Row(
                     tlc=fault_row_dict.get("Three Letter Code", ""),
                     long_desc=fault_row_dict.get("Long Description", ""),
-                    gen_short_desc=fault_row_dict.get("Generic Short Description for Decoder", ""),
-                    corrective_action=fault_row_dict.get("Recommended Corrective Actions", ""),
+                    gen_short_desc=fault_row_dict.get(
+                        "Generic Short Description for Decoder", ""
+                    ),
+                    corrective_action=fault_row_dict.get(
+                        "Recommended Corrective Actions", ""
+                    ),
                 )
             )
 

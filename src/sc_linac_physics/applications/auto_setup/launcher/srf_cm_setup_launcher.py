@@ -41,7 +41,12 @@ if __name__ == "__main__":
         help="Cryomodule name as a string",
     )
 
-    parser.add_argument("--shutdown", "-off", action="store_true", help="Turn off cavity and SSA")
+    parser.add_argument(
+        "--shutdown",
+        "-off",
+        action="store_true",
+        help="Turn off cavity and SSA",
+    )
 
     parsed_args = parser.parse_args()
     cm_name = parsed_args.cryomodule

@@ -128,7 +128,9 @@ def _add_level_properties(cls):
         pass
 
     cls.averaged_liquid_level = property(averaged_liquid_level_getter)
-    cls.ds_liquid_level = property(ds_liquid_level_getter, ds_liquid_level_setter)
+    cls.ds_liquid_level = property(
+        ds_liquid_level_getter, ds_liquid_level_setter
+    )
 
 
 def _add_heater_properties(cls):
@@ -302,8 +304,12 @@ def fast_q0_cryo(cryo_name, mock_linac_object):
         cryo = mock_class(cryo_name, mock_linac_object)
 
         # Add helper methods
-        cryo.make_jt_pv = lambda suffix: f"CLIC:CM{cryo_name}:3001:PVJT:{suffix}"
-        cryo.make_heater_pv = lambda suffix: f"CPIC:CM{cryo_name}:0000:EHCV:{suffix}"
+        cryo.make_jt_pv = (
+            lambda suffix: f"CLIC:CM{cryo_name}:3001:PVJT:{suffix}"
+        )
+        cryo.make_heater_pv = (
+            lambda suffix: f"CPIC:CM{cryo_name}:0000:EHCV:{suffix}"
+        )
 
         return cryo
 
@@ -379,7 +385,9 @@ class TestQ0CryomoduleCoreFast:
 class TestQ0CryomoduleHeaterRunsFast:
     """Fast tests for heater run functionality"""
 
-    def test_launch_heater_run_basic_no_calibration(self, fast_q0_cryo, valve_params, mock_data_run):
+    def test_launch_heater_run_basic_no_calibration(
+        self, fast_q0_cryo, valve_params, mock_data_run
+    ):
         """Test basic launchHeaterRun functionality without calibration - FAST"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
@@ -392,22 +400,35 @@ class TestQ0CryomoduleHeaterRunsFast:
 
         # Mock all time-consuming operations
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),  # Prevent any sleep calls
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ),  # Prevent any sleep calls
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=mock_data_run),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=mock_data_run,
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.side_effect = [start_time, end_time]
 
             # Test with is_cal=False to avoid calibration requirement
-            Q0Cryomodule.launchHeaterRun(fast_q0_cryo, heater_setpoint, is_cal=False)
+            Q0Cryomodule.launchHeaterRun(
+                fast_q0_cryo, heater_setpoint, is_cal=False
+            )
 
             # Basic verification
             assert fast_q0_cryo.current_data_run == mock_data_run
 
-    def test_launch_heater_run_with_calibration(self, fast_q0_cryo, valve_params, mock_data_run, mock_calibration):
+    def test_launch_heater_run_with_calibration(
+        self, fast_q0_cryo, valve_params, mock_data_run, mock_calibration
+    ):
         """Test launchHeaterRun adds to calibration - FAST"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
@@ -419,21 +440,34 @@ class TestQ0CryomoduleHeaterRunsFast:
         end_time = MockDatetime(2023, 1, 1, 12, 30, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),  # Prevent any sleep calls
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ),  # Prevent any sleep calls
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=mock_data_run),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=mock_data_run,
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.side_effect = [start_time, end_time]
 
-            Q0Cryomodule.launchHeaterRun(fast_q0_cryo, heater_setpoint, is_cal=True)
+            Q0Cryomodule.launchHeaterRun(
+                fast_q0_cryo, heater_setpoint, is_cal=True
+            )
 
             # Verify data run was added to calibration
             assert mock_data_run in mock_calibration.heater_runs
 
-    def test_launch_heater_run_data_flow(self, fast_q0_cryo, valve_params, mock_data_run):
+    def test_launch_heater_run_data_flow(
+        self, fast_q0_cryo, valve_params, mock_data_run
+    ):
         """Test data flow through launchHeaterRun - FAST"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
@@ -444,16 +478,27 @@ class TestQ0CryomoduleHeaterRunsFast:
         end_time = MockDatetime(2023, 1, 1, 12, 30, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor") as mock_camonitor,
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear") as mock_camonitor_clear,
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=mock_data_run),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor"
+            ) as mock_camonitor,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ) as mock_camonitor_clear,
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=mock_data_run,
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.side_effect = [start_time, end_time]
 
-            Q0Cryomodule.launchHeaterRun(fast_q0_cryo, heater_setpoint, is_cal=False)
+            Q0Cryomodule.launchHeaterRun(
+                fast_q0_cryo, heater_setpoint, is_cal=False
+            )
 
             # Verify monitoring was set up and cleaned up
             mock_camonitor.assert_called_once()
@@ -512,14 +557,27 @@ class TestQ0CryomoduleMeasurementFast:
         end_time = MockDatetime(2023, 1, 1, 14, 0, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=15.0),  # Cavity amplitude
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                return_value=15.0,
+            ),  # Cavity amplitude
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_utils.FULL_MODULE_CALIBRATION_LOAD", 80),
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=mock_heater_run),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.FULL_MODULE_CALIBRATION_LOAD",
+                80,
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=mock_heater_run,
+            ),
             patch("builtins.print"),
         ):
             # Provide enough datetime values for all calls
@@ -534,14 +592,19 @@ class TestQ0CryomoduleMeasurementFast:
             ]
 
             Q0Cryomodule.takeNewQ0Measurement(
-                fast_q0_cryo, desiredAmplitudes=desired_amplitudes, desired_ll=desired_ll, ll_drop=ll_drop
+                fast_q0_cryo,
+                desiredAmplitudes=desired_amplitudes,
+                desired_ll=desired_ll,
+                ll_drop=ll_drop,
             )
 
             # Verify basic workflow completed
             mock_q0_measurement.save_data.assert_called_once()
             mock_q0_measurement.save_results.assert_called_once()
 
-    def test_take_new_q0_measurement_cavity_amplitude_waiting(self, fast_q0_cryo, valve_params):
+    def test_take_new_q0_measurement_cavity_amplitude_waiting(
+        self, fast_q0_cryo, valve_params
+    ):
         """Test that measurement waits for cavity amplitudes to be ready"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
@@ -581,13 +644,25 @@ class TestQ0CryomoduleMeasurementFast:
         end_time = MockDatetime(2023, 1, 1, 14, 0, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep") as mock_sleep,
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", side_effect=mock_caget),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ) as mock_sleep,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                side_effect=mock_caget,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=Mock()),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=Mock(),
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.side_effect = [
@@ -600,13 +675,17 @@ class TestQ0CryomoduleMeasurementFast:
                 end_time,
             ]
 
-            Q0Cryomodule.takeNewQ0Measurement(fast_q0_cryo, desiredAmplitudes=desired_amplitudes)
+            Q0Cryomodule.takeNewQ0Measurement(
+                fast_q0_cryo, desiredAmplitudes=desired_amplitudes
+            )
 
             # Should have waited (slept) while amplitude approached target
             assert mock_sleep.call_count > 0
             assert amplitude_index > 1  # Amplitude was checked multiple times
 
-    def test_take_new_q0_measurement_data_collection(self, fast_q0_cryo, valve_params):
+    def test_take_new_q0_measurement_data_collection(
+        self, fast_q0_cryo, valve_params
+    ):
         """Test data collection during Q0 measurement"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
@@ -639,13 +718,25 @@ class TestQ0CryomoduleMeasurementFast:
         end_time = MockDatetime(2023, 1, 1, 13, 0, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=16.0),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                return_value=16.0,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor") as mock_camonitor,
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear") as mock_camonitor_clear,
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=Mock()),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor"
+            ) as mock_camonitor,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ) as mock_camonitor_clear,
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=Mock(),
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.side_effect = [
@@ -658,14 +749,20 @@ class TestQ0CryomoduleMeasurementFast:
                 end_time,
             ]
 
-            Q0Cryomodule.takeNewQ0Measurement(fast_q0_cryo, desiredAmplitudes=desired_amplitudes)
+            Q0Cryomodule.takeNewQ0Measurement(
+                fast_q0_cryo, desiredAmplitudes=desired_amplitudes
+            )
 
             # Verify monitoring was set up for both heater and pressure
             heater_monitor_calls = [
-                call for call in mock_camonitor.call_args_list if fast_q0_cryo.heater_readback_pv in str(call)
+                call
+                for call in mock_camonitor.call_args_list
+                if fast_q0_cryo.heater_readback_pv in str(call)
             ]
             pressure_monitor_calls = [
-                call for call in mock_camonitor.call_args_list if fast_q0_cryo.ds_pressure_pv in str(call)
+                call
+                for call in mock_camonitor.call_args_list
+                if fast_q0_cryo.ds_pressure_pv in str(call)
             ]
 
             # Should have at least one call for heater and one for pressure
@@ -673,9 +770,13 @@ class TestQ0CryomoduleMeasurementFast:
             assert len(pressure_monitor_calls) >= 1
 
             # Verify cleanup
-            assert mock_camonitor_clear.call_count >= 2  # At least heater and pressure
+            assert (
+                mock_camonitor_clear.call_count >= 2
+            )  # At least heater and pressure
 
-    def test_take_new_q0_measurement_multiple_cavities(self, fast_q0_cryo, valve_params):
+    def test_take_new_q0_measurement_multiple_cavities(
+        self, fast_q0_cryo, valve_params
+    ):
         """Test Q0 measurement with multiple cavities"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
@@ -710,13 +811,23 @@ class TestQ0CryomoduleMeasurementFast:
         end_time = MockDatetime(2023, 1, 1, 14, 0, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", side_effect=mock_caget),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                side_effect=mock_caget,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=Mock()),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=Mock(),
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.side_effect = [
@@ -729,7 +840,9 @@ class TestQ0CryomoduleMeasurementFast:
                 end_time,
             ]
 
-            Q0Cryomodule.takeNewQ0Measurement(fast_q0_cryo, desiredAmplitudes=desired_amplitudes)
+            Q0Cryomodule.takeNewQ0Measurement(
+                fast_q0_cryo, desiredAmplitudes=desired_amplitudes
+            )
 
             # Should complete successfully with multiple cavities
             mock_q0_measurement.save_data.assert_called_once()
@@ -737,7 +850,9 @@ class TestQ0CryomoduleMeasurementFast:
 
     # Replace the failing test methods with these corrected versions
 
-    def test_take_new_q0_measurement_timing_and_results(self, fast_q0_cryo, valve_params):
+    def test_take_new_q0_measurement_timing_and_results(
+        self, fast_q0_cryo, valve_params
+    ):
         """Test timing setup and Q0 calculation in measurement"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
@@ -780,13 +895,23 @@ class TestQ0CryomoduleMeasurementFast:
         final_end = MockDatetime(2023, 1, 1, 12, 30, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=18.0),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                return_value=18.0,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=mock_heater_run),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=mock_heater_run,
+            ),
             patch("builtins.print") as mock_print,
         ):
             mock_datetime_module.now.side_effect = [
@@ -799,7 +924,9 @@ class TestQ0CryomoduleMeasurementFast:
                 final_end,  # Extra for safety
             ]
 
-            Q0Cryomodule.takeNewQ0Measurement(fast_q0_cryo, desiredAmplitudes=desired_amplitudes)
+            Q0Cryomodule.takeNewQ0Measurement(
+                fast_q0_cryo, desiredAmplitudes=desired_amplitudes
+            )
 
             # Verify timing was set correctly
             # The actual implementation sets start_time twice - once for measurement, once for RF run
@@ -819,7 +946,9 @@ class TestQ0CryomoduleMeasurementFast:
             # Verify console output was produced
             assert mock_print.call_count > 0  # At least some output was printed
 
-    def test_take_new_q0_measurement_with_abort(self, fast_q0_cryo, valve_params):
+    def test_take_new_q0_measurement_with_abort(
+        self, fast_q0_cryo, valve_params
+    ):
         """Test Q0 measurement handles abort gracefully"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
@@ -869,12 +998,19 @@ class TestQ0CryomoduleMeasurementFast:
         start_time = MockDatetime(2023, 1, 1, 12, 0, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", side_effect=mock_caget),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                side_effect=mock_caget,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.return_value = start_time
@@ -883,7 +1019,9 @@ class TestQ0CryomoduleMeasurementFast:
 
             # Should raise Q0AbortError
             with pytest.raises(q0_utils.Q0AbortError):
-                Q0Cryomodule.takeNewQ0Measurement(fast_q0_cryo, desiredAmplitudes=desired_amplitudes)
+                Q0Cryomodule.takeNewQ0Measurement(
+                    fast_q0_cryo, desiredAmplitudes=desired_amplitudes
+                )
 
             # Verify abort was actually called
             assert abort_called
@@ -919,13 +1057,23 @@ class TestQ0CryomoduleMeasurementPerformance:
         end_time = MockDatetime(2023, 1, 1, 14, 0, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=15.0),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                return_value=15.0,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=Mock()),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=Mock(),
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.side_effect = [
@@ -939,10 +1087,14 @@ class TestQ0CryomoduleMeasurementPerformance:
             ]
 
             test_start_time = time.time()
-            Q0Cryomodule.takeNewQ0Measurement(fast_q0_cryo, desiredAmplitudes=desired_amplitudes)
+            Q0Cryomodule.takeNewQ0Measurement(
+                fast_q0_cryo, desiredAmplitudes=desired_amplitudes
+            )
             duration = time.time() - test_start_time
 
-            assert duration < 3.0, f"Q0 measurement took {duration:.2f}s, should be under 3s"
+            assert (
+                duration < 3.0
+            ), f"Q0 measurement took {duration:.2f}s, should be under 3s"
 
 
 class TestQ0CryomoduleCalibrationFast:
@@ -962,14 +1114,29 @@ class TestQ0CryomoduleCalibrationFast:
         end_time = MockDatetime(2023, 1, 1, 14, 0, 0)  # 2 hours later
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),  # Prevent any sleep
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=92.0),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ),  # Prevent any sleep
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                return_value=92.0,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.linspace", return_value=[130.0, 160.0]),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.Calibration", return_value=mock_calibration),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.linspace",
+                return_value=[130.0, 160.0],
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.Calibration",
+                return_value=mock_calibration,
+            ),
             patch("builtins.print"),
         ):
             # Provide enough datetime values for all the calls
@@ -1003,9 +1170,14 @@ class TestQ0CryomoduleJTPositionCoverage:
         """Test only the JT position getter (safe)"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
-        with patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=75.5) as mock_caget:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+            return_value=75.5,
+        ) as mock_caget:
             result = Q0Cryomodule.jt_position.fget(fast_q0_cryo)
-            mock_caget.assert_called_once_with(fast_q0_cryo.jt_valve_readback_pv)
+            mock_caget.assert_called_once_with(
+                fast_q0_cryo.jt_valve_readback_pv
+            )
             assert result == 75.5
 
     def test_jt_position_setter_minimal_safe(self, fast_q0_cryo):
@@ -1034,8 +1206,13 @@ class TestQ0CryomoduleJTPositionCoverage:
 
         try:
             with (
-                patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", side_effect=ultra_safe_caget),
-                patch("sc_linac_physics.applications.q0.q0_cryomodule.caput") as mock_caput,
+                patch(
+                    "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                    side_effect=ultra_safe_caget,
+                ),
+                patch(
+                    "sc_linac_physics.applications.q0.q0_cryomodule.caput"
+                ) as mock_caput,
                 patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
                 patch("builtins.print"),
             ):
@@ -1097,7 +1274,10 @@ class TestQ0CryomoduleJTPositionCoverage:
         expected_base = f"CLIC:CM{fast_q0_cryo.name}:3001:PVJT"
 
         assert fast_q0_cryo.jt_valve_readback_pv == f"{expected_base}:ORBV"
-        assert fast_q0_cryo.jt_man_pos_setpoint_pv == f"{expected_base}:MANPOS_RQST"
+        assert (
+            fast_q0_cryo.jt_man_pos_setpoint_pv
+            == f"{expected_base}:MANPOS_RQST"
+        )
         assert fast_q0_cryo.jt_manual_select_pv == f"{expected_base}:MANUAL"
         assert fast_q0_cryo.jt_mode_pv == f"{expected_base}:MODE"
 
@@ -1193,7 +1373,9 @@ class TestQ0CryomoduleJTPositionAlgorithmCoverage:
             step = sign(delta)
             num_steps = int(floor(abs(delta)))
 
-            assert abs(delta - exp_delta) < 1e-10, f"Delta: {current} -> {target}"
+            assert (
+                abs(delta - exp_delta) < 1e-10
+            ), f"Delta: {current} -> {target}"
             assert abs(step - exp_step) < 1e-10, f"Step: {current} -> {target}"
             assert num_steps == exp_steps, f"Steps: {current} -> {target}"
 
@@ -1215,7 +1397,9 @@ class TestQ0CryomoduleJTPositionAlgorithmCoverage:
 
         for position, should_be_within in test_positions:
             within_tolerance = abs(position - target) <= tolerance
-            assert within_tolerance == should_be_within, f"Position {position} tolerance check failed"
+            assert (
+                within_tolerance == should_be_within
+            ), f"Position {position} tolerance check failed"
 
     def test_mode_checking_algorithm_coverage(self, fast_q0_cryo):
         """Test mode checking algorithm"""
@@ -1334,11 +1518,18 @@ class TestQ0CryomodulePerformance:
         end_time = MockDatetime(2023, 1, 1, 12, 30, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_utils.HeaterRun", return_value=Mock()),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
+                return_value=Mock(),
+            ),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.side_effect = [start_time, end_time]
@@ -1347,7 +1538,9 @@ class TestQ0CryomodulePerformance:
             Q0Cryomodule.launchHeaterRun(fast_q0_cryo, 160.0, is_cal=False)
             duration = time.time() - test_start_time
 
-            assert duration < 1.0, f"Test took {duration:.2f}s, should be under 1s"
+            assert (
+                duration < 1.0
+            ), f"Test took {duration:.2f}s, should be under 1s"
 
     def test_calibration_completes_quickly(self, fast_q0_cryo, valve_params):
         """Ensure calibration completes in under 2 seconds"""
@@ -1359,24 +1552,45 @@ class TestQ0CryomodulePerformance:
         end_time = MockDatetime(2023, 1, 1, 14, 0, 0)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.datetime") as mock_datetime_module,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
+            ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=92.0),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                return_value=92.0,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.linspace", return_value=[130.0]),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.Calibration", return_value=Mock()),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.linspace",
+                return_value=[130.0],
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.Calibration",
+                return_value=Mock(),
+            ),
             patch("builtins.print"),
         ):
             # Provide enough datetime values for all calls
-            mock_datetime_module.now.side_effect = [start_time, start_time, end_time, end_time, end_time]
+            mock_datetime_module.now.side_effect = [
+                start_time,
+                start_time,
+                end_time,
+                end_time,
+                end_time,
+            ]
 
             test_start_time = time.time()
             fast_q0_cryo.take_new_calibration()
             duration = time.time() - test_start_time
 
-            assert duration < 2.0, f"Test took {duration:.2f}s, should be under 2s"
+            assert (
+                duration < 2.0
+            ), f"Test took {duration:.2f}s, should be under 2s"
 
 
 # Add these test classes for fill and wait_for_ll_drop coverage
@@ -1399,13 +1613,19 @@ class TestQ0CryomoduleFillMethods:
         fast_q0_cryo.cavities = {"1": mock_cavity}
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput") as mock_caput,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caput"
+            ) as mock_caput,
             patch("builtins.print"),
         ):
             Q0Cryomodule.fill(fast_q0_cryo, desired_level)
 
             # Verify JT auto mode was set (this is what actually happens)
-            jt_auto_calls = [call for call in mock_caput.call_args_list if call[0][0] == fast_q0_cryo.jt_auto_select_pv]
+            jt_auto_calls = [
+                call
+                for call in mock_caput.call_args_list
+                if call[0][0] == fast_q0_cryo.jt_auto_select_pv
+            ]
             assert len(jt_auto_calls) >= 1
 
             # Verify cavity was turned off (default behavior)
@@ -1443,7 +1663,9 @@ class TestQ0CryomoduleFillMethods:
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("builtins.print"),
         ):
-            Q0Cryomodule.fill(fast_q0_cryo, desired_level, turn_cavities_off=False)
+            Q0Cryomodule.fill(
+                fast_q0_cryo, desired_level, turn_cavities_off=False
+            )
 
             # Verify cavity was NOT turned off
             mock_cavity.turn_off.assert_not_called()
@@ -1482,7 +1704,11 @@ class TestQ0CryomoduleFillMethods:
         with (
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch.object(
-                type(fast_q0_cryo), "heater_power", property(type(fast_q0_cryo).heater_power.fget, track_heater_power)
+                type(fast_q0_cryo),
+                "heater_power",
+                property(
+                    type(fast_q0_cryo).heater_power.fget, track_heater_power
+                ),
             ),
             patch("builtins.print"),
         ):
@@ -1528,10 +1754,14 @@ class TestQ0CryomoduleWaitForLLDrop:
             return 85.0  # After drop
 
         # Mock the property
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep") as mock_sleep,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ) as mock_sleep,
             patch("builtins.print"),
         ):
             Q0Cryomodule.wait_for_ll_drop(fast_q0_cryo, target_ll_diff)
@@ -1555,10 +1785,14 @@ class TestQ0CryomoduleWaitForLLDrop:
                 return 90.0  # Starting level
             return 86.0  # Already dropped 4.4% (more than target 3%)
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep") as mock_sleep,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ) as mock_sleep,
             patch("builtins.print"),
         ):
             Q0Cryomodule.wait_for_ll_drop(fast_q0_cryo, target_ll_diff)
@@ -1584,10 +1818,14 @@ class TestQ0CryomoduleWaitForLLDrop:
                 return result
             return 86.0  # Final level
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep") as mock_sleep,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ) as mock_sleep,
             patch("builtins.print"),
         ):
             Q0Cryomodule.wait_for_ll_drop(fast_q0_cryo, target_ll_diff)
@@ -1622,7 +1860,9 @@ class TestQ0CryomoduleWaitForLLDrop:
                 return 90.0
             return 85.0  # Dropped 5.6% > target 4%
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
@@ -1656,7 +1896,9 @@ class TestQ0CryomoduleWaitForLLDrop:
         def mock_averaged_liquid_level():
             return 90.0  # Never drops
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
@@ -1682,7 +1924,9 @@ class TestQ0CryomoduleWaitForLLDrop:
                 return 90.0
             return 87.0  # Dropped 3.3%
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
@@ -1713,10 +1957,14 @@ class TestQ0CryomoduleWaitForLL:
                 return 85.0  # Below target
             return 90.0  # At target
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep") as mock_sleep,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ) as mock_sleep,
             patch("builtins.print"),
         ):
             Q0Cryomodule.waitForLL(fast_q0_cryo, desired_level)
@@ -1734,10 +1982,14 @@ class TestQ0CryomoduleWaitForLL:
         def mock_averaged_liquid_level():
             return 88.2  # Close to 88.0
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep") as mock_sleep,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ) as mock_sleep,
             patch("builtins.print"),
         ):
             Q0Cryomodule.waitForLL(fast_q0_cryo, desired_level)
@@ -1755,10 +2007,14 @@ class TestQ0CryomoduleWaitForLL:
         def mock_averaged_liquid_level():
             return 92.0
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep") as mock_sleep,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
+            ) as mock_sleep,
             patch("builtins.print"),
         ):
             Q0Cryomodule.waitForLL(fast_q0_cryo, desired_level)
@@ -1793,7 +2049,9 @@ class TestQ0CryomoduleWaitForLL:
                 return 85.0
             return 89.0
 
-        type(fast_q0_cryo).averaged_liquid_level = property(lambda self: mock_averaged_liquid_level())
+        type(fast_q0_cryo).averaged_liquid_level = property(
+            lambda self: mock_averaged_liquid_level()
+        )
 
         with (
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
@@ -1828,7 +2086,9 @@ class TestQ0CryomoduleLiquidLevelIntegration:
         assert "target_ll_diff" in wait_drop_sig.parameters
 
         wait_ll_sig = inspect.signature(Q0Cryomodule.waitForLL)
-        assert "desiredLiquidLevel" in wait_ll_sig.parameters  # FIXED: correct parameter name
+        assert (
+            "desiredLiquidLevel" in wait_ll_sig.parameters
+        )  # FIXED: correct parameter name
 
     def test_liquid_level_workflow_components(self, fast_q0_cryo, valve_params):
         """Test liquid level workflow components without execution"""
@@ -1897,7 +2157,9 @@ class TestQ0CryomoduleLiquidLevelIntegration:
             fast_q0_cryo.fill(90.0)  # Our mock implementation
 
         duration = time.time() - start_time
-        assert duration < 0.5, f"Mock operations took {duration:.3f}s, should be under 0.5s"
+        assert (
+            duration < 0.5
+        ), f"Mock operations took {duration:.3f}s, should be under 0.5s"
 
 
 class TestQ0CryomoduleFillMethodsSafe:
@@ -1929,13 +2191,19 @@ class TestQ0CryomoduleFillMethodsSafe:
 
         desired_level = 85.0
 
-        with patch("sc_linac_physics.applications.q0.q0_cryomodule.caput") as mock_caput:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_cryomodule.caput"
+        ) as mock_caput:
             # Simulate what fill does
-            fast_q0_cryo.ds_liquid_level = desired_level  # This uses our mock setter
+            fast_q0_cryo.ds_liquid_level = (
+                desired_level  # This uses our mock setter
+            )
             mock_caput(fast_q0_cryo.jt_auto_select_pv, 1, wait=True)
 
             # Verify operations
-            mock_caput.assert_called_with(fast_q0_cryo.jt_auto_select_pv, 1, wait=True)
+            mock_caput.assert_called_with(
+                fast_q0_cryo.jt_auto_select_pv, 1, wait=True
+            )
 
     def test_fill_cavity_management(self, fast_q0_cryo):
         """Test cavity management in fill method"""
@@ -1963,7 +2231,9 @@ class TestQ0CryomoduleFillMethodsSafe:
             heater_calls.append(value)
 
         with patch.object(
-            type(fast_q0_cryo), "heater_power", property(type(fast_q0_cryo).heater_power.fget, track_heater)
+            type(fast_q0_cryo),
+            "heater_power",
+            property(type(fast_q0_cryo).heater_power.fget, track_heater),
         ):
             # Simulate what fill does
             fast_q0_cryo.heater_power = 0
@@ -1982,13 +2252,19 @@ class TestQ0CryomoduleShutOff:
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput") as mock_caput,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caput"
+            ) as mock_caput,
             patch("builtins.print"),
         ):
             Q0Cryomodule.shut_off(fast_q0_cryo)
 
             # Verify JT auto mode was set (this is what actually happens)
-            jt_auto_calls = [call for call in mock_caput.call_args_list if call[0][0] == fast_q0_cryo.jt_auto_select_pv]
+            jt_auto_calls = [
+                call
+                for call in mock_caput.call_args_list
+                if call[0][0] == fast_q0_cryo.jt_auto_select_pv
+            ]
             assert len(jt_auto_calls) >= 1
 
     def test_shut_off_with_cavities(self, fast_q0_cryo):
@@ -2045,7 +2321,10 @@ class TestQ0CryomoduleHeaterPowerProperty:
         """Test heater_power getter"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
-        with patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=125.5) as mock_caget:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+            return_value=125.5,
+        ) as mock_caget:
             result = Q0Cryomodule.heater_power.fget(fast_q0_cryo)
 
             mock_caget.assert_called_once_with(fast_q0_cryo.heater_readback_pv)
@@ -2064,13 +2343,22 @@ class TestQ0CryomoduleHeaterPowerProperty:
             return 0
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", side_effect=mock_caget),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput") as mock_caput,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                side_effect=mock_caget,
+            ),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caput"
+            ) as mock_caput,
         ):
             Q0Cryomodule.heater_power.fset(fast_q0_cryo, target_power)
 
             # Verify power setpoint was set
-            power_calls = [call for call in mock_caput.call_args_list if call[0][0] == fast_q0_cryo.heater_setpoint_pv]
+            power_calls = [
+                call
+                for call in mock_caput.call_args_list
+                if call[0][0] == fast_q0_cryo.heater_setpoint_pv
+            ]
             assert len(power_calls) >= 1
 
     def test_heater_power_property_interface(self, fast_q0_cryo):
@@ -2130,7 +2418,9 @@ class TestQ0CryomoduleSetupForQ0:
         # Test that it's callable
         assert callable(Q0Cryomodule.setup_for_q0)
 
-    def test_setup_for_q0_basic_functionality_with_all_params(self, fast_q0_cryo, valve_params):
+    def test_setup_for_q0_basic_functionality_with_all_params(
+        self, fast_q0_cryo, valve_params
+    ):
         """Test basic setup_for_q0 functionality with all required parameters"""
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
         from datetime import datetime
@@ -2161,11 +2451,20 @@ class TestQ0CryomoduleSetupForQ0:
         jt_search_end = datetime.now()
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", side_effect=mock_caget),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                side_effect=mock_caget,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch("builtins.print"),
         ):
-            Q0Cryomodule.setup_for_q0(fast_q0_cryo, desired_amplitudes, desired_ll, jt_search_end, jt_search_start)
+            Q0Cryomodule.setup_for_q0(
+                fast_q0_cryo,
+                desired_amplitudes,
+                desired_ll,
+                jt_search_end,
+                jt_search_start,
+            )
 
             # Method should complete without error
             assert True
@@ -2231,7 +2530,10 @@ class TestQ0CryomoduleMethodIntegration:
             Q0Cryomodule.shut_off(fast_q0_cryo)
 
         # heater_power should be readable
-        with patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=100.0):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+            return_value=100.0,
+        ):
             power = Q0Cryomodule.heater_power.fget(fast_q0_cryo)
             assert power == 100.0
 
@@ -2246,7 +2548,10 @@ class TestQ0CryomoduleMethodIntegration:
         fast_q0_cryo.valveParams = valve_params
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caget", return_value=15.0),
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                return_value=15.0,
+            ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
             patch("builtins.print"),
         ):
@@ -2259,7 +2564,9 @@ class TestQ0CryomoduleMethodIntegration:
             # REMOVED: setup_for_q0 call (needs complex parameters and may have loops)
 
             duration = time.time() - start_time
-            assert duration < 1.0, f"Safe methods took {duration:.2f}s, should be under 1s"
+            assert (
+                duration < 1.0
+            ), f"Safe methods took {duration:.2f}s, should be under 1s"
 
     def test_mock_method_performance(self, fast_q0_cryo):
         """Test that our mock implementations are fast"""
@@ -2276,7 +2583,9 @@ class TestQ0CryomoduleMethodIntegration:
             _ = fast_q0_cryo.averaged_liquid_level  # Our mock property
 
         duration = time.time() - start_time
-        assert duration < 0.1, f"Mock operations took {duration:.3f}s, should be under 0.1s"
+        assert (
+            duration < 0.1
+        ), f"Mock operations took {duration:.3f}s, should be under 0.1s"
 
 
 class TestQ0CryomoduleMethodDocumentation:

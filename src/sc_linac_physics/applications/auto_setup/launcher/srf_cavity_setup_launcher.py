@@ -38,12 +38,19 @@ if __name__ == "__main__":
         type=int,
         help="Cavity number as an int",
     )
-    parser.add_argument("--shutdown", "-off", action="store_true", help="Turn off cavity and SSA")
+    parser.add_argument(
+        "--shutdown",
+        "-off",
+        action="store_true",
+        help="Turn off cavity and SSA",
+    )
 
     parsed_args: argparse.Namespace = parser.parse_args()
     cm_name = parsed_args.cryomodule
     cav_num = parsed_args.cavity
 
-    cavity_obj: SetupCavity = SETUP_MACHINE.cryomodules[cm_name].cavities[cav_num]
+    cavity_obj: SetupCavity = SETUP_MACHINE.cryomodules[cm_name].cavities[
+        cav_num
+    ]
 
     setup_cavity(cavity_obj, parsed_args)

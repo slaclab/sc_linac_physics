@@ -48,7 +48,9 @@ class CryoParamSetupWorker(Worker):
     def run(self) -> None:
         self.status.emit("Checking for required cryo permissions")
         if caget(self.cryomodule.cryo_access_pv) != q0_utils.CRYO_ACCESS_VALUE:
-            self.error.emit("Required cryo permissions not granted - call cryo ops")
+            self.error.emit(
+                "Required cryo permissions not granted - call cryo ops"
+            )
             return
 
         self.cryomodule.heater_power = self.heater_setpoint
@@ -58,7 +60,9 @@ class CryoParamSetupWorker(Worker):
 
 
 class CryoParamWorker(Worker):
-    def __init__(self, cryomodule: Q0Cryomodule, start_time: datetime, end_time: datetime):
+    def __init__(
+        self, cryomodule: Q0Cryomodule, start_time: datetime, end_time: datetime
+    ):
         super().__init__()
         self.cryomodule: Q0Cryomodule = cryomodule
         self.start_time: datetime = start_time
@@ -67,7 +71,9 @@ class CryoParamWorker(Worker):
     def run(self) -> None:
         try:
             self.status.emit("Getting new reference cryo parameters")
-            self.cryomodule.getRefValveParams(start_time=self.start_time, end_time=self.end_time)
+            self.cryomodule.getRefValveParams(
+                start_time=self.start_time, end_time=self.end_time
+            )
             self.finished.emit("New reference cryo params loaded")
         except (CavityAbortError, q0_utils.Q0AbortError) as e:
             self.error.emit(str(e))
@@ -95,7 +101,9 @@ class RFWorker(Worker):
 class Q0Worker(RFWorker):
     def run(self) -> None:
         if caget(self.cryomodule.cryo_access_pv) != q0_utils.CRYO_ACCESS_VALUE:
-            self.error.emit("Required cryo permissions not granted - call cryo ops")
+            self.error.emit(
+                "Required cryo permissions not granted - call cryo ops"
+            )
             return
 
         try:
@@ -105,7 +113,9 @@ class Q0Worker(RFWorker):
                 desired_ll=self.desired_ll,
                 ll_drop=self.ll_drop,
             )
-            self.finished.emit(f"Recorded Q0: {self.cryomodule.q0_measurement.q0:.2e}")
+            self.finished.emit(
+                f"Recorded Q0: {self.cryomodule.q0_measurement.q0:.2e}"
+            )
         except (TypeError, CavityAbortError, q0_utils.Q0AbortError) as e:
             self.error.emit(str(e))
 
@@ -113,18 +123,24 @@ class Q0Worker(RFWorker):
 class Q0SetupWorker(RFWorker):
     def run(self) -> None:
         if caget(self.cryomodule.cryo_access_pv) != q0_utils.CRYO_ACCESS_VALUE:
-            self.error.emit("Required cryo permissions not granted - call cryo ops")
+            self.error.emit(
+                "Required cryo permissions not granted - call cryo ops"
+            )
             return
 
         try:
-            self.status.emit(f"CM{self.cryomodule.name} setting up for RF measurement")
+            self.status.emit(
+                f"CM{self.cryomodule.name} setting up for RF measurement"
+            )
             self.cryomodule.setup_for_q0(
                 desiredAmplitudes=self.desired_amplitudes,
                 desired_ll=self.desired_ll,
                 jt_search_start=self.jt_search_start,
                 jt_search_end=self.jt_search_end,
             )
-            self.finished.emit(f"CM{self.cryomodule.name} ready for cavity ramp up")
+            self.finished.emit(
+                f"CM{self.cryomodule.name} ready for cavity ramp up"
+            )
         except (CavityAbortError, q0_utils.Q0AbortError) as e:
             self.error.emit(str(e))
 
@@ -137,9 +153,13 @@ class CavityRampWorker(Worker):
 
     def run(self) -> None:
         try:
-            self.status.emit(f"Ramping Cavity {self.cavity.number} to {self.des_amp}")
+            self.status.emit(
+                f"Ramping Cavity {self.cavity.number} to {self.des_amp}"
+            )
             self.cavity.setup_rf(self.des_amp)
-            self.finished.emit(f"Cavity {self.cavity.number} ramped up to {self.des_amp}")
+            self.finished.emit(
+                f"Cavity {self.cavity.number} ramped up to {self.des_amp}"
+            )
         except (CavityAbortError, q0_utils.Q0AbortError) as e:
             self.error.emit(str(e))
 
@@ -168,7 +188,9 @@ class CalibrationWorker(Worker):
 
     def run(self) -> None:
         if caget(self.cryomodule.cryo_access_pv) != q0_utils.CRYO_ACCESS_VALUE:
-            self.error.emit("Required cryo permissions not granted - call cryo ops")
+            self.error.emit(
+                "Required cryo permissions not granted - call cryo ops"
+            )
             return
         try:
             self.status.emit("Taking new calibration")
@@ -239,25 +261,35 @@ class Q0Options(QObject):
     def __init__(self, cryomodule: Q0Cryomodule):
         super().__init__()
         self.cryomodule = cryomodule
-        self.main_groupbox: QGroupBox = QGroupBox(f"Q0 Measurements for CM{cryomodule.name}")
+        self.main_groupbox: QGroupBox = QGroupBox(
+            f"Q0 Measurements for CM{cryomodule.name}"
+        )
         grid_layout: QGridLayout = QGridLayout()
         self.main_groupbox.setLayout(grid_layout)
 
         try:
-            with open(cryomodule.q0_idx_file, "r") as f:  # Changed from "r+" to "r"
+            with open(
+                cryomodule.q0_idx_file, "r"
+            ) as f:  # Changed from "r+" to "r"
                 q0_measurements: Dict = json.load(f)
             self._create_measurement_widgets(q0_measurements, grid_layout)
         except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
             _handle_file_error(e, grid_layout)
 
-    def _create_measurement_widgets(self, q0_measurements: Dict, grid_layout: QGridLayout):
+    def _create_measurement_widgets(
+        self, q0_measurements: Dict, grid_layout: QGridLayout
+    ):
         """Create widgets for Q0 measurements"""
         timestamps = list(q0_measurements.keys())
         col_count = get_dimensions(timestamps)
         for idx, time_stamp in enumerate(timestamps):
             cav_amps = q0_measurements[time_stamp]["Cavity Amplitudes"]
-            radio_button: QRadioButton = QRadioButton(f"{time_stamp}: \n{json.dumps(cav_amps, indent=4)}")
-            grid_layout.addWidget(radio_button, int(idx / col_count), idx % col_count)
+            radio_button: QRadioButton = QRadioButton(
+                f"{time_stamp}: \n{json.dumps(cav_amps, indent=4)}"
+            )
+            grid_layout.addWidget(
+                radio_button, int(idx / col_count), idx % col_count
+            )
             radio_button.clicked.connect(partial(self.load_q0, time_stamp))
 
     @pyqtSlot()
@@ -276,7 +308,9 @@ class CalibrationOptions(QObject):
     def __init__(self, cryomodule: Q0Cryomodule):
         super().__init__()
         self.cryomodule = cryomodule
-        self.main_groupbox: QGroupBox = QGroupBox(f"Calibrations for CM{cryomodule.name}")
+        self.main_groupbox: QGroupBox = QGroupBox(
+            f"Calibrations for CM{cryomodule.name}"
+        )
         grid_layout: QGridLayout = QGridLayout()
         self.main_groupbox.setLayout(grid_layout)
 
@@ -286,8 +320,12 @@ class CalibrationOptions(QObject):
 
             for idx, time_stamp in enumerate(calibrations.keys()):
                 radio_button: QRadioButton = QRadioButton(time_stamp)
-                grid_layout.addWidget(radio_button, int(idx / col_count), idx % col_count)
-                radio_button.clicked.connect(partial(self.load_calibration, time_stamp))
+                grid_layout.addWidget(
+                    radio_button, int(idx / col_count), idx % col_count
+                )
+                radio_button.clicked.connect(
+                    partial(self.load_calibration, time_stamp)
+                )
 
     @pyqtSlot()
     def load_calibration(self, timestamp: str):

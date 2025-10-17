@@ -75,7 +75,11 @@ class CavityWidget(PyDMDrawingPolygon):
     def mouseReleaseEvent(self, event: QMouseEvent):
         # ensure that the left button was pressed *and* released within the
         # geometry of the widget; if so, emit the signal;
-        if self.press_pos is not None and event.button() == Qt.LeftButton and event.pos() in self.rect():
+        if (
+            self.press_pos is not None
+            and event.button() == Qt.LeftButton
+            and event.pos() in self.rect()
+        ):
             self.clicked.emit()
         self.press_pos = None
 
@@ -100,7 +104,9 @@ class CavityWidget(PyDMDrawingPolygon):
             self._description_channel.disconnect()
 
         if value:  # Only create channel if value is not empty
-            self._description_channel = PyDMChannel(address=value, value_slot=self.description_changed)
+            self._description_channel = PyDMChannel(
+                address=value, value_slot=self.description_changed
+            )
             self._description_channel.connect()
 
     @qtProperty(str)
@@ -109,14 +115,18 @@ class CavityWidget(PyDMDrawingPolygon):
 
     @severity_channel.setter
     def severity_channel(self, value: str):
-        self._severity_channel = PyDMChannel(address=value, value_slot=self.severity_channel_value_changed)
+        self._severity_channel = PyDMChannel(
+            address=value, value_slot=self.severity_channel_value_changed
+        )
         self._severity_channel.connect()
 
     @Slot(int)
     def severity_channel_value_changed(self, value: int):
         """Handle severity channel value changes with better error handling."""
         try:
-            shape_params = SHAPE_PARAMETER_DICT.get(value, SHAPE_PARAMETER_DICT[3])
+            shape_params = SHAPE_PARAMETER_DICT.get(
+                value, SHAPE_PARAMETER_DICT[3]
+            )
             self.change_shape(shape_params)
         except Exception as e:
             print(f"Error updating severity: {e}")
@@ -137,7 +147,9 @@ class CavityWidget(PyDMDrawingPolygon):
                     if value.size == 0:
                         desc = "Empty array"
                     else:
-                        desc = "".join(chr(int(i)) for i in value if 0 <= int(i) <= 127)
+                        desc = "".join(
+                            chr(int(i)) for i in value if 0 <= int(i) <= 127
+                        )
                 elif isinstance(value, (bytes, bytearray)):
                     # Handle bytes
                     desc = value.decode("utf-8", errors="ignore")

@@ -22,7 +22,9 @@ def cryomodule():
     linac = MagicMock()
     linac.magnet_class = Magnet
     linac.name = f"L{randint(0, 3)}B"
-    yield Cryomodule(cryo_name=choice(ALL_CRYOMODULES_NO_HL), linac_object=linac)
+    yield Cryomodule(
+        cryo_name=choice(ALL_CRYOMODULES_NO_HL), linac_object=linac
+    )
 
 
 @pytest.fixture
@@ -34,7 +36,10 @@ def hl():
 
 
 def test_pv_prefix_quad(cryomodule):
-    assert cryomodule.quad.pv_prefix == f"QUAD:{cryomodule.linac.name}:{cryomodule.name}85:"
+    assert (
+        cryomodule.quad.pv_prefix
+        == f"QUAD:{cryomodule.linac.name}:{cryomodule.name}85:"
+    )
 
 
 def test_pv_prefix_quad_hl(hl):
@@ -53,11 +58,17 @@ def test_pv_prefix_ycor_hl(hl):
 
 
 def test_pv_prefix_xcor(cryomodule):
-    assert cryomodule.xcor.pv_prefix == f"XCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
+    assert (
+        cryomodule.xcor.pv_prefix
+        == f"XCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
+    )
 
 
 def test_pv_prefix_ycor(cryomodule):
-    assert cryomodule.ycor.pv_prefix == f"YCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
+    assert (
+        cryomodule.ycor.pv_prefix
+        == f"YCOR:{cryomodule.linac.name}:{cryomodule.name}85:"
+    )
 
 
 def test_bdes(cryomodule):

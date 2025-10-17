@@ -70,8 +70,12 @@ class TestCryoParamSetupWorker:
     def test_successful_setup(self, mock_caput, mock_caget, mock_cryomodule):
         # Arrange
         mock_caget.return_value = 1  # Assuming CRYO_ACCESS_VALUE is 1
-        with patch("sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1):
-            worker = CryoParamSetupWorker(mock_cryomodule, heater_setpoint=50, jt_setpoint=40)
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+        ):
+            worker = CryoParamSetupWorker(
+                mock_cryomodule, heater_setpoint=50, jt_setpoint=40
+            )
 
             # Mock signals
             worker.status = Mock()
@@ -82,17 +86,25 @@ class TestCryoParamSetupWorker:
             worker.run()
 
             # Assert
-            worker.status.emit.assert_called_with("Checking for required cryo permissions")
-            worker.finished.emit.assert_called_with("Cryo setup for new reference parameters in ~1 hour")
+            worker.status.emit.assert_called_with(
+                "Checking for required cryo permissions"
+            )
+            worker.finished.emit.assert_called_with(
+                "Cryo setup for new reference parameters in ~1 hour"
+            )
             assert mock_cryomodule.heater_power == 50
             assert mock_cryomodule.jt_position == 40
-            mock_caput.assert_called_with(mock_cryomodule.jt_auto_select_pv, 1, wait=True)
+            mock_caput.assert_called_with(
+                mock_cryomodule.jt_auto_select_pv, 1, wait=True
+            )
 
     @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
     def test_insufficient_permissions(self, mock_caget, mock_cryomodule):
         # Arrange
         mock_caget.return_value = 0  # No access
-        with patch("sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+        ):
             worker = CryoParamSetupWorker(mock_cryomodule)
             worker.error = Mock()
 
@@ -100,7 +112,9 @@ class TestCryoParamSetupWorker:
             worker.run()
 
             # Assert
-            worker.error.emit.assert_called_with("Required cryo permissions not granted - call cryo ops")
+            worker.error.emit.assert_called_with(
+                "Required cryo permissions not granted - call cryo ops"
+            )
 
 
 class TestQ0Worker:
@@ -110,14 +124,25 @@ class TestQ0Worker:
     def test_successful_q0_measurement(self, mock_caget, mock_cryomodule):
         # Arrange
         mock_caget.return_value = 1
-        with patch("sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+        ):
             worker = Q0Worker(
                 mock_cryomodule,
                 jt_search_start=datetime.now(),
                 jt_search_end=datetime.now() + timedelta(hours=1),
                 desired_ll=95.0,
                 ll_drop=4.0,
-                desired_amplitudes=[16.5, 16.5, 16.5, 16.5, 16.5, 16.5, 16.5, 16.5],
+                desired_amplitudes=[
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                ],
             )
 
             # Mock signals
@@ -131,17 +156,25 @@ class TestQ0Worker:
             # Assert
             worker.status.emit.assert_called_with("Taking new Q0 Measurement")
             mock_cryomodule.takeNewQ0Measurement.assert_called_once()
-            worker.finished.emit.assert_called_with(f"Recorded Q0: {mock_cryomodule.q0_measurement.q0:.2e}")
+            worker.finished.emit.assert_called_with(
+                f"Recorded Q0: {mock_cryomodule.q0_measurement.q0:.2e}"
+            )
 
     @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
-    def test_q0_measurement_with_cavity_abort(self, mock_caget, mock_cryomodule):
+    def test_q0_measurement_with_cavity_abort(
+        self, mock_caget, mock_cryomodule
+    ):
         # Arrange
         from sc_linac_physics.utils.sc_linac.linac_utils import CavityAbortError
 
         mock_caget.return_value = 1
-        mock_cryomodule.takeNewQ0Measurement.side_effect = CavityAbortError("Cavity aborted")
+        mock_cryomodule.takeNewQ0Measurement.side_effect = CavityAbortError(
+            "Cavity aborted"
+        )
 
-        with patch("sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+        ):
             worker = Q0Worker(
                 mock_cryomodule,
                 jt_search_start=datetime.now(),
@@ -174,9 +207,13 @@ class TestCavityRampWorker:
         worker.run()
 
         # Assert
-        worker.status.emit.assert_called_with(f"Ramping Cavity {mock_cavity.number} to 16.5")
+        worker.status.emit.assert_called_with(
+            f"Ramping Cavity {mock_cavity.number} to 16.5"
+        )
         mock_cavity.setup_rf.assert_called_with(16.5)
-        worker.finished.emit.assert_called_with(f"Cavity {mock_cavity.number} ramped up to 16.5")
+        worker.finished.emit.assert_called_with(
+            f"Cavity {mock_cavity.number} ramped up to 16.5"
+        )
 
     def test_cavity_ramp_with_error(self, mock_cavity):
         # Arrange
@@ -200,7 +237,9 @@ class TestCalibrationWorker:
     def test_successful_calibration(self, mock_caget, mock_cryomodule):
         # Arrange
         mock_caget.return_value = 1
-        with patch("sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+        ):
             worker = CalibrationWorker(
                 mock_cryomodule,
                 jt_search_start=datetime.now(),
@@ -270,25 +309,60 @@ class TestQ0Options:
     def test_q0_options_initialization(self, qapp, mock_cryomodule):
         # Arrange
         test_q0_data = {
-            "2023-10-01 12:00:00": {"Cavity Amplitudes": [16.5, 16.5, 16.5, 16.5, 16.5, 16.5, 16.5, 16.5]},
-            "2023-10-02 12:00:00": {"Cavity Amplitudes": [17.0, 17.0, 17.0, 17.0, 17.0, 17.0, 17.0, 17.0]},
+            "2023-10-01 12:00:00": {
+                "Cavity Amplitudes": [
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                    16.5,
+                ]
+            },
+            "2023-10-02 12:00:00": {
+                "Cavity Amplitudes": [
+                    17.0,
+                    17.0,
+                    17.0,
+                    17.0,
+                    17.0,
+                    17.0,
+                    17.0,
+                    17.0,
+                ]
+            },
         }
 
-        with patch("builtins.open", mock_open(read_data=json.dumps(test_q0_data))):
-            with patch("sc_linac_physics.utils.qt.get_dimensions", return_value=2):
+        with patch(
+            "builtins.open", mock_open(read_data=json.dumps(test_q0_data))
+        ):
+            with patch(
+                "sc_linac_physics.utils.qt.get_dimensions", return_value=2
+            ):
                 # Act
                 options = Q0Options(mock_cryomodule)
 
                 # Assert
-                assert options.main_groupbox.title() == f"Q0 Measurements for CM{mock_cryomodule.name}"
+                assert (
+                    options.main_groupbox.title()
+                    == f"Q0 Measurements for CM{mock_cryomodule.name}"
+                )
                 assert options.cryomodule == mock_cryomodule
 
     def test_load_q0_measurement(self, qapp, mock_cryomodule):
         # Arrange
-        test_q0_data = {"2023-10-01 12:00:00": {"Cavity Amplitudes": [16.5] * 8}}
+        test_q0_data = {
+            "2023-10-01 12:00:00": {"Cavity Amplitudes": [16.5] * 8}
+        }
 
-        with patch("builtins.open", mock_open(read_data=json.dumps(test_q0_data))):
-            with patch("sc_linac_physics.utils.qt.get_dimensions", return_value=1):
+        with patch(
+            "builtins.open", mock_open(read_data=json.dumps(test_q0_data))
+        ):
+            with patch(
+                "sc_linac_physics.utils.qt.get_dimensions", return_value=1
+            ):
                 options = Q0Options(mock_cryomodule)
                 options.q0_loaded_signal = Mock()
 
@@ -296,7 +370,9 @@ class TestQ0Options:
                 options.load_q0("2023-10-01 12:00:00")
 
                 # Assert
-                mock_cryomodule.load_q0_measurement.assert_called_with(time_stamp="2023-10-01 12:00:00")
+                mock_cryomodule.load_q0_measurement.assert_called_with(
+                    time_stamp="2023-10-01 12:00:00"
+                )
                 options.q0_loaded_signal.emit.assert_called_once()
 
 
@@ -305,23 +381,37 @@ class TestCalibrationOptions:
 
     def test_calibration_options_initialization(self, qapp, mock_cryomodule):
         # Arrange
-        test_cal_data = {"2023-10-01 12:00:00": {"slope": 0.15}, "2023-10-02 12:00:00": {"slope": 0.16}}
+        test_cal_data = {
+            "2023-10-01 12:00:00": {"slope": 0.15},
+            "2023-10-02 12:00:00": {"slope": 0.16},
+        }
 
-        with patch("builtins.open", mock_open(read_data=json.dumps(test_cal_data))):
-            with patch("sc_linac_physics.utils.qt.get_dimensions", return_value=2):
+        with patch(
+            "builtins.open", mock_open(read_data=json.dumps(test_cal_data))
+        ):
+            with patch(
+                "sc_linac_physics.utils.qt.get_dimensions", return_value=2
+            ):
                 # Act
                 options = CalibrationOptions(mock_cryomodule)
 
                 # Assert
-                assert options.main_groupbox.title() == f"Calibrations for CM{mock_cryomodule.name}"
+                assert (
+                    options.main_groupbox.title()
+                    == f"Calibrations for CM{mock_cryomodule.name}"
+                )
                 assert options.cryomodule == mock_cryomodule
 
     def test_load_calibration(self, qapp, mock_cryomodule):
         # Arrange
         test_cal_data = {"2023-10-01 12:00:00": {"slope": 0.15}}
 
-        with patch("builtins.open", mock_open(read_data=json.dumps(test_cal_data))):
-            with patch("sc_linac_physics.utils.qt.get_dimensions", return_value=1):
+        with patch(
+            "builtins.open", mock_open(read_data=json.dumps(test_cal_data))
+        ):
+            with patch(
+                "sc_linac_physics.utils.qt.get_dimensions", return_value=1
+            ):
                 options = CalibrationOptions(mock_cryomodule)
                 options.cal_loaded_signal = Mock()
 
@@ -329,7 +419,9 @@ class TestCalibrationOptions:
                 options.load_calibration("2023-10-01 12:00:00")
 
                 # Assert
-                mock_cryomodule.load_calibration.assert_called_with(time_stamp="2023-10-01 12:00:00")
+                mock_cryomodule.load_calibration.assert_called_with(
+                    time_stamp="2023-10-01 12:00:00"
+                )
                 options.cal_loaded_signal.emit.assert_called_once()
 
 
@@ -341,7 +433,9 @@ class TestIntegration:
         """Test a complete Q0 measurement workflow"""
         # Arrange
         mock_caget.return_value = 1
-        with patch("sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+        ):
             # Step 1: Setup cryo parameters
             setup_worker = CryoParamSetupWorker(mock_cryomodule)
             setup_worker.status = Mock()
@@ -385,7 +479,9 @@ class TestErrorHandling:
 
     def test_file_not_found_error(self, qapp, mock_cryomodule):
         """Test handling of missing configuration files"""
-        with patch("builtins.open", side_effect=FileNotFoundError("File not found")):
+        with patch(
+            "builtins.open", side_effect=FileNotFoundError("File not found")
+        ):
             # Should not raise exception, should handle gracefully
             try:
                 Q0Options(mock_cryomodule)
@@ -418,7 +514,10 @@ class TestPerformance:
         worker.finished = Mock()
 
         start_time = time.time()
-        with patch("sc_linac_physics.applications.q0.q0_gui_utils.caget", return_value=0):  # No permissions
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui_utils.caget",
+            return_value=0,
+        ):  # No permissions
             worker.run()
         end_time = time.time()
 
@@ -432,7 +531,16 @@ def sample_q0_data():
     """Sample Q0 measurement data for testing"""
     return {
         "2023-10-01 12:00:00": {
-            "Cavity Amplitudes": [16.5, 16.5, 16.5, 16.5, 16.5, 16.5, 16.5, 16.5],
+            "Cavity Amplitudes": [
+                16.5,
+                16.5,
+                16.5,
+                16.5,
+                16.5,
+                16.5,
+                16.5,
+                16.5,
+            ],
             "Q0": 1.2e10,
             "LL": 95.0,
         }
@@ -442,7 +550,13 @@ def sample_q0_data():
 @pytest.fixture
 def sample_calibration_data():
     """Sample calibration data for testing"""
-    return {"2023-10-01 12:00:00": {"slope": 0.15, "intercept": 2.5, "heat_points": [40, 60, 80, 100, 112]}}
+    return {
+        "2023-10-01 12:00:00": {
+            "slope": 0.15,
+            "intercept": 2.5,
+            "heat_points": [40, 60, 80, 100, 112],
+        }
+    }
 
 
 if __name__ == "__main__":

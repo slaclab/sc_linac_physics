@@ -36,7 +36,10 @@ def ssa(monkeypatch):
 
 
 def test_pv_prefix(ssa):
-    assert ssa.pv_prefix == f"ACCL:{ssa.cavity.linac.name}:{ssa.cavity.cryomodule.name}{ssa.cavity.number}0:SSA:"
+    assert (
+        ssa.pv_prefix
+        == f"ACCL:{ssa.cavity.linac.name}:{ssa.cavity.cryomodule.name}{ssa.cavity.number}0:SSA:"
+    )
 
 
 def test_pv_addr(ssa):
@@ -205,9 +208,15 @@ def test_run_calibration(ssa):
     ssa.start_calibration = MagicMock()
     ssa._calibration_status_pv_obj = make_mock_pv(get_val=1)
 
-    ssa._cal_result_status_pv_obj = make_mock_pv(get_val=SSA_RESULT_GOOD_STATUS_VALUE)
-    ssa._max_fwd_pwr_pv_obj = make_mock_pv(get_val=ssa.fwd_power_lower_limit * 2)
-    ssa._measured_slope_pv_obj = make_mock_pv(get_val=uniform(SSA_SLOPE_LOWER_LIMIT, SSA_SLOPE_UPPER_LIMIT))
+    ssa._cal_result_status_pv_obj = make_mock_pv(
+        get_val=SSA_RESULT_GOOD_STATUS_VALUE
+    )
+    ssa._max_fwd_pwr_pv_obj = make_mock_pv(
+        get_val=ssa.fwd_power_lower_limit * 2
+    )
+    ssa._measured_slope_pv_obj = make_mock_pv(
+        get_val=uniform(SSA_SLOPE_LOWER_LIMIT, SSA_SLOPE_UPPER_LIMIT)
+    )
     ssa.cavity.push_ssa_slope = MagicMock()
 
     ssa.run_calibration()
@@ -224,7 +233,9 @@ def test_run_calibration_crashed(ssa):
     ssa.turn_on = MagicMock()
     ssa.cavity.reset_interlocks = MagicMock()
     ssa.start_calibration = MagicMock()
-    ssa._calibration_status_pv_obj = make_mock_pv(get_val=SSA_CALIBRATION_CRASHED_VALUE)
+    ssa._calibration_status_pv_obj = make_mock_pv(
+        get_val=SSA_CALIBRATION_CRASHED_VALUE
+    )
     with pytest.raises(SSACalibrationError):
         ssa.run_calibration()
 
@@ -246,8 +257,12 @@ def test_run_calibration_low_fwd_pwr(ssa):
     ssa.cavity.reset_interlocks = MagicMock()
     ssa.start_calibration = MagicMock()
     ssa._calibration_status_pv_obj = make_mock_pv(get_val=1)
-    ssa._cal_result_status_pv_obj = make_mock_pv(get_val=SSA_RESULT_GOOD_STATUS_VALUE)
-    ssa._max_fwd_pwr_pv_obj = make_mock_pv(get_val=ssa.fwd_power_lower_limit / 2)
+    ssa._cal_result_status_pv_obj = make_mock_pv(
+        get_val=SSA_RESULT_GOOD_STATUS_VALUE
+    )
+    ssa._max_fwd_pwr_pv_obj = make_mock_pv(
+        get_val=ssa.fwd_power_lower_limit / 2
+    )
     with pytest.raises(SSACalibrationToleranceError):
         ssa.run_calibration()
 
@@ -258,8 +273,12 @@ def test_run_calibration_bad_slope(ssa):
     ssa.cavity.reset_interlocks = MagicMock()
     ssa.start_calibration = MagicMock()
     ssa._calibration_status_pv_obj = make_mock_pv(get_val=1)
-    ssa._cal_result_status_pv_obj = make_mock_pv(get_val=SSA_RESULT_GOOD_STATUS_VALUE)
-    ssa._max_fwd_pwr_pv_obj = make_mock_pv(get_val=ssa.fwd_power_lower_limit * 2)
+    ssa._cal_result_status_pv_obj = make_mock_pv(
+        get_val=SSA_RESULT_GOOD_STATUS_VALUE
+    )
+    ssa._max_fwd_pwr_pv_obj = make_mock_pv(
+        get_val=ssa.fwd_power_lower_limit * 2
+    )
     ssa._measured_slope_pv_obj = make_mock_pv(get_val=SSA_SLOPE_LOWER_LIMIT / 2)
     with pytest.raises(SSACalibrationToleranceError):
         ssa.run_calibration()

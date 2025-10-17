@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class DataAcquisitionManager(QObject):
-    acquisitionProgress = pyqtSignal(str, int, int)  # chassis_id, cavity_num, progress
+    acquisitionProgress = pyqtSignal(
+        str, int, int
+    )  # chassis_id, cavity_num, progress
     acquisitionError = pyqtSignal(str, str)  # chassis_id, error_message
     acquisitionComplete = pyqtSignal(str)  # chassis_id
     dataReceived = pyqtSignal(str, dict)  # chassis_id, data_dict
@@ -32,7 +34,9 @@ class DataAcquisitionManager(QObject):
         super().__init__()
         self.active_processes: Dict[str, Dict] = {}
         self.base_path = Path("/u1/lcls/physics/rf_lcls2/microphonics")
-        self.script_path = Path("/usr/local/lcls/package/lcls2_llrf/srf/software/res_ctl/res_data_acq.py")
+        self.script_path = Path(
+            "/usr/local/lcls/package/lcls2_llrf/srf/software/res_ctl/res_data_acq.py"
+        )
 
     def _create_data_directory(self, chassis_id: str) -> Path:
         """Create hierarchical data directory structure.
@@ -53,7 +57,9 @@ class DataAcquisitionManager(QObject):
         linac = parts[1]  # e.g., L1B
         cryomodule = parts[2][:2]  # e.g. 03 from 0300
         date_str = datetime.now().strftime("%Y%m%d")
-        data_path = self.base_path / facility / linac / f"CM{cryomodule}" / date_str
+        data_path = (
+            self.base_path / facility / linac / f"CM{cryomodule}" / date_str
+        )
         data_path.mkdir(parents=True, exist_ok=True)
         return data_path
 
@@ -76,7 +82,9 @@ class DataAcquisitionManager(QObject):
 
         return output_path, selected_cavities
 
-    def _build_acquisition_args(self, config: Dict, output_path: Path, selected_cavities: list) -> list:
+    def _build_acquisition_args(
+        self, config: Dict, output_path: Path, selected_cavities: list
+    ) -> list:
         measurement_cfg = config["config"]
         return [
             str(self.script_path),
@@ -99,13 +107,26 @@ class DataAcquisitionManager(QObject):
     def start_acquisition(self, chassis_id: str, config: Dict):
         """Start acquisition using QProcess"""
         try:
-            output_path, selected_cavities = self._prepare_acquisition_environment(chassis_id, config)
-            command_args = self._build_acquisition_args(config, output_path, selected_cavities)
+            (
+                output_path,
+                selected_cavities,
+            ) = self._prepare_acquisition_environment(chassis_id, config)
+            command_args = self._build_acquisition_args(
+                config, output_path, selected_cavities
+            )
 
             process = QProcess()
-            process.readyReadStandardOutput.connect(lambda: self.handle_stdout(chassis_id, process))
-            process.readyReadStandardError.connect(lambda: self.handle_stderr(chassis_id, process))
-            process.finished.connect(lambda code, status: self.handle_finished(chassis_id, process, code, status))
+            process.readyReadStandardOutput.connect(
+                lambda: self.handle_stdout(chassis_id, process)
+            )
+            process.readyReadStandardError.connect(
+                lambda: self.handle_stderr(chassis_id, process)
+            )
+            process.finished.connect(
+                lambda code, status: self.handle_finished(
+                    chassis_id, process, code, status
+                )
+            )
 
             measurement_cfg = config["config"]
             self.active_processes[chassis_id] = {
@@ -124,11 +145,18 @@ class DataAcquisitionManager(QObject):
                 error_str = process.errorString()
                 if chassis_id in self.active_processes:
                     del self.active_processes[chassis_id]
-                self.acquisitionError.emit(chassis_id, f"Failed to start process: {error_str}")
+                self.acquisitionError.emit(
+                    chassis_id, f"Failed to start process: {error_str}"
+                )
 
         except Exception as e:
-            logger.error(f"Failed to start acquisition for {chassis_id}: {e}", exc_info=True)
-            self.acquisitionError.emit(chassis_id, f"Failed to start acquisition: {str(e)}")
+            logger.error(
+                f"Failed to start acquisition for {chassis_id}: {e}",
+                exc_info=True,
+            )
+            self.acquisitionError.emit(
+                chassis_id, f"Failed to start acquisition: {str(e)}"
+            )
 
     def _check_progress(self, line: str, chassis_id: str, process_info: dict):
         """Check for progress updates in the line"""
@@ -148,7 +176,9 @@ class DataAcquisitionManager(QObject):
             if progress > process_info["last_progress"]:
                 process_info["last_progress"] = progress
                 for cavity_num in process_info["cavities"]:
-                    self.acquisitionProgress.emit(chassis_id, cavity_num, progress)
+                    self.acquisitionProgress.emit(
+                        chassis_id, cavity_num, progress
+                    )
 
                 logger.debug(
                     f"Progress ({chassis_id}, Cavities {process_info['cavities']}): {progress}% ({acquired}/{total})"
@@ -160,7 +190,9 @@ class DataAcquisitionManager(QObject):
                     )
 
         except Exception as e_parse:
-            logger.warning(f"Could not parse progress from line '{line}': {e_parse}")
+            logger.warning(
+                f"Could not parse progress from line '{line}': {e_parse}"
+            )
 
     def handle_stdout(self, chassis_id: str, process: QProcess):
         """Handle standard output from process"""
@@ -174,7 +206,11 @@ class DataAcquisitionManager(QObject):
             if not current_process:
                 return
 
-            data = bytes(current_process.readAllStandardOutput()).decode(errors="ignore").strip()
+            data = (
+                bytes(current_process.readAllStandardOutput())
+                .decode(errors="ignore")
+                .strip()
+            )
 
             for line in data.splitlines():
                 line = line.strip()
@@ -184,10 +220,16 @@ class DataAcquisitionManager(QObject):
                 self._process_stdout_line(line, chassis_id, process_info)
 
         except Exception as e:
-            logger.error(f"Error processing stdout for {chassis_id}: {e}", exc_info=True)
-            self.acquisitionError.emit(chassis_id, f"Internal error processing script output: {str(e)}")
+            logger.error(
+                f"Error processing stdout for {chassis_id}: {e}", exc_info=True
+            )
+            self.acquisitionError.emit(
+                chassis_id, f"Internal error processing script output: {str(e)}"
+            )
 
-    def _process_stdout_line(self, line: str, chassis_id: str, process_info: dict):
+    def _process_stdout_line(
+        self, line: str, chassis_id: str, process_info: dict
+    ):
         """Process a single line of stdout output"""
         if process_info.get("completion_signal_received"):
             return
@@ -208,14 +250,27 @@ class DataAcquisitionManager(QObject):
             if error:
                 self.acquisitionError.emit(chassis_id, error)
         except Exception as e:
-            logger.error(f"Failed to handle stderr for {chassis_id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to handle stderr for {chassis_id}: {e}", exc_info=True
+            )
 
-    def _was_acquisition_successful(self, exit_code: int, exit_status: QProcess.ExitStatus, process_info: dict) -> bool:
+    def _was_acquisition_successful(
+        self,
+        exit_code: int,
+        exit_status: QProcess.ExitStatus,
+        process_info: dict,
+    ) -> bool:
         if not process_info.get("completion_signal_received"):
             process = process_info.get("process")
             if process:
-                stdout_final = bytes(process.readAllStandardOutput()).decode(errors="ignore").strip()
-                if any(marker in stdout_final for marker in self.COMPLETION_MARKERS):
+                stdout_final = (
+                    bytes(process.readAllStandardOutput())
+                    .decode(errors="ignore")
+                    .strip()
+                )
+                if any(
+                    marker in stdout_final for marker in self.COMPLETION_MARKERS
+                ):
                     process_info["completion_signal_received"] = True
 
         return (
@@ -275,14 +330,22 @@ class DataAcquisitionManager(QObject):
 
         process_info = self.active_processes[chassis_id]
         try:
-            if self._was_acquisition_successful(exit_code, exit_status, process_info):
+            if self._was_acquisition_successful(
+                exit_code, exit_status, process_info
+            ):
                 output_path = process_info["output_path"]
                 QTimer.singleShot(
                     20000,
-                    lambda: self._process_output_file_wrapper(chassis_id, output_path, process_info),
+                    lambda: self._process_output_file_wrapper(
+                        chassis_id, output_path, process_info
+                    ),
                 )
             else:
-                stderr_final = bytes(process.readAllStandardError()).decode(errors="ignore").strip()
+                stderr_final = (
+                    bytes(process.readAllStandardError())
+                    .decode(errors="ignore")
+                    .strip()
+                )
                 self._report_acquisition_failure(
                     chassis_id,
                     exit_code,
@@ -297,58 +360,89 @@ class DataAcquisitionManager(QObject):
                 f"Unexpected error in handle_finished for {chassis_id}: {e}",
                 exc_info=True,
             )
-            self.acquisitionError.emit(chassis_id, f"Unexpected error: {str(e)}")
+            self.acquisitionError.emit(
+                chassis_id, f"Unexpected error: {str(e)}"
+            )
             if chassis_id in self.active_processes:
                 del self.active_processes[chassis_id]
         finally:
             self._cleanup_process_resources(process_info)
 
-    def _process_output_file_wrapper(self, chassis_id: str, output_path: Path, process_info: dict):
+    def _process_output_file_wrapper(
+        self, chassis_id: str, output_path: Path, process_info: dict
+    ):
         """
         Wrapper to check file, call the central file parser, handle errors,
         and emit signals.
         """
-        logging.debug(f"_process_output_file_wrapper entered for {chassis_id}, File: {output_path}")
+        logging.debug(
+            f"_process_output_file_wrapper entered for {chassis_id}, File: {output_path}"
+        )
         try:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            logging.debug(f"[{current_time}] Attempting to process file: {output_path}")
+            logging.debug(
+                f"[{current_time}] Attempting to process file: {output_path}"
+            )
 
             if not output_path.exists():
                 logging.error(f"File {output_path} not found after wait!")
-                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} missing after wait.")
+                self.acquisitionError.emit(
+                    chassis_id,
+                    f"Output file {output_path.name} missing after wait.",
+                )
                 return
 
             file_size = output_path.stat().st_size
             logging.debug(f"File exists. Size: {file_size} bytes")
             if file_size == 0:
-                logging.warning(f"File {output_path} exists but is empty. Aborting processing.")
-                self.acquisitionError.emit(chassis_id, f"Output file {output_path.name} was empty.")
+                logging.warning(
+                    f"File {output_path} exists but is empty. Aborting processing."
+                )
+                self.acquisitionError.emit(
+                    chassis_id, f"Output file {output_path.name} was empty."
+                )
                 return
             logging.debug(f"Calling load_and_process_file for {chassis_id}")
             parsed_data_dict = load_and_process_file(output_path)
 
             if parsed_data_dict and parsed_data_dict.get("cavities"):
-                logging.debug(f"Successfully parsed data for {chassis_id}. Emitting signals.")
+                logging.debug(
+                    f"Successfully parsed data for {chassis_id}. Emitting signals."
+                )
 
                 parsed_data_dict["source"] = chassis_id
-                parsed_data_dict["decimation"] = process_info.get("decimation", 1)
+                parsed_data_dict["decimation"] = process_info.get(
+                    "decimation", 1
+                )
 
                 self.dataReceived.emit(chassis_id, parsed_data_dict)
                 self.acquisitionComplete.emit(chassis_id)
 
-                current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                logging.debug(f"[{current_time_end}] Successfully processed and emitted data for: {output_path}")
+                current_time_end = datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S.%f"
+                )[:-3]
+                logging.debug(
+                    f"[{current_time_end}] Successfully processed and emitted data for: {output_path}"
+                )
             else:
                 logging.error(
                     f"load_and_process_file did not return valid data for {chassis_id} from {output_path.name}."
                 )
-                self.acquisitionError.emit(chassis_id, f"Failed to parse valid data from {output_path.name}")
+                self.acquisitionError.emit(
+                    chassis_id,
+                    f"Failed to parse valid data from {output_path.name}",
+                )
 
         except (FileParserError, FileNotFoundError, ValueError) as e:
             logger.error(f"File processing failed for {chassis_id}: {e}")
-            self.acquisitionError.emit(chassis_id, f"Data processing error: {e}")
+            self.acquisitionError.emit(
+                chassis_id, f"Data processing error: {e}"
+            )
         except Exception as e:
-            logger.critical(f"Unexpected error processing file for {chassis_id}: {e}", exc_info=True)
+            logger.critical(
+                f"Unexpected error processing file for {chassis_id}: {e}",
+                exc_info=True,
+            )
             self.acquisitionError.emit(
                 chassis_id,
                 f"Unexpected error processing file {output_path.name}: {str(e)}",

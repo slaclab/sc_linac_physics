@@ -6,7 +6,9 @@ from PyQt5.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
 from sc_linac_physics.applications.quench_processing.quench_gui import QuenchGUI
-from sc_linac_physics.applications.quench_processing.quench_worker import QuenchWorker
+from sc_linac_physics.applications.quench_processing.quench_worker import (
+    QuenchWorker,
+)
 from sc_linac_physics.utils.qt import make_rainbow
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
 
@@ -29,10 +31,12 @@ def gui(monkeypatch):
 
     # Patch it everywhere it might be used
     monkeypatch.setattr(
-        "sc_linac_physics.applications.quench_processing.quench_cryomodule.QuenchCryomodule", MockQuenchCryomodule
+        "sc_linac_physics.applications.quench_processing.quench_cryomodule.QuenchCryomodule",
+        MockQuenchCryomodule,
     )
     monkeypatch.setattr(
-        "sc_linac_physics.applications.quench_processing.quench_gui.QuenchCryomodule", MockQuenchCryomodule
+        "sc_linac_physics.applications.quench_processing.quench_gui.QuenchCryomodule",
+        MockQuenchCryomodule,
     )
 
     # Mock the file handler to prevent any file operations
@@ -60,7 +64,9 @@ def gui(monkeypatch):
     # Patch the symbol actually used by QuenchGUI.__init__
     import sc_linac_physics.applications.quench_processing.quench_gui as gui_mod
 
-    monkeypatch.setattr(gui_mod, "PyDMWaveformPlot", DummyWaveformPlot, raising=False)
+    monkeypatch.setattr(
+        gui_mod, "PyDMWaveformPlot", DummyWaveformPlot, raising=False
+    )
 
     # Now construct the GUI safely
     g = QuenchGUI()
@@ -153,7 +159,9 @@ def test_update_timeplot(qtbot: QtBot, gui):
     gui.amp_rad_timeplot.addYChannel.assert_called()
 
     colors = make_rainbow(num_colors=11)
-    channels = [gui.current_cav.aact_pv] + [head.raw_dose_rate_pv for head in gui.current_decarad.heads.values()]
+    channels = [gui.current_cav.aact_pv] + [
+        head.raw_dose_rate_pv for head in gui.current_decarad.heads.values()
+    ]
     axes = ["Amplitude"] + ["Radiation" for _ in range(10)]
     calls = []
     for channel, (r, g, b, a), axis in zip(channels, colors, axes):
@@ -181,10 +189,20 @@ def test_update_decarad(qtbot: QtBot, gui):
     assert gui.current_decarad == Decarad(1)
     gui.update_timeplot.assert_called()
     gui.clear_connections.assert_called()
-    gui.decarad_on_button.clicked.connect.assert_called_with(gui.current_decarad.turn_on)
-    gui.decarad_off_button.clicked.connect.assert_called_with(gui.current_decarad.turn_off)
-    assert gui.current_decarad.power_status_pv == gui.decarad_status_readback.channel
-    assert gui.current_decarad.voltage_readback_pv == gui.decarad_voltage_readback.channel
+    gui.decarad_on_button.clicked.connect.assert_called_with(
+        gui.current_decarad.turn_on
+    )
+    gui.decarad_off_button.clicked.connect.assert_called_with(
+        gui.current_decarad.turn_off
+    )
+    assert (
+        gui.current_decarad.power_status_pv
+        == gui.decarad_status_readback.channel
+    )
+    assert (
+        gui.current_decarad.voltage_readback_pv
+        == gui.decarad_voltage_readback.channel
+    )
 
 
 def test_update_cm(qtbot: QtBot, gui):
@@ -200,15 +218,25 @@ def test_update_cm(qtbot: QtBot, gui):
     gui.update_timeplot.assert_called()
     gui.waveform_updater.updatePlot.assert_called()
     cavity = gui.current_cav
-    gui.rf_controls.ssa_on_button.clicked.connect.assert_called_with(cavity.ssa.turn_on)
-    gui.rf_controls.ssa_off_button.clicked.connect.assert_called_with(cavity.ssa.turn_off)
+    gui.rf_controls.ssa_on_button.clicked.connect.assert_called_with(
+        cavity.ssa.turn_on
+    )
+    gui.rf_controls.ssa_off_button.clicked.connect.assert_called_with(
+        cavity.ssa.turn_off
+    )
     assert gui.rf_controls.ssa_readback_label.channel == cavity.ssa.status_pv
 
     assert gui.rf_controls.rf_mode_combobox.channel == cavity.rf_mode_ctrl_pv
     assert gui.rf_controls.rf_mode_readback_label.channel == cavity.rf_mode_pv
-    gui.rf_controls.rf_on_button.clicked.connect.assert_called_with(cavity.turn_on)
-    gui.rf_controls.rf_off_button.clicked.connect.assert_called_with(cavity.turn_off)
-    assert gui.rf_controls.rf_status_readback_label.channel == cavity.rf_state_pv
+    gui.rf_controls.rf_on_button.clicked.connect.assert_called_with(
+        cavity.turn_on
+    )
+    gui.rf_controls.rf_off_button.clicked.connect.assert_called_with(
+        cavity.turn_off
+    )
+    assert (
+        gui.rf_controls.rf_status_readback_label.channel == cavity.rf_state_pv
+    )
 
     assert gui.rf_controls.ades_spinbox.channel == cavity.ades_pv
     assert gui.rf_controls.aact_readback_label.channel == cavity.aact_pv

@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v1.3.0 (2025-10-17)
+
+### Code Style
+
+- Apply black formatting ([#128](https://github.com/slaclab/sc_linac_physics/pull/128),
+  [`2335d55`](https://github.com/slaclab/sc_linac_physics/commit/2335d555b76e02d4c753af65baf661eaab050615))
+
+- Reformat with black line-length=80 ([#128](https://github.com/slaclab/sc_linac_physics/pull/128),
+  [`2335d55`](https://github.com/slaclab/sc_linac_physics/commit/2335d555b76e02d4c753af65baf661eaab050615))
+
+### Features
+
+- **cli**: Add microphonics application launcher
+  ([#127](https://github.com/slaclab/sc_linac_physics/pull/127),
+  [`9da8e8e`](https://github.com/slaclab/sc_linac_physics/commit/9da8e8e2604b0fe6a9673eb79594b9568e5995b1))
+
+
 ## v1.2.0 (2025-10-16)
 
 ### Bug Fixes

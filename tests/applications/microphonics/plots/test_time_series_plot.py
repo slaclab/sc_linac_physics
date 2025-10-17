@@ -7,8 +7,12 @@ import pyqtgraph as pg
 import pytest
 from PyQt5.QtWidgets import QApplication
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
-from sc_linac_physics.applications.microphonics.plots.time_series_plot import TimeSeriesPlot
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+    BASE_HARDWARE_SAMPLE_RATE,
+)
+from sc_linac_physics.applications.microphonics.plots.time_series_plot import (
+    TimeSeriesPlot,
+)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -85,7 +89,9 @@ class TestTimeSeriesPlot:
 
     def test_preprocess_data_valid_df(self, plot_widget, sample_cavity_data):
         """Test preprocessing with valid DF data"""
-        data, is_valid = plot_widget._preprocess_data(sample_cavity_data, channel_type="DF")
+        data, is_valid = plot_widget._preprocess_data(
+            sample_cavity_data, channel_type="DF"
+        )
 
         assert is_valid is True
         assert isinstance(data, np.ndarray)
@@ -95,7 +101,9 @@ class TestTimeSeriesPlot:
     def test_preprocess_data_missing_channel(self, plot_widget):
         """Test preprocessing with missing channel data"""
         cavity_data = {"decimation": 1}
-        data, is_valid = plot_widget._preprocess_data(cavity_data, channel_type="DF")
+        data, is_valid = plot_widget._preprocess_data(
+            cavity_data, channel_type="DF"
+        )
 
         assert is_valid is False
         assert data is None
@@ -103,7 +111,9 @@ class TestTimeSeriesPlot:
     def test_preprocess_data_none_value(self, plot_widget):
         """Test preprocessing with None value"""
         cavity_data = {"DF": None, "decimation": 1}
-        data, is_valid = plot_widget._preprocess_data(cavity_data, channel_type="DF")
+        data, is_valid = plot_widget._preprocess_data(
+            cavity_data, channel_type="DF"
+        )
 
         assert is_valid is False
         assert data is None
@@ -111,7 +121,9 @@ class TestTimeSeriesPlot:
     def test_preprocess_data_empty_array(self, plot_widget):
         """Test preprocessing with empty array"""
         cavity_data = {"DF": np.array([]), "decimation": 1}
-        data, is_valid = plot_widget._preprocess_data(cavity_data, channel_type="DF")
+        data, is_valid = plot_widget._preprocess_data(
+            cavity_data, channel_type="DF"
+        )
 
         assert is_valid is False
         assert data is None
@@ -165,7 +177,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 10, 100)
         values = np.sin(times)
 
-        dec_times, dec_values = plot_widget._decimate_data(times, values, target_points=200)
+        dec_times, dec_values = plot_widget._decimate_data(
+            times, values, target_points=200
+        )
 
         # Should return original data when below target
         np.testing.assert_array_equal(dec_times, times)
@@ -176,7 +190,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 10, 10000)
         values = np.sin(times)
 
-        dec_times, dec_values = plot_widget._decimate_data(times, values, target_points=1000)
+        dec_times, dec_values = plot_widget._decimate_data(
+            times, values, target_points=1000
+        )
 
         # Should be decimated to approximately target points
         assert len(dec_times) <= 1000
@@ -188,7 +204,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 10, 5000)
         values = np.sin(times)
 
-        dec_times, dec_values = plot_widget._decimate_data(times, values, target_points=500)
+        dec_times, dec_values = plot_widget._decimate_data(
+            times, values, target_points=500
+        )
 
         # Decimated data should still be monotonically increasing in time
         assert np.all(np.diff(dec_times) > 0)
@@ -198,7 +216,9 @@ class TestTimeSeriesPlot:
         times = np.array([])
         values = np.array([])
 
-        dec_times, dec_values = plot_widget._decimate_data(times, values, target_points=100)
+        dec_times, dec_values = plot_widget._decimate_data(
+            times, values, target_points=100
+        )
 
         assert len(dec_times) == 0
         assert len(dec_values) == 0
@@ -241,7 +261,9 @@ class TestTimeSeriesPlot:
 
         # Store data first
         plot_widget._original_data[cavity_num] = (times, values)
-        plot_widget._decimated_data[cavity_num] = plot_widget._create_decimated_levels(times, values)
+        plot_widget._decimated_data[cavity_num] = (
+            plot_widget._create_decimated_levels(times, values)
+        )
 
         result = plot_widget._get_optimal_decimation(cavity_num, view_width=10)
 
@@ -260,7 +282,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 100, 1000)
         values = np.sin(times)
 
-        filtered_times, filtered_values = plot_widget._filter_to_view(times, values, x_min=25, x_max=75)
+        filtered_times, filtered_values = plot_widget._filter_to_view(
+            times, values, x_min=25, x_max=75
+        )
 
         assert len(filtered_times) > 0
         assert len(filtered_times) <= len(times)
@@ -274,7 +298,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 10, 100)
         values = np.sin(times)
 
-        filtered_times, filtered_values = plot_widget._filter_to_view(times, values, x_min=50, x_max=60)
+        filtered_times, filtered_values = plot_widget._filter_to_view(
+            times, values, x_min=50, x_max=60
+        )
 
         # May return all data or empty depending on implementation
         # Just check it doesn't crash
@@ -286,7 +312,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 100, 10000)
         values = np.sin(times)
 
-        filtered_times, filtered_values = plot_widget._filter_to_view(times, values, x_min=0, x_max=100)
+        filtered_times, filtered_values = plot_widget._filter_to_view(
+            times, values, x_min=0, x_max=100
+        )
 
         # Should be decimated to <= 5000 points
         assert len(filtered_times) <= 5000
@@ -298,7 +326,9 @@ class TestTimeSeriesPlot:
         """Test view adjustment with data"""
         times = np.linspace(0, 100, 1000)
 
-        with patch.object(plot_widget.plot_widget, "setXRange") as mock_set_range:
+        with patch.object(
+            plot_widget.plot_widget, "setXRange"
+        ) as mock_set_range:
             plot_widget._adjust_view(times)
 
             # Should set range
@@ -308,7 +338,9 @@ class TestTimeSeriesPlot:
         """Test view adjustment with empty data"""
         times = np.array([])
 
-        with patch.object(plot_widget.plot_widget, "setXRange") as mock_set_range:
+        with patch.object(
+            plot_widget.plot_widget, "setXRange"
+        ) as mock_set_range:
             plot_widget._adjust_view(times)
 
             # Should set default range
@@ -365,7 +397,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 100, 1000)
         values = np.sin(times)
         plot_widget._original_data[cavity_num] = (times, values)
-        plot_widget._decimated_data[cavity_num] = plot_widget._create_decimated_levels(times, values)
+        plot_widget._decimated_data[cavity_num] = (
+            plot_widget._create_decimated_levels(times, values)
+        )
         plot_widget.plot_curves[cavity_num] = Mock()
 
         plot_widget._on_range_changed()
@@ -381,7 +415,9 @@ class TestTimeSeriesPlot:
         times = np.linspace(0, 100, 1000)
         values = np.sin(times)
         plot_widget._original_data[cavity_num] = (times, values)
-        plot_widget._decimated_data[cavity_num] = plot_widget._create_decimated_levels(times, values)
+        plot_widget._decimated_data[cavity_num] = (
+            plot_widget._create_decimated_levels(times, values)
+        )
         plot_widget.plot_curves[cavity_num] = Mock()
 
         plot_widget._end_zoom()
