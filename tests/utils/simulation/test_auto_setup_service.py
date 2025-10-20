@@ -183,7 +183,9 @@ class TestAutoSetupPVGroupBase:
     def test_srf_root_dir_configuration(self):
         """Test SRF_ROOT_DIR environment variable handling."""
         # Test default value
-        assert AutoSetupPVGroup.srf_root_dir == os.getenv("SRF_ROOT_DIR", "/")
+        assert AutoSetupPVGroup.srf_root_dir == os.getenv(
+            "SRF_ROOT_DIR", os.path.expanduser("~/sc_linac_physics")
+        )
 
         # Test launcher_dir construction
         expected_launcher_dir = os.path.join(
