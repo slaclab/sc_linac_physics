@@ -11,12 +11,16 @@ from sc_linac_physics.applications.q0 import q0_gui_utils
 from sc_linac_physics.applications.q0.q0_cavity import Q0Cavity
 from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 from sc_linac_physics.applications.q0.q0_gui_utils import CalibrationWorker
-from sc_linac_physics.applications.q0.q0_measurement_widget import Q0MeasurementWidget
+from sc_linac_physics.applications.q0.q0_measurement_widget import (
+    Q0MeasurementWidget,
+)
 from sc_linac_physics.applications.q0.q0_utils import ValveParams
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
-Q0_CRYOMODULES: Dict[str, Q0Cryomodule] = Machine(cryomodule_class=Q0Cryomodule, cavity_class=Q0Cavity).cryomodules
+Q0_CRYOMODULES: Dict[str, Q0Cryomodule] = Machine(
+    cryomodule_class=Q0Cryomodule, cavity_class=Q0Cavity
+).cryomodules
 
 
 def make_non_blocking_error_popup(title, message: str):
@@ -47,25 +51,37 @@ class Q0GUI(Display):
         self.main_widget.cm_combobox.addItems([""] + ALL_CRYOMODULES)
         self.main_widget.cm_combobox.currentTextChanged.connect(self.update_cm)
 
-        self.main_widget.ll_avg_spinbox.valueChanged.connect(self.update_ll_buffer)
+        self.main_widget.ll_avg_spinbox.valueChanged.connect(
+            self.update_ll_buffer
+        )
 
         self.main_widget.new_cal_button.clicked.connect(self.takeNewCalibration)
         self.main_widget.load_cal_button.clicked.connect(self.load_calibration)
         self.cal_option_windows: Dict[str, Display] = {}
-        self.main_widget.show_cal_data_button.clicked.connect(self.show_calibration_data)
+        self.main_widget.show_cal_data_button.clicked.connect(
+            self.show_calibration_data
+        )
 
-        self.main_widget.new_rf_button.clicked.connect(self.take_new_q0_measurement)
+        self.main_widget.new_rf_button.clicked.connect(
+            self.take_new_q0_measurement
+        )
         self.main_widget.load_rf_button.clicked.connect(self.load_q0)
         self.rf_option_windows: Dict[str, Display] = {}
         self.main_widget.show_rf_button.clicked.connect(self.show_q0_data)
 
         self.calibration_worker: Optional[CalibrationWorker] = None
         self.q0_setup_worker: Optional[q0_gui_utils.Q0SetupWorker] = None
-        self.q0_ramp_workers: Dict[int, q0_gui_utils.CavityRampWorker] = {i: None for i in range(1, 9)}
+        self.q0_ramp_workers: Dict[int, q0_gui_utils.CavityRampWorker] = {
+            i: None for i in range(1, 9)
+        }
         self.q0_meas_worker: Optional[q0_gui_utils.Q0Worker] = None
-        self.cryo_param_setup_worker: Optional[q0_gui_utils.CryoParamSetupWorker] = None
+        self.cryo_param_setup_worker: Optional[
+            q0_gui_utils.CryoParamSetupWorker
+        ] = None
 
-        self.main_widget.setup_param_button.clicked.connect(self.setup_for_cryo_params)
+        self.main_widget.setup_param_button.clicked.connect(
+            self.setup_for_cryo_params
+        )
 
         self.calibration_data_plot: Optional[PlotWidget] = None
         self.calibration_data_plot_items = []
@@ -85,10 +101,16 @@ class Q0GUI(Display):
         for i in range(8):
             cav_amp_control = q0_gui_utils.CavAmpControl()
             self.cav_amp_controls[i + 1] = cav_amp_control
-            self.main_widget.cavity_layout.addWidget(cav_amp_control.groupbox, int(i / 4), int(i % 4))
+            self.main_widget.cavity_layout.addWidget(
+                cav_amp_control.groupbox, int(i / 4), int(i % 4)
+            )
 
-        self.main_widget.heater_setpoint_spinbox.ctrl_limit_changed = lambda *args: None
-        self.main_widget.jt_setpoint_spinbox.ctrl_limit_changed = lambda *args: None
+        self.main_widget.heater_setpoint_spinbox.ctrl_limit_changed = (
+            lambda *args: None
+        )
+        self.main_widget.jt_setpoint_spinbox.ctrl_limit_changed = (
+            lambda *args: None
+        )
 
         self.main_widget.abort_rf_button.clicked.connect(self.kill_rf)
         self.main_widget.abort_cal_button.clicked.connect(self.kill_calibration)
@@ -98,7 +120,9 @@ class Q0GUI(Display):
     def _require_cm(self) -> bool:
         """Check if a cryomodule is selected. Show non-blocking error if not."""
         if not self.selected_cm:
-            make_non_blocking_error_popup("No Cryomodule Selected", "Please select a cryomodule first.")
+            make_non_blocking_error_popup(
+                "No Cryomodule Selected", "Please select a cryomodule first."
+            )
             return False
         return True
 
@@ -111,7 +135,9 @@ class Q0GUI(Display):
         try:
             self.selected_cm.restore_cryo()
         except Exception as e:
-            make_non_blocking_error_popup("Restore Cryo Error", f"Failed to restore cryo: {str(e)}")
+            make_non_blocking_error_popup(
+                "Restore Cryo Error", f"Failed to restore cryo: {str(e)}"
+            )
 
     @pyqtSlot()
     def kill_rf(self):
@@ -140,19 +166,41 @@ class Q0GUI(Display):
         else:
             self.selected_cm = Q0_CRYOMODULES[current_text]
             self.main_widget.perm_byte.channel = self.selected_cm.cryo_access_pv
-            self.main_widget.perm_label.channel = self.selected_cm.cryo_access_pv
+            self.main_widget.perm_label.channel = (
+                self.selected_cm.cryo_access_pv
+            )
 
-            self.main_widget.jt_man_button.channel = self.selected_cm.jt_manual_select_pv
-            self.main_widget.jt_auto_button.channel = self.selected_cm.jt_auto_select_pv
-            self.main_widget.jt_mode_label.channel = self.selected_cm.jt_mode_str_pv
-            self.main_widget.jt_setpoint_spinbox.channel = self.selected_cm.jt_man_pos_setpoint_pv
-            self.main_widget.jt_setpoint_readback.channel = self.selected_cm.jt_valve_readback_pv
+            self.main_widget.jt_man_button.channel = (
+                self.selected_cm.jt_manual_select_pv
+            )
+            self.main_widget.jt_auto_button.channel = (
+                self.selected_cm.jt_auto_select_pv
+            )
+            self.main_widget.jt_mode_label.channel = (
+                self.selected_cm.jt_mode_str_pv
+            )
+            self.main_widget.jt_setpoint_spinbox.channel = (
+                self.selected_cm.jt_man_pos_setpoint_pv
+            )
+            self.main_widget.jt_setpoint_readback.channel = (
+                self.selected_cm.jt_valve_readback_pv
+            )
 
-            self.main_widget.heater_man_button.channel = self.selected_cm.heater_manual_pv
-            self.main_widget.heater_seq_button.channel = self.selected_cm.heater_sequencer_pv
-            self.main_widget.heater_mode_label.channel = self.selected_cm.heater_mode_string_pv
-            self.main_widget.heater_setpoint_spinbox.channel = self.selected_cm.heater_setpoint_pv
-            self.main_widget.heater_readback_label.channel = self.selected_cm.heater_readback_pv
+            self.main_widget.heater_man_button.channel = (
+                self.selected_cm.heater_manual_pv
+            )
+            self.main_widget.heater_seq_button.channel = (
+                self.selected_cm.heater_sequencer_pv
+            )
+            self.main_widget.heater_mode_label.channel = (
+                self.selected_cm.heater_mode_string_pv
+            )
+            self.main_widget.heater_setpoint_spinbox.channel = (
+                self.selected_cm.heater_setpoint_pv
+            )
+            self.main_widget.heater_readback_label.channel = (
+                self.selected_cm.heater_readback_pv
+            )
 
             for cavity in self.selected_cm.cavities.values():
                 self.cav_amp_controls[cavity.number].connect(cavity)
@@ -164,7 +212,9 @@ class Q0GUI(Display):
             return
 
         if not self.selected_cm.q0_measurement:
-            make_non_blocking_error_popup("No Q0 Data", "No Q0 measurement data available.")
+            make_non_blocking_error_popup(
+                "No Q0 Data", "No Q0 measurement data available."
+            )
             return
 
         try:
@@ -175,7 +225,9 @@ class Q0GUI(Display):
                 self.q0_data_plot: PlotWidget = plot()
                 self.q0_data_plot.setTitle("Q0 Data")
                 self.q0_fit_plot: PlotWidget = plot()
-                self.q0_fit_plot.setTitle("Heat On Calibration Curve (with adjustments)")
+                self.q0_fit_plot.setTitle(
+                    "Heat On Calibration Curve (with adjustments)"
+                )
                 layout.addWidget(self.q0_data_plot)
                 layout.addWidget(self.q0_fit_plot)
                 self.q0_window.setLayout(layout)
@@ -212,14 +264,19 @@ class Q0GUI(Display):
 
             self.q0_fit_plot_items.append(
                 self.q0_fit_plot.plot(
-                    [self.selected_cm.calibration.get_heat(dll_dt) for dll_dt in dll_dts],
+                    [
+                        self.selected_cm.calibration.get_heat(dll_dt)
+                        for dll_dt in dll_dts
+                    ],
                     dll_dts,
                 )
             )
 
             showDisplay(self.q0_window)
         except Exception as e:
-            make_non_blocking_error_popup("Plot Error", f"Failed to show Q0 data: {str(e)}")
+            make_non_blocking_error_popup(
+                "Plot Error", f"Failed to show Q0 data: {str(e)}"
+            )
 
     @pyqtSlot()
     def show_calibration_data(self):
@@ -228,7 +285,9 @@ class Q0GUI(Display):
             return
 
         if not self.selected_cm.calibration:
-            make_non_blocking_error_popup("No Calibration Data", "No calibration data available.")
+            make_non_blocking_error_popup(
+                "No Calibration Data", "No calibration data available."
+            )
             return
 
         try:
@@ -245,28 +304,47 @@ class Q0GUI(Display):
                 self.calibration_window.setLayout(layout)
 
             while self.calibration_data_plot_items:
-                self.calibration_data_plot.removeItem(self.calibration_data_plot_items.pop())
+                self.calibration_data_plot.removeItem(
+                    self.calibration_data_plot_items.pop()
+                )
 
             while self.calibration_fit_plot_items:
-                self.calibration_fit_plot.removeItem(self.calibration_fit_plot_items.pop())
+                self.calibration_fit_plot.removeItem(
+                    self.calibration_fit_plot_items.pop()
+                )
 
             dll_dts = []
 
             for heater_run in self.selected_cm.calibration.heater_runs:
                 self.calibration_data_plot_items.append(
-                    self.calibration_data_plot.plot(list(heater_run.ll_data.keys()), list(heater_run.ll_data.values()))
+                    self.calibration_data_plot.plot(
+                        list(heater_run.ll_data.keys()),
+                        list(heater_run.ll_data.values()),
+                    )
                 )
                 dll_dts.append(heater_run.dll_dt)
                 self.calibration_fit_plot_items.append(
-                    self.calibration_fit_plot.plot([heater_run.average_heat], [heater_run.dll_dt], pen=None, symbol="o")
+                    self.calibration_fit_plot.plot(
+                        [heater_run.average_heat],
+                        [heater_run.dll_dt],
+                        pen=None,
+                        symbol="o",
+                    )
                 )
 
-            heat_loads = [self.selected_cm.calibration.get_heat(dll_dt) for dll_dt in dll_dts]
-            self.calibration_fit_plot_items.append(self.calibration_fit_plot.plot(heat_loads, dll_dts))
+            heat_loads = [
+                self.selected_cm.calibration.get_heat(dll_dt)
+                for dll_dt in dll_dts
+            ]
+            self.calibration_fit_plot_items.append(
+                self.calibration_fit_plot.plot(heat_loads, dll_dts)
+            )
 
             showDisplay(self.calibration_window)
         except Exception as e:
-            make_non_blocking_error_popup("Plot Error", f"Failed to show calibration data: {str(e)}")
+            make_non_blocking_error_popup(
+                "Plot Error", f"Failed to show calibration data: {str(e)}"
+            )
 
     @pyqtSlot(str)
     def handle_cal_status(self, message):
@@ -289,12 +367,22 @@ class Q0GUI(Display):
         try:
             if self.selected_cm.name not in self.cal_option_windows:
                 option_window: Display = Display()
-                option_window.setWindowTitle(f"CM {self.selected_cm.name} Calibration Options")
+                option_window.setWindowTitle(
+                    f"CM {self.selected_cm.name} Calibration Options"
+                )
                 cal_options = q0_gui_utils.CalibrationOptions(self.selected_cm)
                 cal_options.cal_loaded_signal.connect(self.handle_cal_status)
-                cal_options.cal_loaded_signal.connect(partial(self.main_widget.rf_groupbox.setEnabled, True))
-                cal_options.cal_loaded_signal.connect(partial(self.main_widget.show_cal_data_button.setEnabled, True))
-                cal_options.cal_loaded_signal.connect(self.show_calibration_data)
+                cal_options.cal_loaded_signal.connect(
+                    partial(self.main_widget.rf_groupbox.setEnabled, True)
+                )
+                cal_options.cal_loaded_signal.connect(
+                    partial(
+                        self.main_widget.show_cal_data_button.setEnabled, True
+                    )
+                )
+                cal_options.cal_loaded_signal.connect(
+                    self.show_calibration_data
+                )
                 cal_options.cal_loaded_signal.connect(self.update_cryo_params)
                 window_layout = QVBoxLayout()
                 window_layout.addWidget(cal_options.main_groupbox)
@@ -302,7 +390,10 @@ class Q0GUI(Display):
                 self.cal_option_windows[self.selected_cm.name] = option_window
             showDisplay(self.cal_option_windows[self.selected_cm.name])
         except Exception as e:
-            make_non_blocking_error_popup("Load Calibration Error", f"Failed to load calibration: {str(e)}")
+            make_non_blocking_error_popup(
+                "Load Calibration Error",
+                f"Failed to load calibration: {str(e)}",
+            )
 
     @pyqtSlot(str)
     def handle_rf_status(self, message):
@@ -325,7 +416,9 @@ class Q0GUI(Display):
         try:
             if self.selected_cm.name not in self.rf_option_windows:
                 option_window: Display = Display()
-                option_window.setWindowTitle(f"CM {self.selected_cm.name} RF Measurement Options")
+                option_window.setWindowTitle(
+                    f"CM {self.selected_cm.name} RF Measurement Options"
+                )
                 rf_options = q0_gui_utils.Q0Options(self.selected_cm)
                 rf_options.q0_loaded_signal.connect(self.handle_rf_status)
                 rf_options.q0_loaded_signal.connect(self.show_q0_data)
@@ -335,7 +428,9 @@ class Q0GUI(Display):
                 self.rf_option_windows[self.selected_cm.name] = option_window
             showDisplay(self.rf_option_windows[self.selected_cm.name])
         except Exception as e:
-            make_non_blocking_error_popup("Load Q0 Error", f"Failed to load Q0 data: {str(e)}")
+            make_non_blocking_error_popup(
+                "Load Q0 Error", f"Failed to load Q0 data: {str(e)}"
+            )
 
     @pyqtSlot(int)
     def update_ll_buffer(self, value):
@@ -347,8 +442,12 @@ class Q0GUI(Display):
     def update_cryo_params(self):
         """Update cryogenic parameters display."""
         if self.selected_cm and self.selected_cm.valveParams:
-            self.main_widget.ref_heat_spinbox.setValue(self.selected_cm.valveParams.refHeatLoadDes)
-            self.main_widget.jt_pos_spinbox.setValue(self.selected_cm.valveParams.refValvePos)
+            self.main_widget.ref_heat_spinbox.setValue(
+                self.selected_cm.valveParams.refHeatLoadDes
+            )
+            self.main_widget.jt_pos_spinbox.setValue(
+                self.selected_cm.valveParams.refValvePos
+            )
 
     @pyqtSlot()
     def setup_for_cryo_params(self):
@@ -363,11 +462,15 @@ class Q0GUI(Display):
                 jt_setpoint=self.main_widget.jt_pos_spinbox.value(),
             )
             self.cryo_param_setup_worker.error.connect(
-                lambda msg: make_non_blocking_error_popup("Cryo Setup Error", msg)
+                lambda msg: make_non_blocking_error_popup(
+                    "Cryo Setup Error", msg
+                )
             )
             self.cryo_param_setup_worker.start()
         except Exception as e:
-            make_non_blocking_error_popup("Setup Error", f"Failed to setup cryo params: {str(e)}")
+            make_non_blocking_error_popup(
+                "Setup Error", f"Failed to setup cryo params: {str(e)}"
+            )
 
     @pyqtSlot()
     def takeNewCalibration(self):
@@ -395,11 +498,17 @@ class Q0GUI(Display):
             self.calibration_worker.status.connect(self.handle_cal_status)
             self.calibration_worker.finished.connect(self.handle_cal_status)
             self.calibration_worker.error.connect(self.handle_cal_error)
-            self.calibration_worker.finished.connect(partial(self.main_widget.rf_groupbox.setEnabled, True))
-            self.calibration_worker.finished.connect(partial(self.main_widget.show_cal_data_button.setEnabled, True))
+            self.calibration_worker.finished.connect(
+                partial(self.main_widget.rf_groupbox.setEnabled, True)
+            )
+            self.calibration_worker.finished.connect(
+                partial(self.main_widget.show_cal_data_button.setEnabled, True)
+            )
             self.calibration_worker.start()
         except Exception as e:
-            make_non_blocking_error_popup("Calibration Error", f"Failed to start calibration: {str(e)}")
+            make_non_blocking_error_popup(
+                "Calibration Error", f"Failed to start calibration: {str(e)}"
+            )
 
     @property
     def desiredCavityAmplitudes(self):
@@ -436,12 +545,18 @@ class Q0GUI(Display):
                 ramp_worker.finished.connect(cavity.mark_ready)
                 ramp_worker.finished.connect(self._on_ramp_finished)
                 ramp_worker.error.connect(
-                    lambda msg, num=cav_num: make_non_blocking_error_popup(f"Cavity {num} Ramp Error", msg)
+                    lambda msg, num=cav_num: make_non_blocking_error_popup(
+                        f"Cavity {num} Ramp Error", msg
+                    )
                 )
-                ramp_worker.finished.connect(partial(self._clear_ramp_worker, cav_num))
+                ramp_worker.finished.connect(
+                    partial(self._clear_ramp_worker, cav_num)
+                )
                 ramp_worker.start()
         except Exception as e:
-            make_non_blocking_error_popup("Ramp Error", f"Failed to ramp cavities: {str(e)}")
+            make_non_blocking_error_popup(
+                "Ramp Error", f"Failed to ramp cavities: {str(e)}"
+            )
 
     @pyqtSlot()
     def _on_ramp_finished(self):
@@ -461,14 +576,20 @@ class Q0GUI(Display):
                 ll_drop=self.main_widget.ll_drop_spinbox.value(),
                 desired_amplitudes=self.desiredCavityAmplitudes,
             )
-            self.q0_meas_worker.error.connect(lambda msg: make_non_blocking_error_popup("Q0 Measurement Error", msg))
+            self.q0_meas_worker.error.connect(
+                lambda msg: make_non_blocking_error_popup(
+                    "Q0 Measurement Error", msg
+                )
+            )
             self.q0_meas_worker.error.connect(self.selected_cm.shut_off)
             self.q0_meas_worker.status.connect(self.handle_rf_status)
             self.q0_meas_worker.finished.connect(self.handle_rf_status)
             self.q0_meas_worker.finished.connect(self._clear_q0_meas_worker)
             self.q0_meas_worker.start()
         except Exception as e:
-            make_non_blocking_error_popup("Q0 Worker Error", f"Failed to start Q0 measurement: {str(e)}")
+            make_non_blocking_error_popup(
+                "Q0 Worker Error", f"Failed to start Q0 measurement: {str(e)}"
+            )
 
     def _clear_ramp_worker(self, cav_num):
         """Clear ramp worker reference."""
@@ -505,4 +626,6 @@ class Q0GUI(Display):
             self.q0_setup_worker.error.connect(self.handle_rf_error)
             self.q0_setup_worker.start()
         except Exception as e:
-            make_non_blocking_error_popup("Q0 Setup Error", f"Failed to setup Q0 measurement: {str(e)}")
+            make_non_blocking_error_popup(
+                "Q0 Setup Error", f"Failed to setup Q0 measurement: {str(e)}"
+            )

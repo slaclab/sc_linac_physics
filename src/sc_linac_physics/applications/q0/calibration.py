@@ -33,14 +33,21 @@ class Calibration:
                     heater_run_data[q0_utils.JSON_START_KEY],
                     q0_utils.DATETIME_FORMATTER,
                 )
-                run._end_time = datetime.strptime(heater_run_data[q0_utils.JSON_END_KEY], q0_utils.DATETIME_FORMATTER)
+                run._end_time = datetime.strptime(
+                    heater_run_data[q0_utils.JSON_END_KEY],
+                    q0_utils.DATETIME_FORMATTER,
+                )
 
                 ll_data = {}
-                for timestamp_str, val in heater_run_data[q0_utils.JSON_LL_KEY].items():
+                for timestamp_str, val in heater_run_data[
+                    q0_utils.JSON_LL_KEY
+                ].items():
                     ll_data[float(timestamp_str)] = val
 
                 run.ll_data = ll_data
-                run.average_heat = heater_run_data[q0_utils.JSON_HEATER_READBACK_KEY]
+                run.average_heat = heater_run_data[
+                    q0_utils.JSON_HEATER_READBACK_KEY
+                ]
 
                 self.heater_runs.append(run)
 
@@ -70,7 +77,9 @@ class Calibration:
 
             new_data[key] = heater_data
 
-        q0_utils.update_json_data(self.cryomodule.calib_data_file, self.time_stamp, new_data)
+        q0_utils.update_json_data(
+            self.cryomodule.calib_data_file, self.time_stamp, new_data
+        )
 
     def save_results(self):
         newData = {
@@ -81,7 +90,9 @@ class Calibration:
             "Total Reference Heater Readback": self.cryomodule.valveParams.refHeatLoadAct,
             "JT Valve Position": self.cryomodule.valveParams.refValvePos,
         }
-        q0_utils.update_json_data(self.cryomodule.calib_idx_file, self.time_stamp, newData)
+        q0_utils.update_json_data(
+            self.cryomodule.calib_idx_file, self.time_stamp, newData
+        )
 
     @property
     def dLLdt_dheat(self):
@@ -92,7 +103,9 @@ class Calibration:
                 heat_loads.append(run.average_heat)
                 dll_dts.append(run.dll_dt)
 
-            slope, intercept, r_val, p_val, std_err = linregress(heat_loads, dll_dts)
+            slope, intercept, r_val, p_val, std_err = linregress(
+                heat_loads, dll_dts
+            )
 
             if np.isnan(slope):
                 self._slope = None

@@ -15,8 +15,12 @@ from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
 from pydm import Display
 from pydm.widgets import PyDMLabel
 
-from sc_linac_physics.applications.auto_setup.backend.setup_linac import SetupLinac
-from sc_linac_physics.applications.auto_setup.backend.setup_machine import SETUP_MACHINE
+from sc_linac_physics.applications.auto_setup.backend.setup_linac import (
+    SetupLinac,
+)
+from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+    SETUP_MACHINE,
+)
 from sc_linac_physics.applications.auto_setup.frontend.gui_cryomodule import (
     GUICryomodule,
 )
@@ -37,14 +41,22 @@ class GUILinac:
         self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
         self.setup_button.clicked.connect(self.trigger_setup)
 
-        self.abort_button: QPushButton = QPushButton(f"Abort Action for {self.name}")
+        self.abort_button: QPushButton = QPushButton(
+            f"Abort Action for {self.name}"
+        )
         self.abort_button.setStyleSheet(ERROR_STYLESHEET)
         self.abort_button.clicked.connect(self.request_stop)
 
-        self.acon_button: QPushButton = QPushButton(f"Capture all {self.name} ACON")
+        self.acon_button: QPushButton = QPushButton(
+            f"Capture all {self.name} ACON"
+        )
         self.acon_button.clicked.connect(self.capture_acon)
 
-        self.aact_pv = f"ACCL:L{self.idx}B:1:AACTMEANSUM" if self.name != "L1BHL" else "ACCL:L1B:1:HL_AACTMEANSUM"
+        self.aact_pv = (
+            f"ACCL:L{self.idx}B:1:AACTMEANSUM"
+            if self.name != "L1BHL"
+            else "ACCL:L1B:1:HL_AACTMEANSUM"
+        )
 
         self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
         self.readback_label.alarmSensitiveBorder = True
@@ -71,10 +83,18 @@ class GUILinac:
         self.linac_object.trigger_shutdown()
 
     def trigger_setup(self):
-        self.linac_object.ssa_cal_requested = self.settings.ssa_cal_checkbox.isChecked()
-        self.linac_object.auto_tune_requested = self.settings.auto_tune_checkbox.isChecked()
-        self.linac_object.cav_char_requested = self.settings.cav_char_checkbox.isChecked()
-        self.linac_object.rf_ramp_requested = self.settings.rf_ramp_checkbox.isChecked()
+        self.linac_object.ssa_cal_requested = (
+            self.settings.ssa_cal_checkbox.isChecked()
+        )
+        self.linac_object.auto_tune_requested = (
+            self.settings.auto_tune_checkbox.isChecked()
+        )
+        self.linac_object.cav_char_requested = (
+            self.settings.cav_char_checkbox.isChecked()
+        )
+        self.linac_object.rf_ramp_requested = (
+            self.settings.rf_ramp_checkbox.isChecked()
+        )
         self.linac_object.trigger_start()
 
     def capture_acon(self):
@@ -87,7 +107,12 @@ class GUILinac:
         page.setLayout(vlayout)
         self.cm_tab_widget.addTab(page, f"CM{cm_name}")
 
-        gui_cryomodule = GUICryomodule(linac_idx=self.idx, name=cm_name, settings=self.settings, parent=self.parent)
+        gui_cryomodule = GUICryomodule(
+            linac_idx=self.idx,
+            name=cm_name,
+            settings=self.settings,
+            parent=self.parent,
+        )
         self.gui_cryomodules[cm_name] = gui_cryomodule
         hlayout: QHBoxLayout = QHBoxLayout()
         hlayout.addStretch()
@@ -132,4 +157,8 @@ class GUILinac:
             cav_vlayout.addWidget(cav_widgets.status_label)
             cav_vlayout.addWidget(cav_widgets.progress_bar)
             cav_vlayout.addWidget(cav_widgets.note_label)
-            all_cav_layout.addWidget(cav_groupbox, 0 if cav_num in range(1, 5) else 1, (cav_num - 1) % 4)
+            all_cav_layout.addWidget(
+                cav_groupbox,
+                0 if cav_num in range(1, 5) else 1,
+                (cav_num - 1) % 4,
+            )

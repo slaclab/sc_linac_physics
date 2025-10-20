@@ -155,8 +155,10 @@ class StepperTuner(linac_utils.SCLinacObject):
     @property
     def on_limit_switch(self) -> bool:
         return (
-            self.limit_switch_a_pv_obj.get() == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
-            or self.limit_switch_b_pv_obj.get() == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
+            self.limit_switch_a_pv_obj.get()
+            == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
+            or self.limit_switch_b_pv_obj.get()
+            == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
         )
 
     @property
@@ -216,7 +218,11 @@ class StepperTuner(linac_utils.SCLinacObject):
             self.max_steps = max_steps
 
             # make sure that we don't exceed the speed limit as defined by the tuner experts
-            self.speed = speed if speed < linac_utils.MAX_STEPPER_SPEED else linac_utils.MAX_STEPPER_SPEED
+            self.speed = (
+                speed
+                if speed < linac_utils.MAX_STEPPER_SPEED
+                else linac_utils.MAX_STEPPER_SPEED
+            )
 
         if abs(num_steps) <= max_steps:
             print(f"{self.cavity} {abs(num_steps)} steps <= {max_steps} max")
@@ -227,7 +233,9 @@ class StepperTuner(linac_utils.SCLinacObject):
             print(f"{self.cavity} {abs(num_steps)} steps > {max_steps} max")
             self.step_des = max_steps
             self.issue_move_command(num_steps, check_detune=check_detune)
-            print(f"{self.cavity} moving {num_steps - (sign(num_steps) * max_steps)}")
+            print(
+                f"{self.cavity} moving {num_steps - (sign(num_steps) * max_steps)}"
+            )
             self.move(
                 num_steps - (sign(num_steps) * max_steps),
                 max_steps,
@@ -270,4 +278,6 @@ class StepperTuner(linac_utils.SCLinacObject):
 
         # the motor can be done moving for good OR bad reasons
         if self.on_limit_switch:
-            raise linac_utils.StepperError(f"{self.cavity} stepper motor on limit switch")
+            raise linac_utils.StepperError(
+                f"{self.cavity} stepper motor on limit switch"
+            )

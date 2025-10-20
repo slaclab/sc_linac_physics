@@ -36,7 +36,9 @@ def mock_show_display():
     mock_show = MagicMock()
 
     # Patch the showDisplay function
-    with patch("lcls_tools.common.frontend.display.util.showDisplay", mock_show):
+    with patch(
+        "lcls_tools.common.frontend.display.util.showDisplay", mock_show
+    ):
         yield mock_show
 
 
@@ -50,15 +52,24 @@ def display(mock_show_display):
             MockFaultCountDisplay,
         ),
         patch(
-            "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay", MockDecoderDisplay
+            "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay",
+            MockDecoderDisplay,
         ),
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine", MockGUIMachine),
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine",
+            MockGUIMachine,
+        ),
     ):
         # Now import CavityDisplayGUI after patching
-        from sc_linac_physics.displays.cavity_display.cavity_display import CavityDisplayGUI
+        from sc_linac_physics.displays.cavity_display.cavity_display import (
+            CavityDisplayGUI,
+        )
 
         # Create the display but prevent it from showing
-        with patch.object(CavityDisplayGUI, "show"), patch.object(CavityDisplayGUI, "showMaximized"):
+        with (
+            patch.object(CavityDisplayGUI, "show"),
+            patch.object(CavityDisplayGUI, "showMaximized"),
+        ):
             display = CavityDisplayGUI()
             yield display
             display.close()
@@ -83,7 +94,10 @@ def test_header_buttons(qtbot: QtBot, display):
     assert display.fault_count_button.text() == "Fault Counter"
 
     # Check that buttons have tooltips
-    assert display.fault_count_button.toolTip() == "See fault history using archived data"
+    assert (
+        display.fault_count_button.toolTip()
+        == "See fault history using archived data"
+    )
 
 
 @pytest.mark.skip("Need to figure out why this is failing")
@@ -93,7 +107,10 @@ def test_button_connections(qtbot: QtBot, display, mock_show_display):
 
     # Verify that buttons have signal connections
     assert display.decoder_button.receivers(display.decoder_button.clicked) > 0
-    assert display.fault_count_button.receivers(display.fault_count_button.clicked) > 0
+    assert (
+        display.fault_count_button.receivers(display.fault_count_button.clicked)
+        > 0
+    )
 
     # Emit the clicked signal directly
     display.decoder_button.clicked.emit()

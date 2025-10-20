@@ -1,4 +1,9 @@
-from caproto.server import PVGroup, pvproperty, PvpropertyString, PvpropertyBoolEnum
+from caproto.server import (
+    PVGroup,
+    pvproperty,
+    PvpropertyString,
+    PvpropertyBoolEnum,
+)
 
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
@@ -7,7 +12,9 @@ class HeaterPVGroup(PVGroup):
     setpoint = pvproperty(name="MANPOS_RQST", value=24.0)
     readback = pvproperty(name="ORBV", value=24.0)
     mode = pvproperty(name="MODE", value=1)
-    mode_string: PvpropertyString = pvproperty(name="MODE_STRING", value="SEQUENCER")
+    mode_string: PvpropertyString = pvproperty(
+        name="MODE_STRING", value="SEQUENCER"
+    )
     manual: PvpropertyBoolEnum = pvproperty(name="MANUAL")
     sequencer: PvpropertyBoolEnum = pvproperty(name="SEQUENCER")
 

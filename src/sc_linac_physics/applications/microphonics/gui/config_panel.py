@@ -16,8 +16,12 @@ from PyQt5.QtWidgets import (
     QTabWidget,
 )
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import BASE_HARDWARE_SAMPLE_RATE
-from sc_linac_physics.applications.microphonics.utils.pv_utils import format_accl_base
+from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+    BASE_HARDWARE_SAMPLE_RATE,
+)
+from sc_linac_physics.applications.microphonics.utils.pv_utils import (
+    format_accl_base,
+)
 from sc_linac_physics.applications.microphonics.utils.ui_utils import (
     create_cavity_selection_tabs,
     create_pushbuttons,
@@ -105,13 +109,16 @@ class ConfigPanel(QWidget):
         try:
             return int(self.decim_combo.currentText())
         except ValueError:
-            print(f"Warning: Could not parse decimation from UI, defaulting to {self.DEFAULT_DECIMATION_VALUE}.")
+            print(
+                f"Warning: Could not parse decimation from UI, defaulting to {self.DEFAULT_DECIMATION_VALUE}."
+            )
             return self.DEFAULT_DECIMATION_VALUE
 
     def _set_default_decimation(self):
         """Sets the decimation combo box to the default value."""
         if str(self.DEFAULT_DECIMATION_VALUE) in [
-            self.decim_combo.itemText(i) for i in range(self.decim_combo.count())
+            self.decim_combo.itemText(i)
+            for i in range(self.decim_combo.count())
         ]:
             self.decim_combo.setCurrentText(str(self.DEFAULT_DECIMATION_VALUE))
         else:
@@ -161,7 +168,9 @@ class ConfigPanel(QWidget):
         cavity_tabs = {}
         select_all_buttons = {}
 
-        cavity_tabs, select_all_buttons = create_cavity_selection_tabs(self, rack_config, self._select_all_cavities)
+        cavity_tabs, select_all_buttons = create_cavity_selection_tabs(
+            self, rack_config, self._select_all_cavities
+        )
         self.cavity_checks_a = cavity_tabs["A"]
         self.cavity_checks_b = cavity_tabs["B"]
         self.select_all_a = select_all_buttons["A"]
@@ -186,7 +195,9 @@ class ConfigPanel(QWidget):
         self.is_updating = True
         try:
             # Gets relevant checkboxes and button
-            checks = self.cavity_checks_a if rack == "A" else self.cavity_checks_b
+            checks = (
+                self.cavity_checks_a if rack == "A" else self.cavity_checks_b
+            )
             button = self.select_all_a if rack == "A" else self.select_all_b
 
             # Determine the current state (use 1st checkbox as reference)
@@ -214,9 +225,9 @@ class ConfigPanel(QWidget):
         self.is_updating = True
         try:
             # Check if all cavities are picked
-            all_selected = all(cb.isChecked() for cb in self.cavity_checks_a.values()) and all(
-                cb.isChecked() for cb in self.cavity_checks_b.values()
-            )
+            all_selected = all(
+                cb.isChecked() for cb in self.cavity_checks_a.values()
+            ) and all(cb.isChecked() for cb in self.cavity_checks_b.values())
 
             # Toggle to opposite state
             new_state = not all_selected
@@ -228,7 +239,9 @@ class ConfigPanel(QWidget):
                 cb.setChecked(new_state)
 
             # Update main button text
-            self.select_all_btn.setText("Deselect All (1-8)" if new_state else "Select All (1-8)")
+            self.select_all_btn.setText(
+                "Deselect All (1-8)" if new_state else "Select All (1-8)"
+            )
 
             # Emit configuration
             config = self.get_config()
@@ -244,7 +257,9 @@ class ConfigPanel(QWidget):
         # Decimation
         layout.addWidget(QLabel("Decimation:"), 0, 0)
         self.decim_combo = QComboBox()
-        self.decim_combo.addItems([str(x) for x in sorted(self.VALID_DECIMATION)])
+        self.decim_combo.addItems(
+            [str(x) for x in sorted(self.VALID_DECIMATION)]
+        )
         layout.addWidget(self.decim_combo, 0, 1)
 
         # Buffer count
@@ -298,7 +313,9 @@ class ConfigPanel(QWidget):
 
             # Calculate total acquisition time
             # Formula: (BUFFER_LENGTH / effective_sample_rate) * number_of_buffers
-            acquisition_time = (self.BUFFER_LENGTH * decimation_num * number_of_buffers) / BASE_HARDWARE_SAMPLE_RATE
+            acquisition_time = (
+                self.BUFFER_LENGTH * decimation_num * number_of_buffers
+            ) / BASE_HARDWARE_SAMPLE_RATE
 
             # Display acquisition time with right precision
             if acquisition_time < 1:
@@ -385,12 +402,18 @@ class ConfigPanel(QWidget):
             max_cols=6,
         )
 
-    def validate_cavity_selection(self, is_bulk_action: bool = False) -> Optional[str]:
+    def validate_cavity_selection(
+        self, is_bulk_action: bool = False
+    ) -> Optional[str]:
         """Validate cavity selection"""
 
         # Get selected cavities
-        selected_a = [num for num, cb in self.cavity_checks_a.items() if cb.isChecked()]
-        selected_b = [num for num, cb in self.cavity_checks_b.items() if cb.isChecked()]
+        selected_a = [
+            num for num, cb in self.cavity_checks_a.items() if cb.isChecked()
+        ]
+        selected_b = [
+            num for num, cb in self.cavity_checks_b.items() if cb.isChecked()
+        ]
 
         # For individual selections check if any cavities are selected
         if not is_bulk_action and not selected_a and not selected_b:
@@ -415,14 +438,26 @@ class ConfigPanel(QWidget):
         self.stop_button.clicked.connect(lambda: self.measurementStopped.emit())
 
         if hasattr(self, "decim_combo"):
-            self.decim_combo.currentIndexChanged.connect(self._handle_decimation_change)
+            self.decim_combo.currentIndexChanged.connect(
+                self._handle_decimation_change
+            )
         else:
-            print("WARNING (ConfigPanel): self.decim_combo not found during signal connection.")
+            print(
+                "WARNING (ConfigPanel): self.decim_combo not found during signal connection."
+            )
         if hasattr(self, "buffer_spin"):
             self.buffer_spin.valueChanged.connect(self._update_daq_parameters)
-            self.buffer_spin.valueChanged.connect(lambda: self._emit_config_changed() if not self.is_updating else None)
+            self.buffer_spin.valueChanged.connect(
+                lambda: (
+                    self._emit_config_changed()
+                    if not self.is_updating
+                    else None
+                )
+            )
         else:
-            print("WARNING (ConfigPanel): self.buffer_spin not found during signal connection.")
+            print(
+                "WARNING (ConfigPanel): self.buffer_spin not found during signal connection."
+            )
 
     def _handle_decimation_change(self):
         """Handle changes to decimation combo box"""
@@ -435,7 +470,9 @@ class ConfigPanel(QWidget):
             dec_value = int(self.decim_combo.currentText())
             # Emit signal w/ new decimation value
             self.decimationSettingChanged.emit(dec_value)
-            print(f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}")
+            print(
+                f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}"
+            )
         except ValueError:
             print(
                 f"WARNING (ConfigPanel): Could not parse decimation value from "
@@ -462,12 +499,20 @@ class ConfigPanel(QWidget):
         self.is_updating = True
         try:
             # Update Rack A button text
-            all_a_selected = all(cb.isChecked() for cb in self.cavity_checks_a.values())
-            self.select_all_a.setText("Deselect All" if all_a_selected else "Select All")
+            all_a_selected = all(
+                cb.isChecked() for cb in self.cavity_checks_a.values()
+            )
+            self.select_all_a.setText(
+                "Deselect All" if all_a_selected else "Select All"
+            )
 
             # Update Rack B button text
-            all_b_selected = all(cb.isChecked() for cb in self.cavity_checks_b.values())
-            self.select_all_b.setText("Deselect All" if all_b_selected else "Select All")
+            all_b_selected = all(
+                cb.isChecked() for cb in self.cavity_checks_b.values()
+            )
+            self.select_all_b.setText(
+                "Deselect All" if all_b_selected else "Select All"
+            )
 
             self._emit_config_changed()
 
@@ -492,8 +537,14 @@ class ConfigPanel(QWidget):
             "linac": self.selected_linac,
             "modules": selected_modules,
             "cavities": {
-                **{num: cb.isChecked() for num, cb in self.cavity_checks_a.items()},
-                **{num: cb.isChecked() for num, cb in self.cavity_checks_b.items()},
+                **{
+                    num: cb.isChecked()
+                    for num, cb in self.cavity_checks_a.items()
+                },
+                **{
+                    num: cb.isChecked()
+                    for num, cb in self.cavity_checks_b.items()
+                },
             },
             "decimation": int(self.decim_combo.currentText()),
             "buffer_count": self.buffer_spin.value(),

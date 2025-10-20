@@ -5,7 +5,9 @@ from unittest.mock import MagicMock
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from sc_linac_physics.applications.quench_processing.quench_cavity import QuenchCavity
+from sc_linac_physics.applications.quench_processing.quench_cavity import (
+    QuenchCavity,
+)
 from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
     QuenchCryomodule,
 )
@@ -26,10 +28,14 @@ from tests.mock_utils import mock_func
 @pytest.fixture
 def cavities(monkeypatch):
     monkeypatch.setattr("os.makedirs", mock_func)
-    monkeypatch.setattr("lcls_tools.common.logger.logger.custom_logger", mock_func)
+    monkeypatch.setattr(
+        "lcls_tools.common.logger.logger.custom_logger", mock_func
+    )
     monkeypatch.setattr("logging.FileHandler", mock_func)
     cavity_lst: List[QuenchCavity] = list(
-        Machine(cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule).all_iterator
+        Machine(
+            cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule
+        ).all_iterator
     )
 
     for cavity in cavity_lst:

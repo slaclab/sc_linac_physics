@@ -20,7 +20,9 @@ class Runner:
     def __init__(self, lazy_fault_pvs=False):
         self.watcher_pv = "PHYS:SYS0:1:SC_CAV_FAULT_HEARTBEAT"
         self._watcher_pv_obj: Optional[PV] = None
-        self.backend_cavities: List[BackendCavity] = list(BackendMachine(lazy_fault_pvs=lazy_fault_pvs).all_iterator)
+        self.backend_cavities: List[BackendCavity] = list(
+            BackendMachine(lazy_fault_pvs=lazy_fault_pvs).all_iterator
+        )
 
     @property
     def watcher_pv_obj(self):
@@ -34,7 +36,9 @@ class Runner:
             cavity.run_through_faults()
         if DEBUG:
             delta = (datetime.now() - start).total_seconds()
-            sleep(BACKEND_SLEEP_TIME - delta if delta < BACKEND_SLEEP_TIME else 0)
+            sleep(
+                BACKEND_SLEEP_TIME - delta if delta < BACKEND_SLEEP_TIME else 0
+            )
         try:
             self.watcher_pv_obj.put(self.watcher_pv_obj.get() + 1)
         except TypeError as e:

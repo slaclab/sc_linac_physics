@@ -36,19 +36,25 @@ class Rack(SCLinacObject):
         self.piezo_class = self.cryomodule.piezo_class
 
         self.cavities: Dict[int, "Cavity"] = {}
-        self._pv_prefix = self.cryomodule.pv_addr("RACK{RACK}:".format(RACK=self.rack_name))
+        self._pv_prefix = self.cryomodule.pv_addr(
+            "RACK{RACK}:".format(RACK=self.rack_name)
+        )
         self.rfs1 = RFStation(num=1, rack_object=self)
         self.rfs2 = RFStation(num=2, rack_object=self)
 
         if rack_name == "A":
             # rack A always has cavities 1 - 4
             for cavityNum in range(1, 5):
-                self.cavities[cavityNum] = self.cavity_class(cavity_num=cavityNum, rack_object=self)
+                self.cavities[cavityNum] = self.cavity_class(
+                    cavity_num=cavityNum, rack_object=self
+                )
 
         elif rack_name == "B":
             # rack B always has cavities 5 - 8
             for cavityNum in range(5, 9):
-                self.cavities[cavityNum] = self.cavity_class(cavity_num=cavityNum, rack_object=self)
+                self.cavities[cavityNum] = self.cavity_class(
+                    cavity_num=cavityNum, rack_object=self
+                )
 
         else:
             raise Exception(f"Bad rack name {rack_name}")

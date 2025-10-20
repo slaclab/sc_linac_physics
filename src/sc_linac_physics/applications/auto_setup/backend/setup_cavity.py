@@ -116,13 +116,19 @@ class SetupCavity(Cavity, SetupLinacObject):
             if self.rf_ramp_requested:
                 try:
                     if self.acon <= 0:
-                        raise linac_utils.CavityFaultError(f"Cannot ramp {self} to {self.acon}")
+                        raise linac_utils.CavityFaultError(
+                            f"Cannot ramp {self} to {self.acon}"
+                        )
 
-                    self.status_message = f"Waiting for {self} piezo to be in feedback mode"
+                    self.status_message = (
+                        f"Waiting for {self} piezo to be in feedback mode"
+                    )
                     self.piezo.enable_feedback()
                     self.progress = 80
 
-                    if not self.is_on or (self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP):
+                    if not self.is_on or (
+                        self.is_on and self.rf_mode != linac_utils.RF_MODE_SELAP
+                    ):
                         self.ades = min(2, self.acon)
 
                     self.turn_on()

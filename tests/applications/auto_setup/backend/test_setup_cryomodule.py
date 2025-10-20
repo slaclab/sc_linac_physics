@@ -36,11 +36,15 @@ class TestSetupCryomoduleInitialization:
         # Test inheritance tree - we only need to check the immediate parents
         assert isinstance(cryo, SetupCryomodule)  # First our actual class
         assert isinstance(cryo, Cryomodule)  # First parent
-        assert isinstance(cryo, SCLinacObject)  # Base class both parents inherit from
+        assert isinstance(
+            cryo, SCLinacObject
+        )  # Base class both parents inherit from
 
     def test_initialization(self, setup_cryomodule):
         """Test that initialization sets up all required attributes."""
-        assert setup_cryomodule.cryo_name == "CM01"  # Just the CM prefix + number
+        assert (
+            setup_cryomodule.cryo_name == "CM01"
+        )  # Just the CM prefix + number
         assert hasattr(setup_cryomodule, "cavities")
         assert hasattr(setup_cryomodule, "start_pv_obj")
         assert hasattr(setup_cryomodule, "ssa_cal_requested_pv_obj")
@@ -81,7 +85,9 @@ class TestSetupCryomoduleProperties:
         """Test the ssa_cal_requested property."""
         test_value = True
         setup_cryomodule.ssa_cal_requested = test_value
-        setup_cryomodule._ssa_cal_requested_pv_obj.put.assert_called_with(test_value)
+        setup_cryomodule._ssa_cal_requested_pv_obj.put.assert_called_with(
+            test_value
+        )
 
         setup_cryomodule._ssa_cal_requested_pv_obj.get.return_value = test_value
         assert setup_cryomodule.ssa_cal_requested == test_value
@@ -90,7 +96,11 @@ class TestSetupCryomoduleProperties:
         """Test the auto_tune_requested property."""
         test_value = True
         setup_cryomodule.auto_tune_requested = test_value
-        setup_cryomodule._auto_tune_requested_pv_obj.put.assert_called_with(test_value)
+        setup_cryomodule._auto_tune_requested_pv_obj.put.assert_called_with(
+            test_value
+        )
 
-        setup_cryomodule._auto_tune_requested_pv_obj.get.return_value = test_value
+        setup_cryomodule._auto_tune_requested_pv_obj.get.return_value = (
+            test_value
+        )
         assert setup_cryomodule.auto_tune_requested == test_value

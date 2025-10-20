@@ -12,16 +12,36 @@ from PyQt5.QtWidgets import (
 def mock_dependencies():
     """Mock external dependencies."""
     with (
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMEDMDisplayButton") as mock_edm,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.showDisplay") as mock_show,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.Display") as mock_display,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMByteIndicator") as mock_byte,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMShellCommand") as mock_shell,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMRelatedDisplayButton") as mock_related,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.CavityWidget") as mock_cavity_widget,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.make_header") as mock_header,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.EnumLabel") as mock_enum,
-        patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMFaultButton") as mock_fault_btn,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMEDMDisplayButton"
+        ) as mock_edm,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.showDisplay"
+        ) as mock_show,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.Display"
+        ) as mock_display,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMByteIndicator"
+        ) as mock_byte,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMShellCommand"
+        ) as mock_shell,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMRelatedDisplayButton"
+        ) as mock_related,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.CavityWidget"
+        ) as mock_cavity_widget,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.make_header"
+        ) as mock_header,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.EnumLabel"
+        ) as mock_enum,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.PyDMFaultButton"
+        ) as mock_fault_btn,
     ):
         # Configure mocks to return reasonable defaults
         mock_header.return_value = Mock()
@@ -64,7 +84,9 @@ def mock_rack():
 @pytest.fixture
 def mock_backend_cavity():
     """Mock the BackendCavity parent class."""
-    with patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.BackendCavity") as mock:
+    with patch(
+        "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.BackendCavity"
+    ) as mock:
         mock_instance = Mock()
 
         # Mock SSA object
@@ -73,7 +95,9 @@ def mock_backend_cavity():
         mock_instance.ssa = mock_ssa
 
         # Mock PV addresses
-        mock_instance.pv_addr.side_effect = lambda suffix: f"ACCL:L0B:0110:{suffix}"
+        mock_instance.pv_addr.side_effect = (
+            lambda suffix: f"ACCL:L0B:0110:{suffix}"
+        )
         mock_instance.rf_state_pv = "ACCL:L0B:0110:RFSTATE"
 
         # Mock cryomodule
@@ -94,7 +118,9 @@ def mock_backend_cavity():
 @pytest.fixture
 def gui_cavity(qapp, mock_backend_cavity, mock_rack):
     """Create a GUICavity instance for testing."""
-    from sc_linac_physics.displays.cavity_display.frontend.gui_cavity import GUICavity
+    from sc_linac_physics.displays.cavity_display.frontend.gui_cavity import (
+        GUICavity,
+    )
     from unittest.mock import Mock, MagicMock
     from PyQt5.QtWidgets import QWidget, QGridLayout
     from PyQt5.QtGui import QColor
@@ -176,14 +202,22 @@ def gui_cavity(qapp, mock_backend_cavity, mock_rack):
                     "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.make_header",
                     side_effect=create_real_grid_layout,
                 ):
-                    with patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.showDisplay") as mock_show:
+                    with patch(
+                        "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.showDisplay"
+                    ) as mock_show:
                         with patch(
                             "sc_linac_physics.displays.cavity_display.backend.backend_cavity.BackendCavity.__init__",
                             mock_backend_init,
                         ):
                             # Mock the problematic method
-                            with patch.object(GUICavity, "populate_fault_display", mock_populate_fault_display):
-                                cavity = GUICavity(cavity_num=1, rack_object=mock_rack)
+                            with patch.object(
+                                GUICavity,
+                                "populate_fault_display",
+                                mock_populate_fault_display,
+                            ):
+                                cavity = GUICavity(
+                                    cavity_num=1, rack_object=mock_rack
+                                )
                                 cavity._mock_show_display = mock_show
                                 return cavity
 
@@ -280,7 +314,10 @@ class TestGUICavityInitialization:
         assert gui_cavity.rf_bar.channel == "TEST:RF:STATE"
 
         # If cavity_widget should have a channel, test for the mock format
-        if hasattr(gui_cavity.cavity_widget, "channel") and gui_cavity.cavity_widget.channel:
+        if (
+            hasattr(gui_cavity.cavity_widget, "channel")
+            and gui_cavity.cavity_widget.channel
+        ):
             expected_channel = "TEST:CAVITY_1:CUDSTATUS"  # Based on your mock
             assert gui_cavity.cavity_widget.channel == expected_channel
 
@@ -352,7 +389,9 @@ class TestGUICavityFaultDisplay:
     def test_show_fault_display(self, gui_cavity):
         """Test show_fault_display method."""
         # Patch showDisplay at the right location
-        with patch("sc_linac_physics.displays.cavity_display.frontend.gui_cavity.showDisplay") as mock_show_display:
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.gui_cavity.showDisplay"
+        ) as mock_show_display:
             gui_cavity.show_fault_display()
 
             # Verify the display was created
@@ -467,7 +506,9 @@ class TestGUICavityIntegration:
 
     def test_widget_accessibility_names(self, gui_cavity):
         """Test that widgets have proper accessibility names."""
-        gui_cavity.cavity_widget.setAccessibleName.assert_called_with("cavity_widget")
+        gui_cavity.cavity_widget.setAccessibleName.assert_called_with(
+            "cavity_widget"
+        )
         gui_cavity.ssa_bar.setAccessibleName.assert_called_with("SSA")
         gui_cavity.rf_bar.setAccessibleName.assert_called_with("RFSTATE")
 
@@ -491,7 +532,9 @@ class TestGUICavityIntegration:
         gui_cavity.faults = {"fault1": fault1, "fault2": fault2}
 
         # Test that the fault display can be created with multiple faults
-        with patch.object(gui_cavity, "populate_fault_display") as mock_populate:
+        with patch.object(
+            gui_cavity, "populate_fault_display"
+        ) as mock_populate:
             _ = gui_cavity.fault_display
             mock_populate.assert_called_once()
 

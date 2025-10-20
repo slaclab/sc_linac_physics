@@ -25,11 +25,15 @@ def cavity(monkeypatch):
     monkeypatch.setenv("SC_LINAC_DISABLE_FILE_LOGS", "1")
     # Ensure no real files/dirs/loggers are created
     monkeypatch.setattr("os.makedirs", mock_func)
-    monkeypatch.setattr("lcls_tools.common.logger.logger.custom_logger", mock_func)
+    monkeypatch.setattr(
+        "lcls_tools.common.logger.logger.custom_logger", mock_func
+    )
     monkeypatch.setattr("logging.FileHandler", mock_func)
 
     # Import after patching, so the module sees the patched handlers
-    from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import SELCavity
+    from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import (
+        SELCavity,
+    )
 
     yield SELCavity(randint(1, 8), rack_object=MagicMock())
 
@@ -112,7 +116,15 @@ def test_cannot_be_straightened_rf_mode(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
     cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
     cavity._rf_mode_pv_obj = make_mock_pv(
-        get_val=choice([RF_MODE_SELA, RF_MODE_SEL, RF_MODE_SEL_RAW, RF_MODE_PULSE, RF_MODE_CHIRP])
+        get_val=choice(
+            [
+                RF_MODE_SELA,
+                RF_MODE_SEL,
+                RF_MODE_SEL_RAW,
+                RF_MODE_PULSE,
+                RF_MODE_CHIRP,
+            ]
+        )
     )
     cavity._aact_pv_obj = make_mock_pv(get_val=randint(5, 21))
     assert not cavity.can_be_straightened()

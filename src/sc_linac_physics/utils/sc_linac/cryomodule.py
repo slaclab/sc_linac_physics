@@ -47,9 +47,15 @@ class Cryomodule(SCLinacObject):
         self.piezo_class: Type["Piezo"] = self.linac.piezo_class
 
         if not self.is_harmonic_linearizer:
-            self.quad: "Magnet" = self.magnet_class(magnet_type="QUAD", cryomodule=self)
-            self.xcor: "Magnet" = self.magnet_class(magnet_type="XCOR", cryomodule=self)
-            self.ycor: "Magnet" = self.magnet_class(magnet_type="YCOR", cryomodule=self)
+            self.quad: "Magnet" = self.magnet_class(
+                magnet_type="QUAD", cryomodule=self
+            )
+            self.xcor: "Magnet" = self.magnet_class(
+                magnet_type="XCOR", cryomodule=self
+            )
+            self.ycor: "Magnet" = self.magnet_class(
+                magnet_type="YCOR", cryomodule=self
+            )
 
         self._pv_prefix = f"ACCL:{self.linac.name}:{self.name}00:"
 
@@ -74,8 +80,12 @@ class Cryomodule(SCLinacObject):
         self.jt_valve_readback_pv: str = self.make_jt_pv("ORBV")
         self.heater_readback_pv: str = self.make_heater_pv("ORBV")
 
-        self.rack_a: "Rack" = self.rack_class(rack_name="A", cryomodule_object=self)
-        self.rack_b: "Rack" = self.rack_class(rack_name="B", cryomodule_object=self)
+        self.rack_a: "Rack" = self.rack_class(
+            rack_name="A", cryomodule_object=self
+        )
+        self.rack_b: "Rack" = self.rack_class(
+            rack_name="B", cryomodule_object=self
+        )
 
         self.cavities: Dict[int, "Cavity"] = {}
         self.cavities.update(self.rack_a.cavities)
@@ -83,14 +93,20 @@ class Cryomodule(SCLinacObject):
 
         if self.is_harmonic_linearizer:
             self.coupler_vacuum_pvs: List[str] = [
-                self.linac.vacuum_prefix + "{cm}09:COMBO_P".format(cm=self.name),
-                self.linac.vacuum_prefix + "{cm}19:COMBO_P".format(cm=self.name),
+                self.linac.vacuum_prefix
+                + "{cm}09:COMBO_P".format(cm=self.name),
+                self.linac.vacuum_prefix
+                + "{cm}19:COMBO_P".format(cm=self.name),
             ]
         else:
-            self.coupler_vacuum_pvs: List[str] = [self.linac.vacuum_prefix + "{cm}14:COMBO_P".format(cm=self.name)]
+            self.coupler_vacuum_pvs: List[str] = [
+                self.linac.vacuum_prefix + "{cm}14:COMBO_P".format(cm=self.name)
+            ]
 
         self.vacuum_pvs: List[str] = (
-            self.coupler_vacuum_pvs + self.linac.beamline_vacuum_pvs + self.linac.insulating_vacuum_pvs
+            self.coupler_vacuum_pvs
+            + self.linac.beamline_vacuum_pvs
+            + self.linac.insulating_vacuum_pvs
         )
 
     def __str__(self):

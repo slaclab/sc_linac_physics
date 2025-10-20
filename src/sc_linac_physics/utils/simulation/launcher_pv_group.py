@@ -11,7 +11,9 @@ from caproto.server import (
 
 
 class LauncherPVGroup(PVGroup):
-    srf_root_dir = os.getenv("SRF_ROOT_DIR", os.path.expanduser("~/sc_linac_physics"))
+    srf_root_dir = os.getenv(
+        "SRF_ROOT_DIR", os.path.expanduser("~/sc_linac_physics")
+    )
 
     setup_start: PvpropertyBoolEnum = pvproperty(name="SETUPSTRT")
     setup_stop: PvpropertyBoolEnum = pvproperty(name="SETUPSTOP")
@@ -30,7 +32,9 @@ class LauncherPVGroup(PVGroup):
 
     note: PvpropertyChar = pvproperty(
         name="NOTE",
-        value="This is as long of a " "sentence as I can type " "in order to test wrapping",
+        value="This is as long of a "
+        "sentence as I can type "
+        "in order to test wrapping",
     )
 
     abort: PvpropertyEnum = pvproperty(

@@ -1,8 +1,12 @@
-from sc_linac_physics.applications.auto_setup.backend.setup_cavity import SetupCavity
+from sc_linac_physics.applications.auto_setup.backend.setup_cavity import (
+    SetupCavity,
+)
 from sc_linac_physics.applications.auto_setup.backend.setup_cryomodule import (
     SetupCryomodule,
 )
-from sc_linac_physics.applications.auto_setup.backend.setup_linac import SetupLinac
+from sc_linac_physics.applications.auto_setup.backend.setup_linac import (
+    SetupLinac,
+)
 from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
     SetupLinacObject,
 )

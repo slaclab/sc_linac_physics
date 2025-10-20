@@ -66,7 +66,16 @@ def mock_cryomodule():
 @pytest.fixture
 def sample_amplitudes():
     """Sample cavity amplitudes"""
-    return {1: 16.5, 2: 16.5, 3: 16.5, 4: 16.5, 5: 16.5, 6: 16.5, 7: 16.5, 8: 16.5}
+    return {
+        1: 16.5,
+        2: 16.5,
+        3: 16.5,
+        4: 16.5,
+        5: 16.5,
+        6: 16.5,
+        7: 16.5,
+        8: 16.5,
+    }
 
 
 @pytest.fixture
@@ -185,7 +194,9 @@ class TestAmplitudesPropertyValidation:
         """Test amplitudes setter with empty dictionary"""
         measurement = Q0Measurement(mock_cryomodule)
 
-        with pytest.raises(ValueError, match="Amplitudes dictionary cannot be empty"):
+        with pytest.raises(
+            ValueError, match="Amplitudes dictionary cannot be empty"
+        ):
             measurement.amplitudes = {}
 
     def test_amplitudes_invalid_cavity_number_type(self, mock_cryomodule):
@@ -209,7 +220,9 @@ class TestAmplitudesPropertyValidation:
         with pytest.raises(ValueError, match="Amplitude cannot be negative"):
             measurement.amplitudes = {1: -16.5, 2: 16.5}
 
-    def test_amplitudes_resets_calculated_properties(self, mock_cryomodule, sample_amplitudes):
+    def test_amplitudes_resets_calculated_properties(
+        self, mock_cryomodule, sample_amplitudes
+    ):
         """Test that setting amplitudes resets calculated properties"""
         measurement = Q0Measurement(mock_cryomodule)
 
@@ -241,7 +254,9 @@ class TestStartTimeProperty:
         expected_string = test_time.strftime(datetime_format)
         assert measurement.start_time == expected_string
 
-    def test_start_time_immutable_after_set(self, mock_cryomodule, datetime_format):
+    def test_start_time_immutable_after_set(
+        self, mock_cryomodule, datetime_format
+    ):
         """Test that start_time cannot be changed once set"""
         measurement = Q0Measurement(mock_cryomodule)
 
@@ -266,7 +281,9 @@ class TestLoadDataMethod:
         with pytest.raises(ValueError, match="Invalid timestamp format"):
             measurement.load_data("invalid-timestamp")
 
-    def test_load_data_wrong_timestamp_format(self, mock_cryomodule, invalid_timestamp):
+    def test_load_data_wrong_timestamp_format(
+        self, mock_cryomodule, invalid_timestamp
+    ):
         """Test load_data with wrong but valid timestamp format"""
         measurement = Q0Measurement(mock_cryomodule)
 
@@ -279,7 +296,9 @@ class TestLoadDataMethod:
         measurement = Q0Measurement(mock_cryomodule)
 
         with patch("builtins.open", side_effect=FileNotFoundError()):
-            with pytest.raises(FileNotFoundError, match="Q0 data file not found"):
+            with pytest.raises(
+                FileNotFoundError, match="Q0 data file not found"
+            ):
                 measurement.load_data(valid_timestamp)
 
     def test_load_data_invalid_json(self, mock_cryomodule, valid_timestamp):
@@ -287,10 +306,14 @@ class TestLoadDataMethod:
         measurement = Q0Measurement(mock_cryomodule)
 
         with patch("builtins.open", mock_open(read_data="invalid json")):
-            with pytest.raises(ValueError, match="Invalid JSON in Q0 data file"):
+            with pytest.raises(
+                ValueError, match="Invalid JSON in Q0 data file"
+            ):
                 measurement.load_data(valid_timestamp)
 
-    def test_load_data_timestamp_not_found(self, mock_cryomodule, valid_timestamp, datetime_format):
+    def test_load_data_timestamp_not_found(
+        self, mock_cryomodule, valid_timestamp, datetime_format
+    ):
         """Test load_data when timestamp is not in data"""
         measurement = Q0Measurement(mock_cryomodule)
 
@@ -303,29 +326,53 @@ class TestLoadDataMethod:
             with pytest.raises(KeyError, match="No data found for timestamp"):
                 measurement.load_data(valid_timestamp)
 
-    def test_load_data_missing_required_fields(self, mock_cryomodule, valid_timestamp):
+    def test_load_data_missing_required_fields(
+        self, mock_cryomodule, valid_timestamp
+    ):
         """Test load_data with missing required fields"""
         measurement = Q0Measurement(mock_cryomodule)
 
         # Data missing required keys
-        incomplete_data = {valid_timestamp: {"Heater Run": {}}}  # Missing required fields
+        incomplete_data = {
+            valid_timestamp: {"Heater Run": {}}
+        }  # Missing required fields
 
-        with patch("builtins.open", mock_open(read_data=json.dumps(incomplete_data))):
-            with patch("sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_RUN_KEY", "Heater Run"):
-                with pytest.raises(ValueError, match="Missing required data field"):
+        with patch(
+            "builtins.open", mock_open(read_data=json.dumps(incomplete_data))
+        ):
+            with patch(
+                "sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_RUN_KEY",
+                "Heater Run",
+            ):
+                with pytest.raises(
+                    ValueError, match="Missing required data field"
+                ):
                     measurement.load_data(valid_timestamp)
 
-    def test_load_data_success(self, mock_cryomodule, valid_timestamp, sample_measurement_data):
+    def test_load_data_success(
+        self, mock_cryomodule, valid_timestamp, sample_measurement_data
+    ):
         """Test successful data loading"""
         measurement = Q0Measurement(mock_cryomodule)
 
-        with patch("builtins.open", mock_open(read_data=json.dumps(sample_measurement_data))):
-            with patch.object(measurement, "_load_heater_run_data") as mock_load_heater:
-                with patch.object(measurement, "_load_rf_run_data") as mock_load_rf:
+        with patch(
+            "builtins.open",
+            mock_open(read_data=json.dumps(sample_measurement_data)),
+        ):
+            with patch.object(
+                measurement, "_load_heater_run_data"
+            ) as mock_load_heater:
+                with patch.object(
+                    measurement, "_load_rf_run_data"
+                ) as mock_load_rf:
                     with patch.object(measurement, "save_data") as mock_save:
-                        with patch("sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_RUN_KEY", "Heater Run"):
+                        with patch(
+                            "sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_RUN_KEY",
+                            "Heater Run",
+                        ):
                             with patch(
-                                "sc_linac_physics.applications.q0.q0_utils.JSON_RF_RUN_KEY", "RF Run"
+                                "sc_linac_physics.applications.q0.q0_utils.JSON_RF_RUN_KEY",
+                                "RF Run",
                             ):  # Fixed: removed trailing space
                                 measurement.load_data(valid_timestamp)
 
@@ -355,11 +402,26 @@ class TestLoadHelperMethods:
             }
         }
 
-        with patch("sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_RUN_KEY", "Heater Run"):
-            with patch("sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_READBACK_KEY", "Heater Readback"):
-                with patch("sc_linac_physics.applications.q0.q0_utils.JSON_START_KEY", "Start Time"):
-                    with patch("sc_linac_physics.applications.q0.q0_utils.JSON_END_KEY", "End Time"):
-                        with patch("sc_linac_physics.applications.q0.q0_utils.JSON_LL_KEY", "LL Data"):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_RUN_KEY",
+            "Heater Run",
+        ):
+            with patch(
+                "sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_READBACK_KEY",
+                "Heater Readback",
+            ):
+                with patch(
+                    "sc_linac_physics.applications.q0.q0_utils.JSON_START_KEY",
+                    "Start Time",
+                ):
+                    with patch(
+                        "sc_linac_physics.applications.q0.q0_utils.JSON_END_KEY",
+                        "End Time",
+                    ):
+                        with patch(
+                            "sc_linac_physics.applications.q0.q0_utils.JSON_LL_KEY",
+                            "LL Data",
+                        ):
                             measurement._load_heater_run_data(heater_data)
 
         assert measurement.heater_run_heatload == 40.0
@@ -381,20 +443,42 @@ class TestLoadHelperMethods:
                 "Heater Readback": 60.0,
                 "Average Pressure": 16.2,
                 "dLL/dt": -0.004,
-                "Cavity Amplitudes": {"1": 16.5, "2": 16.5, "3": 16.5, "4": 16.5},
+                "Cavity Amplitudes": {
+                    "1": 16.5,
+                    "2": 16.5,
+                    "3": 16.5,
+                    "4": 16.5,
+                },
             }
         }
 
-        with patch("sc_linac_physics.applications.q0.q0_utils.JSON_RF_RUN_KEY", "RF Run"):
-            with patch("sc_linac_physics.applications.q0.q0_utils.JSON_CAV_AMPS_KEY", "Cavity Amplitudes"):
-                with patch("sc_linac_physics.applications.q0.q0_utils.JSON_START_KEY", "Start Time"):
-                    with patch("sc_linac_physics.applications.q0.q0_utils.JSON_END_KEY", "End Time"):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.JSON_RF_RUN_KEY",
+            "RF Run",
+        ):
+            with patch(
+                "sc_linac_physics.applications.q0.q0_utils.JSON_CAV_AMPS_KEY",
+                "Cavity Amplitudes",
+            ):
+                with patch(
+                    "sc_linac_physics.applications.q0.q0_utils.JSON_START_KEY",
+                    "Start Time",
+                ):
+                    with patch(
+                        "sc_linac_physics.applications.q0.q0_utils.JSON_END_KEY",
+                        "End Time",
+                    ):
                         with patch(
-                            "sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_READBACK_KEY", "Heater Readback"
+                            "sc_linac_physics.applications.q0.q0_utils.JSON_HEATER_READBACK_KEY",
+                            "Heater Readback",
                         ):
-                            with patch("sc_linac_physics.applications.q0.q0_utils.JSON_LL_KEY", "LL Data"):
+                            with patch(
+                                "sc_linac_physics.applications.q0.q0_utils.JSON_LL_KEY",
+                                "LL Data",
+                            ):
                                 with patch(
-                                    "sc_linac_physics.applications.q0.q0_utils.JSON_AVG_PRESS_KEY", "Average Pressure"
+                                    "sc_linac_physics.applications.q0.q0_utils.JSON_AVG_PRESS_KEY",
+                                    "Average Pressure",
                                 ):
                                     measurement._load_rf_run_data(rf_data)
 
@@ -409,13 +493,17 @@ class TestSaveDataMethod:
 
     @patch("sc_linac_physics.applications.q0.q0_utils.make_json_file")
     @patch("sc_linac_physics.applications.q0.q0_utils.update_json_data")
-    def test_save_data(self, mock_update_json, mock_make_json, setup_complete_measurement):
+    def test_save_data(
+        self, mock_update_json, mock_make_json, setup_complete_measurement
+    ):
         """Test data saving"""
         measurement = setup_complete_measurement()
 
         measurement.save_data()
 
-        mock_make_json.assert_called_once_with(measurement.cryomodule.q0_data_file)
+        mock_make_json.assert_called_once_with(
+            measurement.cryomodule.q0_data_file
+        )
         mock_update_json.assert_called_once()
 
 
@@ -497,7 +585,9 @@ class TestCalculatedProperties:
         assert heat_load == 57.0
 
     @patch("sc_linac_physics.applications.q0.q0_utils.calc_q0")
-    def test_q0_calculation(self, mock_calc_q0, setup_complete_measurement, sample_amplitudes):
+    def test_q0_calculation(
+        self, mock_calc_q0, setup_complete_measurement, sample_amplitudes
+    ):
         """Test Q0 calculation"""
         measurement = setup_complete_measurement()
 
@@ -514,7 +604,9 @@ class TestCalculatedProperties:
 
         q0_value = measurement.q0
 
-        expected_effective_amp = np.sqrt(sum(amp**2 for amp in sample_amplitudes.values()))
+        expected_effective_amp = np.sqrt(
+            sum(amp**2 for amp in sample_amplitudes.values())
+        )
 
         mock_calc_q0.assert_called_once_with(
             amplitude=expected_effective_amp,
@@ -543,7 +635,9 @@ class TestEdgeCases:
         with pytest.raises(KeyError):
             _ = measurement.q0
 
-    def test_effective_amplitude_calculation_edge_cases(self, setup_complete_measurement):
+    def test_effective_amplitude_calculation_edge_cases(
+        self, setup_complete_measurement
+    ):
         """Test effective amplitude calculation with edge cases"""
         # Test with zero amplitudes
         zero_amplitudes = {1: 0.0, 2: 0.0}
@@ -552,7 +646,9 @@ class TestEdgeCases:
         # Mock calibration
         measurement.cryomodule.calibration.get_heat.side_effect = lambda x: 50.0
 
-        with patch("sc_linac_physics.applications.q0.q0_utils.calc_q0") as mock_calc_q0:
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.calc_q0"
+        ) as mock_calc_q0:
             mock_calc_q0.return_value = 0.0
             _ = measurement.q0
 
@@ -570,7 +666,9 @@ class TestEdgeCases:
         with pytest.raises(AttributeError):
             _ = measurement.adjustment
 
-    def test_property_access_with_missing_heater_run(self, mock_cryomodule, sample_amplitudes):
+    def test_property_access_with_missing_heater_run(
+        self, mock_cryomodule, sample_amplitudes
+    ):
         """Test accessing adjustment property without heater_run"""
         measurement = Q0Measurement(mock_cryomodule)
         measurement.amplitudes = sample_amplitudes  # This creates rf_run
@@ -598,7 +696,10 @@ class TestIntegration:
 
         measurement.cryomodule.calibration.get_heat.side_effect = mock_get_heat
 
-        with patch("sc_linac_physics.applications.q0.q0_utils.calc_q0", return_value=1.2e10):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.calc_q0",
+            return_value=1.2e10,
+        ):
             # Test all calculations work together
             assert measurement.raw_heat == 55.0
             assert measurement.adjustment == 2.0
@@ -612,7 +713,10 @@ class TestIntegration:
         measurement.cryomodule.calibration.get_heat.side_effect = lambda x: 50.0
 
         # Calculate some properties
-        with patch("sc_linac_physics.applications.q0.q0_utils.calc_q0", return_value=1.0e10):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.calc_q0",
+            return_value=1.0e10,
+        ):
             _ = measurement.raw_heat
             _ = measurement.adjustment
             _ = measurement.heat_load
@@ -644,7 +748,10 @@ class TestIntegration:
 
         measurement.cryomodule.calibration.get_heat.side_effect = track_get_heat
 
-        with patch("sc_linac_physics.applications.q0.q0_utils.calc_q0", return_value=1.2e10):
+        with patch(
+            "sc_linac_physics.applications.q0.q0_utils.calc_q0",
+            return_value=1.2e10,
+        ):
             # Accessing q0 should trigger the calculation chain
             _ = measurement.q0
 

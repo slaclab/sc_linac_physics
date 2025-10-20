@@ -4,7 +4,9 @@ from typing import Dict, List, Optional, Tuple
 from PyQt5.QtCore import QObject, QThread
 from PyQt5.QtCore import pyqtSignal
 
-from sc_linac_physics.applications.microphonics.gui.data_acquisition import DataAcquisitionManager
+from sc_linac_physics.applications.microphonics.gui.data_acquisition import (
+    DataAcquisitionManager,
+)
 
 BASE_HARDWARE_SAMPLE_RATE = 2000
 
@@ -37,7 +39,9 @@ class AsyncDataManager(QObject):
     - Signal routing from the data acquisition manager
     """
 
-    acquisitionProgress = pyqtSignal(str, int, int)  # chassis_id, cavity_num, progress
+    acquisitionProgress = pyqtSignal(
+        str, int, int
+    )  # chassis_id, cavity_num, progress
     acquisitionError = pyqtSignal(str, str)  # chassis_id, error_message
     acquisitionComplete = pyqtSignal(str)  # chassis_id
     # Job level signals
@@ -54,7 +58,9 @@ class AsyncDataManager(QObject):
         self.job_chassis_ids = set()
         self.job_running = False
 
-    def _validate_all_chassis_config(self, chassis_config: Dict) -> List[Tuple[str, str]]:
+    def _validate_all_chassis_config(
+        self, chassis_config: Dict
+    ) -> List[Tuple[str, str]]:
         """Validate for all chassis configuration"""
         if not chassis_config:
             return [("", "No chassis configurations provided")]
@@ -82,7 +88,9 @@ class AsyncDataManager(QObject):
         # Initialize job tracking
         self.job_running = True
         self.job_chassis_ids = set(chassis_config.keys())
-        self.worker_progress = {chassis_id: 0 for chassis_id in self.job_chassis_ids}
+        self.worker_progress = {
+            chassis_id: 0 for chassis_id in self.job_chassis_ids
+        }
         self.worker_data.clear()
 
         # Start parallel acquisitions
@@ -107,16 +115,22 @@ class AsyncDataManager(QObject):
         self.active_workers[chassis_id] = (thread, worker)
 
         # Automatic cleanup
-        thread.started.connect(lambda: worker.start_acquisition(chassis_id, config))
+        thread.started.connect(
+            lambda: worker.start_acquisition(chassis_id, config)
+        )
         worker.acquisitionComplete.connect(thread.quit)
         worker.acquisitionError.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(lambda: self.active_workers.pop(chassis_id, None))
+        thread.finished.connect(
+            lambda: self.active_workers.pop(chassis_id, None)
+        )
         # Schedule acquisition start
         thread.start()
 
-    def _handle_worker_progress(self, chassis_id: str, cavity_num: int, progress: int):
+    def _handle_worker_progress(
+        self, chassis_id: str, cavity_num: int, progress: int
+    ):
         """Handle progress from individual worker"""
         # Update worker progress
         self.worker_progress[chassis_id] = progress
@@ -126,7 +140,9 @@ class AsyncDataManager(QObject):
 
         # Calculate and emit overall job progress
         if self.job_chassis_ids:
-            total_progress = sum(self.worker_progress.values()) / len(self.job_chassis_ids)
+            total_progress = sum(self.worker_progress.values()) / len(
+                self.job_chassis_ids
+            )
             self.jobProgress.emit(int(total_progress))
 
     def _handle_worker_error(self, chassis_id: str, error: str):
@@ -178,7 +194,9 @@ class AsyncDataManager(QObject):
                 aggregated_data["decimation"] = data["decimation"]
 
         # Sort cavity list
-        aggregated_data["cavity_list"] = sorted(set(aggregated_data["cavity_list"]))
+        aggregated_data["cavity_list"] = sorted(
+            set(aggregated_data["cavity_list"])
+        )
 
         # Emit aggregated data
         self.jobComplete.emit(aggregated_data)

@@ -17,8 +17,11 @@ from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 
 class AutoSetupPVGroup(LauncherPVGroup):
+    launcher_dir = os.path.join(
+        LauncherPVGroup.srf_root_dir, "applications/auto_setup/launcher"
+    )
+
     def __init__(self, prefix: str, script_args: List[str] = None):
-        self.launcher_dir = os.path.join(self.srf_root_dir, "applications/auto_setup/launcher")
         super().__init__(prefix + "AUTO:")
         self.script_args = script_args
 
@@ -84,7 +87,9 @@ class AutoSetupGlobalPVGroup(AutoSetupPVGroup):
 
 
 class AutoSetupCavityPVGroup(AutoSetupPVGroup):
-    progress: PvpropertyFloat = pvproperty(name="PROG", value=0.0, dtype=ChannelType.FLOAT)
+    progress: PvpropertyFloat = pvproperty(
+        name="PROG", value=0.0, dtype=ChannelType.FLOAT
+    )
     status_sevr: SeverityProp = SeverityProp(name="STATUS", value=0)
     status: PvpropertyEnum = pvproperty(
         name="STATUS",
@@ -115,7 +120,9 @@ class AutoSetupCavityPVGroup(AutoSetupPVGroup):
         if isinstance(value, int):
             await self.status_sevr.write(value)
         else:
-            await self.status_sevr.write(["Ready", "Running", "Error"].index(value))
+            await self.status_sevr.write(
+                ["Ready", "Running", "Error"].index(value)
+            )
 
     async def trigger_setup_script(self):
         await create_subprocess_exec(

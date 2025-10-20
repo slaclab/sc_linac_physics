@@ -9,4 +9,3 @@ if TYPE_CHECKING:
 class ColdLinacObject(LauncherLinacObject):
     def __init__(self):
         super().__init__(name="COLD")
-

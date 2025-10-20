@@ -42,7 +42,12 @@ class TestShapeParameters:
 
     def test_shape_parameters_creation(self):
         """Test creating ShapeParameters."""
-        params = ShapeParameters(fillColor=GREEN_FILL_COLOR, borderColor=BLACK_TEXT_COLOR, numPoints=4, rotation=0)
+        params = ShapeParameters(
+            fillColor=GREEN_FILL_COLOR,
+            borderColor=BLACK_TEXT_COLOR,
+            numPoints=4,
+            rotation=0,
+        )
         assert params.fillColor == GREEN_FILL_COLOR
         assert params.borderColor == BLACK_TEXT_COLOR
         assert params.numPoints == 4
@@ -105,7 +110,9 @@ class TestCavityWidgetProperties:
         cavity_widget.underline = False
         assert cavity_widget.underline is False
 
-    @patch("sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel")
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+    )
     def test_severity_channel_property(self, mock_channel_class, cavity_widget):
         """Test severity_channel property."""
         mock_channel = Mock()
@@ -115,15 +122,20 @@ class TestCavityWidgetProperties:
         # Test setter
         cavity_widget.severity_channel = "test:severity"
         mock_channel_class.assert_called_with(
-            address="test:severity", value_slot=cavity_widget.severity_channel_value_changed
+            address="test:severity",
+            value_slot=cavity_widget.severity_channel_value_changed,
         )
         mock_channel.connect.assert_called_once()
 
         # Test getter
         assert cavity_widget.severity_channel == "test:severity"
 
-    @patch("sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel")
-    def test_description_channel_property(self, mock_channel_class, cavity_widget):
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+    )
+    def test_description_channel_property(
+        self, mock_channel_class, cavity_widget
+    ):
         """Test description_channel property."""
         mock_channel = Mock()
         mock_channel.address = "test:description"
@@ -131,7 +143,10 @@ class TestCavityWidgetProperties:
 
         # Test setter
         cavity_widget.description_channel = "test:description"
-        mock_channel_class.assert_called_with(address="test:description", value_slot=cavity_widget.description_changed)
+        mock_channel_class.assert_called_with(
+            address="test:description",
+            value_slot=cavity_widget.description_changed,
+        )
         mock_channel.connect.assert_called_once()
 
         # Test getter
@@ -148,13 +163,25 @@ class TestCavityWidgetMouseEvents:
 
     def test_mouse_press_event(self, cavity_widget):
         """Test mouse press event sets press_pos."""
-        event = QMouseEvent(QMouseEvent.MouseButtonPress, QPoint(10, 10), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+        event = QMouseEvent(
+            QMouseEvent.MouseButtonPress,
+            QPoint(10, 10),
+            Qt.LeftButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
+        )
         cavity_widget.mousePressEvent(event)
         assert cavity_widget.press_pos == QPoint(10, 10)
 
     def test_mouse_press_event_right_button(self, cavity_widget):
         """Test mouse press event with right button doesn't set press_pos."""
-        event = QMouseEvent(QMouseEvent.MouseButtonPress, QPoint(10, 10), Qt.RightButton, Qt.RightButton, Qt.NoModifier)
+        event = QMouseEvent(
+            QMouseEvent.MouseButtonPress,
+            QPoint(10, 10),
+            Qt.RightButton,
+            Qt.RightButton,
+            Qt.NoModifier,
+        )
         cavity_widget.mousePressEvent(event)
         assert cavity_widget.press_pos is None
 
@@ -193,7 +220,11 @@ class TestCavityWidgetMouseEvents:
 
         # Release outside widget bounds
         event = QMouseEvent(
-            QMouseEvent.MouseButtonRelease, QPoint(100, 100), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier
+            QMouseEvent.MouseButtonRelease,
+            QPoint(100, 100),
+            Qt.LeftButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
         )
 
         clicked_spy = Mock()
@@ -219,7 +250,9 @@ class TestCavityWidgetChannelHandlers:
             cavity_widget.severity_channel_value_changed(999)  # Invalid value
             mock_change_shape.assert_called_with(SHAPE_PARAMETER_DICT[3])
 
-    def test_severity_channel_value_changed_exception_handling(self, cavity_widget):
+    def test_severity_channel_value_changed_exception_handling(
+        self, cavity_widget
+    ):
         """Test severity channel handler exception handling."""
         # Create a mock that raises exception on first call, succeeds on second
         mock_change_shape = Mock(side_effect=[Exception("Test error"), None])
@@ -233,8 +266,12 @@ class TestCavityWidgetChannelHandlers:
 
             # Verify the calls were made with correct parameters
             calls = mock_change_shape.call_args_list
-            assert calls[0][0][0] == SHAPE_PARAMETER_DICT[0]  # First call with intended value
-            assert calls[1][0][0] == SHAPE_PARAMETER_DICT[3]  # Second call with fallback
+            assert (
+                calls[0][0][0] == SHAPE_PARAMETER_DICT[0]
+            )  # First call with intended value
+            assert (
+                calls[1][0][0] == SHAPE_PARAMETER_DICT[3]
+            )  # Second call with fallback
 
     def test_description_changed_with_string(self, cavity_widget):
         """Test description_changed with string value."""
@@ -273,7 +310,9 @@ class TestCavityWidgetChannelHandlers:
         cavity_widget.description_changed(test_array)
         assert "Description processing error" in cavity_widget.toolTip()
 
-    def test_description_changed_with_large_values_filtered_out(self, cavity_widget):
+    def test_description_changed_with_large_values_filtered_out(
+        self, cavity_widget
+    ):
         """Test description_changed with values that get filtered out (not an error case)."""
         # Array with invalid ASCII values - these get filtered out, resulting in empty string
         test_array = np.array([999, 1000])  # Invalid ASCII but filtered out
@@ -287,7 +326,12 @@ class TestCavityWidgetShapeChanging:
 
     def test_change_shape(self, cavity_widget):
         """Test change_shape method."""
-        test_params = ShapeParameters(fillColor=RED_FILL_COLOR, borderColor=BLACK_TEXT_COLOR, numPoints=6, rotation=45)
+        test_params = ShapeParameters(
+            fillColor=RED_FILL_COLOR,
+            borderColor=BLACK_TEXT_COLOR,
+            numPoints=6,
+            rotation=45,
+        )
 
         # Test without mocking update to avoid complications with multiple calls
         cavity_widget.change_shape(test_params)
@@ -300,7 +344,12 @@ class TestCavityWidgetShapeChanging:
 
     def test_change_shape_calls_update_at_end(self, cavity_widget):
         """Test that change_shape calls update method."""
-        test_params = ShapeParameters(fillColor=RED_FILL_COLOR, borderColor=BLACK_TEXT_COLOR, numPoints=6, rotation=45)
+        test_params = ShapeParameters(
+            fillColor=RED_FILL_COLOR,
+            borderColor=BLACK_TEXT_COLOR,
+            numPoints=6,
+            rotation=45,
+        )
 
         with patch.object(cavity_widget, "update") as mock_update:
             cavity_widget.change_shape(test_params)
@@ -337,8 +386,12 @@ class TestCavityWidgetDrawing:
         with patch(
             "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMDrawingPolygon.draw_item"
         ) as mock_super_draw:
-            with patch.object(cavity_widget, "get_bounds", return_value=(0, 0, 100, 50)):
-                with patch("sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QFontMetrics"):
+            with patch.object(
+                cavity_widget, "get_bounds", return_value=(0, 0, 100, 50)
+            ):
+                with patch(
+                    "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QFontMetrics"
+                ):
                     mock_painter = Mock()
                     cavity_widget._cavity_text = ""
 
@@ -348,8 +401,12 @@ class TestCavityWidgetDrawing:
 
     def test_draw_item_with_empty_text_skips_text_drawing(self, cavity_widget):
         """Test that empty text skips text drawing logic."""
-        with patch.object(cavity_widget, "get_bounds", return_value=(0, 0, 100, 50)):
-            with patch("sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QFontMetrics") as mock_fm_class:
+        with patch.object(
+            cavity_widget, "get_bounds", return_value=(0, 0, 100, 50)
+        ):
+            with patch(
+                "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QFontMetrics"
+            ) as mock_fm_class:
                 mock_painter = Mock()
                 cavity_widget._cavity_text = ""
 
@@ -364,7 +421,9 @@ class TestCavityWidgetDrawing:
 class TestCavityWidgetIntegration:
     """Integration tests."""
 
-    @patch("sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel")
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+    )
     def test_full_workflow(self, mock_channel_class, cavity_widget):
         """Test complete workflow of setting channels and receiving values."""
         # Setup mock channels

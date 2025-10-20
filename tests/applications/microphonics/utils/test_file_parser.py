@@ -69,7 +69,9 @@ def sample_data_file():
  -0.70800  -0.97200   0.00000   0.33200
   0.12000  -0.14800  -0.61200   0.79200
 """
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", delete=False, suffix=".txt"
+    ) as f:
         f.write(content)
         temp_path = Path(f.name)
 
@@ -82,7 +84,12 @@ def sample_data_file():
 # Test _read_and_parse_header
 class TestReadAndParseHeader:
     def test_basic_parsing(self, sample_data_file):
-        header_lines, data_lines, decimation, marker_idx = _read_and_parse_header(sample_data_file)
+        (
+            header_lines,
+            data_lines,
+            decimation,
+            marker_idx,
+        ) = _read_and_parse_header(sample_data_file)
 
         assert marker_idx is not None
         assert decimation == 4  # from wave_samp_per
@@ -90,7 +97,12 @@ class TestReadAndParseHeader:
         assert len(header_lines) > 0
 
     def test_marker_index_found(self, sample_data_file):
-        header_lines, data_lines, decimation, marker_idx = _read_and_parse_header(sample_data_file)
+        (
+            header_lines,
+            data_lines,
+            decimation,
+            marker_idx,
+        ) = _read_and_parse_header(sample_data_file)
 
         # Check that the header lines contain the ACCL marker at marker_idx
         assert marker_idx < len(header_lines)
@@ -107,12 +119,16 @@ class TestReadAndParseHeader:
 # wave_samp_per : 4
 1.0 2.0 3.0
 """
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".txt"
+        ) as f:
             f.write(content)
             temp_path = Path(f.name)
 
         try:
-            with pytest.raises(FileParserError, match="Essential channel header line"):
+            with pytest.raises(
+                FileParserError, match="Essential channel header line"
+            ):
                 _read_and_parse_header(temp_path)
         finally:
             temp_path.unlink()
@@ -141,7 +157,9 @@ class TestParseChannelPVs:
         marker_idx = 0
 
         # The actual error message is "Failed to parse channel PVs from header line"
-        with pytest.raises(FileParserError, match="Failed to parse channel PVs"):
+        with pytest.raises(
+            FileParserError, match="Failed to parse channel PVs"
+        ):
             _parse_channel_pvs(header_lines, marker_idx)
 
     def test_single_channel(self):
@@ -196,7 +214,11 @@ class TestParseNumericalData:
             lines = f.readlines()
 
         # Extract only numerical data lines (skip header and comments)
-        data_lines = [line for line in lines if line.strip() and not line.strip().startswith("#")]
+        data_lines = [
+            line
+            for line in lines
+            if line.strip() and not line.strip().startswith("#")
+        ]
 
         data_array = _parse_numerical_data(data_lines, 4, sample_data_file)
 
@@ -213,7 +235,10 @@ class TestParseNumericalData:
     def test_column_mismatch(self):
         """Test data with fewer columns than expected"""
         # The parser uses the actual number of columns present, not the expected count
-        invalid_lines = ["1.0 2.0 3.0\n", "4.0 5.0 6.0\n"]  # Only 3 columns, expecting 4
+        invalid_lines = [
+            "1.0 2.0 3.0\n",
+            "4.0 5.0 6.0\n",
+        ]  # Only 3 columns, expecting 4
         data_array = _parse_numerical_data(invalid_lines, 4, Path("dummy.txt"))
         # It creates a 2x3 array (actual columns) rather than padding to 2x4
         assert data_array.shape == (2, 3)
@@ -224,7 +249,9 @@ class TestParseNumericalData:
     def test_non_numeric_data(self):
         """Test data with non-numeric values"""
         invalid_lines = ["1.0 2.0 not_a_number 4.0\n"]
-        with pytest.raises(FileParserError, match="Could not parse numerical data"):
+        with pytest.raises(
+            FileParserError, match="Could not parse numerical data"
+        ):
             _parse_numerical_data(invalid_lines, 4, Path("dummy.txt"))
 
 
@@ -232,7 +259,12 @@ class TestParseNumericalData:
 class TestFullFileIntegration:
     def test_complete_file_parsing(self, sample_data_file):
         """Test the full parsing pipeline"""
-        header_lines, data_lines, decimation, marker_idx = _read_and_parse_header(sample_data_file)
+        (
+            header_lines,
+            data_lines,
+            decimation,
+            marker_idx,
+        ) = _read_and_parse_header(sample_data_file)
 
         # Verify decimation
         assert decimation == 4
@@ -242,7 +274,9 @@ class TestFullFileIntegration:
         assert len(pvs) == 4
 
         # Parse numerical data
-        data_array = _parse_numerical_data(data_lines, len(pvs), sample_data_file)
+        data_array = _parse_numerical_data(
+            data_lines, len(pvs), sample_data_file
+        )
         assert data_array.shape[0] == 20
         assert data_array.shape[1] == 4
 
@@ -264,7 +298,9 @@ class TestFullFileIntegration:
 
         # Check that we have 4 cavities
         cavity_list = result["cavity_list"]
-        assert len(cavity_list) == 4, f"Expected 4 cavities, got {len(cavity_list)}"
+        assert (
+            len(cavity_list) == 4
+        ), f"Expected 4 cavities, got {len(cavity_list)}"
         assert cavity_list == [1, 2, 3, 4]
 
         # Check cavities dictionary structure
@@ -288,12 +324,19 @@ class TestEdgeCases:
         content = """# wave_samp_per : 4
 # ACCL:L1B:0210:PZT:DF:WF
 """
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".txt"
+        ) as f:
             f.write(content)
             temp_path = Path(f.name)
 
         try:
-            header_lines, data_lines, decimation, marker_idx = _read_and_parse_header(temp_path)
+            (
+                header_lines,
+                data_lines,
+                decimation,
+                marker_idx,
+            ) = _read_and_parse_header(temp_path)
             assert len(data_lines) == 0
             assert decimation == 4
         finally:
@@ -306,12 +349,19 @@ class TestEdgeCases:
 # ACCL:L1B:0210:PZT:DF:WF
 1.0
 """
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".txt"
+        ) as f:
             f.write(content)
             temp_path = Path(f.name)
 
         try:
-            header_lines, data_lines, decimation, marker_idx = _read_and_parse_header(temp_path)
+            (
+                header_lines,
+                data_lines,
+                decimation,
+                marker_idx,
+            ) = _read_and_parse_header(temp_path)
             assert decimation == 8  # Last value should be used
         finally:
             temp_path.unlink()

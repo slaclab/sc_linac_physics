@@ -108,7 +108,9 @@ class TestLaunchDisplay:
         mock_func = Mock()
         mock_launchers.launch_srf_home = mock_func
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             cli.launch_display("srf-home")
 
         mock_func.assert_called_once()
@@ -121,7 +123,9 @@ class TestLaunchDisplay:
 
         original_argv = sys.argv.copy()
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             cli.launch_display("cavity", ["--arg1", "value1"])
 
         # Verify launcher was called
@@ -145,7 +149,9 @@ class TestLaunchDisplay:
 
         original_argv = sys.argv.copy()
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             cli.launch_display("fault-decoder", ["--test", "value"])
 
         # Verify argv was restored
@@ -159,7 +165,9 @@ class TestLaunchDisplay:
 
         original_argv = sys.argv.copy()
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             with pytest.raises(Exception, match="Launch failed"):
                 cli.launch_display("quench")
 
@@ -173,7 +181,9 @@ class TestLaunchDisplay:
             mock_func = Mock()
             setattr(mock_launchers, info["launcher"], mock_func)
 
-            with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+            with patch.dict(
+                "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+            ):
                 cli.launch_display(display_name)
 
             mock_func.assert_called_once()
@@ -184,7 +194,9 @@ class TestLaunchDisplay:
         mock_func = Mock()
         mock_launchers.launch_tuning = mock_func
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             cli.launch_display("tuning", None)
 
         mock_func.assert_called_once()
@@ -213,10 +225,14 @@ class TestMain:
     def test_main_with_extra_args(self, mock_launch):
         """Test main with extra arguments."""
         # Note: argparse collects these as args, not --arg1 --arg2
-        with patch("sys.argv", ["sc-linac", "cavity", "arg1", "value1", "arg2"]):
+        with patch(
+            "sys.argv", ["sc-linac", "cavity", "arg1", "value1", "arg2"]
+        ):
             cli.main()
 
-        mock_launch.assert_called_once_with("cavity", ["arg1", "value1", "arg2"])
+        mock_launch.assert_called_once_with(
+            "cavity", ["arg1", "value1", "arg2"]
+        )
 
     def test_main_invalid_display(self):
         """Test main with invalid display name."""
@@ -315,7 +331,9 @@ class TestIntegration:
         mock_func = Mock()
         mock_launchers.launch_srf_home = mock_func
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             with patch("sys.argv", ["sc-linac", "srf-home", "test-arg"]):
                 cli.main()
 
@@ -330,7 +348,9 @@ class TestIntegration:
 
         original_argv = sys.argv.copy()
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             with patch("sys.argv", ["sc-linac", "cavity", "CM01", "verbose"]):
                 cli.main()
 
@@ -356,7 +376,9 @@ class TestErrorHandling:
         mock_func = Mock(side_effect=RuntimeError("Display error"))
         mock_launchers.launch_fault_count = mock_func
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             with patch("sys.argv", ["sc-linac", "fault-count"]):
                 with pytest.raises(RuntimeError, match="Display error"):
                     cli.main()
@@ -365,9 +387,13 @@ class TestErrorHandling:
         """Test error when launcher attribute doesn't exist."""
         mock_launchers = MagicMock()
         # Make getattr raise AttributeError
-        mock_launchers.launch_q0_measurement = MagicMock(side_effect=AttributeError("No such launcher"))
+        mock_launchers.launch_q0_measurement = MagicMock(
+            side_effect=AttributeError("No such launcher")
+        )
 
-        with patch.dict("sys.modules", {"sc_linac_physics.launchers": mock_launchers}):
+        with patch.dict(
+            "sys.modules", {"sc_linac_physics.launchers": mock_launchers}
+        ):
             with patch("sys.argv", ["sc-linac", "q0"]):
                 with pytest.raises(AttributeError):
                     cli.main()

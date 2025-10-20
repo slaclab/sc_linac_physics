@@ -43,14 +43,19 @@ from sc_linac_physics.utils.simulation.rack_service import RACKPVGroup
 from sc_linac_physics.utils.simulation.rfs_service import RFStationPVGroup
 from sc_linac_physics.utils.simulation.service import Service
 from sc_linac_physics.utils.simulation.ssa_service import SSAPVGroup
-from sc_linac_physics.utils.simulation.tuner_service import StepperPVGroup, PiezoPVGroup
+from sc_linac_physics.utils.simulation.tuner_service import (
+    StepperPVGroup,
+    PiezoPVGroup,
+)
 
 
 class SCLinacPhysicsService(Service):
     def __init__(self):
         super().__init__()
         self["PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT"] = ChannelInteger(value=0)
-        self["PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT"] = ChannelInteger(value=0)
+        self["PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT"] = ChannelInteger(
+            value=0
+        )
         self["PHYS:SYS0:1:SC_CAV_FAULT_HEARTBEAT"] = ChannelInteger(value=0)
 
         self["ALRM:SYS0:SC_CAV_FAULT:ALHBERR"] = ChannelEnum(
@@ -76,20 +81,28 @@ class SCLinacPhysicsService(Service):
 
         for linac_idx, (linac_name, cm_list) in enumerate(LINAC_TUPLES):
             linac_prefix = f"ACCL:{linac_name}:1:"
-            self[f"{linac_prefix}AACTMEANSUM"] = ChannelFloat(value=len(LINAC_CM_DICT[linac_idx]) * 8 * 16.6)
+            self[f"{linac_prefix}AACTMEANSUM"] = ChannelFloat(
+                value=len(LINAC_CM_DICT[linac_idx]) * 8 * 16.6
+            )
             self[f"{linac_prefix}ADES_MAX"] = ChannelFloat(value=2800.0)
             if linac_name == "L1B":
                 cm_list += L1BHL
                 self[f"{linac_prefix}HL_AACTMEANSUM"] = ChannelFloat(value=0.0)
 
-            self.add_pvs(AutoSetupLinacPVGroup(prefix=linac_prefix, linac_idx=linac_idx))
+            self.add_pvs(
+                AutoSetupLinacPVGroup(prefix=linac_prefix, linac_idx=linac_idx)
+            )
             for cm_name in cm_list:
                 is_hl = cm_name in L1BHL
                 heater_prefix = f"CPIC:CM{cm_name}:0000:EHCV:"
                 self.add_pvs(HeaterPVGroup(prefix=heater_prefix))
 
-                self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(enum_strings=("Close", "Open"), value=1)
-                self[f"ACCL:{linac_name}:{cm_name}00:ADES_MAX"] = ChannelFloat(value=168.0)
+                self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(
+                    enum_strings=("Close", "Open"), value=1
+                )
+                self[f"ACCL:{linac_name}:{cm_name}00:ADES_MAX"] = ChannelFloat(
+                    value=168.0
+                )
 
                 cryo_prefix = f"CLL:CM{cm_name}:2601:US:"
                 cm_prefix = f"ACCL:{linac_name}:{cm_name}"
@@ -101,7 +114,11 @@ class SCLinacPhysicsService(Service):
                 self.add_pvs(MAGNETPVGroup(prefix=f"YCOR:{magnet_infix}"))
                 self.add_pvs(MAGNETPVGroup(prefix=f"QUAD:{magnet_infix}"))
 
-                self.add_pvs(AutoSetupCMPVGroup(prefix=cm_prefix + "00:", cm_name=cm_name))
+                self.add_pvs(
+                    AutoSetupCMPVGroup(
+                        prefix=cm_prefix + "00:", cm_name=cm_name
+                    )
+                )
 
                 for cav_num in range(1, 9):
                     cav_prefix = cm_prefix + f"{cav_num}0:"
@@ -113,9 +130,15 @@ class SCLinacPhysicsService(Service):
 
                     cavityGroup = CavityPVGroup(prefix=cav_prefix, isHL=is_hl)
                     self.add_pvs(cavityGroup)
-                    self.add_pvs(SSAPVGroup(prefix=cav_prefix + "SSA:", cavityGroup=cavityGroup))
+                    self.add_pvs(
+                        SSAPVGroup(
+                            prefix=cav_prefix + "SSA:", cavityGroup=cavityGroup
+                        )
+                    )
 
-                    piezo_group = PiezoPVGroup(prefix=cav_prefix + "PZT:", cavity_group=cavityGroup)
+                    piezo_group = PiezoPVGroup(
+                        prefix=cav_prefix + "PZT:", cavity_group=cavityGroup
+                    )
                     self.add_pvs(piezo_group)
                     self.add_pvs(
                         StepperPVGroup(
@@ -146,8 +169,12 @@ class SCLinacPhysicsService(Service):
                             cav_num=cav_num,
                         )
                     )
-                    self.add_pvs(RFStationPVGroup(prefix=rfs_prefix + f"RFS1{rfs_infix}"))
-                    self.add_pvs(RFStationPVGroup(prefix=rfs_prefix + f"RFS2{rfs_infix}"))
+                    self.add_pvs(
+                        RFStationPVGroup(prefix=rfs_prefix + f"RFS1{rfs_infix}")
+                    )
+                    self.add_pvs(
+                        RFStationPVGroup(prefix=rfs_prefix + f"RFS2{rfs_infix}")
+                    )
 
                 self.add_pvs(CryoPVGroup(prefix=cryo_prefix))
                 self.add_pvs(BeamlineVacuumPVGroup(prefix=cm_prefix + "00:"))
@@ -157,7 +184,9 @@ class SCLinacPhysicsService(Service):
 
 def main():
     service = SCLinacPhysicsService()
-    _, run_options = ioc_arg_parser(default_prefix="", desc="Simulated CM Cavity Service")
+    _, run_options = ioc_arg_parser(
+        default_prefix="", desc="Simulated CM Cavity Service"
+    )
     run(service, **run_options)
 
 

@@ -1,6 +1,8 @@
 from PyQt5.QtWidgets import QHBoxLayout
 
-from sc_linac_physics.displays.cavity_display.frontend.gui_cavity import GUICavity
+from sc_linac_physics.displays.cavity_display.frontend.gui_cavity import (
+    GUICavity,
+)
 from sc_linac_physics.displays.cavity_display.frontend.gui_cryomodule import (
     GUICryomodule,
 )

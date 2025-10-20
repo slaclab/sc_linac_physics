@@ -10,11 +10,16 @@ from sc_linac_physics.utils.sc_linac.linac import Linac
 @pytest.fixture
 def setup_linac(monkeypatch):
     """Create a SetupLinac instance for testing."""
-    from sc_linac_physics.applications.auto_setup.backend.setup_linac import SetupLinac
+    from sc_linac_physics.applications.auto_setup.backend.setup_linac import (
+        SetupLinac,
+    )
 
     # Mock LauncherLinacObject since it's in the inheritance chain
     launcher_mock = MagicMock()
-    monkeypatch.setattr("sc_linac_physics.utils.sc_linac.linac_utils.LauncherLinacObject", launcher_mock)
+    monkeypatch.setattr(
+        "sc_linac_physics.utils.sc_linac.linac_utils.LauncherLinacObject",
+        launcher_mock,
+    )
 
     # Create a proper mock machine
     machine = MagicMock()
@@ -142,4 +147,6 @@ class TestSetupLinacProperties:
 
         # Test setter updates PV
         setup_linac.auto_tune_requested = False
-        setup_linac._auto_tune_requested_pv_obj.put.assert_called_once_with(False)
+        setup_linac._auto_tune_requested_pv_obj.put.assert_called_once_with(
+            False
+        )

@@ -8,7 +8,9 @@ from sc_linac_physics.applications.tuning.tuning_gui import Tuner
 
 @pytest.fixture
 def display():
-    with patch("pydm.widgets.base.PyDMWidget.channelValueChanged", lambda x: None):
+    with patch(
+        "pydm.widgets.base.PyDMWidget.channelValueChanged", lambda x: None
+    ):
         yield Tuner()
 
 

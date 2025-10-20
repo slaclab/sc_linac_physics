@@ -6,7 +6,9 @@ from unittest.mock import MagicMock, call
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
-from sc_linac_physics.applications.auto_setup.backend.setup_cavity import SetupCavity
+from sc_linac_physics.applications.auto_setup.backend.setup_cavity import (
+    SetupCavity,
+)
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityAbortError,
     RF_MODE_SELA,
@@ -79,14 +81,21 @@ def running_cavity(cavity):
 class TestCavityStatus:
     """Tests for cavity status monitoring and basic state operations."""
 
-    @pytest.mark.parametrize("status", [STATUS_READY_VALUE, STATUS_RUNNING_VALUE, STATUS_ERROR_VALUE])
+    @pytest.mark.parametrize(
+        "status", [STATUS_READY_VALUE, STATUS_RUNNING_VALUE, STATUS_ERROR_VALUE]
+    )
     def test_status(self, cavity, status):
         """Test that cavity status is correctly reported."""
         cavity._status_pv_obj = make_mock_pv(get_val=status)
         assert cavity.status == status
 
     @pytest.mark.parametrize(
-        "status,expected", [(STATUS_RUNNING_VALUE, True), (STATUS_READY_VALUE, False), (STATUS_ERROR_VALUE, False)]
+        "status,expected",
+        [
+            (STATUS_RUNNING_VALUE, True),
+            (STATUS_READY_VALUE, False),
+            (STATUS_ERROR_VALUE, False),
+        ],
     )
     def test_script_running_status(self, cavity, status, expected):
         """Test script_is_running property for different status values."""
@@ -118,11 +127,18 @@ class TestCavityStatus:
 
         assert cavity.status_message == expected_message
 
-    @pytest.mark.parametrize("initial_status", [STATUS_READY_VALUE, STATUS_RUNNING_VALUE, STATUS_ERROR_VALUE])
+    @pytest.mark.parametrize(
+        "initial_status",
+        [STATUS_READY_VALUE, STATUS_RUNNING_VALUE, STATUS_ERROR_VALUE],
+    )
     def test_status_transitions(self, cavity, initial_status):
         """Test that status can transition between states."""
         cavity._status_pv_obj = make_mock_pv(get_val=initial_status)
-        new_status = STATUS_ERROR_VALUE if initial_status != STATUS_ERROR_VALUE else STATUS_READY_VALUE
+        new_status = (
+            STATUS_ERROR_VALUE
+            if initial_status != STATUS_ERROR_VALUE
+            else STATUS_READY_VALUE
+        )
 
         cavity._status_pv_obj.put(new_status)
         cavity._status_pv_obj.get.return_value = new_status
@@ -154,7 +170,12 @@ class TestCavityAbortAndShutdown:
         cavity._abort_pv_obj.put.assert_called_once_with(0)
 
     @pytest.mark.parametrize(
-        "status,should_abort", [(STATUS_READY_VALUE, False), (STATUS_RUNNING_VALUE, True), (STATUS_ERROR_VALUE, False)]
+        "status,should_abort",
+        [
+            (STATUS_READY_VALUE, False),
+            (STATUS_RUNNING_VALUE, True),
+            (STATUS_ERROR_VALUE, False),
+        ],
     )
     def test_request_abort(self, cavity, status, should_abort):
         """Test abort request handling in different states."""
@@ -203,8 +224,12 @@ class TestCavityAbortAndShutdown:
         cavity.shut_down()
 
         # Verify all steps executed in correct order
-        cavity._status_pv_obj.put.assert_has_calls([call(STATUS_RUNNING_VALUE), call(STATUS_READY_VALUE)])
-        cavity._progress_pv_obj.put.assert_has_calls([call(0), call(50), call(100)])
+        cavity._status_pv_obj.put.assert_has_calls(
+            [call(STATUS_RUNNING_VALUE), call(STATUS_READY_VALUE)]
+        )
+        cavity._progress_pv_obj.put.assert_has_calls(
+            [call(0), call(50), call(100)]
+        )
         cavity.turn_off.assert_called_once()
         cavity.ssa.turn_off.assert_called_once()
 
@@ -219,7 +244,9 @@ class TestCavityAbortAndShutdown:
         # Should not proceed with shutdown when script is running
         running_cavity.turn_off.assert_not_called()
         running_cavity.ssa.turn_off.assert_not_called()
-        running_cavity._status_msg_pv_obj.put.assert_called_with(f"{running_cavity} script already running")
+        running_cavity._status_msg_pv_obj.put.assert_called_with(
+            f"{running_cavity} script already running"
+        )
 
 
 class TestSSACalibration:
@@ -289,7 +316,9 @@ class TestSSACalibration:
         cavity._status_msg_pv_obj.put.assert_called_with("Test abort")
 
     @pytest.mark.parametrize("drive_max", [0.0, 50.0, 100.0])
-    def test_ssa_cal_with_different_drive_levels(self, setup_ssa_mocks, drive_max):
+    def test_ssa_cal_with_different_drive_levels(
+        self, setup_ssa_mocks, drive_max
+    ):
         """Test SSA calibration with different drive maximum values."""
         cavity = setup_ssa_mocks
         cavity._ssa_cal_requested_pv_obj = make_mock_pv(get_val=True)
@@ -341,8 +370,12 @@ class TestAutoTuning:
         cavity.move_to_resonance.assert_called_once_with(use_sela=False)
 
         # Verify status updates and progress
-        assert cavity._status_msg_pv_obj.put.call_count >= 1  # At least one status message
-        cavity._progress_pv_obj.put.assert_called_once_with(50)  # Progress is set to 50
+        assert (
+            cavity._status_msg_pv_obj.put.call_count >= 1
+        )  # At least one status message
+        cavity._progress_pv_obj.put.assert_called_once_with(
+            50
+        )  # Progress is set to 50
         cavity.check_abort.assert_called_once()
 
     def test_auto_tune_with_abort(self, setup_tuning_mocks):
@@ -363,7 +396,9 @@ class TestAutoTuning:
         """Test auto-tuning in different SELA modes."""
         cavity = setup_tuning_mocks
         cavity._auto_tune_requested_pv_obj = make_mock_pv(get_val=True)
-        cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_SELA if mode else 0)
+        cavity._rf_mode_pv_obj = make_mock_pv(
+            get_val=RF_MODE_SELA if mode else 0
+        )
 
         cavity.request_auto_tune()
 
@@ -399,7 +434,9 @@ class TestCavityCharacterization:
         cavity.check_abort = mock_check_abort
         return cavity
 
-    def test_request_characterization_when_not_requested(self, setup_char_mocks):
+    def test_request_characterization_when_not_requested(
+        self, setup_char_mocks
+    ):
         """Test characterization behavior when not requested."""
         cavity = setup_char_mocks
         cavity._cav_char_requested_pv_obj = make_mock_pv(get_val=False)
@@ -437,14 +474,20 @@ class TestCavityCharacterization:
         cavity = setup_char_mocks
         cavity._cav_char_requested_pv_obj = make_mock_pv(get_val=True)
         cavity._abort_pv_obj = make_mock_pv()
-        cavity._abort_pv_obj.get.return_value = True  # Ensure abort_requested returns True
+        cavity._abort_pv_obj.get.return_value = (
+            True  # Ensure abort_requested returns True
+        )
 
         with pytest.raises(CavityAbortError) as exc:
             cavity.request_characterization()
 
         assert str(exc.value) == f"Abort requested for {cavity}"
-        cavity._status_msg_pv_obj.put.assert_called_with(f"Abort requested for {cavity}")
-        cavity._abort_pv_obj.put.assert_called_once_with(0)  # Verify clear_abort was called
+        cavity._status_msg_pv_obj.put.assert_called_with(
+            f"Abort requested for {cavity}"
+        )
+        cavity._abort_pv_obj.put.assert_called_once_with(
+            0
+        )  # Verify clear_abort was called
         cavity.characterize.assert_not_called()
 
     def test_characterization_error_handling(self, setup_char_mocks):
@@ -461,7 +504,9 @@ class TestCavityCharacterization:
         assert exc.value == test_error
 
         # Verify error handling - only the first status message is set
-        cavity._status_msg_pv_obj.put.assert_has_calls([call(f"Running {cavity} Cavity Characterization")])
+        cavity._status_msg_pv_obj.put.assert_has_calls(
+            [call(f"Running {cavity} Cavity Characterization")]
+        )
 
     def test_probe_q_calculation(self, setup_char_mocks):
         """Test probe Q calculation during characterization."""
@@ -583,7 +628,13 @@ class TestCavitySetup:
         cavity.request_ramp.assert_not_called()
 
     @pytest.mark.parametrize(
-        "hw_mode", [HW_MODE_MAINTENANCE_VALUE, HW_MODE_OFFLINE_VALUE, HW_MODE_MAIN_DONE_VALUE, HW_MODE_READY_VALUE]
+        "hw_mode",
+        [
+            HW_MODE_MAINTENANCE_VALUE,
+            HW_MODE_OFFLINE_VALUE,
+            HW_MODE_MAIN_DONE_VALUE,
+            HW_MODE_READY_VALUE,
+        ],
     )
     def test_setup_in_invalid_mode(self, setup_sequence_mocks, hw_mode):
         """Test setup behavior in various invalid hardware modes."""

@@ -27,7 +27,9 @@ from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 from sc_linac_physics.utils.sc_linac.rack import Rack
 
-TUNE_MACHINE = Machine(cavity_class=TuneCavity, rack_class=TuneRack, stepper_class=TuneStepper)
+TUNE_MACHINE = Machine(
+    cavity_class=TuneCavity, rack_class=TuneRack, stepper_class=TuneStepper
+)
 
 
 class LabeledSpinbox:
@@ -69,7 +71,9 @@ class CavitySection(QObject):
         status_label: Label showing current operation status
     """
 
-    def __init__(self, cavity: TuneCavity, parent: QObject | None = None) -> None:
+    def __init__(
+        self, cavity: TuneCavity, parent: QObject | None = None
+    ) -> None:
         """Initialize a new cavity control section.
 
         Args:
@@ -79,15 +83,21 @@ class CavitySection(QObject):
         super().__init__(parent)
         self.parent: QObject = parent
         self.cavity: TuneCavity = cavity
-        self.tune_state: PyDMEnumComboBox = PyDMEnumComboBox(init_channel=cavity.tune_config_pv)
+        self.tune_state: PyDMEnumComboBox = PyDMEnumComboBox(
+            init_channel=cavity.tune_config_pv
+        )
 
-        self.chirp_start: LabeledSpinbox = LabeledSpinbox(init_channel=cavity.chirp_freq_start_pv)
+        self.motor_speed: LabeledSpinbox = LabeledSpinbox(
+            init_channel=cavity.stepper_tuner.speed_pv
+        )
 
-        self.chirp_stop: LabeledSpinbox = LabeledSpinbox(init_channel=cavity.chirp_freq_stop_pv)
+        self.max_steps: LabeledSpinbox = LabeledSpinbox(
+            init_channel=cavity.stepper_tuner.max_steps_pv
+        )
 
-        self.motor_speed: LabeledSpinbox = LabeledSpinbox(init_channel=cavity.stepper_tuner.speed_pv)
-
-        self.max_steps: LabeledSpinbox = LabeledSpinbox(init_channel=cavity.stepper_tuner.max_steps_pv)
+        # Create chirp button
+        self.chirp_button: QPushButton = QPushButton("Set Chirp ±400kHz")
+        self.chirp_button.clicked.connect(self.set_chirp_range)
 
         self.groupbox = QGroupBox(f"Cavity {cavity.number}")
         layout = QVBoxLayout()
@@ -95,14 +105,16 @@ class CavitySection(QObject):
         spinbox_layout = QGridLayout()
         layout.addWidget(self.tune_state)
 
-        spinbox_layout.addLayout(self.chirp_start.layout, 0, 0)
-        spinbox_layout.addLayout(self.chirp_stop.layout, 0, 1)
-        spinbox_layout.addLayout(self.motor_speed.layout, 1, 0)
-        spinbox_layout.addLayout(self.max_steps.layout, 1, 1)
+        spinbox_layout.addLayout(self.motor_speed.layout, 0, 1)
+        spinbox_layout.addLayout(self.max_steps.layout, 0, 2)
+        spinbox_layout.addWidget(self.chirp_button, 1, 0, 1, 4)
 
-        expert_options = CollapsibleGroupBox(f"Show {cavity} expert options", spinbox_layout)
+        expert_options = CollapsibleGroupBox(
+            f"Show {cavity} expert options", spinbox_layout
+        )
         layout.addWidget(expert_options)
 
+        # Cold landing button and status
         button_layout = QHBoxLayout()
 
         self.cold_button: QPushButton = QPushButton("Move to Cold Landing")
@@ -118,6 +130,13 @@ class CavitySection(QObject):
         button_layout.addWidget(self.abort_button)
         layout.addLayout(button_layout)
 
+    def set_chirp_range(self):
+        print(
+            "Setting start frequency to -400kHz and stop frequency to +400kHz"
+        )
+        self.cavity.chirp_freq_start = -400e3
+        self.cavity.chirp_freq_stop = 400e3
+
 
 class RackScreen(QObject):
     def __init__(self, rack: Rack, parent=None):
@@ -130,9 +149,13 @@ class RackScreen(QObject):
         self.populate_detune_plot()
         self.detune_plot.showLegend = True
         rack_file = f"/usr/local/lcls/tools/edm/display/llrf/rf_srf_freq_scan_rack{rack.rack_name}.edl"
-        self.edm_screen: PyDMEDMDisplayButton = PyDMEDMDisplayButton(filename=rack_file)
+        self.edm_screen: PyDMEDMDisplayButton = PyDMEDMDisplayButton(
+            filename=rack_file
+        )
         self.edm_screen.setText("EDM Rack Screen")
-        self.edm_screen.macros = list(rack.cavities.values())[0].edm_macro_string
+        self.edm_screen.macros = list(rack.cavities.values())[
+            0
+        ].edm_macro_string
         self.groupbox = QGroupBox(f"{rack}")
         layout = QVBoxLayout()
         self.groupbox.setLayout(layout)
@@ -151,7 +174,9 @@ class RackScreen(QObject):
 
         button_layout.addWidget(self.edm_screen)
 
-        self.cold_button: QPushButton = QPushButton("Move Cavities to Cold Landing")
+        self.cold_button: QPushButton = QPushButton(
+            "Move Cavities to Cold Landing"
+        )
         self.cold_button.clicked.connect(self.rack.trigger_start)
         button_layout.addWidget(self.cold_button)
 
@@ -210,7 +235,11 @@ class Tuner(Display):
         layout: QVBoxLayout = QVBoxLayout()
         self.setLayout(layout)
         layout.addWidget(self.tab_widget)
-        self.machine: Machine = Machine(cavity_class=TuneCavity, stepper_class=TuneStepper, rack_class=TuneRack)
+        self.machine: Machine = Machine(
+            cavity_class=TuneCavity,
+            stepper_class=TuneStepper,
+            rack_class=TuneRack,
+        )
 
         for cm_name in ALL_CRYOMODULES:
             cm = self.machine.cryomodules[cm_name]

@@ -49,10 +49,14 @@ class RFControls:
         rf_row = 1
         control_groupbox_layout.addWidget(self.rf_on_button, rf_row, 0)
         control_groupbox_layout.addWidget(self.rf_off_button, rf_row, 1)
-        control_groupbox_layout.addWidget(self.rf_status_readback_label, rf_row, 2)
+        control_groupbox_layout.addWidget(
+            self.rf_status_readback_label, rf_row, 2
+        )
 
         mode_row = 2
-        control_groupbox_layout.addWidget(self.rf_mode_combobox, mode_row, 0, 1, 3)
+        control_groupbox_layout.addWidget(
+            self.rf_mode_combobox, mode_row, 0, 1, 3
+        )
 
         amp_row = 3
         control_groupbox_layout.addWidget(QLabel("Amplitude:"), amp_row, 0)
@@ -62,7 +66,9 @@ class RFControls:
         max_row = 4
         control_groupbox_layout.addWidget(QLabel("SRF Max"), max_row, 0)
         control_groupbox_layout.addWidget(self.srf_max_spinbox, max_row, 1)
-        control_groupbox_layout.addWidget(self.srf_max_readback_label, max_row, 2)
+        control_groupbox_layout.addWidget(
+            self.srf_max_readback_label, max_row, 2
+        )
 
 
 class Worker(QThread):
