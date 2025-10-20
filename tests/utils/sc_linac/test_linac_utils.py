@@ -535,7 +535,9 @@ class TestEdgeCases:
         """Test stepper tolerance factor at boundary values"""
         # Test exactly at boundaries
         assert stepper_tol_factor(10000) == 5
-        assert stepper_tol_factor(10001) != 5  # Should be in interpolation range
+        assert (
+            stepper_tol_factor(10001) != 5
+        )  # Should be in interpolation range
 
         # Test just above and below key thresholds
         result_just_below_10k = stepper_tol_factor(9999)
@@ -583,7 +585,9 @@ def concrete_auto_linac_object():
 class TestIntegration:
     """Integration tests using fixtures"""
 
-    def test_auto_linac_object_full_workflow(self, mock_pv, concrete_auto_linac_object):
+    def test_auto_linac_object_full_workflow(
+        self, mock_pv, concrete_auto_linac_object
+    ):
         """Test a complete workflow with AutoLinacObject"""
         obj = concrete_auto_linac_object
 
@@ -610,7 +614,9 @@ class TestIntegration:
         obj.trigger_abort()
         mock_pv.put.assert_called_with(1)
 
-    def test_auto_linac_object_status_workflow(self, mock_pv, concrete_auto_linac_object):
+    def test_auto_linac_object_status_workflow(
+        self, mock_pv, concrete_auto_linac_object
+    ):
         """Test status-related workflow"""
         obj = concrete_auto_linac_object
 
@@ -644,7 +650,9 @@ class TestDataStructureIntegrity:
     def test_vacuum_structure_consistency(self):
         """Test consistency between vacuum structures"""
         # Should have same number of beamlines
-        assert len(BEAMLINE_VACUUM_INFIXES) == len(INSULATING_VACUUM_CRYOMODULES)
+        assert len(BEAMLINE_VACUUM_INFIXES) == len(
+            INSULATING_VACUUM_CRYOMODULES
+        )
         assert len(BEAMLINE_VACUUM_INFIXES) == 4  # L0B, L1B, L2B, L3B
 
     def test_cryo_name_map_validity(self):
@@ -656,8 +664,12 @@ class TestDataStructureIntegrity:
 # Configuration for pytest
 def pytest_configure(config):
     """Configure pytest with custom markers"""
-    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
-    config.addinivalue_line("markers", "integration: marks tests as integration tests")
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
+    config.addinivalue_line(
+        "markers", "integration: marks tests as integration tests"
+    )
 
 
 if __name__ == "__main__":

@@ -38,7 +38,9 @@ if __name__ == "__main__":
 
     cm_name = parsed_args.cryomodule
     cm_object: Cryomodule = TUNE_MACHINE.cryomodules[cm_name]
-    rack_obj: TuneRack = cm_object.rack_a if parsed_args.rack == "A" else cm_object.rack_b
+    rack_obj: TuneRack = (
+        cm_object.rack_a if parsed_args.rack == "A" else cm_object.rack_b
+    )
 
     for cavity in rack_obj.cavities.values():
         detune_cavity(cavity)
