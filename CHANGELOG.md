@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v1.4.0 (2025-10-20)
+
+### Bug Fixes
+
+- Use property setter for chirp frequency assignment
+  ([#129](https://github.com/slaclab/sc_linac_physics/pull/129),
+  [`1bc129f`](https://github.com/slaclab/sc_linac_physics/commit/1bc129fa2513cb1144973e39b463dacc592c9ce4))
+
+### Chores
+
+- Resolved linting errors from last push
+  ([#129](https://github.com/slaclab/sc_linac_physics/pull/129),
+  [`1bc129f`](https://github.com/slaclab/sc_linac_physics/commit/1bc129fa2513cb1144973e39b463dacc592c9ce4))
+
+### Features
+
+- Simplify cavity tuning with chirp preset button
+  ([#129](https://github.com/slaclab/sc_linac_physics/pull/129),
+  [`1bc129f`](https://github.com/slaclab/sc_linac_physics/commit/1bc129fa2513cb1144973e39b463dacc592c9ce4))
+
+
 ## v1.3.0 (2025-10-17)
 
 ### Code Style
