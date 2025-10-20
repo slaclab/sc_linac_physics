@@ -97,4 +97,4 @@ class GUICryomodule:
             self.settings.rf_ramp_checkbox.isChecked()
         )
 
-        self.cryomodule_object.trigger_setup()
+        self.cryomodule_object.trigger_start()

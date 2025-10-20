@@ -28,7 +28,7 @@ def setup_cavity(cavity_object: SetupCavity, args):
         cavity_object.cav_char_requested = cm.cav_char_requested
         cavity_object.rf_ramp_requested = cm.rf_ramp_requested
 
-        cavity_object.trigger_setup()
+        cavity_object.trigger_start()
 
 
 if __name__ == "__main__":

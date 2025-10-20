@@ -130,4 +130,4 @@ class GUICavity:
                 self.settings.rf_ramp_checkbox.isChecked()
             )
 
-            self.cavity.trigger_setup()
+            self.cavity.trigger_start()

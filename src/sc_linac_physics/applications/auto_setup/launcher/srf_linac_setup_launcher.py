@@ -28,7 +28,7 @@ def setup_cryomodule(cryomodule_object: SetupCryomodule):
             cryomodule_object.linac.rf_ramp_requested
         )
 
-        cryomodule_object.trigger_setup()
+        cryomodule_object.trigger_start()
 
 
 if __name__ == "__main__":

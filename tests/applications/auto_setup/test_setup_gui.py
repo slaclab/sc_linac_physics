@@ -137,7 +137,7 @@ def test_machine_setup_button(qtbot: QtBot, setup_gui):
     )
 
     # Verify setup was triggered
-    assert SETUP_MACHINE.trigger_setup.call_count == 1
+    assert SETUP_MACHINE.trigger_start.call_count == 1
 
 
 def test_machine_shutdown_button(qtbot: QtBot, setup_gui):
@@ -253,7 +253,7 @@ def test_dialog_cancellation(qtbot: QtBot, setup_gui_with_no_dialogs):
         setup_gui_with_no_dialogs.machine_setup_button, Qt.LeftButton
     )
     assert setup_gui_with_no_dialogs.machine_setup_popup.exec.call_count == 1
-    assert SETUP_MACHINE.trigger_setup.call_count == 0
+    assert SETUP_MACHINE.trigger_start.call_count == 0
 
     # Reset mocks again
     SETUP_MACHINE.reset_mock()
@@ -348,7 +348,7 @@ def test_error_conditions(qtbot: QtBot, setup_gui):
     # Test rapid button clicks
     for _ in range(5):
         qtbot.mouseClick(setup_gui.machine_setup_button, Qt.LeftButton)
-    assert SETUP_MACHINE.trigger_setup.call_count == 5
+    assert SETUP_MACHINE.trigger_start.call_count == 5
 
     # Test checkbox state consistency
     setup_gui.settings = None  # Simulate settings object being destroyed
