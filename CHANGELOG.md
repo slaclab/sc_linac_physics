@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.4.1 (2025-10-21)
+
+### Refactoring
+
+- Consolidate imports to use local linac_utils
+  ([#130](https://github.com/slaclab/sc_linac_physics/pull/130),
+  [`11ad3c8`](https://github.com/slaclab/sc_linac_physics/commit/11ad3c8a656f604425ef92b42e0063a175811b44))
+
+
 ## v1.4.0 (2025-10-20)
 
 ### Bug Fixes
