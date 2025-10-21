@@ -2,10 +2,6 @@ from time import sleep
 from typing import List
 
 from lcls_tools.common.controls.pyepics.utils import PVInvalidError, PV
-from lcls_tools.superconducting.sc_linac_utils import (
-    HW_MODE_ONLINE_VALUE,
-    CavityFaultError,
-)
 from numpy.linalg import LinAlgError
 
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
@@ -13,6 +9,10 @@ from sc_linac_physics.applications.quench_processing.quench_cavity import (
 )  # noqa: E402
 from sc_linac_physics.applications.quench_processing.quench_cryomodule import (  # noqa: E402
     QUENCH_MACHINE,
+)
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    HW_MODE_ONLINE_VALUE,
+    CavityFaultError,
 )
 
 
