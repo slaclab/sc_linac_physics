@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.4.4 (2025-10-22)
+
+### Bug Fixes
+
+- Include CSV files in package distribution
+  ([#133](https://github.com/slaclab/sc_linac_physics/pull/133),
+  [`c2228ee`](https://github.com/slaclab/sc_linac_physics/commit/c2228ee8715439d007688b9c926affee100c6088))
+
+- Include nested display files in package data
+  ([#133](https://github.com/slaclab/sc_linac_physics/pull/133),
+  [`c2228ee`](https://github.com/slaclab/sc_linac_physics/commit/c2228ee8715439d007688b9c926affee100c6088))
+
+
 ## v1.4.3 (2025-10-22)
 
 ### Bug Fixes
