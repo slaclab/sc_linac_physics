@@ -118,7 +118,7 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
 
 [tool.setuptools.package-data]
 "sc_linac_physics" = [
-    "displays/*",
+    "displays/**/*",
     "applications/q0/calibrations/*",
     "applications/q0/data/*",
     "*.ui",
