@@ -124,7 +124,8 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
     "*.ui",
     "*.yaml",
     "*.yml",
-    "*.json"
+    "*.json",
+    "*.csv"
 ]
 
 [tool.semantic_release]
