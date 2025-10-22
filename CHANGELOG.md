@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.4.2 (2025-10-22)
+
+### Refactoring
+
+- **cli**: Auto-discover launchers with decorators
+  ([#131](https://github.com/slaclab/sc_linac_physics/pull/131),
+  [`1057aca`](https://github.com/slaclab/sc_linac_physics/commit/1057aca637ab2f46d36d39cf6bbae7e12510f26c))
+
+- **tests**: Improve CLI test structure and organization
+  ([#131](https://github.com/slaclab/sc_linac_physics/pull/131),
+  [`1057aca`](https://github.com/slaclab/sc_linac_physics/commit/1057aca637ab2f46d36d39cf6bbae7e12510f26c))
+
+
 ## v1.4.1 (2025-10-21)
 
 ### Refactoring
