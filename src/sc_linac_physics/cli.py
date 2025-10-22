@@ -1,49 +1,84 @@
 """Command-line interface for SC Linac Physics."""
 
 import argparse
+import inspect
 import sys
+from dataclasses import dataclass
+from typing import Callable, List
+
+from sc_linac_physics import launchers
 
 
-DISPLAYS = {
-    # Main displays
-    "srf-home": {
-        "launcher": "launch_srf_home",
-        "description": "SRF home overview display",
-    },
-    "cavity": {
-        "launcher": "launch_cavity_display",
-        "description": "Cavity control and monitoring display",
-    },
-    "fault-decoder": {
-        "launcher": "launch_fault_decoder",
-        "description": "Cavity fault decoder display",
-    },
-    "fault-count": {
-        "launcher": "launch_fault_count",
-        "description": "Cavity fault count display",
-    },
-    # Applications
-    "quench": {
-        "launcher": "launch_quench_processing",
-        "description": "Quench processing application",
-    },
-    "setup": {
-        "launcher": "launch_auto_setup",
-        "description": "Automated cavity setup",
-    },
-    "q0": {
-        "launcher": "launch_q0_measurement",
-        "description": "Q0 measurement application",
-    },
-    "tuning": {
-        "launcher": "launch_tuning",
-        "description": "Cavity tuning interface",
-    },
-    "microphonics": {
-        "launcher": "launch_microphonics",
-        "description": "Microphonics data acquisition and analysis interface",
-    },
-}
+@dataclass
+class DisplayInfo:
+    """Information about a display or application."""
+
+    name: str
+    launcher: Callable
+    description: str
+    category: str  # "display" or "application"
+
+
+def _extract_description_from_docstring(func: Callable) -> str:
+    """Extract the first line of a function's docstring."""
+    if func.__doc__:
+        # Get first non-empty line
+        lines = [line.strip() for line in func.__doc__.strip().split("\n")]
+        return lines[0] if lines else "No description available"
+    return "No description available"
+
+
+def _get_display_name(func_name: str) -> str:
+    """Convert function name to display name.
+
+    Example: launch_srf_home -> srf-home
+    """
+    if func_name.startswith("launch_"):
+        name = func_name[7:]  # Remove 'launch_' prefix
+        return name.replace("_", "-")
+    return func_name
+
+
+def _get_category(func: Callable) -> str:
+    """Get the category from the function's decorator attribute."""
+    # Check if function has the _launcher_category attribute set by decorator
+    if hasattr(func, "_launcher_category"):
+        return func._launcher_category
+
+    # Default to application if not decorated
+    return "application"
+
+
+def _discover_launchers():
+    """Automatically discover all launcher functions from launchers module."""
+    display_list = []
+
+    # Get all functions from launchers module
+    for name, obj in inspect.getmembers(launchers, inspect.isfunction):
+        # Only include functions that start with 'launch_'
+        # Exclude the base launch_python_display function
+        if name.startswith("launch_") and name != "launch_python_display":
+            display_name = _get_display_name(name)
+            description = _extract_description_from_docstring(obj)
+            category = _get_category(obj)
+
+            display_list.append(
+                DisplayInfo(
+                    name=display_name,
+                    launcher=obj,
+                    description=description,
+                    category=category,
+                )
+            )
+
+    return display_list
+
+
+# Automatically discover all launchers
+DISPLAY_LIST: List[DisplayInfo] = _discover_launchers()
+
+# Create lookup dictionary for easy access
+DISPLAYS = {display.name: display for display in DISPLAY_LIST}
 
 
 def main():
@@ -62,6 +97,7 @@ Examples:
   sc-linac quench            Launch quench processing
   sc-linac setup             Launch auto setup
   sc-linac q0                Launch Q0 measurement
+  sc-linac microphonics      Launch microphonics GUI
         """,
     )
 
@@ -88,17 +124,24 @@ def list_displays():
     print("\n SC Linac Physics - Available Applications\n")
     print("=" * 70)
 
+    # Calculate the maximum name length for better formatting
+    max_name_length = (
+        max(len(display.name) for display in DISPLAY_LIST)
+        if DISPLAY_LIST
+        else 15
+    )
+    # Add some padding
+    column_width = max_name_length + 2
+
     print("\n DISPLAYS:")
-    for name in ["srf-home", "cavity", "fault-decoder", "fault-count"]:
-        if name in DISPLAYS:
-            info = DISPLAYS[name]
-            print(f"  {name:15} - {info['description']}")
+    for display in sorted(DISPLAY_LIST, key=lambda x: x.name):
+        if display.category == "display":
+            print(f"  {display.name:<{column_width}} - {display.description}")
 
     print("\n APPLICATIONS:")
-    for name in ["quench", "setup", "q0", "tuning", "microphonics"]:
-        if name in DISPLAYS:
-            info = DISPLAYS[name]
-            print(f"  {name:15} - {info['description']}")
+    for display in sorted(DISPLAY_LIST, key=lambda x: x.name):
+        if display.category == "application":
+            print(f"  {display.name:<{column_width}} - {display.description}")
 
     print("\n" + "=" * 70)
     print("\nUsage: sc-linac <name>")
@@ -115,13 +158,11 @@ def launch_display(display_name: str, extra_args: list = None):
     extra_args : list, optional
         Additional arguments for PyDM
     """
-    from . import launchers
-
     if extra_args is None:
         extra_args = []
 
     display_info = DISPLAYS[display_name]
-    launcher_func = getattr(launchers, display_info["launcher"])
+    launcher_func = display_info.launcher
 
     # Override sys.argv with extra args
     original_argv = sys.argv

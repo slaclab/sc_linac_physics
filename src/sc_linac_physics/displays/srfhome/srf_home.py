@@ -1,6 +1,4 @@
 import os
-import pathlib
-from typing import List
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -10,6 +8,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QSizePolicy,
     QHBoxLayout,
+    QPushButton,
 )
 from edmbutton import PyDMEDMDisplayButton
 from pydm import Display
@@ -17,6 +16,7 @@ from pydm.widgets import (
     PyDMRelatedDisplayButton,
 )
 
+from sc_linac_physics.cli import DISPLAY_LIST
 from sc_linac_physics.displays.srfhome.utils import (
     make_link_button,
     make_watcher_groupbox,
@@ -70,6 +70,7 @@ class SRFHome(Display):
 
         self.main_layout.addLayout(extras_layout)
         self.main_layout.addLayout(watcher_layout)
+        self.child_windows = []
 
     def fill_link_groupbox(self):
         link_layout = QGridLayout()
@@ -112,26 +113,25 @@ class SRFHome(Display):
             decarad_button.macros = f"P=RADM:SYS0:{decarad}00,M={decarad}"
             buttons.append(decarad_button)
 
-        self.add_buttons_from_path(buttons, "*gui.py")
-        self.add_buttons_from_path(buttons, "*display.py")
+        for display in DISPLAY_LIST:
+            if display.name == "srf-home":
+                continue
+            button = QPushButton(display.name)
+
+            def make_handler(disp):
+                def handler():
+                    window = disp.launcher(standalone=False)
+                    if window:
+                        self.child_windows.append(window)
+
+                return handler
+
+            button.clicked.connect(make_handler(display))
+            buttons.append(button)
 
         col_count = get_dimensions(buttons)
         for idx, button in enumerate(buttons):
             link_layout.addWidget(button, int(idx / col_count), idx % col_count)
-
-    def add_buttons_from_path(
-        self, buttons: List[PyDMRelatedDisplayButton], suffix
-    ):
-        for file in pathlib.Path(self.root_dir).rglob(suffix):
-            name: str = file.name
-            if name.startswith("test"):
-                continue
-            gui_button = PyDMRelatedDisplayButton(
-                filename=os.path.join(self.root_dir, file)
-            )
-            parsed_name = name.split(".")[0].replace("_", " ")
-            gui_button.setText(parsed_name.title().replace("Gui", "GUI"))
-            buttons.append(gui_button)
 
     def fill_mini_home_groupbox(self):
         mini_home_groupbox_layout = QGridLayout()
