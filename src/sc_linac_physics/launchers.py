@@ -2,108 +2,167 @@
 
 import sys
 
+from pydm import PyDMApplication
+from pydm.main_window import PyDMMainWindow
 
-def launch_python_display(module_path: str, class_name: str, *args):
+
+def display(func):
+    """Decorator to mark a launcher as a display."""
+    func._launcher_category = "display"
+    return func
+
+
+def application(func):
+    """Decorator to mark a launcher as an application."""
+    func._launcher_category = "application"
+    return func
+
+
+def launch_python_display(display_class, *args, standalone=True):
     """Launch a Python-based PyDM display.
 
     Parameters
     ----------
-    module_path : str
-        Full module path
-    class_name : str
-        Name of the display class
+    display_class : class
+        The display class to instantiate
     *args
         Additional command line arguments
+    standalone : bool, optional
+        If True, creates new application and blocks (for standalone launch).
+        If False, uses existing application (for child windows). Default is True.
+
+    Returns
+    -------
+    QWidget or None
+        The display window instance if standalone=False, None otherwise
     """
-    from pydm import PyDMApplication
-    import importlib
 
-    # Import the module and get the class
-    module = importlib.import_module(module_path)
-    display_class = getattr(module, class_name)
+    if standalone:
+        # Standalone mode: create app and block
+        app = PyDMApplication(command_line_args=list(args))
+        new_display = display_class()
+        app.main_window.set_display_widget(new_display)
+        app.main_window.show()
+        sys.exit(app.exec())
+    else:
+        # Child window mode: use existing app
+        app = PyDMApplication.instance()
 
-    # Create PyDM application and show the display
-    app = PyDMApplication(command_line_args=list(args))
-    main_window = display_class()
-    main_window.show()
-    sys.exit(app.exec())
+        if app is None:
+            raise RuntimeError(
+                "No PyDMApplication instance found. "
+                "standalone=False requires an existing application."
+            )
+
+        new_display = display_class()
+
+        # Create a new main window for this display
+        window = PyDMMainWindow()
+        window.set_display_widget(new_display)
+        window.show()
+
+        return window
 
 
 # Display launchers
-def launch_srf_home():
+@display
+def launch_srf_home(standalone=True):
     """Launch the SRF home display."""
-    launch_python_display(
-        "sc_linac_physics.displays.srfhome.srf_home", "SRFHome", *sys.argv[1:]
+    from sc_linac_physics.displays.srfhome.srf_home import SRFHome
+
+    return launch_python_display(
+        display_class=SRFHome, *sys.argv[1:], standalone=standalone
     )
 
 
-def launch_cavity_display():
+@display
+def launch_cavity_display(standalone=True):
     """Launch the cavity control display."""
-    launch_python_display(
-        "sc_linac_physics.displays.cavity_display.cavity_display",
-        "CavityDisplayGUI",
-        *sys.argv[1:],
+    from sc_linac_physics.displays.cavity_display.cavity_display import (
+        CavityDisplayGUI,
+    )
+
+    return launch_python_display(
+        display_class=CavityDisplayGUI, *sys.argv[1:], standalone=standalone
     )
 
 
-def launch_fault_decoder():
+@display
+def launch_fault_decoder(standalone=True):
     """Launch the fault decoder display."""
-    launch_python_display(
-        "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display",
-        "DecoderDisplay",
-        *sys.argv[1:],
+    from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display import (
+        DecoderDisplay,
+    )
+
+    return launch_python_display(
+        display_class=DecoderDisplay, *sys.argv[1:], standalone=standalone
     )
 
 
-def launch_fault_count():
+@display
+def launch_fault_count(standalone=True):
     """Launch the fault count display."""
-    launch_python_display(
-        "sc_linac_physics.displays.cavity_display.frontend.fault_count_display",
-        "FaultCountDisplay",
-        *sys.argv[1:],
+    from sc_linac_physics.displays.cavity_display.frontend.fault_count_display import (
+        FaultCountDisplay,
+    )
+
+    return launch_python_display(
+        display_class=FaultCountDisplay, *sys.argv[1:], standalone=standalone
     )
 
 
 # Application launchers
-def launch_quench_processing():
+@application
+def launch_quench_processing(standalone=True):
     """Launch the quench processing GUI."""
-    launch_python_display(
-        "sc_linac_physics.applications.quench_processing.quench_gui",
-        "QuenchGUI",
-        *sys.argv[1:],
+    from sc_linac_physics.applications.quench_processing.quench_gui import (
+        QuenchGUI,
+    )
+
+    return launch_python_display(
+        display_class=QuenchGUI, *sys.argv[1:], standalone=standalone
     )
 
 
-def launch_auto_setup():
+@application
+def launch_auto_setup(standalone=True):
     """Launch the auto setup GUI."""
-    launch_python_display(
-        "sc_linac_physics.applications.auto_setup.setup_gui",
-        "SetupGUI",
-        *sys.argv[1:],
+    from sc_linac_physics.applications.auto_setup.setup_gui import SetupGUI
+
+    return launch_python_display(
+        display_class=SetupGUI, *sys.argv[1:], standalone=standalone
     )
 
 
-def launch_q0_measurement():
+@application
+def launch_q0_measurement(standalone=True):
     """Launch the Q0 measurement GUI."""
-    launch_python_display(
-        "sc_linac_physics.applications.q0.q0_gui", "Q0GUI", *sys.argv[1:]
+    from sc_linac_physics.applications.q0.q0_gui import Q0GUI
+
+    return launch_python_display(
+        display_class=Q0GUI, *sys.argv[1:], standalone=standalone
     )
 
 
-def launch_tuning():
+@application
+def launch_tuning(standalone=True):
     """Launch the tuning GUI."""
-    launch_python_display(
-        "sc_linac_physics.applications.tuning.tuning_gui",
-        "Tuner",
-        *sys.argv[1:],
+    from sc_linac_physics.applications.tuning.tuning_gui import Tuner
+
+    return launch_python_display(
+        display_class=Tuner, *sys.argv[1:], standalone=standalone
     )
 
 
-def launch_microphonics():
-    """launch the microphonics GUI"""
-    launch_python_display(
-        module_path="sc_linac_physics.applications.microphonics.gui.main_window",
-        class_name="MicrophonicsGUI",
+@application
+def launch_microphonics(standalone=True):
+    """Launch the microphonics GUI."""
+    from sc_linac_physics.applications.microphonics.gui.main_window import (
+        MicrophonicsGUI,
+    )
+
+    return launch_python_display(
+        display_class=MicrophonicsGUI, standalone=standalone
     )
 
 
