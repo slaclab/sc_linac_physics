@@ -2,6 +2,9 @@
 
 import sys
 
+from pydm import PyDMApplication
+from pydm.main_window import PyDMMainWindow
+
 
 def display(func):
     """Decorator to mark a launcher as a display."""
@@ -27,20 +30,38 @@ def launch_python_display(display_class, *args, standalone=True):
     standalone : bool, optional
         If True, creates new application and blocks (for standalone launch).
         If False, uses existing application (for child windows). Default is True.
+
+    Returns
+    -------
+    QWidget or None
+        The display window instance if standalone=False, None otherwise
     """
+
     if standalone:
         # Standalone mode: create app and block
-        from pydm import PyDMApplication
-
         app = PyDMApplication(command_line_args=list(args))
-        main_window = display_class()
-        main_window.show()
+        new_display = display_class()
+        app.main_window.set_display_widget(new_display)
+        app.main_window.show()
         sys.exit(app.exec())
     else:
-        # Child window mode: use existing app, return reference
-        main_window = display_class()
-        main_window.show()
-        return main_window
+        # Child window mode: use existing app
+        app = PyDMApplication.instance()
+
+        if app is None:
+            raise RuntimeError(
+                "No PyDMApplication instance found. "
+                "standalone=False requires an existing application."
+            )
+
+        new_display = display_class()
+
+        # Create a new main window for this display
+        window = PyDMMainWindow()
+        window.set_display_widget(new_display)
+        window.show()
+
+        return window
 
 
 # Display launchers
