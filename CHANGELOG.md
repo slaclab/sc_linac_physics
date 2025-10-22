@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.4.3 (2025-10-22)
+
+### Bug Fixes
+
+- Include CSV files in package distribution
+  ([#132](https://github.com/slaclab/sc_linac_physics/pull/132),
+  [`f2dd422`](https://github.com/slaclab/sc_linac_physics/commit/f2dd422dbb2f81489d37bd95d1be63d674efc410))
+
+
 ## v1.4.2 (2025-10-22)
 
 ### Refactoring
