@@ -17,10 +17,14 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.12' , '3.13' ]
+        python-version: [ '3.12' , '3.13' , '3.14']
+        include:
+          - python-version: '3.14'
+            experimental: true
     env:
       QT_QPA_PLATFORM: offscreen
       PIP_DISABLE_PIP_VERSION_CHECK: 1
