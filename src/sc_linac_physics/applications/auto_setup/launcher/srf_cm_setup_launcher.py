@@ -14,6 +14,13 @@ from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 def setup_cavity(cavity_object: SetupCavity, args):
+    """
+    Setup or shutdown a single cavity within a cryomodule.
+
+    Args:
+        cavity_object: SetupCavity object to operate on
+        args: Parsed command-line arguments
+    """
     if cavity_object.script_is_running:
         cavity_object.status_message = f"{cavity_object} script already running"
         return
@@ -31,21 +38,25 @@ def setup_cavity(cavity_object: SetupCavity, args):
         cavity_object.trigger_setup()
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+def main():
+    """Main entry point for the cryomodule setup CLI."""
+    parser = argparse.ArgumentParser(
+        description="Setup or shutdown all cavities in a cryomodule",
+        epilog="Example: sc-linac-setup-cryomodule -cm 01",
+    )
     parser.add_argument(
         "--cryomodule",
         "-cm",
         choices=ALL_CRYOMODULES,
         required=True,
-        help="Cryomodule name as a string",
+        help="Cryomodule name (e.g., 01, 02, H1, H2, etc.)",
     )
 
     parser.add_argument(
         "--shutdown",
         "-off",
         action="store_true",
-        help="Turn off cavity and SSA",
+        help="Turn off all cavities and SSAs in the cryomodule",
     )
 
     parsed_args = parser.parse_args()
@@ -56,3 +67,7 @@ if __name__ == "__main__":
     for cavity in cm_object.cavities.values():
         setup_cavity(cavity, parsed_args)
         sleep(0.1)
+
+
+if __name__ == "__main__":
+    main()
