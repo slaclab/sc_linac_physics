@@ -1,4 +1,3 @@
-import os
 from asyncio import create_subprocess_exec
 from datetime import datetime
 from typing import List
@@ -17,13 +16,6 @@ from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 
 class AutoSetupPVGroup(PVGroup):
-    srf_root_dir = os.getenv("SRF_ROOT_DIR", "/")
-    print(srf_root_dir)
-    launcher_dir = os.path.join(
-        srf_root_dir, "applications/auto_setup/launcher"
-    )
-    # print(launcher_dir)
-
     setup_start: PvpropertyBoolEnum = pvproperty(name="SETUPSTRT")
     setup_stop: PvpropertyBoolEnum = pvproperty(name="SETUPSTOP")
     setup_status: PvpropertyBoolEnum = pvproperty(name="SETUPSTS")
@@ -78,15 +70,13 @@ class AutoSetupCMPVGroup(AutoSetupPVGroup):
 
     async def trigger_setup_script(self):
         await create_subprocess_exec(
-            "python",
-            os.path.join(self.launcher_dir, "srf_cm_setup_launcher.py"),
+            "sc-setup-cm",
             f"-cm={self.cm_name}",
         )
 
     async def trigger_shutdown_script(self):
         await create_subprocess_exec(
-            "python",
-            os.path.join(self.launcher_dir, "srf_cm_setup_launcher.py"),
+            "sc-setup-cm",
             f"-cm={self.cm_name}",
             "-off",
         )
@@ -99,16 +89,14 @@ class AutoSetupLinacPVGroup(AutoSetupPVGroup):
 
     async def trigger_setup_script(self):
         await create_subprocess_exec(
-            "python",
-            os.path.join(self.launcher_dir, "srf_linac_setup_launcher.py"),
-            f"-cm={self.linac_idx}",
+            "sc-setup-linac",
+            f"-l={self.linac_idx}",
         )
 
     async def trigger_shutdown_script(self):
         await create_subprocess_exec(
-            "python",
-            os.path.join(self.launcher_dir, "srf_linac_setup_launcher.py"),
-            f"-cm={self.linac_idx}",
+            "sc-setup-linac",
+            f"-l={self.linac_idx}",
             "-off",
         )
 
@@ -118,17 +106,10 @@ class AutoSetupGlobalPVGroup(AutoSetupPVGroup):
         super().__init__(prefix)
 
     async def trigger_setup_script(self):
-        await create_subprocess_exec(
-            "python",
-            os.path.join(self.launcher_dir, "srf_global_setup_launcher.py"),
-        )
+        await create_subprocess_exec("sc-setup-all")
 
     async def trigger_shutdown_script(self):
-        await create_subprocess_exec(
-            "python",
-            os.path.join(self.launcher_dir, "srf_global_setup_launcher.py"),
-            "-off",
-        )
+        await create_subprocess_exec("sc-setup-all", "-off")
 
 
 class AutoSetupCavityPVGroup(AutoSetupPVGroup):
@@ -173,16 +154,14 @@ class AutoSetupCavityPVGroup(AutoSetupPVGroup):
 
     async def trigger_setup_script(self):
         await create_subprocess_exec(
-            "python",
-            os.path.join(self.launcher_dir, "srf_cavity_setup_launcher.py"),
+            "sc-setup-cav",
             f"-cm={self.cm_name}",
             f"-cav={self.cav_num}",
         )
 
     async def trigger_shutdown_script(self):
         await create_subprocess_exec(
-            "python",
-            os.path.join(self.launcher_dir, "srf_cavity_setup_launcher.py"),
+            "sc-setup-cav",
             f"-cm={self.cm_name}",
             f"-cav={self.cav_num}",
             "-off",
