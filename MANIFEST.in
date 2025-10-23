@@ -1,0 +1,22 @@
+include *.md
+include LICENSE
+include pyproject.toml
+
+recursive-include src *.json
+recursive-include src *.mat
+recursive-include src *.csv
+recursive-include src *.yaml
+recursive-include src *.yml
+recursive-include src *.ui
+
+prune src/sc_linac_physics/applications/microphonics/test_data
+
+exclude .flake8
+exclude requirements.txt
+exclude *.sh
+exclude Makefile
+recursive-exclude tests *
+recursive-exclude .github *
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude *.pyo

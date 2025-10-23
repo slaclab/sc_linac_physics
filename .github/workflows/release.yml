@@ -61,8 +61,136 @@ jobs:
           path: coverage.xml
           if-no-files-found: warn
 
+  package-verification:
+    name: Verify Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install build tools
+        run: |
+          python -m pip install -U pip
+          pip install build twine check-manifest
+
+      - name: Run check-manifest
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Running check-manifest..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          check-manifest -v
+
+      - name: Build package
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Building package..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          python -m build
+
+      - name: Check package with twine
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Checking package with twine..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          twine check dist/*
+
+      - name: Verify critical files in package
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying critical files in package..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          TARBALL=$(ls dist/*.tar.gz)
+          
+          # Check for faults.csv
+          if tar -tzf "$TARBALL" | grep -q "faults.csv"; then
+            echo "✓ Found faults.csv"
+          else
+            echo "✗ ERROR: faults.csv is missing from package!"
+            exit 1
+          fi
+          
+          # List all data files
+          echo ""
+          echo "Data files in package:"
+          tar -tzf "$TARBALL" | grep -E '\.(csv|yaml|yml|json|ui|mat)$' || echo "No data files found"
+          
+          # File count summary
+          echo ""
+          echo "Package contents summary:"
+          echo "  Total files: $(tar -tzf "$TARBALL" | wc -l)"
+          echo "  Python files: $(tar -tzf "$TARBALL" | grep -c '\.py$')"
+          echo "  CSV files: $(tar -tzf "$TARBALL" | grep -c '\.csv$' || echo 0)"
+          echo "  YAML files: $(tar -tzf "$TARBALL" | grep -c '\.yaml$\|\.yml$' || echo 0)"
+          echo "  JSON files: $(tar -tzf "$TARBALL" | grep -c '\.json$' || echo 0)"
+          echo "  UI files: $(tar -tzf "$TARBALL" | grep -c '\.ui$' || echo 0)"
+          echo "  MAT files: $(tar -tzf "$TARBALL" | grep -c '\.mat$' || echo 0)"
+
+      - name: Test installation from wheel
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Testing installation from built wheel..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          # Create fresh virtual environment
+          python -m venv /tmp/test_install_env
+          source /tmp/test_install_env/bin/activate
+          
+          # Install from wheel
+          WHEEL=$(ls dist/*.whl)
+          pip install "$WHEEL"
+          
+          # Test import
+          python -c "import sc_linac_physics; print(f'✓ Import successful - version: {sc_linac_physics.__version__}')"
+          
+          # Verify faults.csv is accessible
+          python << 'EOF'
+          from pathlib import Path
+          import sc_linac_physics
+          
+          package_path = Path(sc_linac_physics.__file__).parent
+          faults_csv = package_path / "displays/cavity_display/utils/faults.csv"
+          
+          if not faults_csv.exists():
+              print(f"✗ ERROR: faults.csv not found at {faults_csv}")
+              exit(1)
+          
+          print(f"✓ faults.csv found at {faults_csv}")
+          with open(faults_csv, 'r') as f:
+              lines = f.readlines()
+              print(f"✓ Contains {len(lines)} lines")
+              if len(lines) < 1:
+                  print("✗ ERROR: faults.csv is empty!")
+                  exit(1)
+          EOF
+          
+          # Test CLI (basic check)
+          if sc-linac --help > /dev/null 2>&1; then
+            echo "✓ CLI executable"
+          else
+            echo "⚠ CLI test skipped (may require display)"
+          fi
+          
+          deactivate
+          echo "✓ Installation test passed"
+
+      - name: Upload build artifacts for release
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-dist
+          path: dist/*
+          retention-days: 7
+
   release:
-    needs: test
+    needs: [test, package-verification]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -92,7 +220,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global url."https://x-access-token:${{ secrets.SEMANTIC_RELEASE_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Run semantic-release
+      - name: Run semantic-release version
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
           GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
@@ -103,6 +231,34 @@ jobs:
           echo ""
           echo "=== Creating new version ==="
           semantic-release version
-          echo ""
+
+      - name: Build verified package
+        run: |
+          echo "=== Building package from tagged version ==="
+          python -m build
+          ls -lh dist/
+
+      - name: Download package verification artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: package-dist
+          path: dist-verified/
+
+      - name: Run semantic-release publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+        run: |
           echo "=== Publishing to GitHub ==="
           semantic-release publish
+
+      - name: Upload release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+        run: |
+          # Get the latest tag
+          TAG=$(git describe --tags --abbrev=0)
+          echo "Uploading assets for release: $TAG"
+          
+          # Upload wheel and tarball to the release
+          gh release upload "$TAG" dist/*.whl dist/*.tar.gz --clobber
