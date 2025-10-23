@@ -44,7 +44,10 @@ dev = [
     "pytest",
     "pytest-qt",
     "pytest-cov",
-    "pytest-asyncio"
+    "pytest-asyncio",
+    "build",
+    "twine",
+    "check-manifest",
 ]
 
 [tool.black]
@@ -162,3 +165,29 @@ sc-linac-quench = "sc_linac_physics.launchers:launch_quench_processing"
 sc-linac-setup = "sc_linac_physics.launchers:launch_auto_setup"
 sc-linac-q0 = "sc_linac_physics.launchers:launch_q0_measurement"
 sc-linac-tuning = "sc_linac_physics.launchers:launch_tuning"
+
+[tool.check-manifest]
+ignore = [
+    # Build artifacts
+    "*.egg-info",
+    "*.egg-info/*",
+    "**/__pycache__",
+    "**/*.pyc",
+    "**/*.pyo",
+
+    # Development files
+    "tests",
+    "tests/**/*",
+    ".github",
+    ".github/**/*",
+    ".flake8",
+    "requirements.txt",
+    "*.sh",
+    "Makefile",
+    ".git*",
+    ".pre-commit-config.yaml",
+
+    # Test data (in git but not in distribution)
+    "src/sc_linac_physics/applications/microphonics/test_data",
+    "src/sc_linac_physics/applications/microphonics/test_data/*",
+]
