@@ -44,7 +44,7 @@ def main():
     """Main entry point for the linac setup CLI."""
     parser = argparse.ArgumentParser(
         description="Setup or shutdown all cryomodules in a specific linac",
-        epilog="Example: sc-linac-setup-linac -l 0",
+        epilog="Example: sc-setup-linac -l 0",
     )
     parser.add_argument(
         "--linac",

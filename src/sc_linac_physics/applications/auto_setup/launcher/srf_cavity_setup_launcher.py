@@ -26,7 +26,7 @@ def main():
     """Main entry point for the cavity setup CLI."""
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Setup or shutdown a specific cavity",
-        epilog="Example: sc-linac-setup-cavity -cm 01 -cav 1",
+        epilog="Example: sc-setup-cav -cm 01 -cav 1",
     )
     parser.add_argument(
         "--cryomodule",

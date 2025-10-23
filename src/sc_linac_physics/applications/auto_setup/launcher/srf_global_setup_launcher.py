@@ -42,7 +42,7 @@ def main():
     """Main entry point for the global (machine-wide) setup CLI."""
     parser = argparse.ArgumentParser(
         description="Setup or shutdown all cryomodules in the machine",
-        epilog="Example: sc-linac-setup-global --no_hl",
+        epilog="Example: sc-setup-all --no_hl",
     )
     parser.add_argument(
         "--no_hl",
