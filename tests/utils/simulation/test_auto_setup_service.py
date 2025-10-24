@@ -1,4 +1,3 @@
-import os
 from unittest.mock import patch, AsyncMock
 
 import pytest
@@ -180,17 +179,6 @@ class TestAutoSetupPVGroupBase:
         with pytest.raises(NotImplementedError):
             base_auto_setup.trigger_shutdown_script()
 
-    def test_srf_root_dir_configuration(self):
-        """Test SRF_ROOT_DIR environment variable handling."""
-        # Test default value
-        assert AutoSetupPVGroup.srf_root_dir == os.getenv("SRF_ROOT_DIR", "/")
-
-        # Test launcher_dir construction
-        expected_launcher_dir = os.path.join(
-            AutoSetupPVGroup.srf_root_dir, "applications/auto_setup/launcher"
-        )
-        assert AutoSetupPVGroup.launcher_dir == expected_launcher_dir
-
     def test_property_types_general(self, base_auto_setup):
         """Test that properties have expected caproto-like characteristics."""
         all_props = [
@@ -268,10 +256,7 @@ class TestAutoSetupCMPVGroup:
             await cm_auto_setup.trigger_setup_script()
 
             mock_create.assert_called_once_with(
-                "python",
-                os.path.join(
-                    cm_auto_setup.launcher_dir, "srf_cm_setup_launcher.py"
-                ),
+                "sc-setup-cm",
                 "-cm=01",
             )
 
@@ -287,10 +272,7 @@ class TestAutoSetupCMPVGroup:
             await cm_auto_setup.trigger_shutdown_script()
 
             mock_create.assert_called_once_with(
-                "python",
-                os.path.join(
-                    cm_auto_setup.launcher_dir, "srf_cm_setup_launcher.py"
-                ),
+                "sc-setup-cm",
                 "-cm=01",
                 "-off",
             )
@@ -330,11 +312,8 @@ class TestAutoSetupLinacPVGroup:
             await linac_auto_setup.trigger_setup_script()
 
             mock_create.assert_called_once_with(
-                "python",
-                os.path.join(
-                    linac_auto_setup.launcher_dir, "srf_linac_setup_launcher.py"
-                ),
-                "-cm=1",  # Note: uses linac_idx, not -linac=
+                "sc-setup-linac",
+                "-l=1",
             )
 
     @pytest.mark.asyncio
@@ -349,11 +328,8 @@ class TestAutoSetupLinacPVGroup:
             await linac_auto_setup.trigger_shutdown_script()
 
             mock_create.assert_called_once_with(
-                "python",
-                os.path.join(
-                    linac_auto_setup.launcher_dir, "srf_linac_setup_launcher.py"
-                ),
-                "-cm=1",
+                "sc-setup-linac",
+                "-l=1",
                 "-off",
             )
 
@@ -390,13 +366,7 @@ class TestAutoSetupGlobalPVGroup:
         ) as mock_create:
             await global_auto_setup.trigger_setup_script()
 
-            mock_create.assert_called_once_with(
-                "python",
-                os.path.join(
-                    global_auto_setup.launcher_dir,
-                    "srf_global_setup_launcher.py",
-                ),
-            )
+            mock_create.assert_called_once_with("sc-setup-all")
 
     @pytest.mark.asyncio
     async def test_trigger_shutdown_script(
@@ -410,11 +380,7 @@ class TestAutoSetupGlobalPVGroup:
             await global_auto_setup.trigger_shutdown_script()
 
             mock_create.assert_called_once_with(
-                "python",
-                os.path.join(
-                    global_auto_setup.launcher_dir,
-                    "srf_global_setup_launcher.py",
-                ),
+                "sc-setup-all",
                 "-off",
             )
 
@@ -529,11 +495,7 @@ class TestAutoSetupCavityPVGroup:
             await cavity_auto_setup.trigger_setup_script()
 
             mock_create.assert_called_once_with(
-                "python",
-                os.path.join(
-                    cavity_auto_setup.launcher_dir,
-                    "srf_cavity_setup_launcher.py",
-                ),
+                "sc-setup-cav",
                 "-cm=01",
                 "-cav=1",
             )
@@ -550,11 +512,7 @@ class TestAutoSetupCavityPVGroup:
             await cavity_auto_setup.trigger_shutdown_script()
 
             mock_create.assert_called_once_with(
-                "python",
-                os.path.join(
-                    cavity_auto_setup.launcher_dir,
-                    "srf_cavity_setup_launcher.py",
-                ),
+                "sc-setup-cav",
                 "-cm=01",
                 "-cav=1",
                 "-off",
@@ -588,33 +546,6 @@ class TestSubprocessIntegration:
         ):
             with pytest.raises(OSError):
                 await cm_group.trigger_setup_script()
-
-    @pytest.mark.asyncio
-    async def test_subprocess_path_construction(self, mock_subprocess):
-        """Test that subprocess paths are constructed correctly."""
-        # Test different group types
-        groups_and_scripts = [
-            (AutoSetupCMPVGroup("TEST:", "01"), "srf_cm_setup_launcher.py"),
-            (AutoSetupLinacPVGroup("TEST:", 1), "srf_linac_setup_launcher.py"),
-            (AutoSetupGlobalPVGroup("TEST:"), "srf_global_setup_launcher.py"),
-            (
-                AutoSetupCavityPVGroup("TEST:", "01", 1),
-                "srf_cavity_setup_launcher.py",
-            ),
-        ]
-
-        for group, expected_script in groups_and_scripts:
-            with patch(
-                "sc_linac_physics.utils.simulation.auto_setup_service.create_subprocess_exec",
-                return_value=mock_subprocess,
-            ) as mock_create:
-                await group.trigger_setup_script()
-
-                # Verify the script path includes the expected launcher directory
-                call_args = mock_create.call_args[0]
-                script_path = call_args[1]
-                assert expected_script in script_path
-                assert group.launcher_dir in script_path
 
 
 class TestErrorHandling:
@@ -691,7 +622,7 @@ class TestIntegrationScenarios:
             # Verify setup script was called
             assert mock_create.call_count == 1
             call_args = mock_create.call_args[0]
-            assert "srf_cm_setup_launcher.py" in call_args[1]
+            assert "sc-setup-cm" in call_args
             assert "-cm=01" in call_args
 
     @pytest.mark.asyncio
@@ -709,8 +640,8 @@ class TestIntegrationScenarios:
             # Verify shutdown script was called
             assert mock_create.call_count == 1
             call_args = mock_create.call_args[0]
-            assert "srf_linac_setup_launcher.py" in call_args[1]
-            assert "-cm=1" in call_args
+            assert "sc-setup-linac" in call_args
+            assert "-l=1" in call_args
             assert "-off" in call_args
 
     @pytest.mark.asyncio
@@ -771,27 +702,6 @@ class TestPropertyCharacteristics:
 
         for prop, expected_default in enum_props:
             assert prop.value == expected_default
-
-
-class TestEnvironmentConfiguration:
-    """Test environment variable configuration."""
-
-    def test_launcher_dir_path_construction(self):
-        """Test that launcher directory path is constructed correctly."""
-        expected_parts = ["applications", "auto_setup", "launcher"]
-        launcher_dir = AutoSetupPVGroup.launcher_dir
-
-        # Check that all expected parts are in the path
-        for part in expected_parts:
-            assert part in launcher_dir
-
-    def test_srf_root_dir_affects_launcher_dir(self):
-        """Test that SRF_ROOT_DIR affects launcher directory."""  # Get current launcher dir
-        current_launcher_dir = AutoSetupPVGroup.launcher_dir
-        current_srf_root = AutoSetupPVGroup.srf_root_dir
-
-        # Should start with the root directory
-        assert current_launcher_dir.startswith(current_srf_root)
 
 
 if __name__ == "__main__":
