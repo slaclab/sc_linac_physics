@@ -75,6 +75,16 @@ Notes:
 
 After installation, the following commands are available:
 
+```bash
+# List all available applications
+sc-linac list
+
+# Launch displays and applications
+sc-linac srf-home
+sc-linac cavity
+sc-linac setup
+```
+
 #### Display Launchers
 
 ```bash
@@ -135,22 +145,6 @@ sc-sim                 # Start simulated IOC service
 sc-sim --list-pvs      # List all available PVs
 sc-sim --interfaces=127.0.0.1  # Run on localhost only
 ```
-
-### Legacy CLI (Deprecated)
-
-The original `sc-linac` command is still available but deprecated:
-
-```bash
-# List all available applications
-sc-linac list
-
-# Launch displays and applications
-sc-linac srf-home
-sc-linac cavity
-sc-linac setup
-```
-
-**Note:** New commands (`sc-srf-home`, `sc-cavity`, etc.) are preferred over the `sc-linac` subcommands.
 
 ### Python API
 
