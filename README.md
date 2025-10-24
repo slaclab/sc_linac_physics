@@ -80,9 +80,16 @@ After installation, the following commands are available:
 sc-linac list
 
 # Launch displays and applications
-sc-linac srf-home
-sc-linac cavity
-sc-linac setup
+sc-linac cavity-display      # Launch the cavity control display.
+sc-linac fault-count         # Launch the fault count display.
+sc-linac fault-decoder       # Launch the fault decoder display.
+sc-linac srf-home            # Launch the SRF home display.
+
+sc-linac auto-setup          # Launch the auto setup GUI.
+sc-linac microphonics        # Launch the microphonics GUI.
+sc-linac q0-measurement      # Launch the Q0 measurement GUI.
+sc-linac quench-processing   # Launch the quench processing GUI.
+sc-linac tuning              # Launch the tuning GUI.
 ```
 
 #### Display Launchers
