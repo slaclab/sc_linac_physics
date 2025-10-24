@@ -2,6 +2,46 @@
 
 <!-- version list -->
 
+## v2.0.0 (2025-10-24)
+
+### Build System
+
+- Configure package manifest and pre-commit hooks
+  ([#135](https://github.com/slaclab/sc_linac_physics/pull/135),
+  [`674569e`](https://github.com/slaclab/sc_linac_physics/commit/674569e68f7aa5dac490453435153ed71c8e09be))
+
+### Continuous Integration
+
+- Add package verification to release and CI workflows
+  ([#135](https://github.com/slaclab/sc_linac_physics/pull/135),
+  [`674569e`](https://github.com/slaclab/sc_linac_physics/commit/674569e68f7aa5dac490453435153ed71c8e09be))
+
+- Add Python 3.14 as experimental test target
+  ([#135](https://github.com/slaclab/sc_linac_physics/pull/135),
+  [`674569e`](https://github.com/slaclab/sc_linac_physics/commit/674569e68f7aa5dac490453435153ed71c8e09be))
+
+- Add Python 3.14 as experimental test target
+  ([#134](https://github.com/slaclab/sc_linac_physics/pull/134),
+  [`e066af6`](https://github.com/slaclab/sc_linac_physics/commit/e066af6b37655de22d814a0d35226f0f13d7c277))
+
+### Features
+
+- **cli**: Add hierarchical setup commands and streamline script names
+  ([#136](https://github.com/slaclab/sc_linac_physics/pull/136),
+  [`6f1f49c`](https://github.com/slaclab/sc_linac_physics/commit/6f1f49cc85715f3a96d9e7b29a8e46de99fe8130))
+
+### Refactoring
+
+- **sim**: Use CLI commands instead of direct script paths
+  ([#136](https://github.com/slaclab/sc_linac_physics/pull/136),
+  [`6f1f49c`](https://github.com/slaclab/sc_linac_physics/commit/6f1f49cc85715f3a96d9e7b29a8e46de99fe8130))
+
+### Breaking Changes
+
+- **cli**: Script names have changed from sc-linac-* to sc-* format. Update any automation or
+  documentation that references the old command names."
+
+
 ## v1.4.4 (2025-10-22)
 
 ### Bug Fixes
