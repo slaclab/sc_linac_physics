@@ -75,6 +75,8 @@ Notes:
 
 After installation, the following commands are available:
 
+#### General Launcher Utility
+
 ```bash
 # List all available applications
 sc-linac list
@@ -92,7 +94,7 @@ sc-linac quench-processing   # Launch the quench processing GUI.
 sc-linac tuning              # Launch the tuning GUI.
 ```
 
-#### Display Launchers
+#### Display Launcher Shortcuts
 
 ```bash
 sc-srf-home          # SRF home overview display - main control interface
@@ -101,7 +103,7 @@ sc-faults            # Cavity fault decoder with detailed diagnostics
 sc-fcount            # Cavity fault count display and statistics
 ```
 
-#### Applications
+#### Application Launcher Shortcuts
 
 ```bash
 sc-quench            # Quench processing application
