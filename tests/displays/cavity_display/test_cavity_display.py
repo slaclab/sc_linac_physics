@@ -43,7 +43,17 @@ def mock_show_display():
 
 
 @pytest.fixture
-def display(mock_show_display):
+def mock_pydm_widgets():
+    """Mock PyDM widgets to prevent EPICS connection attempts."""
+    with patch("pydm.widgets.byte.PyDMByteIndicator") as mock_byte:
+        # Configure the mock to not trigger connection logic
+        mock_instance = MagicMock()
+        mock_byte.return_value = mock_instance
+        yield mock_byte
+
+
+@pytest.fixture
+def display(mock_show_display, mock_pydm_widgets):
     """Create a CavityDisplayGUI instance with mocked components."""
     # Patch the components before importing CavityDisplayGUI
     with (

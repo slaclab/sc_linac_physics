@@ -50,6 +50,7 @@ jobs:
           echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
           echo "QT_OPENGL=software" >> $GITHUB_ENV
           echo "PYDM_DEFAULT_PROTOCOL=fake" >> $GITHUB_ENV
+          echo "PYDM_NO_INITIALIZE=1" >> $GITHUB_ENV
           echo "MPLBACKEND=Agg" >> $GITHUB_ENV
       - name: Run tests (with coverage)
         run: |

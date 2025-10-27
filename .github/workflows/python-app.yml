@@ -30,6 +30,7 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: 1
       PIP_NO_PYTHON_VERSION_WARNING: 1
       PYDM_DEFAULT_PROTOCOL: fake
+      PYDM_NO_INITIALIZE: 1
       PYTEST_ADDOPTS: -vv -ra --durations=10 --tb=long -l
     steps:
       - name: Checkout
