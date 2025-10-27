@@ -168,7 +168,8 @@ print("Package version:", getattr(sc_linac_physics, "__version__", "unknown"))
 Programmatic display launching:
 
 ```python
-from sc_linac_physics import launchers
+
+from sc_linac_physics.cli import launchers
 
 # Launch displays programmatically
 launchers.launch_srf_home()

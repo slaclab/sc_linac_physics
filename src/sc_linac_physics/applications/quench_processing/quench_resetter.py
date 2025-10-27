@@ -6,8 +6,8 @@ from numpy.linalg import LinAlgError
 
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
-)  # noqa: E402
-from sc_linac_physics.applications.quench_processing.quench_cryomodule import (  # noqa: E402
+)
+from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
     QUENCH_MACHINE,
 )
 from sc_linac_physics.utils.sc_linac.linac_utils import (
@@ -50,9 +50,25 @@ def check_cavities(cavity_list: List[QuenchCavity], watcher_pv: PV):
             print(e)
 
 
-if __name__ == "__main__":
+def main():
+    # Initialize watcher PV
+    print("Resetting heartbeat to 0")
     WATCHER_PV: PV = PV("PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT")
     WATCHER_PV.put(0)
+
+    # Get cavity list
+    print("Loading cavity list from QUENCH_MACHINE...")
     cavities: List[QuenchCavity] = list(QUENCH_MACHINE.all_iterator)
-    while True:
-        check_cavities(cavities, WATCHER_PV)
+    print(f"Monitoring {len(cavities)} cavities")
+
+    # Main loop
+    print("Starting continuous monitoring (Ctrl+C to stop)...")
+    try:
+        while True:
+            check_cavities(cavities, WATCHER_PV)
+    except KeyboardInterrupt:
+        print("\nStopping quench processing...")
+
+
+if __name__ == "__main__":
+    main()

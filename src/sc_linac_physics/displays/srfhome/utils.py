@@ -3,7 +3,11 @@ from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout
 from pydm.widgets import PyDMByteIndicator, PyDMLabel, PyDMShellCommand
 
 
-def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
+def make_watcher_groupbox(watcher_name: str) -> QGroupBox:
+    """
+    Args:
+        watcher_name: Name of the watcher session (e.g., "quench_resetter")
+    """
     parsed_name = watcher_name.replace("_", " ")
     groupbox = QGroupBox(f"{parsed_name} Watcher")
     vlayout = QVBoxLayout()
@@ -11,22 +15,15 @@ def make_watcher_groupbox(watcher_name: str, script_path: str) -> QGroupBox:
 
     show_button = PyDMShellCommand()
     show_button.setText(f"Show {parsed_name} Output")
-    xterm_prefix = f'xterm -T {watcher_name} -hold -e "export TMUX_SSH_USER=laci && export TMUX_SSH_SERVER=lcls-srv03'
-    show_button.commands = [
-        f'{xterm_prefix} && tmux_launcher open {watcher_name}"'
-    ]
+    show_button.commands = [f"sc-watcher show {watcher_name}"]
 
     start_button = PyDMShellCommand()
     start_button.setText(f"Restart {parsed_name} Process")
-    tmux_command = (
-        f"tmux_launcher restart 'python {script_path}' {watcher_name}\""
-    )
-    start_button.commands = [f"{xterm_prefix} && {tmux_command}"]
+    start_button.commands = [f"sc-watcher restart {watcher_name}"]
 
     stop_button = PyDMShellCommand()
     stop_button.setText(f"Stop {parsed_name} Process")
-    tmux_command = f'tmux_launcher stop {script_path} {watcher_name}"'
-    stop_button.commands = [f"{xterm_prefix} && {tmux_command}"]
+    stop_button.commands = [f"sc-watcher stop {watcher_name}"]
 
     vlayout.addWidget(show_button)
     vlayout.addWidget(start_button)

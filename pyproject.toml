@@ -188,6 +188,11 @@ sc-setup-cm = "sc_linac_physics.applications.auto_setup.launcher.srf_cm_setup_la
 sc-setup-cav = "sc_linac_physics.applications.auto_setup.launcher.srf_cavity_setup_launcher:main"
 
 # ============================================================================
+# Watcher Management
+# ============================================================================
+sc-watcher = "sc_linac_physics.cli.watcher_commands:main"
+
+# ============================================================================
 # Simulation/Testing
 # ============================================================================
 sc-sim = "sc_linac_physics.utils.simulation.sc_linac_physics_service:main"

@@ -6,7 +6,7 @@ import sys
 from dataclasses import dataclass
 from typing import Callable, List
 
-from sc_linac_physics import launchers
+from sc_linac_physics.cli import launchers
 
 
 @dataclass

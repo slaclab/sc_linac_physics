@@ -16,7 +16,8 @@ from pydm.widgets import (
     PyDMRelatedDisplayButton,
 )
 
-from sc_linac_physics.cli import DISPLAY_LIST
+from sc_linac_physics.cli.cli import DISPLAY_LIST
+from sc_linac_physics.cli.watcher_commands import WATCHER_CONFIGS
 from sc_linac_physics.displays.srfhome.utils import (
     make_link_button,
     make_watcher_groupbox,
@@ -43,34 +44,25 @@ class SRFHome(Display):
         self.links_groupbox = QGroupBox("Shortcuts && Bookmarks")
         self.fill_link_groupbox()
 
-        sel_opt_path = f"{self.root_dir}/applications/sel_phase_optimizer/sel_phase_optimizer.py"
-        quench_reset_path = (
-            f"{self.root_dir}/applications/quench_processing/quench_resetter.py"
-        )
-        cav_disp_backend_path = (
-            f"{self.root_dir}/displays/cavity_display/backend/runner.py"
-        )
-
-        self.sel_phase_opt_groupbox = make_watcher_groupbox(
-            watcher_name="SC_SEL_PHAS_OPT", script_path=sel_opt_path
-        )
-        self.quench_reset_groupbox = make_watcher_groupbox(
-            watcher_name="SC_CAV_QNCH_RESET", script_path=quench_reset_path
-        )
-        self.cav_disp_groupbox = make_watcher_groupbox(
-            watcher_name="SC_CAV_FAULT", script_path=cav_disp_backend_path
-        )
         extras_layout = QVBoxLayout()
-        watcher_layout = QVBoxLayout()
         extras_layout.addWidget(self.mini_home_groupbox)
         extras_layout.addWidget(self.links_groupbox)
-        watcher_layout.addWidget(self.sel_phase_opt_groupbox)
-        watcher_layout.addWidget(self.quench_reset_groupbox)
-        watcher_layout.addWidget(self.cav_disp_groupbox)
+
+        # Automatically create all watcher groupboxes
+        self.watcher_layout = QVBoxLayout()
+        self.setup_watcher_groupboxes()
 
         self.main_layout.addLayout(extras_layout)
-        self.main_layout.addLayout(watcher_layout)
+        self.main_layout.addLayout(self.watcher_layout)
         self.child_windows = []
+
+    def setup_watcher_groupboxes(self):
+        """Create groupboxes for all configured watchers"""
+
+        # Create a groupbox for each watcher in WATCHER_CONFIGS
+        for watcher_name in WATCHER_CONFIGS.keys():
+            groupbox = make_watcher_groupbox(watcher_name)
+            self.watcher_layout.addWidget(groupbox)
 
     def fill_link_groupbox(self):
         link_layout = QGridLayout()
