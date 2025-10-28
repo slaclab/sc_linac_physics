@@ -6,14 +6,14 @@ from lcls_tools.common.controls.pyepics.utils import PV
 
 from sc_linac_physics.displays.cavity_display.backend.backend_cavity import (
     BackendCavity,
-)  # noqa: E402
+)
 from sc_linac_physics.displays.cavity_display.backend.backend_machine import (
     BackendMachine,
-)  # noqa: E402
+)
 from sc_linac_physics.displays.cavity_display.utils.utils import (
     DEBUG,
     BACKEND_SLEEP_TIME,
-)  # noqa: E402
+)
 
 
 class Runner:
@@ -44,9 +44,17 @@ class Runner:
         except TypeError as e:
             print(f"Write to watcher PV failed with error: {e}")
 
+    def run(self):
+        """Run the fault checker continuously."""
+        self.watcher_pv_obj.put(0)
+        while True:
+            self.check_faults()
+
+
+def main():
+    runner = Runner(lazy_fault_pvs=False)
+    runner.run()
+
 
 if __name__ == "__main__":
-    runner = Runner(lazy_fault_pvs=False)
-    runner.watcher_pv_obj.put(0)
-    while True:
-        runner.check_faults()
+    main()

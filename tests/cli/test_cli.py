@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sc_linac_physics import cli
+from sc_linac_physics.cli import cli
 
 
 class TestDisplayInfo:
@@ -116,7 +116,7 @@ class TestHelperFunctions:
 class TestDiscoverLaunchers:
     """Tests for launcher discovery."""
 
-    @patch("sc_linac_physics.cli.inspect.getmembers")
+    @patch("sc_linac_physics.cli.cli.inspect.getmembers")
     def test_discover_launchers(self, mock_getmembers):
         """Test automatic launcher discovery."""
 
@@ -335,7 +335,7 @@ class TestMain:
 
         mock_launcher.assert_called_once()
 
-    @patch("sc_linac_physics.cli.launch_display")
+    @patch("sc_linac_physics.cli.cli.launch_display")
     def test_main_launch_display_with_args(self, mock_launch):
         """Test main with display launch and extra arguments."""
         mock_launcher = MagicMock()

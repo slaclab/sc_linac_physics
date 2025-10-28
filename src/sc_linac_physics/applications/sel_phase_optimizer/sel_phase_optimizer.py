@@ -4,14 +4,13 @@
 Script to optimize SEL phase offsets
 Originally by J. Nelson, refactored by L. Zacarias
 """
-import sys
+import argparse
 import time
 from typing import List
 
 from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
 
-sys.path.append("/home/physics/srf/sc_linac_physics")
-from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import (  # noqa: E402
+from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import (
     SEL_MACHINE,
     SELCavity,
     MAX_STEP,
@@ -30,10 +29,9 @@ def update_heartbeat(time_to_wait: int):
         time.sleep(1)
 
 
-cavities: List[SELCavity] = list(SEL_MACHINE.all_iterator)
-
-
 def run():
+    cavities: List[SELCavity] = list(SEL_MACHINE.all_iterator)
+
     while True:
         num_large_steps = 0
 
@@ -58,10 +56,16 @@ def run():
             print(
                 f"\033[94mThanks for your help! The current date/time is {current_time}\033[0m"
             )
-
             update_heartbeat(600)
 
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(description="Optimize SEL phase offsets")
+    parser.parse_args()
+
     HEARTBEAT_PV.put(0)
     run()
+
+
+if __name__ == "__main__":
+    main()
