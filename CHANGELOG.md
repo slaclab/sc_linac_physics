@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.0.1 (2025-10-28)
+
+### Refactoring
+
+- Restructure CLI and improve watcher script management
+  ([#137](https://github.com/slaclab/sc_linac_physics/pull/137),
+  [`c870ac4`](https://github.com/slaclab/sc_linac_physics/commit/c870ac4516e8d4264a44307320b8dbdd396120cb))
+
+
 ## v2.0.0 (2025-10-24)
 
 ### Build System
