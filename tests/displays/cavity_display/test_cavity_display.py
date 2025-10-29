@@ -5,6 +5,30 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from pytestqt.qtbot import QtBot
 
 
+@pytest.fixture(scope="module", autouse=True)
+def disable_pydm_connections():
+    """Disable PyDM data connections for all tests in this module."""
+    import os
+
+    os.environ["PYDM_DATA_PLUGINS_DISABLED"] = "1"
+
+    # Mock the plugin system directly
+    import pydm.data_plugins
+
+    original_plugin_for_address = pydm.data_plugins.plugin_for_address
+
+    # Return a mock plugin that does nothing
+    mock_plugin = MagicMock()
+    mock_plugin.add_listener = MagicMock()
+    mock_plugin.remove_listener = MagicMock()
+    pydm.data_plugins.plugin_for_address = MagicMock(return_value=mock_plugin)
+
+    yield
+
+    # Restore
+    pydm.data_plugins.plugin_for_address = original_plugin_for_address
+
+
 # Mock classes for the displays we want to prevent from opening
 class MockFaultCountDisplay(QWidget):
     """Mock version of FaultCountDisplay."""
@@ -30,49 +54,48 @@ class MockGUIMachine:
 
 
 @pytest.fixture
-def mock_show_display():
+def mock_show_display(monkeypatch):
     """Mock the showDisplay function."""
-    # Create a mock for showDisplay
-    mock_show = MagicMock()
-
-    # Patch the showDisplay function
-    with patch(
-        "lcls_tools.common.frontend.display.util.showDisplay", mock_show
-    ):
-        yield mock_show
+    mock = MagicMock()
+    # Patch it in the cavity_display module where it's imported
+    monkeypatch.setattr(
+        "sc_linac_physics.displays.cavity_display.cavity_display.showDisplay",
+        mock,
+    )
+    return mock
 
 
 @pytest.fixture
-def display(mock_show_display):
+def display(mock_show_display, monkeypatch):
     """Create a CavityDisplayGUI instance with mocked components."""
     # Patch the components before importing CavityDisplayGUI
-    with (
-        patch(
-            "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay",
-            MockFaultCountDisplay,
-        ),
-        patch(
-            "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay",
-            MockDecoderDisplay,
-        ),
-        patch(
-            "sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine",
-            MockGUIMachine,
-        ),
-    ):
-        # Now import CavityDisplayGUI after patching
-        from sc_linac_physics.displays.cavity_display.cavity_display import (
-            CavityDisplayGUI,
-        )
 
-        # Create the display but prevent it from showing
-        with (
-            patch.object(CavityDisplayGUI, "show"),
-            patch.object(CavityDisplayGUI, "showMaximized"),
-        ):
-            display = CavityDisplayGUI()
-            yield display
-            display.close()
+    monkeypatch.setattr(
+        "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay",
+        MockFaultCountDisplay,
+    ),
+    monkeypatch.setattr(
+        "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay",
+        MockDecoderDisplay,
+    ),
+    monkeypatch.setattr(
+        "sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine",
+        MockGUIMachine,
+    )
+
+    # Now import CavityDisplayGUI after patching
+    from sc_linac_physics.displays.cavity_display.cavity_display import (
+        CavityDisplayGUI,
+    )
+
+    # Create the display but prevent it from showing
+    with (
+        patch.object(CavityDisplayGUI, "show"),
+        patch.object(CavityDisplayGUI, "showMaximized"),
+    ):
+        display = CavityDisplayGUI()
+        yield display
+        display.close()
 
 
 def test_launches(qtbot: QtBot, display):
@@ -100,7 +123,6 @@ def test_header_buttons(qtbot: QtBot, display):
     )
 
 
-@pytest.mark.skip("Need to figure out why this is failing")
 def test_button_connections(qtbot: QtBot, display, mock_show_display):
     """Test that button connections work with our mocked showDisplay function."""
     qtbot.addWidget(display)

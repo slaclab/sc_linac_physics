@@ -1,5 +1,3 @@
-from functools import partial
-
 from PyQt5.QtGui import QColor, QCursor
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -87,7 +85,7 @@ class CavityDisplayGUI(Display):
         )
 
     def add_header_button(self, button: QPushButton, display: Display):
-        button.clicked.connect(partial(showDisplay, display))
+        button.clicked.connect(lambda: showDisplay(display))
 
         icon = IconFont().icon("file")
         button.setIcon(icon)
