@@ -196,7 +196,17 @@ class TestDisplayLaunchers:
 
     def test_launch_cavity_display(self):
         """Test cavity display launcher."""
-        from sc_linac_physics.cli.launchers import launch_cavity_display
+        # Mock the entire cavity_display module to prevent real imports
+        mock_module = MagicMock()
+        mock_module.CavityDisplayGUI = MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "sc_linac_physics.displays.cavity_display.cavity_display": mock_module
+            },
+        ):
+            from sc_linac_physics.cli.launchers import launch_cavity_display
 
         with patch(
             "sc_linac_physics.displays.cavity_display.cavity_display.CavityDisplayGUI"
