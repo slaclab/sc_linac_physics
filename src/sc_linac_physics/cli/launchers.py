@@ -70,9 +70,7 @@ def launch_srf_home(standalone=True):
     """Launch the SRF home display."""
     from sc_linac_physics.displays.srfhome.srf_home import SRFHome
 
-    return launch_python_display(
-        display_class=SRFHome, *sys.argv[1:], standalone=standalone
-    )
+    return launch_python_display(SRFHome, *sys.argv[1:], standalone=standalone)
 
 
 @display
@@ -83,7 +81,7 @@ def launch_cavity_display(standalone=True):
     )
 
     return launch_python_display(
-        display_class=CavityDisplayGUI, *sys.argv[1:], standalone=standalone
+        CavityDisplayGUI, *sys.argv[1:], standalone=standalone
     )
 
 
@@ -95,7 +93,7 @@ def launch_fault_decoder(standalone=True):
     )
 
     return launch_python_display(
-        display_class=DecoderDisplay, *sys.argv[1:], standalone=standalone
+        DecoderDisplay, *sys.argv[1:], standalone=standalone
     )
 
 
@@ -107,7 +105,7 @@ def launch_fault_count(standalone=True):
     )
 
     return launch_python_display(
-        display_class=FaultCountDisplay, *sys.argv[1:], standalone=standalone
+        FaultCountDisplay, *sys.argv[1:], standalone=standalone
     )
 
 
@@ -120,7 +118,7 @@ def launch_quench_processing(standalone=True):
     )
 
     return launch_python_display(
-        display_class=QuenchGUI, *sys.argv[1:], standalone=standalone
+        QuenchGUI, *sys.argv[1:], standalone=standalone
     )
 
 
@@ -129,9 +127,7 @@ def launch_auto_setup(standalone=True):
     """Launch the auto setup GUI."""
     from sc_linac_physics.applications.auto_setup.setup_gui import SetupGUI
 
-    return launch_python_display(
-        display_class=SetupGUI, *sys.argv[1:], standalone=standalone
-    )
+    return launch_python_display(SetupGUI, *sys.argv[1:], standalone=standalone)
 
 
 @application
@@ -139,9 +135,7 @@ def launch_q0_measurement(standalone=True):
     """Launch the Q0 measurement GUI."""
     from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
-    return launch_python_display(
-        display_class=Q0GUI, *sys.argv[1:], standalone=standalone
-    )
+    return launch_python_display(Q0GUI, *sys.argv[1:], standalone=standalone)
 
 
 @application
@@ -149,9 +143,7 @@ def launch_tuning(standalone=True):
     """Launch the tuning GUI."""
     from sc_linac_physics.applications.tuning.tuning_gui import Tuner
 
-    return launch_python_display(
-        display_class=Tuner, *sys.argv[1:], standalone=standalone
-    )
+    return launch_python_display(Tuner, *sys.argv[1:], standalone=standalone)
 
 
 @application
@@ -162,7 +154,7 @@ def launch_microphonics(standalone=True):
     )
 
     return launch_python_display(
-        display_class=MicrophonicsGUI, standalone=standalone
+        MicrophonicsGUI, *sys.argv[1:], standalone=standalone
     )
 
 
