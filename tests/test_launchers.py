@@ -46,9 +46,12 @@ def test_launcher_decorators():
     assert launch_auto_setup._launcher_category == "application"
 
 
+@patch("sc_linac_physics.displays.srfhome.srf_home.SRFHome")
 @patch("sc_linac_physics.cli.launchers.PyDMApplication")
 @patch("sc_linac_physics.cli.launchers.sys.exit")
-def test_launch_srf_home_standalone(mock_exit, mock_pydm_app):
+def test_launch_srf_home_standalone(
+    mock_exit, mock_pydm_app, mock_display_class
+):
     """Test SRF home launcher in standalone mode."""
     from sc_linac_physics.cli.launchers import launch_srf_home
 
@@ -56,32 +59,33 @@ def test_launch_srf_home_standalone(mock_exit, mock_pydm_app):
     mock_app_instance = MagicMock()
     mock_pydm_app.return_value = mock_app_instance
     mock_app_instance.exec.return_value = 0
+    mock_app_instance.exec_.return_value = 0
 
-    # Mock the display class
-    with patch(
-        "sc_linac_physics.displays.srfhome.srf_home.SRFHome"
-    ) as mock_display:
-        mock_display_instance = MagicMock()
-        mock_display.return_value = mock_display_instance
+    mock_display_instance = MagicMock()
+    mock_display_class.return_value = mock_display_instance
 
-        # Call launcher
-        launch_srf_home(standalone=True)
+    # Call launcher
+    launch_srf_home(standalone=True)
 
-        # Verify PyDMApplication was created
-        assert mock_pydm_app.called
+    # Verify PyDMApplication was created
+    assert mock_pydm_app.called
 
-        # Verify display was instantiated
-        assert mock_display.called
+    # Verify display was instantiated
+    assert mock_display_class.called
 
-        # Verify app.exec() was called
-        assert mock_app_instance.exec.called or mock_app_instance.exec_.called
+    # Verify app.exec() or app.exec_() was called
+    assert mock_app_instance.exec.called or mock_app_instance.exec_.called
 
-        # Verify sys.exit was called
-        assert mock_exit.called
+    # Verify sys.exit was called
+    assert mock_exit.called
 
 
+@patch("sc_linac_physics.displays.srfhome.srf_home.SRFHome")
+@patch("sc_linac_physics.cli.launchers.PyDMMainWindow")
 @patch("sc_linac_physics.cli.launchers.PyDMApplication")
-def test_launch_srf_home_non_standalone(mock_pydm_app):
+def test_launch_srf_home_non_standalone(
+    mock_pydm_app, mock_window, mock_display_class
+):
     """Test SRF home launcher in non-standalone mode."""
     from sc_linac_physics.cli.launchers import launch_srf_home
 
@@ -89,26 +93,19 @@ def test_launch_srf_home_non_standalone(mock_pydm_app):
     mock_app_instance = MagicMock()
     mock_pydm_app.instance.return_value = mock_app_instance
 
-    # Mock the display class and window
-    with patch(
-        "sc_linac_physics.displays.srfhome.srf_home.SRFHome"
-    ) as mock_display:
-        with patch(
-            "sc_linac_physics.cli.launchers.PyDMMainWindow"
-        ) as mock_window:
-            mock_display_instance = MagicMock()
-            mock_display.return_value = mock_display_instance
+    mock_display_instance = MagicMock()
+    mock_display_class.return_value = mock_display_instance
 
-            mock_window_instance = MagicMock()
-            mock_window.return_value = mock_window_instance
+    mock_window_instance = MagicMock()
+    mock_window.return_value = mock_window_instance
 
-            # Call launcher in non-standalone mode
-            result = launch_srf_home(standalone=False)
+    # Call launcher in non-standalone mode
+    result = launch_srf_home(standalone=False)
 
-            # Verify window was created and returned
-            assert result == mock_window_instance
-            assert mock_window_instance.set_display_widget.called
-            assert mock_window_instance.show.called
+    # Verify window was created and returned
+    assert result == mock_window_instance
+    assert mock_window_instance.set_display_widget.called
+    assert mock_window_instance.show.called
 
 
 @pytest.mark.parametrize(
@@ -192,48 +189,48 @@ def test_launch_python_display_called_correctly(mock_launch):
         assert call_args[1]["standalone"] is True
 
 
-def test_launch_python_display_no_app_instance():
+@patch("sc_linac_physics.cli.launchers.PyDMApplication")
+def test_launch_python_display_no_app_instance(mock_pydm_app):
     """Test that non-standalone mode raises error without app instance."""
     from sc_linac_physics.cli.launchers import launch_python_display
 
-    with patch(
-        "sc_linac_physics.cli.launchers.PyDMApplication.instance",
-        return_value=None,
-    ):
-        with pytest.raises(
-            RuntimeError, match="No PyDMApplication instance found"
-        ):
-            # Use a dummy class
-            class DummyDisplay:
-                pass
+    mock_pydm_app.instance.return_value = None
 
-            launch_python_display(DummyDisplay, standalone=False)
+    with pytest.raises(RuntimeError, match="No PyDMApplication instance found"):
+        # Use a dummy class
+        class DummyDisplay:
+            pass
+
+        launch_python_display(DummyDisplay, standalone=False)
 
 
 @pytest.mark.parametrize(
-    "launcher_name,display_class_path",
+    "launcher_name,display_class_path,display_module",
     [
         (
             "launch_srf_home",
             "sc_linac_physics.displays.srfhome.srf_home.SRFHome",
+            "sc_linac_physics.displays.srfhome.srf_home",
         ),
         (
             "launch_cavity_display",
             "sc_linac_physics.displays.cavity_display.cavity_display.CavityDisplayGUI",
+            "sc_linac_physics.displays.cavity_display.cavity_display",
         ),
         (
             "launch_fault_decoder",
             "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay",
+            "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display",
         ),
         (
             "launch_fault_count",
             "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay",
+            "sc_linac_physics.displays.cavity_display.frontend.fault_count_display",
         ),
     ],
 )
-@patch("sc_linac_physics.cli.launchers.launch_python_display")
 def test_launchers_import_correct_display_class(
-    mock_launch, launcher_name, display_class_path
+    launcher_name, display_class_path, display_module
 ):
     """Test that each launcher imports and uses the correct display class."""
     from sc_linac_physics.cli.launchers import (
@@ -251,35 +248,40 @@ def test_launchers_import_correct_display_class(
     }
 
     launcher_func = launchers[launcher_name]
-    mock_launch.return_value = None
 
-    # Call the launcher
-    launcher_func(standalone=True)
-
-    # Verify the correct display class was passed
-    assert mock_launch.called
-    call_args = mock_launch.call_args[0]
-
-    # Get the actual class that was passed
-    passed_class = call_args[0]
-
-    # Verify it's the expected class by checking its module and name
+    # Parse the display class path
     module_path, class_name = display_class_path.rsplit(".", 1)
-    assert passed_class.__name__ == class_name
-    assert passed_class.__module__ == module_path
+
+    # Mock launch_python_display to capture what was passed to it
+    with patch(
+        "sc_linac_physics.cli.launchers.launch_python_display"
+    ) as mock_launch:
+        mock_launch.return_value = None
+
+        # Call the launcher
+        launcher_func(standalone=True)
+
+        # Verify launch_python_display was called
+        assert mock_launch.called
+        call_args = mock_launch.call_args[0]
+
+        # Get the actual class that was passed (should be the real class, not a mock)
+        passed_class = call_args[0]
+
+        # Verify it's the expected class by checking its module and name
+        assert passed_class.__name__ == class_name
+        assert passed_class.__module__ == module_path
 
 
 def test_all_entry_points_have_tests():
     """Meta-test: ensure all launchers in the module are being tested."""
-    from sc_linac_physics import cli
+    from sc_linac_physics.cli import launchers
     import inspect
-
-    launchers_module = cli.launchers
 
     # Get all launcher functions
     launcher_functions = [
         name
-        for name, obj in inspect.getmembers(launchers_module)
+        for name, obj in inspect.getmembers(launchers)
         if name.startswith("launch_") and callable(obj)
     ]
 
