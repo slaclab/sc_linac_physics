@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v2.0.2 (2025-10-29)
+
+### Bug Fixes
+
+- Prevent PyDM connection errors in cavity display tests
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+- **cavity-display**: Ignore Qt signal args in button handler
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+- **test**: Disable PyDM data plugins to prevent connection errors
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+- **tests**: Prevent module import side effects in cavity display test
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+### Refactoring
+
+- Reorganize CLI structure and improve testability
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+### Testing
+
+- Fix launcher tests to prevent PyDM widget instantiation
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+- Improve CLI launcher test coverage and add integration tests
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+
 ## v2.0.1 (2025-10-28)
 
 ### Refactoring
