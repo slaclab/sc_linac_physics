@@ -153,37 +153,42 @@ class TestLaunchPythonDisplay:
 
 
 class TestDisplayLaunchers:
-    """Test individual display launcher functions."""
+    """Test display launchers."""
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        """Set up common mocks for all display launcher tests."""
-        with (
-            patch("sys.exit"),
-            patch(
-                "sc_linac_physics.cli.launchers.launch_python_display"
-            ) as mock_launch,
-        ):
-            self.mock_launch = mock_launch
-            yield
+        """Set up mocks for each test."""
+        # Patch launch_python_display
+        patcher = patch("sc_linac_physics.cli.launchers.launch_python_display")
+        self.mock_launch = patcher.start()
+        self.mock_launch.return_value = None
+        yield
+        patcher.stop()
 
     def test_launch_srf_home(self):
         """Test SRF home launcher."""
         from sc_linac_physics.cli.launchers import launch_srf_home
 
         # Mock the import inside the function
-        with patch("sc_linac_physics.displays.srfhome.srf_home.SRFHome"):
+        with patch(
+            "sc_linac_physics.displays.srfhome.srf_home.SRFHome"
+        ) as mock_display:
             launch_srf_home(standalone=True)
 
             # Verify launch_python_display was called
             assert self.mock_launch.called
-            call_kwargs = self.mock_launch.call_args
-            # The display_class argument should be the mock
-            assert "display_class" in call_kwargs.kwargs
-            assert call_kwargs.kwargs["standalone"] is True
+
+            # Get the call arguments
+            call_args = self.mock_launch.call_args
+
+            # display_class is passed as FIRST POSITIONAL argument
+            assert call_args.args[0] == mock_display
+
+            # standalone is passed as KEYWORD argument
+            assert call_args.kwargs["standalone"] is True
 
     def test_launch_srf_home_has_display_decorator(self):
-        """Test that SRF home launcher has display decorator."""
+        """Test that launch_srf_home has display decorator."""
         from sc_linac_physics.cli.launchers import launch_srf_home
 
         assert hasattr(launch_srf_home, "_launcher_category")
@@ -191,21 +196,19 @@ class TestDisplayLaunchers:
 
     def test_launch_cavity_display(self):
         """Test cavity display launcher."""
-        # Mock the entire cavity_display module to prevent real imports
-        mock_module = MagicMock()
-        mock_module.CavityDisplayGUI = MagicMock()
+        from sc_linac_physics.cli.launchers import launch_cavity_display
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "sc_linac_physics.displays.cavity_display.cavity_display": mock_module
-            },
-        ):
-            from sc_linac_physics.cli.launchers import launch_cavity_display
-
-            launch_cavity_display(standalone=False)
+        with patch(
+            "sc_linac_physics.displays.cavity_display.cavity_display.CavityDisplayGUI"
+        ) as mock_display:
+            launch_cavity_display(standalone=True)
 
             assert self.mock_launch.called
+            call_args = self.mock_launch.call_args
+
+            # Check positional and keyword args
+            assert call_args.args[0] == mock_display
+            assert call_args.kwargs["standalone"] is True
 
     def test_launch_fault_decoder(self):
         """Test fault decoder launcher."""
@@ -213,10 +216,13 @@ class TestDisplayLaunchers:
 
         with patch(
             "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay"
-        ):
-            launch_fault_decoder()
+        ) as mock_display:
+            launch_fault_decoder(standalone=True)
 
             assert self.mock_launch.called
+            call_args = self.mock_launch.call_args
+            assert call_args.args[0] == mock_display
+            assert call_args.kwargs["standalone"] is True
 
     def test_launch_fault_count(self):
         """Test fault count launcher."""
@@ -224,26 +230,26 @@ class TestDisplayLaunchers:
 
         with patch(
             "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay"
-        ):
-            launch_fault_count()
+        ) as mock_display:
+            launch_fault_count(standalone=True)
 
             assert self.mock_launch.called
+            call_args = self.mock_launch.call_args
+            assert call_args.args[0] == mock_display
+            assert call_args.kwargs["standalone"] is True
 
 
 class TestApplicationLaunchers:
-    """Test individual application launcher functions."""
+    """Test application launchers."""
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        """Set up common mocks for all application launcher tests."""
-        with (
-            patch("sys.exit"),
-            patch(
-                "sc_linac_physics.cli.launchers.launch_python_display"
-            ) as mock_launch,
-        ):
-            self.mock_launch = mock_launch
-            yield
+        """Set up mocks for each test."""
+        patcher = patch("sc_linac_physics.cli.launchers.launch_python_display")
+        self.mock_launch = patcher.start()
+        self.mock_launch.return_value = None
+        yield
+        patcher.stop()
 
     def test_launch_quench_processing(self):
         """Test quench processing launcher."""
@@ -251,15 +257,16 @@ class TestApplicationLaunchers:
 
         with patch(
             "sc_linac_physics.applications.quench_processing.quench_gui.QuenchGUI"
-        ):
+        ) as mock_app:
             launch_quench_processing(standalone=True)
 
             assert self.mock_launch.called
-            call_kwargs = self.mock_launch.call_args
-            assert call_kwargs.kwargs["standalone"] is True
+            call_args = self.mock_launch.call_args
+            assert call_args.args[0] == mock_app
+            assert call_args.kwargs["standalone"] is True
 
     def test_launch_quench_processing_has_application_decorator(self):
-        """Test that quench processing launcher has application decorator."""
+        """Test that launch_quench_processing has application decorator."""
         from sc_linac_physics.cli.launchers import launch_quench_processing
 
         assert hasattr(launch_quench_processing, "_launcher_category")
@@ -271,28 +278,39 @@ class TestApplicationLaunchers:
 
         with patch(
             "sc_linac_physics.applications.auto_setup.setup_gui.SetupGUI"
-        ):
-            launch_auto_setup()
+        ) as mock_app:
+            launch_auto_setup(standalone=True)
 
             assert self.mock_launch.called
+            call_args = self.mock_launch.call_args
+            assert call_args.args[0] == mock_app
+            assert call_args.kwargs["standalone"] is True
 
     def test_launch_q0_measurement(self):
         """Test Q0 measurement launcher."""
         from sc_linac_physics.cli.launchers import launch_q0_measurement
 
-        with patch("sc_linac_physics.applications.q0.q0_gui.Q0GUI"):
-            launch_q0_measurement()
+        with patch("sc_linac_physics.applications.q0.q0_gui.Q0GUI") as mock_app:
+            launch_q0_measurement(standalone=True)
 
             assert self.mock_launch.called
+            call_args = self.mock_launch.call_args
+            assert call_args.args[0] == mock_app
+            assert call_args.kwargs["standalone"] is True
 
     def test_launch_tuning(self):
         """Test tuning launcher."""
         from sc_linac_physics.cli.launchers import launch_tuning
 
-        with patch("sc_linac_physics.applications.tuning.tuning_gui.Tuner"):
-            launch_tuning()
+        with patch(
+            "sc_linac_physics.applications.tuning.tuning_gui.Tuner"
+        ) as mock_app:
+            launch_tuning(standalone=True)
 
             assert self.mock_launch.called
+            call_args = self.mock_launch.call_args
+            assert call_args.args[0] == mock_app
+            assert call_args.kwargs["standalone"] is True
 
     def test_launch_microphonics(self):
         """Test microphonics launcher."""
@@ -300,10 +318,13 @@ class TestApplicationLaunchers:
 
         with patch(
             "sc_linac_physics.applications.microphonics.gui.main_window.MicrophonicsGUI"
-        ):
-            launch_microphonics()
+        ) as mock_app:
+            launch_microphonics(standalone=True)
 
             assert self.mock_launch.called
+            call_args = self.mock_launch.call_args
+            assert call_args.args[0] == mock_app
+            assert call_args.kwargs["standalone"] is True
 
 
 class TestMainExecution:
