@@ -43,36 +43,36 @@ def mock_show_display():
 
 
 @pytest.fixture
-def display(mock_show_display):
+def display(mock_show_display, monkeypatch):
     """Create a CavityDisplayGUI instance with mocked components."""
     # Patch the components before importing CavityDisplayGUI
-    with (
-        patch(
-            "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay",
-            MockFaultCountDisplay,
-        ),
-        patch(
-            "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay",
-            MockDecoderDisplay,
-        ),
-        patch(
-            "sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine",
-            MockGUIMachine,
-        ),
-    ):
-        # Now import CavityDisplayGUI after patching
-        from sc_linac_physics.displays.cavity_display.cavity_display import (
-            CavityDisplayGUI,
-        )
 
-        # Create the display but prevent it from showing
-        with (
-            patch.object(CavityDisplayGUI, "show"),
-            patch.object(CavityDisplayGUI, "showMaximized"),
-        ):
-            display = CavityDisplayGUI()
-            yield display
-            display.close()
+    monkeypatch.setattr(
+        "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay",
+        MockFaultCountDisplay,
+    ),
+    monkeypatch.setattr(
+        "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay",
+        MockDecoderDisplay,
+    ),
+    monkeypatch.setattr(
+        "sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine",
+        MockGUIMachine,
+    )
+
+    # Now import CavityDisplayGUI after patching
+    from sc_linac_physics.displays.cavity_display.cavity_display import (
+        CavityDisplayGUI,
+    )
+
+    # Create the display but prevent it from showing
+    with (
+        patch.object(CavityDisplayGUI, "show"),
+        patch.object(CavityDisplayGUI, "showMaximized"),
+    ):
+        display = CavityDisplayGUI()
+        yield display
+        display.close()
 
 
 def test_launches(qtbot: QtBot, display):
@@ -100,7 +100,6 @@ def test_header_buttons(qtbot: QtBot, display):
     )
 
 
-@pytest.mark.skip("Need to figure out why this is failing")
 def test_button_connections(qtbot: QtBot, display, mock_show_display):
     """Test that button connections work with our mocked showDisplay function."""
     qtbot.addWidget(display)
