@@ -6,6 +6,8 @@ import pyqtgraph as pg
 import pytest
 from qtpy.QtWidgets import QApplication
 
+# Disable PyDM data plugins before importing any PyDM modules
+os.environ.setdefault("PYDM_DATA_PLUGINS_DISABLED", "1")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_API", "pyqt5")
 # Optional: avoid any PyDM telemetry/tasks
