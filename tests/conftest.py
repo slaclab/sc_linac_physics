@@ -14,20 +14,6 @@ os.environ.setdefault("QT_API", "pyqt5")
 os.environ.setdefault("PYDM_DISABLE_TELEMETRY", "1")
 
 
-@pytest.fixture(autouse=True)
-def cleanup_imports():
-    """Clean up module imports between tests."""
-    import sys
-
-    modules_before = set(sys.modules.keys())
-    yield
-    # Remove any modules imported during test
-    modules_after = set(sys.modules.keys())
-    for module in modules_after - modules_before:
-        if "sc_linac_physics" in module:
-            sys.modules.pop(module, None)
-
-
 @pytest.fixture(scope="session")
 def ensure_installed():
     """Ensure package is installed in editable mode."""
