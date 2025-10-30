@@ -62,9 +62,13 @@ def main():
     parsed_args = parser.parse_args()
     cm_name = parsed_args.cryomodule
 
-    cm_object: SetupCryomodule = SETUP_MACHINE.cryomodules[cm_name]
+    cm: SetupCryomodule = SETUP_MACHINE.cryomodules[cm_name]
+    print(f"{cm.ssa_cal_requested_pv}: {cm.ssa_cal_requested}")
+    print(f"{cm.auto_tune_requested_pv}: {cm.auto_tune_requested}")
+    print(f"{cm.cav_char_requested_pv}: {cm.cav_char_requested}")
+    print(f"{cm.rf_ramp_requested_pv}: {cm.rf_ramp_requested}")
 
-    for cavity in cm_object.cavities.values():
+    for cavity in cm.cavities.values():
         setup_cavity(cavity, parsed_args)
         sleep(0.1)
 

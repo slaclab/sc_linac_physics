@@ -56,11 +56,16 @@ def main():
         cm_name = parsed_args.cryomodule
         cav_num = parsed_args.cavity
 
-        cavity_obj: SetupCavity = SETUP_MACHINE.cryomodules[cm_name].cavities[
+        cavity: SetupCavity = SETUP_MACHINE.cryomodules[cm_name].cavities[
             cav_num
         ]
 
-        setup_cavity(cavity_obj, parsed_args)
+        print(f"{cavity.ssa_cal_requested_pv}: {cavity.ssa_cal_requested}")
+        print(f"{cavity.auto_tune_requested_pv}: {cavity.auto_tune_requested}")
+        print(f"{cavity.cav_char_requested_pv}: {cavity.cav_char_requested}")
+        print(f"{cavity.rf_ramp_requested_pv}: {cavity.rf_ramp_requested}")
+
+        setup_cavity(cavity, parsed_args)
 
     except KeyError as e:
         print(

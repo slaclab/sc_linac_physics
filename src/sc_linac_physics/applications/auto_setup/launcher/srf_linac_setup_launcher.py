@@ -4,6 +4,9 @@ from time import sleep
 from sc_linac_physics.applications.auto_setup.backend.setup_cryomodule import (
     SetupCryomodule,
 )
+from sc_linac_physics.applications.auto_setup.backend.setup_linac import (
+    SetupLinac,
+)
 from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
     SETUP_MACHINE,
 )
@@ -66,9 +69,15 @@ def main():
     print(args)
     linac_number: int = args.linac
 
+    linac: SetupLinac = SETUP_MACHINE.linacs[linac_number]
+    print(f"{linac.ssa_cal_requested_pv}: {linac.ssa_cal_requested}")
+    print(f"{linac.auto_tune_requested_pv}: {linac.auto_tune_requested}")
+    print(f"{linac.cav_char_requested_pv}: {linac.cav_char_requested}")
+    print(f"{linac.rf_ramp_requested_pv}: {linac.rf_ramp_requested}")
+
     cryomodule_list = LINAC_CM_DICT[linac_number]
     print(
-        f"Setting up {len(cryomodule_list)} cryomodules in Linac {linac_number}"
+        f"Setting up {len(cryomodule_list)} cryomodule(s) in Linac {linac_number}"
     )
 
     for cm_name in cryomodule_list:
