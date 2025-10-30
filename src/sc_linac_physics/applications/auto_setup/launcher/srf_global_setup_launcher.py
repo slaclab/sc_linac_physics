@@ -62,6 +62,11 @@ def main():
     machine: SetupMachine = SetupMachine()
     print(args)
 
+    print(f"{machine.ssa_cal_requested_pv}: {machine.ssa_cal_requested}")
+    print(f"{machine.auto_tune_requested_pv}: {machine.auto_tune_requested}")
+    print(f"{machine.cav_char_requested_pv}: {machine.cav_char_requested}")
+    print(f"{machine.rf_ramp_requested_pv}: {machine.rf_ramp_requested}")
+
     if args.no_hl:
         cryomodule_list = ALL_CRYOMODULES_NO_HL
         print(f"Setting up {len(cryomodule_list)} cryomodules (excluding HL)")
