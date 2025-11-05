@@ -127,7 +127,7 @@ class TestPVGroupArchiverDisplayInitialization:
         assert display.pv_type_list is not None
         assert display.filter_edit is not None
         assert display.plotted_list is not None
-        assert display.time_plot is not None
+        assert display.archiver_plot is not None
 
     def test_initial_level_is_machine(self, display):
         """Test that initial level is Machine."""
@@ -505,7 +505,9 @@ class TestTimeRangeControl:
 
     def test_time_range_change_updates_plot(self, display):
         """Test that changing time range updates the plot."""
-        with patch.object(display.time_plot, "setTimeSpan") as mock_set_time:
+        with patch.object(
+            display.archiver_plot, "setTimeSpan"
+        ) as mock_set_time:
             display.time_range_combo.setCurrentText("1 hour")
             display.on_time_range_changed("1 hour")
 
