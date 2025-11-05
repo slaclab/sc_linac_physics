@@ -145,6 +145,43 @@ class PVGroupArchiverDisplay(Display):
         action_group.setLayout(action_layout)
         layout.addWidget(action_group)
 
+        # Plot controls (moved from plot panel)
+        plot_control_group = QGroupBox("5. Plot Controls")
+        plot_control_layout = QVBoxLayout()
+
+        # Time range controls
+        time_layout = QHBoxLayout()
+        time_layout.addWidget(QLabel("Time Range:"))
+
+        self.time_range_combo = QComboBox()
+        self.time_range_combo.addItems(
+            [
+                "5 minutes",
+                "15 minutes",
+                "30 minutes",
+                "1 hour",
+                "2 hours",
+                "6 hours",
+                "12 hours",
+                "24 hours",
+            ]
+        )
+        self.time_range_combo.setCurrentText("1 hour")
+        self.time_range_combo.currentTextChanged.connect(
+            self.on_time_range_changed
+        )
+        time_layout.addWidget(self.time_range_combo)
+        plot_control_layout.addLayout(time_layout)
+
+        # Legend controls
+        self.show_legend_check = QCheckBox("Show Legend")
+        self.show_legend_check.setChecked(True)
+        self.show_legend_check.stateChanged.connect(self.on_show_legend_changed)
+        plot_control_layout.addWidget(self.show_legend_check)
+
+        plot_control_group.setLayout(plot_control_layout)
+        layout.addWidget(plot_control_group)
+
         # Currently plotted PVs
         plotted_group = QGroupBox("Currently Plotted PVs")
         plotted_layout = QVBoxLayout()
@@ -164,83 +201,40 @@ class PVGroupArchiverDisplay(Display):
         layout.addStretch()
         panel.setLayout(layout)
 
-        # Initialize with Machine level (trigger after all widgets are created)
+        # Initialize with Machine level
         self.on_level_changed("Machine")
 
         return panel
 
     def create_plot_panel(self):
-        """Create the archiver time plot panel."""
+        """Create the time plot panel."""
         panel = QWidget()
         layout = QVBoxLayout()
 
-        # Title and controls in header
+        # Title
         header_layout = QHBoxLayout()
 
         title = PyDMLabel()
-        title.setText("Archiver Time Plot")
+        title.setText("Time Plot")
         title.setStyleSheet("font-size: 16pt; font-weight: bold;")
         header_layout.addWidget(title)
 
         header_layout.addStretch()
         layout.addLayout(header_layout)
 
-        # Archiver time plot
+        # Time plot
         self.time_plot = PyDMTimePlot()
 
         # Set to fixed rate update mode
         self.time_plot.updateMode = updateMode.AtFixedRate
 
-        # Enable legend (this is the correct way)
-        self.time_plot.setShowLegend(True)
+        # Enable legend
+        self.time_plot.showLegend = True
+
+        # Set default time span (1 hour)
+        self.time_plot.setTimeSpan(3600)
 
         layout.addWidget(self.time_plot)
-
-        # Plot controls
-        control_group = QGroupBox("Plot Controls")
-        control_layout = QVBoxLayout()
-
-        # Time range controls
-        time_layout = QHBoxLayout()
-        time_layout.addWidget(QLabel("Time Range:"))
-
-        self.time_range_combo = QComboBox()
-        self.time_range_combo.addItems(
-            [
-                "5 minutes",
-                "15 minutes",
-                "30 minutes",
-                "1 hour",
-                "2 hours",
-                "6 hours",
-                "12 hours",
-                "24 hours",
-                "2 days",
-                "7 days",
-            ]
-        )
-        self.time_range_combo.setCurrentText("1 hour")
-        self.time_range_combo.currentTextChanged.connect(
-            self.on_time_range_changed
-        )
-        time_layout.addWidget(self.time_range_combo)
-
-        time_layout.addStretch()
-        control_layout.addLayout(time_layout)
-
-        # Legend controls
-        legend_layout = QHBoxLayout()
-
-        self.show_legend_check = QCheckBox("Show Legend")
-        self.show_legend_check.setChecked(True)
-        self.show_legend_check.stateChanged.connect(self.on_show_legend_changed)
-        legend_layout.addWidget(self.show_legend_check)
-
-        legend_layout.addStretch()
-        control_layout.addLayout(legend_layout)
-
-        control_group.setLayout(control_layout)
-        layout.addWidget(control_group)
 
         panel.setLayout(layout)
         return panel

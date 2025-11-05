@@ -145,16 +145,16 @@ class PVExtractor:
 
     def update_context(self, obj_type: str, current_obj: Any):
         """Update the context based on object type."""
-        context_map = {
-            "Machine": ("machine", current_obj),
-            "Linac": ("linac_name", current_obj.name),
-            "Cryomodule": ("cryomodule_name", current_obj.name),
-            "Rack": ("rack_name", current_obj.rack_name),
-            "Cavity": ("cavity_number", current_obj.number),
-        }
-        if obj_type in context_map:
-            key, value = context_map[obj_type]
-            self.context[key] = value
+        if obj_type == "Machine":
+            self.context["machine"] = current_obj
+        elif obj_type == "Linac":
+            self.context["linac_name"] = current_obj.name
+        elif obj_type == "Cryomodule":
+            self.context["cryomodule_name"] = current_obj.name
+        elif obj_type == "Rack":
+            self.context["rack_name"] = current_obj.rack_name
+        elif obj_type == "Cavity":
+            self.context["cavity_number"] = current_obj.number
 
     def add_to_machine_group(self, pv_key: Tuple[str, str], pv_list: List[str]):
         """Add PVs to machine grouping."""
