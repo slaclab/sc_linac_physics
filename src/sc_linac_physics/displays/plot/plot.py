@@ -1,7 +1,6 @@
 from PyQt5.QtWidgets import QListWidgetItem
 from pydm import Display
-from pydm.widgets import PyDMLabel
-from pydm.widgets.timeplot import PyDMTimePlot
+from pydm.widgets import PyDMLabel, PyDMArchiverTimePlot
 from pydm.widgets.timeplot import updateMode
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
@@ -37,7 +36,8 @@ class PVGroupArchiverDisplay(Display):
         self.pv_groups = get_pvs_all_groupings(self.machine)
 
         # Track which PVs are currently plotted
-        self.plotted_pvs = {}  # {pv_name: True}
+        self.plotted_pvs = {}  # {pv_name: pv_key}
+        self.pv_curves = {}  # {pv_name: curve_object}  # ADD THIS
 
         self.setup_ui()
 
@@ -208,7 +208,7 @@ class PVGroupArchiverDisplay(Display):
         return panel
 
     def create_plot_panel(self):
-        """Create the time plot panel."""
+        """Create the archiver time plot panel."""
         panel = QWidget()
         layout = QVBoxLayout()
 
@@ -216,26 +216,48 @@ class PVGroupArchiverDisplay(Display):
         header_layout = QHBoxLayout()
 
         title = PyDMLabel()
-        title.setText("Time Plot")
+        title.setText("Archiver Time Plot")
         title.setStyleSheet("font-size: 16pt; font-weight: bold;")
         header_layout.addWidget(title)
 
         header_layout.addStretch()
         layout.addLayout(header_layout)
 
-        # Time plot
-        self.time_plot = PyDMTimePlot()
+        # Archiver time plot
+        self.archiver_plot = PyDMArchiverTimePlot()
 
         # Set to fixed rate update mode
-        self.time_plot.updateMode = updateMode.AtFixedRate
+        self.archiver_plot.updateMode = updateMode.AtFixedRate
 
-        # Enable legend
-        self.time_plot.showLegend = True
+        # Access the legend and debug it
+        plot_item = self.archiver_plot.getPlotItem()
+        self.legend = plot_item.legend
+
+        if self.legend:
+            print(f"Legend exists: {self.legend}")
+            print(f"Legend visible: {self.legend.isVisible()}")
+            print(f"Legend parent: {self.legend.parentItem()}")
+
+            # Try multiple ways to make it visible
+            self.legend.setVisible(True)
+            self.legend.show()
+
+            # Try setting opacity
+            self.legend.setOpacity(1.0)
+
+            # Check again
+            print(f"After setting visible: {self.legend.isVisible()}")
+        else:
+            print("Legend is None, trying to create...")
+            self.legend = plot_item.addLegend()
+            if self.legend:
+                self.legend.setVisible(True)
+                self.legend.show()
 
         # Set default time span (1 hour)
-        self.time_plot.setTimeSpan(3600)
+        self.archiver_plot.setTimeSpan(3600)
 
-        layout.addWidget(self.time_plot)
+        layout.addWidget(self.archiver_plot)
 
         panel.setLayout(layout)
         return panel
@@ -243,7 +265,10 @@ class PVGroupArchiverDisplay(Display):
     def on_show_legend_changed(self, state):
         """Handle legend visibility change."""
         show_legend = state == Qt.Checked
-        self.time_plot.showLegend = show_legend
+
+        if self.legend is not None:
+            self.legend.setVisible(show_legend)
+
         print(f"Legend {'shown' if show_legend else 'hidden'}")
 
     def on_time_range_changed(self, time_range_text):
@@ -262,7 +287,7 @@ class PVGroupArchiverDisplay(Display):
         }
 
         seconds = time_map.get(time_range_text, 3600)
-        self.time_plot.setTimeSpan(seconds)
+        self.archiver_plot.setTimeSpan(seconds)
         print(f"Time range set to {time_range_text}")
 
     def on_level_changed(self, level):
@@ -398,7 +423,8 @@ class PVGroupArchiverDisplay(Display):
 
             for pv in pvs:
                 if pv not in self.plotted_pvs:
-                    self.plotted_pvs[pv] = True
+                    # Store both the PV and its key (source_level, pv_type)
+                    self.plotted_pvs[pv] = pv_key
 
                     # Add to plotted list
                     self.plotted_list.addItem(pv)
@@ -415,7 +441,7 @@ class PVGroupArchiverDisplay(Display):
             print(f"Added {pvs_added} PVs to plot")
 
     def remove_selected_pvs(self):
-        """Remove selected PVs from the time plot."""
+        """Remove selected PVs from the archiver time plot."""
         selected_items = self.plotted_list.selectedItems()
 
         if not selected_items:
@@ -429,12 +455,15 @@ class PVGroupArchiverDisplay(Display):
             if pv in self.plotted_pvs:
                 del self.plotted_pvs[pv]
 
+            if pv in self.pv_curves:
+                del self.pv_curves[pv]
+
             # Remove from list
             row = self.plotted_list.row(item)
             self.plotted_list.takeItem(row)
             pvs_removed += 1
 
-        # Regenerate plot with remaining curves
+        # Regenerate plot with remaining curves (this will handle axis cleanup)
         if pvs_removed > 0:
             self._regenerate_plot()
 
@@ -446,11 +475,50 @@ class PVGroupArchiverDisplay(Display):
 
     def clear_all_pvs(self):
         """Clear all PVs from the plot."""
+        # Clear all curves at once
+        self.archiver_plot.clearCurves()
+
         self.plotted_pvs.clear()
         self.plotted_list.clear()
+        self.pv_curves.clear()
 
-        # Clear the plot
-        self.time_plot.clearCurves()
+        # Clear legend
+        if self.legend:
+            self.legend.clear()
+
+        # Clear all Y axes except the default ones
+        essential_axes = {"left", "bottom", "right", "top"}
+        try:
+            if hasattr(self.archiver_plot.plotItem, "axes"):
+                # Get list of axes to remove (make a copy of keys to avoid modification during iteration)
+                axes_to_remove = [
+                    axis_name
+                    for axis_name in list(
+                        self.archiver_plot.plotItem.axes.keys()
+                    )
+                    if axis_name not in essential_axes
+                ]
+
+                for axis_name in axes_to_remove:
+                    axis_dict = self.archiver_plot.plotItem.axes[axis_name]
+                    if "item" in axis_dict:
+                        # Remove the axis item from the scene
+                        axis_item = axis_dict["item"]
+                        self.archiver_plot.plotItem.layout.removeItem(axis_item)
+                        # Also remove from the scene
+                        if axis_item.scene() is not None:
+                            axis_item.scene().removeItem(axis_item)
+                    # Remove from axes dict
+                    del self.archiver_plot.plotItem.axes[axis_name]
+                    print(f"Removed axis: {axis_name}")
+        except Exception as e:
+            print(f"Could not clear axes: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+        # Force a redraw
+        self.archiver_plot.plotItem.update()
 
         # Update info
         self.update_info_label()
@@ -459,15 +527,117 @@ class PVGroupArchiverDisplay(Display):
 
     def _regenerate_plot(self):
         """Regenerate the plot with all currently selected PVs using rainbow colors."""
-        # Clear all existing curves
-        self.time_plot.clearCurves()
+        # Clear existing plot elements
+        self._clear_plot_elements()
 
-        # Re-add all curves with rainbow colors
-        for index, pv in enumerate(self.plotted_pvs.keys()):
-            color = self._get_rainbow_color(index)
-            self.time_plot.addYChannel(pv, color=color)
+        # Clear all custom Y axes
+        self._clear_custom_axes()
 
-        print(f"Regenerated plot with {len(self.plotted_pvs)} curves")
+        # Group PVs by their source type
+        pv_groups = self._group_pvs_by_source()
+
+        # Add all PV groups to the plot
+        self._add_pv_groups_to_plot(pv_groups)
+
+        # Ensure legend is visible
+        if self.legend:
+            self.legend.setVisible(True)
+
+        print(
+            f"Regenerated plot with {len(self.plotted_pvs)} curves on {len(pv_groups)} axes"
+        )
+
+    def _clear_plot_elements(self):
+        """Clear all existing curves and legend items."""
+        self.archiver_plot.clearCurves()
+        self.pv_curves.clear()
+
+        if self.legend:
+            self.legend.clear()
+
+    def _clear_custom_axes(self):
+        """Clear all custom Y axes, preserving essential axes."""
+        essential_axes = {"left", "bottom", "right", "top"}
+        try:
+            if hasattr(self.archiver_plot.plotItem, "axes"):
+                axes_to_remove = [
+                    axis_name
+                    for axis_name in list(
+                        self.archiver_plot.plotItem.axes.keys()
+                    )
+                    if axis_name not in essential_axes
+                ]
+
+                for axis_name in axes_to_remove:
+                    self._remove_axis(axis_name)
+        except Exception as e:
+            print(f"Could not clear custom axes: {e}")
+
+    def _remove_axis(self, axis_name):
+        """Remove a specific axis from the plot."""
+        axis_dict = self.archiver_plot.plotItem.axes[axis_name]
+        if "item" in axis_dict:
+            axis_item = axis_dict["item"]
+            # Remove from layout
+            self.archiver_plot.plotItem.layout.removeItem(axis_item)
+            # Also remove from the scene
+            if axis_item.scene() is not None:
+                axis_item.scene().removeItem(axis_item)
+        del self.archiver_plot.plotItem.axes[axis_name]
+
+    def _group_pvs_by_source(self):
+        """Group PVs by their source type (source_level, pv_type)."""
+        pv_groups = {}
+        for pv, pv_key in self.plotted_pvs.items():
+            if pv_key not in pv_groups:
+                pv_groups[pv_key] = []
+            pv_groups[pv_key].append(pv)
+        return pv_groups
+
+    def _add_pv_groups_to_plot(self, pv_groups):
+        """Add all PV groups to the plot with appropriate axes and colors."""
+        plot_item = self.archiver_plot.getPlotItem()
+        color_index = 0
+
+        for pv_key, pvs in pv_groups.items():
+            source_level, pv_type = pv_key
+            axis_name = f"{source_level} - {pv_type}"
+
+            # Add all PVs in this group
+            for pv in pvs:
+                color = self._get_rainbow_color(color_index)
+                self._add_pv_to_plot(pv, axis_name, color, plot_item)
+                color_index += 1
+
+            # Set the axis label
+            self._set_axis_label(axis_name)
+
+    def _add_pv_to_plot(self, pv, axis_name, color, plot_item):
+        """Add a single PV to the plot with specified axis and color."""
+        # Add the channel with specific axis
+        self.archiver_plot.addYChannel(
+            pv, color=color, yAxisName=axis_name, useArchiveData=True
+        )
+
+        # Get the curve that was just added and store it
+        if len(plot_item.curves) > 0:
+            curve = plot_item.curves[-1]
+            self.pv_curves[pv] = curve
+
+            # Manually add to legend
+            if self.legend:
+                self.legend.addItem(curve, pv)
+
+    def _set_axis_label(self, axis_name):
+        """Set the label for a specific axis."""
+        try:
+            if hasattr(self.archiver_plot, "plotItem"):
+                axes = self.archiver_plot.plotItem.axes
+                if axes and axis_name in axes:
+                    axis_item = axes[axis_name]["item"]
+                    axis_item.setLabel(axis_name)
+        except Exception as e:
+            print(f"Could not set axis label: {e}")
 
     def _get_rainbow_color(self, index):
         """
