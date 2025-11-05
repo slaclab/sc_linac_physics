@@ -1,6 +1,152 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple, Union
 
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (
+    QVBoxLayout,
+    QLabel,
+    QWidget,
+    QHBoxLayout,
+    QPushButton,
+    QGroupBox,
+    QCheckBox,
+    QLineEdit,
+)
+from qtpy.QtWidgets import QDialog, QScrollArea, QGridLayout
+
+
+class AxisRangeDialog(QDialog):
+    """Dialog for controlling Y-axis ranges."""
+
+    def __init__(self, axis_names, axis_settings, parent=None):
+        super().__init__(parent)
+        self.axis_names = axis_names
+        self.axis_settings = axis_settings
+        self.axis_controls = {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setWindowTitle("Y-Axis Range Control")
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(400)
+
+        layout = QVBoxLayout()
+
+        # Info label
+        info = QLabel("Configure range settings for each Y-axis:")
+        info.setStyleSheet("font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(info)
+
+        # Create controls for each axis
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+
+        for axis_name in self.axis_names:
+            axis_group = self.create_axis_control(axis_name)
+            scroll_layout.addWidget(axis_group)
+
+        scroll_layout.addStretch()
+        scroll_widget.setLayout(scroll_layout)
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        apply_btn = QPushButton("Apply")
+        apply_btn.clicked.connect(self.accept)
+        apply_btn.setStyleSheet(
+            "background-color: #4CAF50; color: white; padding: 5px;"
+        )
+        close_btn = QPushButton("Cancel")
+        close_btn.clicked.connect(self.reject)
+        button_layout.addStretch()
+        button_layout.addWidget(apply_btn)
+        button_layout.addWidget(close_btn)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def create_axis_control(self, axis_name):
+        """Create control widgets for a single axis."""
+        group = QGroupBox(axis_name)
+        layout = QVBoxLayout()
+
+        # Auto-scale checkbox
+        auto_check = QCheckBox("Auto-scale")
+        current_settings = self.axis_settings.get(axis_name, {})
+        auto_check.setChecked(current_settings.get("auto_scale", True))
+        layout.addWidget(auto_check)
+
+        # Manual range inputs
+        range_layout = QGridLayout()
+        range_layout.addWidget(QLabel("Y Min:"), 0, 0)
+        y_min_input = QLineEdit()
+        y_min_input.setEnabled(not auto_check.isChecked())
+        if current_settings.get("range"):
+            y_min_input.setText(str(current_settings["range"][0]))
+        range_layout.addWidget(y_min_input, 0, 1)
+
+        range_layout.addWidget(QLabel("Y Max:"), 1, 0)
+        y_max_input = QLineEdit()
+        y_max_input.setEnabled(not auto_check.isChecked())
+        if current_settings.get("range"):
+            y_max_input.setText(str(current_settings["range"][1]))
+        range_layout.addWidget(y_max_input, 1, 1)
+
+        layout.addLayout(range_layout)
+
+        # Connect checkbox to enable/disable inputs
+        auto_check.stateChanged.connect(
+            lambda state, min_input=y_min_input, max_input=y_max_input: self.toggle_inputs(
+                min_input, max_input, state == Qt.Checked
+            )
+        )
+
+        # Store references
+        self.axis_controls[axis_name] = {
+            "auto_check": auto_check,
+            "y_min": y_min_input,
+            "y_max": y_max_input,
+        }
+
+        group.setLayout(layout)
+        return group
+
+    def toggle_inputs(self, y_min_input, y_max_input, is_auto):
+        """Toggle manual input fields."""
+        y_min_input.setEnabled(not is_auto)
+        y_max_input.setEnabled(not is_auto)
+
+    def get_settings(self):
+        """Get all axis settings from the dialog."""
+        settings = {}
+        for axis_name, controls in self.axis_controls.items():
+            is_auto = controls["auto_check"].isChecked()
+            settings[axis_name] = {"auto_scale": is_auto, "range": None}
+
+            if not is_auto:
+                try:
+                    y_min_text = controls["y_min"].text().strip()
+                    y_max_text = controls["y_max"].text().strip()
+
+                    if y_min_text and y_max_text:
+                        y_min = float(y_min_text)
+                        y_max = float(y_max_text)
+                        if y_min < y_max:
+                            settings[axis_name]["range"] = (y_min, y_max)
+                        else:
+                            settings[axis_name][
+                                "auto_scale"
+                            ] = True  # Revert to auto if invalid
+                except ValueError:
+                    settings[axis_name][
+                        "auto_scale"
+                    ] = True  # Revert to auto if invalid input
+
+        return settings
+
 
 @dataclass
 class PVGroup:

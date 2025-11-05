@@ -1,10 +1,13 @@
 import sys
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 
 import pytest
+from PyQt5.QtWidgets import QDialog
 from qtpy.QtWidgets import QApplication
 
-from sc_linac_physics.displays.plot.plot import PVGroupArchiverDisplay
+from sc_linac_physics.displays.plot.plot import (
+    PVGroupArchiverDisplay,
+)
 from sc_linac_physics.displays.plot.utils import (
     HierarchicalPVs,
     MachinePVs,
@@ -13,6 +16,7 @@ from sc_linac_physics.displays.plot.utils import (
     RackPVs,
     CavityPVs,
     PVGroup,
+    AxisRangeDialog,
 )
 
 
@@ -119,6 +123,7 @@ class TestPVGroupArchiverDisplayInitialization:
         assert hasattr(display, "machine")
         assert hasattr(display, "pv_groups")
         assert hasattr(display, "plotted_pvs")
+        assert hasattr(display, "axis_settings")
 
     def test_ui_components_exist(self, display):
         """Test that all UI components are created."""
@@ -137,6 +142,10 @@ class TestPVGroupArchiverDisplayInitialization:
         """Test that plotted PVs dict is initially empty."""
         assert len(display.plotted_pvs) == 0
         assert display.plotted_list.count() == 0
+
+    def test_axis_settings_initially_empty(self, display):
+        """Test that axis settings dict is initially empty."""
+        assert len(display.axis_settings) == 0
 
 
 class TestHierarchyLevelSelection:
@@ -296,6 +305,149 @@ class TestPVSelection:
         assert len(display.pv_type_list.selectedItems()) == 0
 
 
+class TestAxisRangeControl:
+    """Test Y-axis range control functionality."""
+
+    def test_axis_range_dialog_creation(self, display):
+        """Test that axis range dialog can be created."""
+        axis_names = ["Cavity - ades_pv", "Cavity - acon_pv"]
+        axis_settings = {}
+
+        dialog = AxisRangeDialog(axis_names, axis_settings, display)
+        assert dialog is not None
+        assert len(dialog.axis_controls) == 2
+
+    def test_axis_range_dialog_with_existing_settings(self, display):
+        """Test dialog populates with existing settings."""
+        axis_names = ["Cavity - ades_pv"]
+        axis_settings = {
+            "Cavity - ades_pv": {"auto_scale": False, "range": (0.0, 100.0)}
+        }
+
+        dialog = AxisRangeDialog(axis_names, axis_settings, display)
+        controls = dialog.axis_controls["Cavity - ades_pv"]
+
+        assert not controls["auto_check"].isChecked()
+        assert controls["y_min"].text() == "0.0"
+        assert controls["y_max"].text() == "100.0"
+
+    def test_axis_range_dialog_get_settings(self, display):
+        """Test getting settings from dialog."""
+        axis_names = ["Cavity - ades_pv"]
+        axis_settings = {}
+
+        dialog = AxisRangeDialog(axis_names, axis_settings, display)
+        controls = dialog.axis_controls["Cavity - ades_pv"]
+
+        # Set manual range
+        controls["auto_check"].setChecked(False)
+        controls["y_min"].setText("10.0")
+        controls["y_max"].setText("90.0")
+
+        settings = dialog.get_settings()
+
+        assert not settings["Cavity - ades_pv"]["auto_scale"]
+        assert settings["Cavity - ades_pv"]["range"] == (10.0, 90.0)
+
+    def test_axis_range_dialog_invalid_range(self, display):
+        """Test that invalid ranges revert to auto-scale."""
+        axis_names = ["Cavity - ades_pv"]
+        axis_settings = {}
+
+        dialog = AxisRangeDialog(axis_names, axis_settings, display)
+        controls = dialog.axis_controls["Cavity - ades_pv"]
+
+        # Set invalid range (min > max)
+        controls["auto_check"].setChecked(False)
+        controls["y_min"].setText("100.0")
+        controls["y_max"].setText("10.0")
+
+        settings = dialog.get_settings()
+
+        # Should revert to auto-scale
+        assert settings["Cavity - ades_pv"]["auto_scale"]
+
+    def test_open_axis_range_dialog_no_axes(self, display):
+        """Test opening dialog with no axes shows message."""
+        with patch(
+            "sc_linac_physics.displays.plot.plot.QMessageBox"
+        ) as mock_msg:
+            display.open_axis_range_dialog()
+            mock_msg.information.assert_called_once()
+
+    def test_open_axis_range_dialog_with_axes(self, display):
+        """Test opening dialog with plotted axes."""
+        # Add some PVs first
+        display.level_combo.setCurrentText("Cavity")
+        if display.object_combo.count() > 0:
+            display.object_combo.setCurrentIndex(0)
+            if display.pv_type_list.count() > 0:
+                display.pv_type_list.item(0).setSelected(True)
+                display.add_selected_pvs()
+
+                # Mock the dialog
+                with patch(
+                    "sc_linac_physics.displays.plot.plot.AxisRangeDialog"
+                ) as mock_dialog:
+                    mock_instance = MagicMock()
+                    mock_instance.exec_.return_value = QDialog.Rejected
+                    mock_dialog.return_value = mock_instance
+
+                    display.open_axis_range_dialog()
+
+                    # Dialog should have been created
+                    mock_dialog.assert_called_once()
+
+    def test_apply_axis_settings(self, display):
+        """Test applying axis settings to plot."""
+        # Add PVs to create axes
+        display.level_combo.setCurrentText("Cavity")
+        if display.object_combo.count() > 0:
+            display.object_combo.setCurrentIndex(0)
+            if display.pv_type_list.count() > 0:
+                display.pv_type_list.item(0).setSelected(True)
+                display.add_selected_pvs()
+
+                # Create mock settings
+                pv_groups = display._group_pvs_by_source()
+                if pv_groups:
+                    pv_key = list(pv_groups.keys())[0]
+                    source_level, pv_type = pv_key
+                    axis_name = f"{source_level} - {pv_type}"
+
+                    settings = {
+                        axis_name: {"auto_scale": False, "range": (0.0, 100.0)}
+                    }
+
+                    # Apply settings
+                    display.apply_axis_settings(settings)
+
+                    # Check that settings were stored
+                    assert axis_name in display.axis_settings
+                    assert display.axis_settings[axis_name]["range"] == (
+                        0.0,
+                        100.0,
+                    )
+
+    def test_cleanup_axis_settings(self, display):
+        """Test cleanup of orphaned axis settings."""
+        # Manually add axis settings
+        display.axis_settings = {
+            "Cavity - ades_pv": {"auto_scale": True, "range": None},
+            "Cavity - acon_pv": {"auto_scale": False, "range": (0, 100)},
+        }
+
+        # Add only one type of PV
+        display.plotted_pvs["ACCL:L1B:0210:ADES"] = ("Cavity", "ades_pv")
+
+        # Run cleanup
+        display._cleanup_axis_settings()
+
+        # Only the ades_pv axis should remain
+        assert "Cavity - ades_pv" in display.axis_settings
+        assert "Cavity - acon_pv" not in display.axis_settings
+
+
 class TestAddRemovePVs:
     """Test adding and removing PVs from plot."""
 
@@ -347,10 +499,33 @@ class TestAddRemovePVs:
 
                     assert len(display.plotted_pvs) < initial_count
 
+    def test_remove_pvs_cleans_up_axis_settings(self, display):
+        """Test that removing PVs cleans up orphaned axis settings."""
+        # Add PVs from two different types
+        display.level_combo.setCurrentText("Cavity")
+        if display.object_combo.count() > 0:
+            display.object_combo.setCurrentIndex(0)
+            if display.pv_type_list.count() > 1:
+                # Add first type
+                display.pv_type_list.item(0).setSelected(True)
+                display.add_selected_pvs()
+
+                # Manually add axis settings
+                display.axis_settings["Cavity - ades_pv"] = {
+                    "auto_scale": False,
+                    "range": (0, 100),
+                }
+
+                # Remove all PVs
+                display.clear_all_pvs()
+
+                # Axis settings should be cleared
+                assert len(display.axis_settings) == 0
+
     def test_clear_all_pvs(self, display):
         """Test clearing all PVs from the plot."""
         # Add some PVs
-        display.level_combo.setCurrentText("Cavity ")
+        display.level_combo.setCurrentText("Cavity")
         if display.object_combo.count() > 0:
             display.object_combo.setCurrentIndex(0)
 
@@ -363,6 +538,7 @@ class TestAddRemovePVs:
 
                 assert len(display.plotted_pvs) == 0
                 assert display.plotted_list.count() == 0
+                assert len(display.axis_settings) == 0
 
 
 class TestRainbowColors:
@@ -372,7 +548,7 @@ class TestRainbowColors:
         """Test that rainbow colors are generated correctly."""
         # Simulate having 10 PVs plotted
         for i in range(10):
-            display.plotted_pvs[f"TEST:PV:{i}"] = True
+            display.plotted_pvs[f"TEST:PV:{i}"] = ("Test", "pv")
 
         colors = [display._get_rainbow_color(i) for i in range(10)]
 
@@ -392,7 +568,7 @@ class TestRainbowColors:
 
         # Simulate having PVs plotted
         for i in range(num_colors):
-            display.plotted_pvs[f"TEST:PV:{i}"] = True
+            display.plotted_pvs[f"TEST:PV:{i}"] = ("Test", "pv")
 
         colors = [display._get_rainbow_color(i) for i in range(num_colors)]
 

@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QListWidgetItem
+from PyQt5.QtWidgets import QListWidgetItem, QDialog, QMessageBox
 from pydm import Display
 from pydm.widgets import PyDMLabel, PyDMArchiverTimePlot
 from pydm.widgets.timeplot import updateMode
@@ -17,7 +17,10 @@ from qtpy.QtWidgets import (
     QLabel,
 )
 
-from sc_linac_physics.displays.plot.utils import get_pvs_all_groupings
+from sc_linac_physics.displays.plot.utils import (
+    get_pvs_all_groupings,
+    AxisRangeDialog,
+)
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 
@@ -37,7 +40,10 @@ class PVGroupArchiverDisplay(Display):
 
         # Track which PVs are currently plotted
         self.plotted_pvs = {}  # {pv_name: pv_key}
-        self.pv_curves = {}  # {pv_name: curve_object}  # ADD THIS
+        self.pv_curves = {}  # {pv_name: curve_object}
+        self.axis_settings = (
+            {}
+        )  # {axis_name: {'auto_scale': bool, 'range': (min, max)}}
 
         self.setup_ui()
 
@@ -161,6 +167,11 @@ class PVGroupArchiverDisplay(Display):
         self.show_legend_check.setChecked(True)
         self.show_legend_check.stateChanged.connect(self.on_show_legend_changed)
         plot_control_layout.addWidget(self.show_legend_check)
+
+        # Y-axis range control button
+        axis_range_btn = QPushButton("Configure Y-Axis Ranges")
+        axis_range_btn.clicked.connect(self.open_axis_range_dialog)
+        plot_control_layout.addWidget(axis_range_btn)
 
         plot_control_group.setLayout(plot_control_layout)
         layout.addWidget(plot_control_group)
@@ -469,11 +480,36 @@ class PVGroupArchiverDisplay(Display):
         if pvs_removed > 0:
             self._regenerate_plot()
 
+            # Clean up axis settings for axes that no longer exist
+            self._cleanup_axis_settings()
+
         # Update info
         self.update_info_label()
 
         if pvs_removed > 0:
             print(f"Removed {pvs_removed} PVs from plot")
+
+    def _cleanup_axis_settings(self):
+        """Remove axis settings for axes that no longer exist in the plot."""
+        # Get current axis names
+        current_axes = set()
+        pv_groups = self._group_pvs_by_source()
+
+        for pv_key in pv_groups.keys():
+            source_level, pv_type = pv_key
+            axis_name = f"{source_level} - {pv_type}"
+            current_axes.add(axis_name)
+
+        # Remove settings for axes that no longer exist
+        axes_to_remove = [
+            axis_name
+            for axis_name in self.axis_settings.keys()
+            if axis_name not in current_axes
+        ]
+
+        for axis_name in axes_to_remove:
+            del self.axis_settings[axis_name]
+            print(f"Cleaned up settings for removed axis: {axis_name}")
 
     def clear_all_pvs(self):
         """Clear all PVs from the plot."""
@@ -483,6 +519,7 @@ class PVGroupArchiverDisplay(Display):
         self.plotted_pvs.clear()
         self.plotted_list.clear()
         self.pv_curves.clear()
+        self.axis_settings.clear()  # ADD THIS LINE
 
         # Clear legend
         if self.legend:
@@ -614,6 +651,32 @@ class PVGroupArchiverDisplay(Display):
             # Set the axis label
             self._set_axis_label(axis_name)
 
+            # Apply saved axis settings if they exist
+            if axis_name in self.axis_settings:
+                self._apply_single_axis_setting(
+                    axis_name, self.axis_settings[axis_name]
+                )
+
+    def _apply_single_axis_setting(self, axis_name, setting):
+        """Apply settings to a single axis."""
+        plot_item = self.archiver_plot.getPlotItem()
+
+        try:
+            if hasattr(plot_item, "axes") and axis_name in plot_item.axes:
+                axis_dict = plot_item.axes[axis_name]
+                view_box = axis_dict.get("view", None)
+
+                if view_box:
+                    if setting["auto_scale"]:
+                        view_box.enableAutoRange(axis="y")
+                    else:
+                        if setting["range"]:
+                            y_min, y_max = setting["range"]
+                            view_box.setYRange(y_min, y_max, padding=0)
+                            view_box.disableAutoRange(axis="y")
+        except Exception as e:
+            print(f"Error applying setting to {axis_name}: {e}")
+
     def _add_pv_to_plot(self, pv, axis_name, color, plot_item):
         """Add a single PV to the plot with specified axis and color."""
         # Add the channel with specific axis
@@ -678,6 +741,72 @@ class PVGroupArchiverDisplay(Display):
         self.info_label.setText(
             f"{count} PV{'s' if count != 1 else ''} plotted"
         )
+
+    def open_axis_range_dialog(self):
+        """Open dialog to configure Y-axis ranges."""
+        # Get current axis names from the plot
+        axis_names = []
+        pv_groups = self._group_pvs_by_source()
+
+        for pv_key in pv_groups.keys():
+            source_level, pv_type = pv_key
+            axis_name = f"{source_level} - {pv_type}"
+            axis_names.append(axis_name)
+
+        if not axis_names:
+            QMessageBox.information(
+                self,
+                "No Axes",
+                "No Y-axes are currently plotted. Add some PVs first.",
+            )
+            return
+
+        dialog = AxisRangeDialog(axis_names, self.axis_settings, self)
+        if dialog.exec_() == QDialog.Accepted:
+            settings = dialog.get_settings()
+            self.apply_axis_settings(settings)
+
+    def apply_axis_settings(self, settings):
+        """Apply axis range settings to the plot."""
+        # Update stored settings
+        self.axis_settings.update(settings)
+
+        plot_item = self.archiver_plot.getPlotItem()
+
+        # Map axes to viewboxes
+        for axis_name, setting in settings.items():
+            # Find the axis item
+            if hasattr(plot_item, "axes") and axis_name in plot_item.axes:
+                axis_item = plot_item.axes[axis_name].get("item")
+
+                # Try to find linked ViewBox
+                if hasattr(axis_item, "linkedView"):
+                    view_box = axis_item.linkedView()
+
+                    if view_box:
+                        if setting["auto_scale"]:
+                            view_box.enableAutoRange(axis="y")
+                            view_box.setAutoVisible(y=True)
+                        else:
+                            if setting["range"]:
+                                y_min, y_max = setting["range"]
+
+                                # Disable auto-range first
+                                view_box.disableAutoRange(axis="y")
+                                view_box.setAutoVisible(y=False)
+
+                                # Set the range
+                                view_box.setYRange(y_min, y_max, padding=0)
+
+                                # Set limits to prevent auto-scaling
+                                view_box.setLimits(yMin=y_min, yMax=y_max)
+
+                                # Force immediate update
+                                view_box.updateViewRange()
+
+        # Force a redraw of the entire plot
+        plot_item.update()
+        self.archiver_plot.update()
 
     def ui_filename(self):
         """Return None since we're building UI programmatically."""
