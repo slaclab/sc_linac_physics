@@ -108,46 +108,28 @@ class PVGroupArchiverDisplay(Display):
         pv_type_layout.addWidget(self.pv_type_list)
 
         # Select all/none buttons
-        button_layout = QHBoxLayout()
+        selection_button_layout = QHBoxLayout()
         select_all_btn = QPushButton("Select All")
         select_all_btn.clicked.connect(self.select_all_pv_types)
         select_none_btn = QPushButton("Select None")
         select_none_btn.clicked.connect(self.select_no_pv_types)
-        button_layout.addWidget(select_all_btn)
-        button_layout.addWidget(select_none_btn)
-        pv_type_layout.addLayout(button_layout)
+        selection_button_layout.addWidget(select_all_btn)
+        selection_button_layout.addWidget(select_none_btn)
+        pv_type_layout.addLayout(selection_button_layout)
 
-        pv_type_group.setLayout(pv_type_layout)
-        layout.addWidget(pv_type_group)
-
-        # Action buttons
-        action_group = QGroupBox("4. Actions")
-        action_layout = QVBoxLayout()
-
+        # Add to Plot button
         self.add_btn = QPushButton("Add to Plot")
         self.add_btn.clicked.connect(self.add_selected_pvs)
         self.add_btn.setStyleSheet(
             "background-color: #4CAF50; color: white; font-weight: bold; padding: 8px;"
         )
-        action_layout.addWidget(self.add_btn)
+        pv_type_layout.addWidget(self.add_btn)
 
-        self.remove_btn = QPushButton("Remove Selected")
-        self.remove_btn.clicked.connect(self.remove_selected_pvs)
-        self.remove_btn.setStyleSheet(
-            "background-color: #f44336; color: white; font-weight: bold; padding: 8px;"
-        )
-        action_layout.addWidget(self.remove_btn)
+        pv_type_group.setLayout(pv_type_layout)
+        layout.addWidget(pv_type_group)
 
-        self.clear_btn = QPushButton("Clear All")
-        self.clear_btn.clicked.connect(self.clear_all_pvs)
-        self.clear_btn.setStyleSheet("padding: 8px;")
-        action_layout.addWidget(self.clear_btn)
-
-        action_group.setLayout(action_layout)
-        layout.addWidget(action_group)
-
-        # Plot controls (moved from plot panel)
-        plot_control_group = QGroupBox("5. Plot Controls")
+        # Plot controls
+        plot_control_group = QGroupBox("4. Plot Controls")
         plot_control_layout = QVBoxLayout()
 
         # Time range controls
@@ -195,6 +177,26 @@ class PVGroupArchiverDisplay(Display):
         self.info_label = PyDMLabel()
         self.info_label.setText("0 PVs plotted")
         plotted_layout.addWidget(self.info_label)
+
+        # Remove and Clear buttons
+        # Remove and Clear buttons
+        plotted_button_layout = QHBoxLayout()
+
+        self.remove_btn = QPushButton("Remove Selected")
+        self.remove_btn.clicked.connect(self.remove_selected_pvs)
+        self.remove_btn.setStyleSheet(
+            "background-color: #ff5252; color: white; font-weight: bold; padding: 8px;"
+        )
+        plotted_button_layout.addWidget(self.remove_btn)
+
+        self.clear_btn = QPushButton("Clear All")
+        self.clear_btn.clicked.connect(self.clear_all_pvs)
+        self.clear_btn.setStyleSheet(
+            "background-color: #d32f2f; color: white; font-weight: bold; padding: 8px;"
+        )
+        plotted_button_layout.addWidget(self.clear_btn)
+
+        plotted_layout.addLayout(plotted_button_layout)
 
         plotted_group.setLayout(plotted_layout)
         layout.addWidget(plotted_group)
