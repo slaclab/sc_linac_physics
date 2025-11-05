@@ -30,6 +30,7 @@ class PVGroupArchiverDisplay(Display):
 
     def __init__(self, parent=None, args=None, macros=None):
         super().__init__(parent=parent, args=args, macros=macros)
+        self.setWindowTitle("SC Linac Physics Plotter")
 
         # Initialize machine and get PV groupings
         self.machine = Machine()
