@@ -2,6 +2,50 @@
 
 <!-- version list -->
 
+## v2.1.0 (2025-11-06)
+
+### Bug Fixes
+
+- **tests**: Correct plot widget attribute name in tests
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+### Code Style
+
+- **displays**: Set window title for plot display
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+### Features
+
+- Add Y-axis range control dialog ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+- **displays**: Add hierarchical PV time plot selector
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+- **displays**: Add hierarchical PV time plot utility
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+- **displays**: Implement multi-axis archiver plot with grouped PVs
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+### Refactoring
+
+- **displays**: Improve action button placement
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+### Testing
+
+- **displays**: Add plot display and utils test suite
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+
 ## v2.0.2 (2025-10-29)
 
 ### Bug Fixes
