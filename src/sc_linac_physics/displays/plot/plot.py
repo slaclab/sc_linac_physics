@@ -225,17 +225,6 @@ class PVGroupArchiverDisplay(Display):
         panel = QWidget()
         layout = QVBoxLayout()
 
-        # Title
-        header_layout = QHBoxLayout()
-
-        title = PyDMLabel()
-        title.setText("Archiver Time Plot")
-        title.setStyleSheet("font-size: 16pt; font-weight: bold;")
-        header_layout.addWidget(title)
-
-        header_layout.addStretch()
-        layout.addLayout(header_layout)
-
         # Archiver time plot
         self.archiver_plot = PyDMArchiverTimePlot()
 
