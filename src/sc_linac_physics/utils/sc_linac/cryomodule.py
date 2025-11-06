@@ -80,6 +80,8 @@ class Cryomodule(SCLinacObject):
         self.jt_valve_readback_pv: str = self.make_jt_pv("ORBV")
         self.heater_readback_pv: str = self.make_heater_pv("ORBV")
 
+        self.aact_mean_sum_pv: str = self.pv_addr("AACTMEANSUM")
+
         self.rack_a: "Rack" = self.rack_class(
             rack_name="A", cryomodule_object=self
         )

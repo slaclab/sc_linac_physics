@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-qt", "pytest-cov", "pytest-asyncio", "pytest-console-scripts"]
+test = ["pytest", "pytest-qt", "pytest-cov", "pytest-asyncio", "pytest-console-scripts", "importlib-metadata"]
 dev = [
     "black",
     "flake8",
@@ -201,7 +201,6 @@ ignore = [
     "**/__pycache__",
     "**/*.pyc",
     "**/*.pyo",
-
     # Development files
     "tests",
     "tests/**/*",
@@ -213,7 +212,6 @@ ignore = [
     "Makefile",
     ".git*",
     ".pre-commit-config.yaml",
-
     # Test data (in git but not in distribution)
     "src/sc_linac_physics/applications/microphonics/test_data",
     "src/sc_linac_physics/applications/microphonics/test_data/*",

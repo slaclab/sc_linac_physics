@@ -158,5 +158,14 @@ def launch_microphonics(standalone=True):
     )
 
 
+@display
+def launch_plotter(standalone=True):
+    from sc_linac_physics.displays.plot.plot import PVGroupArchiverDisplay
+
+    return launch_python_display(
+        PVGroupArchiverDisplay, *sys.argv[1:], standalone=standalone
+    )
+
+
 if __name__ == "__main__":
     launch_srf_home()
