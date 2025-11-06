@@ -2,6 +2,7 @@ import sys
 from unittest.mock import Mock, patch
 
 import pytest
+from PyQt5.QtWidgets import QWidget
 from qtpy.QtWidgets import QApplication, QDialog
 
 from sc_linac_physics.displays.plot.cryo_signals import (
@@ -63,10 +64,51 @@ def mock_machine():
 @pytest.fixture
 def display(qapp, mock_machine):
     """Create LinacGroupedCryomodulePlotDisplay instance with mocked data."""
-    with patch(
-        "sc_linac_physics.displays.plot.cryo_signals.Machine"
-    ) as MockMachine:
+    with (
+        patch(
+            "sc_linac_physics.displays.plot.cryo_signals.Machine"
+        ) as MockMachine,
+        patch(
+            "sc_linac_physics.displays.plot.cryo_signals.PVGroupArchiverDisplay"
+        ) as MockPlot,
+    ):
+
         MockMachine.return_value = mock_machine
+
+        # Create a mock that is actually a QWidget so it can be added to layouts
+        def create_mock_plot():
+            """Factory function to create mock plot widgets."""
+            mock_plot = QWidget()  # Use real QWidget as base
+
+            # Create mock plot item with axes dict
+            mock_plot_item = Mock()
+            mock_plot_item.axes = {}  # Empty dict so "in" operator works
+            mock_plot_item.update = Mock()
+
+            # Add necessary mock attributes
+            mock_plot.archiver_plot = Mock()
+            mock_plot.archiver_plot.getPlotItem = Mock(
+                return_value=mock_plot_item
+            )
+            mock_plot.archiver_plot.addYChannel = Mock()
+            mock_plot.archiver_plot.update = Mock()
+            mock_plot.plotted_pvs = {}
+            mock_plot.plotted_list = Mock()
+            mock_plot.plotted_list.addItem = Mock()
+            mock_plot.legend = Mock()
+            mock_plot._get_rainbow_color = Mock(return_value=(255, 0, 0))
+            mock_plot.update_info_label = Mock()
+
+            # Mock children() and findChildren() for _hide_selection_panel
+            mock_plot.children = Mock(return_value=[])
+            mock_plot.findChildren = Mock(return_value=[])
+
+            # Mock setSizePolicy to avoid issues
+            mock_plot.setSizePolicy = Mock()
+
+            return mock_plot
+
+        MockPlot.side_effect = create_mock_plot
 
         display = LinacGroupedCryomodulePlotDisplay()
         yield display
