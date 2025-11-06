@@ -236,9 +236,6 @@ class PVGroupArchiverDisplay(Display):
         self.legend = plot_item.legend
 
         if self.legend:
-            print(f"Legend exists: {self.legend}")
-            print(f"Legend visible: {self.legend.isVisible()}")
-            print(f"Legend parent: {self.legend.parentItem()}")
 
             # Try multiple ways to make it visible
             self.legend.setVisible(True)
@@ -248,9 +245,7 @@ class PVGroupArchiverDisplay(Display):
             self.legend.setOpacity(1.0)
 
             # Check again
-            print(f"After setting visible: {self.legend.isVisible()}")
         else:
-            print("Legend is None, trying to create...")
             self.legend = plot_item.addLegend()
             if self.legend:
                 self.legend.setVisible(True)
