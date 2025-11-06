@@ -167,5 +167,16 @@ def launch_plotter(standalone=True):
     )
 
 
+@display
+def launch_cryo_signals(standalone=True):
+    from sc_linac_physics.displays.plot.cryo_signals import (
+        LinacGroupedCryomodulePlotDisplay,
+    )
+
+    return launch_python_display(
+        LinacGroupedCryomodulePlotDisplay, *sys.argv[1:], standalone=standalone
+    )
+
+
 if __name__ == "__main__":
     launch_srf_home()
