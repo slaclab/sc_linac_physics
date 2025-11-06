@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.2.0 (2025-11-06)
+
+### Features
+
+- **cryo_signals**: Add linac-wide cryomodule monitoring display
+  ([#141](https://github.com/slaclab/sc_linac_physics/pull/141),
+  [`f90b754`](https://github.com/slaclab/sc_linac_physics/commit/f90b754fd1b46af8db171cc179c3320d7e64fa2b))
+
+
 ## v2.1.0 (2025-11-06)
 
 ### Bug Fixes
