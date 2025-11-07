@@ -1,3 +1,4 @@
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -5,22 +6,15 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QSizePolicy,
+    QLabel,
 )
 
-from sc_linac_physics.applications.microphonics.gui.config_panel import (
-    ConfigPanel,
-)
-from sc_linac_physics.applications.microphonics.plots.fft_plot import FFTPlot
-from sc_linac_physics.applications.microphonics.plots.histogram_plot import (
-    HistogramPlot,
-)
-from sc_linac_physics.applications.microphonics.plots.spectrogram_plot import (
-    SpectrogramPlot,
-)
-from sc_linac_physics.applications.microphonics.plots.time_series_plot import (
-    TimeSeriesPlot,
-)
-from sc_linac_physics.applications.microphonics.utils.ui_utils import (
+from applications.microphonics.gui.config_panel import ConfigPanel
+from applications.microphonics.plots.fft_plot import FFTPlot
+from applications.microphonics.plots.histogram_plot import HistogramPlot
+from applications.microphonics.plots.spectrogram_plot import SpectrogramPlot
+from applications.microphonics.plots.time_series_plot import TimeSeriesPlot
+from applications.microphonics.utils.ui_utils import (
     create_checkboxes,
     create_pushbuttons,
 )
@@ -32,6 +26,7 @@ class PlotPanel(QWidget):
     def __init__(self, parent=None, config_panel_ref=None):
         super().__init__(parent)
         self.config_panel = config_panel_ref
+        self.current_cryomodule = None
 
         # Default configuration
         self.config = {
@@ -61,6 +56,15 @@ class PlotPanel(QWidget):
 
         # Set size policy for the entire panel to expand
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.cryomodule_label = QLabel("Cryomodule: No Data Loaded")
+        self.cryomodule_label.setStyleSheet(
+            "font-size: 12pt; font-weight: bold; "
+            "color: #e0e0e0; background-color: rgba(70, 70, 70, 200); "
+            "padding: 5px; border-radius: 3px;"
+        )
+        self.cryomodule_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.cryomodule_label)
 
         # Add cavity visibility controls
         self.visibility_group = QGroupBox("Cavity Visibility")
@@ -219,8 +223,16 @@ class PlotPanel(QWidget):
         self._last_data_dict_processed = data_dict
         cavity_list = data_dict.get("cavity_list", [])
         all_cavity_data = data_dict.get("cavities", {})
+
+        cryomodule = data_dict.get("cryomodule", "Unknown")
+        if cryomodule and cryomodule != "Unknown":
+            self.current_cryomodule = cryomodule
+            self.cryomodule_label.setText(f"Cryomodule: {cryomodule}")
+        else:
+            self.cryomodule_label.setText("Cryomodule: Not Available")
         actual_plotting_decimation = self._get_decimation_for_plotting()
         self._current_plotting_decimation = actual_plotting_decimation
+        self.time_series_plot.begin_batch_update()
 
         for cavity_num in cavity_list:
             cavity_data_from_source = all_cavity_data.get(cavity_num)
@@ -229,6 +241,7 @@ class PlotPanel(QWidget):
                 data_for_this_plot_call["decimation"] = (
                     actual_plotting_decimation
                 )
+                data_for_this_plot_call["cryomodule"] = cryomodule
                 # Pass dictionary of channel data for this cavity to each plot types update method
                 self.fft_plot.update_plot(cavity_num, data_for_this_plot_call)
                 self.histogram_plot.update_plot(
@@ -244,6 +257,7 @@ class PlotPanel(QWidget):
                 print(
                     f"PlotPanel: No data found for cavity {cavity_num} in received data_dict."
                 )
+        self.time_series_plot.end_batch_update()
 
     def refresh_plots_if_decimation_changed(self):
         """
@@ -266,6 +280,8 @@ class PlotPanel(QWidget):
 
     def clear_plots(self):
         """Clear all plot data"""
+        self.cryomodule_label.setText("Cryomodule: No Data Loaded")
+        self.current_cryomodule = None
         self.fft_plot.clear_plot()
         self.histogram_plot.clear_plot()
         self.time_series_plot.clear_plot()
