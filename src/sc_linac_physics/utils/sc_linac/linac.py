@@ -8,6 +8,7 @@ from typing import Dict, List, Type
 from sc_linac_physics.utils.sc_linac import linac_utils
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
+from sc_linac_physics.utils.sc_linac.linac_utils import SCLinacObject
 from sc_linac_physics.utils.sc_linac.magnet import Magnet
 from sc_linac_physics.utils.sc_linac.piezo import Piezo
 from sc_linac_physics.utils.sc_linac.rack import Rack
@@ -15,12 +16,16 @@ from sc_linac_physics.utils.sc_linac.ssa import SSA
 from sc_linac_physics.utils.sc_linac.stepper import StepperTuner
 
 
-class Linac:
+class Linac(SCLinacObject):
     """
     Python representation of LCLS II linac sections. This class functions mostly
     as a container for cryomodules and linac-level vacuum PVs
 
     """
+
+    @property
+    def pv_prefix(self):
+        return f"ACCL:{self.name}:1:"
 
     def __init__(
         self,
@@ -52,7 +57,9 @@ class Linac:
         self.machine = machine
 
         self.name = f"L{linac_section}B"
-        self.cryomodules: Dict[str, Cryomodule] = {}
+
+        self.aact_mean_sum_pv = self.pv_addr("AACTMEANSUM")
+
         self.vacuum_prefix = f"VGXX:{self.name}:"
 
         self.beamline_vacuum_pvs: List[str] = [
@@ -64,6 +71,7 @@ class Linac:
             for cm in insulating_vacuum_cryomodules
         ]
 
+        self.cryomodules: Dict[str, Cryomodule] = {}
         for cm_name in linac_utils.LINAC_CM_MAP[linac_section]:
             self.cryomodules[cm_name] = self.cryomodule_class(
                 cryo_name=cm_name, linac_object=self
@@ -140,6 +148,7 @@ class Machine:
         self.non_hl_iterator = iter(non_hl_cavities)
         self.hl_iterator = iter(hl_cavities)
         self.all_iterator = iter(non_hl_cavities + hl_cavities)
+        self.global_heater_feedback_pv = "CHTR:CM00:0:HTR_POWER_TOT"
 
 
 MACHINE = Machine()

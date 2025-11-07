@@ -1,3 +1,4 @@
+
 # sc_linac_physics
 
 Controls, analysis, and displays for SC Linac operations.
@@ -16,11 +17,13 @@ Release: [![Release](https://github.com/slaclab/sc_linac_physics/actions/workflo
 
 - PyDM-based operator displays for SC Linac
 - Unified command-line interface for all displays and applications
+- Hierarchical setup control (global → linac → cryomodule → cavity)
 - Analysis utilities using NumPy/SciPy/scikit-learn
 - Plotting with matplotlib and pyqtgraph
 - EPICS/Channel Access via caproto and pyepics
 - Configuration with YAML/JSON
 - Packaged calibration and example data
+- Simulated EPICS IOC service for testing and development
 
 ## Requirements
 
@@ -66,65 +69,90 @@ Notes:
     - https://github.com/slaclab/edmbutton.git
     - https://github.com/slaclab/lcls-tools.git
 
-## Quick start
+## Quick Start
 
-### Command Line Interface
+### Command Line Tools
 
-The package provides a unified CLI for launching all displays and applications:
+After installation, the following commands are available:
+
+#### General Launcher Utility
 
 ```bash
 # List all available applications
 sc-linac list
 
-# Launch main displays
-sc-linac srf-home          # SRF home overview display
-sc-linac cavity            # Cavity control and monitoring
-sc-linac fault-decoder     # Cavity fault decoder
-sc-linac fault-count       # Cavity fault count display
+# Launch displays and applications
+sc-linac cavity-display      # Launch the cavity control display.
+sc-linac fault-count         # Launch the fault count display.
+sc-linac fault-decoder       # Launch the fault decoder display.
+sc-linac srf-home            # Launch the SRF home display.
 
-# Launch applications
-sc-linac quench            # Quench processing application
-sc-linac setup             # Automated cavity setup
-sc-linac q0                # Q0 measurement application
-sc-linac tuning            # Cavity tuning interface
-
-# Pass additional arguments to PyDM
-sc-linac cavity arg1 arg2
+sc-linac auto-setup          # Launch the auto setup GUI.
+sc-linac microphonics        # Launch the microphonics GUI.
+sc-linac q0-measurement      # Launch the Q0 measurement GUI.
+sc-linac quench-processing   # Launch the quench processing GUI.
+sc-linac tuning              # Launch the tuning GUI.
 ```
 
-#### Available Commands
-
-**Main Displays:**
-
-| Command                  | Description                                        |
-|--------------------------|----------------------------------------------------|
-| `sc-linac srf-home`      | SRF home overview display - main control interface |
-| `sc-linac cavity`        | Cavity control and monitoring display              |
-| `sc-linac fault-decoder` | Cavity fault decoder with detailed diagnostics     |
-| `sc-linac fault-count`   | Cavity fault count display and statistics          |
-
-**Applications:**
-
-| Command           | Description                                          |
-|-------------------|------------------------------------------------------|
-| `sc-linac quench` | Quench processing application for cavity recovery    |
-| `sc-linac setup`  | Automated cavity setup and configuration             |
-| `sc-linac q0`     | Q0 measurement application for cavity quality factor |
-| `sc-linac tuning` | Cavity tuning interface for frequency optimization   |
-
-**Direct Launchers:**
-
-Each command also has a direct launcher for convenience:
+#### Display Launcher Shortcuts
 
 ```bash
-sc-linac-srf-home
-sc-linac-cavity
-sc-linac-fault-decoder
-sc-linac-fault-count
-sc-linac-quench
-sc-linac-setup
-sc-linac-q0
-sc-linac-tuning
+sc-srf-home          # SRF home overview display - main control interface
+sc-cavity            # Cavity control and monitoring display
+sc-faults            # Cavity fault decoder with detailed diagnostics
+sc-fcount            # Cavity fault count display and statistics
+```
+
+#### Application Launcher Shortcuts
+
+```bash
+sc-quench            # Quench processing application
+sc-setup             # Automated cavity setup (GUI)
+sc-q0                # Q0 measurement application
+sc-tune              # Cavity tuning interface
+```
+
+#### Setup Commands (Hierarchical Control)
+
+The setup commands provide hierarchical control from global (entire machine) down to individual cavities:
+
+**Global Level - Entire Machine**
+```bash
+sc-setup-all                    # Setup all cryomodules
+sc-setup-all --no_hl            # Setup all except HL cryomodules
+sc-setup-all --shutdown         # Shutdown all cryomodules
+```
+
+**Linac Level**
+```bash
+sc-setup-linac -l 0             # Setup Linac 0 (all cryomodules in linac)
+sc-setup-linac -l 1             # Setup Linac 1
+sc-setup-linac -l 2 --shutdown  # Shutdown Linac 2
+```
+
+**Cryomodule Level**
+```bash
+sc-setup-cm -cm 01              # Setup Cryomodule 01 (all cavities)
+sc-setup-cm -cm 02              # Setup Cryomodule 02
+sc-setup-cm -cm H1 --shutdown   # Shutdown Cryomodule H1
+sc-setup-cm -cm 03 -off         # Shutdown Cryomodule 03 (short form)
+```
+
+**Cavity Level**
+```bash
+sc-setup-cav -cm 01 -cav 1      # Setup specific cavity
+sc-setup-cav -cm 02 -cav 3      # Setup CM02, cavity 3
+sc-setup-cav -cm 01 -cav 2 -off # Shutdown specific cavity
+```
+
+#### Simulation Service
+
+For testing and development without live hardware:
+
+```bash
+sc-sim                 # Start simulated IOC service
+sc-sim --list-pvs      # List all available PVs
+sc-sim --interfaces=127.0.0.1  # Run on localhost only
 ```
 
 ### Python API
@@ -140,7 +168,8 @@ print("Package version:", getattr(sc_linac_physics, "__version__", "unknown"))
 Programmatic display launching:
 
 ```python
-from sc_linac_physics import launchers
+
+from sc_linac_physics.cli import launchers
 
 # Launch displays programmatically
 launchers.launch_srf_home()
@@ -167,7 +196,7 @@ Tip: Set PYDM_DEFAULT_PROTOCOL=fake to try displays without live PVs:
 
 ```bash
 export PYDM_DEFAULT_PROTOCOL=fake
-sc-linac cavity
+sc-cavity
 ```
 
 Headless usage (e.g., servers/CI):
@@ -175,7 +204,70 @@ Headless usage (e.g., servers/CI):
 ```bash
 export QT_QPA_PLATFORM=offscreen
 # or use Xvfb:
-xvfb-run -a sc-linac srf-home
+xvfb-run -a sc-srf-home
+```
+
+## Command Reference
+
+### Complete Command List
+
+**Displays:**
+- `sc-srf-home` - SRF home overview display
+- `sc-cavity` - Cavity control and monitoring
+- `sc-faults` - Fault decoder
+- `sc-fcount` - Fault count display
+
+**Applications:**
+- `sc-quench` - Quench processing
+- `sc-setup` - Auto setup GUI
+- `sc-q0` - Q0 measurement
+- `sc-tune` - Tuning application
+
+**Setup Commands:**
+- `sc-setup-all` - Global setup (all cryomodules)
+- `sc-setup-linac` - Linac level setup
+- `sc-setup-cm` - Cryomodule level setup
+- `sc-setup-cav` - Cavity level setup
+
+**Simulation:**
+- `sc-sim` - Simulated IOC service
+
+### Setup Command Examples
+
+```bash
+# Setup entire machine
+sc-setup-all
+
+# Setup all except high-level cryomodules
+sc-setup-all --no_hl
+
+# Setup specific linac
+sc-setup-linac -l 0
+
+# Setup specific cryomodule
+sc-setup-cm -cm 01
+
+# Setup specific cavity
+sc-setup-cav -cm 01 -cav 1
+
+# Shutdown examples (add --shutdown or -off to any command)
+sc-setup-all --shutdown
+sc-setup-linac -l 0 -off
+sc-setup-cm -cm 01 --shutdown
+sc-setup-cav -cm 01 -cav 1 -off
+```
+
+### Cryomodule and Cavity Numbers
+
+- Cryomodules: `01`, `02`, `03`, `H1`, `H2`, `04`-`35`
+- Cavities: `1` through `8`
+- Linacs: `0` through `3`
+
+Examples:
+```bash
+sc-setup-cav -cm 01 -cav 1    # Cryomodule 01, cavity 1
+sc-setup-cav -cm H1 -cav 5    # High-level cryomodule H1, cavity 5
+sc-setup-cm -cm 15            # Cryomodule 15
 ```
 
 ## Development
@@ -235,21 +327,29 @@ def launch_my_display():
     app.exec_()
 ```
 
-3. Register it in `cli.py`:
+3. Add a script entry in `pyproject.toml`:
 
-```python
-DISPLAYS = {
-    # ... existing displays ...
-    "my-display": {
-        "launcher": "launch_my_display",
-        "description": "My custom display description"
-    },
-}
+```toml
+[project.scripts]
+sc-my-display = "sc_linac_physics.launchers:launch_my_display"
 ```
 
-4. Add tests in `tests/test_cli.py` and `tests/test_launchers.py`
+4. Add tests in `tests/test_launchers.py`
 
-## Release process
+### Adding New CLI Tools
+
+1. Create your script with a `main()` function
+2. Add an entry in `pyproject.toml`:
+
+```toml
+[project.scripts]
+sc-my-tool = "sc_linac_physics.path.to.module:main"
+```
+
+3. Reinstall: `pip install -e .`
+4. Test: `sc-my-tool --help`
+
+## Release Process
 
 Releases are automated with semantic-release on pushes to the main branch.
 
@@ -261,7 +361,7 @@ Releases are automated with semantic-release on pushes to the main branch.
 Commit message examples:
 
 - `feat(q0): add automated calibration routine`
-- `feat(cli): add unified command-line interface`
+- `feat(cli): add hierarchical setup commands`
 - `fix(display): prevent crash when PV is disconnected`
 - `docs: update operator instructions`
 - `refactor: simplify analysis pipeline`
@@ -272,7 +372,7 @@ Commit message examples:
 
 Note: Upload to PyPI is disabled by default; artifacts are attached to GitHub Releases.
 
-## Project structure and data
+## Project Structure and Data
 
 Packaged data included under the distribution:
 
@@ -297,15 +397,18 @@ for p in display_dir.iterdir():
 
 ## Troubleshooting
 
-- Qt errors in headless environments:
-    - Set QT_QPA_PLATFORM=offscreen or use Xvfb (xvfb-run -a ...)
-- PV connections during development:
-    - Use PYDM_DEFAULT_PROTOCOL=fake to test UI flow without EPICS
-- Import issues when developing:
-    - Ensure editable install (-e) or add src/ to PYTHONPATH
-- CLI command not found after installation:
+- **Qt errors in headless environments:**
+    - Set `QT_QPA_PLATFORM=offscreen` or use Xvfb (`xvfb-run -a ...`)
+- **PV connections during development:**
+    - Use `PYDM_DEFAULT_PROTOCOL=fake` to test UI flow without EPICS
+- **Import issues when developing:**
+    - Ensure editable install (`-e`) or add src/ to PYTHONPATH
+- **CLI command not found after installation:**
     - Reinstall with `pip install -e .` or check that your virtual environment is activated
     - Verify console_scripts entry points in pyproject.toml
+- **Invalid cryomodule name:**
+    - Use just the number (e.g., `01`, `H1`) not `CM01`
+    - Valid choices shown in error message or help text
 
 ## Contributing
 
@@ -328,5 +431,3 @@ This project is licensed under the terms described in the LICENSE file included 
 ## Changelog
 
 See CHANGELOG.md for release notes (auto-generated by semantic-release).
-
-```

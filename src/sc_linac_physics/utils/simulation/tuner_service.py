@@ -9,11 +9,11 @@ from caproto.server import (
     PvpropertyEnum,
     PvpropertyFloat,
 )
-from lcls_tools.superconducting.sc_linac_utils import (
+
+from sc_linac_physics.utils.sc_linac.linac_utils import (
     ESTIMATED_MICROSTEPS_PER_HZ,
     PIEZO_HZ_PER_VOLT,
 )
-
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 

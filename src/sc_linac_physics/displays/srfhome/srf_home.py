@@ -1,6 +1,4 @@
 import os
-import pathlib
-from typing import List
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -10,6 +8,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QSizePolicy,
     QHBoxLayout,
+    QPushButton,
 )
 from edmbutton import PyDMEDMDisplayButton
 from pydm import Display
@@ -17,6 +16,8 @@ from pydm.widgets import (
     PyDMRelatedDisplayButton,
 )
 
+from sc_linac_physics.cli.cli import DISPLAY_LIST
+from sc_linac_physics.cli.watcher_commands import WATCHER_CONFIGS
 from sc_linac_physics.displays.srfhome.utils import (
     make_link_button,
     make_watcher_groupbox,
@@ -43,33 +44,25 @@ class SRFHome(Display):
         self.links_groupbox = QGroupBox("Shortcuts && Bookmarks")
         self.fill_link_groupbox()
 
-        sel_opt_path = f"{self.root_dir}/applications/sel_phase_optimizer/sel_phase_optimizer.py"
-        quench_reset_path = (
-            f"{self.root_dir}/applications/quench_processing/quench_resetter.py"
-        )
-        cav_disp_backend_path = (
-            f"{self.root_dir}/displays/cavity_display/backend/runner.py"
-        )
-
-        self.sel_phase_opt_groupbox = make_watcher_groupbox(
-            watcher_name="SC_SEL_PHAS_OPT", script_path=sel_opt_path
-        )
-        self.quench_reset_groupbox = make_watcher_groupbox(
-            watcher_name="SC_CAV_QNCH_RESET", script_path=quench_reset_path
-        )
-        self.cav_disp_groupbox = make_watcher_groupbox(
-            watcher_name="SC_CAV_FAULT", script_path=cav_disp_backend_path
-        )
         extras_layout = QVBoxLayout()
-        watcher_layout = QVBoxLayout()
         extras_layout.addWidget(self.mini_home_groupbox)
         extras_layout.addWidget(self.links_groupbox)
-        watcher_layout.addWidget(self.sel_phase_opt_groupbox)
-        watcher_layout.addWidget(self.quench_reset_groupbox)
-        watcher_layout.addWidget(self.cav_disp_groupbox)
+
+        # Automatically create all watcher groupboxes
+        self.watcher_layout = QVBoxLayout()
+        self.setup_watcher_groupboxes()
 
         self.main_layout.addLayout(extras_layout)
-        self.main_layout.addLayout(watcher_layout)
+        self.main_layout.addLayout(self.watcher_layout)
+        self.child_windows = []
+
+    def setup_watcher_groupboxes(self):
+        """Create groupboxes for all configured watchers"""
+
+        # Create a groupbox for each watcher in WATCHER_CONFIGS
+        for watcher_name in WATCHER_CONFIGS.keys():
+            groupbox = make_watcher_groupbox(watcher_name)
+            self.watcher_layout.addWidget(groupbox)
 
     def fill_link_groupbox(self):
         link_layout = QGridLayout()
@@ -112,26 +105,25 @@ class SRFHome(Display):
             decarad_button.macros = f"P=RADM:SYS0:{decarad}00,M={decarad}"
             buttons.append(decarad_button)
 
-        self.add_buttons_from_path(buttons, "*gui.py")
-        self.add_buttons_from_path(buttons, "*display.py")
+        for display in DISPLAY_LIST:
+            if display.name == "srf-home":
+                continue
+            button = QPushButton(display.name)
+
+            def make_handler(disp):
+                def handler():
+                    window = disp.launcher(standalone=False)
+                    if window:
+                        self.child_windows.append(window)
+
+                return handler
+
+            button.clicked.connect(make_handler(display))
+            buttons.append(button)
 
         col_count = get_dimensions(buttons)
         for idx, button in enumerate(buttons):
             link_layout.addWidget(button, int(idx / col_count), idx % col_count)
-
-    def add_buttons_from_path(
-        self, buttons: List[PyDMRelatedDisplayButton], suffix
-    ):
-        for file in pathlib.Path(self.root_dir).rglob(suffix):
-            name: str = file.name
-            if name.startswith("test"):
-                continue
-            gui_button = PyDMRelatedDisplayButton(
-                filename=os.path.join(self.root_dir, file)
-            )
-            parsed_name = name.split(".")[0].replace("_", " ")
-            gui_button.setText(parsed_name.title().replace("Gui", "GUI"))
-            buttons.append(gui_button)
 
     def fill_mini_home_groupbox(self):
         mini_home_groupbox_layout = QGridLayout()

@@ -17,10 +17,14 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.12' , '3.13' ]
+        python-version: [ '3.12' , '3.13' , '3.14']
+        include:
+          - python-version: '3.14'
+            experimental: true
     env:
       QT_QPA_PLATFORM: offscreen
       PIP_DISABLE_PIP_VERSION_CHECK: 1
@@ -114,12 +118,100 @@ jobs:
             htmlcov/**
           retention-days: 7
 
+      - name: Check package manifest
+        if: ${{ matrix.python-version == '3.12' }}
+        run: |
+          pip install check-manifest
+          check-manifest
+
       - name: Build sdist and wheel
         if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
         run: |
           pip install build twine
           python -m build
           twine check dist/*
+
+      - name: Verify package contents
+        if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying critical files in package..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          TARBALL=$(ls dist/*.tar.gz)
+          
+          # Check for faults.csv
+          if tar -tzf "$TARBALL" | grep -q "faults.csv"; then
+            echo "✓ Found faults.csv"
+          else
+            echo "✗ ERROR: faults.csv is missing from package!"
+            exit 1
+          fi
+          
+          # List all data files
+          echo ""
+          echo "Data files in package:"
+          tar -tzf "$TARBALL" | grep -E '\.(csv|yaml|yml|json|ui|mat)$' || echo "No data files found"
+          
+          # File count summary
+          echo ""
+          echo "Package contents summary:"
+          echo "  Total files: $(tar -tzf "$TARBALL" | wc -l)"
+          echo "  Python files: $(tar -tzf "$TARBALL" | grep -c '\.py$')"
+          echo "  CSV files: $(tar -tzf "$TARBALL" | grep -c '\.csv$' || echo 0)"
+          echo "  YAML files: $(tar -tzf "$TARBALL" | grep -c '\.yaml$\|\.yml$' || echo 0)"
+          echo "  JSON files: $(tar -tzf "$TARBALL" | grep -c '\.json$' || echo 0)"
+          echo "  UI files: $(tar -tzf "$TARBALL" | grep -c '\.ui$' || echo 0)"
+          echo "  MAT files: $(tar -tzf "$TARBALL" | grep -c '\.mat$' || echo 0)"
+
+      - name: Test installation from wheel
+        if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Testing installation from built wheel..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          # Create fresh virtual environment
+          python -m venv /tmp/test_install_env
+          source /tmp/test_install_env/bin/activate
+          
+          # Install from wheel
+          WHEEL=$(ls dist/*.whl)
+          pip install "$WHEEL"
+          
+          # Test import
+          python -c "import sc_linac_physics; print(f'✓ Import successful - version: {sc_linac_physics.__version__}')"
+          
+          # Verify faults.csv is accessible
+          python << 'EOF'
+          from pathlib import Path
+          import sc_linac_physics
+          
+          package_path = Path(sc_linac_physics.__file__).parent
+          faults_csv = package_path / "displays/cavity_display/utils/faults.csv"
+          
+          if not faults_csv.exists():
+              print(f"✗ ERROR: faults.csv not found at {faults_csv}")
+              exit(1)
+          
+          print(f"✓ faults.csv found at {faults_csv}")
+          with open(faults_csv, 'r') as f:
+              lines = f.readlines()
+              print(f"✓ Contains {len(lines)} lines")
+              if len(lines) < 1:
+                  print("✗ ERROR: faults.csv is empty!")
+                  exit(1)
+          EOF
+          
+          # Test CLI (basic check)
+          if sc-linac --help > /dev/null 2>&1; then
+            echo "✓ CLI executable"
+          else
+            echo "⚠ CLI test skipped (may require display)"
+          fi
+          
+          deactivate
+          echo "✓ Installation test passed"
 
       - name: Upload build artifacts
         if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}

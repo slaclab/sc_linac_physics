@@ -10,12 +10,6 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     LINAC_CM_DICT,
     L1BHL,
 )
-from sc_linac_physics.utils.simulation.auto_setup_service import (
-    AutoSetupCMPVGroup,
-    AutoSetupLinacPVGroup,
-    AutoSetupGlobalPVGroup,
-    AutoSetupCavityPVGroup,
-)
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
 from sc_linac_physics.utils.simulation.cryo_service import (
     HeaterPVGroup,
@@ -37,6 +31,16 @@ from sc_linac_physics.utils.simulation.fault_service import (
     BSOICPVGroup,
     BeamlineVacuumPVGroup,
     CouplerVacuumPVGroup,
+)
+from sc_linac_physics.utils.simulation.launcher_service import (
+    SetupGlobalPVGroup,
+    OffGlobalPVGroup,
+    SetupLinacPVGroup,
+    OffLinacPVGroup,
+    SetupCMPVGroup,
+    OffCMPVGroup,
+    SetupCavityPVGroup,
+    OffCavityPVGroup,
 )
 from sc_linac_physics.utils.simulation.magnet_service import MAGNETPVGroup
 from sc_linac_physics.utils.simulation.rack_service import RACKPVGroup
@@ -71,7 +75,8 @@ class SCLinacPhysicsService(Service):
 
         rackA = range(1, 5)
         self.add_pvs(PPSPVGroup(prefix="PPS:SYSW:1:"))
-        self.add_pvs(AutoSetupGlobalPVGroup(prefix="ACCL:SYS0:SC:"))
+        self.add_pvs(SetupGlobalPVGroup(prefix="ACCL:SYS0:SC:"))
+        self.add_pvs(OffGlobalPVGroup(prefix="ACCL:SYS0:SC:"))
 
         for i in [1, 2]:
             decarad = Decarad(i)
@@ -90,7 +95,10 @@ class SCLinacPhysicsService(Service):
                 self[f"{linac_prefix}HL_AACTMEANSUM"] = ChannelFloat(value=0.0)
 
             self.add_pvs(
-                AutoSetupLinacPVGroup(prefix=linac_prefix, linac_idx=linac_idx)
+                SetupLinacPVGroup(prefix=linac_prefix, linac_idx=linac_idx)
+            )
+            self.add_pvs(
+                OffLinacPVGroup(prefix=linac_prefix, linac_idx=linac_idx)
             )
             for cm_name in cm_list:
                 is_hl = cm_name in L1BHL
@@ -115,9 +123,10 @@ class SCLinacPhysicsService(Service):
                 self.add_pvs(MAGNETPVGroup(prefix=f"QUAD:{magnet_infix}"))
 
                 self.add_pvs(
-                    AutoSetupCMPVGroup(
-                        prefix=cm_prefix + "00:", cm_name=cm_name
-                    )
+                    SetupCMPVGroup(prefix=cm_prefix + "00:", cm_name=cm_name)
+                )
+                self.add_pvs(
+                    OffCMPVGroup(prefix=cm_prefix + "00:", cm_name=cm_name)
                 )
 
                 for cav_num in range(1, 9):
@@ -163,7 +172,14 @@ class SCLinacPhysicsService(Service):
                     self.add_pvs(RACKPVGroup(prefix=hwi_prefix))
                     self.add_pvs(HOMPVGroup(prefix=HOM_prefix))
                     self.add_pvs(
-                        AutoSetupCavityPVGroup(
+                        SetupCavityPVGroup(
+                            prefix=cav_prefix,
+                            cm_name=cm_name,
+                            cav_num=cav_num,
+                        )
+                    )
+                    self.add_pvs(
+                        OffCavityPVGroup(
                             prefix=cav_prefix,
                             cm_name=cm_name,
                             cav_num=cav_num,

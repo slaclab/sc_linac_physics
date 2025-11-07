@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sc_linac_physics"
-version = "1.4.0"
+version = "2.2.0"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -36,15 +36,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-qt", "pytest-cov", "pytest-asyncio"]
+test = ["pytest", "pytest-qt", "pytest-cov", "pytest-asyncio", "pytest-console-scripts", "importlib-metadata"]
 dev = [
     "black",
     "flake8",
     "pre-commit",
-    "pytest",
-    "pytest-qt",
-    "pytest-cov",
-    "pytest-asyncio"
+    "build",
+    "twine",
+    "check-manifest",
 ]
 
 [tool.black]
@@ -118,13 +117,14 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
 
 [tool.setuptools.package-data]
 "sc_linac_physics" = [
-    "displays/*",
+    "displays/**/*",
     "applications/q0/calibrations/*",
     "applications/q0/data/*",
     "*.ui",
     "*.yaml",
     "*.yml",
-    "*.json"
+    "*.json",
+    "*.csv"
 ]
 
 [tool.semantic_release]
@@ -147,17 +147,72 @@ minor_tags = ["feat"]
 patch_tags = ["fix", "perf", "refactor"]
 
 [project.scripts]
-# Main CLI tool
-sc-linac = "sc_linac_physics.cli:main"
+# ============================================================================
+# Main CLI
+# ============================================================================
+sc-linac = "sc_linac_physics.cli.cli:main"
 
-# Display launchers
-sc-linac-srf-home = "sc_linac_physics.launchers:launch_srf_home"
-sc-linac-cavity = "sc_linac_physics.launchers:launch_cavity_display"
-sc-linac-fault-decoder = "sc_linac_physics.launchers:launch_fault_decoder"
-sc-linac-fault-count = "sc_linac_physics.launchers:launch_fault_count"
+# ============================================================================
+# Display Launchers
+# ============================================================================
+sc-srf-home = "sc_linac_physics.cli.launchers:launch_srf_home"
+sc-cavity = "sc_linac_physics.cli.launchers:launch_cavity_display"
+sc-faults = "sc_linac_physics.cli.launchers:launch_fault_decoder"
+sc-fcount = "sc_linac_physics.cli.launchers:launch_fault_count"
 
-# Application launchers
-sc-linac-quench = "sc_linac_physics.launchers:launch_quench_processing"
-sc-linac-setup = "sc_linac_physics.launchers:launch_auto_setup"
-sc-linac-q0 = "sc_linac_physics.launchers:launch_q0_measurement"
-sc-linac-tuning = "sc_linac_physics.launchers:launch_tuning"
+# ============================================================================
+# Application Launchers
+# ============================================================================
+sc-quench = "sc_linac_physics.cli.launchers:launch_quench_processing"
+sc-setup = "sc_linac_physics.cli.launchers:launch_auto_setup"
+sc-q0 = "sc_linac_physics.cli.launchers:launch_q0_measurement"
+sc-tune = "sc_linac_physics.cli.launchers:launch_tuning"
+
+# ============================================================================
+# Setup CLI - Hierarchical Control
+# ============================================================================
+# Global (all cryomodules)
+sc-setup-all = "sc_linac_physics.applications.auto_setup.launcher.srf_global_setup_launcher:main"
+
+# Linac level
+sc-setup-linac = "sc_linac_physics.applications.auto_setup.launcher.srf_linac_setup_launcher:main"
+
+# Cryomodule level
+sc-setup-cm = "sc_linac_physics.applications.auto_setup.launcher.srf_cm_setup_launcher:main"
+
+# Cavity level
+sc-setup-cav = "sc_linac_physics.applications.auto_setup.launcher.srf_cavity_setup_launcher:main"
+
+# ============================================================================
+# Watcher Management
+# ============================================================================
+sc-watcher = "sc_linac_physics.cli.watcher_commands:main"
+
+# ============================================================================
+# Simulation/Testing
+# ============================================================================
+sc-sim = "sc_linac_physics.utils.simulation.sc_linac_physics_service:main"
+
+[tool.check-manifest]
+ignore = [
+    # Build artifacts
+    "*.egg-info",
+    "*.egg-info/*",
+    "**/__pycache__",
+    "**/*.pyc",
+    "**/*.pyo",
+    # Development files
+    "tests",
+    "tests/**/*",
+    ".github",
+    ".github/**/*",
+    ".flake8",
+    "requirements.txt",
+    "*.sh",
+    "Makefile",
+    ".git*",
+    ".pre-commit-config.yaml",
+    # Test data (in git but not in distribution)
+    "src/sc_linac_physics/applications/microphonics/test_data",
+    "src/sc_linac_physics/applications/microphonics/test_data/*",
+]

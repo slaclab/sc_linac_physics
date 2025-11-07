@@ -2,6 +2,189 @@
 
 <!-- version list -->
 
+## v2.2.0 (2025-11-06)
+
+### Features
+
+- **cryo_signals**: Add linac-wide cryomodule monitoring display
+  ([#141](https://github.com/slaclab/sc_linac_physics/pull/141),
+  [`f90b754`](https://github.com/slaclab/sc_linac_physics/commit/f90b754fd1b46af8db171cc179c3320d7e64fa2b))
+
+
+## v2.1.0 (2025-11-06)
+
+### Bug Fixes
+
+- **tests**: Correct plot widget attribute name in tests
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+### Code Style
+
+- **displays**: Set window title for plot display
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+### Features
+
+- Add Y-axis range control dialog ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+- **displays**: Add hierarchical PV time plot selector
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+- **displays**: Add hierarchical PV time plot utility
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+- **displays**: Implement multi-axis archiver plot with grouped PVs
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+### Refactoring
+
+- **displays**: Improve action button placement
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+### Testing
+
+- **displays**: Add plot display and utils test suite
+  ([#140](https://github.com/slaclab/sc_linac_physics/pull/140),
+  [`33fbcf0`](https://github.com/slaclab/sc_linac_physics/commit/33fbcf0614b4918f487d350faeaa934bc9ad141e))
+
+
+## v2.0.2 (2025-10-29)
+
+### Bug Fixes
+
+- Prevent PyDM connection errors in cavity display tests
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+- **cavity-display**: Ignore Qt signal args in button handler
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+- **test**: Disable PyDM data plugins to prevent connection errors
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+- **tests**: Prevent module import side effects in cavity display test
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+### Refactoring
+
+- Reorganize CLI structure and improve testability
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+### Testing
+
+- Fix launcher tests to prevent PyDM widget instantiation
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+- Improve CLI launcher test coverage and add integration tests
+  ([#138](https://github.com/slaclab/sc_linac_physics/pull/138),
+  [`5d55a24`](https://github.com/slaclab/sc_linac_physics/commit/5d55a243c93df418ea5cb7e06f77b4f737ab1037))
+
+
+## v2.0.1 (2025-10-28)
+
+### Refactoring
+
+- Restructure CLI and improve watcher script management
+  ([#137](https://github.com/slaclab/sc_linac_physics/pull/137),
+  [`c870ac4`](https://github.com/slaclab/sc_linac_physics/commit/c870ac4516e8d4264a44307320b8dbdd396120cb))
+
+
+## v2.0.0 (2025-10-24)
+
+### Build System
+
+- Configure package manifest and pre-commit hooks
+  ([#135](https://github.com/slaclab/sc_linac_physics/pull/135),
+  [`674569e`](https://github.com/slaclab/sc_linac_physics/commit/674569e68f7aa5dac490453435153ed71c8e09be))
+
+### Continuous Integration
+
+- Add package verification to release and CI workflows
+  ([#135](https://github.com/slaclab/sc_linac_physics/pull/135),
+  [`674569e`](https://github.com/slaclab/sc_linac_physics/commit/674569e68f7aa5dac490453435153ed71c8e09be))
+
+- Add Python 3.14 as experimental test target
+  ([#135](https://github.com/slaclab/sc_linac_physics/pull/135),
+  [`674569e`](https://github.com/slaclab/sc_linac_physics/commit/674569e68f7aa5dac490453435153ed71c8e09be))
+
+- Add Python 3.14 as experimental test target
+  ([#134](https://github.com/slaclab/sc_linac_physics/pull/134),
+  [`e066af6`](https://github.com/slaclab/sc_linac_physics/commit/e066af6b37655de22d814a0d35226f0f13d7c277))
+
+### Features
+
+- **cli**: Add hierarchical setup commands and streamline script names
+  ([#136](https://github.com/slaclab/sc_linac_physics/pull/136),
+  [`6f1f49c`](https://github.com/slaclab/sc_linac_physics/commit/6f1f49cc85715f3a96d9e7b29a8e46de99fe8130))
+
+### Refactoring
+
+- **sim**: Use CLI commands instead of direct script paths
+  ([#136](https://github.com/slaclab/sc_linac_physics/pull/136),
+  [`6f1f49c`](https://github.com/slaclab/sc_linac_physics/commit/6f1f49cc85715f3a96d9e7b29a8e46de99fe8130))
+
+### Breaking Changes
+
+- **cli**: Script names have changed from sc-linac-* to sc-* format. Update any automation or
+  documentation that references the old command names."
+
+
+## v1.4.4 (2025-10-22)
+
+### Bug Fixes
+
+- Include CSV files in package distribution
+  ([#133](https://github.com/slaclab/sc_linac_physics/pull/133),
+  [`c2228ee`](https://github.com/slaclab/sc_linac_physics/commit/c2228ee8715439d007688b9c926affee100c6088))
+
+- Include nested display files in package data
+  ([#133](https://github.com/slaclab/sc_linac_physics/pull/133),
+  [`c2228ee`](https://github.com/slaclab/sc_linac_physics/commit/c2228ee8715439d007688b9c926affee100c6088))
+
+
+## v1.4.3 (2025-10-22)
+
+### Bug Fixes
+
+- Include CSV files in package distribution
+  ([#132](https://github.com/slaclab/sc_linac_physics/pull/132),
+  [`f2dd422`](https://github.com/slaclab/sc_linac_physics/commit/f2dd422dbb2f81489d37bd95d1be63d674efc410))
+
+
+## v1.4.2 (2025-10-22)
+
+### Refactoring
+
+- **cli**: Auto-discover launchers with decorators
+  ([#131](https://github.com/slaclab/sc_linac_physics/pull/131),
+  [`1057aca`](https://github.com/slaclab/sc_linac_physics/commit/1057aca637ab2f46d36d39cf6bbae7e12510f26c))
+
+- **tests**: Improve CLI test structure and organization
+  ([#131](https://github.com/slaclab/sc_linac_physics/pull/131),
+  [`1057aca`](https://github.com/slaclab/sc_linac_physics/commit/1057aca637ab2f46d36d39cf6bbae7e12510f26c))
+
+
+## v1.4.1 (2025-10-21)
+
+### Refactoring
+
+- Consolidate imports to use local linac_utils
+  ([#130](https://github.com/slaclab/sc_linac_physics/pull/130),
+  [`11ad3c8`](https://github.com/slaclab/sc_linac_physics/commit/11ad3c8a656f604425ef92b42e0063a175811b44))
+
+
 ## v1.4.0 (2025-10-20)
 
 ### Bug Fixes
