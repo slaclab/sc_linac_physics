@@ -240,7 +240,6 @@ class PlotPanel(QWidget):
             self.cryomodule_label.setText("Cryomodule: Not Available")
         actual_plotting_decimation = self._get_decimation_for_plotting()
         self._current_plotting_decimation = actual_plotting_decimation
-        self.time_series_plot.begin_batch_update()
 
         for cavity_num in cavity_list:
             cavity_data_from_source = all_cavity_data.get(cavity_num)
@@ -265,7 +264,6 @@ class PlotPanel(QWidget):
                 print(
                     f"PlotPanel: No data found for cavity {cavity_num} in received data_dict."
                 )
-        self.time_series_plot.end_batch_update()
 
     def refresh_plots_if_decimation_changed(self):
         """
