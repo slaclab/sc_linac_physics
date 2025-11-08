@@ -236,7 +236,7 @@ class BaseCavityPVGroup(BaseScriptPVGroup):
     )
 
     def __init__(self, prefix: str, cm_name: str, cav_num: int):
-        super().__init__(prefix, "sc-setup-cavity", cm=cm_name, cav=cav_num)
+        super().__init__(prefix, "sc-setup-cav", cm=cm_name, cav=cav_num)
         self.cm_name = cm_name
         self.cav_num = cav_num
 
