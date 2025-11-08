@@ -510,7 +510,9 @@ class TestMainFunction:
     @patch(
         "sc_linac_physics.utils.simulation.sc_linac_physics_service.SCLinacPhysicsService"
     )
-    def test_main_creates_service(self, mock_service_cls, mock_parser):
+    def test_main_creates_service(
+        self, mock_service_cls, mock_parser, mock_run
+    ):
         """Test that main() creates the service"""
         mock_parser.return_value = (None, {})
 
@@ -534,7 +536,7 @@ class TestMainFunction:
     @patch(
         "sc_linac_physics.utils.simulation.sc_linac_physics_service.ioc_arg_parser"
     )
-    def test_main_uses_ioc_arg_parser(self, mock_parser):
+    def test_main_uses_ioc_arg_parser(self, mock_parser, mock_run):
         """Test that main() uses ioc_arg_parser correctly"""
         mock_parser.return_value = (None, {})
 
