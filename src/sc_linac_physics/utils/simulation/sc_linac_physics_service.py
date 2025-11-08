@@ -91,7 +91,8 @@ class SCLinacPhysicsService(Service):
             )
             self[f"{linac_prefix}ADES_MAX"] = ChannelFloat(value=2800.0)
             if linac_name == "L1B":
-                cm_list += L1BHL
+                # cm_list += L1BHL  # BAD: mutates the original list
+                cm_list = cm_list + L1BHL
                 self[f"{linac_prefix}HL_AACTMEANSUM"] = ChannelFloat(value=0.0)
 
             self.add_pvs(

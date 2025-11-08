@@ -2,7 +2,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-# Import the module under test - corrected import path
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     SCLinacObject,
     AutoLinacObject,
