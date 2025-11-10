@@ -269,8 +269,8 @@ class Q0Options(QObject):
 
         try:
             with open(
-                cryomodule.q0_idx_file, "r"
-            ) as f:  # Changed from "r+" to "r"
+                cryomodule.q0_idx_file, "r", encoding="utf-8"
+            ) as f:  # Added explicit encoding
                 q0_measurements: Dict = json.load(f)
             self._create_measurement_widgets(q0_measurements, grid_layout)
         except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
@@ -314,18 +314,29 @@ class CalibrationOptions(QObject):
         grid_layout: QGridLayout = QGridLayout()
         self.main_groupbox.setLayout(grid_layout)
 
-        with open(cryomodule.calib_idx_file, "r+") as f:
-            calibrations: Dict = json.load(f)
-            col_count = get_dimensions(calibrations)
+        try:
+            with open(
+                cryomodule.calib_idx_file, "r", encoding="utf-8"
+            ) as f:  # Changed from "r+" to "r" and added encoding
+                calibrations: Dict = json.load(f)
+                self._create_calibration_widgets(calibrations, grid_layout)
+        except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
+            _handle_file_error(e, grid_layout)
 
-            for idx, time_stamp in enumerate(calibrations.keys()):
-                radio_button: QRadioButton = QRadioButton(time_stamp)
-                grid_layout.addWidget(
-                    radio_button, int(idx / col_count), idx % col_count
-                )
-                radio_button.clicked.connect(
-                    partial(self.load_calibration, time_stamp)
-                )
+    def _create_calibration_widgets(
+        self, calibrations: Dict, grid_layout: QGridLayout
+    ):
+        """Create widgets for calibrations"""
+        col_count = get_dimensions(calibrations)
+
+        for idx, time_stamp in enumerate(calibrations.keys()):
+            radio_button: QRadioButton = QRadioButton(time_stamp)
+            grid_layout.addWidget(
+                radio_button, int(idx / col_count), idx % col_count
+            )
+            radio_button.clicked.connect(
+                partial(self.load_calibration, time_stamp)
+            )
 
     @pyqtSlot()
     def load_calibration(self, timestamp: str):

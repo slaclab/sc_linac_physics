@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, mock_open
 
@@ -309,35 +311,23 @@ class TestQ0Options:
     def test_q0_options_initialization(self, qapp, mock_cryomodule):
         # Arrange
         test_q0_data = {
-            "2023-10-01 12:00:00": {
-                "Cavity Amplitudes": [
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                ]
-            },
-            "2023-10-02 12:00:00": {
-                "Cavity Amplitudes": [
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                ]
-            },
+            "2023-10-01 12:00:00": {"Cavity Amplitudes": [16.5] * 8},
+            "2023-10-02 12:00:00": {"Cavity Amplitudes": [17.0] * 8},
         }
 
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(test_q0_data))
-        ):
+        # Create a temporary file with the test data
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",  # Add encoding
+        ) as f:
+            json.dump(test_q0_data, f)
+            temp_file = f.name
+
+        try:
+            mock_cryomodule.q0_idx_file = temp_file
+
             with patch(
                 "sc_linac_physics.utils.qt.get_dimensions", return_value=2
             ):
@@ -350,6 +340,8 @@ class TestQ0Options:
                     == f"Q0 Measurements for CM{mock_cryomodule.name}"
                 )
                 assert options.cryomodule == mock_cryomodule
+        finally:
+            os.unlink(temp_file)
 
     def test_load_q0_measurement(self, qapp, mock_cryomodule):
         # Arrange
@@ -357,9 +349,18 @@ class TestQ0Options:
             "2023-10-01 12:00:00": {"Cavity Amplitudes": [16.5] * 8}
         }
 
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(test_q0_data))
-        ):
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",  # Add encoding
+        ) as f:
+            json.dump(test_q0_data, f)
+            temp_file = f.name
+
+        try:
+            mock_cryomodule.q0_idx_file = temp_file
+
             with patch(
                 "sc_linac_physics.utils.qt.get_dimensions", return_value=1
             ):
@@ -374,6 +375,8 @@ class TestQ0Options:
                     time_stamp="2023-10-01 12:00:00"
                 )
                 options.q0_loaded_signal.emit.assert_called_once()
+        finally:
+            os.unlink(temp_file)
 
 
 class TestCalibrationOptions:
@@ -386,9 +389,18 @@ class TestCalibrationOptions:
             "2023-10-02 12:00:00": {"slope": 0.16},
         }
 
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(test_cal_data))
-        ):
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",  # Add encoding
+        ) as f:
+            json.dump(test_cal_data, f)
+            temp_file = f.name
+
+        try:
+            mock_cryomodule.calib_idx_file = temp_file
+
             with patch(
                 "sc_linac_physics.utils.qt.get_dimensions", return_value=2
             ):
@@ -401,14 +413,25 @@ class TestCalibrationOptions:
                     == f"Calibrations for CM{mock_cryomodule.name}"
                 )
                 assert options.cryomodule == mock_cryomodule
+        finally:
+            os.unlink(temp_file)
 
     def test_load_calibration(self, qapp, mock_cryomodule):
         # Arrange
         test_cal_data = {"2023-10-01 12:00:00": {"slope": 0.15}}
 
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(test_cal_data))
-        ):
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",  # Add encoding
+        ) as f:
+            json.dump(test_cal_data, f)
+            temp_file = f.name
+
+        try:
+            mock_cryomodule.calib_idx_file = temp_file
+
             with patch(
                 "sc_linac_physics.utils.qt.get_dimensions", return_value=1
             ):
@@ -423,19 +446,28 @@ class TestCalibrationOptions:
                     time_stamp="2023-10-01 12:00:00"
                 )
                 options.cal_loaded_signal.emit.assert_called_once()
+        finally:
+            os.unlink(temp_file)
 
 
 class TestIntegration:
     """Integration tests for worker coordination"""
 
-    @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
-    def test_complete_q0_workflow(self, mock_caget, mock_cryomodule):
+    def test_complete_q0_workflow(self, mock_cryomodule):
         """Test a complete Q0 measurement workflow"""
-        # Arrange
-        mock_caget.return_value = 1
-        with patch(
-            "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+
+        with (
+            patch("time.sleep"),
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui_utils.caget",
+                return_value=1,
+            ),
+            patch("sc_linac_physics.applications.q0.q0_gui_utils.caput"),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+            ),
         ):
+
             # Step 1: Setup cryo parameters
             setup_worker = CryoParamSetupWorker(mock_cryomodule)
             setup_worker.status = Mock()
