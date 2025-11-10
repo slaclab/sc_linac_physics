@@ -35,7 +35,7 @@ def setup_cryomodule(
         cryomodule_object.cav_char_requested = machine.cav_char_requested
         cryomodule_object.rf_ramp_requested = machine.rf_ramp_requested
 
-        cryomodule_object.trigger_setup()
+        cryomodule_object.trigger_start()
 
 
 def main():

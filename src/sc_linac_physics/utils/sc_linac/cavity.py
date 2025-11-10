@@ -9,6 +9,7 @@ from lcls_tools.common.controls.pyepics.utils import (
 )
 
 from sc_linac_physics.utils.sc_linac import linac_utils
+from sc_linac_physics.utils.sc_linac.linac_utils import STATUS_RUNNING_VALUE
 
 if TYPE_CHECKING:
     from linac import Linac
@@ -190,6 +191,18 @@ class Cavity(linac_utils.SCLinacObject):
         self.char_timestamp_pv: str = self.pv_addr("PROBECALTS")
         self._char_timestamp_pv_obj: Optional[PV] = None
 
+        self.progress_pv: str = self.auto_pv_addr("PROG")
+        self._progress_pv_obj: Optional[PV] = None
+
+        self.status_pv: str = self.auto_pv_addr("STATUS")
+        self._status_pv_obj: Optional[PV] = None
+
+        self.status_msg_pv: str = self.auto_pv_addr("MSG")
+        self._status_msg_pv_obj: Optional[PV] = None
+
+        self.note_pv: str = self.auto_pv_addr("NOTE")
+        self._note_pv_obj: Optional[PV] = None
+
     def __str__(self):
         return (
             f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
@@ -198,6 +211,59 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def pv_prefix(self):
         return self._pv_prefix
+
+    @property
+    def note_pv_obj(self) -> PV:
+        if not self._note_pv_obj:
+            self._note_pv_obj = PV(self.note_pv)
+        return self._note_pv_obj
+
+    @property
+    def status_pv_obj(self):
+        if not self._status_pv_obj:
+            self._status_pv_obj = PV(self.status_pv)
+        return self._status_pv_obj
+
+    @property
+    def status(self):
+        return self.status_pv_obj.get()
+
+    @status.setter
+    def status(self, value: int):
+        self.status_pv_obj.put(value)
+
+    @property
+    def script_is_running(self) -> bool:
+        return self.status == STATUS_RUNNING_VALUE
+
+    @property
+    def progress_pv_obj(self):
+        if not self._progress_pv_obj:
+            self._progress_pv_obj = PV(self.progress_pv)
+        return self._progress_pv_obj
+
+    @property
+    def progress(self) -> float:
+        return self.progress_pv_obj.get()
+
+    @progress.setter
+    def progress(self, value: float):
+        self.progress_pv_obj.put(value)
+
+    @property
+    def status_msg_pv_obj(self) -> PV:
+        if not self._status_msg_pv_obj:
+            self._status_msg_pv_obj = PV(self.status_msg_pv)
+        return self._status_msg_pv_obj
+
+    @property
+    def status_message(self):
+        return self.status_msg_pv_obj.get()
+
+    @status_message.setter
+    def status_message(self, message):
+        print(message)
+        self.status_msg_pv_obj.put(message)
 
     @property
     def microsteps_per_hz(self):
