@@ -317,7 +317,10 @@ class TestQ0Options:
 
         # Create a temporary file with the test data
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",  # Add encoding
         ) as f:
             json.dump(test_q0_data, f)
             temp_file = f.name
@@ -347,7 +350,10 @@ class TestQ0Options:
         }
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",  # Add encoding
         ) as f:
             json.dump(test_q0_data, f)
             temp_file = f.name
@@ -384,7 +390,10 @@ class TestCalibrationOptions:
         }
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",  # Add encoding
         ) as f:
             json.dump(test_cal_data, f)
             temp_file = f.name
@@ -412,7 +421,10 @@ class TestCalibrationOptions:
         test_cal_data = {"2023-10-01 12:00:00": {"slope": 0.15}}
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",  # Add encoding
         ) as f:
             json.dump(test_cal_data, f)
             temp_file = f.name
