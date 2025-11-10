@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v3.0.0 (2025-11-10)
+
+### Refactoring
+
+- Delete setup_linac_object.py ([#144](https://github.com/slaclab/sc_linac_physics/pull/144),
+  [`6c8e0e6`](https://github.com/slaclab/sc_linac_physics/commit/6c8e0e675bc128e047bc5852b61826a0d638c9c9))
+
+- Extract common launcher functionality to base classes
+  ([#144](https://github.com/slaclab/sc_linac_physics/pull/144),
+  [`6c8e0e6`](https://github.com/slaclab/sc_linac_physics/commit/6c8e0e675bc128e047bc5852b61826a0d638c9c9))
+
+- Remove unused AutoLinacObject class ([#144](https://github.com/slaclab/sc_linac_physics/pull/144),
+  [`6c8e0e6`](https://github.com/slaclab/sc_linac_physics/commit/6c8e0e675bc128e047bc5852b61826a0d638c9c9))
+
+
 ## v2.2.1 (2025-11-10)
 
 ### Chores
