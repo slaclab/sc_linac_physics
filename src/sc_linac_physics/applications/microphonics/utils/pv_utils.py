@@ -26,6 +26,27 @@ def extract_cavity_channel_from_pv(pv_string: str) -> Optional[Tuple[int, str]]:
         return None
 
 
+def extract_cryomodule_from_pv(pv_string: str) -> Optional[str]:
+    """
+    Extract cryomodule identifier from PV string.
+
+    Args:
+        pv_string: Full PV string (e.g., "ACCL:L3B:1910:PZT:DF:WF")
+
+    Returns:
+        Cryomodule identifier (e.g., "L3B:19") or None if not found
+    """
+    try:
+        parts = pv_string.split(":")
+        if len(parts) >= 3 and parts[0] == "ACCL":
+            linac = parts[1]
+            module = parts[2][:2] if len(parts[2]) >= 2 else parts[2]
+            return f"{linac}:{module}"
+        return None
+    except (IndexError, ValueError):
+        return None
+
+
 # PV Formatting Helpers
 def format_accl_base(linac: str, module: str) -> str:
     """
