@@ -303,41 +303,26 @@ class TestCavAmpControl:
         assert control.desAmpSpinbox.maximum() == 0
 
 
+def json_mock_open(data):
+    """Helper to create mock_open that properly handles JSON data in Python 3.14+"""
+    json_str = json.dumps(data)
+    m = mock_open(read_data=json_str)
+    # Ensure the read() method returns the string, not bytes
+    m.return_value.__enter__.return_value.read.return_value = json_str
+    return m
+
+
 class TestQ0Options:
     """Test Q0Options GUI component"""
 
     def test_q0_options_initialization(self, qapp, mock_cryomodule):
         # Arrange
         test_q0_data = {
-            "2023-10-01 12:00:00": {
-                "Cavity Amplitudes": [
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                    16.5,
-                ]
-            },
-            "2023-10-02 12:00:00": {
-                "Cavity Amplitudes": [
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                    17.0,
-                ]
-            },
+            "2023-10-01 12:00:00": {"Cavity Amplitudes": [16.5] * 8},
+            "2023-10-02 12:00:00": {"Cavity Amplitudes": [17.0] * 8},
         }
 
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(test_q0_data))
-        ):
+        with patch("builtins.open", json_mock_open(test_q0_data)):
             with patch(
                 "sc_linac_physics.utils.qt.get_dimensions", return_value=2
             ):
@@ -357,9 +342,7 @@ class TestQ0Options:
             "2023-10-01 12:00:00": {"Cavity Amplitudes": [16.5] * 8}
         }
 
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(test_q0_data))
-        ):
+        with patch("builtins.open", json_mock_open(test_q0_data)):
             with patch(
                 "sc_linac_physics.utils.qt.get_dimensions", return_value=1
             ):
@@ -386,9 +369,7 @@ class TestCalibrationOptions:
             "2023-10-02 12:00:00": {"slope": 0.16},
         }
 
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(test_cal_data))
-        ):
+        with patch("builtins.open", json_mock_open(test_cal_data)):
             with patch(
                 "sc_linac_physics.utils.qt.get_dimensions", return_value=2
             ):
@@ -406,9 +387,7 @@ class TestCalibrationOptions:
         # Arrange
         test_cal_data = {"2023-10-01 12:00:00": {"slope": 0.15}}
 
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(test_cal_data))
-        ):
+        with patch("builtins.open", json_mock_open(test_cal_data)):
             with patch(
                 "sc_linac_physics.utils.qt.get_dimensions", return_value=1
             ):
@@ -428,14 +407,21 @@ class TestCalibrationOptions:
 class TestIntegration:
     """Integration tests for worker coordination"""
 
-    @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
-    def test_complete_q0_workflow(self, mock_caget, mock_cryomodule):
+    def test_complete_q0_workflow(self, mock_cryomodule):
         """Test a complete Q0 measurement workflow"""
-        # Arrange
-        mock_caget.return_value = 1
-        with patch(
-            "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+
+        with (
+            patch("time.sleep"),
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui_utils.caget",
+                return_value=1,
+            ),
+            patch("sc_linac_physics.applications.q0.q0_gui_utils.caput"),
+            patch(
+                "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
+            ),
         ):
+
             # Step 1: Setup cryo parameters
             setup_worker = CryoParamSetupWorker(mock_cryomodule)
             setup_worker.status = Mock()
