@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v2.2.1 (2025-11-10)
+
+### Chores
+
+- Patching tests ([#143](https://github.com/slaclab/sc_linac_physics/pull/143),
+  [`e93fb99`](https://github.com/slaclab/sc_linac_physics/commit/e93fb993de3d3045445f6d838acc21534a7c4dc6))
+
+### Refactoring
+
+- **simulation**: Remove deprecated auto_setup_service module
+  ([#143](https://github.com/slaclab/sc_linac_physics/pull/143),
+  [`e93fb99`](https://github.com/slaclab/sc_linac_physics/commit/e93fb993de3d3045445f6d838acc21534a7c4dc6))
+
+- **simulation**: Rename launcher services and add Off groups
+  ([#143](https://github.com/slaclab/sc_linac_physics/pull/143),
+  [`e93fb99`](https://github.com/slaclab/sc_linac_physics/commit/e93fb993de3d3045445f6d838acc21534a7c4dc6))
+
+
 ## v2.2.0 (2025-11-06)
 
 ### Features
