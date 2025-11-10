@@ -185,7 +185,7 @@ class TestCavityPVGroups:
 
         assert group.cm_name == "CM01"
         assert group.cav_num == 3
-        assert group.script_name == "sc-setup-cavity"
+        assert group.script_name == "sc-setup-cav"
         assert group.script_args == {"cm": "CM01", "cav": 3}
 
     def test_cavity_has_extra_pvs(self):
@@ -201,14 +201,14 @@ class TestCavityPVGroups:
         group = SetupCavityPVGroup(prefix="TEST:", cm_name="CM02", cav_num=5)
         args = group.get_command_args()
 
-        assert args == ["sc-setup-cavity", "-cm=CM02", "-cav=5"]
+        assert args == ["sc-setup-cav", "-cm=CM02", "-cav=5"]
 
     def test_off_cavity_command_args(self):
         """Test OffCavityPVGroup includes -off flag"""
         group = OffCavityPVGroup(prefix="TEST:", cm_name="CM01", cav_num=1)
         args = group.get_command_args()
 
-        assert args == ["sc-setup-cavity", "-cm=CM01", "-cav=1", "-off"]
+        assert args == ["sc-setup-cav", "-cm=CM01", "-cav=1", "-off"]
 
 
 class TestPVGroupPrefix:
