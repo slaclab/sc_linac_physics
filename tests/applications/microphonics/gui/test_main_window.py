@@ -63,14 +63,6 @@ def gui(qapp):
             "sc_linac_physics.applications.microphonics.gui.main_window.ConfigPanel",
             return_value=MockWidget(),
         ) as mock_config,
-        patch(
-            "sc_linac_physics.applications.microphonics.gui.main_window.ChannelSelectionGroup",
-            return_value=MockWidget(),
-        ) as mock_channel,
-        patch(
-            "sc_linac_physics.applications.microphonics.gui.main_window.DataLoadingGroup",
-            return_value=MockWidget(),
-        ) as mock_data,
     ):
         # Create MicrophonicsGUI instance
         window = MicrophonicsGUI()
@@ -84,8 +76,6 @@ def gui(qapp):
             "plot": mock_plot,
             "status": mock_status,
             "config": mock_config,
-            "channel": mock_channel,
-            "data": mock_data,
         }
 
         yield window
@@ -131,8 +121,6 @@ def test_gui_initialization(gui):
         "config_panel",
         "status_panel",
         "plot_panel",
-        "channel_selection",
-        "data_loading",
     ]:
         assert hasattr(gui, panel)
         assert getattr(gui, panel) is not None
@@ -175,20 +163,12 @@ def test_measurement_start_stop(gui):
     }
     gui.config_panel.mock.get_config.return_value = mock_config
 
-    # Mock channel selection
-    gui.channel_selection.mock.get_selected_channels.return_value = [
-        "DF",
-        "FWD",
-    ]
-
     # Start measurement
     gui.start_measurement()
     QTest.qWait(100)  # Give time for async operations
 
     # Verify state changes
     assert gui.measurement_running
-    assert not gui.channel_selection.isEnabled()
-    assert not gui.data_loading.isEnabled()
 
     # Verify data manager was called correctly
     expected_config = {
@@ -208,8 +188,6 @@ def test_measurement_start_stop(gui):
 
     # Verify final state
     assert not gui.measurement_running
-    assert gui.channel_selection.isEnabled()
-    assert gui.data_loading.isEnabled()
     gui.data_manager.stop_all.assert_called_once()
 
 
@@ -253,7 +231,6 @@ def test_data_loading_success(gui, temp_data_file):
     # Verify successful handling
     gui.stats_calculator.calculate_statistics.assert_called_with(mock_df_data)
     gui.status_panel.update_statistics.assert_called_once_with(1, mock_stats)
-    assert gui.data_loading.isEnabled()
 
 
 def test_data_loading_error(gui, temp_data_file):
@@ -264,7 +241,6 @@ def test_data_loading_error(gui, temp_data_file):
     # Configure mocks
     gui.data_loader = Mock()
     gui._show_error_dialog = Mock()  # Mock the error dialog method
-    gui.data_loading = Mock()
 
     # Configure error case
     def raise_error(*args):
@@ -278,13 +254,9 @@ def test_data_loading_error(gui, temp_data_file):
     # Verify error handling
     expected_error = f"Failed to load data: {error_msg}"
     gui._show_error_dialog.assert_called_once_with("Error", expected_error)
-    gui.data_loading.update_file_info.assert_called_once_with(
-        "Error loading file"
-    )
 
     # Verify file loading was attempted
     gui.data_loader.load_file.assert_called_once_with(temp_data_file)
-    assert gui.data_loading.isEnabled()  # GUI should remain responsive
 
 
 @pytest.mark.parametrize("source", ["measurement", "file"])
@@ -323,11 +295,6 @@ def test_split_chassis_config(gui):
         "decimation": 2,
         "buffer_count": 1,
     }
-
-    # Mock channel selection
-    gui.channel_selection.get_selected_channels = Mock(
-        return_value=["DF", "FWD"]
-    )
 
     # Get split configuration
     result = gui._split_chassis_config(test_config)
@@ -376,8 +343,6 @@ def test_job_handling(gui):
     test_data = {"cavity_list": [1], "cavities": {1: {"DF": MagicMock()}}}
     gui._handle_job_complete(test_data)
     assert not gui.measurement_running
-    assert gui.channel_selection.isEnabled()
-    assert gui.data_loading.isEnabled()
 
 
 def test_cleanup(gui, mock_data_manager):
