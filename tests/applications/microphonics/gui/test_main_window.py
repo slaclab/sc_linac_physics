@@ -175,7 +175,7 @@ def test_measurement_start_stop(gui):
         "ACCL:L0B:0100:RESA": {
             "pv_base": "ca://ACCL:L0B:0100:RESA:",
             "config": MeasurementConfig(
-                channels=["DF", "FWD"], decimation=2, buffer_count=1
+                channels=["DF"], decimation=2, buffer_count=1
             ),
             "cavities": [1],
         }
