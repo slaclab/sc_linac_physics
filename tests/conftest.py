@@ -1,10 +1,35 @@
 import os
 import subprocess
 import sys
+from unittest.mock import patch
 
 import pyqtgraph as pg
+
+# tests/conftest.py
 import pytest
 from qtpy.QtWidgets import QApplication
+
+
+@pytest.fixture(autouse=True, scope="session")
+def mock_physics_home(tmp_path_factory):
+    """Replace /home/physics with a temporary directory for all tests"""
+    temp_physics = tmp_path_factory.mktemp("physics_home")
+
+    # Store the original function before patching
+    original_expanduser = os.path.expanduser
+
+    # Mock it in any modules that might use it
+    with patch("os.path.expanduser") as mock_expand:
+
+        def side_effect(path):
+            if "/home/physics" in path:
+                return str(temp_physics / path.replace("/home/physics/", ""))
+            # Call the original function directly (not via __wrapped__)
+            return original_expanduser(path)
+
+        mock_expand.side_effect = side_effect
+        yield temp_physics
+
 
 # Disable PyDM data plugins before importing any PyDM modules
 os.environ.setdefault("PYDM_DATA_PLUGINS_DISABLED", "1")
