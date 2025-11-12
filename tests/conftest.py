@@ -1,16 +1,85 @@
+import builtins
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pyqtgraph as pg
 import pytest
 from qtpy.QtWidgets import QApplication
 
+# Mock filesystem operations BEFORE any imports that might use them
+_original_os_mkdir = os.mkdir
+_original_open = open
+
+
+def _mock_os_mkdir(path, mode=0o777, *, dir_fd=None):
+    """Mock os.mkdir to ignore /home/physics paths"""
+    path_str = str(path)
+    if "/home/physics" in path_str:
+        # Silently succeed for /home/physics paths
+        return
+    # For other paths, use original
+    return _original_os_mkdir(path, mode, dir_fd=dir_fd)
+
+
+def _mock_open(file, mode="r", *args, **kwargs):
+    """Mock open to redirect /home/physics to /tmp"""
+    file_str = str(file)
+    if "/home/physics" in file_str:
+        # Create a temp directory structure
+        import tempfile
+
+        temp_base = Path(tempfile.gettempdir()) / "test_physics"
+        new_file = temp_base / file_str.replace("/home/physics/", "")
+        new_file.parent.mkdir(parents=True, exist_ok=True)
+        return _original_open(new_file, mode, *args, **kwargs)
+    return _original_open(file, mode, *args, **kwargs)
+
+
+# Apply mocks immediately
+os.mkdir = _mock_os_mkdir
+builtins.open = _mock_open
+
+
+@pytest.fixture(autouse=True, scope="session")
+def setup_test_environment(tmp_path_factory):
+    """Set up test environment with redirected filesystem operations"""
+    temp_physics = tmp_path_factory.mktemp("physics_home")
+
+    # Update mocks to use the proper temp directory
+    def _better_os_mkdir(path, mode=0o777, *, dir_fd=None):
+        path_str = str(path)
+        if "/home/physics" in path_str:
+            new_path = temp_physics / path_str.replace("/home/physics/", "")
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            if not new_path.exists():
+                return _original_os_mkdir(str(new_path), mode)
+            return
+        return _original_os_mkdir(path, mode, dir_fd=dir_fd)
+
+    def _better_open(file, mode="r", *args, **kwargs):
+        file_str = str(file)
+        if "/home/physics" in file_str:
+            new_file = temp_physics / file_str.replace("/home/physics/", "")
+            new_file.parent.mkdir(parents=True, exist_ok=True)
+            return _original_open(new_file, mode, *args, **kwargs)
+        return _original_open(file, mode, *args, **kwargs)
+
+    os.mkdir = _better_os_mkdir
+    builtins.open = _better_open
+
+    yield temp_physics
+
+    # Restore originals
+    os.mkdir = _original_os_mkdir
+    builtins.open = _original_open
+
+
 # Disable PyDM data plugins before importing any PyDM modules
 os.environ.setdefault("PYDM_DATA_PLUGINS_DISABLED", "1")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_API", "pyqt5")
-# Optional: avoid any PyDM telemetry/tasks
 os.environ.setdefault("PYDM_DISABLE_TELEMETRY", "1")
 
 
@@ -78,14 +147,6 @@ def mock_qt_app(monkeypatch):
 def patch_pyqtgraph():
     """
     Patch PyQtGraph for Python 3.13 compatibility.
-
-    Issue: PyQtGraph's PlotDataItem tries to call view.autoRangeEnabled()
-    on PlotWidget, but PlotWidget doesn't have this method directly.
-    It needs to be accessed via getViewBox().autoRangeEnabled().
-
-    This is a known compatibility issue with Python 3.13.
-    TODO: Remove this patch when upgrading to PyQtGraph 0.14+ or
-    when downgrading to Python 3.11/3.12.
     """
     original_getattr = pg.PlotWidget.__getattr__
 

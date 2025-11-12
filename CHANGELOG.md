@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v3.0.3 (2025-11-12)
+
+### Chores
+
+- Patching tests ([#147](https://github.com/slaclab/sc_linac_physics/pull/147),
+  [`6fae9eb`](https://github.com/slaclab/sc_linac_physics/commit/6fae9eb4ef502f0eb2457e05ba3320cd0c46471f))
+
+### Refactoring
+
+- **quench**: Replace print statements with structured logging
+  ([#147](https://github.com/slaclab/sc_linac_physics/pull/147),
+  [`6fae9eb`](https://github.com/slaclab/sc_linac_physics/commit/6fae9eb4ef502f0eb2457e05ba3320cd0c46471f))
+
+
+## v3.0.2 (2025-11-12)
+
+### Bug Fixes
+
+- **build**: Resolve packaging warnings and deprecated license format
+  ([#148](https://github.com/slaclab/sc_linac_physics/pull/148),
+  [`12c6df4`](https://github.com/slaclab/sc_linac_physics/commit/12c6df470ddd3d170cbf6c74e692fce55b25c6ab))
+
+
+## v3.0.1 (2025-11-12)
+
+### Bug Fixes
+
+- **ci**: Prevent release job from hanging when no version is created
+  ([`553af91`](https://github.com/slaclab/sc_linac_physics/commit/553af91845a602742fc4931c7f4cd4d732fac12f))
+
+
 ## v3.0.0 (2025-11-10)
 
 ### Refactoring
