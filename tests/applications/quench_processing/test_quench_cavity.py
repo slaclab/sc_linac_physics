@@ -134,6 +134,11 @@ def test_wait_for_quench(cavity):
 def test_check_abort_radiation(cavity):
     cavity.decarad = MagicMock()
     cavity.decarad.max_raw_dose = RADIATION_LIMIT + 1
+
+    # Mock PV objects to avoid actual PV access
+    cavity._aact_pv_obj = make_mock_pv(get_val=10.0)
+    cavity._ades_pv_obj = make_mock_pv(get_val=15.0)
+
     with pytest.raises(QuenchError):
         cavity.check_abort()
 
@@ -142,6 +147,11 @@ def test_check_abort_quench(cavity):
     cavity.decarad = MagicMock()
     cavity.decarad.max_raw_dose = RADIATION_LIMIT
     cavity.has_uncaught_quench = MagicMock(return_value=True)
+
+    # Mock PV objects to avoid actual PV access
+    cavity._aact_pv_obj = make_mock_pv(get_val=10.0)
+    cavity._ades_pv_obj = make_mock_pv(get_val=15.0)
+
     with pytest.raises(QuenchError):
         cavity.check_abort()
 
