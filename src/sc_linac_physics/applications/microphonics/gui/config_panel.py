@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 from PyQt5.QtCore import pyqtSignal
@@ -11,9 +12,9 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QPushButton,
     QGridLayout,
-    QScrollArea,
     QMessageBox,
     QTabWidget,
+    QFileDialog,
 )
 
 from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
@@ -43,6 +44,7 @@ class ConfigPanel(QWidget):
     measurementStarted = pyqtSignal()  # Emitted when start button clicked
     measurementStopped = pyqtSignal()  # Emitted when stop button clicked
     decimationSettingChanged = pyqtSignal(int)
+    file_selected = pyqtSignal(Path)
 
     # Constants
     VALID_LINACS = {
@@ -55,6 +57,7 @@ class ConfigPanel(QWidget):
     DEFAULT_DECIMATION_VALUE = 2
     DEFAULT_BUFFER_COUNT = 1
     BUFFER_LENGTH = 16384
+    PREFERRED_DEFAULT_DATA_PATH = Path("/u1/lcls/physics/rf_lcls2/microphonics")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -71,8 +74,10 @@ class ConfigPanel(QWidget):
         self.decim_combo = None
         self.buffer_spin = None
         self.start_button = None
+        self.load_button = None
         self.stop_button = None
         self.label_sampling_rate = None
+        self.file_info_label = None
         self.label_acq_time = None
         # Setup UI components
         self.setup_ui()
@@ -86,23 +91,20 @@ class ConfigPanel(QWidget):
 
     def setup_ui(self):
         """Initialize user interface"""
-        layout = QVBoxLayout(self)
+        # Main vertical layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Scrollable area
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        content_widget = QWidget()
-        scroll.setWidget(content_widget)
-        content_layout = QVBoxLayout(content_widget)
+        main_layout.addWidget(self.create_linac_section())
+        main_layout.addWidget(self.create_cavity_section())
 
-        # Adding config sections
-        content_layout.addWidget(self.create_linac_section())
-        content_layout.addWidget(self.create_cavity_section())
-        content_layout.addWidget(self.create_settings_section())
-        content_layout.addWidget(self.create_control_section())
-        content_layout.addStretch()
+        bottom_layout = QHBoxLayout()
+        bottom_layout.addWidget(self.create_settings_section())
+        bottom_layout.addWidget(self.create_control_section())
 
-        layout.addWidget(scroll)
+        # Add the horizontal layout to the main layout
+        main_layout.addLayout(bottom_layout)
+        main_layout.addStretch()
 
     def get_selected_decimation(self):
         """Returns the currently selected decimation value from the UI."""
@@ -283,6 +285,11 @@ class ConfigPanel(QWidget):
         layout.addWidget(self.label_acq_time, 3, 1)
         layout.addWidget(QLabel("s"), 3, 2)
 
+        layout.addWidget(QLabel("Channel:"), 4, 0)
+        channel_label = QLabel("DF (Fixed)")
+        channel_label.setStyleSheet("font-style: italic;")
+        layout.addWidget(channel_label, 4, 1, 1, 2)
+
         group.setLayout(layout)
         return group
 
@@ -334,17 +341,23 @@ class ConfigPanel(QWidget):
 
     def create_control_section(self):
         """Create measurement control section"""
-        group = QGroupBox("Measurement Control")
-        layout = QHBoxLayout()
+        group = QGroupBox("Controls")
+        layout = QGridLayout(group)
 
         self.start_button = QPushButton("Start Measurement")
-        layout.addWidget(self.start_button)
-
         self.stop_button = QPushButton("Stop")
         self.stop_button.setEnabled(False)
-        layout.addWidget(self.stop_button)
 
-        group.setLayout(layout)
+        layout.addWidget(self.start_button, 0, 0)
+        layout.addWidget(self.stop_button, 0, 1)
+
+        self.load_button = QPushButton("Load Previous Data")
+        layout.addWidget(self.load_button, 1, 0, 1, 2)
+
+        self.file_info_label = QLabel("No file loaded")
+        self.file_info_label.setStyleSheet("font-style: italic; color: gray;")
+        layout.addWidget(self.file_info_label, 2, 0, 1, 2)
+
         return group
 
     def _on_linac_selected(self, selected_linac):
@@ -436,6 +449,7 @@ class ConfigPanel(QWidget):
         # Connects start/stop buttons
         self.start_button.clicked.connect(self._on_start_clicked)
         self.stop_button.clicked.connect(lambda: self.measurementStopped.emit())
+        self.load_button.clicked.connect(self._show_file_dialog)
 
         if hasattr(self, "decim_combo"):
             self.decim_combo.currentIndexChanged.connect(
@@ -554,3 +568,33 @@ class ConfigPanel(QWidget):
         """Update UI state for measurement status"""
         self.start_button.setEnabled(not running)
         self.stop_button.setEnabled(running)
+        self.set_loading_enabled(not running)
+
+    def set_loading_enabled(self, enabled: bool):
+        """Enable or disable the data loading button."""
+        self.load_button.setEnabled(enabled)
+
+    def update_file_info(self, status: str):
+        """Update the file info label with a status message"""
+        self.file_info_label.setText(status)
+
+    def _get_start_directory(self) -> str:
+        """Figures the best starting directory for the file dialog."""
+        if self.PREFERRED_DEFAULT_DATA_PATH.is_dir():
+            return str(self.PREFERRED_DEFAULT_DATA_PATH)
+        home_path = Path.home()
+        if home_path.is_dir():
+            return str(home_path)
+        return "."
+
+    def _show_file_dialog(self):
+        """Opens file dialog to let user select data file."""
+        start_directory = self._get_start_directory()
+        file_filters = "All Files (*);;Text Files (*.txt);;Data Files (*.dat)"
+        file_path_str, _ = QFileDialog.getOpenFileName(
+            self, "Load Previous Data", start_directory, file_filters
+        )
+        if file_path_str:
+            file_path = Path(file_path_str)
+            self.file_info_label.setText(f"Selected: {file_path.name}")
+            self.file_selected.emit(file_path)
