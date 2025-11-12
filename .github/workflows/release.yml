@@ -221,6 +221,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.SEMANTIC_RELEASE_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Run semantic-release version
+        id: release_version
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
           GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
@@ -233,18 +234,21 @@ jobs:
           semantic-release version
 
       - name: Build verified package
+        if: steps.release_version.outputs.released == 'true'
         run: |
           echo "=== Building package from tagged version ==="
           python -m build
           ls -lh dist/
 
       - name: Download package verification artifacts
+        if: steps.release_version.outputs.released == 'true'
         uses: actions/download-artifact@v4
         with:
           name: package-dist
           path: dist-verified/
 
       - name: Run semantic-release publish
+        if: steps.release_version.outputs.released == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
           GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
@@ -253,12 +257,19 @@ jobs:
           semantic-release publish
 
       - name: Upload release assets
+        if: steps.release_version.outputs.released == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
         run: |
-          # Get the latest tag
           TAG=$(git describe --tags --abbrev=0)
           echo "Uploading assets for release: $TAG"
-          
-          # Upload wheel and tarball to the release
           gh release upload "$TAG" dist/*.whl dist/*.tar.gz --clobber
+      
+      - name: No release needed
+        if: steps.release_version.outputs.released == 'false'
+        run: |
+          echo "ℹ️ No new release needed - version ${{ steps.release_version.outputs.version }} already exists"
+          echo "To trigger a release, ensure commits follow conventional commit format:"
+          echo "  - feat: for new features (minor version bump)"
+          echo "  - fix: for bug fixes (patch version bump)"
+          echo "  - BREAKING CHANGE: for breaking changes (major version bump)"
