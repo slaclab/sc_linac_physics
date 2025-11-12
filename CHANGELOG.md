@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.0.1 (2025-11-12)
+
+### Bug Fixes
+
+- **ci**: Prevent release job from hanging when no version is created
+  ([`553af91`](https://github.com/slaclab/sc_linac_physics/commit/553af91845a602742fc4931c7f4cd4d732fac12f))
+
+
 ## v3.0.0 (2025-11-10)
 
 ### Refactoring
