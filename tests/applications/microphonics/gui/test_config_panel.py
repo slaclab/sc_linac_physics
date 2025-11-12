@@ -240,9 +240,10 @@ def test_signal_emission(config_panel):
     )  # Config should have changed multiple times
     assert config_changed_count > 0
 
-    # Clean up signal connections
-    for connection in connections:
-        config_panel.configChanged.disconnect(connection)
+    config_panel.configChanged.disconnect(on_config_changed)
+    config_panel.measurementStarted.disconnect(on_measurement_started)
+    config_panel.measurementStopped.disconnect(on_measurement_stopped)
+    config_panel.decimationSettingChanged.disconnect(on_decimation_changed)
 
 
 def teardown_module():

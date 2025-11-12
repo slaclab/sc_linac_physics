@@ -6,10 +6,6 @@ from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QMessageBox
 from pydm import Display
 
-from sc_linac_physics.applications.microphonics.components.components import (
-    ChannelSelectionGroup,
-    DataLoadingGroup,
-)
 from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
     MeasurementConfig,
     AsyncDataManager,
@@ -113,8 +109,6 @@ class MicrophonicsGUI(Display):
         # Left panel components
         self.config_panel = ConfigPanel()
         self.status_panel = StatusPanel()
-        self.channel_selection = ChannelSelectionGroup()
-        self.data_loading = DataLoadingGroup()
 
         # Right panel components
         self.plot_panel = PlotPanel(config_panel_ref=self.config_panel)
@@ -122,8 +116,6 @@ class MicrophonicsGUI(Display):
     def setup_left_panel(self, layout: QVBoxLayout):
         """Setup left side of the window"""
         layout.addWidget(self.config_panel)
-        layout.addWidget(self.channel_selection)
-        layout.addWidget(self.data_loading)
         layout.addWidget(self.status_panel)
         layout.addStretch()
 
@@ -142,7 +134,7 @@ class MicrophonicsGUI(Display):
         )
 
         # Data loading signals
-        self.data_loading.file_selected.connect(self.load_data)
+        self.config_panel.file_selected.connect(self.load_data)
 
     def on_config_changed(self, config: Dict):
         logger.info("Configuration changed: %s", config)
@@ -163,12 +155,7 @@ class MicrophonicsGUI(Display):
     def _split_chassis_config(self, config: dict) -> Dict[str, Dict]:
         """Split configuration by chassis (A/B) and include channel selection"""
         result = {}
-
-        # Get selected channels from ChannelSelectionGroup
-        selected_channels_ui = self.channel_selection.get_selected_channels()
-        logger.debug("Selected channels (from UI): %s", selected_channels_ui)
-
-        channels_for_script = selected_channels_ui
+        channels_for_script = ["DF"]
         logger.debug(
             "Channels actually sent to script: %s", channels_for_script
         )
@@ -280,8 +267,6 @@ class MicrophonicsGUI(Display):
             self._show_error_message(str(e))
             self.measurement_running = False
             self.config_panel.set_measurement_running(False)
-            self.channel_selection.setEnabled(True)
-            self.data_loading.setEnabled(True)
 
     def stop_measurement(self):
         """Stop the measurement process"""
@@ -307,8 +292,6 @@ class MicrophonicsGUI(Display):
         """Enable/disable UI components based on measurement state."""
         self.measurement_running = is_running
         self.config_panel.set_measurement_running(is_running)
-        self.channel_selection.setEnabled(not is_running)
-        self.data_loading.setEnabled(not is_running)
 
     def _handle_job_progress(self, overall_progress: int):
         """Handle overall job progress"""
@@ -333,8 +316,6 @@ class MicrophonicsGUI(Display):
         # Reset UI state
         self.measurement_running = False
         self.config_panel.set_measurement_running(False)
-        self.channel_selection.setEnabled(True)
-        self.data_loading.setEnabled(True)
 
     def _handle_completion(self, chassis_id: str):
         """Handle rack completion"""
@@ -436,12 +417,12 @@ class MicrophonicsGUI(Display):
     def _handle_load_error(self, error_msg: str):
         """Handle errors during data loading"""
         logger.error("Error loading data: %s", error_msg)
-        self.data_loading.update_file_info("Error loading file")
+        self.config_panel.update_file_info("Error loading file")
         self._show_error_dialog("Error", error_msg)
 
     def _handle_load_progress(self, progress: int):
         """Handle progress updates during data loading"""
-        self.data_loading.update_file_info(f"Loading: {progress}%")
+        self.config_panel.update_file_info(f"Loading: {progress}%")
 
     def closeEvent(self, event):
         """Ensure clean shutdown"""
