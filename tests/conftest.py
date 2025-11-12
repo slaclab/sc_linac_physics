@@ -15,20 +15,23 @@ def mock_physics_home(tmp_path_factory):
     """Replace /home/physics with a temporary directory for all tests"""
     temp_physics = tmp_path_factory.mktemp("physics_home")
 
-    # Store the original function before patching
+    # Store the original function
     original_expanduser = os.path.expanduser
 
-    # Mock it in any modules that might use it
-    with patch("os.path.expanduser") as mock_expand:
+    def side_effect(path):
+        if "/home/physics" in str(path):
+            return str(temp_physics / str(path).replace("/home/physics/", ""))
+        # Call the original function
+        return original_expanduser(path)
 
-        def side_effect(path):
-            if "/home/physics" in path:
-                return str(temp_physics / path.replace("/home/physics/", ""))
-            # Call the original function directly (not via __wrapped__)
-            return original_expanduser(path)
+    # Start the patch and keep it active for the entire session
+    patcher = patch("os.path.expanduser", side_effect=side_effect)
+    patcher.start()
 
-        mock_expand.side_effect = side_effect
-        yield temp_physics
+    yield temp_physics
+
+    # Stop the patch after all tests
+    patcher.stop()
 
 
 # Disable PyDM data plugins before importing any PyDM modules
