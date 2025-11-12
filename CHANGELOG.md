@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v3.0.3 (2025-11-12)
+
+### Chores
+
+- Patching tests ([#147](https://github.com/slaclab/sc_linac_physics/pull/147),
+  [`6fae9eb`](https://github.com/slaclab/sc_linac_physics/commit/6fae9eb4ef502f0eb2457e05ba3320cd0c46471f))
+
+### Refactoring
+
+- **quench**: Replace print statements with structured logging
+  ([#147](https://github.com/slaclab/sc_linac_physics/pull/147),
+  [`6fae9eb`](https://github.com/slaclab/sc_linac_physics/commit/6fae9eb4ef502f0eb2457e05ba3320cd0c46471f))
+
+
 ## v3.0.2 (2025-11-12)
 
 ### Bug Fixes
