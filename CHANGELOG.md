@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.0.2 (2025-11-12)
+
+### Bug Fixes
+
+- **build**: Resolve packaging warnings and deprecated license format
+  ([#148](https://github.com/slaclab/sc_linac_physics/pull/148),
+  [`12c6df4`](https://github.com/slaclab/sc_linac_physics/commit/12c6df470ddd3d170cbf6c74e692fce55b25c6ab))
+
+
 ## v3.0.1 (2025-11-12)
 
 ### Bug Fixes
