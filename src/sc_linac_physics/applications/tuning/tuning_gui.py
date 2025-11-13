@@ -20,12 +20,17 @@ from pydm.widgets.timeplot import updateMode
 from qtpy import QtCore
 
 from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
+from sc_linac_physics.applications.tuning.tune_rack import TuneRack
 from sc_linac_physics.applications.tuning.tune_stepper import TuneStepper
 from sc_linac_physics.applications.tuning.tune_utils import ColdWorker
 from sc_linac_physics.utils.qt import make_rainbow, CollapsibleGroupBox
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 from sc_linac_physics.utils.sc_linac.rack import Rack
+
+TUNE_MACHINE = Machine(
+    cavity_class=TuneCavity, rack_class=TuneRack, stepper_class=TuneStepper
+)
 
 
 class LabeledSpinbox:
