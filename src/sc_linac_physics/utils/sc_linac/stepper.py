@@ -2,9 +2,9 @@ import time
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from lcls_tools.common.controls.pyepics.utils import PV
 from numpy import sign
 
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
@@ -225,15 +225,19 @@ class StepperTuner(linac_utils.SCLinacObject):
             )
 
         if abs(num_steps) <= max_steps:
-            print(f"{self.cavity} {abs(num_steps)} steps <= {max_steps} max")
+            self.cavity.logger.info(
+                f"{self.cavity} {abs(num_steps)} steps <= {max_steps} max"
+            )
             self.step_des = abs(num_steps)
             self.issue_move_command(num_steps, check_detune=check_detune)
             self.restore_defaults()
         else:
-            print(f"{self.cavity} {abs(num_steps)} steps > {max_steps} max")
+            self.cavity.logger.info(
+                f"{self.cavity} {abs(num_steps)} steps > {max_steps} max"
+            )
             self.step_des = max_steps
             self.issue_move_command(num_steps, check_detune=check_detune)
-            print(
+            self.cavity.logger.info(
                 f"{self.cavity} moving {num_steps - (sign(num_steps) * max_steps)}"
             )
             self.move(
@@ -264,17 +268,21 @@ class StepperTuner(linac_utils.SCLinacObject):
         else:
             self.move_negative()
 
-        print(f"Waiting 5s for {self.cavity} motor to start moving")
+        self.cavity.logger.info(
+            f"Waiting 5s for {self.cavity} motor to start moving"
+        )
         time.sleep(5)
 
         while self.motor_moving:
             self.check_abort()
             if check_detune:
                 self.cavity.check_detune()
-            print(f"{self} motor still moving, waiting 5s", datetime.now())
+            self.cavity.logger.debug(
+                f"{self} motor still moving, waiting 5s ({datetime.now()})"
+            )
             time.sleep(5)
 
-        print(f"{self} motor done moving")
+        self.cavity.logger.info(f"{self} motor done moving")
 
         # the motor can be done moving for good OR bad reasons
         if self.on_limit_switch:

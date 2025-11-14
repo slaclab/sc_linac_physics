@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Optional
 
-from lcls_tools.common.controls.pyepics.utils import PV
 from numpy import polyfit
+
+from sc_linac_physics.utils.epics import PV
 
 # Global list of superconducting linac objects
 L0B = ["01"]
@@ -375,11 +376,6 @@ class LauncherLinacObject(SCLinacObject):
 
 
 PARK_DETUNE = 10000
-STATUS_READY_VALUE = 0
-STATUS_RUNNING_VALUE = 1
-STATUS_ERROR_VALUE = 2
-
-
 STATUS_READY_VALUE = 0
 STATUS_RUNNING_VALUE = 1
 STATUS_ERROR_VALUE = 2

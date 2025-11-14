@@ -1,8 +1,7 @@
 import time
 from typing import Optional, TYPE_CHECKING
 
-from lcls_tools.common.controls.pyepics.utils import PV
-
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
@@ -154,7 +153,7 @@ class Piezo(linac_utils.SCLinacObject):
         self.bias_voltage = 25
         while not self.is_enabled:
             self.cavity.check_abort()
-            print(f"{self} not enabled, trying to enable")
+            self.cavity.logger.debug(f"{self} not enabled, trying to enable")
             self.enable_pv_obj.put(linac_utils.PIEZO_DISABLE_VALUE)
             time.sleep(2)
             self.enable_pv_obj.put(linac_utils.PIEZO_ENABLE_VALUE)
@@ -164,7 +163,9 @@ class Piezo(linac_utils.SCLinacObject):
         self.enable()
         while self.in_manual:
             self.cavity.check_abort()
-            print(f"{self} feedback not enabled, trying to enable feedback")
+            self.cavity.logger.debug(
+                f"{self} feedback not enabled, trying to enable feedback"
+            )
             self.set_to_manual()
             time.sleep(5)
             self.set_to_feedback()
@@ -174,7 +175,9 @@ class Piezo(linac_utils.SCLinacObject):
         self.enable()
         while not self.in_manual:
             self.cavity.check_abort()
-            print(f"{self} feedback enabled, trying to disable feedback")
+            self.cavity.logger.debug(
+                f"{self} feedback enabled, trying to disable feedback"
+            )
             self.set_to_feedback()
             time.sleep(2)
             self.set_to_manual()
