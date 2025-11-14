@@ -1,7 +1,6 @@
 from typing import Dict, Optional
 
-from lcls_tools.common.controls.pyepics.utils import PV
-
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     SCLinacObject,
     DECARAD_BACKGROUND_READING_AVG,

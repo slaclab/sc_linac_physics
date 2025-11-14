@@ -2,8 +2,7 @@ import time
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from lcls_tools.common.controls.pyepics.utils import PV
-
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
@@ -159,13 +158,15 @@ class SSA(linac_utils.SCLinacObject):
         @param attempt: recursively incremented upon calibration failure
         @return: None
         """
-        print(f"Trying {self} calibration with drive max {drive_max}")
+        self.cavity.logger.info(
+            f"Trying {self} calibration with drive max {drive_max}"
+        )
         if drive_max < 0.4:
             raise linac_utils.SSACalibrationError(
                 f"Requested {self} drive max too low"
             )
 
-        print(f"Setting {self} max drive")
+        self.cavity.logger.info(f"Setting {self} max drive")
         self.drive_max = drive_max
 
         try:
@@ -205,19 +206,19 @@ class SSA(linac_utils.SCLinacObject):
             # number of times before raising an error)
             self.reset()
 
-            print(f"Turning {self} on")
+            self.cavity.logger.info(f"Turning {self} on")
             self.turn_on_pv_obj.put(1)
 
             while not self.is_on:
                 self.cavity.check_abort()
-                print(f"waiting for {self} to turn on")
+                self.cavity.logger.debug(f"waiting for {self} to turn on")
                 time.sleep(1)
 
         if self.cavity.cryomodule.is_harmonic_linearizer:
             self.ps_volt_setpoint2_pv_obj.put(linac_utils.HL_SSA_PS_SETPOINT)
             self.ps_volt_setpoint1_pv_obj.put(linac_utils.HL_SSA_PS_SETPOINT)
 
-        print(f"{self} on")
+        self.cavity.logger.info(f"{self} on")
 
     @property
     def turn_off_pv_obj(self) -> PV:
@@ -227,15 +228,15 @@ class SSA(linac_utils.SCLinacObject):
 
     def turn_off(self):
         if self.is_on:
-            print(f"Turning {self} off")
+            self.cavity.logger.info(f"Turning {self} off")
             self.turn_off_pv_obj.put(1)
 
             while self.is_on:
                 self.cavity.check_abort()
-                print(f"waiting for {self} to turn off")
+                self.cavity.logger.debug(f"waiting for {self} to turn off")
                 time.sleep(1)
 
-        print(f"{self} off")
+        self.cavity.logger.info(f"{self} off")
 
     @property
     def reset_pv_obj(self) -> PV:
@@ -247,7 +248,7 @@ class SSA(linac_utils.SCLinacObject):
         reset_attempt = 0
         while self.is_faulted:
             self.cavity.check_abort()
-            print(f"Resetting {self}...")
+            self.cavity.logger.info(f"Resetting {self}...")
             self.reset_pv_obj.put(1)
 
             self.wait_while_resetting()
@@ -262,13 +263,13 @@ class SSA(linac_utils.SCLinacObject):
 
             reset_attempt += 1
 
-        print(f"{self} reset")
+        self.cavity.logger.info(f"{self} reset")
 
     def wait_while_resetting(self):
         start = datetime.now()
         while self.is_resetting:
             self.cavity.check_abort()
-            print(
+            self.cavity.logger.debug(
                 f"{datetime.now().replace(microsecond=0)} Waiting for {self} to finish resetting"
             )
             time.sleep(5)
@@ -327,14 +328,13 @@ class SSA(linac_utils.SCLinacObject):
 
         self.cavity.reset_interlocks()
 
-        print(f"Starting {self} calibration")
+        self.cavity.logger.info(f"Starting {self} calibration")
         self.start_calibration()
         time.sleep(2)
 
         while self.calibration_running:
-            print(
-                f"waiting for {self} calibration to stop running",
-                datetime.now(),
+            self.cavity.logger.debug(
+                f"waiting for {self} calibration to stop running ({datetime.now()})"
             )
             time.sleep(1)
         time.sleep(2)
@@ -357,7 +357,9 @@ class SSA(linac_utils.SCLinacObject):
                 f"{self.cavity} SSA Slope out of tolerance"
             )
 
-        print(f"Pushing SSA calibration results for {self.cavity}")
+        self.cavity.logger.info(
+            f"Pushing SSA calibration results for {self.cavity}"
+        )
         self.cavity.push_ssa_slope()
 
         if save_slope:

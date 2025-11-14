@@ -7,6 +7,11 @@ from pathlib import Path
 # More readable format option
 READABLE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
 
+if sys.platform == "darwin":  # macOS
+    BASE_LOG_DIR = Path.home() / "logs"
+else:  # Linux (production)
+    BASE_LOG_DIR = Path("/home/physics/srf/logfiles")
+
 
 class ColoredFormatter(logging.Formatter):
     """Colored formatter for terminal output."""
