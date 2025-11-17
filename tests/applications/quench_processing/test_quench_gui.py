@@ -18,27 +18,6 @@ def gui(monkeypatch):
     from PyQt5.QtWidgets import QWidget
     from unittest.mock import MagicMock
 
-    # Mock QuenchCryomodule BEFORE any imports that use it
-    class MockQuenchCryomodule:
-        def __init__(self, cryo_name, linac_object):
-            self.name = cryo_name
-            self.linac = linac_object
-            self.logger = MagicMock()
-            # Add any other attributes your tests need
-            self.cavities = {}
-            for i in range(1, 9):  # Assuming 8 cavities per cryomodule
-                self.cavities[i] = MagicMock()
-
-    # Patch it everywhere it might be used
-    monkeypatch.setattr(
-        "sc_linac_physics.applications.quench_processing.quench_cryomodule.QuenchCryomodule",
-        MockQuenchCryomodule,
-    )
-    monkeypatch.setattr(
-        "sc_linac_physics.applications.quench_processing.quench_gui.QuenchCryomodule",
-        MockQuenchCryomodule,
-    )
-
     # Mock the file handler to prevent any file operations
     def mock_file_handler(*args, **kwargs):
         handler = MagicMock()

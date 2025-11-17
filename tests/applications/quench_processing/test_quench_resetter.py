@@ -8,9 +8,6 @@ from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
 )
-from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
-    QuenchCryomodule,
-)
 from sc_linac_physics.applications.quench_processing.quench_resetter import (
     check_cavities,
     CavityResetTracker,
@@ -34,9 +31,7 @@ def cavities(monkeypatch):
     )
     monkeypatch.setattr("logging.FileHandler", mock_func)
     cavity_lst: List[QuenchCavity] = list(
-        Machine(
-            cavity_class=QuenchCavity, cryomodule_class=QuenchCryomodule
-        ).all_iterator
+        Machine(cavity_class=QuenchCavity).all_iterator
     )
 
     for cavity in cavity_lst:

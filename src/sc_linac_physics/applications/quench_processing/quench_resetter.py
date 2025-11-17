@@ -8,17 +8,17 @@ from lcls_tools.common.controls.pyepics.utils import PVInvalidError, PV
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
 )
-from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
-    QUENCH_MACHINE,
-)
 from sc_linac_physics.applications.quench_processing.quench_utils import (
     QUENCH_LOG_DIR,
 )
 from sc_linac_physics.utils.logger import custom_logger
+from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     CavityFaultError,
 )
+
+QUENCH_MACHINE = Machine(cavity_class=QuenchCavity)
 
 # Module-level logger with explicit descriptive name
 logger = custom_logger(
@@ -30,7 +30,7 @@ logger = custom_logger(
 
 # Constants
 RESET_COOLDOWN_SECONDS = 3.0
-MONITORING_CYCLE_SLEEP = 1.0
+MONITORING_CYCLE_SLEEP = 10
 
 
 @dataclass
