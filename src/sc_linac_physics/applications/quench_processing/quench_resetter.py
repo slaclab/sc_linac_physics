@@ -30,7 +30,7 @@ logger = custom_logger(
 
 # Constants
 RESET_COOLDOWN_SECONDS = 3.0
-MONITORING_CYCLE_SLEEP = 10
+MONITORING_CYCLE_SLEEP = 1.0
 
 
 @dataclass
