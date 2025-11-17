@@ -45,7 +45,9 @@ def gui(monkeypatch):
         handler.setFormatter = MagicMock()
         return handler
 
-    monkeypatch.setattr("logging.FileHandler", mock_file_handler)
+    monkeypatch.setattr(
+        "logging.handlers.RotatingFileHandler", mock_file_handler
+    )
 
     # Minimal dummy to avoid pyqtgraph/PyDM internals during tests
     class DummyWaveformPlot(QWidget):

@@ -23,6 +23,7 @@ def stepper(monkeypatch):
     rack.cryomodule.name = choice(ALL_CRYOMODULES)
     rack.cryomodule.linac.name = f"L{randint(0, 3)}B"
     cavity = Cavity(cavity_num=randint(1, 8), rack_object=rack)
+    cavity.logger = MagicMock()  # Mock the logger
 
     yield StepperTuner(cavity=cavity)
 
