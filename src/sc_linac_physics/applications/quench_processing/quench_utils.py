@@ -1,5 +1,4 @@
-import sys
-from pathlib import Path
+from sc_linac_physics.utils.logger import BASE_LOG_DIR
 
 QUENCH_AMP_THRESHOLD = 0.7
 LOADED_Q_CHANGE_FOR_QUENCH = 0.6
@@ -9,7 +8,4 @@ MAX_QUENCH_RETRIES = 100
 DECARAD_SETTLE_TIME = 3
 RADIATION_LIMIT = 2
 
-if sys.platform == "darwin":  # macOS
-    BASE_LOG_DIR = Path.home() / "logs" / "quench"
-else:  # Linux (production)
-    BASE_LOG_DIR = Path("/home/physics/srf/logfiles/quench")
+QUENCH_LOG_DIR = BASE_LOG_DIR / "quench"

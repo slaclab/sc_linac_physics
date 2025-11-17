@@ -2,7 +2,7 @@ from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
 )
 from sc_linac_physics.applications.quench_processing.quench_utils import (
-    BASE_LOG_DIR,
+    QUENCH_LOG_DIR,
 )
 from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
@@ -15,7 +15,7 @@ class QuenchCryomodule(Cryomodule):
         self.logger = self._setup_logger()
 
     def _setup_logger(self):
-        log_dir = BASE_LOG_DIR / f"cm{self.name}"
+        log_dir = QUENCH_LOG_DIR / f"cm{self.name}"
         log_filename = f"cm{self.name}_quench_reset"
 
         return custom_logger(
