@@ -1,6 +1,7 @@
 import logging
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
@@ -104,6 +105,35 @@ class DataAcquisitionManager(QObject):
             output_path.name,
         ]
 
+    def _update_progress_estimate(self, chassis_id: str):
+        """Update progress estimate based on elapsed time"""
+        if chassis_id not in self.active_processes:
+            return
+
+        process_info = self.active_processes[chassis_id]
+
+        if process_info.get("actual_progress_received", False):
+            timer = process_info.get("progress_timer")
+            if timer and timer.isActive():
+                timer.stop()
+            return
+
+        current_time = time.time()
+        elapsed = current_time - process_info["start_time"]
+        expected_duration = process_info["expected_duration"]
+
+        estimated_progress = min(int((elapsed / expected_duration) * 100), 90)
+
+        if estimated_progress > process_info["last_progress"]:
+            process_info["last_progress"] = estimated_progress
+            for cavity_num in process_info["cavities"]:
+                self.acquisitionProgress.emit(
+                    chassis_id, cavity_num, estimated_progress
+                )
+            logger.debug(
+                f"Estimated progress for {chassis_id}: {estimated_progress}%"
+            )
+
     def start_acquisition(self, chassis_id: str, config: Dict):
         """Start acquisition using QProcess"""
         try:
@@ -129,6 +159,15 @@ class DataAcquisitionManager(QObject):
             )
 
             measurement_cfg = config["config"]
+            expected_duration = (
+                16384
+                * measurement_cfg.decimation
+                * measurement_cfg.buffer_count
+            ) / 2000
+            progress_timer = QTimer()
+            progress_timer.timeout.connect(
+                lambda: self._update_progress_estimate(chassis_id)
+            )
             self.active_processes[chassis_id] = {
                 "process": process,
                 "output_path": output_path,
@@ -137,17 +176,25 @@ class DataAcquisitionManager(QObject):
                 "completion_signal_received": False,
                 "last_progress": 0,
                 "cavities": selected_cavities,
+                "start_time": time.time(),
+                "expected_duration": expected_duration,
+                "progress_timer": progress_timer,
+                "actual_progress_received": False,
             }
 
             process.start(sys.executable, command_args)
 
             if not process.waitForStarted(5000):
                 error_str = process.errorString()
+                progress_timer.stop()
+                progress_timer.deleteLater()
                 if chassis_id in self.active_processes:
                     del self.active_processes[chassis_id]
                 self.acquisitionError.emit(
                     chassis_id, f"Failed to start process: {error_str}"
                 )
+            else:
+                progress_timer.start(2000)
 
         except Exception as e:
             logger.error(
@@ -170,6 +217,10 @@ class DataAcquisitionManager(QObject):
 
             if total <= 0:
                 return
+            process_info["actual_progress_received"] = True
+            timer = process_info.get("progress_timer")
+            if timer and timer.isActive():
+                timer.stop()
 
             progress = int((acquired / total) * 100)
 
@@ -236,6 +287,9 @@ class DataAcquisitionManager(QObject):
 
         if any(marker in line for marker in self.COMPLETION_MARKERS):
             process_info["completion_signal_received"] = True
+            timer = process_info.get("progress_timer")
+            if timer and timer.isActive():
+                timer.stop()
             if process_info["last_progress"] < 100:
                 for cavity_num in process_info["cavities"]:
                     self.acquisitionProgress.emit(chassis_id, cavity_num, 100)
@@ -303,6 +357,11 @@ class DataAcquisitionManager(QObject):
         self.acquisitionError.emit(chassis_id, full_error_message)
 
     def _cleanup_process_resources(self, process_info: dict):
+        timer = process_info.get("progress_timer")
+        if timer:
+            if timer.isActive():
+                timer.stop()
+            timer.deleteLater()
         process = process_info.get("process")
         if not process:
             return
@@ -330,6 +389,9 @@ class DataAcquisitionManager(QObject):
 
         process_info = self.active_processes[chassis_id]
         try:
+            timer = process_info.get("progress_timer")
+            if timer and timer.isActive():
+                timer.stop()
             if self._was_acquisition_successful(
                 exit_code, exit_status, process_info
             ):
@@ -455,6 +517,9 @@ class DataAcquisitionManager(QObject):
         """Stop a running acquisition process."""
         process_info = self.active_processes.get(chassis_id)
         if process_info:
+            timer = process_info.get("progress_timer")
+            if timer and timer.isActive():
+                timer.stop()
             process = process_info.get("process")
             if process and process.state() != QProcess.NotRunning:
                 process.terminate()
