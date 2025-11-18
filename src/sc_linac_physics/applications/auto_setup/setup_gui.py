@@ -10,7 +10,6 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QMessageBox,
 )
-from lcls_tools.common.controls.pyepics.utils import PV
 from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
 from pydm import Display
 
@@ -19,6 +18,7 @@ from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
 )
 from sc_linac_physics.applications.auto_setup.frontend.gui_linac import GUILinac
 from sc_linac_physics.applications.auto_setup.frontend.utils import Settings
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.qt import make_sanity_check_popup
 from sc_linac_physics.utils.sc_linac import linac_utils
 

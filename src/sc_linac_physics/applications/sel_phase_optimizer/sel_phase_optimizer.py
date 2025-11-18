@@ -8,13 +8,12 @@ import argparse
 import time
 from typing import List
 
-from lcls_tools.common.controls.pyepics.utils import PV, PVInvalidError
-
 from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import (
     SEL_MACHINE,
     SELCavity,
     MAX_STEP,
 )
+from sc_linac_physics.utils.epics import PV, PVInvalidError
 
 HEARTBEAT_PV = PV("PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT")
 

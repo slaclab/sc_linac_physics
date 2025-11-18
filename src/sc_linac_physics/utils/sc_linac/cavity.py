@@ -2,12 +2,7 @@ import time
 from datetime import datetime
 from typing import Optional, Callable, TYPE_CHECKING
 
-from lcls_tools.common.controls.pyepics.utils import (
-    PV,
-    EPICS_INVALID_VAL,
-    PVInvalidError,
-)
-
+from sc_linac_physics.utils.epics import PV, EPICS_INVALID_VAL, PVInvalidError
 from sc_linac_physics.utils.sc_linac import linac_utils
 from sc_linac_physics.utils.sc_linac.linac_utils import STATUS_RUNNING_VALUE
 

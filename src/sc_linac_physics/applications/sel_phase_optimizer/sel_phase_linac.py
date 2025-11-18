@@ -4,10 +4,10 @@ import pathlib
 from typing import Optional, Dict
 
 import numpy as np
-from lcls_tools.common.controls.pyepics.utils import PV
 from lcls_tools.common.logger import logger
 from scipy import stats
 
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import RF_MODE_SELAP
