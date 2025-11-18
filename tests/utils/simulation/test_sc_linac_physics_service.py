@@ -149,12 +149,19 @@ class TestGlobalLaunchers:
 
         SCLinacPhysicsService()
 
-        sc_linac_physics_service.SetupGlobalPVGroup.assert_called_once_with(
-            prefix="ACCL:SYS0:SC:"
-        )
-        sc_linac_physics_service.OffGlobalPVGroup.assert_called_once_with(
-            prefix="ACCL:SYS0:SC:"
-        )
+        # Check that SetupGlobalPVGroup was called with prefix and linac_groups
+        call_args = sc_linac_physics_service.SetupGlobalPVGroup.call_args
+        assert call_args.kwargs["prefix"] == "ACCL:SYS0:SC:"
+        assert "linac_groups" in call_args.kwargs
+        assert isinstance(call_args.kwargs["linac_groups"], list)
+        assert len(call_args.kwargs["linac_groups"]) == 4  # Number of linacs
+
+        # Similarly for OffGlobalPVGroup
+        call_args = sc_linac_physics_service.OffGlobalPVGroup.call_args
+        assert call_args.kwargs["prefix"] == "ACCL:SYS0:SC:"
+        assert "linac_groups" in call_args.kwargs
+        assert isinstance(call_args.kwargs["linac_groups"], list)
+        assert len(call_args.kwargs["linac_groups"]) == 4  # Number of linacs
 
 
 class TestLinacPVGroups:
