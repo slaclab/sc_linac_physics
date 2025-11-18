@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.1.0 (2025-11-18)
+
+### Features
+
+- **microphonics**: Add time-based progress estimation for data acquisition
+  ([#151](https://github.com/slaclab/sc_linac_physics/pull/151),
+  [`5d9d003`](https://github.com/slaclab/sc_linac_physics/commit/5d9d0033fb65a7f12e90a56e32b709714a288992))
+
+
 ## v3.0.3 (2025-11-12)
 
 ### Chores
