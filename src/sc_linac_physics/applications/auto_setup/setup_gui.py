@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -91,11 +91,19 @@ class SetupGUI(Display):
         self.linac_widgets: List[GUILinac] = []
         self.populate_linac_widgets()
 
-        self.linac_aact_pvs: List[PV] = [
-            PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)
-        ]
+        # Initialize PVs as None, create them lazily
+        self._linac_aact_pvs: Optional[List[PV]] = None
 
         self.populate_tabs()
+
+    @property
+    def linac_aact_pvs(self) -> List[PV]:
+        """Lazy initialization of AACT PVs"""
+        if self._linac_aact_pvs is None:
+            self._linac_aact_pvs = [
+                PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)
+            ]
+        return self._linac_aact_pvs
 
     def populate_tabs(self):
         linac_tab_widget: QTabWidget = self.tabWidget_linac

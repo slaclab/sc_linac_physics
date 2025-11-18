@@ -1,6 +1,8 @@
 from time import sleep
+from typing import Optional, Union, List, Any
 from unittest.mock import MagicMock
 
+import numpy as np
 from epics import PV as EPICS_PV
 
 # Import your custom logger
@@ -66,6 +68,10 @@ class PV(EPICS_PV):
         connection_callback=None,
         access_callback=None,
     ):
+        # Initialize recursion guard BEFORE calling super().__init__
+        # because super().__init__ might trigger callbacks
+        self._in_ensure_connected = False
+
         if connection_timeout is None:
             connection_timeout = self.DEFAULT_CONNECTION_TIMEOUT
 
@@ -96,39 +102,69 @@ class PV(EPICS_PV):
         status = "connected" if self.connected else "disconnected"
         return f"PV('{self.pvname}', {status})"
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.disconnect()
+        return False
+
+    def _ensure_connected(self, timeout=None):
+        """
+        Ensure PV is connected, raise exception if not
+        Protected against recursion.
+
+        Raises:
+            PVConnectionError: If connection fails
+        """
+        # Quick check - if already connected, return immediately
+        if self.connected:
+            return
+
+        # Prevent recursion from callbacks or nested calls
+        if self._in_ensure_connected:
+            error_msg = (
+                f"PV {self.pvname} not connected (recursive check detected)"
+            )
+            logger.error(error_msg)
+            raise PVConnectionError(error_msg)
+
+        self._in_ensure_connected = True
+        try:
+            timeout = timeout or self.DEFAULT_CONNECTION_TIMEOUT
+
+            if not self.wait_for_connection(timeout=timeout):
+                error_msg = (
+                    f"PV {self.pvname} failed to connect within {timeout}s"
+                )
+                logger.error(error_msg)
+                raise PVConnectionError(error_msg)
+
+            logger.warning(f"PV {self.pvname} reconnected after disconnection")
+        finally:
+            self._in_ensure_connected = False
+
+    def disconnect(self, deepclean=True):
+        """Clean disconnect"""
+        try:
+            super().disconnect()
+        except Exception as e:
+            logger.warning(f"Error disconnecting PV {self.pvname}: {e}")
+
     @property
     def val(self):
         """Shorthand for getting current value"""
         return self.get()
 
-    def _ensure_connected(self, timeout=None):
-        """
-        Ensure PV is connected, raise exception if not
-
-        Raises:
-            PVConnectionError: If connection fails
-        """
-        if self.connected:
-            return
-
-        timeout = timeout or self.DEFAULT_CONNECTION_TIMEOUT
-
-        if not self.wait_for_connection(timeout=timeout):
-            error_msg = f"PV {self.pvname} failed to connect within {timeout}s"
-            logger.error(error_msg)
-            raise PVConnectionError(error_msg)
-
-        logger.warning(f"PV {self.pvname} reconnected after disconnection")
-
     def get(
         self,
-        count=None,
-        as_string=False,
-        as_numpy=True,
-        timeout=None,
-        with_ctrlvars=False,
-        use_monitor=None,
-    ):
+        count: Optional[int] = None,
+        as_string: bool = False,
+        as_numpy: bool = True,
+        timeout: Optional[float] = None,
+        with_ctrlvars: bool = False,
+        use_monitor: Optional[bool] = None,
+    ) -> Union[int, float, str, np.ndarray, List]:
         """
         Get PV value with automatic retry logic
 
@@ -392,40 +428,58 @@ class PV(EPICS_PV):
         Raises:
             PVInvalidError: If raise_on_alarm=True and PV is alarming
         """
-        severity = self.severity
+        severity_snapshot = self.severity
 
         # Only log warnings and errors
-        if severity == EPICS_MINOR_VAL:
+        if severity_snapshot == EPICS_MINOR_VAL:
             logger.warning(f"PV {self.pvname} has MINOR alarm")
             if raise_on_alarm:
                 raise PVInvalidError(f"PV {self.pvname} has MINOR alarm")
-        elif severity == EPICS_MAJOR_VAL:
+        elif severity_snapshot == EPICS_MAJOR_VAL:
             logger.error(f"PV {self.pvname} has MAJOR alarm")
             if raise_on_alarm:
                 raise PVInvalidError(f"PV {self.pvname} has MAJOR alarm")
-        elif severity == EPICS_INVALID_VAL:
+        elif severity_snapshot == EPICS_INVALID_VAL:
             logger.error(f"PV {self.pvname} has INVALID alarm")
             if raise_on_alarm:
                 raise PVInvalidError(f"PV {self.pvname} has INVALID alarm")
 
-        return severity
+        return severity_snapshot
 
 
 def make_mock_pv(
-    pv_name: str = None,
-    get_val=None,
-    severity=EPICS_NO_ALARM_VAL,
-    connected=True,
+    pv_name: str = "MOCK:PV",
+    get_val: Any = 0.0,
+    connected: bool = True,
+    severity: int = EPICS_NO_ALARM_VAL,
 ) -> MagicMock:
-    """Create a mock PV for testing"""
-    mock = MagicMock(spec=PV)
-    mock.pvname = pv_name or "MOCK:PV"
-    mock.put.return_value = None
-    mock.get.return_value = get_val
-    mock.severity = severity
-    mock.connected = connected
-    mock.auto_monitor = True
-    mock.wait_for_connection.return_value = connected
-    mock.validate_value.return_value = True
-    mock.check_alarm.return_value = severity
-    return mock
+    """
+    Create a mock PV object for testing.
+
+    Args:
+        pv_name: PV name
+        get_val: Value to return from get()
+        connected: Connection status
+        severity: Alarm severity
+
+    Returns:
+        MagicMock configured to behave like a PV
+    """
+    # Don't use spec=PV to allow flexible attribute setting
+    mock_pv = MagicMock()
+
+    # Basic attributes
+    mock_pv.pvname = pv_name
+    mock_pv.connected = connected
+    mock_pv.severity = severity
+    mock_pv.auto_monitor = True
+    mock_pv.val = get_val
+
+    # Methods
+    mock_pv.get.return_value = get_val
+    mock_pv.put.return_value = 1  # Success
+    mock_pv.wait_for_connection.return_value = connected
+    mock_pv.validate_value.return_value = True
+    mock_pv.check_alarm.return_value = severity
+
+    return mock_pv

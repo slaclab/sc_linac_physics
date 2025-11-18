@@ -2,8 +2,8 @@ from random import randint, choice
 from unittest.mock import MagicMock
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
+from sc_linac_physics.utils.epics import make_mock_pv
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     RF_MODE_SELAP,
@@ -30,7 +30,13 @@ def cavity(monkeypatch):
     )
     monkeypatch.setattr("logging.FileHandler", mock_func)
 
-    # Import after patching, so the module sees the patched handlers
+    # Patch PV class in the module where it will be used
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac.PV",
+        lambda *args, **kwargs: make_mock_pv(),
+    )
+
+    # Import SELCavity after all patching
     from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import (
         SELCavity,
     )

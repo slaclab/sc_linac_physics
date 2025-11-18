@@ -3,10 +3,102 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pyqtgraph as pg
 import pytest
 from qtpy.QtWidgets import QApplication
+
+
+# tests/conftest.py
+
+
+class FakeEPICS_PV:
+    """Fake EPICS PV for testing - mimics the interface"""
+
+    def __init__(
+        self,
+        pvname,
+        connection_timeout=None,
+        callback=None,
+        form="time",
+        verbose=False,
+        auto_monitor=True,
+        count=None,
+        connection_callback=None,
+        access_callback=None,
+    ):
+        self.pvname = pvname
+        self._connected = True
+        self._get_value = 42.0
+        self._put_return = 1
+        self.severity = 0  # EPICS_NO_ALARM_VAL
+        self.auto_monitor = auto_monitor
+
+    @property
+    def connected(self):
+        return self._connected
+
+    def wait_for_connection(self, timeout=None):
+        return self._connected
+
+    def get(
+        self,
+        count=None,
+        as_string=False,
+        as_numpy=True,
+        timeout=None,
+        with_ctrlvars=False,
+        use_monitor=None,
+    ):
+        return self._get_value
+
+    def put(
+        self,
+        value,
+        wait=True,
+        timeout=None,
+        use_complete=False,
+        callback=None,
+        callback_data=None,
+    ):
+        return self._put_return
+
+
+# Create fake epics exceptions
+class FakeCASeverityException(Exception):
+    """Fake CASeverityException"""
+
+    pass
+
+
+def fake_with_initial_context(func):
+    """Fake decorator for withInitialContext"""
+    return func
+
+
+def pytest_configure(config):
+    """
+    Pytest hook that runs before test collection.
+    Inject our fake EPICS module into sys.modules before any test imports happen.
+    """
+    # Create a fake epics module with all necessary attributes
+    fake_epics = MagicMock()
+    fake_epics.PV = FakeEPICS_PV
+
+    # Create fake epics.ca submodule
+    fake_epics_ca = MagicMock()
+    fake_epics_ca.CASeverityException = FakeCASeverityException
+    fake_epics_ca.withInitialContext = fake_with_initial_context
+
+    # Set up the ca attribute
+    fake_epics.ca = fake_epics_ca
+
+    # Inject into sys.modules
+    sys.modules["epics"] = fake_epics
+    sys.modules["epics.pv"] = fake_epics
+    sys.modules["epics.ca"] = fake_epics_ca
+
 
 # Mock filesystem operations BEFORE any imports that might use them
 _original_os_mkdir = os.mkdir

@@ -457,7 +457,7 @@ class Cavity(linac_utils.SCLinacObject):
     def ades(self):
         if not self._ades_pv_obj:
             self._ades_pv_obj = PV(self.ades_pv)
-        return self._ades_pv_obj.get(use_caget=False)
+        return self._ades_pv_obj.get()
 
     @ades.setter
     def ades(self, value: float):
@@ -469,7 +469,7 @@ class Cavity(linac_utils.SCLinacObject):
     def acon(self):
         if not self._acon_pv_obj:
             self._acon_pv_obj = PV(self.acon_pv)
-        return self._acon_pv_obj.get(use_caget=False)
+        return self._acon_pv_obj.get()
 
     @acon.setter
     def acon(self, value: float):
@@ -530,7 +530,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def hw_mode(self):
-        return self.hw_mode_pv_obj.get(use_caget=False)
+        return self.hw_mode_pv_obj.get()
 
     @property
     def is_online(self) -> bool:
@@ -929,7 +929,7 @@ class Cavity(linac_utils.SCLinacObject):
     def characterization_timestamp(self) -> datetime:
         if not self._char_timestamp_pv_obj:
             self._char_timestamp_pv_obj = PV(self.char_timestamp_pv)
-        date_string = self._char_timestamp_pv_obj.get(use_caget=False)
+        date_string = self._char_timestamp_pv_obj.get()
         time_readback = datetime.strptime(date_string, "%Y-%m-%d-%H:%M:%S")
         return time_readback
 
