@@ -3,8 +3,8 @@ import time
 from datetime import datetime
 from typing import Optional, Callable, TYPE_CHECKING
 
-from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
 from sc_linac_physics.utils.epics import PV, EPICS_INVALID_VAL, PVInvalidError
+from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
 from sc_linac_physics.utils.sc_linac import linac_utils
 from sc_linac_physics.utils.sc_linac.linac_utils import STATUS_RUNNING_VALUE
 
@@ -379,7 +379,7 @@ class Cavity(linac_utils.SCLinacObject):
         self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_SELA)
 
     def set_selap_mode(self):
-        self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_SELAP, use_caput=False)
+        self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_SELAP)
 
     @property
     def drive_level_pv_obj(self):
