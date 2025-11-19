@@ -4,6 +4,7 @@ import logging.handlers
 import os
 import subprocess
 import sys
+import tempfile
 from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch, Mock
@@ -11,6 +12,134 @@ from unittest.mock import MagicMock, patch, Mock
 import pyqtgraph as pg
 import pytest
 from qtpy.QtWidgets import QApplication
+
+# ============================================================================
+# Early Filesystem Mocking (BEFORE imports)
+# ============================================================================
+
+# Create temp directory for /home/physics redirection
+_TEMP_PHYSICS_DIR = Path(tempfile.gettempdir()) / "test_physics_home"
+_TEMP_PHYSICS_DIR.mkdir(parents=True, exist_ok=True)
+
+_original_os_mkdir = os.mkdir
+_original_os_makedirs = os.makedirs
+_original_open = builtins.open
+_original_path_mkdir = Path.mkdir
+_original_path_open = Path.open
+
+
+def _is_log_path(path_str):
+    """Check if path is related to logging."""
+    return "log" in path_str.lower() or path_str.endswith(".log")
+
+
+def _is_physics_path(path_str):
+    """Check if path is under /home/physics."""
+    return "/home/physics" in path_str
+
+
+def _create_mock_file():
+    """Create a mock file object for log files."""
+    mock_file = Mock()
+    mock_file.__enter__ = Mock(return_value=mock_file)
+    mock_file.__exit__ = Mock(return_value=None)
+    mock_file.write = Mock()
+    mock_file.read = Mock(return_value="")
+    mock_file.flush = Mock()
+    mock_file.close = Mock()
+    return mock_file
+
+
+def _redirect_physics_path(path_str):
+    """Convert /home/physics path to temp directory."""
+    return _TEMP_PHYSICS_DIR / path_str.replace("/home/physics/", "").lstrip(
+        "/"
+    )
+
+
+def _mock_os_mkdir(path, mode=0o777, *, dir_fd=None):
+    """Mock os.mkdir to handle /home/physics and log paths."""
+    path_str = str(path)
+
+    if _is_log_path(path_str):
+        return
+
+    if _is_physics_path(path_str):
+        new_path = _redirect_physics_path(path_str)
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        if not new_path.exists():
+            return _original_os_mkdir(str(new_path), mode)
+        return
+
+    return _original_os_mkdir(path, mode, dir_fd=dir_fd)
+
+
+def _mock_os_makedirs(name, mode=0o777, exist_ok=False):
+    """Mock os.makedirs to handle /home/physics and log paths."""
+    path_str = str(name)
+
+    if _is_log_path(path_str):
+        return
+
+    if _is_physics_path(path_str):
+        new_path = _redirect_physics_path(path_str)
+        return _original_os_makedirs(str(new_path), mode, exist_ok=True)
+
+    return _original_os_makedirs(name, mode, exist_ok)
+
+
+def _mock_open(file, mode="r", *args, **kwargs):
+    """Mock open to handle /home/physics and log files."""
+    file_str = str(file)
+
+    if _is_log_path(file_str):
+        return _create_mock_file()
+
+    if _is_physics_path(file_str):
+        new_file = _redirect_physics_path(file_str)
+        new_file.parent.mkdir(parents=True, exist_ok=True)
+        return _original_open(new_file, mode, *args, **kwargs)
+
+    return _original_open(file, mode, *args, **kwargs)
+
+
+def _mock_path_mkdir(self, mode=0o777, parents=False, exist_ok=False):
+    """Mock Path.mkdir to handle /home/physics and log paths."""
+    path_str = str(self)
+
+    if _is_log_path(path_str):
+        return None
+
+    if _is_physics_path(path_str):
+        new_path = _redirect_physics_path(path_str)
+        return new_path.mkdir(mode=mode, parents=True, exist_ok=True)
+
+    return _original_path_mkdir(
+        self, mode=mode, parents=parents, exist_ok=exist_ok
+    )
+
+
+def _mock_path_open(self, mode="r", *args, **kwargs):
+    """Mock Path.open to handle /home/physics and log files."""
+    path_str = str(self)
+
+    if _is_log_path(path_str):
+        return _create_mock_file()
+
+    if _is_physics_path(path_str):
+        new_path = _redirect_physics_path(path_str)
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        return new_path.open(mode=mode, *args, **kwargs)
+
+    return _original_path_open(self, mode=mode, *args, **kwargs)
+
+
+# Apply mocks IMMEDIATELY (before any test imports)
+os.mkdir = _mock_os_mkdir
+os.makedirs = _mock_os_makedirs
+builtins.open = _mock_open
+Path.mkdir = _mock_path_mkdir
+Path.open = _mock_path_open
 
 
 # ============================================================================
@@ -31,6 +160,15 @@ def pytest_configure(config):
 
     # Inject fake EPICS module
     _setup_fake_epics()
+
+
+def pytest_unconfigure(config):
+    """Restore original functions after all tests complete."""
+    os.mkdir = _original_os_mkdir
+    os.makedirs = _original_os_makedirs
+    builtins.open = _original_open
+    Path.mkdir = _original_path_mkdir
+    Path.open = _original_path_open
 
 
 def _setup_fake_epics():
@@ -115,7 +253,6 @@ class FakeEPICS_PV:
     ):
         self._get_value = value
 
-        # Trigger callbacks
         for cb in self.callbacks.values():
             try:
                 cb(pvname=self.pvname, value=value, timestamp=None)
@@ -282,109 +419,6 @@ def clear_logger_cache():
     yield
 
     sc_linac_physics.utils.logger._created_loggers.clear()
-
-
-# ============================================================================
-# Filesystem Mocking
-# ============================================================================
-
-_original_os_mkdir = os.mkdir
-_original_open = builtins.open
-
-
-def _is_log_path(path_str):
-    """Check if path is related to logging."""
-    return "log" in path_str.lower() or path_str.endswith(".log")
-
-
-def _is_physics_path(path_str):
-    """Check if path is under /home/physics."""
-    return "/home/physics" in path_str
-
-
-def _create_mock_file():
-    """Create a mock file object for log files."""
-    mock_file = Mock()
-    mock_file.__enter__ = Mock(return_value=mock_file)
-    mock_file.__exit__ = Mock(return_value=None)
-    mock_file.write = Mock()
-    mock_file.read = Mock(return_value="")
-    mock_file.flush = Mock()
-    mock_file.close = Mock()
-    return mock_file
-
-
-@pytest.fixture(autouse=True, scope="session")
-def setup_test_environment(tmp_path_factory):
-    """Set up test environment with redirected filesystem operations."""
-    temp_physics = tmp_path_factory.mktemp("physics_home")
-
-    def mock_os_mkdir(path, mode=0o777, *, dir_fd=None):
-        path_str = str(path)
-
-        # Ignore log directories
-        if _is_log_path(path_str):
-            return
-
-        # Redirect /home/physics paths
-        if _is_physics_path(path_str):
-            new_path = temp_physics / path_str.replace("/home/physics/", "")
-            new_path.parent.mkdir(parents=True, exist_ok=True)
-            if not new_path.exists():
-                return _original_os_mkdir(str(new_path), mode)
-            return
-
-        return _original_os_mkdir(path, mode, dir_fd=dir_fd)
-
-    def mock_open(file, mode="r", *args, **kwargs):
-        file_str = str(file)
-
-        # Mock log files
-        if _is_log_path(file_str):
-            return _create_mock_file()
-
-        # Redirect /home/physics paths
-        if _is_physics_path(file_str):
-            new_file = temp_physics / file_str.replace("/home/physics/", "")
-            new_file.parent.mkdir(parents=True, exist_ok=True)
-            return _original_open(new_file, mode, *args, **kwargs)
-
-        return _original_open(file, mode, *args, **kwargs)
-
-    # Apply mocks
-    os.mkdir = mock_os_mkdir
-    builtins.open = mock_open
-
-    yield temp_physics
-
-    # Restore originals
-    os.mkdir = _original_os_mkdir
-    builtins.open = _original_open
-
-
-@pytest.fixture(autouse=True)
-def prevent_log_file_creation():
-    """Prevent log file creation by mocking Path operations."""
-    original_path_mkdir = Path.mkdir
-    original_path_open = Path.open
-
-    def mock_mkdir(self, mode=0o777, parents=False, exist_ok=False):
-        if _is_log_path(str(self)):
-            return None
-        return original_path_mkdir(
-            self, mode=mode, parents=parents, exist_ok=exist_ok
-        )
-
-    def mock_open(self, mode="r", *args, **kwargs):
-        if _is_log_path(str(self)):
-            return _create_mock_file()
-        return original_path_open(self, mode=mode, *args, **kwargs)
-
-    with (
-        patch.object(Path, "mkdir", mock_mkdir),
-        patch.object(Path, "open", mock_open),
-    ):
-        yield
 
 
 # ============================================================================
