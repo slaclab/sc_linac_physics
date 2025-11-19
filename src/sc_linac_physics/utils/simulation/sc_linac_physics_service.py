@@ -30,14 +30,26 @@ from sc_linac_physics.utils.simulation.fault_service import (
     PPSPVGroup,
 )
 from sc_linac_physics.utils.simulation.launcher_service import (
-    OffCavityPVGroup,
-    OffCMPVGroup,
-    OffGlobalPVGroup,
-    OffLinacPVGroup,
     SetupCavityPVGroup,
     SetupCMPVGroup,
     SetupGlobalPVGroup,
     SetupLinacPVGroup,
+    OffCavityPVGroup,
+    OffCMPVGroup,
+    OffGlobalPVGroup,
+    OffLinacPVGroup,
+    ColdCavityPVGroup,
+    ColdCMPVGroup,
+    ColdGlobalPVGroup,
+    ColdLinacPVGroup,
+    ParkCavityPVGroup,
+    ParkCMPVGroup,
+    ParkGlobalPVGroup,
+    ParkLinacPVGroup,
+    ColdRackPVGroup,
+    ParkRackPVGroup,
+    SetupRackPVGroup,
+    OffRackPVGroup,
 )
 from sc_linac_physics.utils.simulation.magnet_service import MAGNETPVGroup
 from sc_linac_physics.utils.simulation.rack_service import RACKPVGroup
@@ -64,6 +76,70 @@ ALARM_CHANNELS = [
 
 ALARM_STATES = ("RUNNING", "NOT_RUNNING", "INVALID")
 RACK_A_CAVITIES = range(1, 5)
+
+# Launcher type configuration
+# Launcher type configuration
+LAUNCHER_TYPES = {
+    "setup": {
+        "cavity": SetupCavityPVGroup,
+        "cm": SetupCMPVGroup,
+        "linac": SetupLinacPVGroup,
+        "global": SetupGlobalPVGroup,
+        "rack": SetupRackPVGroup,
+    },
+    "off": {
+        "cavity": OffCavityPVGroup,
+        "cm": OffCMPVGroup,
+        "linac": OffLinacPVGroup,
+        "global": OffGlobalPVGroup,
+        "rack": OffRackPVGroup,
+    },
+    "cold": {
+        "cavity": ColdCavityPVGroup,
+        "cm": ColdCMPVGroup,
+        "linac": ColdLinacPVGroup,
+        "global": ColdGlobalPVGroup,
+        "rack": ColdRackPVGroup,
+    },
+    "park": {
+        "cavity": ParkCavityPVGroup,
+        "cm": ParkCMPVGroup,
+        "linac": ParkLinacPVGroup,
+        "global": ParkGlobalPVGroup,
+        "rack": ParkRackPVGroup,
+    },
+}
+
+
+class LauncherGroups:
+    """Container for launcher groups at a specific level"""
+
+    def __init__(self):
+        self.setup = None
+        self.off = None
+        self.cold = None
+        self.park = None
+
+    def set(self, launcher_type, group):
+        """Set a launcher group by type name"""
+        setattr(self, launcher_type, group)
+
+    def get(self, launcher_type):
+        """Get a launcher group by type name"""
+        return getattr(self, launcher_type)
+
+    def all(self):
+        """Return all launcher groups as a list"""
+        return [self.setup, self.off, self.cold, self.park]
+
+    def by_type(self):
+        """Return dict of launcher type -> group"""
+        return {
+            "setup": self.setup,
+            "off": self.off,
+            "cold": self.cold,
+            "park": self.park,
+        }
 
 
 class SCLinacPhysicsService(Service):
@@ -99,33 +175,34 @@ class SCLinacPhysicsService(Service):
 
     def _setup_linac_pvs(self):
         """Set up all linac-related PVs."""
-        setup_linac_groups = []
-        off_linac_groups = []
+        linac_launchers = LauncherGroups()
 
         for linac_idx, (linac_name, cm_list) in enumerate(LINAC_TUPLES):
-            setup_linac, off_linac = self._setup_single_linac(
+            single_linac_launchers = self._setup_single_linac(
                 linac_idx, linac_name, cm_list
             )
-            setup_linac_groups.append(setup_linac)
-            off_linac_groups.append(off_linac)
 
-        # Add global setup/off groups with references to linac groups
-        self.add_pvs(
-            SetupGlobalPVGroup(
-                prefix="ACCL:SYS0:SC:", linac_groups=setup_linac_groups
+            # Collect launcher groups by type
+            for launcher_type in LAUNCHER_TYPES.keys():
+                if linac_launchers.get(launcher_type) is None:
+                    linac_launchers.set(launcher_type, [])
+                linac_launchers.get(launcher_type).append(
+                    single_linac_launchers.get(launcher_type)
+                )
+
+        # Add global launcher groups
+        for launcher_type, classes in LAUNCHER_TYPES.items():
+            global_launcher = classes["global"](
+                prefix="ACCL:SYS0:SC:",
+                linac_groups=linac_launchers.get(launcher_type),
             )
-        )
-        self.add_pvs(
-            OffGlobalPVGroup(
-                prefix="ACCL:SYS0:SC:", linac_groups=off_linac_groups
-            )
-        )
+            self.add_pvs(global_launcher)
 
     def _setup_single_linac(self, linac_idx, linac_name, cm_list):
         """Set up PVs for a single linac.
 
         Returns:
-            tuple: (SetupLinacPVGroup, OffLinacPVGroup)
+            LauncherGroups: Container with all launcher types
         """
         linac_prefix = f"ACCL:{linac_name}:1:"
 
@@ -140,41 +217,62 @@ class SCLinacPhysicsService(Service):
             cm_list = cm_list + L1BHL
             self[f"{linac_prefix}HL_AACTMEANSUM"] = ChannelFloat(value=0.0)
 
-        # Set up cryomodules and collect setup groups
-        setup_cm_groups = []
-        off_cm_groups = []
+        # Set up cryomodules and collect launcher groups
+        cm_launchers = LauncherGroups()
 
         for cm_name in cm_list:
-            setup_cm, off_cm = self._setup_cryomodule(linac_name, cm_name)
-            setup_cm_groups.append(setup_cm)
-            off_cm_groups.append(off_cm)
+            single_cm_launchers = self._setup_cryomodule(linac_name, cm_name)
 
-        # Create linac-level groups with references to CM groups
-        setup_linac = SetupLinacPVGroup(
-            prefix=linac_prefix,
-            linac_idx=linac_idx,
-            cm_groups=setup_cm_groups,
-        )
-        off_linac = OffLinacPVGroup(
-            prefix=linac_prefix,
-            linac_idx=linac_idx,
-            cm_groups=off_cm_groups,
-        )
+            for launcher_type in LAUNCHER_TYPES.keys():
+                if cm_launchers.get(launcher_type) is None:
+                    cm_launchers.set(launcher_type, [])
+                cm_launchers.get(launcher_type).append(
+                    single_cm_launchers.get(launcher_type)
+                )
 
-        self.add_pvs(setup_linac)
-        self.add_pvs(off_linac)
+        # Create linac-level launcher groups
+        linac_launchers = LauncherGroups()
+        for launcher_type, classes in LAUNCHER_TYPES.items():
+            launcher = classes["linac"](
+                prefix=linac_prefix,
+                linac_idx=linac_idx,
+                cm_groups=cm_launchers.get(launcher_type),
+            )
+            self.add_pvs(launcher)
+            linac_launchers.set(launcher_type, launcher)
 
-        return setup_linac, off_linac
+        return linac_launchers
 
     def _setup_cryomodule(self, linac_name, cm_name):
         """Set up PVs for a single cryomodule.
 
         Returns:
-            tuple: (SetupCMPVGroup, OffCMPVGroup)
+            LauncherGroups: Container with all launcher types
         """
         is_hl = cm_name in L1BHL
         cm_prefix = f"ACCL:{linac_name}:{cm_name}"
 
+        # Set up cryomodule-level PVs
+        self._setup_cryomodule_level_pvs(cm_name, cm_prefix, linac_name)
+
+        # Set up cavities and collect launcher groups organized by cavity and rack
+        cavity_launchers, rack_launchers = self._setup_cavities_and_racks(
+            linac_name, cm_name, cm_prefix, is_hl
+        )
+
+        # Set up rack-level launcher groups
+        self._setup_rack_launchers(cm_prefix, cm_name, rack_launchers)
+
+        # Set up RFS groups
+        self._setup_rfs_groups(cm_prefix)
+
+        # Create and return CM-level launcher groups
+        return self._create_cm_launcher_groups(
+            cm_prefix, cm_name, cavity_launchers
+        )
+
+    def _setup_cryomodule_level_pvs(self, cm_name, cm_prefix, linac_name):
+        """Set up PVs at the cryomodule level."""
         # Cryomodule-level channels
         self.add_pvs(HeaterPVGroup(prefix=f"CPIC:CM{cm_name}:0000:EHCV:"))
         self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(
@@ -193,39 +291,99 @@ class SCLinacPhysicsService(Service):
         self.add_pvs(CouplerVacuumPVGroup(prefix=f"{cm_prefix}10:"))
         self.add_pvs(CryomodulePVGroup(prefix=f"{cm_prefix}00:"))
 
-        # Set up cavities and collect setup groups
-        setup_cavity_groups = []
-        off_cavity_groups = []
+    def _setup_cavities_and_racks(self, linac_name, cm_name, cm_prefix, is_hl):
+        """Set up all cavities and organize launcher groups by cavity and rack.
+
+        Returns:
+            tuple: (cavity_launchers, rack_launchers) where rack_launchers is a dict
+                   with keys 'A' and 'B'
+        """
+        cavity_launchers = LauncherGroups()
+        rack_launchers = {"A": LauncherGroups(), "B": LauncherGroups()}
 
         for cav_num in range(1, 9):
-            setup_cav, off_cav = self._setup_cavity(
+            single_cavity_launchers = self._setup_cavity(
                 linac_name, cm_name, cav_num, cm_prefix, is_hl
             )
-            setup_cavity_groups.append(setup_cav)
-            off_cavity_groups.append(off_cav)
 
-        # Create CM-level groups with references to cavity groups
-        setup_cm = SetupCMPVGroup(
-            prefix=f"{cm_prefix}00:",
-            cm_name=cm_name,
-            cavity_groups=setup_cavity_groups,
-        )
-        off_cm = OffCMPVGroup(
-            prefix=f"{cm_prefix}00:",
-            cm_name=cm_name,
-            cavity_groups=off_cavity_groups,
-        )
+            # Determine which rack this cavity belongs to
+            rack_key = "A" if cav_num in RACK_A_CAVITIES else "B"
 
-        self.add_pvs(setup_cm)
-        self.add_pvs(off_cm)
+            # Collect launcher groups
+            for launcher_type in LAUNCHER_TYPES.keys():
+                # Initialize if needed
+                if cavity_launchers.get(launcher_type) is None:
+                    cavity_launchers.set(launcher_type, [])
+                if rack_launchers[rack_key].get(launcher_type) is None:
+                    rack_launchers[rack_key].set(launcher_type, [])
 
-        return setup_cm, off_cm
+                # Append to both cavity and rack collections
+                launcher = single_cavity_launchers.get(launcher_type)
+                cavity_launchers.get(launcher_type).append(launcher)
+                rack_launchers[rack_key].get(launcher_type).append(launcher)
+
+        return cavity_launchers, rack_launchers
+
+    def _setup_rack_launchers(self, cm_prefix, cm_name, rack_launchers):
+        """Set up rack-level PVs and launcher groups.
+
+        Args:
+            cm_prefix: Cryomodule prefix string
+            cm_name: Cryomodule name
+            rack_launchers: Dict with keys 'A' and 'B' containing LauncherGroups
+        """
+        rack_config = [
+            ("RACKA:", "A"),
+            ("RACKB:", "B"),
+        ]
+
+        for rack_suffix, rack_letter in rack_config:
+            rack_prefix = f"{cm_prefix}00:{rack_suffix}"
+            self.add_pvs(RACKPVGroup(prefix=rack_prefix))
+
+            # Create rack launcher groups for each launcher type
+            for launcher_type, classes in LAUNCHER_TYPES.items():
+                launcher = classes["rack"](
+                    prefix=rack_prefix,
+                    cm_name=cm_name,
+                    rack_name=rack_letter,
+                    rack_groups=rack_launchers[rack_letter].get(launcher_type),
+                )
+                self.add_pvs(launcher)
+
+    def _setup_rfs_groups(self, cm_prefix):
+        """Set up RF Station groups for the cryomodule."""
+        for rfs_infix in ["A:", "B:"]:
+            for rfs_num in [1, 2]:
+                self.add_pvs(
+                    RFStationPVGroup(
+                        prefix=f"{cm_prefix}00:RFS{rfs_num}{rfs_infix}"
+                    )
+                )
+
+    def _create_cm_launcher_groups(self, cm_prefix, cm_name, cavity_launchers):
+        """Create and add CM-level launcher groups.
+
+        Returns:
+            LauncherGroups: Container with all launcher types at CM level
+        """
+        cm_launchers = LauncherGroups()
+        for launcher_type, classes in LAUNCHER_TYPES.items():
+            launcher = classes["cm"](
+                prefix=f"{cm_prefix}00:",
+                cm_name=cm_name,
+                cavity_groups=cavity_launchers.get(launcher_type),
+            )
+            self.add_pvs(launcher)
+            cm_launchers.set(launcher_type, launcher)
+
+        return cm_launchers
 
     def _setup_cavity(self, linac_name, cm_name, cav_num, cm_prefix, is_hl):
         """Set up PVs for a single cavity.
 
         Returns:
-            tuple: (SetupCavityPVGroup, OffCavityPVGroup)
+            LauncherGroups: Container with all launcher types
         """
         cav_prefix = f"{cm_prefix}{cav_num}0:"
 
@@ -255,43 +413,20 @@ class SCLinacPhysicsService(Service):
         self.add_pvs(LiquidLevelPVGroup(prefix=f"CLL:CM{cm_name}:"))
         self.add_pvs(HOMPVGroup(prefix=f"CTE:CM{cm_name}:1{cav_num}"))
 
-        # Rack-specific setup
-        self._setup_rack_and_rfs(cav_num, cm_prefix)
+        # Note: Rack and RFS setup moved to CM level
 
-        # Create cavity-level setup/off groups
-        setup_cavity = SetupCavityPVGroup(
-            prefix=cav_prefix,
-            cm_name=cm_name,
-            cav_num=cav_num,
-        )
-        off_cavity = OffCavityPVGroup(
-            prefix=cav_prefix,
-            cm_name=cm_name,
-            cav_num=cav_num,
-        )
-
-        self.add_pvs(setup_cavity)
-        self.add_pvs(off_cavity)
-
-        return setup_cavity, off_cavity
-
-    def _setup_rack_and_rfs(self, cav_num, cm_prefix):
-        """Set up rack and RFS PVs based on cavity number."""
-        if cav_num in RACK_A_CAVITIES:
-            rack_suffix = "RACKA:"
-            rfs_infix = "A:"
-        else:
-            rack_suffix = "RACKB:"
-            rfs_infix = "B:"
-
-        self.add_pvs(RACKPVGroup(prefix=f"{cm_prefix}00:{rack_suffix}"))
-
-        for rfs_num in [1, 2]:
-            self.add_pvs(
-                RFStationPVGroup(
-                    prefix=f"{cm_prefix}00:RFS{rfs_num}{rfs_infix}"
-                )
+        # Create cavity-level launcher groups
+        cavity_launchers = LauncherGroups()
+        for launcher_type, classes in LAUNCHER_TYPES.items():
+            launcher = classes["cavity"](
+                prefix=cav_prefix,
+                cm_name=cm_name,
+                cav_num=cav_num,
             )
+            self.add_pvs(launcher)
+            cavity_launchers.set(launcher_type, launcher)
+
+        return cavity_launchers
 
 
 def main():

@@ -7,12 +7,15 @@ from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
 from sc_linac_physics.applications.tuning.tune_utils import TUNE_LOG_DIR
 from sc_linac_physics.applications.tuning.tuning_gui import TUNE_MACHINE
 from sc_linac_physics.utils.logger import custom_logger
-from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    ALL_CRYOMODULES,
+    CavityAbortError,
+)
 
 logger = custom_logger(
     name=__name__,
     log_filename="detune_cavity",
-    level=logging.INFO,
+    level=logging.DEBUG,  # Changed from INFO to DEBUG
     log_dir=str(TUNE_LOG_DIR),
 )
 
@@ -41,6 +44,8 @@ def detune_cavity(cavity: TuneCavity) -> bool:
             extra={"extra_data": {"cavity": str(cavity)}},
         )
         return True
+    except CavityAbortError as e:
+        logger.error(str(e))
     except Exception as e:
         logger.exception(
             f"Error detuning {cavity}",
@@ -70,12 +75,6 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         metavar="1-8",
         help="Cavity number (1-8)",
     )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Enable verbose output (sets DEBUG level)",
-    )
 
     return parser.parse_args(argv)
 
@@ -89,18 +88,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     """
     args = parse_args(argv)
 
-    # Adjust log level based on verbose flag
-    if args.verbose:
-        logger.setLevel(logging.DEBUG)
-        logger.debug(
-            "Starting cavity detune operation",
-            extra={
-                "extra_data": {
-                    "cryomodule": args.cryomodule,
-                    "cavity": args.cavity,
-                }
-            },
-        )
+    logger.debug(
+        "Starting cavity detune operation",
+        extra={
+            "extra_data": {
+                "cryomodule": args.cryomodule,
+                "cavity": args.cavity,
+            }
+        },
+    )
 
     try:
         cavity_obj: TuneCavity = TUNE_MACHINE.cryomodules[

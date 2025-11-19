@@ -247,13 +247,18 @@ class BaseGlobalPVGroup(BaseScriptPVGroup):
 class BaseRackPVGroup(BaseScriptPVGroup):
     """Base class for rack launchers"""
 
-    def __init__(self, prefix: str, rack_groups=None):
+    def __init__(
+        self, prefix: str, cm_name: str, rack_name: str, rack_groups=None
+    ):
         script_map = {
             "COLD": "sc-cold-rack",
             "PARK": "sc-park-rack",
         }
         script_name = script_map.get(self.LAUNCHER_NAME, "sc-setup-rack")
-        super().__init__(prefix, script_name)
+        # Use 'cm' and 'r' to match the script's short flags
+        super().__init__(prefix, script_name, cm=cm_name, r=rack_name)
+        self.cm_name = cm_name
+        self.rack_name = rack_name
         self.subgroups = rack_groups or []
 
 
@@ -324,6 +329,10 @@ class SetupCavityPVGroup(BaseCavityPVGroup):
     LAUNCHER_NAME = "SETUP"
 
 
+class SetupRackPVGroup(BaseRackPVGroup):
+    LAUNCHER_NAME = "SETUP"
+
+
 # ============================================================================
 # OFF Launchers
 # ============================================================================
@@ -342,6 +351,10 @@ class OffGlobalPVGroup(BaseGlobalPVGroup):
 
 
 class OffCavityPVGroup(BaseCavityPVGroup):
+    LAUNCHER_NAME = "OFF"
+
+
+class OffRackPVGroup(BaseRackPVGroup):
     LAUNCHER_NAME = "OFF"
 
 
@@ -366,6 +379,10 @@ class ColdCavityPVGroup(BaseCavityPVGroup):
     LAUNCHER_NAME = "COLD"
 
 
+class ColdRackPVGroup(BaseRackPVGroup):
+    LAUNCHER_NAME = "COLD"
+
+
 # ============================================================================
 # PARK Launchers
 # ============================================================================
@@ -384,4 +401,8 @@ class ParkGlobalPVGroup(BaseGlobalPVGroup):
 
 
 class ParkCavityPVGroup(BaseCavityPVGroup):
+    LAUNCHER_NAME = "PARK"
+
+
+class ParkRackPVGroup(BaseRackPVGroup):
     LAUNCHER_NAME = "PARK"

@@ -10,14 +10,17 @@ from sc_linac_physics.applications.tuning.tune_utils import TUNE_LOG_DIR
 from sc_linac_physics.applications.tuning.tuning_gui import TUNE_MACHINE
 from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
-from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    ALL_CRYOMODULES,
+    CavityAbortError,
+)
 
 DEFAULT_SLEEP_INTERVAL = 0.1
 
 logger = custom_logger(
     name=__name__,
     log_filename="detune_rack",
-    level=logging.INFO,
+    level=logging.DEBUG,  # Changed from INFO to DEBUG
     log_dir=str(TUNE_LOG_DIR),
 )
 
@@ -46,6 +49,8 @@ def detune_cavity(cavity_object: TuneCavity) -> bool:
             extra={"extra_data": {"cavity": str(cavity_object)}},
         )
         return True
+    except CavityAbortError as e:
+        logger.error(str(e))
     except Exception as e:
         logger.exception(
             f"Error triggering {cavity_object}",
@@ -146,12 +151,6 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         default=DEFAULT_SLEEP_INTERVAL,
         help=f"Sleep interval between cavities in seconds (default: {DEFAULT_SLEEP_INTERVAL})",
     )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Enable verbose output (sets DEBUG level)",
-    )
 
     return parser.parse_args(argv)
 
@@ -164,10 +163,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         int: Exit code (0 for success, 1 for failure)
     """
     args = parse_args(argv)
-
-    # Adjust log level based on verbose flag
-    if args.verbose:
-        logger.setLevel(logging.DEBUG)
 
     logger.debug(
         "Starting rack detune script",
@@ -195,7 +190,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     successful, failed = detune_rack(rack_obj, args.sleep_interval)
 
-    # Always log the summary at INFO level
     logger.info(
         "Detune rack script completed",
         extra={
