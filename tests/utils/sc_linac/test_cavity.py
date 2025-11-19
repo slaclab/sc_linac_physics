@@ -152,9 +152,7 @@ def test_set_sela_mode(cavity):
 def test_set_selap_mode(cavity):
     cavity._rf_mode_ctrl_pv_obj = make_mock_pv()
     cavity.set_selap_mode()
-    cavity._rf_mode_ctrl_pv_obj.put.assert_called_with(
-        RF_MODE_SELAP, use_caput=False
-    )
+    cavity._rf_mode_ctrl_pv_obj.put.assert_called_with(RF_MODE_SELAP)
 
 
 def test_drive_level(cavity):
