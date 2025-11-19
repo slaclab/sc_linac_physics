@@ -51,8 +51,11 @@ def cavity(cavity_number, mock_rack):
         - Configured SSA
         - Attached to mock rack
         - Basic monitoring PVs set up
+        - Mocked logger
     """
     cavity = SetupCavity(cavity_num=cavity_number, rack_object=mock_rack)
+    cavity.logger = MagicMock()  # Mock the logger
+
     cavity.ssa = SSA(cavity)
 
     # Set up common PVs that most tests need

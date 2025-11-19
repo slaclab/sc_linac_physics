@@ -25,17 +25,16 @@ from qtpy.QtCore import Signal
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
 )
-from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
-    QUENCH_MACHINE,
-    QuenchCryomodule,
-)
 from sc_linac_physics.applications.quench_processing.quench_worker import (
     QuenchWorker,
 )
 from sc_linac_physics.utils.qt import RFControls, make_rainbow
 from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
+from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+
+QUENCH_MACHINE = Machine(cavity_class=QuenchCavity)
 
 
 class QuenchGUI(Display):
@@ -84,7 +83,7 @@ class QuenchGUI(Display):
         self.create_processing_spinboxes()
         self.add_controls()
 
-        self.current_cm: Optional[QuenchCryomodule] = None
+        self.current_cm: Optional[Cryomodule] = None
         self.current_cav: Optional[QuenchCavity] = None
 
         self.cav_waveform_plot = PyDMWaveformPlot()

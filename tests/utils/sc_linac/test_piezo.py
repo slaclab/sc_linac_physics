@@ -1,5 +1,5 @@
 from random import randint
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
@@ -18,8 +18,14 @@ from tests.mock_utils import mock_func
 @pytest.fixture
 def piezo(monkeypatch):
     monkeypatch.setattr("time.sleep", mock_func)
-    cavity = Cavity(cavity_num=randint(1, 8), rack_object=MagicMock())
-    yield Piezo(cavity)
+
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.custom_logger"
+    ) as mock_logger:
+        mock_logger.return_value = MagicMock()
+
+        cavity = Cavity(cavity_num=randint(1, 8), rack_object=MagicMock())
+        yield Piezo(cavity)
 
 
 def test_pv_prefix(piezo):
@@ -104,15 +110,24 @@ class MockStatus:
 def test_enable(piezo):
     piezo._bias_voltage_pv_obj = make_mock_pv()
     piezo._enable_stat_pv_obj = make_mock_pv()
-    mock_status = MockStatus()
-    piezo._enable_stat_pv_obj.get = mock_status.mock_status
-    piezo.cavity.check_abort = make_mock_pv()
+
+    # For 1 loop iteration: 2 calls (condition + logging) + 1 final check = 3 total
+    piezo._enable_stat_pv_obj.get = Mock(
+        side_effect=[
+            PIEZO_DISABLE_VALUE,  # while loop check
+            PIEZO_DISABLE_VALUE,  # logging in loop body
+            PIEZO_ENABLE_VALUE,  # final while loop check - exits
+        ]
+    )
+
+    piezo.cavity.check_abort = Mock()
     piezo._enable_pv_obj = make_mock_pv()
 
     piezo.enable()
+
     piezo._bias_voltage_pv_obj.put.assert_called_with(25)
-    piezo.cavity.check_abort.assert_called()
-    piezo._enable_pv_obj.put.assert_called_with(PIEZO_ENABLE_VALUE)
+    assert piezo.cavity.check_abort.call_count == 1
+    assert piezo._enable_pv_obj.put.call_count == 2  # 1 disable + 1 enable
 
 
 def test_enable_feedback(piezo):

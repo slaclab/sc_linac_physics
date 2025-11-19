@@ -1,3 +1,4 @@
+import logging
 import time
 from datetime import datetime
 from typing import Optional, Callable, TYPE_CHECKING
@@ -8,6 +9,7 @@ from lcls_tools.common.controls.pyepics.utils import (
     PVInvalidError,
 )
 
+from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
 from sc_linac_physics.utils.sc_linac import linac_utils
 from sc_linac_physics.utils.sc_linac.linac_utils import STATUS_RUNNING_VALUE
 
@@ -23,7 +25,7 @@ if TYPE_CHECKING:
 
 class Cavity(linac_utils.SCLinacObject):
     """
-    Python representation of LCLS II cavities. This class provides utility self.rfs_addr = f"{self.generate_rfs_addr()}"
+    Python representation of LCLS II cavities. This class provides utility
     functions for commonly used tasks including powering on/off, changing RF mode,
     setting amplitude, characterizing, and tuning to resonance
 
@@ -39,6 +41,9 @@ class Cavity(linac_utils.SCLinacObject):
         self.rack: Rack = rack_object
         self.cryomodule: "Cryomodule" = self.rack.cryomodule
         self.linac: "Linac" = self.cryomodule.linac
+
+        # Initialize logger (can be overridden by subclasses)
+        self._logger = None
 
         if self.cryomodule.is_harmonic_linearizer:
             self.length = 0.346
@@ -208,6 +213,26 @@ class Cavity(linac_utils.SCLinacObject):
             f"{self.linac.name} CM{self.cryomodule.name} Cavity {self.number}"
         )
 
+    def _init_logger(self):
+        """Initialize the default logger. Can be overridden by subclasses."""
+
+        log_dir = BASE_LOG_DIR / self.cryomodule.name / f"cavity_{self.number}"
+        self._logger = custom_logger(
+            __name__, log_dir=str(log_dir), log_filename=f"cavity_{self.number}"
+        )
+
+    @property
+    def logger(self):
+        """Get the logger instance (lazy initialization)."""
+        if self._logger is None:
+            self._init_logger()
+        return self._logger
+
+    @logger.setter
+    def logger(self, logger_instance):
+        """Allow setting a custom logger."""
+        self._logger = logger_instance
+
     @property
     def pv_prefix(self):
         return self._pv_prefix
@@ -256,14 +281,33 @@ class Cavity(linac_utils.SCLinacObject):
             self._status_msg_pv_obj = PV(self.status_msg_pv)
         return self._status_msg_pv_obj
 
+    def set_status_message(self, message: str, level: int = logging.INFO):
+        """
+        Set the status message and log it at the specified level.
+
+        @param message: The status message to set and log
+        @param level: The logging level (default: logging.INFO)
+        """
+        # Map logging level to appropriate logger method
+        if level >= logging.ERROR:
+            self.logger.error(message)
+        elif level >= logging.WARNING:
+            self.logger.warning(message)
+        elif level >= logging.INFO:
+            self.logger.info(message)
+        else:
+            self.logger.debug(message)
+
+        self.status_msg_pv_obj.put(message)
+
     @property
     def status_message(self):
         return self.status_msg_pv_obj.get()
 
     @status_message.setter
-    def status_message(self, message):
-        print(message)
-        self.status_msg_pv_obj.put(message)
+    def status_message(self, message: str):
+        # Default to INFO level for backward compatibility
+        self.set_status_message(message, logging.INFO)
 
     @property
     def microsteps_per_hz(self):
@@ -598,10 +642,14 @@ class Cavity(linac_utils.SCLinacObject):
 
     def set_chirp_range(self, offset: int):
         offset = abs(offset)
-        print(f"Setting chirp range for {self} to +/- {offset} Hz")
+        self.logger.info(
+            "Setting chirp range to +/- %d Hz",
+            offset,
+            extra={"extra_data": {"offset_hz": offset, "cavity": str(self)}},
+        )
         self.chirp_freq_start = -offset
         self.chirp_freq_stop = offset
-        print(f"Chirp range set for {self}")
+        self.logger.info("Chirp range set successfully")
 
     @property
     def rf_state_pv_obj(self) -> PV:
@@ -625,7 +673,16 @@ class Cavity(linac_utils.SCLinacObject):
     def delta_piezo(self):
         delta_volts = self.piezo.voltage - linac_utils.PIEZO_CENTER_VOLTAGE
         delta_hz = delta_volts * self.piezo.hz_per_v
-        print(f"{self} piezo detune: {delta_hz}")
+        self.logger.debug(
+            "Piezo detune calculated",
+            extra={
+                "extra_data": {
+                    "delta_volts": delta_volts,
+                    "delta_hz": delta_hz,
+                    "cavity": str(self),
+                }
+            },
+        )
         return (
             delta_hz
             if not self.cryomodule.is_harmonic_linearizer
@@ -637,10 +694,19 @@ class Cavity(linac_utils.SCLinacObject):
             return self.detune
 
         self.setup_tuning(use_sela=use_sela)
-        print(
-            f"Tuning {self} to resonance in "
-            + ("SELA" if use_sela else "chirp")
+        mode = "SELA" if use_sela else "chirp"
+        self.logger.info(
+            "Tuning to resonance in %s mode",
+            mode,
+            extra={
+                "extra_data": {
+                    "reset_signed_steps": reset_signed_steps,
+                    "mode": mode,
+                    "cavity": str(self),
+                }
+            },
         )
+
         self._auto_tune(
             delta_hz_func=delta_detune,
             tolerance=(500 if self.cryomodule.is_harmonic_linearizer else 50),
@@ -648,7 +714,7 @@ class Cavity(linac_utils.SCLinacObject):
         )
 
         if use_sela:
-            print(f"Centering {self} piezo")
+            self.logger.info("Centering piezo")
             self._auto_tune(
                 delta_hz_func=self.delta_piezo,
                 tolerance=5 * self.piezo.hz_per_v,
@@ -716,7 +782,16 @@ class Cavity(linac_utils.SCLinacObject):
             self.check_abort()
             est_steps = int(0.9 * delta_hz * self.microsteps_per_hz)
 
-            print(f"Moving stepper for {self} {est_steps} steps")
+            self.logger.debug(
+                "Moving stepper",
+                extra={
+                    "extra_data": {
+                        "estimated_steps": est_steps,
+                        "delta_hz": delta_hz,
+                        "cavity": str(self),
+                    }
+                },
+            )
 
             self.stepper_tuner.move(
                 est_steps,
@@ -727,6 +802,17 @@ class Cavity(linac_utils.SCLinacObject):
             steps_moved += abs(est_steps)
 
             if steps_moved > expected_steps * stepper_tol_factor:
+                self.logger.error(
+                    "Motor moved more steps than expected",
+                    extra={
+                        "extra_data": {
+                            "steps_moved": steps_moved,
+                            "expected_steps": expected_steps,
+                            "tolerance_factor": stepper_tol_factor,
+                            "cavity": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.DetuneError(
                     f"{self} motor moved more steps than expected"
                 )
@@ -739,8 +825,18 @@ class Cavity(linac_utils.SCLinacObject):
     def check_detune(self):
         if self.detune_invalid:
             if self.rf_mode == linac_utils.RF_MODE_CHIRP:
+                self.logger.warning("Detune invalid, adjusting chirp range")
                 self.find_chirp_range(self.chirp_freq_start * 1.1)
             else:
+                self.logger.error(
+                    "Cannot tune in SELA with invalid detune",
+                    extra={
+                        "extra_data": {
+                            "rf_mode": self.rf_mode,
+                            "cavity": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.DetuneError(
                     f"Cannot tune {self} in SELA with invalid detune"
                 )
@@ -753,12 +849,18 @@ class Cavity(linac_utils.SCLinacObject):
         accurate.
         :return:
         """
-        print("Checking RF Pulse On Time...")
+        self.logger.debug("Checking RF Pulse On Time")
         if self.pulse_on_time != linac_utils.NOMINAL_PULSED_ONTIME:
-            print(
-                "Setting RF Pulse On Time to {ontime} ms".format(
-                    ontime=linac_utils.NOMINAL_PULSED_ONTIME
-                )
+            self.logger.info(
+                "Setting RF Pulse On Time to %d ms",
+                linac_utils.NOMINAL_PULSED_ONTIME,
+                extra={
+                    "extra_data": {
+                        "previous_ontime": self.pulse_on_time,
+                        "new_ontime": linac_utils.NOMINAL_PULSED_ONTIME,
+                        "cavity": str(self),
+                    }
+                },
             )
             self.pulse_on_time = linac_utils.NOMINAL_PULSED_ONTIME
             self.push_go_button()
@@ -778,13 +880,30 @@ class Cavity(linac_utils.SCLinacObject):
         self._pulse_go_pv_obj.put(1)
         while self.pulse_status < 2:
             self.check_abort()
-            print("waiting for pulse state", datetime.now())
+            self.logger.debug(
+                "Waiting for pulse state to change",
+                extra={
+                    "extra_data": {
+                        "current_pulse_status": self.pulse_status,
+                        "cavity": str(self),
+                    }
+                },
+            )
             time.sleep(1)
         if self.pulse_status > 2:
+            self.logger.error(
+                "Pulse operation failed",
+                extra={
+                    "extra_data": {
+                        "pulse_status": self.pulse_status,
+                        "cavity": str(self),
+                    }
+                },
+            )
             raise linac_utils.PulseError(f"Unable to pulse {self}")
 
     def turn_on(self):
-        print(f"Turning {self} on")
+        self.logger.info("Turning cavity on")
         if self.is_online:
             self.ssa.turn_on()
             self.reset_interlocks()
@@ -792,48 +911,97 @@ class Cavity(linac_utils.SCLinacObject):
 
             while not self.is_on:
                 self.check_abort()
-                print(f"waiting for {self} to turn on", datetime.now())
+                self.logger.debug(
+                    "Waiting for cavity to turn on",
+                    extra={
+                        "extra_data": {
+                            "rf_state": self.rf_state,
+                            "cavity": str(self),
+                        }
+                    },
+                )
                 time.sleep(1)
 
-            print(f"{self} on")
+            self.logger.info("Cavity successfully turned on")
         else:
+            self.logger.error(
+                "Cannot turn on cavity - not online",
+                extra={
+                    "extra_data": {"hw_mode": self.hw_mode, "cavity": str(self)}
+                },
+            )
             raise linac_utils.CavityHWModeError(f"{self} not online")
 
     def turn_off(self):
-        print(f"turning {self} off")
+        self.logger.info("Turning cavity off")
         self.rf_control = 0
         while self.is_on:
             self.check_abort()
-            print(f"waiting for {self} to turn off")
+            self.logger.debug("Waiting for cavity to turn off")
             time.sleep(1)
-        print(f"{self} off")
+        self.logger.info("Cavity successfully turned off")
 
     def setup_selap(self, des_amp: float = 5):
         self.setup_rf(des_amp)
         self.set_selap_mode()
-        print(f"{self} set up in SELAP")
+        self.logger.info(
+            "Cavity set up in SELAP mode",
+            extra={
+                "extra_data": {
+                    "desired_amplitude": des_amp,
+                    "cavity": str(self),
+                }
+            },
+        )
 
     def setup_sela(self, des_amp: float = 5):
         self.setup_rf(des_amp)
         self.set_sela_mode()
-        print(f"{self} set up in SELA")
+        self.logger.info(
+            "Cavity set up in SELA mode",
+            extra={
+                "extra_data": {
+                    "desired_amplitude": des_amp,
+                    "cavity": str(self),
+                }
+            },
+        )
 
     def request_abort(self):
         self.abort_flag = True
+        self.logger.warning("Abort requested")
 
     def check_abort(self):
         if self.abort_flag:
             self.abort_flag = False
             self.turn_off()
+            self.logger.error("Operation aborted by user request")
             raise linac_utils.CavityAbortError(f"Abort requested for {self}")
 
     def setup_rf(self, des_amp):
         if des_amp > self.ades_max:
-            print(
-                f"Requested amplitude for {self} too high - ramping up to AMAX instead"
+            self.logger.warning(
+                "Requested amplitude too high - using AMAX instead",
+                extra={
+                    "extra_data": {
+                        "requested_amp": des_amp,
+                        "ades_max": self.ades_max,
+                        "cavity": str(self),
+                    }
+                },
             )
             des_amp = self.ades_max
-        print(f"setting up {self}")
+
+        self.logger.info(
+            "Setting up RF",
+            extra={
+                "extra_data": {
+                    "desired_amplitude": des_amp,
+                    "cavity": str(self),
+                }
+            },
+        )
+
         self.turn_off()
         self.ssa.calibrate(self.ssa.drive_max)
         self.move_to_resonance()
@@ -862,7 +1030,7 @@ class Cavity(linac_utils.SCLinacObject):
             self.walk_amp(des_amp, 0.1)
 
     def reset_data_decimation(self):
-        print(f"Setting data decimation for {self}")
+        self.logger.info("Setting data decimation to 255")
         self.cw_data_decimation = 255
         self.pulsed_data_decimation = 255
 
@@ -872,18 +1040,20 @@ class Cavity(linac_utils.SCLinacObject):
         if not use_sela:
             self.piezo.disable_feedback()
 
-            print(f"setting {self} piezo DC voltage offset to 0V")
+            self.logger.info("Setting piezo DC voltage offset to 0V")
             self.piezo.dc_setpoint = 0
 
-            print(
-                f"setting {self} drive level to {linac_utils.SAFE_PULSED_DRIVE_LEVEL}"
+            self.logger.info(
+                "Setting drive level to %d", linac_utils.SAFE_PULSED_DRIVE_LEVEL
             )
             self.drive_level = linac_utils.SAFE_PULSED_DRIVE_LEVEL
 
-            print(f"setting {self} RF to chirp")
+            self.logger.info("Setting RF to chirp mode")
             self.set_chirp_mode()
 
-            print(f"turning {self} RF on and waiting 5s for detune to catch up")
+            self.logger.info(
+                "Turning RF on and waiting 5s for detune to stabilize"
+            )
             self.turn_on()
             time.sleep(5)
             self.find_chirp_range(chirp_range)
@@ -899,8 +1069,27 @@ class Cavity(linac_utils.SCLinacObject):
         time.sleep(1)
         if self.detune_invalid:
             if chirp_range < 400000:
+                self.logger.debug(
+                    "Detune invalid, increasing chirp range",
+                    extra={
+                        "extra_data": {
+                            "current_range": chirp_range,
+                            "new_range": int(chirp_range * 1.1),
+                            "cavity": str(self),
+                        }
+                    },
+                )
                 self.find_chirp_range(int(chirp_range * 1.1))
             else:
+                self.logger.error(
+                    "No valid detune found within +/-400000Hz chirp range",
+                    extra={
+                        "extra_data": {
+                            "final_chirp_range": chirp_range,
+                            "cavity": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.DetuneError(
                     f"{self}: No valid detune found within"
                     f"+/-400000Hz chirp range"
@@ -908,7 +1097,18 @@ class Cavity(linac_utils.SCLinacObject):
 
     def reset_interlocks(self, wait: int = 3, attempt: int = 0):
         # TODO see if it makes more sense to implement this non-recursively
-        print(f"Resetting interlocks for {self} and waiting {wait}s")
+        self.logger.info(
+            "Resetting interlocks (attempt %d, wait %ds)",
+            attempt + 1,
+            wait,
+            extra={
+                "extra_data": {
+                    "attempt": attempt + 1,
+                    "wait_time": wait,
+                    "cavity": str(self),
+                }
+            },
+        )
 
         if not self._interlock_reset_pv_obj:
             self._interlock_reset_pv_obj = PV(self.interlock_reset_pv)
@@ -916,19 +1116,31 @@ class Cavity(linac_utils.SCLinacObject):
         self._interlock_reset_pv_obj.put(1)
         time.sleep(wait)
 
-        print(f"Checking {self} RF permit")
+        self.logger.debug("Checking RF permit status")
         if self.rf_inhibited:
             if attempt >= linac_utils.INTERLOCK_RESET_ATTEMPTS:
+                self.logger.error(
+                    "Cavity still faulted after %d reset attempts",
+                    linac_utils.INTERLOCK_RESET_ATTEMPTS,
+                    extra={
+                        "extra_data": {
+                            "total_attempts": linac_utils.INTERLOCK_RESET_ATTEMPTS,
+                            "cavity": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.CavityFaultError(
                     f"{self} still faulted after"
                     f" {linac_utils.INTERLOCK_RESET_ATTEMPTS} "
                     f"reset attempts"
                 )
             else:
-                print(f"{self} reset {attempt} unsuccessful; retrying")
+                self.logger.warning(
+                    "Reset attempt %d unsuccessful, retrying", attempt + 1
+                )
                 self.reset_interlocks(wait=wait + 2, attempt=attempt + 1)
         else:
-            print(f"{self} interlocks reset")
+            self.logger.info("Interlocks successfully reset")
 
     @property
     def characterization_timestamp(self) -> datetime:
@@ -948,29 +1160,41 @@ class Cavity(linac_utils.SCLinacObject):
 
         self.reset_interlocks()
 
-        print(f"setting {self} drive to {linac_utils.SAFE_PULSED_DRIVE_LEVEL}")
+        self.logger.info(
+            "Setting drive level to %d", linac_utils.SAFE_PULSED_DRIVE_LEVEL
+        )
         self.drive_level = linac_utils.SAFE_PULSED_DRIVE_LEVEL
 
         if (
             datetime.now() - self.characterization_timestamp
         ).total_seconds() < 60:
             if self.characterization_status == 1:
-                print(
-                    f"{self} successful characterization within the last minute,"
-                    f" not starting a new one"
+                self.logger.info(
+                    "Recent successful characterization found, skipping",
+                    extra={
+                        "extra_data": {
+                            "timestamp": self.characterization_timestamp.isoformat(),
+                            "cavity": str(self),
+                        }
+                    },
                 )
                 self.finish_characterization()
                 return
 
-        print(f"Starting {self} cavity characterization at {datetime.now()}")
+        self.logger.info("Starting cavity characterization")
         self.start_characterization()
         time.sleep(2)
 
         while self.characterization_running:
             self.check_abort()
-            print(
-                f"waiting for {self} characterization" f" to stop running",
-                datetime.now(),
+            self.logger.debug(
+                "Waiting for characterization to complete",
+                extra={
+                    "extra_data": {
+                        "characterization_status": self.characterization_status,
+                        "cavity": str(self),
+                    }
+                },
             )
             time.sleep(1)
 
@@ -978,46 +1202,137 @@ class Cavity(linac_utils.SCLinacObject):
             self.characterization_status
             == linac_utils.CALIBRATION_COMPLETE_VALUE
         ):
-            if (
+            seconds_since_char = (
                 datetime.now() - self.characterization_timestamp
-            ).total_seconds() > 300:
+            ).total_seconds()
+
+            if seconds_since_char > 300:
+                self.logger.error(
+                    "No valid characterization within the last 5 minutes",
+                    extra={
+                        "extra_data": {
+                            "seconds_since_characterization": seconds_since_char,
+                            "timestamp": self.characterization_timestamp.isoformat(),
+                            "cavity": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.CavityCharacterizationError(
                     f"No valid {self} characterization within the last 5 min"
                 )
             self.finish_characterization()
 
         if self.characterization_crashed:
+            self.logger.error(
+                "Characterization crashed",
+                extra={
+                    "extra_data": {
+                        "characterization_status": self.characterization_status,
+                        "cavity": str(self),
+                    }
+                },
+            )
             raise linac_utils.CavityCharacterizationError(
                 f"{self} characterization crashed"
             )
 
     def finish_characterization(self):
-        print(f"pushing {self} characterization results")
+        self.logger.info("Pushing characterization results")
+
         if self.measured_loaded_q_in_tolerance:
+            self.logger.debug(
+                "Loaded Q in tolerance",
+                extra={
+                    "extra_data": {
+                        "measured_q": self.measured_loaded_q,
+                        "lower_limit": self.loaded_q_lower_limit,
+                        "upper_limit": self.loaded_q_upper_limit,
+                        "cavity": str(self),
+                    }
+                },
+            )
             self.push_loaded_q()
         else:
+            self.logger.error(
+                "Loaded Q out of tolerance",
+                extra={
+                    "extra_data": {
+                        "measured_q": self.measured_loaded_q,
+                        "lower_limit": self.loaded_q_lower_limit,
+                        "upper_limit": self.loaded_q_upper_limit,
+                        "cavity": str(self),
+                    }
+                },
+            )
             raise linac_utils.CavityQLoadedCalibrationError(
                 f"{self} loaded Q out of tolerance"
             )
+
         if self.measured_scale_factor_in_tolerance:
+            self.logger.debug(
+                "Scale factor in tolerance",
+                extra={
+                    "extra_data": {
+                        "measured_scale_factor": self.measured_scale_factor,
+                        "lower_limit": self.scale_factor_lower_limit,
+                        "upper_limit": self.scale_factor_upper_limit,
+                        "cavity": str(self),
+                    }
+                },
+            )
             self.push_scale_factor()
         else:
+            self.logger.error(
+                "Scale factor out of tolerance",
+                extra={
+                    "extra_data": {
+                        "measured_scale_factor": self.measured_scale_factor,
+                        "lower_limit": self.scale_factor_lower_limit,
+                        "upper_limit": self.scale_factor_upper_limit,
+                        "cavity": str(self),
+                    }
+                },
+            )
             raise linac_utils.CavityScaleFactorCalibrationError(
                 f"{self} scale factor out of tolerance"
             )
 
         self.reset_data_decimation()
-        print(f"restoring {self} piezo feedback setpoint to 0")
+
+        self.logger.info("Restoring piezo feedback setpoint to 0")
         self.piezo.feedback_setpoint = 0
 
-        print(f"{self} characterization successful")
+        self.logger.info("Characterization completed successfully")
 
     def walk_amp(self, des_amp, step_size):
-        print(f"walking {self} to {des_amp} from {self.ades}")
+        self.logger.info(
+            "Walking amplitude to %.2f MV from %.2f MV (step size: %.2f)",
+            des_amp,
+            self.ades,
+            step_size,
+            extra={
+                "extra_data": {
+                    "target_amplitude": des_amp,
+                    "current_amplitude": self.ades,
+                    "step_size": step_size,
+                    "cavity": str(self),
+                }
+            },
+        )
 
         while self.ades <= (des_amp - step_size):
             self.check_abort()
             if self.is_quenched:
+                self.logger.error(
+                    "Quench detected during RF ramp",
+                    extra={
+                        "extra_data": {
+                            "current_amplitude": self.ades,
+                            "target_amplitude": des_amp,
+                            "cavity": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.QuenchError(
                     f"{self} quench detected, aborting RF ramp"
                 )
@@ -1028,4 +1343,10 @@ class Cavity(linac_utils.SCLinacObject):
         if self.ades != des_amp:
             self.ades = des_amp
 
-        print(f"{self} at {des_amp} MV")
+        self.logger.info(
+            "Amplitude walk complete - at %.2f MV",
+            des_amp,
+            extra={
+                "extra_data": {"final_amplitude": des_amp, "cavity": str(self)}
+            },
+        )
