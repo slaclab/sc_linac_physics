@@ -2,7 +2,11 @@ from typing import Optional
 
 from lcls_tools.common.controls.pyepics.utils import PV
 
-from sc_linac_physics.applications.tuning.tune_utils import ColdLinacObject
+from sc_linac_physics.applications.tuning.tune_utils import (
+    ColdLinacObject,
+    TUNE_LOG_DIR,
+)
+from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     TUNE_CONFIG_PARKED_VALUE,
@@ -27,6 +31,17 @@ class TuneCavity(Cavity, ColdLinacObject):
         self.df_cold_pv: str = self.pv_addr("DF_COLD")
         self._df_cold_pv_obj: Optional[PV] = None
 
+    def _init_logger(self):
+        """Initialize logger for TuneCavity with TUNE_LOG_DIR."""
+        log_dir = TUNE_LOG_DIR / self.cryomodule.name / f"cavity_{self.number}"
+        logger_name = f"{self.cryomodule.name}.CAV{self.number}"
+
+        self._logger = custom_logger(
+            name=logger_name,
+            log_dir=str(log_dir),
+            log_filename=f"cavity_{self.number}",
+        )
+
     @property
     def hw_mode_str(self):
         if not self._hw_mode_pv_obj:
@@ -41,12 +56,13 @@ class TuneCavity(Cavity, ColdLinacObject):
 
     def park(self, reset_stepper_count: bool = True):
         if self.tune_config_pv_obj.get() == TUNE_CONFIG_PARKED_VALUE:
+            self._logger.debug("Already parked")
             return
 
         starting_config = self.tune_config_pv_obj.get()
 
         if reset_stepper_count:
-            print(f"Resetting {self} stepper signed count")
+            self._logger.info("Resetting stepper signed count")
             self.stepper_tuner.reset_signed_steps()
 
         if self.detune_best < PARK_DETUNE:
@@ -57,8 +73,13 @@ class TuneCavity(Cavity, ColdLinacObject):
             self._auto_tune(delta_hz_func=delta_detune, tolerance=1000)
 
         if starting_config == TUNE_CONFIG_RESONANCE_VALUE:
-            print(
-                f"Updating stored steps to park to current step count for {self}"
+            self._logger.info(
+                "Updating stored steps to park to current step count",
+                extra={
+                    "extra_data": {
+                        "current_steps": self.stepper_tuner.step_tot_pv_obj.get()
+                    }
+                },
             )
             self.stepper_tuner.nsteps_park_pv_obj.put(
                 self.stepper_tuner.step_tot_pv_obj.get()
@@ -66,23 +87,26 @@ class TuneCavity(Cavity, ColdLinacObject):
 
         self.tune_config_pv_obj.put(TUNE_CONFIG_PARKED_VALUE)
 
-        print("Turning cavity and SSA off")
+        self._logger.info("Turning cavity and SSA off")
         self.turn_off()
         self.ssa.turn_off()
 
     def move_to_cold_landing(self, use_rf=True):
         if self.tune_config_pv_obj.get() == TUNE_CONFIG_COLD_VALUE:
-            print(f"{self} at cold landing")
-            print(f"Turning {self} and SSA off")
+            self._logger.info("Already at cold landing")
+            self._logger.info("Turning cavity and SSA off")
             self.turn_off()
             self.ssa.turn_off()
             return
 
+        self._logger.debug(
+            "Starting move to cold landing",
+            extra={"extra_data": {"use_rf": use_rf}},
+        )
         self.stepper_tuner.reset_signed_steps()
 
         if use_rf:
             self.detune_with_rf()
-
         else:
             self.detune_no_rf()
 
@@ -95,6 +119,11 @@ class TuneCavity(Cavity, ColdLinacObject):
             HW_MODE_READY_VALUE,
         ]:
             raise CavityHWModeError(f"{self} not Online, Maintenance, or Ready")
+
+        self._logger.info(
+            "Detuning without RF",
+            extra={"extra_data": {"hw_mode": self.hw_mode_str}},
+        )
         self.check_resonance()
         # If we're not using frequency, it's likely that the cavity is neither
         # on nor in chirp (so the detune check will fail and raise an
@@ -113,7 +142,15 @@ class TuneCavity(Cavity, ColdLinacObject):
         df_cold = self.df_cold_pv_obj.get()
         if df_cold:
             chirp_range = abs(df_cold) + 50000
-            print(f"Tuning {self} to {df_cold} Hz")
+            self._logger.info(
+                "Tuning to cold landing frequency",
+                extra={
+                    "extra_data": {
+                        "df_cold_hz": df_cold,
+                        "chirp_range_hz": chirp_range,
+                    }
+                },
+            )
 
             def delta_func():
                 return self.detune_best - df_cold
@@ -125,22 +162,39 @@ class TuneCavity(Cavity, ColdLinacObject):
             self.detune_by_steps()
 
         self.tune_config_pv_obj.put(TUNE_CONFIG_COLD_VALUE)
-        print("Turning cavity and SSA off")
+        self._logger.info("Turning cavity and SSA off")
         self.turn_off()
         self.ssa.turn_off()
 
     def detune_by_steps(self):
-        print("No cold landing frequency recorded, moving by steps instead")
+        self._logger.info(
+            "No cold landing frequency recorded, moving by steps instead"
+        )
         self.check_resonance()
         abs_est_detune = abs(
             self.stepper_tuner.steps_cold_landing_pv_obj.get()
             / self.microsteps_per_hz
+        )
+        self._logger.debug(
+            "Moving to cold landing by steps",
+            extra={
+                "extra_data": {
+                    "estimated_detune_hz": abs_est_detune,
+                    "chirp_range_hz": abs_est_detune + 50000,
+                }
+            },
         )
         self.setup_tuning(chirp_range=abs_est_detune + 50000)
         self.stepper_tuner.move_to_cold_landing(check_detune=True)
 
     def check_resonance(self):
         if self.tune_config_pv_obj.get() != TUNE_CONFIG_RESONANCE_VALUE:
+            self._logger.error(
+                "Not on resonance, cannot move to cold landing by steps",
+                extra={
+                    "extra_data": {"tune_config": self.tune_config_pv_obj.get()}
+                },
+            )
             raise CavityHWModeError(
                 f"{self} not on resonance, not moving to cold landing by steps"
             )

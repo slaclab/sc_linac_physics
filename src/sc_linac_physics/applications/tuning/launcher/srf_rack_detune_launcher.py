@@ -1,15 +1,25 @@
 import argparse
+import logging
 import sys
 from time import sleep
 from typing import Optional
 
 from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
 from sc_linac_physics.applications.tuning.tune_rack import TuneRack
+from sc_linac_physics.applications.tuning.tune_utils import TUNE_LOG_DIR
 from sc_linac_physics.applications.tuning.tuning_gui import TUNE_MACHINE
+from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 DEFAULT_SLEEP_INTERVAL = 0.1
+
+logger = custom_logger(
+    name=__name__,
+    log_filename="detune_rack",
+    level=logging.INFO,
+    log_dir=str(TUNE_LOG_DIR),
+)
 
 
 def detune_cavity(cavity_object: TuneCavity) -> bool:
@@ -23,24 +33,32 @@ def detune_cavity(cavity_object: TuneCavity) -> bool:
         bool: True if triggered successfully, False if script already running
     """
     if cavity_object.script_is_running:
-        print(
-            f"Warning: {cavity_object} script already running", file=sys.stderr
+        logger.warning(
+            "Script already running",
+            extra={"extra_data": {"cavity": str(cavity_object)}},
         )
         return False
 
     try:
         cavity_object.trigger_start()
-        print(f"Triggered detuning for {cavity_object}")
+        logger.info(
+            "Triggered cavity detuning",
+            extra={"extra_data": {"cavity": str(cavity_object)}},
+        )
         return True
     except Exception as e:
-        print(f"Error triggering {cavity_object}: {e}", file=sys.stderr)
+        logger.exception(
+            f"Error triggering {cavity_object}",
+            extra={
+                "extra_data": {"cavity": str(cavity_object), "error": str(e)}
+            },
+        )
         return False
 
 
 def detune_rack(
     rack: TuneRack,
     sleep_interval: float = DEFAULT_SLEEP_INTERVAL,
-    verbose: bool = False,
 ) -> tuple[int, int]:
     """
     Detune all cavities in a rack.
@@ -48,7 +66,6 @@ def detune_rack(
     Args:
         rack: The TuneRack object containing cavities to detune
         sleep_interval: Time to sleep between cavity operations (seconds)
-        verbose: Enable verbose output
 
     Returns:
         tuple: (successful_count, failed_count)
@@ -56,8 +73,16 @@ def detune_rack(
     successful = 0
     failed = 0
 
-    if verbose:
-        print(f"Detuning {len(rack.cavities)} cavities in rack")
+    logger.debug(
+        "Starting rack detune operation",
+        extra={
+            "extra_data": {
+                "rack": str(rack),
+                "cavity_count": len(rack.cavities),
+                "sleep_interval": sleep_interval,
+            }
+        },
+    )
 
     for cavity in rack.cavities.values():
         if detune_cavity(cavity):
@@ -65,6 +90,18 @@ def detune_rack(
         else:
             failed += 1
         sleep(sleep_interval)
+
+    logger.info(
+        "Rack detune operation completed",
+        extra={
+            "extra_data": {
+                "rack": str(rack),
+                "successful": successful,
+                "failed": failed,
+                "total": successful + failed,
+            }
+        },
+    )
 
     return successful, failed
 
@@ -113,7 +150,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         "--verbose",
         "-v",
         action="store_true",
-        help="Enable verbose output",
+        help="Enable verbose output (sets DEBUG level)",
     )
 
     return parser.parse_args(argv)
@@ -128,25 +165,49 @@ def main(argv: Optional[list[str]] = None) -> int:
     """
     args = parse_args(argv)
 
+    # Adjust log level based on verbose flag
     if args.verbose:
-        print(f"Detuning rack {args.rack} in cryomodule {args.cryomodule}")
+        logger.setLevel(logging.DEBUG)
+
+    logger.debug(
+        "Starting rack detune script",
+        extra={
+            "extra_data": {
+                "cryomodule": args.cryomodule,
+                "rack": args.rack,
+                "sleep_interval": args.sleep_interval,
+            }
+        },
+    )
 
     try:
         cm_object: Cryomodule = TUNE_MACHINE.cryomodules[args.cryomodule]
     except KeyError as e:
-        print(
-            f"Error: Could not find cryomodule {args.cryomodule}: {e}",
-            file=sys.stderr,
+        logger.error(
+            "Could not find cryomodule",
+            extra={
+                "extra_data": {"cryomodule": args.cryomodule, "error": str(e)}
+            },
         )
         return 1
 
     rack_obj = get_rack(cm_object, args.rack)
 
-    successful, failed = detune_rack(
-        rack_obj, args.sleep_interval, args.verbose
-    )
+    successful, failed = detune_rack(rack_obj, args.sleep_interval)
 
-    print(f"\nCompleted: {successful} successful, {failed} failed")
+    # Always log the summary at INFO level
+    logger.info(
+        "Detune rack script completed",
+        extra={
+            "extra_data": {
+                "cryomodule": args.cryomodule,
+                "rack": args.rack,
+                "successful": successful,
+                "failed": failed,
+                "total": successful + failed,
+            }
+        },
+    )
 
     return 0 if failed == 0 else 1
 
