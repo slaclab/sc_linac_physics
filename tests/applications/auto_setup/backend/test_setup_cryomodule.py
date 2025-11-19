@@ -12,21 +12,33 @@ from sc_linac_physics.utils.sc_linac.linac_utils import SCLinacObject
 @pytest.fixture
 def setup_cryomodule() -> SetupCryomodule:
     """Create a SetupCryomodule with mocked PVs and cavities."""
-    linac_mock = MagicMock()
-    # Just pass the CM number, prefix will be added by parent class
-    cryo = SetupCryomodule(cryo_name="01", linac_object=linac_mock)
+    with (
+        patch(
+            "sc_linac_physics.utils.sc_linac.cavity.custom_logger"
+        ) as mock_cavity_logger,
+        patch(
+            "sc_linac_physics.applications.auto_setup.backend.setup_cavity.custom_logger"
+        ) as mock_setup_logger,
+    ):
 
-    # Mock PVs from SetupLinacObject
-    cryo._start_pv_obj = MagicMock()
-    cryo._stop_pv_obj = MagicMock()
-    cryo._abort_pv_obj = MagicMock()
-    cryo._shutoff_pv_obj = MagicMock()
-    cryo._ssa_cal_requested_pv_obj = MagicMock()
-    cryo._auto_tune_requested_pv_obj = MagicMock()
-    cryo._cav_char_requested_pv_obj = MagicMock()
-    cryo._rf_ramp_requested_pv_obj = MagicMock()
+        mock_cavity_logger.return_value = MagicMock()
+        mock_setup_logger.return_value = MagicMock()
 
-    return cryo
+        linac_mock = MagicMock()
+        # Just pass the CM number, prefix will be added by parent class
+        cryo = SetupCryomodule(cryo_name="01", linac_object=linac_mock)
+
+        # Mock PVs from SetupLinacObject
+        cryo._start_pv_obj = MagicMock()
+        cryo._stop_pv_obj = MagicMock()
+        cryo._abort_pv_obj = MagicMock()
+        cryo._shutoff_pv_obj = MagicMock()
+        cryo._ssa_cal_requested_pv_obj = MagicMock()
+        cryo._auto_tune_requested_pv_obj = MagicMock()
+        cryo._cav_char_requested_pv_obj = MagicMock()
+        cryo._rf_ramp_requested_pv_obj = MagicMock()
+
+        return cryo
 
 
 class TestSetupCryomoduleInitialization:
