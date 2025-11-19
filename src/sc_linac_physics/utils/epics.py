@@ -8,10 +8,21 @@ from epics import PV as EPICS_PV
 # Import your custom logger
 from sc_linac_physics.utils.logger import custom_logger, BASE_LOG_DIR
 
-# Create a logger for this module
-logger = custom_logger(
-    __name__, log_dir=str(BASE_LOG_DIR / "epics"), log_filename="pv_operations"
-)
+# Don't create logger at module level - use lazy initialization
+_logger = None
+
+
+def _get_logger():
+    """Lazy logger initialization"""
+    global _logger
+    if _logger is None:
+        _logger = custom_logger(
+            __name__,
+            log_dir=str(BASE_LOG_DIR / "epics"),
+            log_filename="pv_operations",
+        )
+    return _logger
+
 
 # These are the values that decide whether a PV is alarming (and if so, how)
 EPICS_NO_ALARM_VAL = 0
@@ -92,7 +103,7 @@ class PV(EPICS_PV):
             error_msg = (
                 f"PV {pvname} failed to connect within {connection_timeout}s"
             )
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVConnectionError(error_msg)
 
     def __str__(self):
@@ -126,7 +137,7 @@ class PV(EPICS_PV):
             error_msg = (
                 f"PV {self.pvname} not connected (recursive check detected)"
             )
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVConnectionError(error_msg)
 
         self._in_ensure_connected = True
@@ -137,10 +148,12 @@ class PV(EPICS_PV):
                 error_msg = (
                     f"PV {self.pvname} failed to connect within {timeout}s"
                 )
-                logger.error(error_msg)
+                _get_logger().error(error_msg)
                 raise PVConnectionError(error_msg)
 
-            logger.warning(f"PV {self.pvname} reconnected after disconnection")
+            _get_logger().warning(
+                f"PV {self.pvname} reconnected after disconnection"
+            )
         finally:
             self._in_ensure_connected = False
 
@@ -149,7 +162,7 @@ class PV(EPICS_PV):
         try:
             super().disconnect()
         except Exception as e:
-            logger.warning(f"Error disconnecting PV {self.pvname}: {e}")
+            _get_logger().warning(f"Error disconnecting PV {self.pvname}: {e}")
 
     @property
     def val(self):
@@ -223,14 +236,14 @@ class PV(EPICS_PV):
                     return value
 
                 if attempt < self.MAX_RETRIES:
-                    logger.warning(
+                    _get_logger().warning(
                         f"PV {self.pvname} returned None "
                         f"(attempt {attempt}/{self.MAX_RETRIES})"
                     )
             except Exception as e:
                 last_exception = e
                 if attempt < self.MAX_RETRIES:
-                    logger.warning(
+                    _get_logger().warning(
                         f"PV {self.pvname} get raised exception: {e} "
                         f"(attempt {attempt}/{self.MAX_RETRIES})"
                     )
@@ -269,14 +282,14 @@ class PV(EPICS_PV):
                 f"PV {self.pvname} get failed after {self.MAX_RETRIES} attempts. "
                 f"Last exception: {last_exception}"
             )
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVGetError(error_msg) from last_exception
         else:
             error_msg = (
                 f"PV {self.pvname} get returned None after "
                 f"{self.MAX_RETRIES} attempts"
             )
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVGetError(error_msg)
 
     def put(
@@ -331,14 +344,14 @@ class PV(EPICS_PV):
                     return  # Success
 
                 if attempt < self.MAX_RETRIES:
-                    logger.warning(
+                    _get_logger().warning(
                         f"PV {self.pvname} put({value}) returned status {status} "
                         f"(attempt {attempt}/{self.MAX_RETRIES})"
                     )
             except Exception as e:
                 last_exception = e
                 if attempt < self.MAX_RETRIES:
-                    logger.warning(
+                    _get_logger().warning(
                         f"PV {self.pvname} put({value}) raised exception: {e} "
                         f"(attempt {attempt}/{self.MAX_RETRIES})"
                     )
@@ -369,14 +382,14 @@ class PV(EPICS_PV):
                 f"PV {self.pvname} put({value}) failed after {self.MAX_RETRIES} attempts. "
                 f"Last exception: {last_exception}"
             )
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVPutError(error_msg) from last_exception
         else:
             error_msg = (
                 f"PV {self.pvname} put({value}) failed after "
                 f"{self.MAX_RETRIES} attempts"
             )
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVPutError(error_msg)
 
     def validate_value(
@@ -398,19 +411,19 @@ class PV(EPICS_PV):
             error_msg = (
                 f"PV {self.pvname} value {value} below minimum {min_val}"
             )
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVInvalidError(error_msg)
 
         if max_val is not None and value > max_val:
             error_msg = (
                 f"PV {self.pvname} value {value} above maximum {max_val}"
             )
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVInvalidError(error_msg)
 
         if allowed_values is not None and value not in allowed_values:
             error_msg = f"PV {self.pvname} value {value} not in allowed values {allowed_values}"
-            logger.error(error_msg)
+            _get_logger().error(error_msg)
             raise PVInvalidError(error_msg)
 
         return True
@@ -432,15 +445,15 @@ class PV(EPICS_PV):
 
         # Only log warnings and errors
         if severity_snapshot == EPICS_MINOR_VAL:
-            logger.warning(f"PV {self.pvname} has MINOR alarm")
+            _get_logger().warning(f"PV {self.pvname} has MINOR alarm")
             if raise_on_alarm:
                 raise PVInvalidError(f"PV {self.pvname} has MINOR alarm")
         elif severity_snapshot == EPICS_MAJOR_VAL:
-            logger.error(f"PV {self.pvname} has MAJOR alarm")
+            _get_logger().error(f"PV {self.pvname} has MAJOR alarm")
             if raise_on_alarm:
                 raise PVInvalidError(f"PV {self.pvname} has MAJOR alarm")
         elif severity_snapshot == EPICS_INVALID_VAL:
-            logger.error(f"PV {self.pvname} has INVALID alarm")
+            _get_logger().error(f"PV {self.pvname} has INVALID alarm")
             if raise_on_alarm:
                 raise PVInvalidError(f"PV {self.pvname} has INVALID alarm")
 

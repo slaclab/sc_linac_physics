@@ -1,16 +1,174 @@
 import builtins
+import logging
+import logging.handlers
 import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch, Mock
 
 import pyqtgraph as pg
 import pytest
 from qtpy.QtWidgets import QApplication
 
 
-# tests/conftest.py
+@pytest.fixture(autouse=True)
+def suppress_logging():
+    """Suppress all logging output during tests."""
+    # Disable all logging output
+    logging.disable(logging.CRITICAL)
+    yield
+    # Re-enable logging after test
+    logging.disable(logging.NOTSET)
+
+
+class MockHandler:
+    """A mock handler that mimics logging.Handler without creating files."""
+
+    def __init__(self, *args, **kwargs):
+        import threading
+
+        self.level = logging.NOTSET
+        self.filters = []
+        self.lock = threading.RLock()
+        self._name = None
+        self.formatter = None
+        self.stream = None
+        self._builtin_open = open
+        self.baseFilename = "/dev/null"
+        self.mode = "a"
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+
+    def setLevel(self, level):
+        self.level = level
+
+    def setFormatter(self, formatter):
+        self.formatter = formatter
+
+    def addFilter(self, filter):
+        self.filters.append(filter)
+
+    def removeFilter(self, filter):
+        if filter in self.filters:
+            self.filters.remove(filter)
+
+    def filter(self, record):
+        return True
+
+    def close(self):
+        with self.lock:
+            self.stream = None
+
+    def emit(self, record):
+        # Don't actually write anything
+        pass
+
+    def shouldRollover(self, record):
+        # Never rollover in tests
+        return False
+
+    def _open(self):
+        # Return a mock file object instead of opening a real file
+        from io import StringIO
+
+        return StringIO()
+
+    def handle(self, record):
+        return True
+
+    def flush(self):
+        pass
+
+    def format(self, record):
+        return ""
+
+    def acquire(self):
+        self.lock.acquire()
+
+    def release(self):
+        self.lock.release()
+
+    def handleError(self, record):
+        pass
+
+    def createLock(self):
+        pass
+
+    def set_name(self, name):
+        self._name = name
+
+    def __repr__(self):
+        return f"<MockHandler at {id(self)}>"
+
+
+@pytest.fixture(autouse=True)
+def mock_log_files():
+    """Prevent actual log file creation in all tests."""
+    # Mock both RotatingFileHandler and regular FileHandler
+    with (
+        patch("logging.handlers.RotatingFileHandler", MockHandler),
+        patch("logging.FileHandler", MockHandler),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def clear_logger_cache():
+    """Clear logger cache between tests to avoid state pollution."""
+    import sc_linac_physics.utils.logger
+
+    sc_linac_physics.utils.logger._created_loggers.clear()
+
+    # Also clear all handlers from existing loggers
+    for logger_name in list(logging.Logger.manager.loggerDict.keys()):
+        logger = logging.getLogger(logger_name)
+        logger.handlers.clear()
+        logger.propagate = True
+
+    yield
+
+    sc_linac_physics.utils.logger._created_loggers.clear()
+
+
+@pytest.fixture(autouse=True)
+def prevent_log_file_creation():
+    """Prevent log file creation by mocking Path operations for log files."""
+    original_path_mkdir = Path.mkdir
+    original_path_open = Path.open
+
+    def mock_mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        # If it's a logs directory, pretend it was created
+        if "log" in str(self).lower():
+            return None
+        return original_path_mkdir(
+            self, mode=mode, parents=parents, exist_ok=exist_ok
+        )
+
+    def mock_open(self, mode="r", *args, **kwargs):
+        # If it's a log file, return a mock file object
+        if "log" in str(self).lower() or str(self).endswith(".log"):
+            mock_file = Mock()
+            mock_file.__enter__ = Mock(return_value=mock_file)
+            mock_file.__exit__ = Mock(return_value=None)
+            mock_file.write = Mock()
+            mock_file.read = Mock(return_value="")
+            mock_file.flush = Mock()
+            mock_file.close = Mock()
+            return mock_file
+        return original_path_open(self, mode=mode, *args, **kwargs)
+
+    with (
+        patch.object(Path, "mkdir", mock_mkdir),
+        patch.object(Path, "open", mock_open),
+    ):
+        yield
 
 
 class FakeEPICS_PV:
@@ -34,6 +192,19 @@ class FakeEPICS_PV:
         self._put_return = 1
         self.severity = 0  # EPICS_NO_ALARM_VAL
         self.auto_monitor = auto_monitor
+
+        # Add callback storage
+        self.callbacks = {}
+        self.connection_callbacks = []
+        self._callback_counter = 0
+
+        # Store callbacks if provided
+        if callback:
+            self.add_callback(callback)
+        if connection_callback:
+            self.connection_callbacks.append(connection_callback)
+            # Trigger connection callback immediately
+            connection_callback(pvname=pvname, conn=True, pv=self)
 
     @property
     def connected(self):
@@ -62,7 +233,46 @@ class FakeEPICS_PV:
         callback=None,
         callback_data=None,
     ):
+        self._get_value = value
+
+        # Trigger callbacks when value changes
+        for cb in self.callbacks.values():
+            try:
+                cb(pvname=self.pvname, value=value, timestamp=None)
+            except Exception:
+                pass  # Silently ignore callback errors in tests
+
         return self._put_return
+
+    def add_callback(self, callback, index=None, **kwargs):
+        """Add a callback function"""
+        if index is None:
+            index = self._callback_counter
+            self._callback_counter += 1
+        self.callbacks[index] = callback
+
+        # Immediately trigger callback with current value
+        try:
+            callback(pvname=self.pvname, value=self._get_value, timestamp=None)
+        except Exception:
+            pass  # Silently ignore callback errors
+
+        return index
+
+    def remove_callback(self, index):
+        """Remove a specific callback"""
+        if index in self.callbacks:
+            del self.callbacks[index]
+
+    def clear_callbacks(self):
+        """Clear all callbacks - REQUIRED by PyDM when disconnecting"""
+        self.callbacks.clear()
+        self.connection_callbacks.clear()
+
+    def disconnect(self):
+        """Disconnect the PV"""
+        self._connected = False
+        self.clear_callbacks()
 
 
 # Create fake epics exceptions
@@ -106,18 +316,30 @@ _original_open = open
 
 
 def _mock_os_mkdir(path, mode=0o777, *, dir_fd=None):
-    """Mock os.mkdir to ignore /home/physics paths"""
+    """Mock os.mkdir to ignore /home/physics paths and log directories"""
     path_str = str(path)
-    if "/home/physics" in path_str:
-        # Silently succeed for /home/physics paths
+    if "/home/physics" in path_str or "log" in path_str.lower():
+        # Silently succeed for /home/physics paths and log directories
         return
     # For other paths, use original
     return _original_os_mkdir(path, mode, dir_fd=dir_fd)
 
 
 def _mock_open(file, mode="r", *args, **kwargs):
-    """Mock open to redirect /home/physics to /tmp"""
+    """Mock open to redirect /home/physics to /tmp and ignore log files"""
     file_str = str(file)
+
+    # If it's a log file, return a mock
+    if "log" in file_str.lower() or file_str.endswith(".log"):
+        mock_file = Mock()
+        mock_file.__enter__ = Mock(return_value=mock_file)
+        mock_file.__exit__ = Mock(return_value=None)
+        mock_file.write = Mock()
+        mock_file.read = Mock(return_value="")
+        mock_file.flush = Mock()
+        mock_file.close = Mock()
+        return mock_file
+
     if "/home/physics" in file_str:
         # Create a temp directory structure
         import tempfile
@@ -142,6 +364,9 @@ def setup_test_environment(tmp_path_factory):
     # Update mocks to use the proper temp directory
     def _better_os_mkdir(path, mode=0o777, *, dir_fd=None):
         path_str = str(path)
+        if "log" in path_str.lower():
+            # Silently succeed for log paths
+            return
         if "/home/physics" in path_str:
             new_path = temp_physics / path_str.replace("/home/physics/", "")
             new_path.parent.mkdir(parents=True, exist_ok=True)
@@ -152,6 +377,18 @@ def setup_test_environment(tmp_path_factory):
 
     def _better_open(file, mode="r", *args, **kwargs):
         file_str = str(file)
+
+        # Mock log files
+        if "log" in file_str.lower() or file_str.endswith(".log"):
+            mock_file = Mock()
+            mock_file.__enter__ = Mock(return_value=mock_file)
+            mock_file.__exit__ = Mock(return_value=None)
+            mock_file.write = Mock()
+            mock_file.read = Mock(return_value="")
+            mock_file.flush = Mock()
+            mock_file.close = Mock()
+            return mock_file
+
         if "/home/physics" in file_str:
             new_file = temp_physics / file_str.replace("/home/physics/", "")
             new_file.parent.mkdir(parents=True, exist_ok=True)

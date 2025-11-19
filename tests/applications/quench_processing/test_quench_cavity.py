@@ -30,11 +30,6 @@ from tests.mock_utils import mock_func
 @pytest.fixture
 def cavity(monkeypatch):
     monkeypatch.setattr("time.sleep", mock_func)
-    monkeypatch.setattr("os.makedirs", mock_func)
-    monkeypatch.setattr(
-        "sc_linac_physics.utils.logger.custom_logger", mock_func
-    )
-    monkeypatch.setattr("logging.handlers.RotatingFileHandler", mock_func)
     yield QuenchCavity(randint(1, 8), MagicMock())
 
 
@@ -196,7 +191,6 @@ def test_validate_quench_false(cavity):
     cavity._fault_time_waveform_pv_obj = make_mock_pv(get_val=time_data)
     cavity._fault_waveform_pv_obj = make_mock_pv(get_val=amp_data)
     cavity._current_q_loaded_pv_obj = make_mock_pv(get_val=4.5e7)
-    cavity.cryomodule.logger = MagicMock()
 
     assert not (cavity.validate_quench())
 
@@ -216,7 +210,6 @@ def test_validate_quench_true(cavity):
     cavity._fault_time_waveform_pv_obj = make_mock_pv(get_val=time_data)
     cavity._fault_waveform_pv_obj = make_mock_pv(get_val=amp_data)
     cavity._current_q_loaded_pv_obj = make_mock_pv(get_val=4.5e7)
-    cavity.cryomodule.logger = MagicMock()
 
     assert cavity.validate_quench()
 
