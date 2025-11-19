@@ -86,6 +86,11 @@ class Piezo(linac_utils.SCLinacObject):
 
     @bias_voltage.setter
     def bias_voltage(self, value):
+        self.cavity.logger.debug(
+            "Setting piezo bias voltage to %.2fV",
+            value,
+            extra={"extra_data": {"bias_voltage": value, "piezo": str(self)}},
+        )
         self.bias_voltage_pv_obj.put(value)
 
     @property
@@ -100,6 +105,11 @@ class Piezo(linac_utils.SCLinacObject):
 
     @dc_setpoint.setter
     def dc_setpoint(self, value: float):
+        self.cavity.logger.debug(
+            "Setting piezo DC setpoint to %.2fV",
+            value,
+            extra={"extra_data": {"dc_setpoint": value, "piezo": str(self)}},
+        )
         self.dc_setpoint_pv_obj.put(value)
 
     @property
@@ -114,6 +124,13 @@ class Piezo(linac_utils.SCLinacObject):
 
     @feedback_setpoint.setter
     def feedback_setpoint(self, value):
+        self.cavity.logger.debug(
+            "Setting piezo feedback setpoint to %.2f",
+            value,
+            extra={
+                "extra_data": {"feedback_setpoint": value, "piezo": str(self)}
+            },
+        )
         self.feedback_setpoint_pv_obj.put(value)
 
     @property
@@ -145,37 +162,117 @@ class Piezo(linac_utils.SCLinacObject):
         return self.feedback_stat == linac_utils.PIEZO_MANUAL_VALUE
 
     def set_to_feedback(self):
+        self.cavity.logger.debug("Setting piezo to feedback mode")
         self.feedback_control_pv_obj.put(linac_utils.PIEZO_FEEDBACK_VALUE)
 
     def set_to_manual(self):
+        self.cavity.logger.debug("Setting piezo to manual mode")
         self.feedback_control_pv_obj.put(linac_utils.PIEZO_MANUAL_VALUE)
 
     def enable(self):
+        self.cavity.logger.info(
+            "Enabling piezo with bias voltage 25V",
+            extra={"extra_data": {"bias_voltage": 25, "piezo": str(self)}},
+        )
         self.bias_voltage = 25
+
+        attempt = 0
         while not self.is_enabled:
             self.cavity.check_abort()
-            print(f"{self} not enabled, trying to enable")
+            attempt += 1
+            self.cavity.logger.debug(
+                "Piezo not enabled, attempting to enable (attempt %d)",
+                attempt,
+                extra={
+                    "extra_data": {
+                        "attempt": attempt,
+                        "enable_status": (
+                            self._enable_stat_pv_obj.get()
+                            if self._enable_stat_pv_obj
+                            else None
+                        ),
+                        "piezo": str(self),
+                    }
+                },
+            )
             self.enable_pv_obj.put(linac_utils.PIEZO_DISABLE_VALUE)
             time.sleep(2)
             self.enable_pv_obj.put(linac_utils.PIEZO_ENABLE_VALUE)
             time.sleep(2)
 
+        self.cavity.logger.info(
+            "Piezo successfully enabled",
+            extra={
+                "extra_data": {"total_attempts": attempt, "piezo": str(self)}
+            },
+        )
+
     def enable_feedback(self):
+        self.cavity.logger.info("Enabling piezo feedback mode")
         self.enable()
+
+        attempt = 0
         while self.in_manual:
             self.cavity.check_abort()
-            print(f"{self} feedback not enabled, trying to enable feedback")
+            attempt += 1
+            self.cavity.logger.debug(
+                "Piezo feedback not enabled, attempting to enable (attempt %d)",
+                attempt,
+                extra={
+                    "extra_data": {
+                        "attempt": attempt,
+                        "feedback_stat": self.feedback_stat,
+                        "piezo": str(self),
+                    }
+                },
+            )
             self.set_to_manual()
             time.sleep(5)
             self.set_to_feedback()
             time.sleep(5)
 
+        self.cavity.logger.info(
+            "Piezo feedback successfully enabled",
+            extra={
+                "extra_data": {
+                    "total_attempts": attempt,
+                    "feedback_stat": self.feedback_stat,
+                    "piezo": str(self),
+                }
+            },
+        )
+
     def disable_feedback(self):
+        self.cavity.logger.info("Disabling piezo feedback mode")
         self.enable()
+
+        attempt = 0
         while not self.in_manual:
             self.cavity.check_abort()
-            print(f"{self} feedback enabled, trying to disable feedback")
+            attempt += 1
+            self.cavity.logger.debug(
+                "Piezo feedback still enabled, attempting to disable (attempt %d)",
+                attempt,
+                extra={
+                    "extra_data": {
+                        "attempt": attempt,
+                        "feedback_stat": self.feedback_stat,
+                        "piezo": str(self),
+                    }
+                },
+            )
             self.set_to_feedback()
             time.sleep(2)
             self.set_to_manual()
             time.sleep(2)
+
+        self.cavity.logger.info(
+            "Piezo feedback successfully disabled",
+            extra={
+                "extra_data": {
+                    "total_attempts": attempt,
+                    "feedback_stat": self.feedback_stat,
+                    "piezo": str(self),
+                }
+            },
+        )

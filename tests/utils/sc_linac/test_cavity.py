@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from random import randint, choice
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from lcls_tools.common.controls.pyepics.utils import (
@@ -48,21 +48,33 @@ from tests.mock_utils import mock_func
 @pytest.fixture
 def cavity(monkeypatch):
     monkeypatch.setattr("time.sleep", mock_func)
-    rack = make_rack(is_hl=False)
-    cavity = Cavity(cavity_num=randint(1, 8), rack_object=rack)
-    cavity.stepper_tuner.hz_per_microstep = 0.00540801
-    cavity.piezo = Piezo(cavity)
-    yield cavity
+
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.custom_logger"
+    ) as mock_logger:
+        mock_logger.return_value = MagicMock()
+
+        rack = make_rack(is_hl=False)
+        cavity = Cavity(cavity_num=randint(1, 8), rack_object=rack)
+        cavity.stepper_tuner.hz_per_microstep = 0.00540801
+        cavity.piezo = Piezo(cavity)
+        yield cavity
 
 
 @pytest.fixture
 def hl_cavity(monkeypatch):
     monkeypatch.setattr("time.sleep", mock_func)
-    rack = make_rack(is_hl=True)
-    cavity = Cavity(cavity_num=randint(1, 8), rack_object=rack)
-    cavity.stepper_tuner.hz_per_microstep = 0.00540801
-    cavity.piezo = Piezo(cavity)
-    yield cavity
+
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.custom_logger"
+    ) as mock_logger:
+        mock_logger.return_value = MagicMock()
+
+        rack = make_rack(is_hl=True)
+        cavity = Cavity(cavity_num=randint(1, 8), rack_object=rack)
+        cavity.stepper_tuner.hz_per_microstep = 0.00540801
+        cavity.piezo = Piezo(cavity)
+        yield cavity
 
 
 def make_rack(is_hl=False):
@@ -230,7 +242,7 @@ def test_measured_scale_factor_in_tolerance(cavity):
 
 
 def test_scale_factor_high(cavity):
-    val = randint(CAVITY_SCALE_UPPER_LIMIT, CAVITY_SCALE_UPPER_LIMIT * 2)
+    val = randint(CAVITY_SCALE_UPPER_LIMIT + 1, CAVITY_SCALE_UPPER_LIMIT * 2)
     cavity._measured_scale_factor_pv_obj = make_mock_pv(get_val=val)
     assert not cavity.measured_scale_factor_in_tolerance
 
