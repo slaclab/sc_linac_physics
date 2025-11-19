@@ -27,6 +27,8 @@ from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 from sc_linac_physics.utils.sc_linac.rack import Rack
 
+TUNE_MACHINE = Machine(cavity_class=TuneCavity, stepper_class=TuneStepper)
+
 
 class LabeledSpinbox:
     def __init__(self, init_channel: str):

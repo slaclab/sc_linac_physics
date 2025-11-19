@@ -158,13 +158,36 @@ class SSA(linac_utils.SCLinacObject):
         @param attempt: recursively incremented upon calibration failure
         @return: None
         """
-        print(f"Trying {self} calibration with drive max {drive_max}")
+        self.cavity.logger.info(
+            "Attempting SSA calibration with drive max %.2f (attempt %d)",
+            drive_max,
+            attempt + 1,
+            extra={
+                "extra_data": {
+                    "drive_max": drive_max,
+                    "attempt": attempt + 1,
+                    "ssa": str(self),
+                    "cavity": str(self.cavity),
+                }
+            },
+        )
+
         if drive_max < 0.4:
+            self.cavity.logger.error(
+                "Requested drive max too low",
+                extra={
+                    "extra_data": {
+                        "requested_drive_max": drive_max,
+                        "minimum_drive_max": 0.4,
+                        "ssa": str(self),
+                    }
+                },
+            )
             raise linac_utils.SSACalibrationError(
                 f"Requested {self} drive max too low"
             )
 
-        print(f"Setting {self} max drive")
+        self.cavity.logger.debug("Setting SSA max drive to %.2f", drive_max)
         self.drive_max = drive_max
 
         try:
@@ -176,8 +199,31 @@ class SSA(linac_utils.SCLinacObject):
             linac_utils.SSACalibrationError,
         ) as e:
             if attempt < 3:
+                self.cavity.logger.warning(
+                    "SSA calibration failed, retrying with lower drive max",
+                    extra={
+                        "extra_data": {
+                            "current_drive_max": drive_max,
+                            "new_drive_max": drive_max - 0.01,
+                            "attempt": attempt + 1,
+                            "error": str(e),
+                            "ssa": str(self),
+                        }
+                    },
+                )
                 self.calibrate(drive_max - 0.01, attempt + 1)
             else:
+                self.cavity.logger.error(
+                    "SSA calibration failed after 3 attempts",
+                    extra={
+                        "extra_data": {
+                            "final_drive_max": drive_max,
+                            "total_attempts": attempt + 1,
+                            "error": str(e),
+                            "ssa": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.SSACalibrationError(e)
 
     @property
@@ -204,19 +250,31 @@ class SSA(linac_utils.SCLinacObject):
             # number of times before raising an error)
             self.reset()
 
-            print(f"Turning {self} on")
+            self.cavity.logger.info("Turning SSA on")
             self.turn_on_pv_obj.put(1)
 
             while not self.is_on:
                 self.cavity.check_abort()
-                print(f"waiting for {self} to turn on")
+                self.cavity.logger.debug(
+                    "Waiting for SSA to turn on",
+                    extra={
+                        "extra_data": {
+                            "status_message": self.status_message,
+                            "ssa": str(self),
+                        }
+                    },
+                )
                 time.sleep(1)
 
         if self.cavity.cryomodule.is_harmonic_linearizer:
+            self.cavity.logger.debug(
+                "Setting HL SSA power supply setpoints to %d",
+                linac_utils.HL_SSA_PS_SETPOINT,
+            )
             self.ps_volt_setpoint2_pv_obj.put(linac_utils.HL_SSA_PS_SETPOINT)
             self.ps_volt_setpoint1_pv_obj.put(linac_utils.HL_SSA_PS_SETPOINT)
 
-        print(f"{self} on")
+        self.cavity.logger.info("SSA successfully turned on")
 
     @property
     def turn_off_pv_obj(self) -> PV:
@@ -226,15 +284,23 @@ class SSA(linac_utils.SCLinacObject):
 
     def turn_off(self):
         if self.is_on:
-            print(f"Turning {self} off")
+            self.cavity.logger.info("Turning SSA off")
             self.turn_off_pv_obj.put(1)
 
             while self.is_on:
                 self.cavity.check_abort()
-                print(f"waiting for {self} to turn off")
+                self.cavity.logger.debug(
+                    "Waiting for SSA to turn off",
+                    extra={
+                        "extra_data": {
+                            "status_message": self.status_message,
+                            "ssa": str(self),
+                        }
+                    },
+                )
                 time.sleep(1)
 
-        print(f"{self} off")
+        self.cavity.logger.info("SSA successfully turned off")
 
     @property
     def reset_pv_obj(self) -> PV:
@@ -246,7 +312,17 @@ class SSA(linac_utils.SCLinacObject):
         reset_attempt = 0
         while self.is_faulted:
             self.cavity.check_abort()
-            print(f"Resetting {self}...")
+            self.cavity.logger.info(
+                "Resetting SSA (attempt %d)",
+                reset_attempt + 1,
+                extra={
+                    "extra_data": {
+                        "attempt": reset_attempt + 1,
+                        "status_message": self.status_message,
+                        "ssa": str(self),
+                    }
+                },
+            )
             self.reset_pv_obj.put(1)
 
             self.wait_while_resetting()
@@ -255,23 +331,54 @@ class SSA(linac_utils.SCLinacObject):
                 self.is_faulted
                 and reset_attempt >= linac_utils.INTERLOCK_RESET_ATTEMPTS
             ):
+                self.cavity.logger.error(
+                    "SSA failed to reset after %d attempts",
+                    linac_utils.INTERLOCK_RESET_ATTEMPTS,
+                    extra={
+                        "extra_data": {
+                            "total_attempts": linac_utils.INTERLOCK_RESET_ATTEMPTS,
+                            "final_status": self.status_message,
+                            "ssa": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.SSAFaultError(
                     f"{self} failed to reset {linac_utils.INTERLOCK_RESET_ATTEMPTS}x"
                 )
 
             reset_attempt += 1
 
-        print(f"{self} reset")
+        self.cavity.logger.info("SSA successfully reset")
 
     def wait_while_resetting(self):
         start = datetime.now()
         while self.is_resetting:
             self.cavity.check_abort()
-            print(
-                f"{datetime.now().replace(microsecond=0)} Waiting for {self} to finish resetting"
+            elapsed = (datetime.now() - start).total_seconds()
+            self.cavity.logger.debug(
+                "Waiting for SSA to finish resetting (%.0fs elapsed)",
+                elapsed,
+                extra={
+                    "extra_data": {
+                        "elapsed_seconds": elapsed,
+                        "status_message": self.status_message,
+                        "ssa": str(self),
+                    }
+                },
             )
             time.sleep(5)
-            if (datetime.now() - start).total_seconds() >= 90:
+            if elapsed >= 90:
+                self.cavity.logger.error(
+                    "SSA reset timeout",
+                    extra={
+                        "extra_data": {
+                            "elapsed_seconds": elapsed,
+                            "timeout_seconds": 90,
+                            "final_status": self.status_message,
+                            "ssa": str(self),
+                        }
+                    },
+                )
                 raise linac_utils.SSAFaultError(
                     f"{self} took too long to reset, inspect and try again"
                 )
@@ -326,41 +433,116 @@ class SSA(linac_utils.SCLinacObject):
 
         self.cavity.reset_interlocks()
 
-        print(f"Starting {self} calibration")
+        self.cavity.logger.info(
+            "Starting SSA calibration",
+            extra={
+                "extra_data": {
+                    "save_slope": save_slope,
+                    "drive_max": self.drive_max,
+                    "ssa": str(self),
+                }
+            },
+        )
         self.start_calibration()
         time.sleep(2)
 
         while self.calibration_running:
-            print(
-                f"waiting for {self} calibration to stop running",
-                datetime.now(),
+            self.cavity.logger.debug(
+                "Waiting for SSA calibration to complete",
+                extra={
+                    "extra_data": {
+                        "calibration_status": self.calibration_status,
+                        "ssa": str(self),
+                    }
+                },
             )
             time.sleep(1)
         time.sleep(2)
 
         if self.calibration_crashed:
+            self.cavity.logger.error(
+                "SSA calibration crashed",
+                extra={
+                    "extra_data": {
+                        "calibration_status": self.calibration_status,
+                        "ssa": str(self),
+                    }
+                },
+            )
             raise linac_utils.SSACalibrationError(f"{self} calibration crashed")
 
         if not self.calibration_result_good:
+            self.cavity.logger.error(
+                "SSA calibration result not good",
+                extra={
+                    "extra_data": {
+                        "cal_result_status": self.cal_result_status_pv_obj.get(),
+                        "ssa": str(self),
+                    }
+                },
+            )
             raise linac_utils.SSACalibrationError(
                 f"{self} calibration result not good"
             )
 
         if self.max_fwd_pwr < self.fwd_power_lower_limit:
+            self.cavity.logger.error(
+                "SSA forward power too low",
+                extra={
+                    "extra_data": {
+                        "max_fwd_pwr": self.max_fwd_pwr,
+                        "lower_limit": self.fwd_power_lower_limit,
+                        "ssa": str(self),
+                    }
+                },
+            )
             raise linac_utils.SSACalibrationToleranceError(
                 f"{self.cavity} SSA forward power too low"
             )
 
         if not self.measured_slope_in_tolerance:
+            self.cavity.logger.error(
+                "SSA slope out of tolerance",
+                extra={
+                    "extra_data": {
+                        "measured_slope": self.measured_slope,
+                        "lower_limit": linac_utils.SSA_SLOPE_LOWER_LIMIT,
+                        "upper_limit": linac_utils.SSA_SLOPE_UPPER_LIMIT,
+                        "ssa": str(self),
+                    }
+                },
+            )
             raise linac_utils.SSACalibrationToleranceError(
                 f"{self.cavity} SSA Slope out of tolerance"
             )
 
-        print(f"Pushing SSA calibration results for {self.cavity}")
+        self.cavity.logger.info(
+            "Pushing SSA calibration results",
+            extra={
+                "extra_data": {
+                    "measured_slope": self.measured_slope,
+                    "max_fwd_pwr": self.max_fwd_pwr,
+                    "ssa": str(self),
+                }
+            },
+        )
         self.cavity.push_ssa_slope()
 
         if save_slope:
+            self.cavity.logger.info("Saving SSA slope")
             self.cavity.save_ssa_slope()
+
+        self.cavity.logger.info(
+            "SSA calibration completed successfully",
+            extra={
+                "extra_data": {
+                    "measured_slope": self.measured_slope,
+                    "max_fwd_pwr": self.max_fwd_pwr,
+                    "drive_max": self.drive_max,
+                    "ssa": str(self),
+                }
+            },
+        )
 
     @property
     def measured_slope(self):

@@ -2,6 +2,76 @@
 
 <!-- version list -->
 
+## v4.0.0 (2025-11-19)
+
+### Features
+
+- Add structured logging to cavity operations and setup scripts
+  ([#152](https://github.com/slaclab/sc_linac_physics/pull/152),
+  [`f2d920f`](https://github.com/slaclab/sc_linac_physics/commit/f2d920f81c8e42874d9b11fcbd330a50e35a73c2))
+
+### Refactoring
+
+- **quench**: Consolidate logging to QuenchCavity level
+  ([#152](https://github.com/slaclab/sc_linac_physics/pull/152),
+  [`f2d920f`](https://github.com/slaclab/sc_linac_physics/commit/f2d920f81c8e42874d9b11fcbd330a50e35a73c2))
+
+### Testing
+
+- Add logger mocking to prevent file creation
+  ([#152](https://github.com/slaclab/sc_linac_physics/pull/152),
+  [`f2d920f`](https://github.com/slaclab/sc_linac_physics/commit/f2d920f81c8e42874d9b11fcbd330a50e35a73c2))
+
+### Breaking Changes
+
+- **quench**: QuenchCryomodule class removed
+
+
+## v3.2.0 (2025-11-18)
+
+### Bug Fixes
+
+- **tests**: Patch failing test ([#149](https://github.com/slaclab/sc_linac_physics/pull/149),
+  [`bd90fbe`](https://github.com/slaclab/sc_linac_physics/commit/bd90fbecabe9d8cf31448cef1c412e96813e8f41))
+
+### Build System
+
+- **pyproject**: Add detune launcher CLI commands
+  ([#149](https://github.com/slaclab/sc_linac_physics/pull/149),
+  [`bd90fbe`](https://github.com/slaclab/sc_linac_physics/commit/bd90fbecabe9d8cf31448cef1c412e96813e8f41))
+
+### Chores
+
+- **tuning**: Add TUNE_MACHINE singleton for reusability
+  ([#149](https://github.com/slaclab/sc_linac_physics/pull/149),
+  [`bd90fbe`](https://github.com/slaclab/sc_linac_physics/commit/bd90fbecabe9d8cf31448cef1c412e96813e8f41))
+
+### Features
+
+- **launcher**: Add hierarchical abort system and multi-launcher support
+  ([#149](https://github.com/slaclab/sc_linac_physics/pull/149),
+  [`bd90fbe`](https://github.com/slaclab/sc_linac_physics/commit/bd90fbecabe9d8cf31448cef1c412e96813e8f41))
+
+- **simulation**: Add hierarchical abort system and multi-launcher support
+  ([#149](https://github.com/slaclab/sc_linac_physics/pull/149),
+  [`bd90fbe`](https://github.com/slaclab/sc_linac_physics/commit/bd90fbecabe9d8cf31448cef1c412e96813e8f41))
+
+### Refactoring
+
+- **simulation**: Restructure main service into modular components
+  ([#149](https://github.com/slaclab/sc_linac_physics/pull/149),
+  [`bd90fbe`](https://github.com/slaclab/sc_linac_physics/commit/bd90fbecabe9d8cf31448cef1c412e96813e8f41))
+
+
+## v3.1.0 (2025-11-18)
+
+### Features
+
+- **microphonics**: Add time-based progress estimation for data acquisition
+  ([#151](https://github.com/slaclab/sc_linac_physics/pull/151),
+  [`5d9d003`](https://github.com/slaclab/sc_linac_physics/commit/5d9d0033fb65a7f12e90a56e32b709714a288992))
+
+
 ## v3.0.3 (2025-11-12)
 
 ### Chores

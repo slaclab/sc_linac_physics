@@ -96,11 +96,13 @@ class StepperTuner(linac_utils.SCLinacObject):
         """
         self.cavity.check_abort()
         if self.abort_flag:
+            self.cavity.logger.warning("Stepper abort requested")
             self.abort()
             self.abort_flag = False
             raise linac_utils.StepperAbortError(f"Abort requested for {self}")
 
     def abort(self):
+        self.cavity.logger.info("Aborting stepper movement")
         if not self._abort_pv_obj:
             self._abort_pv_obj = PV(self.abort_pv)
         self._abort_pv_obj.put(1)
@@ -136,6 +138,7 @@ class StepperTuner(linac_utils.SCLinacObject):
         return self._motor_moving_pv_obj.get() == 1
 
     def reset_signed_steps(self):
+        self.cavity.logger.debug("Resetting stepper signed steps counter")
         if not self._reset_signed_pv_obj:
             self._reset_signed_pv_obj = PV(self.reset_signed_pv)
         self._reset_signed_pv_obj.put(0)
@@ -190,6 +193,16 @@ class StepperTuner(linac_utils.SCLinacObject):
         self.speed_pv_obj.put(value)
 
     def restore_defaults(self):
+        self.cavity.logger.debug(
+            "Restoring stepper default settings",
+            extra={
+                "extra_data": {
+                    "default_max_steps": linac_utils.DEFAULT_STEPPER_MAX_STEPS,
+                    "default_speed": linac_utils.DEFAULT_STEPPER_SPEED,
+                    "stepper": str(self),
+                }
+            },
+        )
         self.max_steps = linac_utils.DEFAULT_STEPPER_MAX_STEPS
         self.speed = linac_utils.DEFAULT_STEPPER_SPEED
 
@@ -218,26 +231,70 @@ class StepperTuner(linac_utils.SCLinacObject):
             self.max_steps = max_steps
 
             # make sure that we don't exceed the speed limit as defined by the tuner experts
-            self.speed = (
+            requested_speed = (
                 speed
                 if speed < linac_utils.MAX_STEPPER_SPEED
                 else linac_utils.MAX_STEPPER_SPEED
             )
 
+            if requested_speed != speed:
+                self.cavity.logger.warning(
+                    "Requested speed exceeds maximum, limiting to %d steps/s",
+                    linac_utils.MAX_STEPPER_SPEED,
+                    extra={
+                        "extra_data": {
+                            "requested_speed": speed,
+                            "max_speed": linac_utils.MAX_STEPPER_SPEED,
+                            "stepper": str(self),
+                        }
+                    },
+                )
+
+            self.speed = requested_speed
+
         if abs(num_steps) <= max_steps:
-            print(f"{self.cavity} {abs(num_steps)} steps <= {max_steps} max")
+            self.cavity.logger.info(
+                "Moving stepper %d steps (within max %d)",
+                abs(num_steps),
+                max_steps,
+                extra={
+                    "extra_data": {
+                        "num_steps": num_steps,
+                        "max_steps": max_steps,
+                        "speed": self.speed,
+                        "check_detune": check_detune,
+                        "stepper": str(self),
+                    }
+                },
+            )
             self.step_des = abs(num_steps)
             self.issue_move_command(num_steps, check_detune=check_detune)
             self.restore_defaults()
         else:
-            print(f"{self.cavity} {abs(num_steps)} steps > {max_steps} max")
+            self.cavity.logger.info(
+                "Moving stepper %d steps (exceeds max %d, splitting move)",
+                abs(num_steps),
+                max_steps,
+                extra={
+                    "extra_data": {
+                        "total_steps": num_steps,
+                        "max_steps": max_steps,
+                        "first_move_steps": max_steps,
+                        "remaining_steps": abs(num_steps) - max_steps,
+                        "stepper": str(self),
+                    }
+                },
+            )
             self.step_des = max_steps
             self.issue_move_command(num_steps, check_detune=check_detune)
-            print(
-                f"{self.cavity} moving {num_steps - (sign(num_steps) * max_steps)}"
+
+            remaining_steps = num_steps - (sign(num_steps) * max_steps)
+            self.cavity.logger.debug(
+                "Continuing with remaining %d steps", remaining_steps
             )
+
             self.move(
-                num_steps - (sign(num_steps) * max_steps),
+                remaining_steps,
                 max_steps,
                 speed,
                 change_limits=False,
@@ -256,28 +313,82 @@ class StepperTuner(linac_utils.SCLinacObject):
         """
 
         # this is necessary because the tuners for the HLs move the other direction
+        original_steps = num_steps
         if self.cavity.cryomodule.is_harmonic_linearizer:
             num_steps *= -1
+            self.cavity.logger.debug(
+                "Harmonic linearizer detected, inverting step direction (%d -> %d)",
+                original_steps,
+                num_steps,
+            )
+
+        direction = "positive" if sign(num_steps) == 1 else "negative"
+        self.cavity.logger.info(
+            "Issuing stepper move command: %d steps %s",
+            abs(num_steps),
+            direction,
+            extra={
+                "extra_data": {
+                    "num_steps": num_steps,
+                    "direction": direction,
+                    "check_detune": check_detune,
+                    "is_harmonic_linearizer": self.cavity.cryomodule.is_harmonic_linearizer,
+                    "stepper": str(self),
+                }
+            },
+        )
 
         if sign(num_steps) == 1:
             self.move_positive()
         else:
             self.move_negative()
 
-        print(f"Waiting 5s for {self.cavity} motor to start moving")
+        self.cavity.logger.debug("Waiting 5s for motor to start moving")
         time.sleep(5)
 
+        move_start_time = datetime.now()
         while self.motor_moving:
             self.check_abort()
             if check_detune:
                 self.cavity.check_detune()
-            print(f"{self} motor still moving, waiting 5s", datetime.now())
+
+            elapsed = (datetime.now() - move_start_time).total_seconds()
+            self.cavity.logger.debug(
+                "Motor still moving (%.0fs elapsed)",
+                elapsed,
+                extra={
+                    "extra_data": {
+                        "elapsed_seconds": elapsed,
+                        "stepper": str(self),
+                    }
+                },
+            )
             time.sleep(5)
 
-        print(f"{self} motor done moving")
+        total_move_time = (datetime.now() - move_start_time).total_seconds()
+        self.cavity.logger.info(
+            "Stepper motor completed move (%.1fs total)",
+            total_move_time,
+            extra={
+                "extra_data": {
+                    "total_move_time_seconds": total_move_time,
+                    "stepper": str(self),
+                }
+            },
+        )
 
         # the motor can be done moving for good OR bad reasons
         if self.on_limit_switch:
+            self.cavity.logger.error(
+                "Stepper motor hit limit switch",
+                extra={
+                    "extra_data": {
+                        "limit_switch_a": self.limit_switch_a_pv_obj.get(),
+                        "limit_switch_b": self.limit_switch_b_pv_obj.get(),
+                        "stepper": str(self),
+                    }
+                },
+            )
             raise linac_utils.StepperError(
                 f"{self.cavity} stepper motor on limit switch"
             )

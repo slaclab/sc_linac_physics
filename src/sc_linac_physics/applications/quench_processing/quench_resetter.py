@@ -7,23 +7,23 @@ from typing import List, Dict, Optional
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
 )
-from sc_linac_physics.applications.quench_processing.quench_cryomodule import (
-    QUENCH_MACHINE,
-)
 from sc_linac_physics.applications.quench_processing.quench_utils import (
-    BASE_LOG_DIR,
+    QUENCH_LOG_DIR,
 )
 from sc_linac_physics.utils.epics import PV, PVInvalidError
 from sc_linac_physics.utils.logger import custom_logger
+from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     CavityFaultError,
 )
 
+QUENCH_MACHINE = Machine(cavity_class=QuenchCavity)
+
 # Module-level logger with explicit descriptive name
 logger = custom_logger(
     "quench_resetter.main",
-    log_dir=BASE_LOG_DIR,
+    log_dir=QUENCH_LOG_DIR,
     log_filename="quench_resetter",
     level=logging.INFO,
 )

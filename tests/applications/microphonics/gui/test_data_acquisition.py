@@ -1,7 +1,8 @@
+import time
 from unittest.mock import Mock, patch, MagicMock
 
 import pytest
-from PyQt5.QtCore import QProcess, QByteArray
+from PyQt5.QtCore import QProcess, QByteArray, QTimer
 
 from sc_linac_physics.applications.microphonics.gui.data_acquisition import (
     DataAcquisitionManager,
@@ -1010,6 +1011,97 @@ class TestDataAcquisition:
         """Test stop_all with no active processes"""
         acquisition_manager.stop_all()
         assert len(acquisition_manager.active_processes) == 0
+
+    def test_progress_timer_updates_and_stops(
+        self, acquisition_manager, sample_config, tmp_path
+    ):
+        """Test that progress timer works and stops when real progress arrives"""
+        acquisition_manager.base_path = tmp_path
+        chassis_id = "ACCL:L1B:0300:RESA"
+
+        mock_process = Mock(spec=QProcess)
+        mock_process.readyReadStandardOutput = MagicMock()
+        mock_process.readyReadStandardError = MagicMock()
+        mock_process.finished = MagicMock()
+        mock_process.waitForStarted.return_value = True
+
+        mock_timer = Mock(spec=QTimer)
+
+        with patch(
+            "sc_linac_physics.applications.microphonics.gui.data_acquisition.QProcess",
+            return_value=mock_process,
+        ):
+            with patch(
+                "sc_linac_physics.applications.microphonics.gui.data_acquisition.QTimer",
+                return_value=mock_timer,
+            ):
+                acquisition_manager.start_acquisition(chassis_id, sample_config)
+
+                mock_timer.start.assert_called_once_with(2000)
+
+                process_info = acquisition_manager.active_processes[chassis_id]
+                process_info["progress_timer"] = mock_timer
+                mock_timer.isActive.return_value = True
+
+                line = "Acquired 50 / 100 buffers"
+                acquisition_manager._check_progress(
+                    line, chassis_id, process_info
+                )
+
+                mock_timer.stop.assert_called_once()
+                assert process_info["actual_progress_received"] is True
+
+    def test_progress_estimate_calculation(self, acquisition_manager):
+        """Test progress calculation and 90% cap"""
+        chassis_id = "ACCL:L1B:0300:RESA"
+
+        mock_timer = Mock(spec=QTimer)
+
+        # Test 50% progress
+        acquisition_manager.active_processes[chassis_id] = {
+            "start_time": time.time() - 8.0,
+            "expected_duration": 16.0,
+            "last_progress": 0,
+            "cavities": [1],
+            "actual_progress_received": False,
+            "progress_timer": mock_timer,
+        }
+
+        with patch.object(
+            acquisition_manager, "acquisitionProgress"
+        ) as mock_signal:
+            acquisition_manager._update_progress_estimate(chassis_id)
+            mock_signal.emit.assert_called_with(chassis_id, 1, 50)
+
+        acquisition_manager.active_processes[chassis_id]["start_time"] = (
+            time.time() - 20.0
+        )
+        acquisition_manager.active_processes[chassis_id]["last_progress"] = 0
+
+        with patch.object(
+            acquisition_manager, "acquisitionProgress"
+        ) as mock_signal:
+            acquisition_manager._update_progress_estimate(chassis_id)
+            mock_signal.emit.assert_called_with(
+                chassis_id, 1, 90
+            )  # Capped at 90%
+
+    def test_progress_timer_cleanup(self, acquisition_manager):
+        """Test timer is cleaned up properly"""
+        mock_timer = Mock(spec=QTimer)
+        mock_timer.isActive.return_value = True
+
+        mock_process = Mock(spec=QProcess)
+        mock_process.readyReadStandardOutput = MagicMock()
+        mock_process.readyReadStandardError = MagicMock()
+        mock_process.finished = MagicMock()
+
+        process_info = {"progress_timer": mock_timer, "process": mock_process}
+
+        acquisition_manager._cleanup_process_resources(process_info)
+
+        mock_timer.stop.assert_called_once()
+        mock_timer.deleteLater.assert_called_once()
 
     # ===== Integration Tests =====
 

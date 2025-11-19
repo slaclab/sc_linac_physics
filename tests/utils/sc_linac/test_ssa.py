@@ -32,6 +32,7 @@ def ssa(monkeypatch):
     rack.cryomodule.name = choice(ALL_CRYOMODULES)
     rack.cryomodule.linac.name = f"L{randint(0, 3)}B"
     cavity = Cavity(cavity_num=randint(1, 8), rack_object=rack)
+    cavity.logger = MagicMock()  # Mock the logger
     yield SSA(cavity=cavity)
 
 
@@ -208,6 +209,9 @@ def test_run_calibration(ssa):
     ssa.start_calibration = MagicMock()
     ssa._calibration_status_pv_obj = make_mock_pv(get_val=1)
 
+    # ADD THESE LINES to mock the saved drive max PV
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+
     ssa._cal_result_status_pv_obj = make_mock_pv(
         get_val=SSA_RESULT_GOOD_STATUS_VALUE
     )
@@ -236,6 +240,9 @@ def test_run_calibration_crashed(ssa):
     ssa._calibration_status_pv_obj = make_mock_pv(
         get_val=SSA_CALIBRATION_CRASHED_VALUE
     )
+    # ADD THIS LINE
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+
     with pytest.raises(SSACalibrationError):
         ssa.run_calibration()
 
@@ -247,6 +254,9 @@ def test_run_calibration_bad_result(ssa):
     ssa.start_calibration = MagicMock()
     ssa._calibration_status_pv_obj = make_mock_pv(get_val=1)
     ssa._cal_result_status_pv_obj = make_mock_pv(get_val=1)
+    # ADD THIS LINE
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+
     with pytest.raises(SSACalibrationError):
         ssa.run_calibration()
 
@@ -263,6 +273,9 @@ def test_run_calibration_low_fwd_pwr(ssa):
     ssa._max_fwd_pwr_pv_obj = make_mock_pv(
         get_val=ssa.fwd_power_lower_limit / 2
     )
+    # ADD THIS LINE
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+
     with pytest.raises(SSACalibrationToleranceError):
         ssa.run_calibration()
 
@@ -280,6 +293,9 @@ def test_run_calibration_bad_slope(ssa):
         get_val=ssa.fwd_power_lower_limit * 2
     )
     ssa._measured_slope_pv_obj = make_mock_pv(get_val=SSA_SLOPE_LOWER_LIMIT / 2)
+    # ADD THIS LINE
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+
     with pytest.raises(SSACalibrationToleranceError):
         ssa.run_calibration()
 

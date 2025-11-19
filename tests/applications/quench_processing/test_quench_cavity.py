@@ -32,9 +32,9 @@ def cavity(monkeypatch):
     monkeypatch.setattr("time.sleep", mock_func)
     monkeypatch.setattr("os.makedirs", mock_func)
     monkeypatch.setattr(
-        "lcls_tools.common.logger.logger.custom_logger", mock_func
+        "sc_linac_physics.utils.logger.custom_logger", mock_func
     )
-    monkeypatch.setattr("logging.FileHandler", mock_func)
+    monkeypatch.setattr("logging.handlers.RotatingFileHandler", mock_func)
     yield QuenchCavity(randint(1, 8), MagicMock())
 
 
