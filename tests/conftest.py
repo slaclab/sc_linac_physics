@@ -4,6 +4,8 @@ import logging.handlers
 import os
 import subprocess
 import sys
+import tempfile
+from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch, Mock
 
@@ -11,14 +13,304 @@ import pyqtgraph as pg
 import pytest
 from qtpy.QtWidgets import QApplication
 
+# ============================================================================
+# Early Filesystem Mocking (BEFORE imports)
+# ============================================================================
+
+# Create temp directory for /home/physics redirection
+_TEMP_PHYSICS_DIR = Path(tempfile.gettempdir()) / "test_physics_home"
+_TEMP_PHYSICS_DIR.mkdir(parents=True, exist_ok=True)
+
+_original_os_mkdir = os.mkdir
+_original_os_makedirs = os.makedirs
+_original_open = builtins.open
+_original_path_mkdir = Path.mkdir
+_original_path_open = Path.open
+
+
+def _is_log_path(path_str):
+    """Check if path is related to logging."""
+    return "log" in path_str.lower() or path_str.endswith(".log")
+
+
+def _is_physics_path(path_str):
+    """Check if path is under /home/physics."""
+    return "/home/physics" in path_str
+
+
+def _create_mock_file():
+    """Create a mock file object for log files."""
+    mock_file = Mock()
+    mock_file.__enter__ = Mock(return_value=mock_file)
+    mock_file.__exit__ = Mock(return_value=None)
+    mock_file.write = Mock()
+    mock_file.read = Mock(return_value="")
+    mock_file.flush = Mock()
+    mock_file.close = Mock()
+    return mock_file
+
+
+def _redirect_physics_path(path_str):
+    """Convert /home/physics path to temp directory."""
+    return _TEMP_PHYSICS_DIR / path_str.replace("/home/physics/", "").lstrip(
+        "/"
+    )
+
+
+def _mock_os_mkdir(path, mode=0o777, *, dir_fd=None):
+    """Mock os.mkdir to handle /home/physics and log paths."""
+    path_str = str(path)
+
+    if _is_log_path(path_str):
+        return
+
+    if _is_physics_path(path_str):
+        new_path = _redirect_physics_path(path_str)
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        if not new_path.exists():
+            return _original_os_mkdir(str(new_path), mode)
+        return
+
+    return _original_os_mkdir(path, mode, dir_fd=dir_fd)
+
+
+def _mock_os_makedirs(name, mode=0o777, exist_ok=False):
+    """Mock os.makedirs to handle /home/physics and log paths."""
+    path_str = str(name)
+
+    if _is_log_path(path_str):
+        return
+
+    if _is_physics_path(path_str):
+        new_path = _redirect_physics_path(path_str)
+        return _original_os_makedirs(str(new_path), mode, exist_ok=True)
+
+    return _original_os_makedirs(name, mode, exist_ok)
+
+
+def _mock_open(file, mode="r", *args, **kwargs):
+    """Mock open to handle /home/physics and log files."""
+    file_str = str(file)
+
+    if _is_log_path(file_str):
+        return _create_mock_file()
+
+    if _is_physics_path(file_str):
+        new_file = _redirect_physics_path(file_str)
+        new_file.parent.mkdir(parents=True, exist_ok=True)
+        return _original_open(new_file, mode, *args, **kwargs)
+
+    return _original_open(file, mode, *args, **kwargs)
+
+
+def _mock_path_mkdir(self, mode=0o777, parents=False, exist_ok=False):
+    """Mock Path.mkdir to handle /home/physics and log paths."""
+    path_str = str(self)
+
+    if _is_log_path(path_str):
+        return None
+
+    if _is_physics_path(path_str):
+        new_path = _redirect_physics_path(path_str)
+        return new_path.mkdir(mode=mode, parents=True, exist_ok=True)
+
+    return _original_path_mkdir(
+        self, mode=mode, parents=parents, exist_ok=exist_ok
+    )
+
+
+def _mock_path_open(self, mode="r", *args, **kwargs):
+    """Mock Path.open to handle /home/physics and log files."""
+    path_str = str(self)
+
+    if _is_log_path(path_str):
+        return _create_mock_file()
+
+    if _is_physics_path(path_str):
+        new_path = _redirect_physics_path(path_str)
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        return new_path.open(mode=mode, *args, **kwargs)
+
+    return _original_path_open(self, mode=mode, *args, **kwargs)
+
+
+# Apply mocks IMMEDIATELY (before any test imports)
+os.mkdir = _mock_os_mkdir
+os.makedirs = _mock_os_makedirs
+builtins.open = _mock_open
+Path.mkdir = _mock_path_mkdir
+Path.open = _mock_path_open
+
+
+# ============================================================================
+# Environment Setup (runs before imports)
+# ============================================================================
+
+
+def pytest_configure(config):
+    """
+    Pytest hook that runs before test collection.
+    Sets up environment and mocks before any imports.
+    """
+    # Disable PyDM plugins and configure Qt
+    os.environ.setdefault("PYDM_DATA_PLUGINS_DISABLED", "1")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ.setdefault("QT_API", "pyqt5")
+    os.environ.setdefault("PYDM_DISABLE_TELEMETRY", "1")
+
+    # Inject fake EPICS module
+    _setup_fake_epics()
+
+
+def pytest_unconfigure(config):
+    """Restore original functions after all tests complete."""
+    os.mkdir = _original_os_mkdir
+    os.makedirs = _original_os_makedirs
+    builtins.open = _original_open
+    Path.mkdir = _original_path_mkdir
+    Path.open = _original_path_open
+
+
+def _setup_fake_epics():
+    """Create and inject fake EPICS module into sys.modules."""
+    fake_epics = MagicMock()
+    fake_epics.PV = FakeEPICS_PV
+
+    fake_epics_ca = MagicMock()
+    fake_epics_ca.CASeverityException = FakeCASeverityException
+    fake_epics_ca.withInitialContext = fake_with_initial_context
+
+    fake_epics.ca = fake_epics_ca
+
+    sys.modules["epics"] = fake_epics
+    sys.modules["epics.pv"] = fake_epics
+    sys.modules["epics.ca"] = fake_epics_ca
+
+
+# ============================================================================
+# Fake EPICS Implementation
+# ============================================================================
+
+
+class FakeEPICS_PV:
+    """Fake EPICS PV for testing - mimics the interface."""
+
+    def __init__(
+        self,
+        pvname,
+        connection_timeout=None,
+        callback=None,
+        form="time",
+        verbose=False,
+        auto_monitor=True,
+        count=None,
+        connection_callback=None,
+        access_callback=None,
+    ):
+        self.pvname = pvname
+        self._connected = True
+        self._get_value = 42.0
+        self._put_return = 1
+        self.severity = 0
+        self.auto_monitor = auto_monitor
+
+        self.callbacks = {}
+        self.connection_callbacks = []
+        self._callback_counter = 0
+
+        if callback:
+            self.add_callback(callback)
+        if connection_callback:
+            self.connection_callbacks.append(connection_callback)
+            connection_callback(pvname=pvname, conn=True, pv=self)
+
+    @property
+    def connected(self):
+        return self._connected
+
+    def wait_for_connection(self, timeout=None):
+        return self._connected
+
+    def get(
+        self,
+        count=None,
+        as_string=False,
+        as_numpy=True,
+        timeout=None,
+        with_ctrlvars=False,
+        use_monitor=None,
+    ):
+        return self._get_value
+
+    def put(
+        self,
+        value,
+        wait=True,
+        timeout=None,
+        use_complete=False,
+        callback=None,
+        callback_data=None,
+    ):
+        self._get_value = value
+
+        for cb in self.callbacks.values():
+            try:
+                cb(pvname=self.pvname, value=value, timestamp=None)
+            except Exception:
+                pass
+
+        return self._put_return
+
+    def add_callback(self, callback, index=None, **kwargs):
+        """Add a callback function."""
+        if index is None:
+            index = self._callback_counter
+            self._callback_counter += 1
+        self.callbacks[index] = callback
+
+        try:
+            callback(pvname=self.pvname, value=self._get_value, timestamp=None)
+        except Exception:
+            pass
+
+        return index
+
+    def remove_callback(self, index):
+        """Remove a specific callback."""
+        self.callbacks.pop(index, None)
+
+    def clear_callbacks(self):
+        """Clear all callbacks - required by PyDM."""
+        self.callbacks.clear()
+        self.connection_callbacks.clear()
+
+    def disconnect(self):
+        """Disconnect the PV."""
+        self._connected = False
+        self.clear_callbacks()
+
+
+class FakeCASeverityException(Exception):
+    """Fake CASeverityException."""
+
+    pass
+
+
+def fake_with_initial_context(func):
+    """Fake decorator for withInitialContext."""
+    return func
+
+
+# ============================================================================
+# Logging Fixtures
+# ============================================================================
+
 
 @pytest.fixture(autouse=True)
 def suppress_logging():
     """Suppress all logging output during tests."""
-    # Disable all logging output
     logging.disable(logging.CRITICAL)
     yield
-    # Re-enable logging after test
     logging.disable(logging.NOTSET)
 
 
@@ -34,7 +326,6 @@ class MockHandler:
         self._name = None
         self.formatter = None
         self.stream = None
-        self._builtin_open = open
         self.baseFilename = "/dev/null"
         self.mode = "a"
 
@@ -67,17 +358,12 @@ class MockHandler:
             self.stream = None
 
     def emit(self, record):
-        # Don't actually write anything
         pass
 
     def shouldRollover(self, record):
-        # Never rollover in tests
         return False
 
     def _open(self):
-        # Return a mock file object instead of opening a real file
-        from io import StringIO
-
         return StringIO()
 
     def handle(self, record):
@@ -111,7 +397,6 @@ class MockHandler:
 @pytest.fixture(autouse=True)
 def mock_log_files():
     """Prevent actual log file creation in all tests."""
-    # Mock both RotatingFileHandler and regular FileHandler
     with (
         patch("logging.handlers.RotatingFileHandler", MockHandler),
         patch("logging.FileHandler", MockHandler),
@@ -126,7 +411,6 @@ def clear_logger_cache():
 
     sc_linac_physics.utils.logger._created_loggers.clear()
 
-    # Also clear all handlers from existing loggers
     for logger_name in list(logging.Logger.manager.loggerDict.keys()):
         logger = logging.getLogger(logger_name)
         logger.handlers.clear()
@@ -137,279 +421,61 @@ def clear_logger_cache():
     sc_linac_physics.utils.logger._created_loggers.clear()
 
 
-@pytest.fixture(autouse=True)
-def prevent_log_file_creation():
-    """Prevent log file creation by mocking Path operations for log files."""
-    original_path_mkdir = Path.mkdir
-    original_path_open = Path.open
-
-    def mock_mkdir(self, mode=0o777, parents=False, exist_ok=False):
-        # If it's a logs directory, pretend it was created
-        if "log" in str(self).lower():
-            return None
-        return original_path_mkdir(
-            self, mode=mode, parents=parents, exist_ok=exist_ok
-        )
-
-    def mock_open(self, mode="r", *args, **kwargs):
-        # If it's a log file, return a mock file object
-        if "log" in str(self).lower() or str(self).endswith(".log"):
-            mock_file = Mock()
-            mock_file.__enter__ = Mock(return_value=mock_file)
-            mock_file.__exit__ = Mock(return_value=None)
-            mock_file.write = Mock()
-            mock_file.read = Mock(return_value="")
-            mock_file.flush = Mock()
-            mock_file.close = Mock()
-            return mock_file
-        return original_path_open(self, mode=mode, *args, **kwargs)
-
-    with (
-        patch.object(Path, "mkdir", mock_mkdir),
-        patch.object(Path, "open", mock_open),
-    ):
-        yield
+# ============================================================================
+# Qt/GUI Fixtures
+# ============================================================================
 
 
-class FakeEPICS_PV:
-    """Fake EPICS PV for testing - mimics the interface"""
-
-    def __init__(
-        self,
-        pvname,
-        connection_timeout=None,
-        callback=None,
-        form="time",
-        verbose=False,
-        auto_monitor=True,
-        count=None,
-        connection_callback=None,
-        access_callback=None,
-    ):
-        self.pvname = pvname
-        self._connected = True
-        self._get_value = 42.0
-        self._put_return = 1
-        self.severity = 0  # EPICS_NO_ALARM_VAL
-        self.auto_monitor = auto_monitor
-
-        # Add callback storage
-        self.callbacks = {}
-        self.connection_callbacks = []
-        self._callback_counter = 0
-
-        # Store callbacks if provided
-        if callback:
-            self.add_callback(callback)
-        if connection_callback:
-            self.connection_callbacks.append(connection_callback)
-            # Trigger connection callback immediately
-            connection_callback(pvname=pvname, conn=True, pv=self)
-
-    @property
-    def connected(self):
-        return self._connected
-
-    def wait_for_connection(self, timeout=None):
-        return self._connected
-
-    def get(
-        self,
-        count=None,
-        as_string=False,
-        as_numpy=True,
-        timeout=None,
-        with_ctrlvars=False,
-        use_monitor=None,
-    ):
-        return self._get_value
-
-    def put(
-        self,
-        value,
-        wait=True,
-        timeout=None,
-        use_complete=False,
-        callback=None,
-        callback_data=None,
-    ):
-        self._get_value = value
-
-        # Trigger callbacks when value changes
-        for cb in self.callbacks.values():
-            try:
-                cb(pvname=self.pvname, value=value, timestamp=None)
-            except Exception:
-                pass  # Silently ignore callback errors in tests
-
-        return self._put_return
-
-    def add_callback(self, callback, index=None, **kwargs):
-        """Add a callback function"""
-        if index is None:
-            index = self._callback_counter
-            self._callback_counter += 1
-        self.callbacks[index] = callback
-
-        # Immediately trigger callback with current value
-        try:
-            callback(pvname=self.pvname, value=self._get_value, timestamp=None)
-        except Exception:
-            pass  # Silently ignore callback errors
-
-        return index
-
-    def remove_callback(self, index):
-        """Remove a specific callback"""
-        if index in self.callbacks:
-            del self.callbacks[index]
-
-    def clear_callbacks(self):
-        """Clear all callbacks - REQUIRED by PyDM when disconnecting"""
-        self.callbacks.clear()
-        self.connection_callbacks.clear()
-
-    def disconnect(self):
-        """Disconnect the PV"""
-        self._connected = False
-        self.clear_callbacks()
+@pytest.fixture(scope="session", autouse=True)
+def qapp_global():
+    """Provide a global QApplication instance for all tests."""
+    if not QApplication.instance():
+        app = QApplication(sys.argv)
+        yield app
+        app.quit()
+    else:
+        yield QApplication.instance()
 
 
-# Create fake epics exceptions
-class FakeCASeverityException(Exception):
-    """Fake CASeverityException"""
+@pytest.fixture(scope="session", autouse=True)
+def patch_pyqtgraph():
+    """Patch PyQtGraph for Python 3.13 compatibility."""
+    original_getattr = pg.PlotWidget.__getattr__
 
-    pass
+    def patched_getattr(self, attr):
+        if attr == "autoRangeEnabled":
+            return self.getViewBox().autoRangeEnabled
+        return original_getattr(self, attr)
 
-
-def fake_with_initial_context(func):
-    """Fake decorator for withInitialContext"""
-    return func
-
-
-def pytest_configure(config):
-    """
-    Pytest hook that runs before test collection.
-    Inject our fake EPICS module into sys.modules before any test imports happen.
-    """
-    # Create a fake epics module with all necessary attributes
-    fake_epics = MagicMock()
-    fake_epics.PV = FakeEPICS_PV
-
-    # Create fake epics.ca submodule
-    fake_epics_ca = MagicMock()
-    fake_epics_ca.CASeverityException = FakeCASeverityException
-    fake_epics_ca.withInitialContext = fake_with_initial_context
-
-    # Set up the ca attribute
-    fake_epics.ca = fake_epics_ca
-
-    # Inject into sys.modules
-    sys.modules["epics"] = fake_epics
-    sys.modules["epics.pv"] = fake_epics
-    sys.modules["epics.ca"] = fake_epics_ca
+    pg.PlotWidget.__getattr__ = patched_getattr
+    yield
 
 
-# Mock filesystem operations BEFORE any imports that might use them
-_original_os_mkdir = os.mkdir
-_original_open = open
+@pytest.fixture
+def mock_qt_app(monkeypatch):
+    """Mock QApplication for GUI launchers."""
+
+    class MockQApplication:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def exec_(self):
+            return 0
+
+        def exec(self):
+            return 0
+
+    monkeypatch.setattr(
+        "PyQt5.QtWidgets.QApplication", MockQApplication, raising=False
+    )
+    monkeypatch.setattr(
+        "PyQt6.QtWidgets.QApplication", MockQApplication, raising=False
+    )
 
 
-def _mock_os_mkdir(path, mode=0o777, *, dir_fd=None):
-    """Mock os.mkdir to ignore /home/physics paths and log directories"""
-    path_str = str(path)
-    if "/home/physics" in path_str or "log" in path_str.lower():
-        # Silently succeed for /home/physics paths and log directories
-        return
-    # For other paths, use original
-    return _original_os_mkdir(path, mode, dir_fd=dir_fd)
-
-
-def _mock_open(file, mode="r", *args, **kwargs):
-    """Mock open to redirect /home/physics to /tmp and ignore log files"""
-    file_str = str(file)
-
-    # If it's a log file, return a mock
-    if "log" in file_str.lower() or file_str.endswith(".log"):
-        mock_file = Mock()
-        mock_file.__enter__ = Mock(return_value=mock_file)
-        mock_file.__exit__ = Mock(return_value=None)
-        mock_file.write = Mock()
-        mock_file.read = Mock(return_value="")
-        mock_file.flush = Mock()
-        mock_file.close = Mock()
-        return mock_file
-
-    if "/home/physics" in file_str:
-        # Create a temp directory structure
-        import tempfile
-
-        temp_base = Path(tempfile.gettempdir()) / "test_physics"
-        new_file = temp_base / file_str.replace("/home/physics/", "")
-        new_file.parent.mkdir(parents=True, exist_ok=True)
-        return _original_open(new_file, mode, *args, **kwargs)
-    return _original_open(file, mode, *args, **kwargs)
-
-
-# Apply mocks immediately
-os.mkdir = _mock_os_mkdir
-builtins.open = _mock_open
-
-
-@pytest.fixture(autouse=True, scope="session")
-def setup_test_environment(tmp_path_factory):
-    """Set up test environment with redirected filesystem operations"""
-    temp_physics = tmp_path_factory.mktemp("physics_home")
-
-    # Update mocks to use the proper temp directory
-    def _better_os_mkdir(path, mode=0o777, *, dir_fd=None):
-        path_str = str(path)
-        if "log" in path_str.lower():
-            # Silently succeed for log paths
-            return
-        if "/home/physics" in path_str:
-            new_path = temp_physics / path_str.replace("/home/physics/", "")
-            new_path.parent.mkdir(parents=True, exist_ok=True)
-            if not new_path.exists():
-                return _original_os_mkdir(str(new_path), mode)
-            return
-        return _original_os_mkdir(path, mode, dir_fd=dir_fd)
-
-    def _better_open(file, mode="r", *args, **kwargs):
-        file_str = str(file)
-
-        # Mock log files
-        if "log" in file_str.lower() or file_str.endswith(".log"):
-            mock_file = Mock()
-            mock_file.__enter__ = Mock(return_value=mock_file)
-            mock_file.__exit__ = Mock(return_value=None)
-            mock_file.write = Mock()
-            mock_file.read = Mock(return_value="")
-            mock_file.flush = Mock()
-            mock_file.close = Mock()
-            return mock_file
-
-        if "/home/physics" in file_str:
-            new_file = temp_physics / file_str.replace("/home/physics/", "")
-            new_file.parent.mkdir(parents=True, exist_ok=True)
-            return _original_open(new_file, mode, *args, **kwargs)
-        return _original_open(file, mode, *args, **kwargs)
-
-    os.mkdir = _better_os_mkdir
-    builtins.open = _better_open
-
-    yield temp_physics
-
-    # Restore originals
-    os.mkdir = _original_os_mkdir
-    builtins.open = _original_open
-
-
-# Disable PyDM data plugins before importing any PyDM modules
-os.environ.setdefault("PYDM_DATA_PLUGINS_DISABLED", "1")
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("QT_API", "pyqt5")
-os.environ.setdefault("PYDM_DISABLE_TELEMETRY", "1")
+# ============================================================================
+# Installation & Script Fixtures
+# ============================================================================
 
 
 @pytest.fixture(scope="session")
@@ -426,73 +492,19 @@ def ensure_installed():
 def all_script_names():
     """List of all expected console script names."""
     return [
-        # Main CLI
         "sc-linac",
-        # Display Launchers
         "sc-srf-home",
         "sc-cavity",
         "sc-faults",
         "sc-fcount",
-        # Application Launchers
         "sc-quench",
         "sc-setup",
         "sc-q0",
         "sc-tune",
-        # Setup CLI
         "sc-setup-all",
         "sc-setup-linac",
         "sc-setup-cm",
         "sc-setup-cav",
-        # Watcher
         "sc-watcher",
-        # Simulation
         "sc-sim",
     ]
-
-
-@pytest.fixture
-def mock_qt_app(monkeypatch):
-    """Mock QApplication for GUI launchers."""
-
-    class MockQApplication:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def exec_(self):
-            return 0
-
-        def exec(self):  # Qt6
-            return 0
-
-    monkeypatch.setattr(
-        "PyQt5.QtWidgets.QApplication", MockQApplication, raising=False
-    )
-    monkeypatch.setattr(
-        "PyQt6.QtWidgets.QApplication", MockQApplication, raising=False
-    )
-
-
-@pytest.fixture(scope="session", autouse=True)
-def patch_pyqtgraph():
-    """
-    Patch PyQtGraph for Python 3.13 compatibility.
-    """
-    original_getattr = pg.PlotWidget.__getattr__
-
-    def patched_getattr(self, attr):
-        if attr == "autoRangeEnabled":
-            return self.getViewBox().autoRangeEnabled
-        return original_getattr(self, attr)
-
-    pg.PlotWidget.__getattr__ = patched_getattr
-    yield
-
-
-@pytest.fixture(scope="session", autouse=True)
-def qapp_global():
-    if not QApplication.instance():
-        app = QApplication(sys.argv)
-        yield app
-        app.quit()
-    else:
-        yield QApplication.instance()
