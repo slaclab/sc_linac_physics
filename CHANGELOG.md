@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v4.0.0 (2025-11-19)
+
+### Features
+
+- Add structured logging to cavity operations and setup scripts
+  ([#152](https://github.com/slaclab/sc_linac_physics/pull/152),
+  [`f2d920f`](https://github.com/slaclab/sc_linac_physics/commit/f2d920f81c8e42874d9b11fcbd330a50e35a73c2))
+
+### Refactoring
+
+- **quench**: Consolidate logging to QuenchCavity level
+  ([#152](https://github.com/slaclab/sc_linac_physics/pull/152),
+  [`f2d920f`](https://github.com/slaclab/sc_linac_physics/commit/f2d920f81c8e42874d9b11fcbd330a50e35a73c2))
+
+### Testing
+
+- Add logger mocking to prevent file creation
+  ([#152](https://github.com/slaclab/sc_linac_physics/pull/152),
+  [`f2d920f`](https://github.com/slaclab/sc_linac_physics/commit/f2d920f81c8e42874d9b11fcbd330a50e35a73c2))
+
+### Breaking Changes
+
+- **quench**: QuenchCryomodule class removed
+
+
 ## v3.2.0 (2025-11-18)
 
 ### Bug Fixes
