@@ -366,8 +366,20 @@ class TestCheckAbort:
         cavity.decarad.max_raw_dose = 0
         cavity.has_uncaught_quench = Mock(return_value=True)
 
-        with pytest.raises(QuenchError, match="Potential uncaught quench"):
-            cavity.check_abort()
+        # Mock aact and ades to avoid PV access in error message formatting
+        with (
+            patch.object(
+                type(cavity), "aact", new_callable=PropertyMock
+            ) as mock_aact,
+            patch.object(
+                type(cavity), "ades", new_callable=PropertyMock
+            ) as mock_ades,
+        ):
+            mock_aact.return_value = 10.0
+            mock_ades.return_value = 20.0
+
+            with pytest.raises(QuenchError, match="Potential uncaught quench"):
+                cavity.check_abort()
 
 
 class TestHasUncaughtQuench:
