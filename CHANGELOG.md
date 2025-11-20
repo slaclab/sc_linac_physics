@@ -2,6 +2,86 @@
 
 <!-- version list -->
 
+## v4.1.0 (2025-11-20)
+
+### Features
+
+- **logging**: Add automatic retry for failed file handler creation
+  ([#162](https://github.com/slaclab/sc_linac_physics/pull/162),
+  [`b5492da`](https://github.com/slaclab/sc_linac_physics/commit/b5492da8281eea29bf5b77d9dc504ab41771af55))
+
+
+## v4.0.2 (2025-11-20)
+
+### Bug Fixes
+
+- **launcher**: Set current_file on main window for Python displays
+  ([#160](https://github.com/slaclab/sc_linac_physics/pull/160),
+  [`0fa8e10`](https://github.com/slaclab/sc_linac_physics/commit/0fa8e1034cf28c8c7c69cae4eb4192c0d2e6e60b))
+
+- **logger**: Handle permission errors gracefully with console-only fallback
+  ([#161](https://github.com/slaclab/sc_linac_physics/pull/161),
+  [`89383ed`](https://github.com/slaclab/sc_linac_physics/commit/89383edfa68f340662c30996f9a8f7935ca45525))
+
+- **srfhome**: Make ui_filename a method instead of attribute
+  ([#160](https://github.com/slaclab/sc_linac_physics/pull/160),
+  [`0fa8e10`](https://github.com/slaclab/sc_linac_physics/commit/0fa8e1034cf28c8c7c69cae4eb4192c0d2e6e60b))
+
+- **srfhome**: Set ui_filename to resolve PyDMRelatedDisplayButton parent path error
+  ([#160](https://github.com/slaclab/sc_linac_physics/pull/160),
+  [`0fa8e10`](https://github.com/slaclab/sc_linac_physics/commit/0fa8e1034cf28c8c7c69cae4eb4192c0d2e6e60b))
+
+
+## v4.0.1 (2025-11-20)
+
+### Bug Fixes
+
+- **srfhome**: Make ui_filename a method instead of attribute
+  ([#159](https://github.com/slaclab/sc_linac_physics/pull/159),
+  [`8257240`](https://github.com/slaclab/sc_linac_physics/commit/825724004b93f9c2808fa014a0946869228a77e0))
+
+- **srfhome**: Set ui_filename to resolve PyDMRelatedDisplayButton parent path error
+  ([#159](https://github.com/slaclab/sc_linac_physics/pull/159),
+  [`8257240`](https://github.com/slaclab/sc_linac_physics/commit/825724004b93f9c2808fa014a0946869228a77e0))
+
+- **test**: Prevent permission errors during test collection
+  ([#155](https://github.com/slaclab/sc_linac_physics/pull/155),
+  [`8857ab7`](https://github.com/slaclab/sc_linac_physics/commit/8857ab789524085bf1118be663b6889d74be32ac))
+
+### Chores
+
+- **ci**: Make Python 3.14 tests non-blocking for releases
+  ([`41f277f`](https://github.com/slaclab/sc_linac_physics/commit/41f277f30c1c4a4cf3d6d33c2178f0c9a79649d1))
+
+### Refactoring
+
+- Add rack-level launchers and reorganize launcher architecture
+  ([#156](https://github.com/slaclab/sc_linac_physics/pull/156),
+  [`bf18dea`](https://github.com/slaclab/sc_linac_physics/commit/bf18dea6aaf0f9d20d4f87a1b9ba058b3a6c9494))
+
+- **test**: Reorganize conftest.py for better maintainability
+  ([#155](https://github.com/slaclab/sc_linac_physics/pull/155),
+  [`8857ab7`](https://github.com/slaclab/sc_linac_physics/commit/8857ab789524085bf1118be663b6889d74be32ac))
+
+- **utils**: Add rack-level launchers and reorganize launcher architecture
+  ([#156](https://github.com/slaclab/sc_linac_physics/pull/156),
+  [`bf18dea`](https://github.com/slaclab/sc_linac_physics/commit/bf18dea6aaf0f9d20d4f87a1b9ba058b3a6c9494))
+
+### Testing
+
+- Add comprehensive test coverage for q0, quench processing, and tuning applications
+  ([#154](https://github.com/slaclab/sc_linac_physics/pull/154),
+  [`e7fa22c`](https://github.com/slaclab/sc_linac_physics/commit/e7fa22ca253fdb910c44a1cd03200a5db28ca710))
+
+- **quench_cavity**: Fix PV access in check_abort uncaught quench test
+  ([#154](https://github.com/slaclab/sc_linac_physics/pull/154),
+  [`e7fa22c`](https://github.com/slaclab/sc_linac_physics/commit/e7fa22ca253fdb910c44a1cd03200a5db28ca710))
+
+- **simulation**: Add SCLinacPhysicsService test suite
+  ([#156](https://github.com/slaclab/sc_linac_physics/pull/156),
+  [`bf18dea`](https://github.com/slaclab/sc_linac_physics/commit/bf18dea6aaf0f9d20d4f87a1b9ba058b3a6c9494))
+
+
 ## v4.0.0 (2025-11-19)
 
 ### Features

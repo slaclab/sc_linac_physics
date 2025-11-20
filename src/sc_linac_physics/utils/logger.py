@@ -3,8 +3,10 @@ import datetime
 import json
 import logging
 import sys
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from threading import Lock
 
 if sys.platform == "darwin":  # macOS
     BASE_LOG_DIR = Path.home() / "logs"
@@ -28,6 +30,144 @@ class NameOverrideFilter(logging.Filter):
     def filter(self, record):
         record.name = self.display_name
         return True
+
+
+class RetryFileHandlerFilter(logging.Filter):
+    """Filter that retries adding file handlers if they're missing."""
+
+    def __init__(self, logger_manager):
+        super().__init__()
+        self.logger_manager = logger_manager
+
+    def filter(self, record):
+        # Attempt to add file handlers if missing
+        self.logger_manager.ensure_file_handlers()
+        return True
+
+
+class LoggerFileHandlerManager:
+    """Manages file handlers with retry capability."""
+
+    def __init__(
+        self,
+        logger: logging.Logger,
+        log_dir: str,
+        log_filename: str,
+        level: int,
+        max_bytes: int,
+        backup_count: int,
+        retry_interval: int = 60,  # seconds between retries
+        max_retries: int = -1,  # -1 means infinite retries
+    ):
+        self.logger = logger
+        self.log_dir = log_dir
+        self.log_filename = log_filename
+        self.level = level
+        self.max_bytes = max_bytes
+        self.backup_count = backup_count
+        self.retry_interval = retry_interval
+        self.max_retries = max_retries
+
+        self.has_file_handlers = False
+        self.retry_count = 0
+        self.last_retry_time = 0
+        self.lock = Lock()
+
+    def has_active_file_handlers(self) -> bool:
+        """Check if logger has active file handlers."""
+        return any(
+            isinstance(h, RotatingFileHandler) for h in self.logger.handlers
+        )
+
+    def ensure_file_handlers(self) -> bool:
+        """
+        Ensure file handlers exist, retry if necessary.
+
+        Returns:
+            True if file handlers exist or were successfully added.
+        """
+        # Quick check without lock
+        if self.has_file_handlers and self.has_active_file_handlers():
+            return True
+
+        with self.lock:
+            # Double-check with lock
+            if self.has_file_handlers and self.has_active_file_handlers():
+                return True
+
+            # Check if we should retry
+            current_time = time.time()
+            if current_time - self.last_retry_time < self.retry_interval:
+                return False
+
+            # Check max retries
+            if self.max_retries >= 0 and self.retry_count >= self.max_retries:
+                return False
+
+            self.last_retry_time = current_time
+            self.retry_count += 1
+
+            # Attempt to add file handlers
+            success = self._add_file_handlers()
+
+            if success:
+                self.has_file_handlers = True
+                self.logger.info(
+                    f"File logging restored after {self.retry_count} attempt(s): "
+                    f"{self.log_dir}/{self.log_filename}"
+                )
+            else:
+                self.logger.debug(
+                    f"Retry {self.retry_count}: File logging still unavailable"
+                )
+
+            return success
+
+    def _add_file_handlers(self) -> bool:
+        """
+        Attempt to add file handlers to logger.
+
+        Returns:
+            True if file handlers were successfully added, False otherwise.
+        """
+        try:
+            log_dir_path = Path(self.log_dir)
+            log_dir_path.mkdir(parents=True, exist_ok=True)
+
+            text_handler = _create_text_file_handler(
+                log_dir_path,
+                self.log_filename,
+                self.level,
+                self.max_bytes,
+                self.backup_count,
+            )
+            self.logger.addHandler(text_handler)
+
+            json_handler = _create_json_file_handler(
+                log_dir_path,
+                self.log_filename,
+                self.level,
+                self.max_bytes,
+                self.backup_count,
+            )
+            self.logger.addHandler(json_handler)
+
+            return True
+
+        except (PermissionError, OSError) as e:
+            # Log at debug level to avoid spam
+            if self.retry_count == 1:  # Only warn on first failure
+                self.logger.warning(
+                    f"Cannot create log files in '{self.log_dir}': {e}"
+                )
+            return False
+
+        except Exception as e:
+            self.logger.error(
+                f"Unexpected error setting up file logging: {e}",
+                exc_info=True,
+            )
+            return False
 
 
 class ExtraDataMixin:
@@ -121,6 +261,76 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data, ensure_ascii=False)
 
 
+def _create_console_handler(level: int) -> logging.StreamHandler:
+    """Create and configure console handler with colored formatter."""
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_formatter = ColoredFormatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    console_handler.setFormatter(console_formatter)
+    return console_handler
+
+
+def _create_text_file_handler(
+    log_dir_path: Path,
+    log_filename: str,
+    level: int,
+    max_bytes: int,
+    backup_count: int,
+) -> RotatingFileHandler:
+    """Create and configure rotating text file handler."""
+    text_file = log_dir_path / f"{log_filename}.log"
+    text_handler = RotatingFileHandler(
+        text_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    text_handler.setLevel(level)
+    text_formatter = ExtendedFormatter(
+        "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    text_handler.setFormatter(text_formatter)
+    return text_handler
+
+
+def _create_json_file_handler(
+    log_dir_path: Path,
+    log_filename: str,
+    level: int,
+    max_bytes: int,
+    backup_count: int,
+) -> RotatingFileHandler:
+    """Create and configure rotating JSON Lines file handler."""
+    jsonl_file = log_dir_path / f"{log_filename}.jsonl"
+    json_handler = RotatingFileHandler(
+        jsonl_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    json_handler.setLevel(level)
+    json_handler.setFormatter(JSONFormatter())
+    return json_handler
+
+
+def _register_cleanup(logger: logging.Logger) -> None:
+    """Register cleanup function to close handlers on exit."""
+
+    def cleanup():
+        for handler in logger.handlers[:]:
+            try:
+                handler.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+            logger.removeHandler(handler)
+
+    atexit.register(cleanup)
+
+
 def custom_logger(
     name: str,
     log_filename: str,
@@ -128,14 +338,20 @@ def custom_logger(
     level: int = logging.DEBUG,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
+    enable_retry: bool = True,
+    retry_interval: int = 60,  # seconds
+    max_retries: int = -1,  # -1 = infinite
 ) -> logging.Logger:
     """
-    Create a logger with colored console output and dual file logging.
+    Create a logger with colored console output and dual file logging with retry.
 
-    Always writes to three destinations:
-    - Console: Colored, human-readable
+    Always writes to console. Attempts to write to files:
+    - Console: Colored, human-readable (always)
     - {log_dir}/{log_filename}.log: Plain text, human-readable (with rotation)
     - {log_dir}/{log_filename}.jsonl: JSON Lines format (with rotation)
+
+    If file logging fails due to permissions, falls back to console-only logging
+    and retries on subsequent log entries.
 
     Args:
         name: Logger name (typically __name__)
@@ -144,16 +360,16 @@ def custom_logger(
         level: Logging level (default: DEBUG)
         max_bytes: Maximum file size before rotation (default: 10MB)
         backup_count: Number of backup files to keep (default: 5)
+        enable_retry: Enable automatic retry of file handler creation (default: True)
+        retry_interval: Seconds between retry attempts (default: 60)
+        max_retries: Maximum retry attempts, -1 for infinite (default: -1)
 
     Returns:
         Logger instance
     """
-
-    # Validate inputs
     if not log_filename:
         raise ValueError("log_filename cannot be empty")
 
-    # Use log path to make logger unique
     unique_logger_name = f"{name}#{log_dir}/{log_filename}"
 
     # Return existing logger if already created
@@ -169,59 +385,38 @@ def custom_logger(
 
     logger.setLevel(level)
     logger.propagate = False
-
-    # Add name override filter
     logger.addFilter(NameOverrideFilter(name))
 
-    # Ensure log directory exists
-    log_dir_path = Path(log_dir)
-    log_dir_path.mkdir(parents=True, exist_ok=True)
-
-    # Console handler - colored
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(level)
-    console_formatter = ColoredFormatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    console_handler.setFormatter(console_formatter)
+    # Always add console handler first
+    console_handler = _create_console_handler(level)
     logger.addHandler(console_handler)
 
-    # Rotating text file handler with ExtendedFormatter
-    text_file = log_dir_path / f"{log_filename}.log"
-    text_handler = RotatingFileHandler(
-        text_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
+    # Create file handler manager
+    handler_manager = LoggerFileHandlerManager(
+        logger=logger,
+        log_dir=log_dir,
+        log_filename=log_filename,
+        level=level,
+        max_bytes=max_bytes,
+        backup_count=backup_count,
+        retry_interval=retry_interval,
+        max_retries=max_retries,
     )
-    text_handler.setLevel(level)
-    text_formatter = ExtendedFormatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    text_handler.setFormatter(text_formatter)
-    logger.addHandler(text_handler)
 
-    # Rotating JSON Lines file handler
-    jsonl_file = log_dir_path / f"{log_filename}.jsonl"
-    json_handler = RotatingFileHandler(
-        jsonl_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
-    )
-    json_handler.setLevel(level)
-    json_handler.setFormatter(JSONFormatter())
-    logger.addHandler(json_handler)
+    # Try initial file handler creation
+    initial_success = handler_manager.ensure_file_handlers()
 
-    # Register cleanup on exit
-    def cleanup():
-        for handler in logger.handlers[:]:
-            handler.close()
-            logger.removeHandler(handler)
+    # Add retry filter if enabled and initial creation failed
+    if enable_retry and not initial_success:
+        retry_filter = RetryFileHandlerFilter(handler_manager)
+        logger.addFilter(retry_filter)
+        logger.warning(
+            f"File logging unavailable for '{log_dir}/{log_filename}'. "
+            f"Will retry every {retry_interval}s on new log entries."
+        )
 
-    atexit.register(cleanup)
+    # Register cleanup
+    _register_cleanup(logger)
 
     # Store the logger
     _created_loggers[unique_logger_name] = logger
