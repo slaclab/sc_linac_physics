@@ -30,52 +30,63 @@ class NameOverrideFilter(logging.Filter):
         return True
 
 
-class ColoredFormatter(logging.Formatter):
+class ExtraDataMixin:
+    """Mixin to add extra_data formatting capability."""
+
+    def format_extra_data(self, record):
+        """Format extra_data as key=value pairs."""
+        if not (hasattr(record, "extra_data") and record.extra_data):
+            return ""
+
+        extra_items = []
+        for key, value in record.extra_data.items():
+            if isinstance(value, str):
+                extra_items.append(f"{key}='{value}'")
+            elif isinstance(value, bool):
+                extra_items.append(f"{key}={value}")
+            elif isinstance(value, (int, float)):
+                extra_items.append(f"{key}={value}")
+            elif isinstance(value, dict):
+                extra_items.append(f"{key}={json.dumps(value)}")
+            else:
+                extra_items.append(f"{key}={value}")
+
+        return " | ".join(extra_items)
+
+
+class ColoredFormatter(ExtraDataMixin, logging.Formatter):
     """Colored formatter for terminal output."""
 
     COLORS = {
-        "DEBUG": "\033[36m",  # Cyan
-        "INFO": "\033[32m",  # Green
-        "WARNING": "\033[33m",  # Yellow
-        "ERROR": "\033[31m",  # Red
-        "CRITICAL": "\033[1;31m",  # Bold Red
+        "DEBUG": "\033[36m",
+        "INFO": "\033[32m",
+        "WARNING": "\033[33m",
+        "ERROR": "\033[31m",
+        "CRITICAL": "\033[1;31m",
     }
     RESET = "\033[0m"
 
     def format(self, record):
-        # Make a copy to avoid modifying the original record
         record = logging.makeLogRecord(record.__dict__)
         log_color = self.COLORS.get(record.levelname, self.RESET)
         record.levelname = f"{log_color}{record.levelname}{self.RESET}"
-        return super().format(record)
+        result = super().format(record)
+
+        extra_str = self.format_extra_data(record)
+        if extra_str:
+            result = f"{result} | {extra_str}"
+
+        return result
 
 
-class ExtendedFormatter(logging.Formatter):
+class ExtendedFormatter(ExtraDataMixin, logging.Formatter):
     """Formatter that includes extra_data in human-readable format."""
 
     def format(self, record):
-        # Format the base message
         result = super().format(record)
 
-        # Add extra_data if present
-        if hasattr(record, "extra_data") and record.extra_data:
-            # Format extra_data as key=value pairs
-            extra_items = []
-            for key, value in record.extra_data.items():
-                # Handle different value types appropriately
-                if isinstance(value, str):
-                    extra_items.append(f"{key}='{value}'")
-                elif isinstance(value, bool):
-                    extra_items.append(f"{key}={value}")
-                elif isinstance(value, (int, float)):
-                    extra_items.append(f"{key}={value}")
-                elif isinstance(value, dict):
-                    # For nested dicts, use JSON representation
-                    extra_items.append(f"{key}={json.dumps(value)}")
-                else:
-                    extra_items.append(f"{key}={value}")
-
-            extra_str = " | ".join(extra_items)
+        extra_str = self.format_extra_data(record)
+        if extra_str:
             result = f"{result} | {extra_str}"
 
         return result

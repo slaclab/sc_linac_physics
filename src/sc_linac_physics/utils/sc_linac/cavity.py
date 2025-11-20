@@ -212,8 +212,12 @@ class Cavity(linac_utils.SCLinacObject):
         """Initialize the default logger. Can be overridden by subclasses."""
 
         log_dir = BASE_LOG_DIR / self.cryomodule.name / f"cavity_{self.number}"
+        logger_name = f"{self.cryomodule.name}.CAV{self.number}"
+
         self._logger = custom_logger(
-            __name__, log_dir=str(log_dir), log_filename=f"cavity_{self.number}"
+            name=logger_name,
+            log_dir=str(log_dir),
+            log_filename=f"cavity_{self.number}",
         )
 
     @property
