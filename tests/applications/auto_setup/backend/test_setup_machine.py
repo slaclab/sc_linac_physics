@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -9,7 +9,19 @@ from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
 
 @pytest.fixture
 def setup_machine():
-    yield SetupMachine()
+    with (
+        patch(
+            "sc_linac_physics.utils.sc_linac.cavity.custom_logger"
+        ) as mock_cavity_logger,
+        patch(
+            "sc_linac_physics.applications.auto_setup.backend.setup_cavity.custom_logger"
+        ) as mock_setup_logger,
+    ):
+
+        mock_cavity_logger.return_value = MagicMock()
+        mock_setup_logger.return_value = MagicMock()
+
+        yield SetupMachine()
 
 
 def test_pv_prefix(setup_machine):

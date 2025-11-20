@@ -1,10 +1,23 @@
 import argparse
+import logging
 import sys
 from typing import Optional
 
 from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
+from sc_linac_physics.applications.tuning.tune_utils import TUNE_LOG_DIR
 from sc_linac_physics.applications.tuning.tuning_gui import TUNE_MACHINE
-from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.utils.logger import custom_logger
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    ALL_CRYOMODULES,
+    CavityAbortError,
+)
+
+logger = custom_logger(
+    name=__name__,
+    log_filename="detune_cavity",
+    level=logging.DEBUG,  # Changed from INFO to DEBUG
+    log_dir=str(TUNE_LOG_DIR),
+)
 
 
 def detune_cavity(cavity: TuneCavity) -> bool:
@@ -18,15 +31,26 @@ def detune_cavity(cavity: TuneCavity) -> bool:
         bool: True if successful, False if script is already running
     """
     if cavity.script_is_running:
-        print(f"Warning: {cavity} script already running", file=sys.stderr)
+        logger.warning(
+            "Script already running",
+            extra={"extra_data": {"cavity": str(cavity)}},
+        )
         return False
 
     try:
         cavity.move_to_cold_landing()
-        print(f"Successfully detuned {cavity}")
+        logger.info(
+            "Successfully detuned cavity",
+            extra={"extra_data": {"cavity": str(cavity)}},
+        )
         return True
+    except CavityAbortError as e:
+        logger.error(str(e))
     except Exception as e:
-        print(f"Error detuning {cavity}: {e}", file=sys.stderr)
+        logger.exception(
+            f"Error detuning {cavity}",
+            extra={"extra_data": {"cavity": str(cavity), "error": str(e)}},
+        )
         return False
 
 
@@ -51,12 +75,6 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         metavar="1-8",
         help="Cavity number (1-8)",
     )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Enable verbose output",
-    )
 
     return parser.parse_args(argv)
 
@@ -70,17 +88,30 @@ def main(argv: Optional[list[str]] = None) -> int:
     """
     args = parse_args(argv)
 
-    if args.verbose:
-        print(f"Detuning cavity {args.cavity} in cryomodule {args.cryomodule}")
+    logger.debug(
+        "Starting cavity detune operation",
+        extra={
+            "extra_data": {
+                "cryomodule": args.cryomodule,
+                "cavity": args.cavity,
+            }
+        },
+    )
 
     try:
         cavity_obj: TuneCavity = TUNE_MACHINE.cryomodules[
             args.cryomodule
         ].cavities[args.cavity]
     except KeyError as e:
-        print(
-            f"Error: Could not find cavity {args.cavity} in cryomodule {args.cryomodule}: {e}",
-            file=sys.stderr,
+        logger.error(
+            "Could not find cavity in cryomodule",
+            extra={
+                "extra_data": {
+                    "cryomodule": args.cryomodule,
+                    "cavity": args.cavity,
+                    "error": str(e),
+                }
+            },
         )
         return 1
 

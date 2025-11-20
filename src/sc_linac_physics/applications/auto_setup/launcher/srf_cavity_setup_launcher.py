@@ -1,4 +1,5 @@
 import argparse
+import logging
 import sys
 
 from sc_linac_physics.applications.auto_setup.backend.setup_cavity import (
@@ -7,18 +8,28 @@ from sc_linac_physics.applications.auto_setup.backend.setup_cavity import (
 from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
     SETUP_MACHINE,
 )
+from sc_linac_physics.applications.auto_setup.backend.setup_utils import (
+    SETUP_LOG_DIR,
+)
+from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
-def setup_cavity(cavity: SetupCavity, args: argparse.Namespace):
+def setup_cavity(
+    cavity: SetupCavity, args: argparse.Namespace, logger: logging.Logger
+):
     if cavity.script_is_running:
-        cavity.status_message = f"{cavity} script already running"
+        cavity.set_status_message(
+            f"{cavity} script already running", logging.WARNING
+        )
+        logger.warning("%s script already running", cavity)
         return
 
     if args.shutdown:
+        logger.info("Shutting down %s", cavity)
         cavity.shut_down()
-
     else:
+        logger.info("Setting up %s", cavity)
         cavity.setup()
 
 
@@ -52,28 +63,75 @@ def main():
 
     parsed_args: argparse.Namespace = parser.parse_args()
 
+    # Initialize launcher-specific logger
+    cm_name = parsed_args.cryomodule
+    cav_num = parsed_args.cavity
+
+    logger = custom_logger(
+        __name__, log_dir=str(SETUP_LOG_DIR), log_filename="cavity_launcher"
+    )
+
     try:
-        cm_name = parsed_args.cryomodule
-        cav_num = parsed_args.cavity
+        logger.info(
+            "Starting cavity setup script",
+            extra={
+                "extra_data": {
+                    "cryomodule": cm_name,
+                    "cavity_number": cav_num,
+                    "shutdown": parsed_args.shutdown,
+                }
+            },
+        )
 
         cavity: SetupCavity = SETUP_MACHINE.cryomodules[cm_name].cavities[
             cav_num
         ]
 
-        print(f"{cavity.ssa_cal_requested_pv}: {cavity.ssa_cal_requested}")
-        print(f"{cavity.auto_tune_requested_pv}: {cavity.auto_tune_requested}")
-        print(f"{cavity.cav_char_requested_pv}: {cavity.cav_char_requested}")
-        print(f"{cavity.rf_ramp_requested_pv}: {cavity.rf_ramp_requested}")
+        logger.info(
+            "Setup request flags",
+            extra={
+                "extra_data": {
+                    "ssa_cal_requested": cavity.ssa_cal_requested,
+                    "auto_tune_requested": cavity.auto_tune_requested,
+                    "cav_char_requested": cavity.cav_char_requested,
+                    "rf_ramp_requested": cavity.rf_ramp_requested,
+                    "cavity": str(cavity),
+                }
+            },
+        )
 
-        setup_cavity(cavity, parsed_args)
+        setup_cavity(cavity, parsed_args, logger)
+
+        logger.info("Cavity setup script completed successfully")
 
     except KeyError as e:
-        print(
-            f"Error: Invalid cryomodule or cavity number: {e}", file=sys.stderr
+        error_msg = f"Invalid cryomodule or cavity number: {e}"
+        logger.error(
+            error_msg,
+            extra={
+                "extra_data": {
+                    "cryomodule": cm_name,
+                    "cavity_number": cav_num,
+                    "error": str(e),
+                }
+            },
         )
+        print(f"Error: {error_msg}", file=sys.stderr)
         sys.exit(1)
+
     except Exception as e:
-        print(f"Error during cavity setup: {e}", file=sys.stderr)
+        error_msg = f"Error during cavity setup: {e}"
+        logger.exception(
+            error_msg,
+            extra={
+                "extra_data": {
+                    "cryomodule": cm_name,
+                    "cavity_number": cav_num,
+                    "shutdown": parsed_args.shutdown,
+                }
+            },
+        )
+        print(f"Error: {error_msg}", file=sys.stderr)
         sys.exit(1)
 
 

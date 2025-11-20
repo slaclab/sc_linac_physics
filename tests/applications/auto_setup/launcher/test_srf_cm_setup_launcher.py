@@ -1,5 +1,5 @@
 from random import randint, choice
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
@@ -21,40 +21,62 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 
 
 @pytest.fixture
-def cavity():
-    cavity = SetupCavity(cavity_num=randint(1, 8), rack_object=MagicMock())
-    cavity._status_msg_pv_obj = make_mock_pv()
-    cavity._status_pv_obj = make_mock_pv()
-    cavity._ssa_cal_requested_pv_obj = make_mock_pv()
-    cavity._auto_tune_requested_pv_obj = make_mock_pv()
-    cavity._cav_char_requested_pv_obj = make_mock_pv()
-    cavity._rf_ramp_requested_pv_obj = make_mock_pv()
-    cavity._start_pv_obj = make_mock_pv()
-    cavity._stop_pv_obj = make_mock_pv()
-    cavity._abort_pv_obj = make_mock_pv()
-    cavity.trigger_start = MagicMock()
-    cavity.trigger_shutdown = MagicMock()
-    cavity.cryomodule = SetupCryomodule(
-        cryo_name=choice(ALL_CRYOMODULES), linac_object=MagicMock()
-    )
-    cm = cavity.cryomodule
-    cm._ssa_cal_requested_pv_obj = make_mock_pv()
-    cm._auto_tune_requested_pv_obj = make_mock_pv()
-    cm._cav_char_requested_pv_obj = make_mock_pv()
-    cm._rf_ramp_requested_pv_obj = make_mock_pv()
-    cm._start_pv_obj = make_mock_pv()
-    cm._stop_pv_obj = make_mock_pv()
-    cm._abort_pv_obj = make_mock_pv()
-    yield cavity
+def mock_logger():
+    """Mock logger to prevent file creation during tests."""
+    return MagicMock()
 
 
-def test_setup_cavity(cavity):
+@pytest.fixture
+def cavity(mock_logger):
+    with (
+        patch(
+            "sc_linac_physics.utils.sc_linac.cavity.custom_logger"
+        ) as mock_cavity_logger,
+        patch(
+            "sc_linac_physics.applications.auto_setup.backend.setup_cavity.custom_logger"
+        ) as mock_setup_logger,
+    ):
+
+        mock_cavity_logger.return_value = mock_logger
+        mock_setup_logger.return_value = mock_logger
+
+        cavity = SetupCavity(cavity_num=randint(1, 8), rack_object=MagicMock())
+        cavity._status_msg_pv_obj = make_mock_pv()
+        cavity._status_pv_obj = make_mock_pv()
+        cavity._ssa_cal_requested_pv_obj = make_mock_pv()
+        cavity._auto_tune_requested_pv_obj = make_mock_pv()
+        cavity._cav_char_requested_pv_obj = make_mock_pv()
+        cavity._rf_ramp_requested_pv_obj = make_mock_pv()
+        cavity._start_pv_obj = make_mock_pv()
+        cavity._stop_pv_obj = make_mock_pv()
+        cavity._abort_pv_obj = make_mock_pv()
+        cavity.trigger_start = MagicMock()
+        cavity.trigger_shutdown = MagicMock()
+
+        cavity.cryomodule = SetupCryomodule(
+            cryo_name=choice(ALL_CRYOMODULES), linac_object=MagicMock()
+        )
+        cm = cavity.cryomodule
+        cm._ssa_cal_requested_pv_obj = make_mock_pv()
+        cm._auto_tune_requested_pv_obj = make_mock_pv()
+        cm._cav_char_requested_pv_obj = make_mock_pv()
+        cm._rf_ramp_requested_pv_obj = make_mock_pv()
+        cm._start_pv_obj = make_mock_pv()
+        cm._stop_pv_obj = make_mock_pv()
+        cm._abort_pv_obj = make_mock_pv()
+
+        yield cavity
+
+
+def test_setup_cavity(cavity, mock_logger):
     args = MagicMock()
     args.shutdown = False
     cavity._status_pv_obj.get = MagicMock(
         return_value=choice([STATUS_READY_VALUE, STATUS_ERROR_VALUE])
     )
-    setup_cavity(cavity, args)
+
+    setup_cavity(cavity, args, mock_logger)
+
     cavity.trigger_start.assert_called()
     cryomodule = cavity.cryomodule
     cavity._ssa_cal_requested_pv_obj.put.assert_called()
