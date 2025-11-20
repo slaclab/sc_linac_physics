@@ -36,12 +36,17 @@ def launch_python_display(display_class, *args, standalone=True):
     QWidget or None
         The display window instance if standalone=False, None otherwise
     """
+    import inspect
+
+    # Get the file path of the display class
+    display_file = inspect.getfile(display_class)
 
     if standalone:
-        # Standalone mode: create app and block
+        # Standalone mode: use PyDM's open method
         app = PyDMApplication(command_line_args=list(args))
-        new_display = display_class()
-        app.main_window.set_display_widget(new_display)
+        app.main_window.open(
+            display_file, macros=None, command_line_args=list(args)
+        )
         app.main_window.show()
         sys.exit(app.exec())
     else:
@@ -54,11 +59,9 @@ def launch_python_display(display_class, *args, standalone=True):
                 "standalone=False requires an existing application."
             )
 
-        new_display = display_class()
-
         # Create a new main window for this display
         window = PyDMMainWindow()
-        window.set_display_widget(new_display)
+        window.open(display_file, macros=None, command_line_args=list(args))
         window.show()
 
         return window
