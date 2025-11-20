@@ -34,6 +34,14 @@ def mock_display_class():
     return mock_class
 
 
+@pytest.fixture
+def mock_inspect_getfile():
+    """Mock inspect.getfile."""
+    with patch("inspect.getfile") as mock_getfile:
+        mock_getfile.return_value = "/path/to/display.py"
+        yield mock_getfile
+
+
 class TestDecorators:
     """Test decorator functions."""
 
@@ -63,7 +71,9 @@ class TestDecorators:
 class TestLaunchPythonDisplay:
     """Test launch_python_display function."""
 
-    def test_standalone_mode(self, mock_pydm_app, mock_display_class):
+    def test_standalone_mode(
+        self, mock_pydm_app, mock_display_class, mock_inspect_getfile
+    ):
         """Test launching in standalone mode."""
         from sc_linac_physics.cli.launchers import launch_python_display
 
@@ -72,15 +82,15 @@ class TestLaunchPythonDisplay:
                 mock_display_class, "--test-arg", standalone=True
             )
 
+        # Verify inspect.getfile was called with the display class
+        mock_inspect_getfile.assert_called_once_with(mock_display_class)
+
         # Verify PyDMApplication was created with command line args
         mock_pydm_app.assert_called_once_with(command_line_args=["--test-arg"])
 
-        # Verify display was instantiated
-        mock_display_class.assert_called_once_with()
-
-        # Verify display was set on main window
-        mock_pydm_app.return_value.main_window.set_display_widget.assert_called_once_with(
-            mock_display_class.return_value
+        # Verify main window.open was called with the file path
+        mock_pydm_app.return_value.main_window.open.assert_called_once_with(
+            "/path/to/display.py", macros=None
         )
 
         # Verify main window was shown
@@ -93,7 +103,11 @@ class TestLaunchPythonDisplay:
         mock_exit.assert_called_once_with(0)
 
     def test_child_window_mode(
-        self, mock_pydm_app, mock_main_window, mock_display_class
+        self,
+        mock_pydm_app,
+        mock_main_window,
+        mock_display_class,
+        mock_inspect_getfile,
     ):
         """Test launching in child window mode."""
         from sc_linac_physics.cli.launchers import launch_python_display
@@ -104,21 +118,21 @@ class TestLaunchPythonDisplay:
 
         result = launch_python_display(mock_display_class, standalone=False)
 
+        # Verify inspect.getfile was called
+        mock_inspect_getfile.assert_called_once_with(mock_display_class)
+
         # Verify no new PyDMApplication was created
         mock_pydm_app.assert_not_called()
 
         # Verify instance was retrieved
         mock_pydm_app.instance.assert_called_once()
 
-        # Verify display was instantiated
-        mock_display_class.assert_called_once_with()
-
         # Verify new main window was created
         mock_main_window.assert_called_once()
 
-        # Verify display was set on the new window
-        mock_main_window.return_value.set_display_widget.assert_called_once_with(
-            mock_display_class.return_value
+        # Verify window.open was called with the file path
+        mock_main_window.return_value.open.assert_called_once_with(
+            "/path/to/display.py", macros=None
         )
 
         # Verify window was shown
@@ -128,7 +142,7 @@ class TestLaunchPythonDisplay:
         assert result == mock_main_window.return_value
 
     def test_child_window_mode_no_app_raises_error(
-        self, mock_pydm_app, mock_display_class
+        self, mock_pydm_app, mock_display_class, mock_inspect_getfile
     ):
         """Test that child window mode raises error when no app exists."""
         from sc_linac_physics.cli.launchers import launch_python_display
@@ -141,7 +155,9 @@ class TestLaunchPythonDisplay:
         ):
             launch_python_display(mock_display_class, standalone=False)
 
-    def test_no_additional_args(self, mock_pydm_app, mock_display_class):
+    def test_no_additional_args(
+        self, mock_pydm_app, mock_display_class, mock_inspect_getfile
+    ):
         """Test launching without additional arguments."""
         from sc_linac_physics.cli.launchers import launch_python_display
 
@@ -366,7 +382,9 @@ class TestMainExecution:
 class TestSysArgvPassing:
     """Test that sys.argv is correctly passed to displays."""
 
-    def test_sys_argv_passed_to_launch(self, mock_pydm_app):
+    def test_sys_argv_passed_to_launch(
+        self, mock_pydm_app, mock_inspect_getfile
+    ):
         """Test that sys.argv arguments are passed through."""
         from sc_linac_physics.cli.launchers import launch_python_display
 
