@@ -26,8 +26,12 @@ from sc_linac_physics.utils.qt import get_dimensions
 
 
 class SRFHome(Display):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None, args=None, macros=None):
+        super().__init__(parent=parent, args=args, macros=macros)
+
+        # CRITICAL FIX: Set the UI filename so PyDM can resolve relative paths
+        self.ui_filename = os.path.abspath(__file__)
+
         self.root_dir = os.getenv(
             "SRF_ROOT_DIR", "/home/physics/srf/sc_linac_physics"
         )
@@ -58,8 +62,6 @@ class SRFHome(Display):
 
     def setup_watcher_groupboxes(self):
         """Create groupboxes for all configured watchers"""
-
-        # Create a groupbox for each watcher in WATCHER_CONFIGS
         for watcher_name in WATCHER_CONFIGS.keys():
             groupbox = make_watcher_groupbox(watcher_name)
             self.watcher_layout.addWidget(groupbox)
@@ -83,24 +85,28 @@ class SRFHome(Display):
         unit_test_button.setText("All CM Unit Tests")
         buttons.append(unit_test_button)
 
-        # TODO write python auto plot to replace striptool-based repo
-        auto_plot_button = PyDMRelatedDisplayButton(
-            filename="/home/physics/srf/gitRepos/makeAutoPlot/srf_stavDispMulti.py"
-        )
+        auto_plot_button = PyDMRelatedDisplayButton()
+        auto_plot_button.filenames = [
+            "/home/physics/srf/gitRepos/makeAutoPlot/srf_stavDispMulti.py"
+        ]
+        auto_plot_button.openInNewWindow = True
         auto_plot_button.setText("SRF Auto Plot")
         buttons.append(auto_plot_button)
 
-        # TODO migrate microphonics gui
-        microphonics_button = PyDMRelatedDisplayButton(
-            filename="/home/physics/srf/gitRepos/microphonics/CommMicro.py"
-        )
+        microphonics_button = PyDMRelatedDisplayButton()
+        microphonics_button.filenames = [
+            "/home/physics/srf/gitRepos/microphonics/CommMicro.py"
+        ]
+        microphonics_button.openInNewWindow = True
         microphonics_button.setText("Microphonics GUI")
         buttons.append(microphonics_button)
 
         for decarad in [1, 2]:
-            decarad_button = PyDMRelatedDisplayButton(
-                filename="$TOOLS/pydm/display/ads/decarad_main.ui"
-            )
+            decarad_button = PyDMRelatedDisplayButton()
+            decarad_button.filenames = [
+                "$TOOLS/pydm/display/ads/decarad_main.ui"
+            ]
+            decarad_button.openInNewWindow = True
             decarad_button.setText(f"Decarad {decarad}")
             decarad_button.macros = f"P=RADM:SYS0:{decarad}00,M={decarad}"
             buttons.append(decarad_button)
@@ -145,32 +151,37 @@ class SRFHome(Display):
 
         for linac in range(4):
             col = linac + 2
-            rf_button = PyDMRelatedDisplayButton(
-                filename=f"$PYDM/rf/l{linac}b_main.ui"
-            )
+
+            rf_button = PyDMRelatedDisplayButton()
+            rf_button.filenames = [f"$PYDM/rf/l{linac}b_main.ui"]
+            rf_button.openInNewWindow = True
             rf_button.setToolTip(f"L{linac}B RF")
+            mini_home_groupbox_layout.addWidget(rf_button, 1, col)
+
             cryo_button = PyDMEDMDisplayButton(
                 filename=f"$EDM/cryo/cryo_l{linac}b_main.edl"
             )
             cryo_button.setToolTip(f"L{linac}B Cryo")
-            magnet_button = PyDMRelatedDisplayButton(
-                filename=f"$PYDM/mgnt/l{linac}b_main.ui"
-            )
-            magnet_button.setToolTip(f"L{linac}B Magnets")
-            vacuum_button = PyDMRelatedDisplayButton(
-                filename=f"$PYDM/vac/l{linac}b_main.ui"
-            )
-            vacuum_button.setToolTip(f"L{linac}B Vacuum")
-            mini_home_groupbox_layout.addWidget(rf_button, 1, col)
             mini_home_groupbox_layout.addWidget(cryo_button, 2, col)
+
+            magnet_button = PyDMRelatedDisplayButton()
+            magnet_button.filenames = [f"$PYDM/mgnt/l{linac}b_main.ui"]
+            magnet_button.openInNewWindow = True
+            magnet_button.setToolTip(f"L{linac}B Magnets")
             mini_home_groupbox_layout.addWidget(magnet_button, 3, col)
+
+            vacuum_button = PyDMRelatedDisplayButton()
+            vacuum_button.filenames = [f"$PYDM/vac/l{linac}b_main.ui"]
+            vacuum_button.openInNewWindow = True
+            vacuum_button.setToolTip(f"L{linac}B Vacuum")
             mini_home_groupbox_layout.addWidget(vacuum_button, 4, col)
 
-        global_rf_button = PyDMRelatedDisplayButton(
-            filename="$PYDM/rf/global_main.ui"
-        )
-        global_cryo_button = PyDMRelatedDisplayButton(
-            filename="$PYDM/cryo/global_main.ui"
-        )
+        global_rf_button = PyDMRelatedDisplayButton()
+        global_rf_button.filenames = ["$PYDM/rf/global_main.ui"]
+        global_rf_button.openInNewWindow = True
         mini_home_groupbox_layout.addWidget(global_rf_button, 1, 1)
+
+        global_cryo_button = PyDMRelatedDisplayButton()
+        global_cryo_button.filenames = ["$PYDM/cryo/global_main.ui"]
+        global_cryo_button.openInNewWindow = True
         mini_home_groupbox_layout.addWidget(global_cryo_button, 2, 1)
