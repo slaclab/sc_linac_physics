@@ -516,6 +516,8 @@ class DataAcquisitionManager(QObject):
     def stop_acquisition(self, chassis_id: str):
         """Stop a running acquisition process."""
         process_info = self.active_processes.get(chassis_id)
+        if chassis_id in self.active_processes:
+            del self.active_processes[chassis_id]
         if process_info:
             timer = process_info.get("progress_timer")
             if timer and timer.isActive():
@@ -526,8 +528,6 @@ class DataAcquisitionManager(QObject):
                 if not process.waitForFinished(2000):
                     process.kill()
                     process.waitForFinished(1000)
-            if chassis_id in self.active_processes:
-                del self.active_processes[chassis_id]
 
     def stop_all(self):
         """Stop all acquisitions"""
