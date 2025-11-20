@@ -46,16 +46,21 @@ def test_launcher_decorators():
     assert launch_auto_setup._launcher_category == "application"
 
 
+@patch("inspect.getfile")  # Added this
 @patch("sc_linac_physics.displays.srfhome.srf_home.SRFHome")
 @patch("sc_linac_physics.cli.launchers.PyDMApplication")
 @patch("sc_linac_physics.cli.launchers.sys.exit")
 def test_launch_srf_home_standalone(
-    mock_exit, mock_pydm_app, mock_display_class
+    mock_exit,
+    mock_pydm_app,
+    mock_display_class,
+    mock_getfile,  # Added mock_getfile
 ):
     """Test SRF home launcher in standalone mode."""
     from sc_linac_physics.cli.launchers import launch_srf_home
 
     # Setup mocks
+    mock_getfile.return_value = "/path/to/srf_home.py"  # Added this
     mock_app_instance = MagicMock()
     mock_pydm_app.return_value = mock_app_instance
     mock_app_instance.exec.return_value = 0
@@ -67,11 +72,14 @@ def test_launch_srf_home_standalone(
     # Call launcher
     launch_srf_home(standalone=True)
 
+    # Verify inspect.getfile was called
+    assert mock_getfile.called
+
     # Verify PyDMApplication was created
     assert mock_pydm_app.called
 
-    # Verify display was instantiated
-    assert mock_display_class.called
+    # Verify main_window.open was called instead of set_display_widget
+    assert mock_app_instance.main_window.open.called
 
     # Verify app.exec() or app.exec_() was called
     assert mock_app_instance.exec.called or mock_app_instance.exec_.called
@@ -80,16 +88,21 @@ def test_launch_srf_home_standalone(
     assert mock_exit.called
 
 
+@patch("inspect.getfile")  # Added this
 @patch("sc_linac_physics.displays.srfhome.srf_home.SRFHome")
 @patch("sc_linac_physics.cli.launchers.PyDMMainWindow")
 @patch("sc_linac_physics.cli.launchers.PyDMApplication")
 def test_launch_srf_home_non_standalone(
-    mock_pydm_app, mock_window, mock_display_class
+    mock_pydm_app,
+    mock_window,
+    mock_display_class,
+    mock_getfile,  # Added mock_getfile
 ):
     """Test SRF home launcher in non-standalone mode."""
     from sc_linac_physics.cli.launchers import launch_srf_home
 
     # Setup mocks for existing application
+    mock_getfile.return_value = "/path/to/srf_home.py"  # Added this
     mock_app_instance = MagicMock()
     mock_pydm_app.instance.return_value = mock_app_instance
 
@@ -102,9 +115,12 @@ def test_launch_srf_home_non_standalone(
     # Call launcher in non-standalone mode
     result = launch_srf_home(standalone=False)
 
+    # Verify inspect.getfile was called
+    assert mock_getfile.called
+
     # Verify window was created and returned
     assert result == mock_window_instance
-    assert mock_window_instance.set_display_widget.called
+    assert mock_window_instance.open.called  # Changed from set_display_widget
     assert mock_window_instance.show.called
 
 
@@ -163,12 +179,16 @@ def test_display_launchers_no_syntax_errors(command, expected_import_error):
     )
 
 
+@patch("inspect.getfile")  # Added this
 @patch("sc_linac_physics.cli.launchers.launch_python_display")
-def test_launch_python_display_called_correctly(mock_launch):
+def test_launch_python_display_called_correctly(
+    mock_launch, mock_getfile
+):  # Added mock_getfile
     """Test that launchers call launch_python_display with correct arguments."""
     from sc_linac_physics.cli.launchers import launch_srf_home
     from sc_linac_physics.displays.srfhome.srf_home import SRFHome
 
+    mock_getfile.return_value = "/path/to/srf_home.py"  # Added this
     mock_launch.return_value = None
 
     # Mock sys.argv
@@ -189,11 +209,15 @@ def test_launch_python_display_called_correctly(mock_launch):
         assert call_args[1]["standalone"] is True
 
 
+@patch("inspect.getfile")  # Added this
 @patch("sc_linac_physics.cli.launchers.PyDMApplication")
-def test_launch_python_display_no_app_instance(mock_pydm_app):
+def test_launch_python_display_no_app_instance(
+    mock_pydm_app, mock_getfile
+):  # Added mock_getfile
     """Test that non-standalone mode raises error without app instance."""
     from sc_linac_physics.cli.launchers import launch_python_display
 
+    mock_getfile.return_value = "/path/to/display.py"  # Added this
     mock_pydm_app.instance.return_value = None
 
     with pytest.raises(RuntimeError, match="No PyDMApplication instance found"):
@@ -229,8 +253,12 @@ def test_launch_python_display_no_app_instance(mock_pydm_app):
         ),
     ],
 )
+@patch("inspect.getfile")  # Added this
 def test_launchers_import_correct_display_class(
-    launcher_name, display_class_path, display_module
+    mock_getfile,  # Added this parameter
+    launcher_name,
+    display_class_path,
+    display_module,
 ):
     """Test that each launcher imports and uses the correct display class."""
     from sc_linac_physics.cli.launchers import (
@@ -239,6 +267,8 @@ def test_launchers_import_correct_display_class(
         launch_fault_decoder,
         launch_fault_count,
     )
+
+    mock_getfile.return_value = "/path/to/display.py"  # Added this
 
     launchers = {
         "launch_srf_home": launch_srf_home,
