@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v4.0.2 (2025-11-20)
+
+### Bug Fixes
+
+- **launcher**: Set current_file on main window for Python displays
+  ([#160](https://github.com/slaclab/sc_linac_physics/pull/160),
+  [`0fa8e10`](https://github.com/slaclab/sc_linac_physics/commit/0fa8e1034cf28c8c7c69cae4eb4192c0d2e6e60b))
+
+- **logger**: Handle permission errors gracefully with console-only fallback
+  ([#161](https://github.com/slaclab/sc_linac_physics/pull/161),
+  [`89383ed`](https://github.com/slaclab/sc_linac_physics/commit/89383edfa68f340662c30996f9a8f7935ca45525))
+
+- **srfhome**: Make ui_filename a method instead of attribute
+  ([#160](https://github.com/slaclab/sc_linac_physics/pull/160),
+  [`0fa8e10`](https://github.com/slaclab/sc_linac_physics/commit/0fa8e1034cf28c8c7c69cae4eb4192c0d2e6e60b))
+
+- **srfhome**: Set ui_filename to resolve PyDMRelatedDisplayButton parent path error
+  ([#160](https://github.com/slaclab/sc_linac_physics/pull/160),
+  [`0fa8e10`](https://github.com/slaclab/sc_linac_physics/commit/0fa8e1034cf28c8c7c69cae4eb4192c0d2e6e60b))
+
+
 ## v4.0.1 (2025-11-20)
 
 ### Bug Fixes
