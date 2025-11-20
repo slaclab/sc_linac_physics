@@ -29,8 +29,8 @@ class SRFHome(Display):
     def __init__(self, parent=None, args=None, macros=None):
         super().__init__(parent=parent, args=args, macros=macros)
 
-        # CRITICAL FIX: Set the UI filename so PyDM can resolve relative paths
-        self.ui_filename = os.path.abspath(__file__)
+        # Store the filename in a private variable
+        self._ui_filename = os.path.abspath(__file__)
 
         self.root_dir = os.getenv(
             "SRF_ROOT_DIR", "/home/physics/srf/sc_linac_physics"
@@ -59,6 +59,14 @@ class SRFHome(Display):
         self.main_layout.addLayout(extras_layout)
         self.main_layout.addLayout(self.watcher_layout)
         self.child_windows = []
+
+    def ui_filename(self):
+        """Return the UI filename for this display"""
+        return self._ui_filename
+
+    def ui_filepath(self):
+        """Return the directory path of this display"""
+        return os.path.dirname(self._ui_filename)
 
     def setup_watcher_groupboxes(self):
         """Create groupboxes for all configured watchers"""
