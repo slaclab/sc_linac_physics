@@ -121,6 +121,138 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data, ensure_ascii=False)
 
 
+def _create_console_handler(level: int) -> logging.StreamHandler:
+    """Create and configure console handler with colored formatter."""
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_formatter = ColoredFormatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    console_handler.setFormatter(console_formatter)
+    return console_handler
+
+
+def _create_text_file_handler(
+    log_dir_path: Path,
+    log_filename: str,
+    level: int,
+    max_bytes: int,
+    backup_count: int,
+) -> RotatingFileHandler:
+    """Create and configure rotating text file handler."""
+    text_file = log_dir_path / f"{log_filename}.log"
+    text_handler = RotatingFileHandler(
+        text_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    text_handler.setLevel(level)
+    text_formatter = ExtendedFormatter(
+        "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    text_handler.setFormatter(text_formatter)
+    return text_handler
+
+
+def _create_json_file_handler(
+    log_dir_path: Path,
+    log_filename: str,
+    level: int,
+    max_bytes: int,
+    backup_count: int,
+) -> RotatingFileHandler:
+    """Create and configure rotating JSON Lines file handler."""
+    jsonl_file = log_dir_path / f"{log_filename}.jsonl"
+    json_handler = RotatingFileHandler(
+        jsonl_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    json_handler.setLevel(level)
+    json_handler.setFormatter(JSONFormatter())
+    return json_handler
+
+
+def _add_file_handlers(
+    logger: logging.Logger,
+    log_dir: str,
+    log_filename: str,
+    level: int,
+    max_bytes: int,
+    backup_count: int,
+    console_only_on_error: bool,
+) -> bool:
+    """
+    Attempt to add file handlers to logger.
+
+    Returns:
+        True if file handlers were successfully added, False otherwise.
+    """
+    try:
+        log_dir_path = Path(log_dir)
+        log_dir_path.mkdir(parents=True, exist_ok=True)
+
+        text_handler = _create_text_file_handler(
+            log_dir_path, log_filename, level, max_bytes, backup_count
+        )
+        logger.addHandler(text_handler)
+
+        json_handler = _create_json_file_handler(
+            log_dir_path, log_filename, level, max_bytes, backup_count
+        )
+        logger.addHandler(json_handler)
+
+        return True
+
+    except PermissionError as e:
+        if console_only_on_error:
+            logger.warning(
+                f"Permission denied for log directory '{log_dir}': {e}"
+            )
+            logger.warning(
+                "Continuing with console-only logging (no files will be written)"
+            )
+            return False
+        raise
+
+    except OSError as e:
+        if console_only_on_error:
+            logger.error(
+                f"OS error while setting up file logging in '{log_dir}': {e}"
+            )
+            logger.warning("Continuing with console-only logging")
+            return False
+        raise
+
+    except Exception as e:
+        if console_only_on_error:
+            logger.error(
+                f"Unexpected error setting up file logging: {e}",
+                exc_info=True,
+            )
+            logger.warning("Continuing with console-only logging")
+            return False
+        raise
+
+
+def _register_cleanup(logger: logging.Logger) -> None:
+    """Register cleanup function to close handlers on exit."""
+
+    def cleanup():
+        for handler in logger.handlers[:]:
+            try:
+                handler.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+            logger.removeHandler(handler)
+
+    atexit.register(cleanup)
+
+
 def custom_logger(
     name: str,
     log_filename: str,
@@ -128,14 +260,18 @@ def custom_logger(
     level: int = logging.DEBUG,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
+    console_only_on_error: bool = True,
 ) -> logging.Logger:
     """
     Create a logger with colored console output and dual file logging.
 
-    Always writes to three destinations:
-    - Console: Colored, human-readable
+    Always writes to console. Attempts to write to files:
+    - Console: Colored, human-readable (always)
     - {log_dir}/{log_filename}.log: Plain text, human-readable (with rotation)
     - {log_dir}/{log_filename}.jsonl: JSON Lines format (with rotation)
+
+    If file logging fails due to permissions, falls back to console-only logging
+    and emits a warning.
 
     Args:
         name: Logger name (typically __name__)
@@ -144,16 +280,14 @@ def custom_logger(
         level: Logging level (default: DEBUG)
         max_bytes: Maximum file size before rotation (default: 10MB)
         backup_count: Number of backup files to keep (default: 5)
+        console_only_on_error: If True, continue with console-only on permission errors
 
     Returns:
         Logger instance
     """
-
-    # Validate inputs
     if not log_filename:
         raise ValueError("log_filename cannot be empty")
 
-    # Use log path to make logger unique
     unique_logger_name = f"{name}#{log_dir}/{log_filename}"
 
     # Return existing logger if already created
@@ -169,61 +303,31 @@ def custom_logger(
 
     logger.setLevel(level)
     logger.propagate = False
-
-    # Add name override filter
     logger.addFilter(NameOverrideFilter(name))
 
-    # Ensure log directory exists
-    log_dir_path = Path(log_dir)
-    log_dir_path.mkdir(parents=True, exist_ok=True)
-
-    # Console handler - colored
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(level)
-    console_formatter = ColoredFormatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    console_handler.setFormatter(console_formatter)
+    # Always add console handler first
+    console_handler = _create_console_handler(level)
     logger.addHandler(console_handler)
 
-    # Rotating text file handler with ExtendedFormatter
-    text_file = log_dir_path / f"{log_filename}.log"
-    text_handler = RotatingFileHandler(
-        text_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
+    # Try to add file handlers
+    file_handlers_added = _add_file_handlers(
+        logger,
+        log_dir,
+        log_filename,
+        level,
+        max_bytes,
+        backup_count,
+        console_only_on_error,
     )
-    text_handler.setLevel(level)
-    text_formatter = ExtendedFormatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    text_handler.setFormatter(text_formatter)
-    logger.addHandler(text_handler)
 
-    # Rotating JSON Lines file handler
-    jsonl_file = log_dir_path / f"{log_filename}.jsonl"
-    json_handler = RotatingFileHandler(
-        jsonl_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
-    )
-    json_handler.setLevel(level)
-    json_handler.setFormatter(JSONFormatter())
-    logger.addHandler(json_handler)
-
-    # Register cleanup on exit
-    def cleanup():
-        for handler in logger.handlers[:]:
-            handler.close()
-            logger.removeHandler(handler)
-
-    atexit.register(cleanup)
+    # Register cleanup
+    _register_cleanup(logger)
 
     # Store the logger
     _created_loggers[unique_logger_name] = logger
+
+    # Log success message if file handlers were added
+    if file_handlers_added:
+        logger.debug(f"File logging initialized: {log_dir}/{log_filename}")
 
     return logger
