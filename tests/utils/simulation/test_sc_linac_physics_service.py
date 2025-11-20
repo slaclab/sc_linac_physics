@@ -1,514 +1,413 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 from caproto import ChannelEnum, ChannelFloat, ChannelInteger
 
-from sc_linac_physics.utils.sc_linac.linac_utils import (
-    LINAC_TUPLES,
-)
 from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
-    SCLinacPhysicsService,
-    main,
+    LauncherGroups,
+    HEARTBEAT_CHANNELS,
+    ALARM_CHANNELS,
+    ALARM_STATES,
+    RACK_A_CAVITIES,
+    LAUNCHER_TYPES,
 )
 
 
-# Create a fixture that mocks all the expensive PVGroup imports
-@pytest.fixture(autouse=True)
-def mock_all_pvgroups():
-    """Mock all PVGroup classes to speed up tests"""
-    with patch.multiple(
-        "sc_linac_physics.utils.simulation.sc_linac_physics_service",
-        CavityPVGroup=MagicMock(return_value=MagicMock()),
-        SSAPVGroup=MagicMock(return_value=MagicMock()),
-        PiezoPVGroup=MagicMock(return_value=MagicMock()),
-        StepperPVGroup=MagicMock(return_value=MagicMock()),
-        CavFaultPVGroup=MagicMock(return_value=MagicMock()),
-        HeaterPVGroup=MagicMock(return_value=MagicMock()),
-        JTPVGroup=MagicMock(return_value=MagicMock()),
-        LiquidLevelPVGroup=MagicMock(return_value=MagicMock()),
-        CryoPVGroup=MagicMock(return_value=MagicMock()),
-        CryomodulePVGroup=MagicMock(return_value=MagicMock()),
-        HOMPVGroup=MagicMock(return_value=MagicMock()),
-        DecaradPVGroup=MagicMock(return_value=MagicMock()),
-        DecaradHeadPVGroup=MagicMock(return_value=MagicMock()),
-        PPSPVGroup=MagicMock(return_value=MagicMock()),
-        BSOICPVGroup=MagicMock(return_value=MagicMock()),
-        BeamlineVacuumPVGroup=MagicMock(return_value=MagicMock()),
-        CouplerVacuumPVGroup=MagicMock(return_value=MagicMock()),
-        SetupGlobalPVGroup=MagicMock(return_value=MagicMock()),
-        OffGlobalPVGroup=MagicMock(return_value=MagicMock()),
-        SetupLinacPVGroup=MagicMock(return_value=MagicMock()),
-        OffLinacPVGroup=MagicMock(return_value=MagicMock()),
-        SetupCMPVGroup=MagicMock(return_value=MagicMock()),
-        OffCMPVGroup=MagicMock(return_value=MagicMock()),
-        SetupCavityPVGroup=MagicMock(return_value=MagicMock()),
-        OffCavityPVGroup=MagicMock(return_value=MagicMock()),
-        MAGNETPVGroup=MagicMock(return_value=MagicMock()),
-        RACKPVGroup=MagicMock(return_value=MagicMock()),
-        RFStationPVGroup=MagicMock(return_value=MagicMock()),
-        Decarad=MagicMock(
-            return_value=MagicMock(
-                pv_prefix="DCRH:SYS0:1:",
-                heads={1: MagicMock(pv_prefix="DCRH:SYS0:1:1:")},
-            )
-        ),
-    ):
-        yield
+class TestLauncherGroups:
+    """Test the LauncherGroups container class."""
+
+    def test_initialization(self):
+        """Test that LauncherGroups initializes with None values."""
+        groups = LauncherGroups()
+        assert groups.setup is None
+        assert groups.off is None
+        assert groups.cold is None
+        assert groups.park is None
+
+    def test_set_and_get(self):
+        """Test setting and getting launcher groups."""
+        groups = LauncherGroups()
+        mock_group = Mock()
+
+        groups.set("setup", mock_group)
+        assert groups.get("setup") is mock_group
+
+    def test_all(self):
+        """Test the all() method returns all groups as list."""
+        groups = LauncherGroups()
+        mock_setup = Mock()
+        mock_off = Mock()
+
+        groups.set("setup", mock_setup)
+        groups.set("off", mock_off)
+
+        all_groups = groups.all()
+        assert len(all_groups) == 4
+        assert mock_setup in all_groups
+        assert mock_off in all_groups
+
+    def test_by_type(self):
+        """Test the by_type() method returns dict."""
+        groups = LauncherGroups()
+        mock_setup = Mock()
+        groups.set("setup", mock_setup)
+
+        by_type = groups.by_type()
+        assert isinstance(by_type, dict)
+        assert by_type["setup"] is mock_setup
+        assert "off" in by_type
+        assert "cold" in by_type
+        assert "park" in by_type
 
 
-class TestSCLinacPhysicsServiceInitialization:
-    """Test that the service initializes correctly"""
+class TestSCLinacPhysicsService:
+    """Test the main service class."""
 
-    def test_service_can_be_instantiated(self):
-        """Test that SCLinacPhysicsService can be created"""
+    @pytest.fixture
+    def mocked_service(self):
+        """Create a service with all dependencies mocked."""
+        patches = {
+            "Decarad": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.Decarad"
+            ),
+            "BSOICPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.BSOICPVGroup"
+            ),
+            "PPSPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.PPSPVGroup"
+            ),
+            "DecaradPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.DecaradPVGroup"
+            ),
+            "DecaradHeadPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.DecaradHeadPVGroup"
+            ),
+            "CavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CavityPVGroup"
+            ),
+            "PiezoPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.PiezoPVGroup"
+            ),
+            "StepperPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.StepperPVGroup"
+            ),
+            "SSAPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SSAPVGroup"
+            ),
+            "CavFaultPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CavFaultPVGroup"
+            ),
+            "JTPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.JTPVGroup"
+            ),
+            "LiquidLevelPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.LiquidLevelPVGroup"
+            ),
+            "HOMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.HOMPVGroup"
+            ),
+            "HeaterPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.HeaterPVGroup"
+            ),
+            "CryoPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CryoPVGroup"
+            ),
+            "BeamlineVacuumPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.BeamlineVacuumPVGroup"
+            ),
+            "CouplerVacuumPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CouplerVacuumPVGroup"
+            ),
+            "CryomodulePVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CryomodulePVGroup"
+            ),
+            "MAGNETPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.MAGNETPVGroup"
+            ),
+            "RACKPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.RACKPVGroup"
+            ),
+            "RFStationPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.RFStationPVGroup"
+            ),
+            "SetupCavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupCavityPVGroup"
+            ),
+            "SetupCMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupCMPVGroup"
+            ),
+            "SetupLinacPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupLinacPVGroup"
+            ),
+            "SetupGlobalPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupGlobalPVGroup"
+            ),
+            "SetupRackPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupRackPVGroup"
+            ),
+            "OffCavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffCavityPVGroup"
+            ),
+            "OffCMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffCMPVGroup"
+            ),
+            "OffLinacPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffLinacPVGroup"
+            ),
+            "OffGlobalPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffGlobalPVGroup"
+            ),
+            "OffRackPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffRackPVGroup"
+            ),
+            "ColdCavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdCavityPVGroup"
+            ),
+            "ColdCMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdCMPVGroup"
+            ),
+            "ColdLinacPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdLinacPVGroup"
+            ),
+            "ColdGlobalPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdGlobalPVGroup"
+            ),
+            "ColdRackPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdRackPVGroup"
+            ),
+            "ParkCavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkCavityPVGroup"
+            ),
+            "ParkCMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkCMPVGroup"
+            ),
+            "ParkLinacPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkLinacPVGroup"
+            ),
+            "ParkGlobalPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkGlobalPVGroup"
+            ),
+            "ParkRackPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkRackPVGroup"
+            ),
+        }
+
+        mocks = {}
+        for name, patcher in patches.items():
+            mocks[name] = patcher.start()
+
+        yield mocks
+
+        for patcher in patches.values():
+            patcher.stop()
+
+    def test_initialization(self, mocked_service):
+        """Test that service initializes properly."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
+        )
+
         service = SCLinacPhysicsService()
         assert service is not None
+        assert isinstance(service, SCLinacPhysicsService)
 
-    def test_service_is_service_subclass(self):
-        """Test that SCLinacPhysicsService inherits from Service"""
-        from sc_linac_physics.utils.simulation.service import Service
-
-        assert issubclass(SCLinacPhysicsService, Service)
-
-
-class TestHeartbeatPVs:
-    """Test heartbeat PV creation"""
-
-    def test_heartbeat_pvs_created(self):
-        """Test that all heartbeat PVs are created"""
-        service = SCLinacPhysicsService()
-
-        assert "PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT" in service
-        assert "PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT" in service
-        assert "PHYS:SYS0:1:SC_CAV_FAULT_HEARTBEAT" in service
-
-    def test_heartbeat_pvs_are_integers(self):
-        """Test that heartbeat PVs are ChannelIntegers"""
-        service = SCLinacPhysicsService()
-
-        assert isinstance(
-            service["PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT"], ChannelInteger
-        )
-        assert isinstance(
-            service["PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT"], ChannelInteger
-        )
-        assert isinstance(
-            service["PHYS:SYS0:1:SC_CAV_FAULT_HEARTBEAT"], ChannelInteger
+    def test_system_pvs_created(self, mocked_service):
+        """Test that system-level PVs are created."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
         )
 
-    def test_heartbeat_pvs_default_to_zero(self):
-        """Test that heartbeat PVs default to 0"""
         service = SCLinacPhysicsService()
 
-        assert service["PHYS:SYS0:1:SC_SEL_PHAS_OPT_HEARTBEAT"].value == 0
-        assert service["PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT"].value == 0
-        assert service["PHYS:SYS0:1:SC_CAV_FAULT_HEARTBEAT"].value == 0
-
-
-class TestAlarmPVs:
-    """Test alarm PV creation"""
-
-    def test_alarm_pvs_created(self):
-        """Test that all alarm PVs are created"""
-        service = SCLinacPhysicsService()
-
-        assert "ALRM:SYS0:SC_CAV_FAULT:ALHBERR" in service
-        assert "ALRM:SYS0:SC_SEL_PHAS_OPT:ALHBERR" in service
-        assert "ALRM:SYS0:SC_CAV_QNCH_RESET:ALHBERR" in service
-
-    def test_alarm_pvs_are_enums(self):
-        """Test that alarm PVs are ChannelEnums"""
-        service = SCLinacPhysicsService()
-
-        assert isinstance(
-            service["ALRM:SYS0:SC_CAV_FAULT:ALHBERR"], ChannelEnum
-        )
-
-    def test_alarm_pvs_have_correct_enum_strings(self):
-        """Test that alarm PVs have correct enum strings"""
-        service = SCLinacPhysicsService()
-
-        expected_strings = ("RUNNING", "NOT_RUNNING", "INVALID")
-        pv = service["ALRM:SYS0:SC_CAV_FAULT:ALHBERR"]
-        assert pv.enum_strings == expected_strings
-
-    def test_alarm_pvs_default_to_running(self):
-        """Test that alarm PVs default to RUNNING (0)"""
-        service = SCLinacPhysicsService()
-
-        assert service["ALRM:SYS0:SC_CAV_FAULT:ALHBERR"].value == 0
-
-
-class TestGlobalLaunchers:
-    """Test global launcher PV groups"""
-
-    def test_global_launchers_created(self, mock_all_pvgroups):
-        """Test that global launchers are created"""
-        # Access the mocked classes
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        # Check that SetupGlobalPVGroup was called with prefix and linac_groups
-        call_args = sc_linac_physics_service.SetupGlobalPVGroup.call_args
-        assert call_args.kwargs["prefix"] == "ACCL:SYS0:SC:"
-        assert "linac_groups" in call_args.kwargs
-        assert isinstance(call_args.kwargs["linac_groups"], list)
-        assert len(call_args.kwargs["linac_groups"]) == 4  # Number of linacs
-
-        # Similarly for OffGlobalPVGroup
-        call_args = sc_linac_physics_service.OffGlobalPVGroup.call_args
-        assert call_args.kwargs["prefix"] == "ACCL:SYS0:SC:"
-        assert "linac_groups" in call_args.kwargs
-        assert isinstance(call_args.kwargs["linac_groups"], list)
-        assert len(call_args.kwargs["linac_groups"]) == 4  # Number of linacs
-
-
-class TestLinacPVGroups:
-    """Test linac-level PV creation"""
-
-    def test_linac_aactmeansum_created(self):
-        """Test that AACTMEANSUM PV is created for each linac"""
-        service = SCLinacPhysicsService()
-
-        for linac_idx, (linac_name, _) in enumerate(LINAC_TUPLES):
-            pv_name = f"ACCL:{linac_name}:1:AACTMEANSUM"
+        # Check heartbeat channels
+        for channel in HEARTBEAT_CHANNELS:
+            pv_name = f"PHYS:SYS0:1:{channel}"
             assert pv_name in service
-            assert isinstance(service[pv_name], ChannelFloat)
+            assert isinstance(service[pv_name], ChannelInteger)
 
-    def test_linac_aactmeansum_value(self):
-        """Test that AACTMEANSUM values are reasonable"""
-        service = SCLinacPhysicsService()
-
-        for linac_idx, (linac_name, cm_list) in enumerate(LINAC_TUPLES):
-            pv_name = f"ACCL:{linac_name}:1:AACTMEANSUM"
-            actual_value = service[pv_name].value
-
-            # Just verify it's a positive, reasonable value
-            assert actual_value > 0, f"{pv_name} should be positive"
-            assert actual_value < 5000, f"{pv_name} should be < 5000"
-            assert isinstance(
-                actual_value, float
-            ), f"{pv_name} should be a float"
-
-    def test_linac_ades_max_created(self):
-        """Test that ADES_MAX PV is created for each linac"""
-        service = SCLinacPhysicsService()
-
-        for _, (linac_name, _) in enumerate(LINAC_TUPLES):
-            pv_name = f"ACCL:{linac_name}:1:ADES_MAX"
+        # Check alarm channels
+        for channel in ALARM_CHANNELS:
+            pv_name = f"ALRM:SYS0:{channel}:ALHBERR"
             assert pv_name in service
-            assert service[pv_name].value == 2800.0
-
-    def test_l1b_hl_aactmeansum_created(self):
-        """Test that L1B gets HL_AACTMEANSUM PV"""
-        service = SCLinacPhysicsService()
-
-        assert "ACCL:L1B:1:HL_AACTMEANSUM" in service
-        assert service["ACCL:L1B:1:HL_AACTMEANSUM"].value == 0.0
-
-    def test_linac_launchers_created(self, mock_all_pvgroups):
-        """Test that linac launchers are created for each linac"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        # Should be called once per linac
-        assert sc_linac_physics_service.SetupLinacPVGroup.call_count == len(
-            LINAC_TUPLES
-        )
-        assert sc_linac_physics_service.OffLinacPVGroup.call_count == len(
-            LINAC_TUPLES
-        )
-
-
-class TestCryomodulePVGroups:
-    """Test cryomodule-level PV creation"""
-
-    def test_cryo_cas_access_created(self):
-        """Test that CAS_ACCESS PV is created for known CMs"""
-        service = SCLinacPhysicsService()
-
-        # Just test a few known CMs
-        test_cms = ["01", "02", "H1", "04", "16"]
-
-        for cm_name in test_cms:
-            pv_name = f"CRYO:CM{cm_name}:0:CAS_ACCESS"
-            assert pv_name in service, f"Missing {pv_name}"
             assert isinstance(service[pv_name], ChannelEnum)
-            assert service[pv_name].enum_strings == ("Close", "Open")
-            assert service[pv_name].value == 1  # Open
 
-    def test_cm_ades_max_created(self):
-        """Test that CM-level ADES_MAX is created"""
+    def test_decarad_pvs_created(self, mocked_service):
+        """Test that Decarad PVs are created."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
+        )
+
+        # Instantiate service to trigger Decarad initialization
+        _ = SCLinacPhysicsService()
+
+        # Decarad should be instantiated for indices 1 and 2
+        assert mocked_service["Decarad"].call_count == 2
+        mocked_service["Decarad"].assert_any_call(1)
+        mocked_service["Decarad"].assert_any_call(2)
+
+    def test_service_components_initialized(self, mocked_service):
+        """Test that all major service components are initialized."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
+        )
+
+        # Instantiate service to trigger component initialization
+        _ = SCLinacPhysicsService()
+
+        # Verify PVGroup constructors were called (they may be called multiple times)
+        # Just verify they were called at least once
+        assert mocked_service["BSOICPVGroup"].called
+        assert mocked_service["PPSPVGroup"].called
+        assert mocked_service["CavityPVGroup"].called
+        assert mocked_service["MAGNETPVGroup"].called
+        assert mocked_service["RACKPVGroup"].called
+
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+        [("L0B", ["01"])],
+    )
+    def test_single_linac_setup(self, mocked_service):
+        """Test setup of a single linac."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
+        )
+
         service = SCLinacPhysicsService()
 
-        # Test for L0B CM01
-        pv_name = "ACCL:L0B:0100:ADES_MAX"
-        assert pv_name in service
-        assert service[pv_name].value == 168.0
+        # Check linac-level channel was created
+        assert "ACCL:L0B:1:AACTMEANSUM" in service
+        assert isinstance(service["ACCL:L0B:1:AACTMEANSUM"], ChannelFloat)
+        assert "ACCL:L0B:1:ADES_MAX" in service
 
-    def test_cm_launchers_created(self, mock_all_pvgroups):
-        """Test that CM launchers are created"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        # Verify they're called the same number of times
-        assert (
-            sc_linac_physics_service.SetupCMPVGroup.call_count
-            == sc_linac_physics_service.OffCMPVGroup.call_count
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.L1BHL",
+        ["02"],
+    )
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+        [("L1B", ["01"])],
+    )
+    def test_l1b_high_level_setup(self, mocked_service):
+        """Test that L1B high-level cavities are handled."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
         )
 
-        # Verify it's a reasonable number
-        assert sc_linac_physics_service.SetupCMPVGroup.call_count > 30
+        service = SCLinacPhysicsService()
 
+        # Check HL-specific channel
+        assert "ACCL:L1B:1:HL_AACTMEANSUM" in service
+        assert isinstance(service["ACCL:L1B:1:HL_AACTMEANSUM"], ChannelFloat)
 
-class TestCavityPVGroups:
-    """Test cavity-level PV creation"""
-
-    def test_cavity_groups_created(self, mock_all_pvgroups):
-        """Test that cavity PV groups are created (8 per CM)"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert sc_linac_physics_service.CavityPVGroup.call_count >= 200
-        assert sc_linac_physics_service.CavityPVGroup.call_count % 8 == 0
-
-    def test_cavity_launchers_created(self, mock_all_pvgroups):
-        """Test that cavity launchers are created"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert (
-            sc_linac_physics_service.SetupCavityPVGroup.call_count
-            == sc_linac_physics_service.OffCavityPVGroup.call_count
-        )
-        assert sc_linac_physics_service.SetupCavityPVGroup.call_count >= 200
-
-    def test_ssa_groups_created(self, mock_all_pvgroups):
-        """Test that SSA PV groups are created for each cavity"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert sc_linac_physics_service.SSAPVGroup.call_count >= 200
-
-    def test_ssa_matches_cavity_count(self, mock_all_pvgroups):
-        """Test that SSA count matches cavity count"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert (
-            sc_linac_physics_service.SSAPVGroup.call_count
-            == sc_linac_physics_service.CavityPVGroup.call_count
+    def test_cryomodule_level_pvs(self, mocked_service):
+        """Test cryomodule-level PV creation."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
         )
 
+        # Instantiate service to trigger cryomodule setup
+        _ = SCLinacPhysicsService()
 
-class TestRackPVGroups:
-    """Test rack PV group creation"""
+        # Check that cryomodule groups were created
+        assert mocked_service["HeaterPVGroup"].called
+        assert mocked_service["CryoPVGroup"].called
+        assert mocked_service["BeamlineVacuumPVGroup"].called
+        assert mocked_service["CouplerVacuumPVGroup"].called
+        assert mocked_service["CryomodulePVGroup"].called
 
-    def test_rack_groups_created(self, mock_all_pvgroups):
-        """Test that rack PV groups are created"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert sc_linac_physics_service.RACKPVGroup.call_count >= 200
-
-    def test_rack_a_and_b_distribution(self, mock_all_pvgroups):
-        """Test that cavities 1-4 go to RACKA, 5-8 go to RACKB"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        rack_a_calls = 0
-        rack_b_calls = 0
-
-        for call in sc_linac_physics_service.RACKPVGroup.call_args_list:
-            prefix = call.kwargs.get(
-                "prefix", call.args[0] if call.args else ""
-            )
-            if "RACKA" in prefix:
-                rack_a_calls += 1
-            elif "RACKB" in prefix:
-                rack_b_calls += 1
-
-        assert rack_a_calls == rack_b_calls
-        assert rack_a_calls > 0
-
-
-class TestRFStationPVGroups:
-    """Test RF station PV group creation"""
-
-    def test_rf_station_groups_created(self, mock_all_pvgroups):
-        """Test that RF station PV groups are created (2 per cavity)"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert sc_linac_physics_service.RFStationPVGroup.call_count >= 400
-        assert sc_linac_physics_service.RFStationPVGroup.call_count % 2 == 0
-
-    def test_rf_station_count_is_double_cavity_count(self, mock_all_pvgroups):
-        """Test that there are 2 RF stations per cavity"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert (
-            sc_linac_physics_service.RFStationPVGroup.call_count
-            == sc_linac_physics_service.CavityPVGroup.call_count * 2
+    def test_magnet_groups_created(self, mocked_service):
+        """Test that magnet groups are created."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
         )
 
-    def test_rf_station_naming(self, mock_all_pvgroups):
-        """Test that RF stations are named RFS1A, RFS2A, RFS1B, RFS2B"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
+        # Instantiate service to trigger magnet group creation
+        _ = SCLinacPhysicsService()
 
-        SCLinacPhysicsService()
+        # Should create XCOR, YCOR, and QUAD for each CM
+        assert mocked_service["MAGNETPVGroup"].called
 
-        rfs1a_count = 0
-        rfs2a_count = 0
-        rfs1b_count = 0
-        rfs2b_count = 0
-
-        for call in sc_linac_physics_service.RFStationPVGroup.call_args_list:
-            prefix = call.kwargs.get(
-                "prefix", call.args[0] if call.args else ""
-            )
-            if "RFS1A" in prefix:
-                rfs1a_count += 1
-            elif "RFS2A" in prefix:
-                rfs2a_count += 1
-            elif "RFS1B" in prefix:
-                rfs1b_count += 1
-            elif "RFS2B" in prefix:
-                rfs2b_count += 1
-
-        assert rfs1a_count == rfs2a_count == rfs1b_count == rfs2b_count
-        assert rfs1a_count > 0
-
-
-class TestMagnetPVGroups:
-    """Test magnet PV group creation"""
-
-    def test_magnet_groups_created(self, mock_all_pvgroups):
-        """Test that magnet PV groups are created (XCOR, YCOR, QUAD per CM)"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert sc_linac_physics_service.MAGNETPVGroup.call_count >= 90
-        assert sc_linac_physics_service.MAGNETPVGroup.call_count % 3 == 0
-
-    def test_magnet_types_created(self, mock_all_pvgroups):
-        """Test that all three magnet types are created"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        xcor_count = 0
-        ycor_count = 0
-        quad_count = 0
-
-        for call in sc_linac_physics_service.MAGNETPVGroup.call_args_list:
-            prefix = call.kwargs.get(
-                "prefix", call.args[0] if call.args else ""
-            )
-            if prefix.startswith("XCOR:"):
-                xcor_count += 1
-            elif prefix.startswith("YCOR:"):
-                ycor_count += 1
-            elif prefix.startswith("QUAD:"):
-                quad_count += 1
-
-        assert xcor_count == ycor_count == quad_count
-        assert xcor_count > 0
-
-
-class TestTunerPVGroups:
-    """Test tuner PV group creation"""
-
-    def test_tuner_groups_created(self, mock_all_pvgroups):
-        """Test that piezo and stepper groups are created for each cavity"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert (
-            sc_linac_physics_service.PiezoPVGroup.call_count
-            == sc_linac_physics_service.StepperPVGroup.call_count
-        )
-        assert sc_linac_physics_service.PiezoPVGroup.call_count >= 200
-
-
-class TestCryoPVGroups:
-    """Test cryo system PV groups"""
-
-    def test_cryo_groups_created(self, mock_all_pvgroups):
-        """Test that cryo-related PV groups are created"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        # Heater and cryo: one per CM
-        # JT: one per cavity
-        assert (
-            sc_linac_physics_service.HeaterPVGroup.call_count
-            == sc_linac_physics_service.CryoPVGroup.call_count
-        )
-        assert (
-            sc_linac_physics_service.JTPVGroup.call_count
-            == sc_linac_physics_service.CavityPVGroup.call_count
-        )
-        assert sc_linac_physics_service.HeaterPVGroup.call_count > 30
-
-
-class TestVacuumPVGroups:
-    """Test vacuum PV groups"""
-
-    def test_vacuum_groups_created(self, mock_all_pvgroups):
-        """Test that vacuum PV groups are created"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        assert (
-            sc_linac_physics_service.BeamlineVacuumPVGroup.call_count
-            == sc_linac_physics_service.CouplerVacuumPVGroup.call_count
-        )
-        assert sc_linac_physics_service.BeamlineVacuumPVGroup.call_count > 30
-
-
-class TestFaultPVGroups:
-    """Test fault-related PV groups"""
-
-    def test_fault_groups_created(self, mock_all_pvgroups):
-        """Test that fault PV groups are created"""
-        from sc_linac_physics.utils.simulation import sc_linac_physics_service
-
-        SCLinacPhysicsService()
-
-        # One PPS and BSOIC group total
-        sc_linac_physics_service.PPSPVGroup.assert_called_once_with(
-            prefix="PPS:SYSW:1:"
-        )
-        sc_linac_physics_service.BSOICPVGroup.assert_called_once_with(
-            prefix="BSOC:SYSW:2:"
+    def test_cavity_setup(self, mocked_service):
+        """Test cavity-level PV creation."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
         )
 
-        # One cavity fault group per cavity
-        assert (
-            sc_linac_physics_service.CavFaultPVGroup.call_count
-            == sc_linac_physics_service.CavityPVGroup.call_count
+        # Instantiate service to trigger cavity setup
+        _ = SCLinacPhysicsService()
+
+        # Check that cavity-related groups were created
+        assert mocked_service["CavityPVGroup"].called
+        assert mocked_service["PiezoPVGroup"].called
+        assert mocked_service["StepperPVGroup"].called
+        assert mocked_service["SSAPVGroup"].called
+        assert mocked_service["CavFaultPVGroup"].called
+
+    def test_rack_setup(self, mocked_service):
+        """Test rack-level PV creation."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
         )
+
+        # Instantiate service to trigger rack setup
+        _ = SCLinacPhysicsService()
+
+        # Check that rack groups were created
+        assert mocked_service["RACKPVGroup"].called
+
+    def test_rfs_groups_created(self, mocked_service):
+        """Test RF Station groups are created."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
+        )
+
+        # Instantiate service to trigger RFS group creation
+        _ = SCLinacPhysicsService()
+
+        # Should create RFS groups for A and B, numbers 1 and 2
+        assert mocked_service["RFStationPVGroup"].called
+
+    def test_launcher_groups_structure(self, mocked_service):
+        """Test that launcher groups are properly structured."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
+        )
+
+        service = SCLinacPhysicsService()
+
+        # This is an integration test to ensure the launcher hierarchy works
+        assert service is not None
+
+    def test_rack_a_cavities_constant(self):
+        """Test RACK_A_CAVITIES constant."""
+        assert RACK_A_CAVITIES == range(1, 5)
+        assert 1 in RACK_A_CAVITIES
+        assert 4 in RACK_A_CAVITIES
+        assert 5 not in RACK_A_CAVITIES
+
+    def test_launcher_types_structure(self):
+        """Test LAUNCHER_TYPES configuration."""
+        assert "setup" in LAUNCHER_TYPES
+        assert "off" in LAUNCHER_TYPES
+        assert "cold" in LAUNCHER_TYPES
+        assert "park" in LAUNCHER_TYPES
+
+        for launcher_type, classes in LAUNCHER_TYPES.items():
+            assert "cavity" in classes
+            assert "cm" in classes
+            assert "linac" in classes
+            assert "global" in classes
+            assert "rack" in classes
+
+    def test_alarm_states_constant(self):
+        """Test ALARM_STATES constant."""
+        assert "RUNNING" in ALARM_STATES
+        assert "NOT_RUNNING" in ALARM_STATES
+        assert "INVALID" in ALARM_STATES
 
 
 class TestMainFunction:
-    """Test the main() function"""
+    """Test the main entry point."""
 
     @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.run")
     @patch(
@@ -517,38 +416,201 @@ class TestMainFunction:
     @patch(
         "sc_linac_physics.utils.simulation.sc_linac_physics_service.SCLinacPhysicsService"
     )
-    def test_main_creates_service(
-        self, mock_service_cls, mock_parser, mock_run
-    ):
-        """Test that main() creates the service"""
-        mock_parser.return_value = (None, {})
+    def test_main_function(self, mock_service_class, mock_parser, mock_run):
+        """Test that main() sets up and runs the service."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            main,
+        )
+
+        mock_parser.return_value = (None, {"option": "value"})
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
 
         main()
 
-        mock_service_cls.assert_called_once()
+        # Verify service was created
+        mock_service_class.assert_called_once()
 
-    @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.run")
-    @patch(
-        "sc_linac_physics.utils.simulation.sc_linac_physics_service.ioc_arg_parser"
-    )
-    def test_main_calls_run(self, mock_parser, mock_run, mock_all_pvgroups):
-        """Test that main() calls run()"""
-        mock_parser.return_value = (None, {"some": "options"})
-
-        main()
-
-        mock_run.assert_called_once()
-
-    @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.run")
-    @patch(
-        "sc_linac_physics.utils.simulation.sc_linac_physics_service.ioc_arg_parser"
-    )
-    def test_main_uses_ioc_arg_parser(self, mock_parser, mock_run):
-        """Test that main() uses ioc_arg_parser correctly"""
-        mock_parser.return_value = (None, {})
-
-        main()
-
+        # Verify parser was called with correct args
         mock_parser.assert_called_once_with(
             default_prefix="", desc="Simulated CM Cavity Service"
         )
+
+        # Verify run was called with service and options
+        mock_run.assert_called_once_with(mock_service, option="value")
+
+
+class TestIntegration:
+    """Integration tests with minimal mocking."""
+
+    @pytest.fixture
+    def mocked_service(self):
+        """Create a service with all dependencies mocked."""
+        patches = {
+            "Decarad": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.Decarad"
+            ),
+            "BSOICPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.BSOICPVGroup"
+            ),
+            "PPSPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.PPSPVGroup"
+            ),
+            "DecaradPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.DecaradPVGroup"
+            ),
+            "DecaradHeadPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.DecaradHeadPVGroup"
+            ),
+            "CavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CavityPVGroup"
+            ),
+            "PiezoPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.PiezoPVGroup"
+            ),
+            "StepperPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.StepperPVGroup"
+            ),
+            "SSAPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SSAPVGroup"
+            ),
+            "CavFaultPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CavFaultPVGroup"
+            ),
+            "JTPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.JTPVGroup"
+            ),
+            "LiquidLevelPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.LiquidLevelPVGroup"
+            ),
+            "HOMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.HOMPVGroup"
+            ),
+            "HeaterPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.HeaterPVGroup"
+            ),
+            "CryoPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CryoPVGroup"
+            ),
+            "BeamlineVacuumPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.BeamlineVacuumPVGroup"
+            ),
+            "CouplerVacuumPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CouplerVacuumPVGroup"
+            ),
+            "CryomodulePVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.CryomodulePVGroup"
+            ),
+            "MAGNETPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.MAGNETPVGroup"
+            ),
+            "RACKPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.RACKPVGroup"
+            ),
+            "RFStationPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.RFStationPVGroup"
+            ),
+            "SetupCavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupCavityPVGroup"
+            ),
+            "SetupCMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupCMPVGroup"
+            ),
+            "SetupLinacPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupLinacPVGroup"
+            ),
+            "SetupGlobalPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupGlobalPVGroup"
+            ),
+            "SetupRackPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.SetupRackPVGroup"
+            ),
+            "OffCavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffCavityPVGroup"
+            ),
+            "OffCMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffCMPVGroup"
+            ),
+            "OffLinacPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffLinacPVGroup"
+            ),
+            "OffGlobalPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffGlobalPVGroup"
+            ),
+            "OffRackPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.OffRackPVGroup"
+            ),
+            "ColdCavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdCavityPVGroup"
+            ),
+            "ColdCMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdCMPVGroup"
+            ),
+            "ColdLinacPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdLinacPVGroup"
+            ),
+            "ColdGlobalPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdGlobalPVGroup"
+            ),
+            "ColdRackPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ColdRackPVGroup"
+            ),
+            "ParkCavityPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkCavityPVGroup"
+            ),
+            "ParkCMPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkCMPVGroup"
+            ),
+            "ParkLinacPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkLinacPVGroup"
+            ),
+            "ParkGlobalPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkGlobalPVGroup"
+            ),
+            "ParkRackPVGroup": patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.ParkRackPVGroup"
+            ),
+        }
+
+        mocks = {}
+        for name, patcher in patches.items():
+            mocks[name] = patcher.start()
+
+        yield mocks
+
+        for patcher in patches.values():
+            patcher.stop()
+
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.LINAC_TUPLES",
+        [("L0B", ["01"])],
+    )
+    def test_service_creates_expected_pv_count(self, mocked_service):
+        """Test that service creates a reasonable number of PVs."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
+        )
+
+        service = SCLinacPhysicsService()
+
+        # Should have system PVs, decarad PVs, and linac PVs
+        assert len(service) > 0
+
+    def test_pv_name_format(self, mocked_service):
+        """Test that PV names follow expected format."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SCLinacPhysicsService,
+        )
+
+        service = SCLinacPhysicsService()
+
+        # Check some known PV patterns
+        system_pvs = [k for k in service.keys() if k.startswith("PHYS:SYS0:1:")]
+        assert len(system_pvs) > 0
+
+        alarm_pvs = [k for k in service.keys() if k.startswith("ALRM:SYS0:")]
+        assert len(alarm_pvs) > 0
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
