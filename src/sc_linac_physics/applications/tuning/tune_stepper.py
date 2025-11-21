@@ -40,15 +40,18 @@ class TuneStepper(StepperTuner):
             self._step_signed_pv_obj = PV(self.step_signed_pv)
         return self._step_signed_pv_obj
 
-    def move_to_cold_landing(
-        self, count_current: bool = False, check_detune: bool = False
-    ):
-        recorded_steps = self.nsteps_cold_pv_obj.get()
-        if count_current:
-            steps = recorded_steps - self.step_signed_pv_obj.get()
-        else:
-            steps = recorded_steps
-        print(f"Moving {steps} steps")
+    def move_to_cold_landing(self, check_detune: bool = False):
+        steps = self.nsteps_cold_pv_obj.get()
+        self.cavity.logger.info(
+            "Moving stepper to cold landing",
+            extra={
+                "extra_data": {
+                    "steps": steps,
+                    "check_detune": check_detune,
+                    "speed": MAX_STEPPER_SPEED,
+                }
+            },
+        )
         self.move(
             steps,
             max_steps=abs(steps),
@@ -58,5 +61,15 @@ class TuneStepper(StepperTuner):
 
     def park(self, count_current: bool):
         adjustment = self.step_signed_pv_obj.get() if count_current else 0
-        print(f"Moving {self.cavity} tuner 1.8e6 steps")
-        self.move(1800000 - adjustment)
+        target_steps = 1800000 - adjustment
+        self.cavity.logger.info(
+            "Moving tuner to park position",
+            extra={
+                "extra_data": {
+                    "target_steps": target_steps,
+                    "adjustment": adjustment,
+                    "count_current": count_current,
+                }
+            },
+        )
+        self.move(target_steps)
