@@ -1,5 +1,5 @@
 from random import randint, choice
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
@@ -18,40 +18,30 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 
 
 @pytest.fixture
-def mock_logger():
-    """Mock logger to prevent file creation during tests."""
-    return MagicMock()
+def cavity():
+    cavity = SetupCavity(cavity_num=randint(1, 8), rack_object=MagicMock())
+    cavity.setup = MagicMock()
+    cavity.shut_down = MagicMock()
+    cavity._status_msg_pv_obj = make_mock_pv()
+    cavity._status_pv_obj = make_mock_pv()
+    return cavity
 
 
-@pytest.fixture
-def cavity(mock_logger):
-    with patch(
-        "sc_linac_physics.utils.sc_linac.cavity.custom_logger"
-    ) as mock_custom_logger:
-        mock_custom_logger.return_value = mock_logger
-        cavity = SetupCavity(cavity_num=randint(1, 8), rack_object=MagicMock())
-        cavity.setup = MagicMock()
-        cavity.shut_down = MagicMock()
-        cavity._status_msg_pv_obj = make_mock_pv()
-        cavity._status_pv_obj = make_mock_pv()
-        yield cavity
-
-
-def test_setup(cavity, mock_logger):
+def test_setup(cavity):
     args = MagicMock()
     args.shutdown = False
     cavity._status_pv_obj.get = MagicMock(
         return_value=choice([STATUS_READY_VALUE, STATUS_ERROR_VALUE])
     )
-    setup_cavity(cavity, args, mock_logger)
+    setup_cavity(cavity, args, cavity.logger)
     cavity.setup.assert_called()
 
 
-def test_setup_running(cavity, mock_logger):
+def test_setup_running(cavity):
     args = MagicMock()
     args.shutdown = False
     cavity._status_pv_obj.get = MagicMock(return_value=STATUS_RUNNING_VALUE)
-    setup_cavity(cavity, args, mock_logger)
+    setup_cavity(cavity, args, cavity.logger)
     cavity.setup.assert_not_called()
     cavity.shut_down.assert_not_called()
     cavity._status_msg_pv_obj.put.assert_called_with(
@@ -59,12 +49,12 @@ def test_setup_running(cavity, mock_logger):
     )
 
 
-def test_shutdown(cavity, mock_logger):
+def test_shutdown(cavity):
     args = MagicMock()
     args.shutdown = True
     cavity._status_pv_obj.get = MagicMock(
         return_value=choice([STATUS_READY_VALUE, STATUS_ERROR_VALUE])
     )
-    setup_cavity(cavity, args, mock_logger)
+    setup_cavity(cavity, args, cavity.logger)
     cavity.setup.assert_not_called()
     cavity.shut_down.assert_called()

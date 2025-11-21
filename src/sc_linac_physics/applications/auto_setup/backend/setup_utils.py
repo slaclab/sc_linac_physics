@@ -1,7 +1,6 @@
 from typing import Optional
 
-from lcls_tools.common.controls.pyepics.utils import PV
-
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.logger import BASE_LOG_DIR
 from sc_linac_physics.utils.sc_linac.linac_utils import LauncherLinacObject
 

@@ -3,12 +3,7 @@ import time
 from datetime import datetime
 from typing import Optional, Callable, TYPE_CHECKING
 
-from lcls_tools.common.controls.pyepics.utils import (
-    PV,
-    EPICS_INVALID_VAL,
-    PVInvalidError,
-)
-
+from sc_linac_physics.utils.epics import PV, EPICS_INVALID_VAL, PVInvalidError
 from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
 from sc_linac_physics.utils.sc_linac import linac_utils
 from sc_linac_physics.utils.sc_linac.linac_utils import STATUS_RUNNING_VALUE
@@ -388,7 +383,7 @@ class Cavity(linac_utils.SCLinacObject):
         self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_SELA)
 
     def set_selap_mode(self):
-        self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_SELAP, use_caput=False)
+        self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_SELAP)
 
     @property
     def drive_level_pv_obj(self):
@@ -510,7 +505,7 @@ class Cavity(linac_utils.SCLinacObject):
     def ades(self):
         if not self._ades_pv_obj:
             self._ades_pv_obj = PV(self.ades_pv)
-        return self._ades_pv_obj.get(use_caget=False)
+        return self._ades_pv_obj.get()
 
     @ades.setter
     def ades(self, value: float):
@@ -522,7 +517,7 @@ class Cavity(linac_utils.SCLinacObject):
     def acon(self):
         if not self._acon_pv_obj:
             self._acon_pv_obj = PV(self.acon_pv)
-        return self._acon_pv_obj.get(use_caget=False)
+        return self._acon_pv_obj.get()
 
     @acon.setter
     def acon(self, value: float):
@@ -583,7 +578,7 @@ class Cavity(linac_utils.SCLinacObject):
 
     @property
     def hw_mode(self):
-        return self.hw_mode_pv_obj.get(use_caget=False)
+        return self.hw_mode_pv_obj.get()
 
     @property
     def is_online(self) -> bool:
@@ -1150,7 +1145,7 @@ class Cavity(linac_utils.SCLinacObject):
     def characterization_timestamp(self) -> datetime:
         if not self._char_timestamp_pv_obj:
             self._char_timestamp_pv_obj = PV(self.char_timestamp_pv)
-        date_string = self._char_timestamp_pv_obj.get(use_caget=False)
+        date_string = self._char_timestamp_pv_obj.get()
         time_readback = datetime.strptime(date_string, "%Y-%m-%d-%H:%M:%S")
         return time_readback
 

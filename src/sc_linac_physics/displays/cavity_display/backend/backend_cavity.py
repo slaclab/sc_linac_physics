@@ -2,7 +2,6 @@ from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from typing import DefaultDict, Optional, Dict
 
-from lcls_tools.common.controls.pyepics.utils import PV
 from lcls_tools.common.data.archiver import (
     get_values_over_time_range,
     ArchiveDataHandler,
@@ -22,6 +21,7 @@ from sc_linac_physics.displays.cavity_display.utils.utils import (
     display_hash,
     severity_of_fault,
 )
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 
 

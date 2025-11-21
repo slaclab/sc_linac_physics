@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Optional
 
-from lcls_tools.common.controls.pyepics.utils import PV
 from numpy import polyfit
+
+from sc_linac_physics.utils.epics import PV
 
 # Global list of superconducting linac objects
 L0B = ["01"]

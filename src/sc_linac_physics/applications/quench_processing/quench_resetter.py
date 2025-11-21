@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from time import sleep, time
 from typing import List, Dict, Optional
 
-from lcls_tools.common.controls.pyepics.utils import PVInvalidError, PV
 
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
@@ -11,6 +10,7 @@ from sc_linac_physics.applications.quench_processing.quench_cavity import (
 from sc_linac_physics.applications.quench_processing.quench_utils import (
     QUENCH_LOG_DIR,
 )
+from sc_linac_physics.utils.epics import PV, PVInvalidError
 from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import (

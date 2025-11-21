@@ -2,8 +2,6 @@ from datetime import datetime
 from time import sleep
 from typing import List, Optional
 
-from lcls_tools.common.controls.pyepics.utils import PV
-
 from sc_linac_physics.displays.cavity_display.backend.backend_cavity import (
     BackendCavity,
 )
@@ -14,6 +12,7 @@ from sc_linac_physics.displays.cavity_display.utils.utils import (
     DEBUG,
     BACKEND_SLEEP_TIME,
 )
+from sc_linac_physics.utils.epics import PV
 
 
 class Runner:

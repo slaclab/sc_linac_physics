@@ -2,16 +2,17 @@ import dataclasses
 from datetime import datetime
 from typing import Union, Optional, Dict
 
-from lcls_tools.common.controls.pyepics.utils import (
-    PV,
-    EPICS_INVALID_VAL,
-    PVInvalidError,
-)
 from lcls_tools.common.data.archiver import (
     ArchiveDataHandler,
     ArchiverValue,
     get_data_at_time,
     get_values_over_time_range,
+)
+
+from sc_linac_physics.utils.epics import (
+    PV,
+    EPICS_INVALID_VAL,
+    PVInvalidError,
 )
 
 

@@ -1,9 +1,6 @@
 from typing import TYPE_CHECKING, Optional
 
-from lcls_tools.common.controls.pyepics.utils import (
-    PV,
-)
-
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac.linac_utils import SCLinacObject
 
 if TYPE_CHECKING:
