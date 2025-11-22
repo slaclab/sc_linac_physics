@@ -1,3 +1,15 @@
+import pyqtgraph as pg
+
+if not hasattr(pg.PlotWidget, "autoRangeEnabled"):
+
+    def autoRangeEnabled(self):
+        try:
+            vb = self.plotItem.vb
+            return (vb.state["autoRange"][0], vb.state["autoRange"][1])
+        except (AttributeError, KeyError, IndexError):
+            return (False, False)
+
+    pg.PlotWidget.autoRangeEnabled = autoRangeEnabled
 from typing import Tuple, Optional
 
 import numpy as np

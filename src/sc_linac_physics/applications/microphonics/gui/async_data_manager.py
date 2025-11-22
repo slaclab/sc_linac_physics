@@ -223,8 +223,9 @@ class AsyncDataManager(QObject):
 
     def _stop_worker(self, chassis_id: str):
         """Stop a specific worker"""
-        if chassis_id in self.active_workers:
-            thread, worker = self.active_workers[chassis_id]
+        worker_info = self.active_workers.get(chassis_id)
+        if worker_info:
+            thread, worker = worker_info
 
             # Stop acquisition
             worker.stop_acquisition(chassis_id)
@@ -236,4 +237,4 @@ class AsyncDataManager(QObject):
                 thread.wait()
 
             # Remove from tracking
-            del self.active_workers[chassis_id]
+            self.active_workers.pop(chassis_id, None)
