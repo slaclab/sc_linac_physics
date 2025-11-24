@@ -446,15 +446,16 @@ class DataAcquisitionManager(QObject):
                 f"[{current_time}] Attempting to process file: {output_path}"
             )
 
-            if not output_path.exists():
+            try:
+                file_stats = output_path.stat()
+                file_size = file_stats.st_size
+            except FileNotFoundError:
                 logging.error(f"File {output_path} not found after wait!")
                 self.acquisitionError.emit(
                     chassis_id,
                     f"Output file {output_path.name} missing after wait.",
                 )
                 return
-
-            file_size = output_path.stat().st_size
             logging.debug(f"File exists. Size: {file_size} bytes")
             if file_size == 0:
                 logging.warning(
@@ -526,8 +527,9 @@ class DataAcquisitionManager(QObject):
                 if not process.waitForFinished(2000):
                     process.kill()
                     process.waitForFinished(1000)
-            if chassis_id in self.active_processes:
-                del self.active_processes[chassis_id]
+
+        if chassis_id in self.active_processes:
+            del self.active_processes[chassis_id]
 
     def stop_all(self):
         """Stop all acquisitions"""

@@ -1,24 +1,11 @@
 import signal
 import sys
 
-import pyqtgraph as pg
 from pydm import PyDMApplication
 
 from sc_linac_physics.applications.microphonics.gui.main_window import (
     MicrophonicsGUI,
 )
-
-# Monkey patch for compatibility w/ PyQtGraph versions
-if not hasattr(pg.PlotWidget, "autoRangeEnabled"):
-
-    def autoRangeEnabled(self):
-        try:
-            vb = self.plotItem.vb
-            return (vb.state["autoRange"][0], vb.state["autoRange"][1])
-        except (AttributeError, KeyError):
-            return (False, False)
-
-    pg.PlotWidget.autoRangeEnabled = autoRangeEnabled
 
 
 def main():
