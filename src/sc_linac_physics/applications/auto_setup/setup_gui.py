@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -10,7 +10,6 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QMessageBox,
 )
-from lcls_tools.common.controls.pyepics.utils import PV
 from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
 from pydm import Display
 
@@ -19,6 +18,7 @@ from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
 )
 from sc_linac_physics.applications.auto_setup.frontend.gui_linac import GUILinac
 from sc_linac_physics.applications.auto_setup.frontend.utils import Settings
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.qt import make_sanity_check_popup
 from sc_linac_physics.utils.sc_linac import linac_utils
 
@@ -91,11 +91,19 @@ class SetupGUI(Display):
         self.linac_widgets: List[GUILinac] = []
         self.populate_linac_widgets()
 
-        self.linac_aact_pvs: List[PV] = [
-            PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)
-        ]
+        # Initialize PVs as None, create them lazily
+        self._linac_aact_pvs: Optional[List[PV]] = None
 
         self.populate_tabs()
+
+    @property
+    def linac_aact_pvs(self) -> List[PV]:
+        """Lazy initialization of AACT PVs"""
+        if self._linac_aact_pvs is None:
+            self._linac_aact_pvs = [
+                PV(f"ACCL:L{i}B:1:AACTMEANSUM") for i in range(4)
+            ]
+        return self._linac_aact_pvs
 
     def populate_tabs(self):
         linac_tab_widget: QTabWidget = self.tabWidget_linac

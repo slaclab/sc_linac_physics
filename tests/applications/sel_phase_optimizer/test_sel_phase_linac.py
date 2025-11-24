@@ -2,8 +2,8 @@ from random import randint, choice
 from unittest.mock import MagicMock
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
+from sc_linac_physics.utils.epics import make_mock_pv
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     RF_MODE_SELAP,
@@ -30,7 +30,13 @@ def cavity(monkeypatch):
     )
     monkeypatch.setattr("logging.FileHandler", mock_func)
 
-    # Import after patching, so the module sees the patched handlers
+    # Patch PV class in the module where it will be used
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac.PV",
+        lambda *args, **kwargs: make_mock_pv(),
+    )
+
+    # Import SELCavity after all patching
     from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import (
         SELCavity,
     )
@@ -144,12 +150,27 @@ def test_should_not_straighten_iq_plot(cavity):
 
 
 def test_straighten_iq_plot(cavity):
+    import numpy as np
+    from sc_linac_physics.applications.sel_phase_optimizer.sel_phase_linac import (
+        MAX_STEP,
+    )
+
     cavity.can_be_straightened = MagicMock(return_value=True)
-    wf = [i for i in range(1, randint(2, 100))]
-    cavity._i_waveform_pv = make_mock_pv(get_val=wf)
-    cavity._q_waveform_pv = make_mock_pv(get_val=wf)
-    cavity._sel_poff_pv_obj = make_mock_pv(get_val=randint(0, 360))
+
+    # Create clear, deterministic I/Q data
+    qwf = np.linspace(0, 10, 50).tolist()
+    iwf = (0.3 * np.linspace(0, 10, 50) + 0.5).tolist()  # slope = 0.3
+
+    cavity._i_waveform_pv = make_mock_pv(get_val=iwf)
+    cavity._q_waveform_pv = make_mock_pv(get_val=qwf)
+    cavity._sel_poff_pv_obj = make_mock_pv(get_val=0.0)
     cavity._fit_chisquare_pv_obj = make_mock_pv()
     cavity._fit_slope_pv_obj = make_mock_pv()
     cavity._fit_intercept_pv_obj = make_mock_pv()
-    assert cavity.straighten_iq_plot() != 0
+
+    result = cavity.straighten_iq_plot()
+
+    # Expected: slope ≈ 0.3, step = 0.3 * -51.0471 ≈ -15.31
+    # Clamped to -MAX_STEP = -5
+    assert result != 0
+    assert abs(result) == MAX_STEP  # Should be clamped
