@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v5.0.0 (2025-11-24)
+
+### Bug Fixes
+
+- Removing unused flag from pv object put call
+  ([#153](https://github.com/slaclab/sc_linac_physics/pull/153),
+  [`928b85f`](https://github.com/slaclab/sc_linac_physics/commit/928b85f00ccc77ddd869a79268b3eefa3bc4e66f))
+
+### Refactoring
+
+- Migrate PV wrapper from lcls_tools to internal implementation
+  ([#153](https://github.com/slaclab/sc_linac_physics/pull/153),
+  [`928b85f`](https://github.com/slaclab/sc_linac_physics/commit/928b85f00ccc77ddd869a79268b3eefa3bc4e66f))
+
+- **epics**: Implement lazy PV initialization and improve robustness
+  ([#153](https://github.com/slaclab/sc_linac_physics/pull/153),
+  [`928b85f`](https://github.com/slaclab/sc_linac_physics/commit/928b85f00ccc77ddd869a79268b3eefa3bc4e66f))
+
+- **test**: Prevent log file creation during tests
+  ([#153](https://github.com/slaclab/sc_linac_physics/pull/153),
+  [`928b85f`](https://github.com/slaclab/sc_linac_physics/commit/928b85f00ccc77ddd869a79268b3eefa3bc4e66f))
+
+### Testing
+
+- **sel-phase-optimizer**: Fix flaky tests and improve determinism
+  ([#153](https://github.com/slaclab/sc_linac_physics/pull/153),
+  [`928b85f`](https://github.com/slaclab/sc_linac_physics/commit/928b85f00ccc77ddd869a79268b3eefa3bc4e66f))
+
+
 ## v4.2.0 (2025-11-21)
 
 ### Bug Fixes
