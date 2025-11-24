@@ -50,6 +50,7 @@ def detune_cavity(cavity_object: TuneCavity) -> bool:
         return True
     except CavityAbortError as e:
         logger.error(str(e))
+        return False
     except Exception as e:
         logger.exception(
             f"Error triggering {cavity_object}",
