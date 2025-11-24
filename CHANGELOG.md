@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v4.2.0 (2025-11-21)
+
+### Bug Fixes
+
+- **logger**: Set proper file permissions for log files and directories
+  ([#163](https://github.com/slaclab/sc_linac_physics/pull/163),
+  [`06bff30`](https://github.com/slaclab/sc_linac_physics/commit/06bff30c32edbfe9f0da9ea2930eacaf9ad70493))
+
+### Features
+
+- **logging**: Add automatic retry for failed file handler creation
+  ([#163](https://github.com/slaclab/sc_linac_physics/pull/163),
+  [`06bff30`](https://github.com/slaclab/sc_linac_physics/commit/06bff30c32edbfe9f0da9ea2930eacaf9ad70493))
+
+
+## v4.1.0 (2025-11-20)
+
+### Features
+
+- **logging**: Add automatic retry for failed file handler creation
+  ([#162](https://github.com/slaclab/sc_linac_physics/pull/162),
+  [`b5492da`](https://github.com/slaclab/sc_linac_physics/commit/b5492da8281eea29bf5b77d9dc504ab41771af55))
+
+
 ## v4.0.2 (2025-11-20)
 
 ### Bug Fixes

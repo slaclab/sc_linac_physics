@@ -1,10 +1,14 @@
 import atexit
+import contextlib
 import datetime
 import json
 import logging
+import os
 import sys
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from threading import Lock
 
 if sys.platform == "darwin":  # macOS
     BASE_LOG_DIR = Path.home() / "logs"
@@ -18,6 +22,16 @@ READABLE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lin
 _created_loggers = {}
 
 
+@contextlib.contextmanager
+def safe_umask(new_umask):
+    """Context manager to temporarily set umask."""
+    old_umask = os.umask(new_umask)
+    try:
+        yield
+    finally:
+        os.umask(old_umask)
+
+
 class NameOverrideFilter(logging.Filter):
     """Filter that overrides the logger name in the record."""
 
@@ -28,6 +42,150 @@ class NameOverrideFilter(logging.Filter):
     def filter(self, record):
         record.name = self.display_name
         return True
+
+
+class RetryFileHandlerFilter(logging.Filter):
+    """Filter that retries adding file handlers if they're missing."""
+
+    def __init__(self, logger_manager):
+        super().__init__()
+        self.logger_manager = logger_manager
+
+    def filter(self, record):
+        # Attempt to add file handlers if missing
+        self.logger_manager.ensure_file_handlers()
+        return True
+
+
+class LoggerFileHandlerManager:
+    """Manages file handlers with retry capability."""
+
+    def __init__(
+        self,
+        logger: logging.Logger,
+        log_dir: str,
+        log_filename: str,
+        level: int,
+        max_bytes: int,
+        backup_count: int,
+        retry_interval: int = 60,  # seconds between retries
+        max_retries: int = -1,  # -1 means infinite retries
+    ):
+        self.logger = logger
+        self.log_dir = log_dir
+        self.log_filename = log_filename
+        self.level = level
+        self.max_bytes = max_bytes
+        self.backup_count = backup_count
+        self.retry_interval = retry_interval
+        self.max_retries = max_retries
+
+        self.has_file_handlers = False
+        self.retry_count = 0
+        self.last_retry_time = 0
+        self.lock = Lock()
+
+    def has_active_file_handlers(self) -> bool:
+        """Check if logger has active file handlers."""
+        return any(
+            isinstance(h, RotatingFileHandler) for h in self.logger.handlers
+        )
+
+    def ensure_file_handlers(self) -> bool:
+        """
+        Ensure file handlers exist, retry if necessary.
+
+        Returns:
+            True if file handlers exist or were successfully added.
+        """
+        # Quick check without lock
+        if self.has_file_handlers and self.has_active_file_handlers():
+            return True
+
+        with self.lock:
+            # Double-check with lock
+            if self.has_file_handlers and self.has_active_file_handlers():
+                return True
+
+            # Check if we should retry
+            current_time = time.time()
+            if current_time - self.last_retry_time < self.retry_interval:
+                return False
+
+            # Check max retries
+            if 0 <= self.max_retries <= self.retry_count:
+                return False
+
+            self.last_retry_time = current_time
+            self.retry_count += 1
+
+            # Attempt to add file handlers
+            success = self._add_file_handlers()
+
+            if success:
+                self.has_file_handlers = True
+                self.logger.info(
+                    f"File logging restored after {self.retry_count} attempt(s): "
+                    f"{self.log_dir}/{self.log_filename}"
+                )
+            else:
+                self.logger.debug(
+                    f"Retry {self.retry_count}: File logging still unavailable"
+                )
+
+            return success
+
+    def _add_file_handlers(self) -> bool:
+        """
+        Attempt to add file handlers to logger.
+
+        Returns:
+            True if file handlers were successfully added, False otherwise.
+        """
+        try:
+            log_dir_path = Path(self.log_dir)
+
+            # Set umask for directory creation
+            with safe_umask(0o002):
+                log_dir_path.mkdir(parents=True, exist_ok=True)
+                # Ensure directory has group write permissions
+                if log_dir_path.exists():
+                    os.chmod(log_dir_path, 0o775)
+
+            text_handler = _create_text_file_handler(
+                log_dir_path,
+                self.log_filename,
+                self.level,
+                self.max_bytes,
+                self.backup_count,
+            )
+            self.logger.addHandler(text_handler)
+
+            json_handler = _create_json_file_handler(
+                log_dir_path,
+                self.log_filename,
+                self.level,
+                self.max_bytes,
+                self.backup_count,
+            )
+            self.logger.addHandler(json_handler)
+
+            return True
+
+        except (PermissionError, OSError) as e:
+            # Log at debug level to avoid spam
+            if self.retry_count == 1:  # Only warn on first failure
+                self.logger.warning(
+                    f"Cannot create log files in '{self.log_dir}': {e}"
+                )
+            return False
+
+        except Exception as e:
+            self.logger.error(
+                f"Unexpected error setting up file logging: {e}",
+                exc_info=True,
+            )
+            return False
 
 
 class ExtraDataMixin:
@@ -142,12 +300,19 @@ def _create_text_file_handler(
 ) -> RotatingFileHandler:
     """Create and configure rotating text file handler."""
     text_file = log_dir_path / f"{log_filename}.log"
-    text_handler = RotatingFileHandler(
-        text_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
-    )
+
+    # Set umask to ensure file is created with proper permissions
+    with safe_umask(0o002):
+        text_handler = RotatingFileHandler(
+            text_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        # Explicitly set permissions on the file
+        if text_file.exists():
+            os.chmod(text_file, 0o664)
+
     text_handler.setLevel(level)
     text_formatter = ExtendedFormatter(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
@@ -166,77 +331,22 @@ def _create_json_file_handler(
 ) -> RotatingFileHandler:
     """Create and configure rotating JSON Lines file handler."""
     jsonl_file = log_dir_path / f"{log_filename}.jsonl"
-    json_handler = RotatingFileHandler(
-        jsonl_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
-    )
+
+    # Set umask to ensure file is created with proper permissions
+    with safe_umask(0o002):
+        json_handler = RotatingFileHandler(
+            jsonl_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        # Explicitly set permissions on the file
+        if jsonl_file.exists():
+            os.chmod(jsonl_file, 0o664)
+
     json_handler.setLevel(level)
     json_handler.setFormatter(JSONFormatter())
     return json_handler
-
-
-def _add_file_handlers(
-    logger: logging.Logger,
-    log_dir: str,
-    log_filename: str,
-    level: int,
-    max_bytes: int,
-    backup_count: int,
-    console_only_on_error: bool,
-) -> bool:
-    """
-    Attempt to add file handlers to logger.
-
-    Returns:
-        True if file handlers were successfully added, False otherwise.
-    """
-    try:
-        log_dir_path = Path(log_dir)
-        log_dir_path.mkdir(parents=True, exist_ok=True)
-
-        text_handler = _create_text_file_handler(
-            log_dir_path, log_filename, level, max_bytes, backup_count
-        )
-        logger.addHandler(text_handler)
-
-        json_handler = _create_json_file_handler(
-            log_dir_path, log_filename, level, max_bytes, backup_count
-        )
-        logger.addHandler(json_handler)
-
-        return True
-
-    except PermissionError as e:
-        if console_only_on_error:
-            logger.warning(
-                f"Permission denied for log directory '{log_dir}': {e}"
-            )
-            logger.warning(
-                "Continuing with console-only logging (no files will be written)"
-            )
-            return False
-        raise
-
-    except OSError as e:
-        if console_only_on_error:
-            logger.error(
-                f"OS error while setting up file logging in '{log_dir}': {e}"
-            )
-            logger.warning("Continuing with console-only logging")
-            return False
-        raise
-
-    except Exception as e:
-        if console_only_on_error:
-            logger.error(
-                f"Unexpected error setting up file logging: {e}",
-                exc_info=True,
-            )
-            logger.warning("Continuing with console-only logging")
-            return False
-        raise
 
 
 def _register_cleanup(logger: logging.Logger) -> None:
@@ -260,10 +370,12 @@ def custom_logger(
     level: int = logging.DEBUG,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
-    console_only_on_error: bool = True,
+    enable_retry: bool = True,
+    retry_interval: int = 60,  # seconds
+    max_retries: int = -1,  # -1 = infinite
 ) -> logging.Logger:
     """
-    Create a logger with colored console output and dual file logging.
+    Create a logger with colored console output and dual file logging with retry.
 
     Always writes to console. Attempts to write to files:
     - Console: Colored, human-readable (always)
@@ -271,7 +383,7 @@ def custom_logger(
     - {log_dir}/{log_filename}.jsonl: JSON Lines format (with rotation)
 
     If file logging fails due to permissions, falls back to console-only logging
-    and emits a warning.
+    and retries on subsequent log entries.
 
     Args:
         name: Logger name (typically __name__)
@@ -280,7 +392,9 @@ def custom_logger(
         level: Logging level (default: DEBUG)
         max_bytes: Maximum file size before rotation (default: 10MB)
         backup_count: Number of backup files to keep (default: 5)
-        console_only_on_error: If True, continue with console-only on permission errors
+        enable_retry: Enable automatic retry of file handler creation (default: True)
+        retry_interval: Seconds between retry attempts (default: 60)
+        max_retries: Maximum retry attempts, -1 for infinite (default: -1)
 
     Returns:
         Logger instance
@@ -309,25 +423,34 @@ def custom_logger(
     console_handler = _create_console_handler(level)
     logger.addHandler(console_handler)
 
-    # Try to add file handlers
-    file_handlers_added = _add_file_handlers(
-        logger,
-        log_dir,
-        log_filename,
-        level,
-        max_bytes,
-        backup_count,
-        console_only_on_error,
+    # Create file handler manager
+    handler_manager = LoggerFileHandlerManager(
+        logger=logger,
+        log_dir=log_dir,
+        log_filename=log_filename,
+        level=level,
+        max_bytes=max_bytes,
+        backup_count=backup_count,
+        retry_interval=retry_interval,
+        max_retries=max_retries,
     )
+
+    # Try initial file handler creation
+    initial_success = handler_manager.ensure_file_handlers()
+
+    # Add retry filter if enabled and initial creation failed
+    if enable_retry and not initial_success:
+        retry_filter = RetryFileHandlerFilter(handler_manager)
+        logger.addFilter(retry_filter)
+        logger.warning(
+            f"File logging unavailable for '{log_dir}/{log_filename}'. "
+            f"Will retry every {retry_interval}s on new log entries."
+        )
 
     # Register cleanup
     _register_cleanup(logger)
 
     # Store the logger
     _created_loggers[unique_logger_name] = logger
-
-    # Log success message if file handlers were added
-    if file_handlers_added:
-        logger.debug(f"File logging initialized: {log_dir}/{log_filename}")
 
     return logger
