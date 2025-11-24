@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v5.1.0 (2025-11-24)
+
+### Bug Fixes
+
+- Handle race conditions when acquisition fails
+  ([#158](https://github.com/slaclab/sc_linac_physics/pull/158),
+  [`3a20d83`](https://github.com/slaclab/sc_linac_physics/commit/3a20d836109aebdfb17926c700bef8be6cb90bd2))
+
+- **microphonics**: Fix autoRangeEnabled error in plots
+  ([#158](https://github.com/slaclab/sc_linac_physics/pull/158),
+  [`3a20d83`](https://github.com/slaclab/sc_linac_physics/commit/3a20d836109aebdfb17926c700bef8be6cb90bd2))
+
+- **microphonics**: Fix errors when stopping data acquisition
+  ([#158](https://github.com/slaclab/sc_linac_physics/pull/158),
+  [`3a20d83`](https://github.com/slaclab/sc_linac_physics/commit/3a20d836109aebdfb17926c700bef8be6cb90bd2))
+
+### Features
+
+- **microphonics**: Add time-based progress estimation for data acquisition
+  ([#158](https://github.com/slaclab/sc_linac_physics/pull/158),
+  [`3a20d83`](https://github.com/slaclab/sc_linac_physics/commit/3a20d836109aebdfb17926c700bef8be6cb90bd2))
+
+
 ## v5.0.0 (2025-11-24)
 
 ### Bug Fixes
