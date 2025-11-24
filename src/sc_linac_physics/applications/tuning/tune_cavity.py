@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from lcls_tools.common.controls.pyepics.utils import PV
+from sc_linac_physics.utils.epics import PV
 
 from sc_linac_physics.applications.tuning.tune_utils import (
     ColdLinacObject,

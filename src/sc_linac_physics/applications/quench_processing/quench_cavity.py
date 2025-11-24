@@ -3,7 +3,6 @@ import time
 from typing import Optional
 
 import numpy as np
-from lcls_tools.common.controls.pyepics.utils import PV, EPICS_INVALID_VAL
 
 from sc_linac_physics.applications.quench_processing.quench_utils import (
     QUENCH_AMP_THRESHOLD,
@@ -15,6 +14,7 @@ from sc_linac_physics.applications.quench_processing.quench_utils import (
     RADIATION_LIMIT,
     QUENCH_LOG_DIR,
 )
+from sc_linac_physics.utils.epics import PV, EPICS_INVALID_VAL
 from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
