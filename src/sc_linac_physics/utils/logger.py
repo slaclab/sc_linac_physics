@@ -1,7 +1,9 @@
 import atexit
+import contextlib
 import datetime
 import json
 import logging
+import os
 import sys
 import time
 from logging.handlers import RotatingFileHandler
@@ -18,6 +20,16 @@ READABLE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lin
 
 # Track created loggers to avoid duplicates
 _created_loggers = {}
+
+
+@contextlib.contextmanager
+def safe_umask(new_umask):
+    """Context manager to temporarily set umask."""
+    old_umask = os.umask(new_umask)
+    try:
+        yield
+    finally:
+        os.umask(old_umask)
 
 
 class NameOverrideFilter(logging.Filter):
@@ -101,7 +113,7 @@ class LoggerFileHandlerManager:
                 return False
 
             # Check max retries
-            if self.max_retries >= 0 and self.retry_count >= self.max_retries:
+            if 0 <= self.max_retries <= self.retry_count:
                 return False
 
             self.last_retry_time = current_time
@@ -132,7 +144,13 @@ class LoggerFileHandlerManager:
         """
         try:
             log_dir_path = Path(self.log_dir)
-            log_dir_path.mkdir(parents=True, exist_ok=True)
+
+            # Set umask for directory creation
+            with safe_umask(0o002):
+                log_dir_path.mkdir(parents=True, exist_ok=True)
+                # Ensure directory has group write permissions
+                if log_dir_path.exists():
+                    os.chmod(log_dir_path, 0o775)
 
             text_handler = _create_text_file_handler(
                 log_dir_path,
@@ -282,12 +300,19 @@ def _create_text_file_handler(
 ) -> RotatingFileHandler:
     """Create and configure rotating text file handler."""
     text_file = log_dir_path / f"{log_filename}.log"
-    text_handler = RotatingFileHandler(
-        text_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
-    )
+
+    # Set umask to ensure file is created with proper permissions
+    with safe_umask(0o002):
+        text_handler = RotatingFileHandler(
+            text_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        # Explicitly set permissions on the file
+        if text_file.exists():
+            os.chmod(text_file, 0o664)
+
     text_handler.setLevel(level)
     text_formatter = ExtendedFormatter(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
@@ -306,12 +331,19 @@ def _create_json_file_handler(
 ) -> RotatingFileHandler:
     """Create and configure rotating JSON Lines file handler."""
     jsonl_file = log_dir_path / f"{log_filename}.jsonl"
-    json_handler = RotatingFileHandler(
-        jsonl_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
-    )
+
+    # Set umask to ensure file is created with proper permissions
+    with safe_umask(0o002):
+        json_handler = RotatingFileHandler(
+            jsonl_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        # Explicitly set permissions on the file
+        if jsonl_file.exists():
+            os.chmod(jsonl_file, 0o664)
+
     json_handler.setLevel(level)
     json_handler.setFormatter(JSONFormatter())
     return json_handler

@@ -3,16 +3,16 @@ from random import randint
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from lcls_tools.common.controls.pyepics.utils import (
-    make_mock_pv,
-    EPICS_INVALID_VAL,
-    PVInvalidError,
-)
 from lcls_tools.common.data.archiver import ArchiverValue, ArchiveDataHandler
 
 from sc_linac_physics.displays.cavity_display.backend.fault import (
     Fault,
     FaultCounter,
+)
+from sc_linac_physics.utils.epics import (
+    make_mock_pv,
+    EPICS_INVALID_VAL,
+    PVInvalidError,
 )
 
 archiver_value = ArchiverValue()

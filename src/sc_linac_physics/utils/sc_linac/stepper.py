@@ -2,9 +2,9 @@ import time
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from lcls_tools.common.controls.pyepics.utils import PV
 from numpy import sign
 
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
