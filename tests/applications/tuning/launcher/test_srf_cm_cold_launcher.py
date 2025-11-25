@@ -16,7 +16,7 @@ class TestDetuneCavity:
     """Tests for detune_cavity function."""
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     def test_detune_cavity_success(self, mock_logger):
         """Test successful cavity detuning."""
@@ -35,7 +35,7 @@ class TestDetuneCavity:
         assert "Triggered cavity detuning" in call_args[0][0]
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     def test_detune_cavity_already_running(self, mock_logger):
         """Test detuning when script is already running."""
@@ -54,7 +54,7 @@ class TestDetuneCavity:
         assert "Script already running" in call_args[0][0]
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     def test_detune_cavity_generic_exception(self, mock_logger):
         """Test handling of generic exception during trigger_start."""
@@ -73,7 +73,7 @@ class TestDetuneCavity:
         assert "Error triggering" in call_args[0][0]
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     def test_detune_cavity_abort_error(self, mock_logger):
         """Test handling of CavityAbortError."""
@@ -96,13 +96,13 @@ class TestDetuneCryomodule:
     """Tests for detune_cryomodule function."""
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.sleep"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.sleep"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.detune_cavity"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.detune_cavity"
     )
     def test_detune_cryomodule_all_success(
         self, mock_detune, mock_sleep, mock_logger
@@ -132,13 +132,13 @@ class TestDetuneCryomodule:
         assert mock_logger.info.called
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.sleep"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.sleep"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.detune_cavity"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.detune_cavity"
     )
     def test_detune_cryomodule_mixed_results(
         self, mock_detune, mock_sleep, mock_logger
@@ -163,13 +163,13 @@ class TestDetuneCryomodule:
         assert mock_sleep.call_count == 4
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.sleep"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.sleep"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.detune_cavity"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.detune_cavity"
     )
     def test_detune_cryomodule_empty(
         self, mock_detune, mock_sleep, mock_logger
@@ -191,7 +191,7 @@ class TestParseArgs:
     """Tests for parse_args function."""
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01", "CM02", "CM03"],
     )
     def test_parse_args_valid_cryomodule(self):
@@ -200,7 +200,7 @@ class TestParseArgs:
         assert args.cryomodule == "CM01"
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01", "CM02", "CM03"],
     )
     def test_parse_args_short_flag(self):
@@ -209,7 +209,7 @@ class TestParseArgs:
         assert args.cryomodule == "CM02"
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01", "CM02", "CM03"],
     )
     def test_parse_args_missing_required(self):
@@ -218,7 +218,7 @@ class TestParseArgs:
             parse_args([])
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01", "CM02", "CM03"],
     )
     def test_parse_args_invalid_choice(self):
@@ -231,16 +231,16 @@ class TestMain:
     """Tests for main function."""
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.TUNE_MACHINE"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.TUNE_MACHINE"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.detune_cryomodule"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.detune_cryomodule"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01", "CM02"],
     )
     def test_main_success(self, mock_detune_cm, mock_tune_machine, mock_logger):
@@ -266,16 +266,16 @@ class TestMain:
         )
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.TUNE_MACHINE"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.TUNE_MACHINE"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.detune_cryomodule"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.detune_cryomodule"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01", "CM02"],
     )
     def test_main_with_failures(
@@ -308,13 +308,13 @@ class TestMain:
         assert extra_data["cryomodule"] == "CM01"
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.TUNE_MACHINE"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.TUNE_MACHINE"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01", "CM02"],
     )
     def test_main_cryomodule_not_found(self, mock_tune_machine, mock_logger):
@@ -331,13 +331,13 @@ class TestMain:
         assert "Could not find cryomodule" in error_call[0][0]
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.TUNE_MACHINE"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.TUNE_MACHINE"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01"],
     )
     def test_main_keyerror_handling(self, mock_tune_machine, mock_logger):
@@ -356,16 +356,16 @@ class TestIntegration:
     """Integration tests combining multiple components."""
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.TUNE_MACHINE"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.TUNE_MACHINE"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.sleep"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.sleep"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01"],
     )
     def test_full_flow_success(
@@ -397,16 +397,16 @@ class TestIntegration:
         assert mock_logger.info.call_count >= 3  # start, 2 cavities, completion
 
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.logger"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.logger"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.TUNE_MACHINE"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.TUNE_MACHINE"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.sleep"
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.sleep"
     )
     @patch(
-        "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher.ALL_CRYOMODULES",
+        "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher.ALL_CRYOMODULES",
         ["CM01"],
     )
     def test_full_flow_with_running_cavity(
