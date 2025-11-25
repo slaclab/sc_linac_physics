@@ -108,13 +108,7 @@ class ConfigPanel(QWidget):
 
     def get_selected_decimation(self):
         """Returns the currently selected decimation value from the UI."""
-        try:
-            return int(self.decim_combo.currentText())
-        except ValueError:
-            print(
-                f"Warning: Could not parse decimation from UI, defaulting to {self.DEFAULT_DECIMATION_VALUE}."
-            )
-            return self.DEFAULT_DECIMATION_VALUE
+        return int(self.decim_combo.currentText())
 
     def _set_default_decimation(self):
         """Sets the decimation combo box to the default value."""
@@ -295,49 +289,39 @@ class ConfigPanel(QWidget):
 
     def _update_daq_parameters(self):
         """Calculate and update sampling rate and acquisition time displays"""
-        try:
-            # Get current values (buffer count and the selected text from decimation combo box)
-            number_of_buffers = int(self.buffer_spin.value())
-            decimation_text = self.decim_combo.currentText()
-            # If somehow the combo box does not have any text set displays to N/A and exit
-            if not decimation_text:
-                self.label_sampling_rate.setText("N/A")
-                self.label_acq_time.setText("N/A")
-                return
-            # Converting decimation text to int ("2" -> 2)
-            decimation_num = int(decimation_text)
+        # Get current values (buffer count and the selected text from decimation combo box)
+        number_of_buffers = int(self.buffer_spin.value())
+        decimation_text = self.decim_combo.currentText()
+        # If somehow the combo box does not have any text set displays to N/A and exit
+        if not decimation_text:
+            self.label_sampling_rate.setText("N/A")
+            self.label_acq_time.setText("N/A")
+            return
+        # Converting decimation text to int ("2" -> 2)
+        decimation_num = int(decimation_text)
 
-            # Calculate sampling rate
-            sampling_rate = BASE_HARDWARE_SAMPLE_RATE / decimation_num
+        # Calculate sampling rate
+        sampling_rate = BASE_HARDWARE_SAMPLE_RATE / decimation_num
 
-            # Display sampling rate with right precision
-            if sampling_rate >= 1000:
-                # (e.g 2000)
-                self.label_sampling_rate.setText(f"{sampling_rate:.0f}")
-            else:
-                # (e.g 500.0)
-                self.label_sampling_rate.setText(f"{sampling_rate:.1f}")
+        # Display sampling rate with right precision
+        if sampling_rate >= 1000:
+            # (e.g 2000)
+            self.label_sampling_rate.setText(f"{sampling_rate:.0f}")
+        else:
+            # (e.g 500.0)
+            self.label_sampling_rate.setText(f"{sampling_rate:.1f}")
 
-            # Calculate total acquisition time
-            # Formula: (BUFFER_LENGTH / effective_sample_rate) * number_of_buffers
-            acquisition_time = (
-                self.BUFFER_LENGTH * decimation_num * number_of_buffers
-            ) / BASE_HARDWARE_SAMPLE_RATE
+        # Calculate total acquisition time
+        # Formula: (BUFFER_LENGTH / effective_sample_rate) * number_of_buffers
+        acquisition_time = (
+            self.BUFFER_LENGTH * decimation_num * number_of_buffers
+        ) / BASE_HARDWARE_SAMPLE_RATE
 
-            # Display acquisition time with right precision
-            if acquisition_time < 1:
-                self.label_acq_time.setText(f"{acquisition_time:.3f}")
-            else:
-                self.label_acq_time.setText(f"{acquisition_time:.2f}")
-
-        except ValueError as e:
-            print(f"Error parsing values in _update_daq_parameters: {e}")
-            self.label_sampling_rate.setText("Error")
-            self.label_acq_time.setText("Error")
-        except Exception as e:
-            print(f"Unexpected error in _update_daq_parameters: {e}")
-            self.label_sampling_rate.setText("Error")
-            self.label_acq_time.setText("Error")
+        # Display acquisition time with right precision
+        if acquisition_time < 1:
+            self.label_acq_time.setText(f"{acquisition_time:.3f}")
+        else:
+            self.label_acq_time.setText(f"{acquisition_time:.2f}")
 
     def create_control_section(self):
         """Create measurement control section"""
@@ -451,51 +435,22 @@ class ConfigPanel(QWidget):
         self.stop_button.clicked.connect(lambda: self.measurementStopped.emit())
         self.load_button.clicked.connect(self._show_file_dialog)
 
-        if hasattr(self, "decim_combo"):
-            self.decim_combo.currentIndexChanged.connect(
-                self._handle_decimation_change
+        self.decim_combo.currentIndexChanged.connect(
+            self._handle_decimation_change
+        )
+        self.buffer_spin.valueChanged.connect(self._update_daq_parameters)
+        self.buffer_spin.valueChanged.connect(
+            lambda: (
+                self._emit_config_changed() if not self.is_updating else None
             )
-        else:
-            print(
-                "WARNING (ConfigPanel): self.decim_combo not found during signal connection."
-            )
-        if hasattr(self, "buffer_spin"):
-            self.buffer_spin.valueChanged.connect(self._update_daq_parameters)
-            self.buffer_spin.valueChanged.connect(
-                lambda: (
-                    self._emit_config_changed()
-                    if not self.is_updating
-                    else None
-                )
-            )
-        else:
-            print(
-                "WARNING (ConfigPanel): self.buffer_spin not found during signal connection."
-            )
+        )
 
     def _handle_decimation_change(self):
         """Handle changes to decimation combo box"""
         # Update DAQ parameters display (to recalculate and update sampling rate and acq time displays)
         self._update_daq_parameters()
-
-        # Emit decimation specific signal
-        try:
-            # Get current decimation value from combo box
-            dec_value = int(self.decim_combo.currentText())
-            # Emit signal w/ new decimation value
-            self.decimationSettingChanged.emit(dec_value)
-            print(
-                f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}"
-            )
-        except ValueError:
-            print(
-                f"WARNING (ConfigPanel): Could not parse decimation value from "
-                f"combo box: {self.decim_combo.currentText()}"
-            )
-
-        # Emit general config change if not updating
-        if not self.is_updating:
-            self._emit_config_changed()
+        dec_value = int(self.decim_combo.currentText())
+        self.decimationSettingChanged.emit(dec_value)
 
     def _on_start_clicked(self):
         """Start button click w/ validation"""
