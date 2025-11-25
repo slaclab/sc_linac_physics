@@ -1,7 +1,9 @@
+import threading
 from time import sleep
 from typing import Optional, Union, List, Any
 from unittest.mock import MagicMock
 
+import epics
 import numpy as np
 from epics import PV as EPICS_PV
 
@@ -78,18 +80,21 @@ class PV(EPICS_PV):
         count=None,
         connection_callback=None,
         access_callback=None,
+        require_connection=True,
     ):
-        # Initialize recursion guard BEFORE calling super().__init__
-        # because super().__init__ might trigger callbacks
-        self._in_ensure_connected = False
+        # Initialize all guards and defaults BEFORE calling super().__init__
+        self._connection_lock = threading.RLock()
+        self._user_callback = callback
+        self._require_connection = require_connection
 
         if connection_timeout is None:
             connection_timeout = self.DEFAULT_CONNECTION_TIMEOUT
 
+        # Initialize parent without user callback first
         super().__init__(
             pvname=pvname,
             connection_timeout=connection_timeout,
-            callback=callback,
+            callback=None,
             form=form,
             verbose=verbose,
             auto_monitor=auto_monitor,
@@ -98,13 +103,64 @@ class PV(EPICS_PV):
             access_callback=access_callback,
         )
 
-        # Wait for initial connection
-        if not self.wait_for_connection(timeout=connection_timeout):
+        # Give pyepics a moment to process the connection request
+        # This can help with timing issues in multithreaded environments
+        if not self.connected:
+            sleep(0.01)  # Small delay to allow connection to establish
+
+        # Wait for initial connection with multiple attempts
+        connected = self._wait_for_initial_connection(connection_timeout)
+
+        if not connected:
             error_msg = (
                 f"PV {pvname} failed to connect within {connection_timeout}s"
             )
-            _get_logger().error(error_msg)
-            raise PVConnectionError(error_msg)
+            if require_connection:
+                _get_logger().error(error_msg)
+                raise PVConnectionError(error_msg)
+            else:
+                _get_logger().warning(error_msg + " (connection not required)")
+
+        # Now add user callback if provided and connected
+        if self._user_callback is not None and self.connected:
+            self.add_callback(self._user_callback)
+
+    def _wait_for_initial_connection(self, timeout: float) -> bool:
+        """
+        Wait for initial connection with retry logic
+
+        Args:
+            timeout: Total timeout to wait
+
+        Returns:
+            True if connected, False otherwise
+        """
+        # If already connected, return immediately
+        if self.connected:
+            return True
+
+        # Try waiting for connection
+        if self.wait_for_connection(timeout=timeout):
+            return True
+
+        # First attempt failed, try a few quick retries
+        # Sometimes pyepics needs a second chance, especially in multithreaded apps
+        retry_attempts = 2
+        retry_timeout = min(1.0, timeout / 2)
+
+        for attempt in range(retry_attempts):
+            _get_logger().debug(
+                f"Retry connection attempt {attempt + 1}/{retry_attempts} for {self.pvname}"
+            )
+            sleep(0.1)  # Brief pause
+
+            if self.wait_for_connection(timeout=retry_timeout):
+                _get_logger().info(
+                    f"PV {self.pvname} connected on retry attempt {attempt + 1}"
+                )
+                return True
+
+        return False
 
     def __str__(self):
         return f"{self.pvname}"
@@ -123,7 +179,7 @@ class PV(EPICS_PV):
     def _ensure_connected(self, timeout=None):
         """
         Ensure PV is connected, raise exception if not
-        Protected against recursion.
+        Thread-safe with reentrant lock.
 
         Raises:
             PVConnectionError: If connection fails
@@ -132,35 +188,32 @@ class PV(EPICS_PV):
         if self.connected:
             return
 
-        # Prevent recursion from callbacks or nested calls
-        if self._in_ensure_connected:
-            error_msg = (
-                f"PV {self.pvname} not connected (recursive check detected)"
-            )
-            _get_logger().error(error_msg)
-            raise PVConnectionError(error_msg)
+        # Use reentrant lock to prevent race conditions
+        with self._connection_lock:
+            # Double-check after acquiring lock
+            if self.connected:
+                return
 
-        self._in_ensure_connected = True
-        try:
             timeout = timeout or self.DEFAULT_CONNECTION_TIMEOUT
+
+            # Log reconnection attempt
+            _get_logger().warning(
+                f"PV {self.pvname} disconnected, attempting to reconnect"
+            )
 
             if not self.wait_for_connection(timeout=timeout):
                 error_msg = (
-                    f"PV {self.pvname} failed to connect within {timeout}s"
+                    f"PV {self.pvname} failed to reconnect within {timeout}s"
                 )
                 _get_logger().error(error_msg)
                 raise PVConnectionError(error_msg)
 
-            _get_logger().warning(
-                f"PV {self.pvname} reconnected after disconnection"
-            )
-        finally:
-            self._in_ensure_connected = False
+            _get_logger().info(f"PV {self.pvname} reconnected successfully")
 
     def disconnect(self, deepclean=True):
         """Clean disconnect"""
         try:
-            super().disconnect()
+            super().disconnect(deepclean=deepclean)
         except Exception as e:
             _get_logger().warning(f"Error disconnecting PV {self.pvname}: {e}")
 
@@ -168,6 +221,14 @@ class PV(EPICS_PV):
     def val(self):
         """Shorthand for getting current value"""
         return self.get()
+
+    @property
+    def value_or_none(self) -> Optional[Union[int, float, str, np.ndarray]]:
+        """Get value without raising exception, returns None on failure"""
+        try:
+            return self.get()
+        except (PVConnectionError, PVGetError):
+            return None
 
     def get(
         self,
@@ -233,6 +294,10 @@ class PV(EPICS_PV):
                     use_monitor,
                 )
                 if value is not None:
+                    if attempt > 1:
+                        _get_logger().info(
+                            f"PV {self.pvname} get succeeded on attempt {attempt}"
+                        )
                     return value
 
                 if attempt < self.MAX_RETRIES:
@@ -270,10 +335,14 @@ class PV(EPICS_PV):
     def _retry_backoff(self, attempt, timeout):
         """Handle retry delay and reconnection"""
         sleep(self.RETRY_DELAY * attempt)  # Exponential backoff
-        try:
-            self._ensure_connected(timeout=timeout)
-        except PVConnectionError:
-            pass  # Will be caught in next retry attempt
+
+        # Try to reconnect if disconnected, but don't fail the retry attempt
+        if not self.connected:
+            try:
+                self._ensure_connected(timeout=timeout)
+            except PVConnectionError as e:
+                _get_logger().debug(f"Reconnection attempt failed: {e}")
+                # Will be caught in next get/put attempt
 
     def _raise_get_error(self, last_exception):
         """Raise appropriate error after all retries exhausted"""
@@ -341,6 +410,10 @@ class PV(EPICS_PV):
                     value, wait, timeout, use_complete, callback, callback_data
                 )
                 if status == 1:
+                    if attempt > 1:
+                        _get_logger().info(
+                            f"PV {self.pvname} put({value}) succeeded on attempt {attempt}"
+                        )
                     return  # Success
 
                 if attempt < self.MAX_RETRIES:
@@ -400,8 +473,7 @@ class PV(EPICS_PV):
 
         Args:
             value: Value to validate
-            min_val: Minimum allowed value (optional)
-            max_val: Maximum allowed value (optional)
+            min_val: Minimum allowed value (optional) max_val: Maximum allowed value (optional)
             allowed_values: List/set of allowed values (optional)
 
         Raises:
@@ -441,7 +513,16 @@ class PV(EPICS_PV):
         Raises:
             PVInvalidError: If raise_on_alarm=True and PV is alarming
         """
+        self._ensure_connected()
+
         severity_snapshot = self.severity
+
+        # Handle None severity
+        if severity_snapshot is None:
+            _get_logger().warning(f"PV {self.pvname} severity is None")
+            severity_snapshot = EPICS_INVALID_VAL
+            if raise_on_alarm:
+                raise PVInvalidError(f"PV {self.pvname} severity unavailable")
 
         # Only log warnings and errors
         if severity_snapshot == EPICS_MINOR_VAL:
@@ -459,12 +540,196 @@ class PV(EPICS_PV):
 
         return severity_snapshot
 
+    @staticmethod
+    def get_many(
+        pvs: List["PV"],
+        timeout: Optional[float] = None,
+        raise_on_error: bool = True,
+    ) -> List[Any]:
+        """
+        Get multiple PV values efficiently
+
+        Args:
+            pvs: List of PV objects
+            timeout: Timeout for each get
+            raise_on_error: If True, raise exception on any failure.
+                           If False, failed PVs will have None in results.
+
+        Returns:
+            List of values in same order as input PVs
+
+        Raises:
+            PVGetError: If any PV fails to get and raise_on_error=True
+        """
+        results = []
+        errors = []
+
+        for pv in pvs:
+            try:
+                results.append(pv.get(timeout=timeout))
+            except (PVConnectionError, PVGetError) as e:
+                errors.append((pv.pvname, str(e)))
+                results.append(None)
+
+        if errors and raise_on_error:
+            error_msg = f"Failed to get {len(errors)} PVs: {errors}"
+            _get_logger().error(error_msg)
+            raise PVGetError(error_msg)
+
+        return results
+
+    @staticmethod
+    def put_many(
+        pvs: List["PV"],
+        values: List[Any],
+        timeout: Optional[float] = None,
+        wait: bool = True,
+        raise_on_error: bool = True,
+    ) -> List[bool]:
+        """
+        Put values to multiple PVs
+
+        Args:
+            pvs: List of PV objects
+            values: List of values to write (must match length of pvs)
+            timeout: Timeout for each put
+            wait: Wait for completion
+            raise_on_error: If True, raise exception on any failure
+
+        Returns:
+            List of success status (True/False) for each PV
+
+        Raises:
+            ValueError: If pvs and values lengths don't match
+            PVPutError: If any PV fails to put and raise_on_error=True
+        """
+        if len(pvs) != len(values):
+            raise ValueError(
+                f"Length mismatch: {len(pvs)} PVs but {len(values)} values"
+            )
+
+        results = []
+        errors = []
+
+        for pv, value in zip(pvs, values):
+            try:
+                pv.put(value, timeout=timeout, wait=wait)
+                results.append(True)
+            except (PVConnectionError, PVPutError) as e:
+                errors.append((pv.pvname, value, str(e)))
+                results.append(False)
+
+        if errors and raise_on_error:
+            error_msg = f"Failed to put {len(errors)} PVs: {errors}"
+            _get_logger().error(error_msg)
+            raise PVPutError(error_msg)
+
+        return results
+
+
+def create_pv_safe(
+    pvname: str,
+    connection_timeout: Optional[float] = None,
+    raise_on_failure: bool = True,
+    **kwargs,
+) -> Optional[PV]:
+    """
+    Safely create a PV with better error handling
+
+    Args:
+        pvname: PV name
+        connection_timeout: Connection timeout
+        raise_on_failure: If True, raise exception on failure. If False, return None.
+        **kwargs: Additional arguments to pass to PV constructor
+
+    Returns:
+        PV object or None if connection failed and raise_on_failure=False
+
+    Raises:
+        PVConnectionError: If connection fails and raise_on_failure=True
+    """
+    try:
+        pv = PV(pvname, connection_timeout=connection_timeout, **kwargs)
+        return pv
+    except PVConnectionError as e:
+        if raise_on_failure:
+            raise
+        else:
+            _get_logger().warning(f"Failed to create PV {pvname}: {e}")
+            return None
+
+
+def diagnose_pv_connection(pvname: str, timeout: float = 10.0) -> dict:
+    """
+    Diagnose PV connection issues
+
+    Args:
+        pvname: PV name to diagnose
+        timeout: Connection timeout
+
+    Returns:
+        Dictionary with diagnostic information
+    """
+    info = {
+        "pvname": pvname,
+        "caget_works": False,
+        "pv_connects": False,
+        "value": None,
+        "error": None,
+        "host": None,
+        "type": None,
+        "count": None,
+    }
+
+    try:
+        # Try simple caget first
+        _get_logger().info(f"Testing caget for {pvname}...")
+        value = epics.caget(pvname, timeout=timeout)
+        if value is not None:
+            info["caget_works"] = True
+            info["value"] = value
+            _get_logger().info(f"caget successful: {value}")
+        else:
+            _get_logger().warning(f"caget returned None for {pvname}")
+
+        # Try creating PV object
+        _get_logger().info(f"Testing PV object creation for {pvname}...")
+        test_pv = epics.PV(pvname, connection_timeout=timeout)
+
+        if test_pv.wait_for_connection(timeout=timeout):
+            info["pv_connects"] = True
+            info["host"] = test_pv.host
+            info["type"] = test_pv.type
+            info["count"] = test_pv.count
+
+            try:
+                val = test_pv.get(timeout=timeout)
+                if val is not None:
+                    info["value"] = val
+                _get_logger().info(f"PV.get() successful: {val}")
+            except Exception as e:
+                _get_logger().warning(f"PV.get() failed: {e}")
+                info["error"] = f"get failed: {str(e)}"
+        else:
+            _get_logger().warning(f"PV object failed to connect for {pvname}")
+            info["error"] = "PV object connection timeout"
+
+        test_pv.disconnect()
+
+    except Exception as e:
+        info["error"] = str(e)
+        _get_logger().error(f"Diagnostic error for {pvname}: {e}")
+
+    _get_logger().info(f"PV Diagnostics for {pvname}: {info}")
+    return info
+
 
 def make_mock_pv(
     pv_name: str = "MOCK:PV",
     get_val: Any = 0.0,
     connected: bool = True,
     severity: int = EPICS_NO_ALARM_VAL,
+    fail_count: int = 0,
 ) -> MagicMock:
     """
     Create a mock PV object for testing.
@@ -474,6 +739,7 @@ def make_mock_pv(
         get_val: Value to return from get()
         connected: Connection status
         severity: Alarm severity
+        fail_count: Number of times get/put should fail before succeeding
 
     Returns:
         MagicMock configured to behave like a PV
@@ -488,11 +754,37 @@ def make_mock_pv(
     mock_pv.auto_monitor = True
     mock_pv.val = get_val
 
-    # Methods
-    mock_pv.get.return_value = get_val
-    mock_pv.put.return_value = 1  # Success
+    # Setup failure simulation
+    if fail_count > 0:
+        call_counts = {"get": 0, "put": 0}
+
+        def get_with_failures(*args, **kwargs):
+            call_counts["get"] += 1
+            if call_counts["get"] <= fail_count:
+                return None  # Simulate failure
+            return get_val
+
+        def put_with_failures(*args, **kwargs):
+            call_counts["put"] += 1
+            if call_counts["put"] <= fail_count:
+                return 0  # Simulate failure
+            return 1  # Success
+
+        mock_pv.get.side_effect = get_with_failures
+        mock_pv.put.side_effect = put_with_failures
+    else:
+        # Normal operation
+        mock_pv.get.return_value = get_val
+        mock_pv.put.return_value = 1
+
+    # Other methods
     mock_pv.wait_for_connection.return_value = connected
     mock_pv.validate_value.return_value = True
     mock_pv.check_alarm.return_value = severity
+    mock_pv.disconnect.return_value = None
+
+    # Context manager support
+    mock_pv.__enter__.return_value = mock_pv
+    mock_pv.__exit__.return_value = False
 
     return mock_pv

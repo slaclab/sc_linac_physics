@@ -404,12 +404,12 @@ class Cavity(linac_utils.SCLinacObject):
             self._push_ssa_slope_pv_obj = PV(
                 self._pv_prefix + "PUSH_SSA_SLOPE.PROC"
             )
-        self._push_ssa_slope_pv_obj.put(1)
+        self._push_ssa_slope_pv_obj.put(1, wait=False)
 
     def save_ssa_slope(self):
         if not self._save_ssa_slope_pv_obj:
             self._save_ssa_slope_pv_obj = PV(self.save_ssa_slope_pv)
-        self._save_ssa_slope_pv_obj.put(1)
+        self._save_ssa_slope_pv_obj.put(1, wait=False)
 
     @property
     def measured_loaded_q(self) -> float:
@@ -428,7 +428,7 @@ class Cavity(linac_utils.SCLinacObject):
     def push_loaded_q(self):
         if not self._push_loaded_q_pv_obj:
             self._push_loaded_q_pv_obj = PV(self.push_loaded_q_pv)
-        self._push_loaded_q_pv_obj.put(1)
+        self._push_loaded_q_pv_obj.put(1, wait=False)
 
     @property
     def measured_scale_factor(self) -> float:
@@ -449,7 +449,7 @@ class Cavity(linac_utils.SCLinacObject):
     def push_scale_factor(self):
         if not self._push_scale_factor_pv_obj:
             self._push_scale_factor_pv_obj = PV(self.push_scale_factor_pv)
-        self._push_scale_factor_pv_obj.put(1)
+        self._push_scale_factor_pv_obj.put(1, wait=False)
 
     @property
     def characterization_status(self):
@@ -876,7 +876,7 @@ class Cavity(linac_utils.SCLinacObject):
         go button is pressed
         :return:
         """
-        self._pulse_go_pv_obj.put(1)
+        self._pulse_go_pv_obj.put(1, wait=False)
         while self.pulse_status < 2:
             self.check_abort()
             self.logger.debug(
