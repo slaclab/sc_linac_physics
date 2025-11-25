@@ -142,10 +142,12 @@ class StepperPVGroup(PVGroup):
     @move_neg.putter
     async def move_neg(self, instance, value):
         await self.move(-1)
+        return value
 
     @move_pos.putter
     async def move_pos(self, instance, value):
         await self.move(1)
+        return value
 
 
 class PiezoPVGroup(PVGroup):

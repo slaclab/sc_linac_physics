@@ -198,9 +198,9 @@ sc-sim = "sc_linac_physics.utils.simulation.sc_linac_physics_service:main"
 # Detune CLI
 # ============================================================================
 
-sc-cold-cav = "sc_linac_physics.applications.tuning.launcher.srf_cavity_detune_launcher:main"
-sc-cold-rack = "sc_linac_physics.applications.tuning.launcher.srf_rack_detune_launcher:main"
-sc-cold-cm = "sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher:main"
+sc-cold-cav = "sc_linac_physics.applications.tuning.launcher.srf_cavity_cold_launcher:main"
+sc-cold-rack = "sc_linac_physics.applications.tuning.launcher.srf_rack_cold_launcher:main"
+sc-cold-cm = "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher:main"
 
 [tool.check-manifest]
 ignore = [
