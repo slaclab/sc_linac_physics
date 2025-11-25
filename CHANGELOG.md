@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v5.1.1 (2025-11-25)
+
+### Bug Fixes
+
+- **epics**: Add connection retry logic and thread safety improvements
+  ([#165](https://github.com/slaclab/sc_linac_physics/pull/165),
+  [`384dd9a`](https://github.com/slaclab/sc_linac_physics/commit/384dd9a147b68a8b563f85d66037d937f2c56e1c))
+
+### Chores
+
+- Updating sc_linac tests with new PV flags
+  ([#165](https://github.com/slaclab/sc_linac_physics/pull/165),
+  [`384dd9a`](https://github.com/slaclab/sc_linac_physics/commit/384dd9a147b68a8b563f85d66037d937f2c56e1c))
+
+
 ## v5.1.0 (2025-11-24)
 
 ### Bug Fixes
