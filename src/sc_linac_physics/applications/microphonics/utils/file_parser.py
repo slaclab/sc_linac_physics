@@ -11,6 +11,8 @@ from sc_linac_physics.applications.microphonics.utils.pv_utils import (
     extract_cavity_channel_from_pv,
 )
 
+logger = logging.getLogger(__name__)
+
 HEADER_MARKER = "# ACCL:"
 COMMENT_MARKER = "#"
 DECIMATION_HEADER_KEY = "# wave_samp_per"
@@ -65,7 +67,7 @@ def _read_and_parse_header(
         return header_lines, data_content_lines, decimation, marker_index
 
     except Exception as e:
-        logging.error(
+        logger.error(
             f"Unexpected error reading or parsing header for {file_path.name}: {e}\n{traceback.format_exc()}"
         )
         raise FileParserError(f"Error reading file {file_path.name}: {e}")
@@ -96,16 +98,10 @@ def _parse_channel_pvs(header_lines: List[str], marker_index: int) -> List[str]:
             raise FileParserError(
                 f"Found '{HEADER_MARKER}' line but no channels listed after it: '{channel_line}'"
             )
-        stripped_result_for_log = channel_line.strip("# \n")
-        logging.debug(f"Original channel line: '{channel_line}'")
-        logging.debug(f"Result of strip('# \\n'): '{stripped_result_for_log}'")
-        logging.debug(
-            f"Parsed {len(parsed_channels)} channel PVs = {parsed_channels}"
-        )
 
         return parsed_channels
     except Exception as e:
-        logging.error(
+        logger.error(
             f"Failed to split/parse the channel marker line: {channel_line} - {e}"
         )
         raise FileParserError(
@@ -118,10 +114,9 @@ def _parse_decimation(line: str, default: int) -> int:
     try:
         value_str = line.split(":")[1].strip()
         decimation = int(value_str, 0)
-        logging.debug(f"Parsed decimation '{decimation}' from header")
         return decimation
     except (IndexError, ValueError, TypeError) as e:
-        logging.warning(
+        logger.warning(
             f"Could not parse decimation from line: '{line}'. "
             f"Using default {default}. Error: {e}"
         )
@@ -134,7 +129,6 @@ def _parse_numerical_data(
     """Parses numerical data from data lines using numpy"""
     # Handle case where no data lines were found
     if not data_content_lines:
-        print("Warning (FileParser): No numerical data lines found.")
         # Return empty array w/ right number of columns
         return np.empty((0, num_expected_columns), dtype=float)
     data_io = io.StringIO("".join(data_content_lines))
@@ -166,14 +160,15 @@ def _structure_parsed_data(
     expected_cols = len(channel_pvs)
     actual_cols = data_array.shape[1] if data_array.ndim == 2 else 0
     if data_array.size > 0 and actual_cols != expected_cols:
-        print(
-            f"Warning (FileParser): Column mismatch in {file_path.name}! "
-            f"Header={expected_cols}, Data={actual_cols}. Assigning empty data."
+        logger.warning(
+            "Column mismatch in %s: Header=%d, Data=%d. Assigning empty data.",
+            file_path.name,
+            expected_cols,
+            actual_cols,
         )
         data_array = np.empty((0, expected_cols), dtype=float)
         actual_cols = expected_cols
     for idx, pv_name in enumerate(channel_pvs):
-        logging.debug(f"Structuring data for index {idx}, pv_name: '{pv_name}'")
         if cryomodule_id is None:
             cryomodule_id = extract_cryomodule_from_pv(pv_name)
         parsed_info = extract_cavity_channel_from_pv(pv_name)
@@ -193,10 +188,6 @@ def _structure_parsed_data(
                 output_data["cavities"][cav_num][channel_type] = np.array(
                     [], dtype=float
                 )
-        else:
-            print(
-                f"Warning (FileParser): Skipping data column {idx} due to PV parsing failure: {pv_name}"
-            )
     output_data["cavity_list"] = sorted(list(cavity_numbers_found))
     output_data["cryomodule"] = cryomodule_id
     return output_data
@@ -204,22 +195,13 @@ def _structure_parsed_data(
 
 def load_and_process_file(file_path: Path) -> Dict[str, Any]:
     """Main function to orchestrate the file loading and processing."""
-    print(f"DEBUG (FileParser): Processing file {file_path.name}")
-    try:
-        header_lines, data_content_lines, decimation, marker_index = (
-            _read_and_parse_header(file_path)
-        )
-        channel_pvs = _parse_channel_pvs(header_lines, marker_index)
-        data_array = _parse_numerical_data(
-            data_content_lines, len(channel_pvs), file_path
-        )
-        structured_data = _structure_parsed_data(
-            channel_pvs, data_array, file_path, decimation
-        )
-        print(
-            f"DEBUG (FileParser): Successfully processed {file_path.name}. Cavities: {structured_data['cavity_list']}"
-        )
-        return structured_data
-    except FileParserError as e:
-        print(f"ERROR (FileParser): {e}")
-        raise
+    header_lines, data_content_lines, decimation, marker_index = (
+        _read_and_parse_header(file_path)
+    )
+    channel_pvs = _parse_channel_pvs(header_lines, marker_index)
+    data_array = _parse_numerical_data(
+        data_content_lines, len(channel_pvs), file_path
+    )
+    return _structure_parsed_data(
+        channel_pvs, data_array, file_path, decimation
+    )

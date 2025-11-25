@@ -220,11 +220,7 @@ class PlotPanel(QWidget):
         """Determines the decimation to use for plotting based on UI."""
         if self.config_panel:
             return self.config_panel.get_selected_decimation()
-        else:
-            print(
-                "PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation."
-            )
-            return ConfigPanel.DEFAULT_DECIMATION_VALUE
+        return ConfigPanel.DEFAULT_DECIMATION_VALUE
 
     def update_plots(self, data_dict: dict):
         """Update all plots w/ new data"""
@@ -260,10 +256,6 @@ class PlotPanel(QWidget):
                 self.spectrogram_plot.update_plot(
                     cavity_num, data_for_this_plot_call
                 )
-            else:
-                print(
-                    f"PlotPanel: No data found for cavity {cavity_num} in received data_dict."
-                )
 
     def refresh_plots_if_decimation_changed(self):
         """
@@ -278,10 +270,6 @@ class PlotPanel(QWidget):
             self._current_plotting_decimation is None
             or self._current_plotting_decimation != new_ui_decimation
         ):
-            print(
-                f"PlotPanel: UI Decimation changed from {self._current_plotting_decimation} "
-                f"to {new_ui_decimation}. Refreshing plots."
-            )
             self.update_plots(self._last_data_dict_processed.copy())
 
     def clear_plots(self):

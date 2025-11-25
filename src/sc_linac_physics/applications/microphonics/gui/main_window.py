@@ -46,7 +46,6 @@ class MicrophonicsGUI(Display):
         self.data_manager = AsyncDataManager()
 
         # Connect job level signals
-        self.data_manager.jobProgress.connect(self._handle_job_progress)
         self.data_manager.jobError.connect(self._handle_job_error)
         self.data_manager.jobComplete.connect(self._handle_job_complete)
 
@@ -57,7 +56,6 @@ class MicrophonicsGUI(Display):
                 f"Chassis {chassis_id}: {msg}", title="Acquisition Error"
             )
         )
-        self.data_manager.acquisitionComplete.connect(self._handle_completion)
 
         # Main Layout
         main_layout = QHBoxLayout()
@@ -137,7 +135,6 @@ class MicrophonicsGUI(Display):
         self.config_panel.file_selected.connect(self.load_data)
 
     def on_config_changed(self, config: Dict):
-        logger.info("Configuration changed: %s", config)
         try:
             # Update UI based on new configuration
             if not self.measurement_running:
@@ -156,16 +153,11 @@ class MicrophonicsGUI(Display):
         """Split configuration by chassis (A/B) and include channel selection"""
         result = {}
         channels_for_script = ["DF"]
-        logger.debug(
-            "Channels actually sent to script: %s", channels_for_script
-        )
 
         if not config.get("modules"):
-            logger.debug("No modules in config.")
             return result
 
         for module in config["modules"]:
-            logger.debug("Processing module: %s", module)
             base_channel = module["base_channel"]
 
             # Group cavities by rack (A/B)
@@ -173,16 +165,11 @@ class MicrophonicsGUI(Display):
             rack_b_cavities = []
 
             for cavity_num, is_selected in config["cavities"].items():
-                logger.debug(
-                    "Checking cavity %s: selected=%s", cavity_num, is_selected
-                )
                 if is_selected:  # Only process selected cavities
                     if cavity_num <= 4:
                         rack_a_cavities.append(cavity_num)
                     else:
                         rack_b_cavities.append(cavity_num)
-            logger.debug("Rack A cavities: %s", rack_a_cavities)
-            logger.debug("Rack B cavities: %s", rack_b_cavities)
 
             # Create configs for each rack that has selected cavities
             if rack_a_cavities:
@@ -196,7 +183,6 @@ class MicrophonicsGUI(Display):
                     ),
                     "cavities": rack_a_cavities,
                 }
-                logger.debug("Added Rack A config: %s", result[chassis_id])
 
             if rack_b_cavities:
                 chassis_id = f"{base_channel}:RESB"
@@ -209,9 +195,7 @@ class MicrophonicsGUI(Display):
                     ),
                     "cavities": rack_b_cavities,
                 }
-                logger.debug("Added Rack B config: %s", result[chassis_id])
 
-        logger.debug("Final chassis config: %s", result)
         return result
 
     def start_measurement(self):
@@ -239,7 +223,6 @@ class MicrophonicsGUI(Display):
                 )
                 return
             self.plot_panel.clear_plots()  # Clear old plots before starting new measurement
-            logger.info("Current config: %s", config)
 
             # Check for cross CM cavity selection
             low_cm = any(c <= 4 for c in selected_cavities)
@@ -293,10 +276,6 @@ class MicrophonicsGUI(Display):
         self.measurement_running = is_running
         self.config_panel.set_measurement_running(is_running)
 
-    def _handle_job_progress(self, overall_progress: int):
-        """Handle overall job progress"""
-        logger.info("Overall job progress: %s%%", overall_progress)
-
     def _handle_job_error(self, error_msg: str):
         """Handle job-level errors"""
         logger.error("Job error: %s", error_msg)
@@ -308,18 +287,12 @@ class MicrophonicsGUI(Display):
 
     def _handle_job_complete(self, aggregated_data: dict):
         """Handle job completion w/ aggregated data from all racks"""
-        logger.debug("Job completed, processing aggregated data.")
-
         # Process aggregated data
         self._handle_new_data("measurement", aggregated_data)
 
         # Reset UI state
         self.measurement_running = False
         self.config_panel.set_measurement_running(False)
-
-    def _handle_completion(self, chassis_id: str):
-        """Handle rack completion"""
-        logger.debug("Rack %s completed.", chassis_id)
 
     def _handle_progress(self, chassis_id: str, cavity_num: int, progress: int):
         """Handle progress updates from measurement"""
@@ -329,8 +302,6 @@ class MicrophonicsGUI(Display):
 
     def _handle_new_data(self, source: str, data_dict: dict):
         """Handle new data from measurement or file"""
-        logger.debug("_handle_new_data received from '%s'", source)
-
         try:
             cavity_list = data_dict.get("cavity_list", [])
             all_cavity_data = data_dict.get("cavities", {})
@@ -382,10 +353,6 @@ class MicrophonicsGUI(Display):
                         title="Data Processing Warning",
                         is_modal=False,
                     )
-            logger.debug(
-                "Calling plot_panel.update_plots w/ data for cavities: %s",
-                cavity_list,
-            )
             self.plot_panel.update_plots(data_dict)
 
         except Exception:
