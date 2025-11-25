@@ -162,6 +162,46 @@ class LoggerFileHandlerManager:
 
             return success
 
+    def _ensure_log_directory(self) -> None:
+        """
+        Create log directory with appropriate permissions.
+
+        Raises:
+            PermissionError: If directory cannot be created or accessed.
+        """
+        with safe_umask(0o002):
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.log_dir.exists():
+            raise PermissionError(f"Failed to create directory: {self.log_dir}")
+
+        self._set_directory_permissions()
+
+    def _set_directory_permissions(self) -> None:
+        """
+        Set directory permissions if we own it, otherwise verify write access.
+
+        Raises:
+            PermissionError: If directory is not writable.
+        """
+        try:
+            stat_info = self.log_dir.stat()
+            current_uid = os.getuid()
+
+            if stat_info.st_uid == current_uid:
+                # We own it, set permissions
+                os.chmod(self.log_dir, 0o775)
+            elif not os.access(self.log_dir, os.W_OK):
+                # We don't own it and can't write
+                raise PermissionError(
+                    f"Directory '{self.log_dir}' is not writable "
+                    f"(owned by uid {stat_info.st_uid}, running as uid {current_uid})"
+                )
+        except (PermissionError, OSError):
+            # Final check: can we write?
+            if not os.access(self.log_dir, os.W_OK):
+                raise
+
     def _add_file_handlers(self) -> bool:
         """
         Attempt to add file handlers to logger.
@@ -170,15 +210,7 @@ class LoggerFileHandlerManager:
             True if file handlers were successfully added, False otherwise.
         """
         try:
-            # Set umask for directory creation
-            with safe_umask(0o002):
-                self.log_dir.mkdir(parents=True, exist_ok=True)
-                # Ensure directory has group write permissions
-                if self.log_dir.exists():
-                    try:
-                        os.chmod(self.log_dir, 0o775)
-                    except (PermissionError, OSError):
-                        pass  # Best effort
+            self._ensure_log_directory()
 
             text_handler = _create_text_file_handler(
                 self.log_dir,
