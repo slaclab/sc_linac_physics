@@ -15,17 +15,18 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 logger = custom_logger(
     name=__name__,
     log_filename="detune_cavity",
-    level=logging.DEBUG,  # Changed from INFO to DEBUG
+    level=logging.DEBUG,
     log_dir=str(TUNE_LOG_DIR),
 )
 
 
-def detune_cavity(cavity: TuneCavity) -> bool:
+def detune_cavity(cavity: TuneCavity, use_rf: bool = True) -> bool:
     """
     Detune a cavity by moving it to cold landing position.
 
     Args:
         cavity: The TuneCavity object to detune
+        use_rf: If True, use RF for detuning. If False, detune without RF.
 
     Returns:
         bool: True if successful, False if script is already running
@@ -38,18 +39,30 @@ def detune_cavity(cavity: TuneCavity) -> bool:
         return False
 
     try:
-        cavity.move_to_cold_landing()
+        cavity.move_to_cold_landing(use_rf=use_rf)
         logger.info(
             "Successfully detuned cavity",
-            extra={"extra_data": {"cavity": str(cavity)}},
+            extra={
+                "extra_data": {
+                    "cavity": str(cavity),
+                    "use_rf": use_rf,
+                }
+            },
         )
         return True
     except CavityAbortError as e:
         logger.error(str(e))
+        return False
     except Exception as e:
         logger.exception(
             f"Error detuning {cavity}",
-            extra={"extra_data": {"cavity": str(cavity), "error": str(e)}},
+            extra={
+                "extra_data": {
+                    "cavity": str(cavity),
+                    "use_rf": use_rf,
+                    "error": str(e),
+                }
+            },
         )
         return False
 
@@ -75,6 +88,11 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         metavar="1-8",
         help="Cavity number (1-8)",
     )
+    parser.add_argument(
+        "--no-rf",
+        action="store_true",
+        help="Detune without using RF (default: use RF)",
+    )
 
     return parser.parse_args(argv)
 
@@ -94,6 +112,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             "extra_data": {
                 "cryomodule": args.cryomodule,
                 "cavity": args.cavity,
+                "use_rf": not args.no_rf,
             }
         },
     )
@@ -115,7 +134,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         return 1
 
-    success = detune_cavity(cavity_obj)
+    success = detune_cavity(cavity_obj, use_rf=not args.no_rf)
     return 0 if success else 1
 
 

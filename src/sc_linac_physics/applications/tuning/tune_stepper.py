@@ -1,5 +1,6 @@
-from sc_linac_physics.utils.epics import PV
+import logging
 
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac.linac_utils import MAX_STEPPER_SPEED
 from sc_linac_physics.utils.sc_linac.stepper import StepperTuner
 
@@ -42,14 +43,13 @@ class TuneStepper(StepperTuner):
 
     def move_to_cold_landing(self, check_detune: bool = False):
         steps = self.nsteps_cold_pv_obj.get()
-        self.cavity.logger.info(
+        self.cavity.set_status_message(
             "Moving stepper to cold landing",
-            extra={
-                "extra_data": {
-                    "steps": steps,
-                    "check_detune": check_detune,
-                    "speed": MAX_STEPPER_SPEED,
-                }
+            logging.INFO,
+            extra_data={
+                "steps": steps,
+                "check_detune": check_detune,
+                "speed": MAX_STEPPER_SPEED,
             },
         )
         self.move(
@@ -62,14 +62,14 @@ class TuneStepper(StepperTuner):
     def park(self, count_current: bool):
         adjustment = self.step_signed_pv_obj.get() if count_current else 0
         target_steps = 1800000 - adjustment
-        self.cavity.logger.info(
+        self.cavity.set_status_message(
             "Moving tuner to park position",
-            extra={
-                "extra_data": {
-                    "target_steps": target_steps,
-                    "adjustment": adjustment,
-                    "count_current": count_current,
-                }
+            logging.INFO,
+            extra_data={
+                "target_steps": target_steps,
+                "adjustment": adjustment,
+                "count_current": count_current,
             },
         )
+
         self.move(target_steps)
