@@ -451,6 +451,7 @@ class ConfigPanel(QWidget):
         self._update_daq_parameters()
         dec_value = int(self.decim_combo.currentText())
         self.decimationSettingChanged.emit(dec_value)
+        self._emit_config_changed()
 
     def _on_start_clicked(self):
         """Start button click w/ validation"""
