@@ -104,7 +104,7 @@ def test_microsteps_per_hz(cavity):
 def test_start_characterization(cavity):
     cavity._characterization_start_pv_obj = make_mock_pv()
     cavity.start_characterization()
-    cavity._characterization_start_pv_obj.put.assert_called_with(1)
+    cavity._characterization_start_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_cw_data_decimation(cavity):
@@ -164,13 +164,13 @@ def test_drive_level(cavity):
 def test_push_ssa_slope(cavity):
     cavity._push_ssa_slope_pv_obj = make_mock_pv()
     cavity.push_ssa_slope()
-    cavity._push_ssa_slope_pv_obj.put.assert_called_with(1)
+    cavity._push_ssa_slope_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_save_ssa_slope(cavity):
     cavity._save_ssa_slope_pv_obj = make_mock_pv()
     cavity.save_ssa_slope()
-    cavity._save_ssa_slope_pv_obj.put.assert_called_with(1)
+    cavity._save_ssa_slope_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_measured_loaded_q(cavity):
@@ -218,7 +218,7 @@ def test_loaded_q_low_hl(hl_cavity):
 def test_push_loaded_q(cavity):
     cavity._push_loaded_q_pv_obj = make_mock_pv()
     cavity.push_loaded_q()
-    cavity._push_loaded_q_pv_obj.put.assert_called_with(1)
+    cavity._push_loaded_q_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_measured_scale_factor(cavity):
@@ -268,7 +268,7 @@ def test_scale_factor_low_hl(hl_cavity):
 def test_push_scale_factor(cavity):
     cavity._push_scale_factor_pv_obj = make_mock_pv()
     cavity.push_scale_factor()
-    cavity._push_scale_factor_pv_obj.put.assert_called_with(1)
+    cavity._push_scale_factor_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_characterization_status(cavity):
@@ -402,7 +402,7 @@ def test_chirp_freq_stop(cavity):
 def test_calculate_probe_q(cavity):
     cavity._calc_probe_q_pv_obj = make_mock_pv()
     cavity.calculate_probe_q()
-    cavity._calc_probe_q_pv_obj.put.assert_called_with(1)
+    cavity._calc_probe_q_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_set_chirp_range(cavity):
@@ -574,7 +574,7 @@ def test_push_go_button(cavity):
     )
     cavity._pulse_go_pv_obj = make_mock_pv(cavity.pulse_go_pv)
     cavity.push_go_button()
-    cavity._pulse_go_pv_obj.put.assert_called_with(1)
+    cavity._pulse_go_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_turn_on_not_online(cavity):
@@ -710,7 +710,7 @@ def test_reset_interlocks(cavity):
     with pytest.raises(CavityFaultError):
         cavity.reset_interlocks(attempt=INTERLOCK_RESET_ATTEMPTS)
 
-    cavity._interlock_reset_pv_obj.put.assert_called_with(1)
+    cavity._interlock_reset_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_characterization_timestamp(cavity):

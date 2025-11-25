@@ -110,12 +110,12 @@ class StepperTuner(linac_utils.SCLinacObject):
     def move_positive(self):
         if not self._move_pos_pv_obj:
             self._move_pos_pv_obj = PV(self.move_pos_pv)
-        self._move_pos_pv_obj.put(1, wait=False, timeout=5.0)
+        self._move_pos_pv_obj.put(1, wait=False)
 
     def move_negative(self):
         if not self._move_neg_pv_obj:
             self._move_neg_pv_obj = PV(self.move_neg_pv)
-        self._move_neg_pv_obj.put(1, wait=False, timeout=5.0)
+        self._move_neg_pv_obj.put(1, wait=False)
 
     @property
     def step_des_pv_obj(self):

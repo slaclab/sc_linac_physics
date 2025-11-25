@@ -386,13 +386,15 @@ class SSA(linac_utils.SCLinacObject):
     def start_calibration(self):
         if not self._calibration_start_pv_obj:
             self._calibration_start_pv_obj = PV(self.calibration_start_pv)
-        self._calibration_start_pv_obj.put(1)
+        self._calibration_start_pv_obj.put(1, wait=False)
 
     @property
     def calibration_status(self):
         if not self._calibration_status_pv_obj:
-            self._calibration_status_pv_obj = PV(self.calibration_status_pv)
-        return self._calibration_status_pv_obj.get()
+            self._calibration_status_pv_obj = PV(
+                self.calibration_status_pv, connection_timeout=10
+            )
+        return self._calibration_status_pv_obj.get(timeout=10)
 
     @property
     def calibration_running(self) -> bool:

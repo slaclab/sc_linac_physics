@@ -6,9 +6,11 @@ import logging
 import os
 import sys
 import time
+import weakref
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Lock
+from typing import Any
 
 if sys.platform == "darwin":  # macOS
     BASE_LOG_DIR = Path.home() / "logs"
@@ -18,12 +20,12 @@ else:  # Linux (production)
 # More readable format option
 READABLE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
 
-# Track created loggers to avoid duplicates
-_created_loggers = {}
+# Track created loggers to avoid duplicates (using weak references to avoid memory leaks)
+_created_loggers: dict[str, weakref.ref] = {}
 
 
 @contextlib.contextmanager
-def safe_umask(new_umask):
+def safe_umask(new_umask: int):
     """Context manager to temporarily set umask."""
     old_umask = os.umask(new_umask)
     try:
@@ -39,7 +41,7 @@ class NameOverrideFilter(logging.Filter):
         super().__init__()
         self.display_name = display_name
 
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         record.name = self.display_name
         return True
 
@@ -47,13 +49,36 @@ class NameOverrideFilter(logging.Filter):
 class RetryFileHandlerFilter(logging.Filter):
     """Filter that retries adding file handlers if they're missing."""
 
-    def __init__(self, logger_manager):
+    def __init__(self, logger_manager: "LoggerFileHandlerManager"):
         super().__init__()
         self.logger_manager = logger_manager
+        self._last_check = 0.0
+        self._check_interval = 5.0  # Only check every 5 seconds max
+        self._in_retry = False  # Prevent recursive retry attempts
 
-    def filter(self, record):
-        # Attempt to add file handlers if missing
-        self.logger_manager.ensure_file_handlers()
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Prevent recursive calls during retry
+        if self._in_retry:
+            return True
+
+        # Fast path: if we have handlers, skip
+        if self.logger_manager.has_file_handlers:
+            return True
+
+        # Rate limit the retry checks
+        current_time = time.time()
+        if current_time - self._last_check < self._check_interval:
+            return True
+
+        self._last_check = current_time
+
+        # Attempt to ensure file handlers
+        try:
+            self._in_retry = True
+            self.logger_manager.ensure_file_handlers()
+        finally:
+            self._in_retry = False
+
         return True
 
 
@@ -63,7 +88,7 @@ class LoggerFileHandlerManager:
     def __init__(
         self,
         logger: logging.Logger,
-        log_dir: str,
+        log_dir: str | Path,
         log_filename: str,
         level: int,
         max_bytes: int,
@@ -72,7 +97,7 @@ class LoggerFileHandlerManager:
         max_retries: int = -1,  # -1 means infinite retries
     ):
         self.logger = logger
-        self.log_dir = log_dir
+        self.log_dir = Path(log_dir)
         self.log_filename = log_filename
         self.level = level
         self.max_bytes = max_bytes
@@ -82,7 +107,7 @@ class LoggerFileHandlerManager:
 
         self.has_file_handlers = False
         self.retry_count = 0
-        self.last_retry_time = 0
+        self.last_retry_time = 0.0
         self.lock = Lock()
 
     def has_active_file_handlers(self) -> bool:
@@ -98,13 +123,15 @@ class LoggerFileHandlerManager:
         Returns:
             True if file handlers exist or were successfully added.
         """
-        # Quick check without lock
-        if self.has_file_handlers and self.has_active_file_handlers():
+        # Always check actual handlers first (cheap operation)
+        if self.has_active_file_handlers():
+            self.has_file_handlers = True  # Sync the flag
             return True
 
         with self.lock:
-            # Double-check with lock
-            if self.has_file_handlers and self.has_active_file_handlers():
+            # Recheck after acquiring lock
+            if self.has_active_file_handlers():
+                self.has_file_handlers = True
                 return True
 
             # Check if we should retry
@@ -135,6 +162,46 @@ class LoggerFileHandlerManager:
 
             return success
 
+    def _ensure_log_directory(self) -> None:
+        """
+        Create log directory with appropriate permissions.
+
+        Raises:
+            PermissionError: If directory cannot be created or accessed.
+        """
+        with safe_umask(0o002):
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.log_dir.exists():
+            raise PermissionError(f"Failed to create directory: {self.log_dir}")
+
+        self._set_directory_permissions()
+
+    def _set_directory_permissions(self) -> None:
+        """
+        Set directory permissions if we own it, otherwise verify write access.
+
+        Raises:
+            PermissionError: If directory is not writable.
+        """
+        try:
+            stat_info = self.log_dir.stat()
+            current_uid = os.getuid()
+
+            if stat_info.st_uid == current_uid:
+                # We own it, set permissions
+                os.chmod(self.log_dir, 0o775)
+            elif not os.access(self.log_dir, os.W_OK):
+                # We don't own it and can't write
+                raise PermissionError(
+                    f"Directory '{self.log_dir}' is not writable "
+                    f"(owned by uid {stat_info.st_uid}, running as uid {current_uid})"
+                )
+        except (PermissionError, OSError):
+            # Final check: can we write?
+            if not os.access(self.log_dir, os.W_OK):
+                raise
+
     def _add_file_handlers(self) -> bool:
         """
         Attempt to add file handlers to logger.
@@ -143,17 +210,10 @@ class LoggerFileHandlerManager:
             True if file handlers were successfully added, False otherwise.
         """
         try:
-            log_dir_path = Path(self.log_dir)
-
-            # Set umask for directory creation
-            with safe_umask(0o002):
-                log_dir_path.mkdir(parents=True, exist_ok=True)
-                # Ensure directory has group write permissions
-                if log_dir_path.exists():
-                    os.chmod(log_dir_path, 0o775)
+            self._ensure_log_directory()
 
             text_handler = _create_text_file_handler(
-                log_dir_path,
+                self.log_dir,
                 self.log_filename,
                 self.level,
                 self.max_bytes,
@@ -162,7 +222,7 @@ class LoggerFileHandlerManager:
             self.logger.addHandler(text_handler)
 
             json_handler = _create_json_file_handler(
-                log_dir_path,
+                self.log_dir,
                 self.log_filename,
                 self.level,
                 self.max_bytes,
@@ -191,7 +251,7 @@ class LoggerFileHandlerManager:
 class ExtraDataMixin:
     """Mixin to add extra_data formatting capability."""
 
-    def format_extra_data(self, record):
+    def format_extra_data(self, record: logging.LogRecord) -> str:
         """Format extra_data as key=value pairs."""
         if not (hasattr(record, "extra_data") and record.extra_data):
             return ""
@@ -224,7 +284,7 @@ class ColoredFormatter(ExtraDataMixin, logging.Formatter):
     }
     RESET = "\033[0m"
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         record = logging.makeLogRecord(record.__dict__)
         log_color = self.COLORS.get(record.levelname, self.RESET)
         record.levelname = f"{log_color}{record.levelname}{self.RESET}"
@@ -240,7 +300,7 @@ class ColoredFormatter(ExtraDataMixin, logging.Formatter):
 class ExtendedFormatter(ExtraDataMixin, logging.Formatter):
     """Formatter that includes extra_data in human-readable format."""
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         result = super().format(record)
 
         extra_str = self.format_extra_data(record)
@@ -253,8 +313,8 @@ class ExtendedFormatter(ExtraDataMixin, logging.Formatter):
 class JSONFormatter(logging.Formatter):
     """JSON formatter for file output (JSON Lines format)."""
 
-    def format(self, record):
-        log_data = {
+    def format(self, record: logging.LogRecord) -> str:
+        log_data: dict[str, Any] = {
             "timestamp": datetime.datetime.fromtimestamp(
                 record.created, datetime.UTC
             ).isoformat(),
@@ -311,7 +371,10 @@ def _create_text_file_handler(
         )
         # Explicitly set permissions on the file
         if text_file.exists():
-            os.chmod(text_file, 0o664)
+            try:
+                os.chmod(text_file, 0o664)
+            except (PermissionError, OSError):
+                pass  # Best effort
 
     text_handler.setLevel(level)
     text_formatter = ExtendedFormatter(
@@ -342,7 +405,10 @@ def _create_json_file_handler(
         )
         # Explicitly set permissions on the file
         if jsonl_file.exists():
-            os.chmod(jsonl_file, 0o664)
+            try:
+                os.chmod(jsonl_file, 0o664)
+            except (PermissionError, OSError):
+                pass  # Best effort
 
     json_handler.setLevel(level)
     json_handler.setFormatter(JSONFormatter())
@@ -366,7 +432,7 @@ def _register_cleanup(logger: logging.Logger) -> None:
 def custom_logger(
     name: str,
     log_filename: str,
-    log_dir: str = BASE_LOG_DIR,
+    log_dir: str | Path = BASE_LOG_DIR,
     level: int = logging.DEBUG,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
@@ -387,7 +453,7 @@ def custom_logger(
 
     Args:
         name: Logger name (typically __name__)
-        log_dir: Directory for log files
+        log_dir: Directory for log files (str or Path)
         log_filename: Base filename without extension
         level: Logging level (default: DEBUG)
         max_bytes: Maximum file size before rotation (default: 10MB)
@@ -402,17 +468,25 @@ def custom_logger(
     if not log_filename:
         raise ValueError("log_filename cannot be empty")
 
+    # Normalize log_dir to Path for consistent handling
+    log_dir = Path(log_dir)
     unique_logger_name = f"{name}#{log_dir}/{log_filename}"
 
     # Return existing logger if already created
     if unique_logger_name in _created_loggers:
-        return _created_loggers[unique_logger_name]
+        logger_ref = _created_loggers[unique_logger_name]
+        logger = logger_ref()
+        if logger is not None:
+            return logger
+        else:
+            # Weak reference died, remove it
+            del _created_loggers[unique_logger_name]
 
     logger = logging.getLogger(unique_logger_name)
 
     # If logger already has handlers, it was created elsewhere, return it
     if logger.handlers:
-        _created_loggers[unique_logger_name] = logger
+        _created_loggers[unique_logger_name] = weakref.ref(logger)
         return logger
 
     logger.setLevel(level)
@@ -450,7 +524,7 @@ def custom_logger(
     # Register cleanup
     _register_cleanup(logger)
 
-    # Store the logger
-    _created_loggers[unique_logger_name] = logger
+    # Store the logger using weak reference to avoid memory leaks
+    _created_loggers[unique_logger_name] = weakref.ref(logger)
 
     return logger

@@ -63,13 +63,13 @@ def test_abort(stepper):
 def test_move_positive(stepper):
     stepper._move_pos_pv_obj = make_mock_pv()
     stepper.move_positive()
-    stepper._move_pos_pv_obj.put.assert_called_with(1)
+    stepper._move_pos_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_move_negative(stepper):
     stepper._move_neg_pv_obj = make_mock_pv()
     stepper.move_negative()
-    stepper._move_neg_pv_obj.put.assert_called_with(1)
+    stepper._move_neg_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_step_des(stepper):

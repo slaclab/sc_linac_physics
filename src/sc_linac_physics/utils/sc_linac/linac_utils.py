@@ -372,7 +372,7 @@ class LauncherLinacObject(SCLinacObject):
         raise NotImplementedError
 
     def trigger_start(self):
-        self.start_pv_obj.put(1)
+        self.start_pv_obj.put(1, wait=False)
 
 
 PARK_DETUNE = 10000

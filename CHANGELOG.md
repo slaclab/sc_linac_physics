@@ -2,6 +2,74 @@
 
 <!-- version list -->
 
+## v5.1.2 (2025-11-25)
+
+### Bug Fixes
+
+- Skip chmod on directories/files not owned by current user
+  ([#168](https://github.com/slaclab/sc_linac_physics/pull/168),
+  [`702fe0b`](https://github.com/slaclab/sc_linac_physics/commit/702fe0b1b52165241d88c463ae44174e16759fbf))
+
+### Chores
+
+- Patching failing tests ([#167](https://github.com/slaclab/sc_linac_physics/pull/167),
+  [`b1fb425`](https://github.com/slaclab/sc_linac_physics/commit/b1fb425234db9e01275e7c952f12cdf25e8aab58))
+
+### Performance Improvements
+
+- **cavity**: Make PV put operations non-blocking
+  ([#167](https://github.com/slaclab/sc_linac_physics/pull/167),
+  [`b1fb425`](https://github.com/slaclab/sc_linac_physics/commit/b1fb425234db9e01275e7c952f12cdf25e8aab58))
+
+### Refactoring
+
+- Improve logging utility performance and type safety
+  ([#168](https://github.com/slaclab/sc_linac_physics/pull/168),
+  [`702fe0b`](https://github.com/slaclab/sc_linac_physics/commit/702fe0b1b52165241d88c463ae44174e16759fbf))
+
+- **logging**: Optimize logger utility with type safety and permission handling
+  ([#168](https://github.com/slaclab/sc_linac_physics/pull/168),
+  [`702fe0b`](https://github.com/slaclab/sc_linac_physics/commit/702fe0b1b52165241d88c463ae44174e16759fbf))
+
+
+## v5.1.1 (2025-11-25)
+
+### Bug Fixes
+
+- **epics**: Add connection retry logic and thread safety improvements
+  ([#165](https://github.com/slaclab/sc_linac_physics/pull/165),
+  [`384dd9a`](https://github.com/slaclab/sc_linac_physics/commit/384dd9a147b68a8b563f85d66037d937f2c56e1c))
+
+### Chores
+
+- Updating sc_linac tests with new PV flags
+  ([#165](https://github.com/slaclab/sc_linac_physics/pull/165),
+  [`384dd9a`](https://github.com/slaclab/sc_linac_physics/commit/384dd9a147b68a8b563f85d66037d937f2c56e1c))
+
+
+## v5.1.0 (2025-11-24)
+
+### Bug Fixes
+
+- Handle race conditions when acquisition fails
+  ([#158](https://github.com/slaclab/sc_linac_physics/pull/158),
+  [`3a20d83`](https://github.com/slaclab/sc_linac_physics/commit/3a20d836109aebdfb17926c700bef8be6cb90bd2))
+
+- **microphonics**: Fix autoRangeEnabled error in plots
+  ([#158](https://github.com/slaclab/sc_linac_physics/pull/158),
+  [`3a20d83`](https://github.com/slaclab/sc_linac_physics/commit/3a20d836109aebdfb17926c700bef8be6cb90bd2))
+
+- **microphonics**: Fix errors when stopping data acquisition
+  ([#158](https://github.com/slaclab/sc_linac_physics/pull/158),
+  [`3a20d83`](https://github.com/slaclab/sc_linac_physics/commit/3a20d836109aebdfb17926c700bef8be6cb90bd2))
+
+### Features
+
+- **microphonics**: Add time-based progress estimation for data acquisition
+  ([#158](https://github.com/slaclab/sc_linac_physics/pull/158),
+  [`3a20d83`](https://github.com/slaclab/sc_linac_physics/commit/3a20d836109aebdfb17926c700bef8be6cb90bd2))
+
+
 ## v5.0.0 (2025-11-24)
 
 ### Bug Fixes
