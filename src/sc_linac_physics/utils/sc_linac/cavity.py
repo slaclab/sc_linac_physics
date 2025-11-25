@@ -317,7 +317,7 @@ class Cavity(linac_utils.SCLinacObject):
             self._characterization_start_pv_obj = PV(
                 self.characterization_start_pv
             )
-        self._characterization_start_pv_obj.put(1)
+        self._characterization_start_pv_obj.put(1, wait=False)
 
     @property
     def cw_data_decimation_pv_obj(self) -> PV:
@@ -637,7 +637,7 @@ class Cavity(linac_utils.SCLinacObject):
         return self._calc_probe_q_pv_obj
 
     def calculate_probe_q(self):
-        self.calc_probe_q_pv_obj.put(1)
+        self.calc_probe_q_pv_obj.put(1, wait=False)
 
     def set_chirp_range(self, offset: int):
         offset = abs(offset)
@@ -1112,7 +1112,7 @@ class Cavity(linac_utils.SCLinacObject):
         if not self._interlock_reset_pv_obj:
             self._interlock_reset_pv_obj = PV(self.interlock_reset_pv)
 
-        self._interlock_reset_pv_obj.put(1)
+        self._interlock_reset_pv_obj.put(1, wait=False)
         time.sleep(wait)
 
         self.logger.debug("Checking RF permit status")
