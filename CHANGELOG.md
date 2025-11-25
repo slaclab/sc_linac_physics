@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v5.1.2 (2025-11-25)
+
+### Bug Fixes
+
+- Skip chmod on directories/files not owned by current user
+  ([#168](https://github.com/slaclab/sc_linac_physics/pull/168),
+  [`702fe0b`](https://github.com/slaclab/sc_linac_physics/commit/702fe0b1b52165241d88c463ae44174e16759fbf))
+
+### Chores
+
+- Patching failing tests ([#167](https://github.com/slaclab/sc_linac_physics/pull/167),
+  [`b1fb425`](https://github.com/slaclab/sc_linac_physics/commit/b1fb425234db9e01275e7c952f12cdf25e8aab58))
+
+### Performance Improvements
+
+- **cavity**: Make PV put operations non-blocking
+  ([#167](https://github.com/slaclab/sc_linac_physics/pull/167),
+  [`b1fb425`](https://github.com/slaclab/sc_linac_physics/commit/b1fb425234db9e01275e7c952f12cdf25e8aab58))
+
+### Refactoring
+
+- Improve logging utility performance and type safety
+  ([#168](https://github.com/slaclab/sc_linac_physics/pull/168),
+  [`702fe0b`](https://github.com/slaclab/sc_linac_physics/commit/702fe0b1b52165241d88c463ae44174e16759fbf))
+
+- **logging**: Optimize logger utility with type safety and permission handling
+  ([#168](https://github.com/slaclab/sc_linac_physics/pull/168),
+  [`702fe0b`](https://github.com/slaclab/sc_linac_physics/commit/702fe0b1b52165241d88c463ae44174e16759fbf))
+
+
 ## v5.1.1 (2025-11-25)
 
 ### Bug Fixes
