@@ -104,7 +104,7 @@ def test_microsteps_per_hz(cavity):
 def test_start_characterization(cavity):
     cavity._characterization_start_pv_obj = make_mock_pv()
     cavity.start_characterization()
-    cavity._characterization_start_pv_obj.put.assert_called_with(1)
+    cavity._characterization_start_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_cw_data_decimation(cavity):
@@ -402,7 +402,7 @@ def test_chirp_freq_stop(cavity):
 def test_calculate_probe_q(cavity):
     cavity._calc_probe_q_pv_obj = make_mock_pv()
     cavity.calculate_probe_q()
-    cavity._calc_probe_q_pv_obj.put.assert_called_with(1)
+    cavity._calc_probe_q_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_set_chirp_range(cavity):
@@ -710,7 +710,7 @@ def test_reset_interlocks(cavity):
     with pytest.raises(CavityFaultError):
         cavity.reset_interlocks(attempt=INTERLOCK_RESET_ATTEMPTS)
 
-    cavity._interlock_reset_pv_obj.put.assert_called_with(1)
+    cavity._interlock_reset_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_characterization_timestamp(cavity):
