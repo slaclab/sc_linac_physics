@@ -161,7 +161,7 @@ def test_reset(ssa):
 def test_start_calibration(ssa):
     ssa._calibration_start_pv_obj = make_mock_pv()
     ssa.start_calibration()
-    ssa._calibration_start_pv_obj.put.assert_called_with(1)
+    ssa._calibration_start_pv_obj.put.assert_called_with(1, wait=False)
 
 
 def test_calibration_status(ssa):
