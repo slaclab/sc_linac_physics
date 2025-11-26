@@ -1,7 +1,7 @@
 """
 Comprehensive unit test suite for microphonics UI components.
 
-Tests cover ChannelSelectionGroup and DataLoadingGroup using pytest-qt and pytest-mock.
+Tests cover ChannelSelectionGroup and DataLoadingGroup using pytest-qt.
 """
 
 from pathlib import Path
@@ -80,39 +80,44 @@ class TestDataLoadingGroup:
 
 class TestDataLoadingGroupGetStartDirectory:
 
-    def test_returns_preferred_path_when_it_exists(self, qtbot, mocker):
+    def test_returns_preferred_path_when_it_exists(self, qtbot, monkeypatch):
         widget = DataLoadingGroup()
         qtbot.addWidget(widget)
 
-        mocker.patch.object(Path, "is_dir", return_value=True)
+        monkeypatch.setattr(Path, "is_dir", lambda self: True)
 
         result = widget._get_start_directory()
 
         assert result == str(widget.PREFERRED_DEFAULT_DATA_PATH)
 
     def test_returns_home_path_when_preferred_does_not_exist(
-        self, qtbot, mocker
+        self, qtbot, monkeypatch
     ):
         widget = DataLoadingGroup()
         qtbot.addWidget(widget)
 
         fake_home = Path("/fake/home/directory")
+        call_count = {"n": 0}
 
-        mocker.patch.object(Path, "is_dir", side_effect=[False, True])
-        mocker.patch.object(Path, "home", return_value=fake_home)
+        def mock_is_dir(self):
+            call_count["n"] += 1
+            return call_count["n"] > 1
+
+        monkeypatch.setattr(Path, "is_dir", mock_is_dir)
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
         result = widget._get_start_directory()
 
         assert result == str(fake_home)
 
-    def test_returns_current_directory_as_fallback(self, qtbot, mocker):
+    def test_returns_current_directory_as_fallback(self, qtbot, monkeypatch):
         widget = DataLoadingGroup()
         qtbot.addWidget(widget)
 
         fake_home = Path("/nonexistent/home")
 
-        mocker.patch.object(Path, "is_dir", side_effect=[False, False])
-        mocker.patch.object(Path, "home", return_value=fake_home)
+        monkeypatch.setattr(Path, "is_dir", lambda self: False)
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
         result = widget._get_start_directory()
 
@@ -122,19 +127,19 @@ class TestDataLoadingGroupGetStartDirectory:
 class TestDataLoadingGroupShowFileDialog:
 
     def test_success_scenario_emits_signal_and_updates_label(
-        self, qtbot, mocker
+        self, qtbot, monkeypatch
     ):
         widget = DataLoadingGroup()
         qtbot.addWidget(widget)
 
         selected_path = "/some/directory/test_data.dat"
-        mocker.patch.object(
+        monkeypatch.setattr(
             QFileDialog,
             "getOpenFileName",
-            return_value=(selected_path, "All Files (*)"),
+            lambda *args, **kwargs: (selected_path, "All Files (*)"),
         )
-        mocker.patch.object(
-            widget, "_get_start_directory", return_value="/start/dir"
+        monkeypatch.setattr(
+            widget, "_get_start_directory", lambda: "/start/dir"
         )
 
         with qtbot.waitSignal(widget.file_selected, timeout=1000) as blocker:
@@ -145,17 +150,19 @@ class TestDataLoadingGroupShowFileDialog:
         assert emitted_path == Path(selected_path)
         assert widget.file_info_label.text() == "Selected: test_data.dat"
 
-    def test_cancel_scenario_no_signal_and_label_unchanged(self, qtbot, mocker):
+    def test_cancel_scenario_no_signal_and_label_unchanged(
+        self, qtbot, monkeypatch
+    ):
         widget = DataLoadingGroup()
         qtbot.addWidget(widget)
 
         original_label_text = widget.file_info_label.text()
 
-        mocker.patch.object(
-            QFileDialog, "getOpenFileName", return_value=("", "")
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileName", lambda *args, **kwargs: ("", "")
         )
-        mocker.patch.object(
-            widget, "_get_start_directory", return_value="/start/dir"
+        monkeypatch.setattr(
+            widget, "_get_start_directory", lambda: "/start/dir"
         )
 
         signal_received = []
@@ -166,17 +173,26 @@ class TestDataLoadingGroupShowFileDialog:
         assert len(signal_received) == 0
         assert widget.file_info_label.text() == original_label_text
 
-    def test_file_dialog_called_with_correct_parameters(self, qtbot, mocker):
+    def test_file_dialog_called_with_correct_parameters(
+        self, qtbot, monkeypatch
+    ):
         widget = DataLoadingGroup()
         qtbot.addWidget(widget)
 
         start_dir = "/test/start/directory"
-        mocker.patch.object(
-            widget, "_get_start_directory", return_value=start_dir
-        )
+        monkeypatch.setattr(widget, "_get_start_directory", lambda: start_dir)
 
-        mock_dialog = mocker.patch.object(
-            QFileDialog, "getOpenFileName", return_value=("", "")
+        captured_args = {}
+
+        def mock_get_open_filename(parent, title, directory, filters):
+            captured_args["parent"] = parent
+            captured_args["title"] = title
+            captured_args["directory"] = directory
+            captured_args["filters"] = filters
+            return ("", "")
+
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileName", mock_get_open_filename
         )
 
         widget._show_file_dialog()
@@ -184,6 +200,7 @@ class TestDataLoadingGroupShowFileDialog:
         expected_filters = (
             "All Files (*);;Text Files (*.txt);;Data Files (*.dat)"
         )
-        mock_dialog.assert_called_once_with(
-            widget, "Load Previous Data", start_dir, expected_filters
-        )
+        assert captured_args["parent"] is widget
+        assert captured_args["title"] == "Load Previous Data"
+        assert captured_args["directory"] == start_dir
+        assert captured_args["filters"] == expected_filters
