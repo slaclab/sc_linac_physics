@@ -9,6 +9,7 @@ from caproto.server import (
     PvpropertyChar,
     PvpropertyEnum,
     PvpropertyFloat,
+    PvpropertyBoolEnum,
 )
 from caproto.server.server import PVGroupMeta
 
@@ -124,6 +125,13 @@ class LauncherPVGroup(PVGroup, metaclass=LauncherPVGroupMeta):
         name="ABORT",
         dtype=ChannelType.ENUM,
         enum_strings=("No abort request", "Abort request"),
+    )
+
+    use_rf: PvpropertyBoolEnum = pvproperty(
+        name="USE_RF",
+        dtype=ChannelType.ENUM,
+        enum_strings=("Use Steps", "Use RF"),
+        value=1,
     )
 
     def __init__(self, prefix: str):

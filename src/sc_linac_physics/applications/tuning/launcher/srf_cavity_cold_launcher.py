@@ -20,7 +20,7 @@ logger = custom_logger(
 )
 
 
-def detune_cavity(cavity: TuneCavity, use_rf: bool = True) -> bool:
+def detune_cavity(cavity: TuneCavity) -> bool:
     """
     Detune a cavity by moving it to cold landing position.
 
@@ -45,7 +45,6 @@ def detune_cavity(cavity: TuneCavity, use_rf: bool = True) -> bool:
             extra={
                 "extra_data": {
                     "cavity": str(cavity),
-                    "use_rf": use_rf,
                 }
             },
         )
@@ -59,7 +58,6 @@ def detune_cavity(cavity: TuneCavity, use_rf: bool = True) -> bool:
             extra={
                 "extra_data": {
                     "cavity": str(cavity),
-                    "use_rf": use_rf,
                     "error": str(e),
                 }
             },
@@ -88,11 +86,6 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         metavar="1-8",
         help="Cavity number (1-8)",
     )
-    parser.add_argument(
-        "--no-rf",
-        action="store_true",
-        help="Detune without using RF (default: use RF)",
-    )
 
     return parser.parse_args(argv)
 
@@ -112,7 +105,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             "extra_data": {
                 "cryomodule": args.cryomodule,
                 "cavity": args.cavity,
-                "use_rf": not args.no_rf,
             }
         },
     )
@@ -134,7 +126,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         return 1
 
-    success = detune_cavity(cavity_obj, use_rf=not args.no_rf)
+    success = detune_cavity(cavity_obj)
     return 0 if success else 1
 
 
