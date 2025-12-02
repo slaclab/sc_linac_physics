@@ -1,6 +1,6 @@
 import datetime
 import time
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 
@@ -92,18 +92,6 @@ class QuenchCavity(Cavity):
         if not self._fault_time_waveform_pv_obj:
             self._fault_time_waveform_pv_obj = PV(self.fault_time_waveform_pv)
         return self._fault_time_waveform_pv_obj
-
-    def reset_interlocks(
-        self, wait: int = 0, attempt: int = 0, time_after_reset=1
-    ):
-        """Overwriting base function to skip wait/reset cycle."""
-        self.logger.info("Resetting interlocks")
-
-        if not self._interlock_reset_pv_obj:
-            self._interlock_reset_pv_obj = PV(self.interlock_reset_pv)
-
-        self._interlock_reset_pv_obj.put(1)
-        self.wait_for_decarads()
 
     def walk_to_quench(
         self,
@@ -348,8 +336,8 @@ class QuenchCavity(Cavity):
             self.logger.debug("Waiting 0.1s for waveform update")
             time.sleep(0.1)
 
-        time_data = self.fault_time_waveform_pv_obj.get()
-        fault_data = self.fault_waveform_pv_obj.get()
+        time_data: List[float] = self.fault_time_waveform_pv_obj.get()
+        fault_data: List[float] = self.fault_waveform_pv_obj.get()
         self.logger.debug(
             f"Fault data IOC timestamp: {self.fault_waveform_pv_obj.timestamp}"
         )
@@ -416,7 +404,7 @@ class QuenchCavity(Cavity):
 
         if not is_real:
             self.logger.info("FAKE quench detected, issuing reset")
-            super().reset_interlocks()
+            self.reset_interlocks()
             return True
         else:
             self.logger.warning("REAL quench detected, NOT resetting")
