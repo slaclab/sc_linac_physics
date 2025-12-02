@@ -401,7 +401,7 @@ class Tuner(Display):
         use_rf_label = QLabel("Use RF:")
         use_rf_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         self.use_rf_checkbox = QCheckBox()
-        self.use_rf_checkbox.setChecked(False)  # Default to not using RF
+        self.use_rf_checkbox.setChecked(True)  # Default to using RF
         self.use_rf_checkbox.setToolTip(
             "Enable RF usage for cold landing operations"
         )

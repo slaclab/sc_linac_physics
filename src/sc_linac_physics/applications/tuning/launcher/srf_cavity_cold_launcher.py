@@ -39,7 +39,7 @@ def detune_cavity(cavity: TuneCavity, use_rf: bool = True) -> bool:
         return False
 
     try:
-        cavity.move_to_cold_landing(use_rf=use_rf)
+        cavity.move_to_cold_landing()
         logger.info(
             "Successfully detuned cavity",
             extra={
