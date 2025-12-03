@@ -5,6 +5,10 @@ from typing import Dict, List
 
 from lcls_tools.common.data.archiver import ArchiveDataHandler
 
+from sc_linac_physics.utils.logger import BASE_LOG_DIR
+
+CAV_LOG_DIR = str(BASE_LOG_DIR / "cavity_display")
+
 DEBUG = False
 BACKEND_SLEEP_TIME = 10
 
