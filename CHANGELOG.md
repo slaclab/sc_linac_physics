@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v5.1.3 (2025-12-03)
+
+### Bug Fixes
+
+- **test**: Use monkeypatch instead of pytest-mock
+  ([#169](https://github.com/slaclab/sc_linac_physics/pull/169),
+  [`5b9e74a`](https://github.com/slaclab/sc_linac_physics/commit/5b9e74a1ce4f597ee8c05b582a8a6d9b909321b3))
+
+### Testing
+
+- **microphonics**: Add unit tests for components module
+  ([#169](https://github.com/slaclab/sc_linac_physics/pull/169),
+  [`5b9e74a`](https://github.com/slaclab/sc_linac_physics/commit/5b9e74a1ce4f597ee8c05b582a8a6d9b909321b3))
+
+
 ## v5.1.2 (2025-11-25)
 
 ### Bug Fixes
