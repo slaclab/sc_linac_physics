@@ -1,4 +1,5 @@
 import os
+import platform
 from csv import DictReader
 from datetime import datetime, timedelta
 from typing import Dict, List
@@ -9,7 +10,8 @@ from sc_linac_physics.utils.logger import BASE_LOG_DIR
 
 CAV_LOG_DIR = str(BASE_LOG_DIR / "cavity_display")
 
-DEBUG = False
+# Basic OS detection
+DEBUG = platform.system() == "Darwin"  # True on macOS, False elsewhere
 BACKEND_SLEEP_TIME = 10
 
 STATUS_SUFFIX = "CUDSTATUS"
