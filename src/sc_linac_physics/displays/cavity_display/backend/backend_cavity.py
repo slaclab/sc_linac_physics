@@ -114,46 +114,38 @@ class BackendCavity(Cavity):
             )
 
     def _batch_pv_init(self) -> int:
-        """Initialize all PVs for this cavity using batch creation.
+        """Initialize only status PVs for this cavity using batch creation.
 
-        Uses PV.batch_create() to connect to multiple PVs simultaneously,
-        which is much faster than creating them one at a time.
+        Fault PVs are read using caget_many() which doesn't require PV objects.
 
         Returns:
             Number of successfully connected PVs
         """
 
-        # Collect all PV names for this cavity
+        # Only create PV objects for status PVs (needed for put operations)
         pv_names = [
             self.status_pv,
             self.severity_pv,
             self.description_pv,
         ]
 
-        # Add all fault PV names
-        fault_pv_names = [fault.pv for fault in self.faults.values()]
-        pv_names.extend(fault_pv_names)
-
-        # Batch create all PVs at once (much faster!)
         try:
             all_pvs = PV.batch_create(
                 pv_names,
                 connection_timeout=0.5,
                 auto_monitor=False,
-                require_connection=False,  # Don't fail if some PVs don't exist
+                require_connection=False,
             )
         except Exception as e:
             cavity_fault_logger.error(
                 f"Batch PV creation failed for {self.pv_prefix}: {e}"
             )
-            # Fall back to sequential initialization
             return self._sequential_pv_init()
 
         # Count successful connections
         connected_count = sum(1 for pv in all_pvs if pv and pv.connected)
 
-        # Now assign the PV objects to our instance variables
-        # First three are status PVs
+        # Assign status PV objects
         if all_pvs[0] and all_pvs[0].connected:
             self._status_pv_obj = all_pvs[0]
 
@@ -162,13 +154,6 @@ class BackendCavity(Cavity):
 
         if all_pvs[2] and all_pvs[2].connected:
             self._description_pv_obj = all_pvs[2]
-
-        # Rest are fault PVs - assign them to the fault objects
-        fault_pvs = all_pvs[3:]  # Skip the first 3 status PVs
-
-        for fault, pv_obj in zip(self.faults.values(), fault_pvs):
-            if pv_obj and pv_obj.connected:
-                fault._pv_obj = pv_obj
 
         return connected_count
 
@@ -200,14 +185,6 @@ class BackendCavity(Cavity):
             success_count += 1
         except Exception:
             pass
-
-        # Initialize fault PVs
-        for fault in self.faults.values():
-            try:
-                _ = fault.pv_obj
-                success_count += 1
-            except Exception:
-                pass
 
         return success_count
 
