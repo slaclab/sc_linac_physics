@@ -72,8 +72,12 @@ def make_mock_pv(
     mock_pv.__enter__.return_value = mock_pv
     mock_pv.__exit__.return_value = False
 
-    # String representations
-    mock_pv.__str__.return_value = pv_name
-    mock_pv.__repr__.return_value = f"MockPV('{pv_name}')"
+    # Configure special methods using configure_mock
+    mock_pv.configure_mock(
+        **{
+            "__str__": lambda: pv_name,
+            "__repr__": lambda: f"MockPV('{pv_name}')",
+        }
+    )
 
     return mock_pv
