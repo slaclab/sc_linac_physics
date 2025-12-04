@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v5.1.5 (2025-12-04)
+
+### Chores
+
+- Patching mock pv ([#173](https://github.com/slaclab/sc_linac_physics/pull/173),
+  [`a319e7e`](https://github.com/slaclab/sc_linac_physics/commit/a319e7edd3738de116722a0b2b9c1c9ace1119ad))
+
+### Refactoring
+
+- Restructure EPICS utils into modular package
+  ([#173](https://github.com/slaclab/sc_linac_physics/pull/173),
+  [`a319e7e`](https://github.com/slaclab/sc_linac_physics/commit/a319e7edd3738de116722a0b2b9c1c9ace1119ad))
+
+### Testing
+
+- **epics**: Increase PV class test coverage to 95%
+  ([#173](https://github.com/slaclab/sc_linac_physics/pull/173),
+  [`a319e7e`](https://github.com/slaclab/sc_linac_physics/commit/a319e7edd3738de116722a0b2b9c1c9ace1119ad))
+
+- **utils/epics**: Comprehensive coverage for PV class operations
+  ([#173](https://github.com/slaclab/sc_linac_physics/pull/173),
+  [`a319e7e`](https://github.com/slaclab/sc_linac_physics/commit/a319e7edd3738de116722a0b2b9c1c9ace1119ad))
+
+
 ## v5.1.4 (2025-12-04)
 
 ### Chores
