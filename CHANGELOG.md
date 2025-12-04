@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v5.1.4 (2025-12-04)
+
+### Chores
+
+- Patching mock pv ([#172](https://github.com/slaclab/sc_linac_physics/pull/172),
+  [`3b2a790`](https://github.com/slaclab/sc_linac_physics/commit/3b2a79088694e50e08f83fd31676f8ed172f677a))
+
+### Refactoring
+
+- Modularize EPICS utilities into organized package structure
+  ([#172](https://github.com/slaclab/sc_linac_physics/pull/172),
+  [`3b2a790`](https://github.com/slaclab/sc_linac_physics/commit/3b2a79088694e50e08f83fd31676f8ed172f677a))
+
+- Restructure EPICS utils into modular package
+  ([#172](https://github.com/slaclab/sc_linac_physics/pull/172),
+  [`3b2a790`](https://github.com/slaclab/sc_linac_physics/commit/3b2a79088694e50e08f83fd31676f8ed172f677a))
+
+
 ## v5.1.3 (2025-12-03)
 
 ### Bug Fixes
