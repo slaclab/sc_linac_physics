@@ -2,6 +2,63 @@
 
 <!-- version list -->
 
+## v5.1.5 (2025-12-04)
+
+### Chores
+
+- Patching mock pv ([#173](https://github.com/slaclab/sc_linac_physics/pull/173),
+  [`a319e7e`](https://github.com/slaclab/sc_linac_physics/commit/a319e7edd3738de116722a0b2b9c1c9ace1119ad))
+
+### Refactoring
+
+- Restructure EPICS utils into modular package
+  ([#173](https://github.com/slaclab/sc_linac_physics/pull/173),
+  [`a319e7e`](https://github.com/slaclab/sc_linac_physics/commit/a319e7edd3738de116722a0b2b9c1c9ace1119ad))
+
+### Testing
+
+- **epics**: Increase PV class test coverage to 95%
+  ([#173](https://github.com/slaclab/sc_linac_physics/pull/173),
+  [`a319e7e`](https://github.com/slaclab/sc_linac_physics/commit/a319e7edd3738de116722a0b2b9c1c9ace1119ad))
+
+- **utils/epics**: Comprehensive coverage for PV class operations
+  ([#173](https://github.com/slaclab/sc_linac_physics/pull/173),
+  [`a319e7e`](https://github.com/slaclab/sc_linac_physics/commit/a319e7edd3738de116722a0b2b9c1c9ace1119ad))
+
+
+## v5.1.4 (2025-12-04)
+
+### Chores
+
+- Patching mock pv ([#172](https://github.com/slaclab/sc_linac_physics/pull/172),
+  [`3b2a790`](https://github.com/slaclab/sc_linac_physics/commit/3b2a79088694e50e08f83fd31676f8ed172f677a))
+
+### Refactoring
+
+- Modularize EPICS utilities into organized package structure
+  ([#172](https://github.com/slaclab/sc_linac_physics/pull/172),
+  [`3b2a790`](https://github.com/slaclab/sc_linac_physics/commit/3b2a79088694e50e08f83fd31676f8ed172f677a))
+
+- Restructure EPICS utils into modular package
+  ([#172](https://github.com/slaclab/sc_linac_physics/pull/172),
+  [`3b2a790`](https://github.com/slaclab/sc_linac_physics/commit/3b2a79088694e50e08f83fd31676f8ed172f677a))
+
+
+## v5.1.3 (2025-12-03)
+
+### Bug Fixes
+
+- **test**: Use monkeypatch instead of pytest-mock
+  ([#169](https://github.com/slaclab/sc_linac_physics/pull/169),
+  [`5b9e74a`](https://github.com/slaclab/sc_linac_physics/commit/5b9e74a1ce4f597ee8c05b582a8a6d9b909321b3))
+
+### Testing
+
+- **microphonics**: Add unit tests for components module
+  ([#169](https://github.com/slaclab/sc_linac_physics/pull/169),
+  [`5b9e74a`](https://github.com/slaclab/sc_linac_physics/commit/5b9e74a1ce4f597ee8c05b582a8a6d9b909321b3))
+
+
 ## v5.1.2 (2025-11-25)
 
 ### Bug Fixes
