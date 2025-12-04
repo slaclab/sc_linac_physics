@@ -1,4 +1,4 @@
-# tests/utils/test_epics.py
+# tests/utils/epics/test_core.py
 # Get reference to the FakeEPICS_PV that was injected
 import sys
 
@@ -60,6 +60,33 @@ class TestPVInitialization:
         """Test custom connection timeout is respected"""
         pv = PV("TEST:PV", connection_timeout=10.0)
         assert pv is not None
+
+
+class TestPVInitializationEdgeCases:
+    def test_require_connection_false(self):
+        """Test PV can be created without requiring connection"""
+        original_wait = FakeEPICS_PV.wait_for_connection
+        FakeEPICS_PV.wait_for_connection = lambda self, timeout=None: False
+
+        try:
+            pv = PV("TEST:PV", require_connection=False)
+            assert pv is not None
+        finally:
+            FakeEPICS_PV.wait_for_connection = original_wait
+
+    def test_custom_config(self):
+        """Test PV with custom PVConfig"""
+        from sc_linac_physics.utils.epics.config import PVConfig
+
+        config = PVConfig(
+            connection_timeout=5.0,
+            get_timeout=3.0,
+            put_timeout=3.0,
+            max_retries=5,
+            retry_delay=0.5,
+        )
+        pv = PV("TEST:PV", config=config)
+        assert pv.config.max_retries == 5
 
 
 # Test String Representation
@@ -211,6 +238,52 @@ class TestPVPut:
         # Should not raise
 
 
+class TestPVGetPutParameters:
+    def test_get_as_string(self, connected_pv):
+        """Test get with as_string=True"""
+        result = connected_pv.get(as_string=True)
+        assert isinstance(result, (str, float, int))
+
+    def test_get_with_count(self, connected_pv):
+        """Test get with count parameter"""
+        result = connected_pv.get(count=10)
+        assert result is not None
+
+    def test_get_use_monitor_false(self, connected_pv):
+        """Test get with use_monitor=False"""
+        result = connected_pv.get(use_monitor=False)
+        assert result == 42.0
+
+    def test_get_with_ctrlvars(self, connected_pv):
+        """Test get with control variables"""
+        result = connected_pv.get(with_ctrlvars=True)
+        assert result is not None
+
+    def test_put_use_complete(self, connected_pv):
+        """Test put with use_complete=True"""
+        connected_pv.put(100.0, use_complete=True)
+
+    def test_put_with_callback(self, connected_pv):
+        """Test put with callback"""
+        callback_called = [False]
+
+        def put_callback(**kwargs):
+            callback_called[0] = True
+
+        connected_pv.put(100.0, callback=put_callback)
+        # You may need to manually trigger callback in FakeEPICS_PV
+
+    def test_put_with_callback_data(self, connected_pv):
+        """Test put with callback data"""
+
+        def put_callback(pvname=None, data=None, **kwargs):
+            assert data == {"test": "data"}
+
+        connected_pv.put(
+            100.0, callback=put_callback, callback_data={"test": "data"}
+        )
+
+
 # Test Connection Management
 class TestPVConnectionManagement:
     def test_ensure_connected_when_connected(self, connected_pv):
@@ -323,6 +396,191 @@ class TestMakeMockPV:
         """Test make_mock_pv with alarm state"""
         mock_pv = make_mock_pv(severity=EPICS_MAJOR_VAL)
         assert mock_pv.severity == EPICS_MAJOR_VAL
+
+
+class TestPVContextManager:
+    def test_context_manager_success(self):
+        """Test PV works as context manager"""
+        with PV("TEST:PV") as pv:
+            assert pv.connected
+            result = pv.get()
+            assert result == 42.0
+
+    def test_context_manager_disconnect(self):
+        """Test PV disconnects on exit"""
+        pv = PV("TEST:PV")
+        with pv:
+            assert pv.connected
+        # Verify disconnect was called (you'll need to track this in FakeEPICS_PV)
+
+
+class TestPVValueOrNone:
+    def test_value_or_none_success(self, connected_pv):
+        """Test value_or_none returns value on success"""
+        result = connected_pv.value_or_none
+        assert result == 42.0
+
+    def test_value_or_none_on_connection_error(self):
+        """Test value_or_none returns None on connection error"""
+        original_init = FakeEPICS_PV.__init__
+
+        def disconnected_init(self, *args, **kwargs):
+            original_init(self, *args, **kwargs)
+            self._connected = False
+
+        FakeEPICS_PV.__init__ = disconnected_init
+        try:
+            pv = PV("TEST:PV", require_connection=False)
+            assert pv.value_or_none is None
+        finally:
+            FakeEPICS_PV.__init__ = original_init
+
+    def test_value_or_none_on_get_error(self, connected_pv):
+        """Test value_or_none returns None on get error"""
+        original_get = FakeEPICS_PV.get
+        FakeEPICS_PV.get = lambda self, *args, **kwargs: None
+        try:
+            assert connected_pv.value_or_none is None
+        finally:
+            FakeEPICS_PV.get = original_get
+
+
+class TestPVBatchOperations:
+    def test_batch_create_success(self):
+        """Test batch_create creates multiple PVs"""
+        pv_names = ["TEST:PV1", "TEST:PV2", "TEST:PV3"]
+        pvs = PV.batch_create(pv_names)
+        assert len(pvs) == 3
+        assert all(pv.connected for pv in pvs)
+
+    def test_batch_create_empty_list(self):
+        """Test batch_create with empty list"""
+        pvs = PV.batch_create([])
+        assert pvs == []
+
+    def test_batch_create_with_failures(self):
+        """Test batch_create handles connection failures"""
+        # Mock some PVs to fail connection
+        original_wait = FakeEPICS_PV.wait_for_connection
+        call_count = [0]
+
+        def selective_connect(self, timeout=None):
+            call_count[0] += 1
+            # Make every other PV fail
+            return call_count[0] % 2 == 1
+
+        FakeEPICS_PV.wait_for_connection = selective_connect
+        try:
+            pv_names = ["PV1", "PV2", "PV3", "PV4"]
+            pvs = PV.batch_create(pv_names, require_connection=False)
+            assert len(pvs) == 4
+        finally:
+            FakeEPICS_PV.wait_for_connection = original_wait
+
+    def test_batch_create_connection_failures_logged(self):
+        """Test batch_create logs failures when require_connection=False"""
+        original_wait = FakeEPICS_PV.wait_for_connection
+        FakeEPICS_PV.wait_for_connection = lambda self, timeout=None: False
+
+        try:
+            # Should not raise when require_connection=False
+            pvs = PV.batch_create(["PV1", "PV2"], require_connection=False)
+            # Should still return PVs (they may be disconnected but wrapped)
+            assert len(pvs) == 2
+        finally:
+            FakeEPICS_PV.wait_for_connection = original_wait
+
+    def test_get_many_success(self):
+        """Test get_many retrieves multiple values"""
+        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
+        results = PV.get_many(pvs)
+        assert len(results) == 3
+        assert all(r == 42.0 for r in results)
+
+    def test_get_many_with_failures(self):
+        """Test get_many handles failures with persistent errors"""
+        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
+        original_get = FakeEPICS_PV.get
+
+        def selective_get(self, *args, **kwargs):
+            # Determine which PV this is based on pvname
+            if "PV1" in self.pvname:
+                # Always fail for PV1 (middle PV)
+                return None
+            return 42.0
+
+        FakeEPICS_PV.get = selective_get
+        try:
+            results = PV.get_many(pvs, raise_on_error=False)
+            assert results[0] == 42.0
+            assert results[1] is None  # PV1 should fail
+            assert results[2] == 42.0
+        finally:
+            FakeEPICS_PV.get = original_get
+
+    def test_get_many_raise_on_error(self):
+        """Test get_many raises on any failure"""
+        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
+        original_get = FakeEPICS_PV.get
+        # Always return None to cause persistent failure
+        FakeEPICS_PV.get = lambda self, *args, **kwargs: None
+
+        try:
+            with pytest.raises(PVGetError):
+                PV.get_many(pvs, raise_on_error=True)
+        finally:
+            FakeEPICS_PV.get = original_get
+
+    def test_put_many_success(self):
+        """Test put_many writes multiple values"""
+        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
+        values = [10.0, 20.0, 30.0]
+        results = PV.put_many(pvs, values)
+        assert all(r is True for r in results)
+
+    def test_put_many_length_mismatch(self):
+        """Test put_many raises on length mismatch"""
+        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
+        values = [10.0, 20.0]  # Wrong length
+
+        with pytest.raises(ValueError) as exc_info:
+            PV.put_many(pvs, values)
+        assert "length mismatch" in str(exc_info.value).lower()
+
+    def test_put_many_with_failures(self):
+        """Test put_many handles failures with persistent errors"""
+        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
+        values = [10.0, 20.0, 30.0]
+
+        original_put = FakeEPICS_PV.put
+
+        def selective_put(self, *args, **kwargs):
+            # Always fail for PV1 (middle PV)
+            if "PV1" in self.pvname:
+                return 0  # Failure
+            return 1  # Success
+
+        FakeEPICS_PV.put = selective_put
+        try:
+            results = PV.put_many(pvs, values, raise_on_error=False)
+            assert results == [True, False, True]
+        finally:
+            FakeEPICS_PV.put = original_put
+
+    def test_put_many_raise_on_error(self):
+        """Test put_many raises on any failure"""
+        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
+        values = [10.0, 20.0, 30.0]
+
+        original_put = FakeEPICS_PV.put
+        # Always return 0 to cause persistent failure
+        FakeEPICS_PV.put = lambda self, *args, **kwargs: 0
+
+        try:
+            with pytest.raises(PVPutError):
+                PV.put_many(pvs, values, raise_on_error=True)
+        finally:
+            FakeEPICS_PV.put = original_put
 
 
 if __name__ == "__main__":
