@@ -295,90 +295,147 @@ class Runner:
                 raise
         return self._watcher_pv_obj
 
-    def check_faults(self) -> None:  # noqa: C901
+    def check_faults(self) -> None:
         """Check faults for all cavities and update heartbeat."""
         start = time()
         failed_cavities = []
         exception_summary = {}
         slow_cavities = []
 
-        for i, cavity in enumerate(self.backend_cavities):
-            cavity_start = time()
-            try:
-                cavity.run_through_faults()
+        self._check_all_cavities(
+            failed_cavities, exception_summary, slow_cavities, start
+        )
 
-                # Track slow cavity checks
-                cavity_duration = time() - cavity_start
-                if cavity_duration > SLOW_CAVITY_THRESHOLD_SEC:
-                    slow_cavities.append(
-                        (str(cavity), round(cavity_duration, 3))
-                    )
-
-                # Progress bar on first check (updates every 10 cavities)
-                if self._first_check and (i + 1) % 10 == 0:
-                    elapsed = time() - start
-                    percent = (i + 1) / len(self.backend_cavities) * 100
-
-                    # Console progress bar
-                    bar_length = 40
-                    filled = int(
-                        bar_length * (i + 1) / len(self.backend_cavities)
-                    )
-                    bar = "█" * filled + "░" * (bar_length - filled)
-                    print(
-                        f"\r  First check: [{bar}] {percent:5.1f}% | "
-                        f"Cavities: {i + 1:>3}/{len(self.backend_cavities)} | "
-                        f"Avg: {elapsed / (i + 1) * 1000:.1f}ms/cavity",
-                        end="",
-                        flush=True,
-                    )
-
-            except Exception as e:
-                error_type = type(e).__name__
-                exception_summary[error_type] = (
-                    exception_summary.get(error_type, 0) + 1
-                )
-                cavity_fault_logger.error(
-                    "Error checking faults for cavity",
-                    extra={
-                        "extra_data": {
-                            "cavity": str(cavity),
-                            "cavity_index": i,
-                            "error": str(e),
-                            "error_type": error_type,
-                        }
-                    },
-                    exc_info=DEBUG,
-                )
-                failed_cavities.append(cavity)
-
-        # Clear the progress bar after first check completes
         if self._first_check:
             print()  # New line after progress bar
 
-        # Log summary if there were failures
+        self._log_check_summary(
+            failed_cavities, exception_summary, slow_cavities, start
+        )
+        self._sleep_if_needed(start)
+        self._update_heartbeat()
+
+    def _check_all_cavities(
+        self,
+        failed_cavities: list,
+        exception_summary: dict,
+        slow_cavities: list,
+        start_time: float,
+    ) -> None:
+        """Check faults for all cavities and track failures/performance."""
+        for i, cavity in enumerate(self.backend_cavities):
+            cavity_start = time()
+
+            try:
+                cavity.run_through_faults()
+                self._track_slow_cavity(cavity, cavity_start, slow_cavities)
+                self._update_first_check_progress(i, start_time)
+
+            except Exception as e:
+                self._handle_cavity_error(
+                    cavity, i, e, failed_cavities, exception_summary
+                )
+
+    def _track_slow_cavity(
+        self, cavity: BackendCavity, cavity_start: float, slow_cavities: list
+    ) -> None:
+        """Track cavities that take longer than threshold to check."""
+        cavity_duration = time() - cavity_start
+        if cavity_duration > SLOW_CAVITY_THRESHOLD_SEC:
+            slow_cavities.append((str(cavity), round(cavity_duration, 3)))
+
+    def _update_first_check_progress(
+        self, cavity_index: int, start_time: float
+    ) -> None:
+        """Update console progress bar during first check cycle."""
+        if not self._first_check:
+            return
+
+        if (cavity_index + 1) % 10 != 0:
+            return
+
+        elapsed = time() - start_time
+        percent = (cavity_index + 1) / len(self.backend_cavities) * 100
+
+        bar_length = 40
+        filled = int(
+            bar_length * (cavity_index + 1) / len(self.backend_cavities)
+        )
+        bar = "█" * filled + "░" * (bar_length - filled)
+
+        print(
+            f"\r  First check: [{bar}] {percent:5.1f}% | "
+            f"Cavities: {cavity_index + 1:>3}/{len(self.backend_cavities)} | "
+            f"Avg: {elapsed / (cavity_index + 1) * 1000:.1f}ms/cavity",
+            end="",
+            flush=True,
+        )
+
+    def _handle_cavity_error(
+        self,
+        cavity: BackendCavity,
+        cavity_index: int,
+        error: Exception,
+        failed_cavities: list,
+        exception_summary: dict,
+    ) -> None:
+        """Handle and log errors from cavity fault checks."""
+        error_type = type(error).__name__
+        exception_summary[error_type] = exception_summary.get(error_type, 0) + 1
+
+        cavity_fault_logger.error(
+            "Error checking faults for cavity",
+            extra={
+                "extra_data": {
+                    "cavity": str(cavity),
+                    "cavity_index": cavity_index,
+                    "error": str(error),
+                    "error_type": error_type,
+                }
+            },
+            exc_info=DEBUG,
+        )
+        failed_cavities.append(cavity)
+
+    def _log_check_summary(
+        self,
+        failed_cavities: list,
+        exception_summary: dict,
+        slow_cavities: list,
+        start_time: float,
+    ) -> None:
+        """Log summary of fault check cycle."""
         if failed_cavities:
-            successful_count = len(self.backend_cavities) - len(failed_cavities)
-            cavity_fault_logger.warning(
-                "Fault check cycle had failures",
-                extra={
-                    "extra_data": {
-                        "failed_count": len(failed_cavities),
-                        "successful_count": successful_count,
-                        "total_count": len(self.backend_cavities),
-                        "success_rate_pct": round(
-                            successful_count / len(self.backend_cavities) * 100,
-                            1,
-                        ),
-                        "exception_types": exception_summary,
-                    }
-                },
-            )
+            self._log_failures(failed_cavities, exception_summary)
 
-        # Calculate cycle duration
-        delta = time() - start
+        delta = time() - start_time
+        log_data = self._build_log_data(delta, failed_cavities, slow_cavities)
+        self._log_cycle_completion(delta, log_data)
 
-        # Build log data
+    def _log_failures(
+        self, failed_cavities: list, exception_summary: dict
+    ) -> None:
+        """Log summary of cavity check failures."""
+        successful_count = len(self.backend_cavities) - len(failed_cavities)
+        cavity_fault_logger.warning(
+            "Fault check cycle had failures",
+            extra={
+                "extra_data": {
+                    "failed_count": len(failed_cavities),
+                    "successful_count": successful_count,
+                    "total_count": len(self.backend_cavities),
+                    "success_rate_pct": round(
+                        successful_count / len(self.backend_cavities) * 100, 1
+                    ),
+                    "exception_types": exception_summary,
+                }
+            },
+        )
+
+    def _build_log_data(
+        self, delta: float, failed_cavities: list, slow_cavities: list
+    ) -> dict:
+        """Build log data dictionary for cycle completion."""
         log_data = {
             "duration_sec": round(delta, 3),
             "cavities_checked": len(self.backend_cavities)
@@ -390,11 +447,16 @@ class Runner:
             "first_check": self._first_check,
         }
 
-        # Add debug-specific timing info
         if DEBUG:
             log_data["target_sec"] = BACKEND_SLEEP_TIME
 
-        # Add slow cavity info
+        self._add_slow_cavity_data(log_data, slow_cavities)
+        return log_data
+
+    def _add_slow_cavity_data(
+        self, log_data: dict, slow_cavities: list
+    ) -> None:
+        """Add slow cavity information to log data."""
         if self._first_check and slow_cavities:
             log_data["slow_cavities_count"] = len(slow_cavities)
             log_data["slowest_10"] = sorted(
@@ -403,7 +465,8 @@ class Runner:
         elif len(slow_cavities) > 10:
             log_data["slow_cavities_count"] = len(slow_cavities)
 
-        # Log with appropriate level
+    def _log_cycle_completion(self, delta: float, log_data: dict) -> None:
+        """Log completion of fault check cycle with appropriate level."""
         if self._first_check:
             cavity_fault_logger.info(
                 "First fault check cycle completed",
@@ -420,14 +483,15 @@ class Runner:
                 extra={"extra_data": log_data},
             )
 
-        # Sleep only in debug mode to throttle checks
-        if DEBUG:
-            sleep_time = max(0.0, BACKEND_SLEEP_TIME - delta)
-            if sleep_time > 0:
-                sleep(sleep_time)
+    def _sleep_if_needed(self, start_time: float) -> None:
+        """Sleep to maintain cycle time in debug mode."""
+        if not DEBUG:
+            return
 
-        # Update heartbeat
-        self._update_heartbeat()
+        delta = time() - start_time
+        sleep_time = max(0.0, BACKEND_SLEEP_TIME - delta)
+        if sleep_time > 0:
+            sleep(sleep_time)
 
     def _update_heartbeat(self) -> None:
         """
