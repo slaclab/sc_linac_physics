@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v5.2.0 (2025-12-05)
+
+### Features
+
+- **cavity**: Enhance logging with structured extra_data
+  ([#181](https://github.com/slaclab/sc_linac_physics/pull/181),
+  [`05b166b`](https://github.com/slaclab/sc_linac_physics/commit/05b166b84618e2d8e18da82dd3bcb1fc891e078b))
+
+
 ## v5.1.5 (2025-12-04)
 
 ### Chores
