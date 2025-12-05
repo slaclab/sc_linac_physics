@@ -6,16 +6,26 @@ from PyQt5.QtWidgets import QLabel, QPushButton
 from epics.ca import withInitialContext
 from lcls_tools.common.frontend.display.util import WorkerSignals
 
+from sc_linac_physics.utils.logger import BASE_LOG_DIR
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityAbortError,
     CavityHWModeError,
     DetuneError,
     StepperAbortError,
     StepperError,
+    LauncherLinacObject,
 )
 
 if TYPE_CHECKING:
     from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
+
+
+class ColdLinacObject(LauncherLinacObject):
+    def __init__(self):
+        super().__init__(name="COLD")
+
+
+TUNE_LOG_DIR = BASE_LOG_DIR / "tuning"
 
 
 class ParkSignals(WorkerSignals):
