@@ -78,7 +78,6 @@ ALARM_STATES = ("RUNNING", "NOT_RUNNING", "INVALID")
 RACK_A_CAVITIES = range(1, 5)
 
 # Launcher type configuration
-# Launcher type configuration
 LAUNCHER_TYPES = {
     "setup": {
         "cavity": SetupCavityPVGroup,
