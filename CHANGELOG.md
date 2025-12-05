@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v6.0.0 (2025-12-05)
+
+### Chores
+
+- Patching failing import ([#174](https://github.com/slaclab/sc_linac_physics/pull/174),
+  [`bd5bedf`](https://github.com/slaclab/sc_linac_physics/commit/bd5bedfb438fdad70b2a483359aa2eed407d39a7))
+
+- Patching failing test ([#174](https://github.com/slaclab/sc_linac_physics/pull/174),
+  [`bd5bedf`](https://github.com/slaclab/sc_linac_physics/commit/bd5bedfb438fdad70b2a483359aa2eed407d39a7))
+
+### Refactoring
+
+- **tuning**: Rename launcher files from detune to cold
+  ([#174](https://github.com/slaclab/sc_linac_physics/pull/174),
+  [`bd5bedf`](https://github.com/slaclab/sc_linac_physics/commit/bd5bedfb438fdad70b2a483359aa2eed407d39a7))
+
+- **tuning**: Rename launcher files: detune → cold
+  ([#174](https://github.com/slaclab/sc_linac_physics/pull/174),
+  [`bd5bedf`](https://github.com/slaclab/sc_linac_physics/commit/bd5bedfb438fdad70b2a483359aa2eed407d39a7))
+
+
 ## v5.2.0 (2025-12-05)
 
 ### Features
