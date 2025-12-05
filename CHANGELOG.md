@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v6.0.1 (2025-12-05)
+
+### Bug Fixes
+
+- **microphonics**: Emit configChanged on decimation change
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+### Refactoring
+
+- Improve QuenchCavity logger context with instance identification
+  ([#170](https://github.com/slaclab/sc_linac_physics/pull/170),
+  [`8a93365`](https://github.com/slaclab/sc_linac_physics/commit/8a93365b3910a261cff3e12b21ffb4150c72d858))
+
+- **microphonics**: Clean up console logging noise
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+- **microphonics**: Remove debug print statements from console output
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+
 ## v6.0.0 (2025-12-05)
 
 ### Chores
