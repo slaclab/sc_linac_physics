@@ -405,6 +405,7 @@ class Tuner(Display):
         self.use_rf_checkbox.setToolTip(
             "Enable RF usage for cold landing operations"
         )
+        self.use_rf_checkbox.setEnabled(False)
 
         control_bar_layout.addWidget(use_rf_label)
         control_bar_layout.addWidget(self.use_rf_checkbox)

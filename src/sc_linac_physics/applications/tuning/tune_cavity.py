@@ -55,6 +55,7 @@ class TuneCavity(Cavity, ColdLinacObject):
 
     def check_abort(self):
         if self.abort_requested:
+            self.stepper_tuner.abort()
             self.clear_abort()
             err_msg = f"Abort requested for {self}"
             self.set_status_message(err_msg, logging.ERROR)
@@ -115,11 +116,13 @@ class TuneCavity(Cavity, ColdLinacObject):
 
     @property
     def use_rf(self) -> bool:
-        return self.use_rf_pv_obj.get()
+        # return self.use_rf_pv_obj.get()
+        return True
 
     @use_rf.setter
     def use_rf(self, value: bool):
-        self.use_rf_pv_obj.put(value)
+        # self.use_rf_pv_obj.put(value)
+        pass
 
     def move_to_cold_landing(self):
         self.status = STATUS_RUNNING_VALUE
