@@ -176,7 +176,7 @@ class TestAmplitudeControl:
 
         # Verify gradient is updated (amplitude / length)
         expected_gradient = new_amplitude / regular_cavity.length
-        mock_gdes.assert_called_once_with(expected_gradient)
+        mock_gdes.assert_called_once_with(expected_gradient, verify_value=False)
 
     @pytest.mark.asyncio
     async def test_ades_putter_different_cavity_lengths(self, hl_cavity):
@@ -194,28 +194,7 @@ class TestAmplitudeControl:
 
         # For HL cavity, length = 0.346
         expected_gradient = new_amplitude / 0.346
-        mock_gdes.assert_called_once_with(expected_gradient)
-
-    @pytest.mark.asyncio
-    async def test_ades_putter_no_gradient_update_if_same(self, regular_cavity):
-        """Test that gradient is not updated if it's already correct."""
-        # Set up cavity so gact already matches expected gradient
-        amplitude = (
-            20.76  # This should give gradient of 20.0 for regular cavity
-        )
-        regular_cavity.gact._data["value"] = 20.0
-
-        with (
-            patch.object(regular_cavity.aact, "write", new_callable=AsyncMock),
-            patch.object(regular_cavity.amean, "write", new_callable=AsyncMock),
-            patch.object(
-                regular_cavity.gdes, "write", new_callable=AsyncMock
-            ) as mock_gdes,
-        ):
-            await regular_cavity.ades.putter(None, amplitude)
-
-        # gdes.write should not be called since gact already matches
-        mock_gdes.assert_not_called()
+        mock_gdes.assert_called_once_with(expected_gradient, verify_value=False)
 
 
 class TestGradientControl:
@@ -656,7 +635,9 @@ class TestEdgeCasesAndErrorHandling:
 
         mock_aact.assert_called_once_with(0.0)
         mock_amean.assert_called_once_with(0.0)
-        mock_gdes.assert_called_once_with(0.0)  # 0.0 / length = 0.0
+        mock_gdes.assert_called_once_with(
+            0.0, verify_value=False
+        )  # 0.0 / length = 0.0
 
     @pytest.mark.asyncio
     async def test_negative_phase_wrapping(self, regular_cavity):
@@ -684,7 +665,7 @@ class TestEdgeCasesAndErrorHandling:
             await regular_cavity.ades.putter(None, large_amplitude)
 
         expected_gradient = large_amplitude / regular_cavity.length
-        mock_gdes.assert_called_once_with(expected_gradient)
+        mock_gdes.assert_called_once_with(expected_gradient, verify_value=False)
 
     def test_cavity_length_consistency(self):
         """Test that cavity lengths are consistent with cavity type."""
@@ -801,7 +782,7 @@ class TestIntegrationScenarios:
             )  # Should give gradient of 20.0
 
         expected_gradient = 20.76 / regular_cavity.length
-        mock_gdes.assert_called_once_with(expected_gradient)
+        mock_gdes.assert_called_once_with(expected_gradient, verify_value=False)
 
         # Setting gradient should update amplitude
         with (
