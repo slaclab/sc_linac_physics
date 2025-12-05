@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from sc_linac_physics.applications.tuning.launcher.srf_cm_detune_launcher import (
+from sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher import (
     detune_cavity,
     detune_cryomodule,
     parse_args,
