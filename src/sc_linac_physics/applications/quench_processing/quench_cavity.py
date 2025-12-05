@@ -1,6 +1,6 @@
 import datetime
 import time
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 
@@ -54,7 +54,7 @@ class QuenchCavity(Cavity):
         """Initialize a setup-specific logger."""
 
         self.logger = custom_logger(
-            __name__,
+            f"Quench CM{self.cryomodule.name} Cavity {self.number}",
             log_dir=str(QUENCH_LOG_DIR / self.cryomodule.name),
             log_filename=f"setup_cavity_{self.number}",
         )
@@ -93,18 +93,6 @@ class QuenchCavity(Cavity):
             self._fault_time_waveform_pv_obj = PV(self.fault_time_waveform_pv)
         return self._fault_time_waveform_pv_obj
 
-    def reset_interlocks(
-        self, wait: int = 0, attempt: int = 0, time_after_reset=1
-    ):
-        """Overwriting base function to skip wait/reset cycle."""
-        self.logger.info(f"Resetting interlocks for cavity {self.number}")
-
-        if not self._interlock_reset_pv_obj:
-            self._interlock_reset_pv_obj = PV(self.interlock_reset_pv)
-
-        self._interlock_reset_pv_obj.put(1)
-        self.wait_for_decarads()
-
     def walk_to_quench(
         self,
         end_amp: float = 21,
@@ -113,7 +101,7 @@ class QuenchCavity(Cavity):
     ):
         """Walk cavity amplitude until quench or end_amp reached."""
         self.logger.debug(
-            f"Cavity {self.number}: Walking to quench "
+            f"Walking to quench "
             f"(end_amp={end_amp}, step={step_size}, time={step_time}s)"
         )
         self.reset_interlocks()
@@ -127,7 +115,7 @@ class QuenchCavity(Cavity):
 
             if steps % 10 == 0:  # Log every 10 steps
                 self.logger.debug(
-                    f"Cavity {self.number}: Step {steps}, "
+                    f"Step {steps}, "
                     f"ADES: {old_ades:.2f} → {self.ades:.2f} MV"
                 )
 
@@ -136,13 +124,11 @@ class QuenchCavity(Cavity):
 
         if self.is_quenched:
             self.logger.info(
-                f"Cavity {self.number}: Quench detected at {self.ades:.2f} MV "
-                f"after {steps} steps"
+                f"Quench detected at {self.ades:.2f} MV " f"after {steps} steps"
             )
         else:
             self.logger.info(
-                f"Cavity {self.number}: Reached end amplitude {self.ades:.2f} MV "
-                f"without quench"
+                f"Reached end amplitude {self.ades:.2f} MV " f"without quench"
             )
 
     def wait(self, seconds: float):
@@ -171,9 +157,7 @@ class QuenchCavity(Cavity):
         self.reset_interlocks()
         time_start = datetime.datetime.now()
 
-        self.logger.debug(
-            f"Cavity {self.number}: Waiting up to {time_to_wait}s for quench"
-        )
+        self.logger.debug(f"Waiting up to {time_to_wait}s for quench")
 
         while (
             not self.is_quenched
@@ -187,13 +171,9 @@ class QuenchCavity(Cavity):
         elapsed = (time_done - time_start).total_seconds()
 
         if self.is_quenched:
-            self.logger.info(
-                f"Cavity {self.number}: Quenched after {elapsed:.1f}s"
-            )
+            self.logger.info(f"Quenched after {elapsed:.1f}s")
         else:
-            self.logger.debug(
-                f"Cavity {self.number}: No quench after {elapsed:.1f}s"
-            )
+            self.logger.debug(f"No quench after {elapsed:.1f}s")
 
         return elapsed
 
@@ -201,8 +181,7 @@ class QuenchCavity(Cavity):
         """Wait for decarad sensors to settle after quench."""
         if self.is_quenched:
             self.logger.debug(
-                f"Cavity {self.number}: Waiting {DECARAD_SETTLE_TIME}s "
-                f"for decarads to settle"
+                f"Waiting {DECARAD_SETTLE_TIME}s " f"for decarads to settle"
             )
             start = datetime.datetime.now()
             while (
@@ -217,14 +196,14 @@ class QuenchCavity(Cavity):
 
         if self.decarad.max_raw_dose > RADIATION_LIMIT:
             self.logger.error(
-                f"Cavity {self.number}: Max radiation dose exceeded "
+                f"Max radiation dose exceeded "
                 f"({self.decarad.max_raw_dose:.2e} > {RADIATION_LIMIT:.2e})"
             )
             raise QuenchError("Max Radiation Dose Exceeded")
 
         if self.has_uncaught_quench():
             self.logger.error(
-                f"Cavity {self.number}: Potential uncaught quench detected "
+                f"Potential uncaught quench detected "
                 f"(AACT={self.aact:.2f}, threshold={QUENCH_AMP_THRESHOLD * self.ades:.2f})"
             )
             raise QuenchError("Potential uncaught quench detected")
@@ -255,7 +234,7 @@ class QuenchCavity(Cavity):
         """
         self.logger.info("=" * 60)
         self.logger.info(
-            f"Cavity {self.number}: Starting quench process "
+            f"Starting quench process "
             f"({start_amp} → {end_amp} MV, step={step_size} MV, time={step_time}s)"
         )
         self.logger.info("=" * 60)
@@ -268,7 +247,7 @@ class QuenchCavity(Cavity):
 
         if end_amp > self.ades_max:
             self.logger.warning(
-                f"Cavity {self.number}: Requested end_amp {end_amp} > ADES_MAX "
+                f"Requested end_amp {end_amp} > ADES_MAX "
                 f"{self.ades_max}, using {self.ades_max} instead"
             )
             end_amp = self.ades_max
@@ -278,9 +257,7 @@ class QuenchCavity(Cavity):
         while self.ades < end_amp:
             self.check_abort()
 
-            self.logger.info(
-                f"Cavity {self.number}: Walking to quench at {self.ades:.2f} MV"
-            )
+            self.logger.info(f"Walking to quench at {self.ades:.2f} MV")
             self.walk_to_quench(
                 end_amp=end_amp,
                 step_size=step_size,
@@ -289,9 +266,7 @@ class QuenchCavity(Cavity):
 
             if self.is_quenched:
                 quenched = True
-                self.logger.info(
-                    f"Cavity {self.number}: Quench detected, entering retry loop"
-                )
+                self.logger.info("Quench detected, entering retry loop")
                 attempt = 0
                 running_times = []
                 time_to_quench = self.wait_for_quench()
@@ -304,8 +279,7 @@ class QuenchCavity(Cavity):
                 ):
                     super().check_abort()
                     self.logger.debug(
-                        f"Cavity {self.number}: Retry attempt {attempt + 1}/"
-                        f"{MAX_QUENCH_RETRIES}"
+                        f"Retry attempt {attempt + 1}/" f"{MAX_QUENCH_RETRIES}"
                     )
                     time_to_quench = self.wait_for_quench()
                     running_times.append(time_to_quench)
@@ -313,34 +287,30 @@ class QuenchCavity(Cavity):
 
                 if attempt >= MAX_QUENCH_RETRIES:
                     self.logger.error(
-                        f"Cavity {self.number}: Failed after {attempt} attempts. "
+                        f"Failed after {attempt} attempts. "
                         f"Running times: {[f'{t:.1f}s' for t in running_times]}"
                     )
                     raise QuenchError("Quench processing failed")
 
                 self.logger.info(
-                    f"Cavity {self.number}: Passed retry loop after {attempt} "
+                    f"Passed retry loop after {attempt} "
                     f"attempts (times: {[f'{t:.1f}s' for t in running_times]})"
                 )
 
         # Final stability check
         self.logger.info(
-            f"Cavity {self.number}: Reached target {end_amp} MV, "
+            f"Reached target {end_amp} MV, "
             f"proving {QUENCH_STABLE_TIME}s stability"
         )
         while (
             self.wait_for_quench(time_to_wait=QUENCH_STABLE_TIME)
             < QUENCH_STABLE_TIME
         ):
-            self.logger.warning(
-                f"Cavity {self.number}: Quenched during stability check, retrying"
-            )
+            self.logger.warning("Quenched during stability check, retrying")
             super().check_abort()
 
         self.logger.info("=" * 60)
-        self.logger.info(
-            f"Cavity {self.number}: Quench processing completed successfully"
-        )
+        self.logger.info("Quench processing completed successfully")
         self.logger.info("=" * 60)
 
     def validate_quench(self, wait_for_update: bool = False) -> bool:
@@ -363,13 +333,14 @@ class QuenchCavity(Cavity):
             True if quench appears real, False if likely spurious
         """
         if wait_for_update:
-            self.logger.debug(
-                f"Cavity {self.number}: Waiting 0.1s for waveform update"
-            )
+            self.logger.debug("Waiting 0.1s for waveform update")
             time.sleep(0.1)
 
-        time_data = self.fault_time_waveform_pv_obj.get()
-        fault_data = self.fault_waveform_pv_obj.get()
+        time_data: List[float] = self.fault_time_waveform_pv_obj.get()
+        fault_data: List[float] = self.fault_waveform_pv_obj.get()
+        self.logger.debug(
+            f"Fault data IOC timestamp: {self.fault_waveform_pv_obj.timestamp}"
+        )
         time_0 = 0
 
         # Look for time 0 (quench). These waveforms capture data before quench
@@ -399,9 +370,7 @@ class QuenchCavity(Cavity):
             )[0]
             loaded_q = (np.pi * self.frequency) / exponential_term
         except (ValueError, RuntimeWarning) as e:
-            self.logger.error(
-                f"Cavity {self.number}: Error calculating loaded Q: {e}"
-            )
+            self.logger.error(f"Error calculating loaded Q: {e}")
             # Conservative: assume real quench if we can't calculate
             return True
 
@@ -410,7 +379,7 @@ class QuenchCavity(Cavity):
 
         # Combined validation log entry
         validation_msg = (
-            f"Cavity {self.number} Quench Validation:\n"
+            f"Quench Validation:\n"
             f"  Saved Loaded Q:      {saved_loaded_q:.2e}\n"
             f"  Calculated Loaded Q: {loaded_q:.2e}\n"
             f"  Threshold:           {thresh_for_quench:.2e}\n"
@@ -429,18 +398,14 @@ class QuenchCavity(Cavity):
         Returns:
             True if reset was issued (fake quench), False otherwise (real quench)
         """
-        self.logger.info(f"Cavity {self.number}: Validating quench...")
+        self.logger.info("Validating quench...")
 
         is_real = self.validate_quench(wait_for_update=True)
 
         if not is_real:
-            self.logger.info(
-                f"Cavity {self.number}: FAKE quench detected, issuing reset"
-            )
-            super().reset_interlocks()
+            self.logger.info("FAKE quench detected, issuing reset")
+            self.reset_interlocks()
             return True
         else:
-            self.logger.warning(
-                f"Cavity {self.number}: REAL quench detected, NOT resetting"
-            )
+            self.logger.warning("REAL quench detected, NOT resetting")
             return False
