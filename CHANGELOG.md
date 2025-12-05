@@ -2,6 +2,59 @@
 
 <!-- version list -->
 
+## v6.0.1 (2025-12-05)
+
+### Bug Fixes
+
+- **microphonics**: Emit configChanged on decimation change
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+### Refactoring
+
+- Improve QuenchCavity logger context with instance identification
+  ([#170](https://github.com/slaclab/sc_linac_physics/pull/170),
+  [`8a93365`](https://github.com/slaclab/sc_linac_physics/commit/8a93365b3910a261cff3e12b21ffb4150c72d858))
+
+- **microphonics**: Clean up console logging noise
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+- **microphonics**: Remove debug print statements from console output
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+
+## v6.0.0 (2025-12-05)
+
+### Chores
+
+- Patching failing import ([#174](https://github.com/slaclab/sc_linac_physics/pull/174),
+  [`bd5bedf`](https://github.com/slaclab/sc_linac_physics/commit/bd5bedfb438fdad70b2a483359aa2eed407d39a7))
+
+- Patching failing test ([#174](https://github.com/slaclab/sc_linac_physics/pull/174),
+  [`bd5bedf`](https://github.com/slaclab/sc_linac_physics/commit/bd5bedfb438fdad70b2a483359aa2eed407d39a7))
+
+### Refactoring
+
+- **tuning**: Rename launcher files from detune to cold
+  ([#174](https://github.com/slaclab/sc_linac_physics/pull/174),
+  [`bd5bedf`](https://github.com/slaclab/sc_linac_physics/commit/bd5bedfb438fdad70b2a483359aa2eed407d39a7))
+
+- **tuning**: Rename launcher files: detune → cold
+  ([#174](https://github.com/slaclab/sc_linac_physics/pull/174),
+  [`bd5bedf`](https://github.com/slaclab/sc_linac_physics/commit/bd5bedfb438fdad70b2a483359aa2eed407d39a7))
+
+
+## v5.2.0 (2025-12-05)
+
+### Features
+
+- **cavity**: Enhance logging with structured extra_data
+  ([#181](https://github.com/slaclab/sc_linac_physics/pull/181),
+  [`05b166b`](https://github.com/slaclab/sc_linac_physics/commit/05b166b84618e2d8e18da82dd3bcb1fc891e078b))
+
+
 ## v5.1.5 (2025-12-04)
 
 ### Chores
