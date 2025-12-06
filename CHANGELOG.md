@@ -2,6 +2,66 @@
 
 <!-- version list -->
 
+## v7.0.0 (2025-12-06)
+
+### Chores
+
+- Adding new features instead of replacing old ones
+  ([#177](https://github.com/slaclab/sc_linac_physics/pull/177),
+  [`ad9a9d8`](https://github.com/slaclab/sc_linac_physics/commit/ad9a9d8111c4ff1cc7f2f6a49ac65d05087d07d8))
+
+- Adding new features instead of replacing old ones
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- Patching failing import ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- Patching failing test ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+### Features
+
+- **tuning**: Add structured logging to cavity and cm cold launchers
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- **tuning**: Add structured logging to cavity cold launcher
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- **tuning**: Add structured logging to cryomodule cold launcher
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#177](https://github.com/slaclab/sc_linac_physics/pull/177),
+  [`ad9a9d8`](https://github.com/slaclab/sc_linac_physics/commit/ad9a9d8111c4ff1cc7f2f6a49ac65d05087d07d8))
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- **tuning**: Add TuneRack class for launcher integration
+  ([#177](https://github.com/slaclab/sc_linac_physics/pull/177),
+  [`ad9a9d8`](https://github.com/slaclab/sc_linac_physics/commit/ad9a9d8111c4ff1cc7f2f6a49ac65d05087d07d8))
+
+- **tuning**: Adding support for tune racks in tuning gui
+  ([#177](https://github.com/slaclab/sc_linac_physics/pull/177),
+  [`ad9a9d8`](https://github.com/slaclab/sc_linac_physics/commit/ad9a9d8111c4ff1cc7f2f6a49ac65d05087d07d8))
+
+### Refactoring
+
+- **tuning**: Rename launcher files from detune to cold
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+### Breaking Changes
+
+- **tuning**: Entry point names remain the same (sc-cold-cav, etc.) but internal module paths have
+  changed. Direct imports will need updating.
+
+
 ## v6.1.0 (2025-12-05)
 
 ### Chores
