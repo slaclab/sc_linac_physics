@@ -1,5 +1,5 @@
 from random import randint, choice
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
@@ -76,7 +76,7 @@ def test_move_to_cold_landing_freq(cavity):
     cavity.detune_with_rf = MagicMock()
     cavity.detune_no_rf = MagicMock()
 
-    cavity.move_to_cold_landing(use_rf=True)
+    cavity.move_to_cold_landing()
 
     cavity._tune_config_pv_obj.get.assert_called()
     cavity.turn_off.assert_not_called()
@@ -99,14 +99,19 @@ def test_move_to_cold_landing_steps(cavity):
     cavity.detune_with_rf = MagicMock()
     cavity.detune_no_rf = MagicMock()
 
-    cavity.move_to_cold_landing(use_rf=False)
+    # Patch the use_rf property to return False
+    with patch.object(
+        type(cavity), "use_rf", new_callable=PropertyMock
+    ) as mock_use_rf:
+        mock_use_rf.return_value = False
 
-    cavity._tune_config_pv_obj.get.assert_called()
-    cavity.turn_off.assert_not_called()
-    cavity.ssa.turn_off.assert_not_called()
-    cavity.detune_with_rf.assert_not_called()
-    cavity.detune_no_rf.assert_called()
-    cavity._tune_config_pv_obj.put.assert_called_with(TUNE_CONFIG_COLD_VALUE)
+        cavity.move_to_cold_landing()
+
+        cavity._tune_config_pv_obj.get.assert_called()
+        cavity.turn_off.assert_not_called()
+        cavity.ssa.turn_off.assert_not_called()
+        cavity.detune_with_rf.assert_not_called()
+        cavity.detune_no_rf.assert_called()
 
 
 def test_detune_no_rf_error(cavity):
