@@ -403,9 +403,13 @@ class Tuner(Display):
         self.use_rf_checkbox = QCheckBox()
         self.use_rf_checkbox.setChecked(True)  # Default to using RF
         self.use_rf_checkbox.setToolTip(
-            "Enable RF usage for cold landing operations"
+            "Enable RF usage for cold landing operations (Feature coming soon)"
         )
-        self.use_rf_checkbox.setEnabled(False)
+        self.use_rf_checkbox.setEnabled(
+            False
+        )  # Keep disabled until feature is ready
+        # Connect to confirmation handler (will be active when enabled)
+        self.use_rf_checkbox.stateChanged.connect(self._on_use_rf_changed)
 
         control_bar_layout.addWidget(use_rf_label)
         control_bar_layout.addWidget(self.use_rf_checkbox)
@@ -450,6 +454,50 @@ class Tuner(Display):
         # Load first cryomodule
         if ALL_CRYOMODULES:
             self.on_cryomodule_changed(ALL_CRYOMODULES[0])
+
+    def _on_use_rf_changed(self, state):
+        """Handle RF usage checkbox state change with confirmation.
+
+        Args:
+            state: Qt.CheckState value (0=unchecked, 2=checked)
+        """
+        from PyQt5.QtWidgets import QMessageBox
+        from PyQt5.QtCore import Qt
+
+        # If unchecking (disabling RF), ask for confirmation
+        if state == Qt.Unchecked:
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle("Confirm Disable RF")
+            msg_box.setText("Are you sure you want to disable RF usage?")
+            msg_box.setInformativeText(
+                "Disabling RF will affect all subsequent cold landing operations:\n\n"
+                "• Cavity tuning may be less accurate\n"
+                "• Cold landing operations will proceed without RF feedback\n"
+                "• This applies to all cavities in all cryomodules\n\n"
+                "Continue with disabling RF?"
+            )
+            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg_box.setDefaultButton(QMessageBox.No)
+
+            # Make the warning more visible
+            msg_box.button(QMessageBox.Yes).setStyleSheet(
+                "background-color: #ffaa00; font-weight: bold;"
+            )
+
+            reply = msg_box.exec_()
+
+            if reply == QMessageBox.No:
+                # User cancelled - re-enable the checkbox
+                self.use_rf_checkbox.blockSignals(True)
+                self.use_rf_checkbox.setChecked(True)
+                self.use_rf_checkbox.blockSignals(False)
+                logger.info("User cancelled disabling RF")
+            else:
+                logger.warning("RF usage disabled by user")
+        else:
+            # Enabling RF - no confirmation needed
+            logger.info("RF usage enabled")
 
     def get_use_rf_state(self) -> bool:
         """Get the current state of the global RF usage checkbox.
