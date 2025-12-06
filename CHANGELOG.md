@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v6.1.0 (2025-12-05)
+
+### Chores
+
+- Adding new features instead of replacing old ones
+  ([#175](https://github.com/slaclab/sc_linac_physics/pull/175),
+  [`08377d2`](https://github.com/slaclab/sc_linac_physics/commit/08377d2d8d38bd70faa175f6bb2c0127cd4def0a))
+
+### Features
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#175](https://github.com/slaclab/sc_linac_physics/pull/175),
+  [`08377d2`](https://github.com/slaclab/sc_linac_physics/commit/08377d2d8d38bd70faa175f6bb2c0127cd4def0a))
+
+
+## v6.0.1 (2025-12-05)
+
+### Bug Fixes
+
+- **microphonics**: Emit configChanged on decimation change
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+### Refactoring
+
+- Improve QuenchCavity logger context with instance identification
+  ([#170](https://github.com/slaclab/sc_linac_physics/pull/170),
+  [`8a93365`](https://github.com/slaclab/sc_linac_physics/commit/8a93365b3910a261cff3e12b21ffb4150c72d858))
+
+- **microphonics**: Clean up console logging noise
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+- **microphonics**: Remove debug print statements from console output
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+
 ## v6.0.0 (2025-12-05)
 
 ### Chores
