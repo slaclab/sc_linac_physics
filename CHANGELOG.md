@@ -2,6 +2,104 @@
 
 <!-- version list -->
 
+## v7.0.0 (2025-12-06)
+
+### Chores
+
+- Adding new features instead of replacing old ones
+  ([#177](https://github.com/slaclab/sc_linac_physics/pull/177),
+  [`ad9a9d8`](https://github.com/slaclab/sc_linac_physics/commit/ad9a9d8111c4ff1cc7f2f6a49ac65d05087d07d8))
+
+- Adding new features instead of replacing old ones
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- Patching failing import ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- Patching failing test ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+### Features
+
+- **tuning**: Add structured logging to cavity and cm cold launchers
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- **tuning**: Add structured logging to cavity cold launcher
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- **tuning**: Add structured logging to cryomodule cold launcher
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#177](https://github.com/slaclab/sc_linac_physics/pull/177),
+  [`ad9a9d8`](https://github.com/slaclab/sc_linac_physics/commit/ad9a9d8111c4ff1cc7f2f6a49ac65d05087d07d8))
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+- **tuning**: Add TuneRack class for launcher integration
+  ([#177](https://github.com/slaclab/sc_linac_physics/pull/177),
+  [`ad9a9d8`](https://github.com/slaclab/sc_linac_physics/commit/ad9a9d8111c4ff1cc7f2f6a49ac65d05087d07d8))
+
+- **tuning**: Adding support for tune racks in tuning gui
+  ([#177](https://github.com/slaclab/sc_linac_physics/pull/177),
+  [`ad9a9d8`](https://github.com/slaclab/sc_linac_physics/commit/ad9a9d8111c4ff1cc7f2f6a49ac65d05087d07d8))
+
+### Refactoring
+
+- **tuning**: Rename launcher files from detune to cold
+  ([#176](https://github.com/slaclab/sc_linac_physics/pull/176),
+  [`c464929`](https://github.com/slaclab/sc_linac_physics/commit/c464929ed2e1b36fe8738489192769f47d52d5d9))
+
+### Breaking Changes
+
+- **tuning**: Entry point names remain the same (sc-cold-cav, etc.) but internal module paths have
+  changed. Direct imports will need updating.
+
+
+## v6.1.0 (2025-12-05)
+
+### Chores
+
+- Adding new features instead of replacing old ones
+  ([#175](https://github.com/slaclab/sc_linac_physics/pull/175),
+  [`08377d2`](https://github.com/slaclab/sc_linac_physics/commit/08377d2d8d38bd70faa175f6bb2c0127cd4def0a))
+
+### Features
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#175](https://github.com/slaclab/sc_linac_physics/pull/175),
+  [`08377d2`](https://github.com/slaclab/sc_linac_physics/commit/08377d2d8d38bd70faa175f6bb2c0127cd4def0a))
+
+
+## v6.0.1 (2025-12-05)
+
+### Bug Fixes
+
+- **microphonics**: Emit configChanged on decimation change
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+### Refactoring
+
+- Improve QuenchCavity logger context with instance identification
+  ([#170](https://github.com/slaclab/sc_linac_physics/pull/170),
+  [`8a93365`](https://github.com/slaclab/sc_linac_physics/commit/8a93365b3910a261cff3e12b21ffb4150c72d858))
+
+- **microphonics**: Clean up console logging noise
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+- **microphonics**: Remove debug print statements from console output
+  ([#164](https://github.com/slaclab/sc_linac_physics/pull/164),
+  [`f1a6514`](https://github.com/slaclab/sc_linac_physics/commit/f1a6514034a472fc186e0f6562037c09fb67e00b))
+
+
 ## v6.0.0 (2025-12-05)
 
 ### Chores
