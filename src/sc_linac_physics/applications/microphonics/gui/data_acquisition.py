@@ -130,9 +130,6 @@ class DataAcquisitionManager(QObject):
                 self.acquisitionProgress.emit(
                     chassis_id, cavity_num, estimated_progress
                 )
-            logger.debug(
-                f"Estimated progress for {chassis_id}: {estimated_progress}%"
-            )
 
     def start_acquisition(self, chassis_id: str, config: Dict):
         """Start acquisition using QProcess"""
@@ -230,10 +227,6 @@ class DataAcquisitionManager(QObject):
                     self.acquisitionProgress.emit(
                         chassis_id, cavity_num, progress
                     )
-
-                logger.debug(
-                    f"Progress ({chassis_id}, Cavities {process_info['cavities']}): {progress}% ({acquired}/{total})"
-                )
 
                 if acquired == total:
                     logger.info(
@@ -437,41 +430,29 @@ class DataAcquisitionManager(QObject):
         Wrapper to check file, call the central file parser, handle errors,
         and emit signals.
         """
-        logging.debug(
-            f"_process_output_file_wrapper entered for {chassis_id}, File: {output_path}"
-        )
         try:
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            logging.debug(
-                f"[{current_time}] Attempting to process file: {output_path}"
-            )
 
             try:
                 file_stats = output_path.stat()
                 file_size = file_stats.st_size
             except FileNotFoundError:
-                logging.error(f"File {output_path} not found after wait!")
+                logger.error(f"File {output_path} not found after wait!")
                 self.acquisitionError.emit(
                     chassis_id,
                     f"Output file {output_path.name} missing after wait.",
                 )
                 return
-            logging.debug(f"File exists. Size: {file_size} bytes")
             if file_size == 0:
-                logging.warning(
+                logger.warning(
                     f"File {output_path} exists but is empty. Aborting processing."
                 )
                 self.acquisitionError.emit(
                     chassis_id, f"Output file {output_path.name} was empty."
                 )
                 return
-            logging.debug(f"Calling load_and_process_file for {chassis_id}")
             parsed_data_dict = load_and_process_file(output_path)
 
             if parsed_data_dict and parsed_data_dict.get("cavities"):
-                logging.debug(
-                    f"Successfully parsed data for {chassis_id}. Emitting signals."
-                )
 
                 parsed_data_dict["source"] = chassis_id
                 parsed_data_dict["decimation"] = process_info.get(
@@ -481,14 +462,8 @@ class DataAcquisitionManager(QObject):
                 self.dataReceived.emit(chassis_id, parsed_data_dict)
                 self.acquisitionComplete.emit(chassis_id)
 
-                current_time_end = datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S.%f"
-                )[:-3]
-                logging.debug(
-                    f"[{current_time_end}] Successfully processed and emitted data for: {output_path}"
-                )
             else:
-                logging.error(
+                logger.error(
                     f"load_and_process_file did not return valid data for {chassis_id} from {output_path.name}."
                 )
                 self.acquisitionError.emit(
