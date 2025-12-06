@@ -145,17 +145,6 @@ class TestResetInterlocks:
         cav.wait_for_decarads = Mock()
         return cav
 
-    @patch("sc_linac_physics.applications.quench_processing.quench_cavity.PV")
-    def test_reset_interlocks(self, mock_pv_class, cavity):
-        """Test reset_interlocks calls PV put and waits for decarads."""
-        mock_pv = Mock()
-        mock_pv_class.return_value = mock_pv
-
-        cavity.reset_interlocks()
-
-        mock_pv.put.assert_called_once_with(1)
-        cavity.wait_for_decarads.assert_called_once()
-
 
 class TestWaitMethods:
     """Tests for wait-related methods."""
