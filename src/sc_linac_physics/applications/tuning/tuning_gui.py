@@ -91,9 +91,7 @@ class CavitySection(QObject):
             init_channel=cavity.tune_config_pv
         )
 
-        self.groupbox = QGroupBox(
-            f"Cav {cavity.number}" if compact else f"Cavity {cavity.number}"
-        )
+        self.groupbox = QGroupBox(f"Cavity {cavity.number}")
         layout = QVBoxLayout()
         self.groupbox.setLayout(layout)
 
@@ -113,11 +111,9 @@ class CavitySection(QObject):
         if compact:
             button_layout.setSpacing(2)
 
-        self.cold_button: QPushButton = QPushButton(
-            "Cold" if compact else "Move to Cold Landing"
-        )
+        self.cold_button: QPushButton = QPushButton("Cav → Cold")
         self.cold_button.clicked.connect(self.on_cold_button_clicked)
-        self.cold_button.setToolTip("Move to Cold Landing")
+        self.cold_button.setToolTip("Move Cavity to Cold Landing Frequency")
         button_layout.addWidget(self.cold_button)
 
         self.abort_button: QPushButton = QPushButton(
