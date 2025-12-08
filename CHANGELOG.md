@@ -2,6 +2,58 @@
 
 <!-- version list -->
 
+## v8.1.0 (2025-12-08)
+
+### Chores
+
+- Adding new features instead of replacing old ones
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+- Patching failing test ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+### Features
+
+- **tuning**: Add launcher functionality to TuneCavity
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+- **tuning**: Add RF usage toggle confirmation dialog
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+- **tuning**: Add TuneRack class for launcher integration
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+- **tuning**: Adding support for tune racks in tuning gui
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+- **tuning**: Redesign GUI with compact layout, launcher integration, and logging
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+### Refactoring
+
+- **tuning**: Add compact mode and improve GUI layout
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+- **tuning**: Removing unused QThread worker classes
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+- **tuning**: Standardize cavity section button labels in GUI
+  ([#182](https://github.com/slaclab/sc_linac_physics/pull/182),
+  [`958f2ba`](https://github.com/slaclab/sc_linac_physics/commit/958f2ba9ba4f96405e28b8daa98a0d29d705bd94))
+
+
 ## v8.0.0 (2025-12-08)
 
 ### Chores
