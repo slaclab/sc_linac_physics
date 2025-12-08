@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v7.3.0 (2025-12-08)
+
+### Features
+
+- **simulation**: Add launcher PV support to simulation services
+  ([#183](https://github.com/slaclab/sc_linac_physics/pull/183),
+  [`29542c7`](https://github.com/slaclab/sc_linac_physics/commit/29542c7d41bbbd8e897b9d0d14fe8dc7847ac1a7))
+
+
 ## v7.2.0 (2025-12-08)
 
 ### Features
