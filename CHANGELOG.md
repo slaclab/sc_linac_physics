@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v7.1.0 (2025-12-08)
+
+### Chores
+
+- Adding new features instead of replacing old ones
+  ([#178](https://github.com/slaclab/sc_linac_physics/pull/178),
+  [`b752b05`](https://github.com/slaclab/sc_linac_physics/commit/b752b052658bc3e5a345c0f231fb15d103afb286))
+
+- Patching failing test ([#178](https://github.com/slaclab/sc_linac_physics/pull/178),
+  [`b752b05`](https://github.com/slaclab/sc_linac_physics/commit/b752b052658bc3e5a345c0f231fb15d103afb286))
+
+### Features
+
+- **tuning**: Add launcher functionality to TuneCavity
+  ([#178](https://github.com/slaclab/sc_linac_physics/pull/178),
+  [`b752b05`](https://github.com/slaclab/sc_linac_physics/commit/b752b052658bc3e5a345c0f231fb15d103afb286))
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#178](https://github.com/slaclab/sc_linac_physics/pull/178),
+  [`b752b05`](https://github.com/slaclab/sc_linac_physics/commit/b752b052658bc3e5a345c0f231fb15d103afb286))
+
+
 ## v7.0.0 (2025-12-06)
 
 ### Chores
