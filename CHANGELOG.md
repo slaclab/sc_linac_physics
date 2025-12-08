@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v8.0.0 (2025-12-08)
+
+### Chores
+
+- Adding new features instead of replacing old ones
+  ([#179](https://github.com/slaclab/sc_linac_physics/pull/179),
+  [`ef8b42c`](https://github.com/slaclab/sc_linac_physics/commit/ef8b42c24843afdc9916845fe7cbefd702268777))
+
+- Patching failing test ([#179](https://github.com/slaclab/sc_linac_physics/pull/179),
+  [`ef8b42c`](https://github.com/slaclab/sc_linac_physics/commit/ef8b42c24843afdc9916845fe7cbefd702268777))
+
+### Features
+
+- **tuning**: Add launcher functionality to TuneCavity
+  ([#179](https://github.com/slaclab/sc_linac_physics/pull/179),
+  [`ef8b42c`](https://github.com/slaclab/sc_linac_physics/commit/ef8b42c24843afdc9916845fe7cbefd702268777))
+
+- **tuning**: Add tune_utils infrastructure for launcher scripts
+  ([#179](https://github.com/slaclab/sc_linac_physics/pull/179),
+  [`ef8b42c`](https://github.com/slaclab/sc_linac_physics/commit/ef8b42c24843afdc9916845fe7cbefd702268777))
+
+### Refactoring
+
+- **tuning**: Make park position dynamic based on cavity type
+  ([#179](https://github.com/slaclab/sc_linac_physics/pull/179),
+  [`ef8b42c`](https://github.com/slaclab/sc_linac_physics/commit/ef8b42c24843afdc9916845fe7cbefd702268777))
+
+- **tuning**: Update TuneStepper for launcher integration
+  ([#179](https://github.com/slaclab/sc_linac_physics/pull/179),
+  [`ef8b42c`](https://github.com/slaclab/sc_linac_physics/commit/ef8b42c24843afdc9916845fe7cbefd702268777))
+
+
 ## v7.3.0 (2025-12-08)
 
 ### Features
