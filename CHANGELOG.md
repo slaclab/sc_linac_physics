@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v7.2.0 (2025-12-08)
+
+### Features
+
+- **tuning**: Add rack cold launcher script
+  ([#180](https://github.com/slaclab/sc_linac_physics/pull/180),
+  [`632bc24`](https://github.com/slaclab/sc_linac_physics/commit/632bc244872111776c48b0f23f4ae88a52ea3e6d))
+
+
 ## v7.1.0 (2025-12-08)
 
 ### Chores
