@@ -17,7 +17,6 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     HW_MODE_ONLINE_VALUE,
     CavityHWModeError,
     HW_MODE_READY_VALUE,
-    PARK_DETUNE,
     STATUS_READY_VALUE,
     STATUS_RUNNING_VALUE,
 )
@@ -31,6 +30,11 @@ class TuneCavity(Cavity, ColdLinacObject):
     ):
         Cavity.__init__(self, cavity_num=cavity_num, rack_object=rack_object)
         ColdLinacObject.__init__(self)
+
+        self.park_detune = (
+            30000 if self.cryomodule.is_harmonic_linearizer else 10000
+        )
+
         self.df_cold_pv: str = self.pv_addr("DF_COLD")
         self._df_cold_pv_obj: Optional[PV] = None
         self.use_rf_pv: str = self.auto_pv_addr("USE_RF")
@@ -89,7 +93,7 @@ class TuneCavity(Cavity, ColdLinacObject):
             )
             self.stepper_tuner.reset_signed_steps()
 
-        if self.detune_best < PARK_DETUNE:
+        if self.detune_best < self.park_detune:
 
             def delta_detune():
                 return self.detune_best
