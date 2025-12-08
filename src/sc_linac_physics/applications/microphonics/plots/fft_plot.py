@@ -1,9 +1,9 @@
 import numpy as np
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+from sc_linac_physics.applications.microphonics.plots.base_plot import BasePlot
+from sc_linac_physics.applications.microphonics.utils.constants import (
     BASE_HARDWARE_SAMPLE_RATE,
 )
-from sc_linac_physics.applications.microphonics.plots.base_plot import BasePlot
 from sc_linac_physics.applications.microphonics.utils.data_processing import (
     calculate_fft,
 )

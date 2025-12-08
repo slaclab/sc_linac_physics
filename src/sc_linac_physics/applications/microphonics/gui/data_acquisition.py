@@ -1,5 +1,4 @@
 import logging
-import re
 import sys
 import time
 from datetime import datetime
@@ -8,6 +7,14 @@ from typing import Dict
 
 from PyQt5.QtCore import QObject, pyqtSignal, QProcess, QTimer
 
+from sc_linac_physics.applications.microphonics.utils.constants import (
+    ACQ_COMPLETION_MARKERS,
+    ACQ_PROGRESS_REGEX,
+    DEFAULT_DATA_PATH,
+    DEFAULT_SCRIPT_PATH,
+    BUFFER_LENGTH,
+    BASE_HARDWARE_SAMPLE_RATE,
+)
 from sc_linac_physics.applications.microphonics.utils.file_parser import (
     FileParserError,
     load_and_process_file,
@@ -24,20 +31,14 @@ class DataAcquisitionManager(QObject):
     acquisitionComplete = pyqtSignal(str)  # chassis_id
     dataReceived = pyqtSignal(str, dict)  # chassis_id, data_dict
 
-    # Get completion messages from res_data_acq.py stdout
-    COMPLETION_MARKERS = [
-        "Restoring acquisition settings...",
-        "Done",  # This appears after Restoring
-    ]
-    PROGRESS_REGEX = re.compile(r"Acquired\s+(\d+)\s+/\s+(\d+)\s+buffers")
+    COMPLETION_MARKERS = ACQ_COMPLETION_MARKERS
+    PROGRESS_REGEX = ACQ_PROGRESS_REGEX
 
     def __init__(self):
         super().__init__()
         self.active_processes: Dict[str, Dict] = {}
-        self.base_path = Path("/u1/lcls/physics/rf_lcls2/microphonics")
-        self.script_path = Path(
-            "/usr/local/lcls/package/lcls2_llrf/srf/software/res_ctl/res_data_acq.py"
-        )
+        self.base_path = DEFAULT_DATA_PATH
+        self.script_path = DEFAULT_SCRIPT_PATH
 
     def _create_data_directory(self, chassis_id: str) -> Path:
         """Create hierarchical data directory structure.
@@ -157,10 +158,10 @@ class DataAcquisitionManager(QObject):
 
             measurement_cfg = config["config"]
             expected_duration = (
-                16384
+                BUFFER_LENGTH
                 * measurement_cfg.decimation
                 * measurement_cfg.buffer_count
-            ) / 2000
+            ) / BASE_HARDWARE_SAMPLE_RATE
             progress_timer = QTimer()
             progress_timer.timeout.connect(
                 lambda: self._update_progress_estimate(chassis_id)
@@ -355,6 +356,7 @@ class DataAcquisitionManager(QObject):
             if timer.isActive():
                 timer.stop()
             timer.deleteLater()
+            process_info["progress_timer"] = None
         process = process_info.get("process")
         if not process:
             return
