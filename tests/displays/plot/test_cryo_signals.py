@@ -69,14 +69,14 @@ def display(qapp, mock_machine):
             "sc_linac_physics.displays.plot.cryo_signals.Machine"
         ) as MockMachine,
         patch(
-            "sc_linac_physics.displays.plot.cryo_signals.PVGroupArchiverDisplay"
+            "sc_linac_physics.displays.plot.embeddable_plots.EmbeddableArchiverPlot"  # UPDATED PATH
         ) as MockPlot,
     ):
 
         MockMachine.return_value = mock_machine
 
         # Create a mock that is actually a QWidget so it can be added to layouts
-        def create_mock_plot():
+        def create_mock_plot(*args, **kwargs):  # Accept arguments
             """Factory function to create mock plot widgets."""
             mock_plot = QWidget()  # Use real QWidget as base
 
@@ -93,13 +93,17 @@ def display(qapp, mock_machine):
             mock_plot.archiver_plot.addYChannel = Mock()
             mock_plot.archiver_plot.update = Mock()
             mock_plot.plotted_pvs = {}
-            mock_plot.plotted_list = Mock()
-            mock_plot.plotted_list.addItem = Mock()
-            mock_plot.legend = Mock()
-            mock_plot._get_rainbow_color = Mock(return_value=(255, 0, 0))
-            mock_plot.update_info_label = Mock()
+            mock_plot.pv_curves = {}  # ADDED
+            mock_plot._get_rainbow_color = Mock(
+                return_value=Mock(  # Return a QColor-like mock
+                    __class__=Mock(__name__="QColor")
+                )
+            )
+            mock_plot.add_pv = (
+                Mock()
+            )  # ADDED - key method for EmbeddableArchiverPlot
 
-            # Mock children() and findChildren() for _hide_selection_panel
+            # Mock children() and findChildren()
             mock_plot.children = Mock(return_value=[])
             mock_plot.findChildren = Mock(return_value=[])
 
@@ -115,6 +119,7 @@ def display(qapp, mock_machine):
         display.close()
 
 
+# All test classes remain exactly the same - they should work now
 class TestLinacGroupedCryomodulePlotDisplayInitialization:
     """Test display initialization."""
 
@@ -145,7 +150,7 @@ class TestLinacGroupedCryomodulePlotDisplayInitialization:
         assert display.global_axis_settings["ds_level_pv"]["range"] == (
             80,
             100,
-        )  # Updated
+        )
 
         assert "us_level_pv" in display.global_axis_settings
         assert display.global_axis_settings["us_level_pv"]["range"] == (60, 80)
