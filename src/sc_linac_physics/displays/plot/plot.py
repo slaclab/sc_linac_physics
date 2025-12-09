@@ -190,7 +190,6 @@ class PVGroupArchiverDisplay(Display):
         plotted_layout.addWidget(self.info_label)
 
         # Remove and Clear buttons
-        # Remove and Clear buttons
         plotted_button_layout = QHBoxLayout()
 
         self.remove_btn = QPushButton("Remove Selected")
@@ -237,6 +236,14 @@ class PVGroupArchiverDisplay(Display):
         # Set default time span (1 hour)
         self.archiver_plot.setTimeSpan(3600)
 
+        # Get reference to legend and ensure it's visible
+        plot_item = self.archiver_plot.getPlotItem()
+        self.legend = plot_item.legend
+
+        if self.legend:
+            self.legend.setVisible(True)
+            self.legend.show()
+
         layout.addWidget(self.archiver_plot)
 
         panel.setLayout(layout)
@@ -245,7 +252,10 @@ class PVGroupArchiverDisplay(Display):
     def on_show_legend_changed(self, state):
         """Handle legend visibility change."""
         show_legend = state == Qt.Checked
-        self.archiver_plot.showLegend = show_legend
+
+        if self.legend:
+            self.legend.setVisible(show_legend)
+
         print(f"Legend {'shown' if show_legend else 'hidden'}")
 
     def on_time_range_changed(self, time_range_text):
@@ -483,7 +493,7 @@ class PVGroupArchiverDisplay(Display):
         self.plotted_pvs.clear()
         self.plotted_list.clear()
         self.pv_curves.clear()
-        self.axis_settings.clear()  # ADD THIS LINE
+        self.axis_settings.clear()
 
         # Clear legend
         if self.legend:
@@ -645,14 +655,17 @@ class PVGroupArchiverDisplay(Display):
         """Add a single PV to the plot with specified axis and color."""
         # Add the channel with specific axis - PyDM handles the legend
         self.archiver_plot.addYChannel(
-            pv, color=color, yAxisName=axis_name, useArchiveData=True
+            y_channel=pv,  # Use keyword argument
+            name=pv,  # Add name for legend
+            color=color,
+            yAxisName=axis_name,
+            useArchiveData=True,
         )
 
         # Get the curve that was just added and store it
         if len(plot_item.curves) > 0:
             curve = plot_item.curves[-1]
             self.pv_curves[pv] = curve
-            # No manual legend handling needed anymore!
 
     def _set_axis_label(self, axis_name):
         """Set the label for a specific axis."""

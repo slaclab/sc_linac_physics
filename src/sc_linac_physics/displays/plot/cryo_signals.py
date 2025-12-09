@@ -429,31 +429,6 @@ class LinacGroupedCryomodulePlotDisplay(Display):
                         ),
                     )
 
-    def _hide_selection_panel(self, plot_display):
-        """Hide the left selection panel and other UI elements from the plot display."""
-        if hasattr(plot_display, "children"):
-            for child in plot_display.children():
-                if hasattr(child, "widget") and hasattr(child, "setSizes"):
-                    # Hide left panel
-                    left_panel = child.widget(0)
-                    if left_panel:
-                        left_panel.setVisible(False)
-
-                    # Hide extra UI in right panel
-                    right_panel = child.widget(1)
-                    if right_panel:
-                        if hasattr(right_panel, "children"):
-                            for widget in right_panel.findChildren(QWidget):
-                                if isinstance(widget, QGroupBox):
-                                    if (
-                                        "Currently Plotted" in widget.title()
-                                        or "Plot Controls" in widget.title()
-                                    ):
-                                        widget.setVisible(False)
-
-                    child.setSizes([0, 1000])
-                    break
-
     def ui_filename(self):
         """Return None since we're building UI programmatically."""
         return None

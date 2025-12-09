@@ -214,10 +214,6 @@ class CavitySection(QObject):
         dialog.exec_()
 
 
-# Remove the first "class RackScreen(QObject):" line
-# Keep only ONE class definition
-
-
 class RackScreen(QObject):
     def __init__(self, rack: Rack, parent=None):
         # Initialize QObject first with just parent
