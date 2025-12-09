@@ -15,15 +15,17 @@ from PyQt5.QtWidgets import (
 from edmbutton import PyDMEDMDisplayButton
 from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
 from pydm import Display
-from pydm.widgets import PyDMTimePlot, PyDMSpinbox, PyDMEnumComboBox, PyDMLabel
+from pydm.widgets import PyDMSpinbox, PyDMEnumComboBox, PyDMLabel
 from pydm.widgets.display_format import DisplayFormat
-from pydm.widgets.timeplot import updateMode
 from qtpy import QtCore
 
 from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
 from sc_linac_physics.applications.tuning.tune_rack import TuneRack
 from sc_linac_physics.applications.tuning.tune_stepper import TuneStepper
 from sc_linac_physics.applications.tuning.tune_utils import TUNE_LOG_DIR
+from sc_linac_physics.displays.plot.embeddable_plots import (
+    EmbeddableArchiverPlot,
+)
 from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.qt import CollapsibleGroupBox, make_rainbow
 from sc_linac_physics.utils.sc_linac.linac import Machine
@@ -209,18 +211,25 @@ class CavitySection(QObject):
         dialog.exec_()
 
 
+# Remove the first "class RackScreen(QObject):" line
+# Keep only ONE class definition
+
+
 class RackScreen(QObject):
     def __init__(self, rack: Rack, parent=None):
-        super().__init__(parent)
+        # Initialize QObject first with just parent
+        QObject.__init__(self, parent)
+
         self.rack: TuneRack = rack
         self._parent = parent
 
-        # Create plot
-        self.detune_plot: PyDMTimePlot = PyDMTimePlot()
-        self.detune_plot.setTimeSpan(DEFAULT_TIME_SPAN_SECONDS)
-        self.detune_plot.updateMode = updateMode.AtFixedRate
-        self.detune_plot.setPlotTitle(f"{rack} Detunes")
-        self.detune_plot.showLegend = True
+        # Use the embeddable plot component
+        self.detune_plot = EmbeddableArchiverPlot(
+            title=f"{rack} Detunes", time_span=DEFAULT_TIME_SPAN_SECONDS
+        )
+
+        # Add detune PVs
+        self._populate_detune_plot()
 
         # Main container
         self.groupbox = QGroupBox(f"{rack}")
@@ -247,8 +256,32 @@ class RackScreen(QObject):
 
         main_layout.addWidget(splitter)
 
-        # Populate plot AFTER creating UI
-        self.populate_detune_plot()
+    def _populate_detune_plot(self):
+        """Populate the detune plot with cavity data."""
+        num_cavities = len(self.rack.cavities)
+        colors = make_rainbow(num_cavities)  # One color per cavity
+
+        for idx, cavity in enumerate(self.rack.cavities.values()):
+            # Convert numpy array to QColor
+            r, g, b, a = colors[idx]
+            cavity_color = QColor(int(r), int(g), int(b), int(a))
+
+            # Detune - solid line
+            self.detune_plot.add_pv(
+                pv_name=cavity.detune_best_pv,
+                label=f"Cav {cavity.number} Detune",
+                axis_name="Detune (Hz)",
+                color=cavity_color,
+            )
+
+            # Cold landing - dashed line, SAME color
+            self.detune_plot.add_pv(
+                pv_name=cavity.df_cold_pv,
+                label=f"Cav {cavity.number} Cold",
+                axis_name="Detune (Hz)",
+                color=cavity_color,
+                line_style=QtCore.Qt.DashLine,
+            )
 
     def on_rack_cold_button_clicked(self):
         """Handle rack cold landing button click - set RF state then trigger start."""
@@ -324,35 +357,6 @@ class RackScreen(QObject):
         panel_layout.addWidget(scroll)
 
         return panel
-
-    def populate_detune_plot(self):
-        """Populate the detune plot with cavity data."""
-        detune_pvs = []
-        cold_pvs = []
-        for cavity in self.rack.cavities.values():
-            detune_pvs.append(cavity.detune_best_pv)
-            cold_pvs.append(cavity.df_cold_pv)
-
-        colors = make_rainbow(len(detune_pvs))
-
-        for idx, (detune_pv, cold_pv) in enumerate(zip(detune_pvs, cold_pvs)):
-            r, g, b, a = colors[idx]
-            solid_color = QColor(r, g, b, a)
-            dashed_color = QColor(r, g, b, 127)
-
-            self.detune_plot.addYChannel(
-                y_channel=detune_pv,
-                useArchiveData=True,
-                color=solid_color,
-                yAxisName="Detune (Hz)",
-            )
-            self.detune_plot.addYChannel(
-                y_channel=cold_pv,
-                useArchiveData=True,
-                color=dashed_color,
-                yAxisName="Detune (Hz)",
-                lineStyle=QtCore.Qt.DashLine,
-            )
 
 
 class Tuner(Display):
@@ -551,11 +555,11 @@ class Tuner(Display):
             logger.debug(f"Loading {cm_name} from cache")
             rack_a_screen, rack_b_screen = self.rack_screen_cache[cm_name]
         else:
-            # Create new rack screens
+            # Create new rack screens - USE KEYWORD ARGUMENTS
             logger.debug(f"Creating new screens for {cm_name}")
             cm = self.current_cryomodule
-            rack_a_screen = RackScreen(cm.rack_a, parent=self)
-            rack_b_screen = RackScreen(cm.rack_b, parent=self)
+            rack_a_screen = RackScreen(rack=cm.rack_a, parent=self)
+            rack_b_screen = RackScreen(rack=cm.rack_b, parent=self)
 
             # Cache for future use
             self.rack_screen_cache[cm_name] = (rack_a_screen, rack_b_screen)

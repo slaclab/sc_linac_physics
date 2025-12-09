@@ -231,30 +231,8 @@ class PVGroupArchiverDisplay(Display):
         # Set to fixed rate update mode
         self.archiver_plot.updateMode = updateMode.AtFixedRate
 
-        # Access the legend and debug it
-        plot_item = self.archiver_plot.getPlotItem()
-        self.legend = plot_item.legend
-
-        if self.legend:
-            print(f"Legend exists: {self.legend}")
-            print(f"Legend visible: {self.legend.isVisible()}")
-            print(f"Legend parent: {self.legend.parentItem()}")
-
-            # Try multiple ways to make it visible
-            self.legend.setVisible(True)
-            self.legend.show()
-
-            # Try setting opacity
-            self.legend.setOpacity(1.0)
-
-            # Check again
-            print(f"After setting visible: {self.legend.isVisible()}")
-        else:
-            print("Legend is None, trying to create...")
-            self.legend = plot_item.addLegend()
-            if self.legend:
-                self.legend.setVisible(True)
-                self.legend.show()
+        # Enable legend - PyDM handles it automatically
+        self.archiver_plot.showLegend = True
 
         # Set default time span (1 hour)
         self.archiver_plot.setTimeSpan(3600)
@@ -267,10 +245,7 @@ class PVGroupArchiverDisplay(Display):
     def on_show_legend_changed(self, state):
         """Handle legend visibility change."""
         show_legend = state == Qt.Checked
-
-        if self.legend is not None:
-            self.legend.setVisible(show_legend)
-
+        self.archiver_plot.showLegend = show_legend
         print(f"Legend {'shown' if show_legend else 'hidden'}")
 
     def on_time_range_changed(self, time_range_text):
@@ -668,7 +643,7 @@ class PVGroupArchiverDisplay(Display):
 
     def _add_pv_to_plot(self, pv, axis_name, color, plot_item):
         """Add a single PV to the plot with specified axis and color."""
-        # Add the channel with specific axis
+        # Add the channel with specific axis - PyDM handles the legend
         self.archiver_plot.addYChannel(
             pv, color=color, yAxisName=axis_name, useArchiveData=True
         )
@@ -677,10 +652,7 @@ class PVGroupArchiverDisplay(Display):
         if len(plot_item.curves) > 0:
             curve = plot_item.curves[-1]
             self.pv_curves[pv] = curve
-
-            # Manually add to legend
-            if self.legend:
-                self.legend.addItem(curve, pv)
+            # No manual legend handling needed anymore!
 
     def _set_axis_label(self, axis_name):
         """Set the label for a specific axis."""
