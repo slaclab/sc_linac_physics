@@ -106,6 +106,9 @@ class CavitySection(QObject):
         # Status label
         self.status_label = PyDMLabel(init_channel=cavity.status_msg_pv)
         self.status_label.displayFormat = DisplayFormat.String
+        self.status_label.setWordWrap(True)
+        self.status_label.alarmSensitiveBorder = True
+        self.status_label.alarmSensitiveContent = True
         layout.addWidget(self.status_label)
 
         # Cold landing button and abort
