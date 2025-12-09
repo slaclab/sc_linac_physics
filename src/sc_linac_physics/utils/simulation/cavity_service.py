@@ -1,6 +1,7 @@
 from datetime import datetime
 from random import randrange, randint
 
+import numpy as np
 from caproto import ChannelType
 from caproto.server import (
     PVGroup,
@@ -166,7 +167,9 @@ class CavityPVGroup(PVGroup):
     chirp_stop: PvpropertyInteger = pvproperty(
         name="CHIRP:FREQ_STOP", value=200000
     )
+    qloaded = pvproperty(name="QLOADED", value=4e7)
     qloaded_new = pvproperty(name="QLOADED_NEW", value=4e7)
+
     scale_new = pvproperty(name="CAV:CAL_SCALEB_NEW", value=30)
     quench_bypass: PvpropertyEnum = pvproperty(
         name="QUENCH_BYP",
@@ -236,15 +239,195 @@ class CavityPVGroup(PVGroup):
         dtype=ChannelType.FLOAT,
     )
 
+    # Fault waveforms
+    fltawf = pvproperty(
+        value=np.zeros(2048, dtype=np.float64),
+        name="CAV:FLTAWF",
+        dtype=ChannelType.DOUBLE,
+        max_length=2048,
+        read_only=True,
+        doc="Fault amplitude waveform (exponential decay during quench)",
+    )
+
+    flttwf = pvproperty(
+        value=np.zeros(2048, dtype=np.float64),
+        name="CAV:FLTTWF",
+        dtype=ChannelType.DOUBLE,
+        max_length=2048,
+        read_only=True,
+        doc="Fault time waveform (relative to quench event, t=0)",
+    )
+
+    # Control for simulating different quench types (for testing)
+    quench_type: PvpropertyEnum = pvproperty(
+        value=0,
+        name="SIM:QUENCH_TYPE",
+        dtype=ChannelType.ENUM,
+        enum_strings=("Real", "Spurious", "Random"),
+        doc="Simulated quench type for testing",
+    )
+
+    HL_LENGTH = 0.346
+    NORMAL_LENGTH = 1.038
+    HL_FREQ = 3.9e9
+    NORMAL_FREQ = 1.3e9
+
     def __init__(self, prefix, isHL: bool):
         super().__init__(prefix)
-
         self.is_hl = isHL
+        self.length = self.HL_LENGTH if isHL else self.NORMAL_LENGTH
+        self.frequency = self.HL_FREQ if isHL else self.NORMAL_FREQ
 
-        if isHL:
-            self.length = 0.346
+    @quench_latch.putter
+    async def quench_latch(self, instance, value):
+        """Handle quench latch - capture waveforms then drop amplitude."""
+        import sys
+
+        print(
+            f"DEBUG: quench_latch putter called! value={value}",
+            file=sys.stderr,
+            flush=True,
+        )
+        print(f"DEBUG: value type: {type(value)}", file=sys.stderr, flush=True)
+        print(
+            f"DEBUG: Current amplitude: {self.aact.value}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+        # Enum values come through as strings, not integers
+        if value == "Fault" or value == 1:
+            quench_type = self._determine_quench_type()
+            print(
+                f"DEBUG: Generating {quench_type} quench",
+                file=sys.stderr,
+                flush=True,
+            )
+            await self._capture_quench_waveforms(quench_type)
+            print("DEBUG: Waveforms captured", file=sys.stderr, flush=True)
         else:
-            self.length = 1.038
+            print(
+                f"DEBUG: Not a fault trigger (value={value})",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        await self.aact.write(0)
+        await self.amean.write(0)
+        print("DEBUG: Amplitude set to 0", file=sys.stderr, flush=True)
+
+    def _determine_quench_type(self) -> str:
+        """Determine what type of quench to simulate."""
+        type_setting = self.quench_type.value
+
+        if type_setting == 0:  # Real
+            return "real"
+        elif type_setting == 1:  # Spurious
+            return "spurious"
+        else:  # Random
+            return "real" if np.random.random() > 0.3 else "spurious"
+
+    async def _capture_quench_waveforms(self, quench_type: str = "real"):
+        """Generate and store quench waveform data."""
+        # Get current amplitude BEFORE it drops to zero
+        pre_quench_amplitude = self.aact.value
+        saved_loaded_q = self.qloaded_new.value
+
+        self.log.info(
+            f"Capturing waveforms: A={pre_quench_amplitude:.3f} MV, "
+            f"Q={saved_loaded_q:.2e}"
+        )
+
+        # Validate we have reasonable values
+        if pre_quench_amplitude <= 0:
+            self.log.warning(
+                f"Pre-quench amplitude is {pre_quench_amplitude}, using 16.6"
+            )
+            pre_quench_amplitude = 16.6
+
+        if saved_loaded_q <= 0:
+            self.log.warning(f"Loaded Q is {saved_loaded_q}, using 4e7")
+            saved_loaded_q = 4e7
+
+        # Determine effective Q based on quench type
+        if quench_type == "spurious":
+            effective_q = saved_loaded_q
+            self.log.info("Simulating SPURIOUS quench (normal Q)")
+        else:
+            # Real quench: Q drops by 50-70%
+            q_degradation_factor = np.random.uniform(0.3, 0.5)
+            effective_q = saved_loaded_q * q_degradation_factor
+            self.log.info(
+                f"Simulating REAL quench (Q degraded by "
+                f"{(1-q_degradation_factor)*100:.0f}%)"
+            )
+
+        # Generate waveforms
+        time_wf, amplitude_wf = self._generate_decay_waveform(
+            pre_quench_amplitude, effective_q
+        )
+
+        # Write to PVs
+        await self.fltawf.write(amplitude_wf)
+        await self.flttwf.write(time_wf)
+
+        self.log.info(
+            f"Waveforms written: {len(amplitude_wf)} points, "
+            f"A0={amplitude_wf[512]:.3f} MV"
+        )
+
+    def _generate_decay_waveform(
+        self, amplitude: float, loaded_q: float
+    ) -> tuple:
+        """
+        Generate exponential decay waveform.
+
+        Time is in SECONDS to match what validate_quench expects.
+
+        Returns:
+            Tuple of (time_array_in_seconds, amplitude_array)
+        """
+        total_points = 2048
+        pre_quench_points = 512  # 25% before quench
+        post_quench_points = total_points - pre_quench_points
+
+        # Time in SECONDS (not microseconds)
+        time_pre = np.linspace(-500e-6, 0, pre_quench_points, endpoint=False)
+        time_post = np.linspace(0, 1500e-6, post_quench_points)
+        time_wf = np.concatenate([time_pre, time_post])
+
+        # Amplitude waveform
+        amplitude_wf = np.zeros(total_points, dtype=np.float64)
+
+        # Pre-quench: stable with small noise
+        amplitude_wf[:pre_quench_points] = amplitude * (
+            1 + 0.01 * np.random.randn(pre_quench_points)
+        )
+
+        # Post-quench: exponential decay
+        # A(t) = A0 * e^((-π * f * t)/Q_loaded)
+        # Time is already in seconds, no conversion needed
+        decay_constant = (np.pi * self.frequency) / loaded_q
+        amplitude_wf[pre_quench_points:] = amplitude * np.exp(
+            -decay_constant * time_post
+        )
+
+        # Add measurement noise
+        noise_level = amplitude * 0.001
+        amplitude_wf += noise_level * np.random.randn(total_points)
+
+        # Ensure non-negative and minimum value for log calculation
+        amplitude_wf = np.maximum(amplitude_wf, 1e-6)
+
+        # Calculate decay time constant for logging
+        tau = loaded_q / (np.pi * self.frequency)
+        self.log.debug(
+            f"Waveform: τ={tau*1e6:.1f}µs, "
+            f"f={self.frequency/1e9:.1f}GHz, "
+            f"Q={loaded_q:.2e}"
+        )
+
+        return time_wf, amplitude_wf
 
     @rf_mode_des.putter
     async def rf_mode_des(self, instance, value):
@@ -260,29 +443,30 @@ class CavityPVGroup(PVGroup):
 
     @interlock_reset.putter
     async def interlock_reset(self, instance, value):
-        # TODO clear all other faults
-        await self.quench_latch.write(0)
-        await self.aact.write(self.ades.value)
-        await self.amean.write(self.ades.value)
-
-    @quench_latch.putter
-    async def quench_latch(self, instance, value):
-        await self.aact.write(0)
-        await self.amean.write(0)
+        if value == 1:  # Only act on "Reset" command
+            await self.quench_latch.write(0)
+            await self.ssa_latch.write(0)  # Reset SSA latch too
+            # Restore amplitude only if RF is on
+            if self.rf_state_act.value == 1:
+                await self.aact.write(self.ades.value)
+                await self.amean.write(self.ades.value)
+            # Reset the command
+            await self.interlock_reset.write(0)
 
     @ades.putter
     async def ades(self, instance, value):
         await self.aact.write(value)
         await self.amean.write(value)
         gradient = value / self.length
-        if self.gact.value != gradient:
-            await self.gdes.write(gradient)
+        await self.gdes.write(gradient, verify_value=False)  # Skip the putter
 
     @pdes.putter
     async def pdes(self, instance, value):
-        value = value % 360
-        await self.pact.write(value)
-        await self.pmean.write(value)
+        # Normalize phase to [0, 360)
+        normalized_value = value % 360
+        await self.pact.write(normalized_value)
+        await self.pmean.write(normalized_value)
+        return normalized_value  # Return the actual written value
 
     @gdes.putter
     async def gdes(self, instance, value):
