@@ -10,7 +10,6 @@ from qtpy.QtWidgets import (
     QLabel,
     QGroupBox,
     QComboBox,
-    QSizePolicy,
     QPushButton,
     QLineEdit,
     QCheckBox,
@@ -18,7 +17,9 @@ from qtpy.QtWidgets import (
     QScrollArea,
 )
 
-from sc_linac_physics.displays.plot.plot import PVGroupArchiverDisplay
+from sc_linac_physics.displays.plot.embeddable_plots import (
+    EmbeddableArchiverPlot,
+)
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 
@@ -393,96 +394,40 @@ class LinacGroupedCryomodulePlotDisplay(Display):
     def _create_cryomodule_plot_widget(self, linac_name, cryomodule):
         """Create a plot widget for a specific cryomodule."""
         group = QGroupBox(f"CM {cryomodule.name}")
-
         layout = QVBoxLayout()
         layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(0)  # Fixed typo here
+        layout.setSpacing(0)
 
-        # Create embedded plot display
-        plot_display = PVGroupArchiverDisplay()
+        # Use the embeddable plot component
+        plot_widget = EmbeddableArchiverPlot(title=f"CM {cryomodule.name}")
 
-        # Set plot display layout margins to zero
-        if plot_display.layout():
-            plot_display.layout().setContentsMargins(0, 0, 0, 0)
-            plot_display.layout().setSpacing(0)
-
-        # Hide the left selection panel and extra UI
-        self._hide_selection_panel(plot_display)
-
-        # Add PVs directly from cryomodule object
-        self._add_pvs_to_plot(plot_display, cryomodule)
+        # Add PVs
+        self._add_pvs_to_plot(plot_widget, cryomodule)
 
         # Store reference
-        self.cryomodule_plots[(linac_name, cryomodule.name)] = plot_display
+        self.cryomodule_plots[(linac_name, cryomodule.name)] = plot_widget
 
-        layout.addWidget(plot_display)
+        layout.addWidget(plot_widget)
         group.setLayout(layout)
-
-        # Set size policy to expand
-        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        plot_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         return group
 
-    def _hide_selection_panel(self, plot_display):
-        """Hide the left selection panel and other UI elements from the plot display."""
-        if hasattr(plot_display, "children"):
-            for child in plot_display.children():
-                if hasattr(child, "widget") and hasattr(child, "setSizes"):
-                    # Hide left panel
-                    left_panel = child.widget(0)
-                    if left_panel:
-                        left_panel.setVisible(False)
-
-                    # Hide extra UI in right panel
-                    right_panel = child.widget(1)
-                    if right_panel:
-                        if hasattr(right_panel, "children"):
-                            for widget in right_panel.findChildren(QWidget):
-                                if isinstance(widget, QGroupBox):
-                                    if (
-                                        "Currently Plotted" in widget.title()
-                                        or "Plot Controls" in widget.title()
-                                    ):
-                                        widget.setVisible(False)
-
-                    child.setSizes([0, 1000])
-                    break
-
-    def _add_pvs_to_plot(self, plot_display, cryomodule):
+    def _add_pvs_to_plot(self, plot_widget, cryomodule):
         """Add PVs directly from cryomodule object attributes."""
-        pvs_to_plot = []
-
-        for pv_attr in self.SELECTED_PV_ATTRIBUTES:
+        for idx, pv_attr in enumerate(self.SELECTED_PV_ATTRIBUTES):
             if hasattr(cryomodule, pv_attr):
                 pv_name = getattr(cryomodule, pv_attr)
                 if pv_name:
-                    pvs_to_plot.append((pv_attr, pv_name))
+                    label = pv_attr.replace("_pv", "").replace("_", " ").title()
 
-        # Update plotted_pvs first so color calculation works correctly
-        for pv_attr, pv_name in pvs_to_plot:
-            plot_display.plotted_pvs[pv_name] = ("Cryomodule", pv_attr)
-
-        # Add each PV to the plot
-        for color_index, (pv_attr, pv_name) in enumerate(pvs_to_plot):
-            label = pv_attr.replace("_pv", "").replace("_", " ").title()
-
-            color = plot_display._get_rainbow_color(color_index)
-
-            plot_display.archiver_plot.addYChannel(
-                pv_name,
-                name=label,
-                color=color,
-                yAxisName=label,
-                useArchiveData=True,
-            )
-
-            plot_display.plotted_list.addItem(pv_name)
-
-        plot_display.update_info_label()
-
-        if plot_display.legend:
-            plot_display.legend.setVisible(True)
+                    plot_widget.add_pv(
+                        pv_name=pv_name,
+                        label=label,
+                        axis_name=label,
+                        color=plot_widget._get_rainbow_color(
+                            idx, len(self.SELECTED_PV_ATTRIBUTES)
+                        ),
+                    )
 
     def ui_filename(self):
         """Return None since we're building UI programmatically."""

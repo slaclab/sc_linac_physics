@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v8.3.0 (2025-12-09)
+
+### Features
+
+- **displays**: Add reusable embeddable archiver plot component
+  ([#186](https://github.com/slaclab/sc_linac_physics/pull/186),
+  [`28bdac7`](https://github.com/slaclab/sc_linac_physics/commit/28bdac78c7f33eff53bd04246e3bef9e29387cc1))
+
+
+## v8.2.0 (2025-12-09)
+
+### Features
+
+- **tuning**: Enhance status label readability and alarm visibility
+  ([#185](https://github.com/slaclab/sc_linac_physics/pull/185),
+  [`2580923`](https://github.com/slaclab/sc_linac_physics/commit/2580923c7a32499664805f348903e1980d57cbec))
+
+
 ## v8.1.0 (2025-12-08)
 
 ### Chores

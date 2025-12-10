@@ -190,7 +190,6 @@ class PVGroupArchiverDisplay(Display):
         plotted_layout.addWidget(self.info_label)
 
         # Remove and Clear buttons
-        # Remove and Clear buttons
         plotted_button_layout = QHBoxLayout()
 
         self.remove_btn = QPushButton("Remove Selected")
@@ -231,33 +230,19 @@ class PVGroupArchiverDisplay(Display):
         # Set to fixed rate update mode
         self.archiver_plot.updateMode = updateMode.AtFixedRate
 
-        # Access the legend and debug it
+        # Enable legend - PyDM handles it automatically
+        self.archiver_plot.showLegend = True
+
+        # Set default time span (1 hour)
+        self.archiver_plot.setTimeSpan(3600)
+
+        # Get reference to legend and ensure it's visible
         plot_item = self.archiver_plot.getPlotItem()
         self.legend = plot_item.legend
 
         if self.legend:
-            print(f"Legend exists: {self.legend}")
-            print(f"Legend visible: {self.legend.isVisible()}")
-            print(f"Legend parent: {self.legend.parentItem()}")
-
-            # Try multiple ways to make it visible
             self.legend.setVisible(True)
             self.legend.show()
-
-            # Try setting opacity
-            self.legend.setOpacity(1.0)
-
-            # Check again
-            print(f"After setting visible: {self.legend.isVisible()}")
-        else:
-            print("Legend is None, trying to create...")
-            self.legend = plot_item.addLegend()
-            if self.legend:
-                self.legend.setVisible(True)
-                self.legend.show()
-
-        # Set default time span (1 hour)
-        self.archiver_plot.setTimeSpan(3600)
 
         layout.addWidget(self.archiver_plot)
 
@@ -268,7 +253,7 @@ class PVGroupArchiverDisplay(Display):
         """Handle legend visibility change."""
         show_legend = state == Qt.Checked
 
-        if self.legend is not None:
+        if self.legend:
             self.legend.setVisible(show_legend)
 
         print(f"Legend {'shown' if show_legend else 'hidden'}")
@@ -508,7 +493,7 @@ class PVGroupArchiverDisplay(Display):
         self.plotted_pvs.clear()
         self.plotted_list.clear()
         self.pv_curves.clear()
-        self.axis_settings.clear()  # ADD THIS LINE
+        self.axis_settings.clear()
 
         # Clear legend
         if self.legend:
@@ -668,19 +653,19 @@ class PVGroupArchiverDisplay(Display):
 
     def _add_pv_to_plot(self, pv, axis_name, color, plot_item):
         """Add a single PV to the plot with specified axis and color."""
-        # Add the channel with specific axis
+        # Add the channel with specific axis - PyDM handles the legend
         self.archiver_plot.addYChannel(
-            pv, color=color, yAxisName=axis_name, useArchiveData=True
+            y_channel=pv,  # Use keyword argument
+            name=pv,  # Add name for legend
+            color=color,
+            yAxisName=axis_name,
+            useArchiveData=True,
         )
 
         # Get the curve that was just added and store it
         if len(plot_item.curves) > 0:
             curve = plot_item.curves[-1]
             self.pv_curves[pv] = curve
-
-            # Manually add to legend
-            if self.legend:
-                self.legend.addItem(curve, pv)
 
     def _set_axis_label(self, axis_name):
         """Set the label for a specific axis."""

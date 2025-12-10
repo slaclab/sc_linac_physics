@@ -2,7 +2,6 @@ import sys
 from unittest.mock import Mock, patch
 
 import pytest
-from PyQt5.QtWidgets import QWidget
 from qtpy.QtWidgets import QApplication, QDialog
 
 from sc_linac_physics.displays.plot.cryo_signals import (
@@ -69,46 +68,40 @@ def display(qapp, mock_machine):
             "sc_linac_physics.displays.plot.cryo_signals.Machine"
         ) as MockMachine,
         patch(
-            "sc_linac_physics.displays.plot.cryo_signals.PVGroupArchiverDisplay"
-        ) as MockPlot,
+            "sc_linac_physics.displays.plot.embeddable_plots.PyDMArchiverTimePlot"
+        ) as MockArchiverPlot,
     ):
 
         MockMachine.return_value = mock_machine
 
-        # Create a mock that is actually a QWidget so it can be added to layouts
-        def create_mock_plot():
-            """Factory function to create mock plot widgets."""
-            mock_plot = QWidget()  # Use real QWidget as base
+        # Create a mock archiver time plot that IS a QWidget
+        def create_mock_archiver_plot(*args, **kwargs):
+            """Factory function to create mock archiver plot."""
+            from PyQt5.QtWidgets import QWidget
 
-            # Create mock plot item with axes dict
+            # Create a real QWidget as the base
+            mock_archiver = QWidget()
+
+            # Mock plot item
             mock_plot_item = Mock()
-            mock_plot_item.axes = {}  # Empty dict so "in" operator works
+            mock_plot_item.axes = {}
+            mock_plot_item.curves = []
             mock_plot_item.update = Mock()
 
-            # Add necessary mock attributes
-            mock_plot.archiver_plot = Mock()
-            mock_plot.archiver_plot.getPlotItem = Mock(
-                return_value=mock_plot_item
-            )
-            mock_plot.archiver_plot.addYChannel = Mock()
-            mock_plot.archiver_plot.update = Mock()
-            mock_plot.plotted_pvs = {}
-            mock_plot.plotted_list = Mock()
-            mock_plot.plotted_list.addItem = Mock()
-            mock_plot.legend = Mock()
-            mock_plot._get_rainbow_color = Mock(return_value=(255, 0, 0))
-            mock_plot.update_info_label = Mock()
+            # Add mock methods as attributes
+            mock_archiver.getPlotItem = Mock(return_value=mock_plot_item)
+            mock_archiver.addYChannel = Mock()
+            mock_archiver.setTimeSpan = Mock()
+            mock_archiver.setPlotTitle = Mock()
+            mock_archiver.clearCurves = Mock()
+            mock_archiver.removeYChannel = Mock()
+            mock_archiver.update = Mock()
+            mock_archiver.showLegend = True
+            mock_archiver.updateMode = None
 
-            # Mock children() and findChildren() for _hide_selection_panel
-            mock_plot.children = Mock(return_value=[])
-            mock_plot.findChildren = Mock(return_value=[])
+            return mock_archiver
 
-            # Mock setSizePolicy to avoid issues
-            mock_plot.setSizePolicy = Mock()
-
-            return mock_plot
-
-        MockPlot.side_effect = create_mock_plot
+        MockArchiverPlot.side_effect = create_mock_archiver_plot
 
         display = LinacGroupedCryomodulePlotDisplay()
         yield display
@@ -145,7 +138,7 @@ class TestLinacGroupedCryomodulePlotDisplayInitialization:
         assert display.global_axis_settings["ds_level_pv"]["range"] == (
             80,
             100,
-        )  # Updated
+        )
 
         assert "us_level_pv" in display.global_axis_settings
         assert display.global_axis_settings["us_level_pv"]["range"] == (60, 80)
@@ -209,7 +202,6 @@ class TestLinacSwitching:
 
     def test_switch_to_different_linac(self, display):
         """Test switching to a different linac."""
-
         # Switch to L1B (index 1)
         display.linac_combo.setCurrentIndex(1)
 
@@ -375,8 +367,14 @@ class TestGlobalAxisRangeApplication:
 
         display.apply_global_axis_settings(settings)
 
-        assert display.global_axis_settings["ds_level_pv"]["range"] == (0, 100)
-        assert display.global_axis_settings["us_level_pv"]["range"] == (0, 100)
+        assert display.global_axis_settings["ds_level_pv"]["range"] == (
+            0,
+            100,
+        )
+        assert display.global_axis_settings["us_level_pv"]["range"] == (
+            0,
+            100,
+        )
 
     def test_settings_persist_across_linac_switch(self, display):
         """Test that settings persist when switching linacs."""
@@ -390,7 +388,10 @@ class TestGlobalAxisRangeApplication:
         display.linac_combo.setCurrentIndex(1)
 
         # Settings should still be stored
-        assert display.global_axis_settings["ds_level_pv"]["range"] == (20, 80)
+        assert display.global_axis_settings["ds_level_pv"]["range"] == (
+            20,
+            80,
+        )
 
 
 class TestDefaultRanges:
@@ -407,10 +408,7 @@ class TestDefaultRanges:
 
     def test_level_default_ranges(self, display):
         """Test level default ranges."""
-        assert display.DEFAULT_AXIS_RANGES["ds_level_pv"] == (
-            80,
-            100,
-        )  # Updated
+        assert display.DEFAULT_AXIS_RANGES["ds_level_pv"] == (80, 100)
         assert display.DEFAULT_AXIS_RANGES["us_level_pv"] == (60, 80)
 
     def test_auto_scale_defaults(self, display):
