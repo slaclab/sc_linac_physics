@@ -44,9 +44,7 @@ def launch_python_display(display_class, *args, standalone=True):
     if standalone:
         # Standalone mode: use PyDM's open method
         app = PyDMApplication(command_line_args=list(args))
-        app.main_window.open(
-            display_file, macros=None
-        )  # Remove command_line_args
+        app.main_window.open(display_file, macros=None)
         app.main_window.show()
         sys.exit(app.exec())
     else:
@@ -61,7 +59,12 @@ def launch_python_display(display_class, *args, standalone=True):
 
         # Create a new main window for this display
         window = PyDMMainWindow()
-        window.open(display_file, macros=None)  # Remove command_line_args
+
+        # Apply the same stylesheet as the main application
+        if app.main_window and app.main_window.styleSheet():
+            window.setStyleSheet(app.main_window.styleSheet())
+
+        window.open(display_file, macros=None)
         window.show()
 
         return window
