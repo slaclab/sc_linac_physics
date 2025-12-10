@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v8.3.1 (2025-12-10)
+
+### Refactoring
+
+- **constants**: Derive VALID_LINACS from linac_utils instead of hardcoding
+  ([#184](https://github.com/slaclab/sc_linac_physics/pull/184),
+  [`421dfca`](https://github.com/slaclab/sc_linac_physics/commit/421dfcac793992274147915f2b4e760a6b2ec0e7))
+
+- **microphonics**: Centralize constants and fix timer leak
+  ([#184](https://github.com/slaclab/sc_linac_physics/pull/184),
+  [`421dfca`](https://github.com/slaclab/sc_linac_physics/commit/421dfcac793992274147915f2b4e760a6b2ec0e7))
+
+- **microphonics**: Move constants to dedicated module and fix timer leak
+  ([#184](https://github.com/slaclab/sc_linac_physics/pull/184),
+  [`421dfca`](https://github.com/slaclab/sc_linac_physics/commit/421dfcac793992274147915f2b4e760a6b2ec0e7))
+
+
 ## v8.3.0 (2025-12-09)
 
 ### Features
