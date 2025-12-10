@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v8.3.2 (2025-12-10)
+
+### Bug Fixes
+
+- **cli**: Apply stylesheets to child windows in PyDM launcher
+  ([#187](https://github.com/slaclab/sc_linac_physics/pull/187),
+  [`ee10d35`](https://github.com/slaclab/sc_linac_physics/commit/ee10d35828b923bac959850296ce2f5767546c19))
+
+
 ## v8.3.1 (2025-12-10)
 
 ### Refactoring
