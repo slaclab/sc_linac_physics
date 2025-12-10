@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v8.3.2 (2025-12-10)
+
+### Bug Fixes
+
+- **cli**: Apply stylesheets to child windows in PyDM launcher
+  ([#187](https://github.com/slaclab/sc_linac_physics/pull/187),
+  [`ee10d35`](https://github.com/slaclab/sc_linac_physics/commit/ee10d35828b923bac959850296ce2f5767546c19))
+
+
+## v8.3.1 (2025-12-10)
+
+### Refactoring
+
+- **constants**: Derive VALID_LINACS from linac_utils instead of hardcoding
+  ([#184](https://github.com/slaclab/sc_linac_physics/pull/184),
+  [`421dfca`](https://github.com/slaclab/sc_linac_physics/commit/421dfcac793992274147915f2b4e760a6b2ec0e7))
+
+- **microphonics**: Centralize constants and fix timer leak
+  ([#184](https://github.com/slaclab/sc_linac_physics/pull/184),
+  [`421dfca`](https://github.com/slaclab/sc_linac_physics/commit/421dfcac793992274147915f2b4e760a6b2ec0e7))
+
+- **microphonics**: Move constants to dedicated module and fix timer leak
+  ([#184](https://github.com/slaclab/sc_linac_physics/pull/184),
+  [`421dfca`](https://github.com/slaclab/sc_linac_physics/commit/421dfcac793992274147915f2b4e760a6b2ec0e7))
+
+
 ## v8.3.0 (2025-12-09)
 
 ### Features
