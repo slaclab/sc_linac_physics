@@ -5,6 +5,8 @@ Centralized constants for Microphonics GUI application.
 import re
 from pathlib import Path
 
+from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_MAP
+
 # HARDWARE & SAMPLING
 BASE_HARDWARE_SAMPLE_RATE = 2000  # Hz - base sample rate from hardware
 BUFFER_LENGTH = 16384  # samples per buffer
@@ -18,12 +20,7 @@ RACK_A_CAVITIES = [1, 2, 3, 4]
 RACK_B_CAVITIES = [5, 6, 7, 8]
 
 # LINAC CONFIGURATION
-VALID_LINACS = {
-    "L0B": ["01"],
-    "L1B": ["02", "03", "H1", "H2"],
-    "L2B": [f"{i:02d}" for i in range(4, 16)],
-    "L3B": [f"{i:02d}" for i in range(16, 36)],
-}
+VALID_LINACS = dict(zip(["L0B", "L1B", "L2B", "L3B"], LINAC_CM_MAP))
 
 # FILE PATHS
 DEFAULT_DATA_PATH = Path("/u1/lcls/physics/rf_lcls2/microphonics")
