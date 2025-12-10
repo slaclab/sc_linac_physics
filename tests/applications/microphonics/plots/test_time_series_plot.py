@@ -7,11 +7,11 @@ import pyqtgraph as pg
 import pytest
 from PyQt5.QtWidgets import QApplication
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
-    BASE_HARDWARE_SAMPLE_RATE,
-)
 from sc_linac_physics.applications.microphonics.plots.time_series_plot import (
     TimeSeriesPlot,
+)
+from sc_linac_physics.applications.microphonics.utils.constants import (
+    BASE_HARDWARE_SAMPLE_RATE,
 )
 
 
