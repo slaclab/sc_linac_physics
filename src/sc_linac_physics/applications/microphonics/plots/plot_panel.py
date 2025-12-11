@@ -9,9 +9,6 @@ from PyQt5.QtWidgets import (
     QLabel,
 )
 
-from sc_linac_physics.applications.microphonics.gui.config_panel import (
-    ConfigPanel,
-)
 from sc_linac_physics.applications.microphonics.plots.fft_plot import FFTPlot
 from sc_linac_physics.applications.microphonics.plots.histogram_plot import (
     HistogramPlot,
@@ -21,6 +18,9 @@ from sc_linac_physics.applications.microphonics.plots.spectrogram_plot import (
 )
 from sc_linac_physics.applications.microphonics.plots.time_series_plot import (
     TimeSeriesPlot,
+)
+from sc_linac_physics.applications.microphonics.utils.constants import (
+    DEFAULT_DECIMATION,
 )
 from sc_linac_physics.applications.microphonics.utils.ui_utils import (
     create_pushbuttons,
@@ -220,7 +220,11 @@ class PlotPanel(QWidget):
         """Determines the decimation to use for plotting based on UI."""
         if self.config_panel:
             return self.config_panel.get_selected_decimation()
-        return ConfigPanel.DEFAULT_DECIMATION_VALUE
+        else:
+            print(
+                "PLOTPANEL WARNING: ConfigPanel ref missing. Using default decimation."
+            )
+            return DEFAULT_DECIMATION
 
     def update_plots(self, data_dict: dict):
         """Update all plots w/ new data"""
@@ -256,6 +260,10 @@ class PlotPanel(QWidget):
                 self.spectrogram_plot.update_plot(
                     cavity_num, data_for_this_plot_call
                 )
+            else:
+                print(
+                    f"PlotPanel: No data found for cavity {cavity_num} in received data_dict."
+                )
 
     def refresh_plots_if_decimation_changed(self):
         """
@@ -270,6 +278,10 @@ class PlotPanel(QWidget):
             self._current_plotting_decimation is None
             or self._current_plotting_decimation != new_ui_decimation
         ):
+            print(
+                f"PlotPanel: UI Decimation changed from {self._current_plotting_decimation} "
+                f"to {new_ui_decimation}. Refreshing plots."
+            )
             self.update_plots(self._last_data_dict_processed.copy())
 
     def clear_plots(self):

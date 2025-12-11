@@ -7,8 +7,9 @@ from PyQt5.QtCore import pyqtSignal
 from sc_linac_physics.applications.microphonics.gui.data_acquisition import (
     DataAcquisitionManager,
 )
-
-BASE_HARDWARE_SAMPLE_RATE = 2000
+from sc_linac_physics.applications.microphonics.utils.constants import (
+    VALID_DECIMATION_VALUES,
+)
 
 
 @dataclass
@@ -23,8 +24,8 @@ class MeasurementConfig:
         """Validate configuration parameters"""
         if not self.channels:
             return "No channels specified"
-        if self.decimation not in {1, 2, 4, 8}:
-            return f"Invalid decimation value: {self.decimation}. Must be 1, 2, 4, or 8"
+        if self.decimation not in VALID_DECIMATION_VALUES:
+            return f"Invalid decimation value: {self.decimation}. Must be one of {sorted(VALID_DECIMATION_VALUES)}"
         if self.buffer_count < 1:
             return f"Invalid buffer count: {self.buffer_count}. Must be greater than 0"
         return None

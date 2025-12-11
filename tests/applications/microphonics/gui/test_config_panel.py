@@ -4,11 +4,16 @@ import pytest
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QApplication
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
-    BASE_HARDWARE_SAMPLE_RATE,
-)
 from sc_linac_physics.applications.microphonics.gui.config_panel import (
     ConfigPanel,
+)
+from sc_linac_physics.applications.microphonics.utils.constants import (
+    BASE_HARDWARE_SAMPLE_RATE,
+    BUFFER_LENGTH,
+    DEFAULT_BUFFER_COUNT,
+    DEFAULT_DECIMATION,
+    VALID_DECIMATION_VALUES,
+    VALID_LINACS,
 )
 
 
@@ -48,12 +53,10 @@ def test_initial_state(config_panel):
     assert config_panel.is_updating is False
 
     # Check default decimation value
-    assert config_panel.decim_combo.currentText() == str(
-        config_panel.DEFAULT_DECIMATION_VALUE
-    )
+    assert config_panel.decim_combo.currentText() == str(DEFAULT_DECIMATION)
 
     # Check default buffer count
-    assert config_panel.buffer_spin.value() == config_panel.DEFAULT_BUFFER_COUNT
+    assert config_panel.buffer_spin.value() == DEFAULT_BUFFER_COUNT
 
     # Check initial button states
     assert config_panel.start_button.isEnabled() is True
@@ -70,9 +73,7 @@ def test_linac_selection(config_panel):
     assert config_panel.selected_linac == "L0B"
 
     # Check that the correct cryomodules are shown
-    assert len(config_panel.cryo_buttons) == len(
-        config_panel.VALID_LINACS["L0B"]
-    )
+    assert len(config_panel.cryo_buttons) == len(VALID_LINACS["L0B"])
     assert "01" in config_panel.cryo_buttons
 
 
@@ -98,7 +99,7 @@ def test_cavity_selection(config_panel):
 def test_decimation_settings(config_panel):
     """Test decimation settings and related calculations."""
     # Test each valid decimation value
-    for decimation in config_panel.VALID_DECIMATION:
+    for decimation in VALID_DECIMATION_VALUES:
         config_panel.decim_combo.setCurrentText(str(decimation))
 
         # Check sampling rate calculation
@@ -109,9 +110,9 @@ def test_decimation_settings(config_panel):
         )  # Allow for floating point rounding
 
         # Check acquisition time calculation with default buffer count
-        buffer_count = config_panel.DEFAULT_BUFFER_COUNT
+        buffer_count = DEFAULT_BUFFER_COUNT
         expected_time = (
-            config_panel.BUFFER_LENGTH * decimation * buffer_count
+            BUFFER_LENGTH * decimation * buffer_count
         ) / BASE_HARDWARE_SAMPLE_RATE
         displayed_time = float(config_panel.label_acq_time.text())
         assert (

@@ -17,8 +17,14 @@ from PyQt5.QtWidgets import (
     QFileDialog,
 )
 
-from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
+from sc_linac_physics.applications.microphonics.utils.constants import (
     BASE_HARDWARE_SAMPLE_RATE,
+    VALID_DECIMATION_VALUES,
+    DEFAULT_DECIMATION,
+    DEFAULT_BUFFER_COUNT,
+    BUFFER_LENGTH,
+    VALID_LINACS,
+    DEFAULT_DATA_PATH,
 )
 from sc_linac_physics.applications.microphonics.utils.pv_utils import (
     format_accl_base,
@@ -45,19 +51,6 @@ class ConfigPanel(QWidget):
     measurementStopped = pyqtSignal()  # Emitted when stop button clicked
     decimationSettingChanged = pyqtSignal(int)
     file_selected = pyqtSignal(Path)
-
-    # Constants
-    VALID_LINACS = {
-        "L0B": ["01"],
-        "L1B": ["02", "03", "H1", "H2"],
-        "L2B": [f"{i:02d}" for i in range(4, 16)],
-        "L3B": [f"{i:02d}" for i in range(16, 36)],
-    }
-    VALID_DECIMATION = {1, 2, 4, 8}
-    DEFAULT_DECIMATION_VALUE = 2
-    DEFAULT_BUFFER_COUNT = 1
-    BUFFER_LENGTH = 16384
-    PREFERRED_DEFAULT_DATA_PATH = Path("/u1/lcls/physics/rf_lcls2/microphonics")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -108,15 +101,21 @@ class ConfigPanel(QWidget):
 
     def get_selected_decimation(self):
         """Returns the currently selected decimation value from the UI."""
-        return int(self.decim_combo.currentText())
+        try:
+            return int(self.decim_combo.currentText())
+        except ValueError:
+            print(
+                f"Warning: Could not parse decimation from UI, defaulting to {DEFAULT_DECIMATION}."
+            )
+            return DEFAULT_DECIMATION
 
     def _set_default_decimation(self):
         """Sets the decimation combo box to the default value."""
-        if str(self.DEFAULT_DECIMATION_VALUE) in [
+        if str(DEFAULT_DECIMATION) in [
             self.decim_combo.itemText(i)
             for i in range(self.decim_combo.count())
         ]:
-            self.decim_combo.setCurrentText(str(self.DEFAULT_DECIMATION_VALUE))
+            self.decim_combo.setCurrentText(str(DEFAULT_DECIMATION))
         else:
             if self.decim_combo.count() > 0:
                 self.decim_combo.setCurrentIndex(0)
@@ -128,7 +127,7 @@ class ConfigPanel(QWidget):
 
         # Linac selection buttons
         linac_layout = QHBoxLayout()
-        linac_items = {linac: linac for linac in self.VALID_LINACS}
+        linac_items = {linac: linac for linac in VALID_LINACS}
 
         # Make linac selection buttons
         self.linac_buttons = create_pushbuttons(
@@ -254,7 +253,7 @@ class ConfigPanel(QWidget):
         layout.addWidget(QLabel("Decimation:"), 0, 0)
         self.decim_combo = QComboBox()
         self.decim_combo.addItems(
-            [str(x) for x in sorted(self.VALID_DECIMATION)]
+            [str(x) for x in sorted(VALID_DECIMATION_VALUES)]
         )
         layout.addWidget(self.decim_combo, 0, 1)
 
@@ -262,7 +261,7 @@ class ConfigPanel(QWidget):
         layout.addWidget(QLabel("Buffer Count:"), 1, 0)
         self.buffer_spin = QSpinBox()
         self.buffer_spin.setRange(1, 1000)
-        self.buffer_spin.setValue(self.DEFAULT_BUFFER_COUNT)
+        self.buffer_spin.setValue(DEFAULT_BUFFER_COUNT)
         layout.addWidget(self.buffer_spin, 1, 1)
 
         # Sampling Rate Display
@@ -289,39 +288,49 @@ class ConfigPanel(QWidget):
 
     def _update_daq_parameters(self):
         """Calculate and update sampling rate and acquisition time displays"""
-        # Get current values (buffer count and the selected text from decimation combo box)
-        number_of_buffers = int(self.buffer_spin.value())
-        decimation_text = self.decim_combo.currentText()
-        # If somehow the combo box does not have any text set displays to N/A and exit
-        if not decimation_text:
-            self.label_sampling_rate.setText("N/A")
-            self.label_acq_time.setText("N/A")
-            return
-        # Converting decimation text to int ("2" -> 2)
-        decimation_num = int(decimation_text)
+        try:
+            # Get current values (buffer count and the selected text from decimation combo box)
+            number_of_buffers = int(self.buffer_spin.value())
+            decimation_text = self.decim_combo.currentText()
+            # If somehow the combo box does not have any text set displays to N/A and exit
+            if not decimation_text:
+                self.label_sampling_rate.setText("N/A")
+                self.label_acq_time.setText("N/A")
+                return
+            # Converting decimation text to int ("2" -> 2)
+            decimation_num = int(decimation_text)
 
-        # Calculate sampling rate
-        sampling_rate = BASE_HARDWARE_SAMPLE_RATE / decimation_num
+            # Calculate sampling rate
+            sampling_rate = BASE_HARDWARE_SAMPLE_RATE / decimation_num
 
-        # Display sampling rate with right precision
-        if sampling_rate >= 1000:
-            # (e.g 2000)
-            self.label_sampling_rate.setText(f"{sampling_rate:.0f}")
-        else:
-            # (e.g 500.0)
-            self.label_sampling_rate.setText(f"{sampling_rate:.1f}")
+            # Display sampling rate with right precision
+            if sampling_rate >= 1000:
+                # (e.g 2000)
+                self.label_sampling_rate.setText(f"{sampling_rate:.0f}")
+            else:
+                # (e.g 500.0)
+                self.label_sampling_rate.setText(f"{sampling_rate:.1f}")
 
-        # Calculate total acquisition time
-        # Formula: (BUFFER_LENGTH / effective_sample_rate) * number_of_buffers
-        acquisition_time = (
-            self.BUFFER_LENGTH * decimation_num * number_of_buffers
-        ) / BASE_HARDWARE_SAMPLE_RATE
+            # Calculate total acquisition time
+            # Formula: (BUFFER_LENGTH / effective_sample_rate) * number_of_buffers
+            acquisition_time = (
+                BUFFER_LENGTH * decimation_num * number_of_buffers
+            ) / BASE_HARDWARE_SAMPLE_RATE
 
-        # Display acquisition time with right precision
-        if acquisition_time < 1:
-            self.label_acq_time.setText(f"{acquisition_time:.3f}")
-        else:
-            self.label_acq_time.setText(f"{acquisition_time:.2f}")
+            # Display acquisition time with right precision
+            if acquisition_time < 1:
+                self.label_acq_time.setText(f"{acquisition_time:.3f}")
+            else:
+                self.label_acq_time.setText(f"{acquisition_time:.2f}")
+
+        except ValueError as e:
+            print(f"Error parsing values in _update_daq_parameters: {e}")
+            self.label_sampling_rate.setText("Error")
+            self.label_acq_time.setText("Error")
+        except Exception as e:
+            print(f"Unexpected error in _update_daq_parameters: {e}")
+            self.label_sampling_rate.setText("Error")
+            self.label_acq_time.setText("Error")
 
     def create_control_section(self):
         """Create measurement control section"""
@@ -373,7 +382,7 @@ class ConfigPanel(QWidget):
             return
 
         # Add new buttons
-        modules = self.VALID_LINACS[self.selected_linac]
+        modules = VALID_LINACS[self.selected_linac]
 
         # Create dictionary of button items
         button_items = {}
@@ -435,23 +444,51 @@ class ConfigPanel(QWidget):
         self.stop_button.clicked.connect(lambda: self.measurementStopped.emit())
         self.load_button.clicked.connect(self._show_file_dialog)
 
-        self.decim_combo.currentIndexChanged.connect(
-            self._handle_decimation_change
-        )
-        self.buffer_spin.valueChanged.connect(self._update_daq_parameters)
-        self.buffer_spin.valueChanged.connect(
-            lambda: (
-                self._emit_config_changed() if not self.is_updating else None
+        if hasattr(self, "decim_combo"):
+            self.decim_combo.currentIndexChanged.connect(
+                self._handle_decimation_change
             )
-        )
+        else:
+            print(
+                "WARNING (ConfigPanel): self.decim_combo not found during signal connection."
+            )
+        if hasattr(self, "buffer_spin"):
+            self.buffer_spin.valueChanged.connect(self._update_daq_parameters)
+            self.buffer_spin.valueChanged.connect(
+                lambda: (
+                    self._emit_config_changed()
+                    if not self.is_updating
+                    else None
+                )
+            )
+        else:
+            print(
+                "WARNING (ConfigPanel): self.buffer_spin not found during signal connection."
+            )
 
     def _handle_decimation_change(self):
         """Handle changes to decimation combo box"""
         # Update DAQ parameters display (to recalculate and update sampling rate and acq time displays)
         self._update_daq_parameters()
-        dec_value = int(self.decim_combo.currentText())
-        self.decimationSettingChanged.emit(dec_value)
-        self._emit_config_changed()
+
+        # Emit decimation specific signal
+        try:
+            # Get current decimation value from combo box
+            dec_value = int(self.decim_combo.currentText())
+            # Emit signal w/ new decimation value
+            self.decimationSettingChanged.emit(dec_value)
+            print(
+                f"DEBUG (ConfigPanel): Emitted decimationSettingChanged with value: {dec_value}"
+            )
+        except ValueError:
+            print(
+                f"WARNING (ConfigPanel): Could not parse decimation value from "
+                f"combo box: {self.decim_combo.currentText()}"
+            )
+
+        # Emit general config change if not updating
+        if not self.is_updating:
+            self._emit_config_changed()
 
     def _on_start_clicked(self):
         """Start button click w/ validation"""
@@ -536,8 +573,8 @@ class ConfigPanel(QWidget):
 
     def _get_start_directory(self) -> str:
         """Figures the best starting directory for the file dialog."""
-        if self.PREFERRED_DEFAULT_DATA_PATH.is_dir():
-            return str(self.PREFERRED_DEFAULT_DATA_PATH)
+        if DEFAULT_DATA_PATH.is_dir():
+            return str(DEFAULT_DATA_PATH)
         home_path = Path.home()
         if home_path.is_dir():
             return str(home_path)
