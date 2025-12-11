@@ -1,12 +1,19 @@
+import logging
 import os
+import platform
 from csv import DictReader
 from datetime import datetime, timedelta
 from typing import Dict, List
 
 from lcls_tools.common.data.archiver import ArchiveDataHandler
 
-DEBUG = False
-BACKEND_SLEEP_TIME = 10
+from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
+
+CAV_LOG_DIR = str(BASE_LOG_DIR / "cavity_display")
+
+# Basic OS detection
+DEBUG = platform.system() == "Darwin"  # True on macOS, False elsewhere
+BACKEND_SLEEP_TIME = 10 if DEBUG else 0
 
 STATUS_SUFFIX = "CUDSTATUS"
 SEVERITY_SUFFIX = "CUDSEVR"
@@ -65,3 +72,11 @@ def severity_of_fault(timestamp: datetime, severities: ArchiveDataHandler):
         else:
             break
     return sevr
+
+
+cavity_fault_logger = custom_logger(
+    name="cavity.fault.runner",
+    log_filename="cavity_fault_runner",
+    log_dir=CAV_LOG_DIR,
+    level=logging.DEBUG if DEBUG else logging.INFO,
+)
