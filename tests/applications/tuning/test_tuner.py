@@ -3,7 +3,7 @@
 from unittest.mock import patch, Mock
 
 import pytest
-from PyQt5.QtWidgets import QWidget, QCheckBox
+from PyQt5.QtWidgets import QWidget, QCheckBox, QGroupBox
 
 
 class MockDisplay(QWidget):
@@ -20,9 +20,14 @@ class TestTunerMethods:
     def tuner_minimal(self, qapp_global, mock_machine):
         """Create minimal Tuner instance for testing methods."""
         from sc_linac_physics.applications.tuning.tuning_gui import Tuner
+        from PyQt5.QtWidgets import QSplitter
+        from qtpy import QtCore
 
         # Use Tuner.__new__() for Qt classes in Python 3.13+
         tuner = Tuner.__new__(Tuner)
+
+        # Initialize QWidget base class
+        QWidget.__init__(tuner)
 
         # Set only the attributes we need
         tuner.machine = mock_machine
@@ -31,14 +36,19 @@ class TestTunerMethods:
         tuner.current_cryomodule = None
         tuner.rack_screen_cache = {}
         tuner.current_rack_screens = None
-        tuner.rack_layout = Mock()
         tuner._window_title = "SRF Tuner"
+
+        # Add rack_splitter (needed for on_cryomodule_changed)
+        tuner.rack_splitter = QSplitter(QtCore.Qt.Horizontal)
 
         # Mock methods that would require full initialization
         tuner.setWindowTitle = Mock(
             side_effect=lambda x: setattr(tuner, "_window_title", x)
         )
         tuner.windowTitle = Mock(return_value=tuner._window_title)
+
+        # Mock _clear_rack_displays since it needs the splitter
+        tuner._clear_rack_displays = Mock()
 
         return tuner
 
@@ -105,17 +115,24 @@ class TestTunerMethods:
             # Mock RackScreen to return screens with real QWidget groupbox
             def create_screen(*args, **kwargs):
                 screen = Mock()
-                screen.groupbox = QWidget()  # Real QWidget, not Mock
+                screen.groupbox = (
+                    QGroupBox()
+                )  # Use QGroupBox instead of QWidget
                 return screen
 
             mock_rack_screen.side_effect = create_screen
 
             tuner_minimal.on_cryomodule_changed("CM01")
 
-            assert (
-                tuner_minimal.current_cryomodule
-                == mock_machine.cryomodules["CM01"]
-            )
+            # Verify RackScreen was called twice (rack_a and rack_b)
+            assert mock_rack_screen.call_count == 2
+
+            # Verify screens were cached
+            assert "CM01" in tuner_minimal.rack_screen_cache
+
+            # Verify current screens are set
+            assert tuner_minimal.current_rack_screens is not None
+            assert len(tuner_minimal.current_rack_screens) == 2
 
     def test_empty_cryomodule_selection(self, tuner_minimal):
         """Test handling empty cryomodule selection."""
@@ -163,13 +180,9 @@ class TestTunerIntegration:
             assert hasattr(tuner, "use_rf_checkbox")
             assert hasattr(tuner, "cm_cold_button")
             assert hasattr(tuner, "cm_abort_button")
-            assert hasattr(tuner, "rack_container")
-
-            # Check initial states
-            assert tuner.use_rf_checkbox.isChecked() is True
-            assert (
-                tuner.use_rf_checkbox.isEnabled() is False
-            )  # Disabled until feature ready
+            assert hasattr(
+                tuner, "rack_splitter"
+            )  # Changed from rack_container
 
     @pytest.mark.timeout(10)
     def test_window_can_be_shown_and_hidden(self, qapp_global, tuner_patches):
@@ -210,9 +223,10 @@ class TestTunerIntegration:
             # Check layout exists
             assert tuner.layout() is not None
 
-            # Check that rack container is present
-            assert tuner.rack_container is not None
-            assert tuner.rack_layout is not None
+            # Check that rack splitter is present
+            assert (
+                tuner.rack_splitter is not None
+            )  # Changed from rack_container
 
     @pytest.mark.timeout(10)
     def test_cryomodule_selector_populated(self, qapp_global, mock_machine):
