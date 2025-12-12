@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v8.4.0 (2025-12-12)
+
+### Chores
+
+- **tuner**: Patching failing tests ([#192](https://github.com/slaclab/sc_linac_physics/pull/192),
+  [`5192bb0`](https://github.com/slaclab/sc_linac_physics/commit/5192bb050d836dcbea5a04db7693dc5e885479db))
+
+### Features
+
+- **tuning**: Improve error handling and UI layout with resizable splitters
+  ([#192](https://github.com/slaclab/sc_linac_physics/pull/192),
+  [`5192bb0`](https://github.com/slaclab/sc_linac_physics/commit/5192bb050d836dcbea5a04db7693dc5e885479db))
+
+### Testing
+
+- Add comprehensive unit and integration tests for tuning GUI
+  ([#190](https://github.com/slaclab/sc_linac_physics/pull/190),
+  [`58f619a`](https://github.com/slaclab/sc_linac_physics/commit/58f619aee2f8fc2f9da9141260ecccb8df22b5d2))
+
+- Replace failing fault count display tests with simplified version
+  ([#188](https://github.com/slaclab/sc_linac_physics/pull/188),
+  [`058fe51`](https://github.com/slaclab/sc_linac_physics/commit/058fe5143f76f5170ca670df76d8d7b2ec2ed3c4))
+
+
 ## v8.3.2 (2025-12-10)
 
 ### Bug Fixes
