@@ -260,7 +260,7 @@ class CavityPVGroup(PVGroup):
 
     # Control for simulating different quench types (for testing)
     quench_type: PvpropertyEnum = pvproperty(
-        value=0,
+        value=2,
         name="SIM:QUENCH_TYPE",
         dtype=ChannelType.ENUM,
         enum_strings=("Real", "Spurious", "Random"),
@@ -443,14 +443,14 @@ class CavityPVGroup(PVGroup):
 
     @interlock_reset.putter
     async def interlock_reset(self, instance, value):
-        if value == 1:  # Only act on "Reset" command
+        if value:  # Any non-zero/non-empty value triggers reset
             await self.quench_latch.write(0)
-            await self.ssa_latch.write(0)  # Reset SSA latch too
+            await self.ssa_latch.write(0)
             # Restore amplitude only if RF is on
             if self.rf_state_act.value == 1:
                 await self.aact.write(self.ades.value)
                 await self.amean.write(self.ades.value)
-            # Reset the command
+            # Reset the command back to default
             await self.interlock_reset.write(0)
 
     @ades.putter

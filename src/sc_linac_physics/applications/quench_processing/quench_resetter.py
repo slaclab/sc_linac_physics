@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from time import sleep, time
 from typing import List, Dict, Optional
 
-
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
 )
@@ -20,7 +19,6 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 
 QUENCH_MACHINE = Machine(cavity_class=QuenchCavity)
 
-# Module-level logger with explicit descriptive name
 logger = custom_logger(
     "quench_resetter.main",
     log_dir=QUENCH_LOG_DIR,
@@ -38,9 +36,9 @@ class CavityResetStats:
     """Statistics for a single cavity's reset history."""
 
     total_resets: int = 0
+    total_real_quenches: int = 0  # Times we detected a real quench
     last_reset_time: Optional[float] = None
-    last_successful_reset: Optional[float] = None
-    failed_reset_count: int = 0
+    last_check_was_quenched: bool = False  # Track state from last check
 
 
 class CavityResetTracker:
@@ -59,14 +57,13 @@ class CavityResetTracker:
 
     def can_reset(self, quench_cav: QuenchCavity) -> tuple[bool, str]:
         """
-        Check if cavity can be reset.
+        Check if cavity can be reset based on cooldown.
 
         Returns:
             tuple: (can_reset: bool, reason: str)
         """
         stats = self._get_stats(quench_cav)
 
-        # Check cooldown period
         if stats.last_reset_time is not None:
             time_since_reset = time() - stats.last_reset_time
             if time_since_reset < self.cooldown_seconds:
@@ -75,56 +72,35 @@ class CavityResetTracker:
 
         return True, "ready"
 
-    def get_time_until_ready(self, quench_cav: QuenchCavity) -> float:
-        """Get seconds until cavity can be reset again."""
+    def record_fake_quench_reset(self, quench_cav: QuenchCavity):
+        """Record that a fake quench reset was sent."""
         stats = self._get_stats(quench_cav)
-
-        if stats.last_reset_time is None:
-            return 0.0
-
-        time_since_reset = time() - stats.last_reset_time
-        remaining = self.cooldown_seconds - time_since_reset
-        return max(0.0, remaining)
-
-    def record_reset(self, quench_cav: QuenchCavity, success: bool):
-        """Record that a reset was attempted on this cavity."""
-        stats = self._get_stats(quench_cav)
-        cavity_id = str(quench_cav)
-
         stats.last_reset_time = time()
         stats.total_resets += 1
 
-        if success:
-            stats.last_successful_reset = time()
-            logger.debug(
-                f"Recorded successful reset for {cavity_id} "
-                f"(total: {stats.total_resets})"
-            )
-        else:
-            stats.failed_reset_count += 1
-            logger.debug(
-                f"Recorded failed reset for {cavity_id} "
-                f"(total failures: {stats.failed_reset_count})"
-            )
+    def record_real_quench(self, quench_cav: QuenchCavity):
+        """Record that a real quench was detected."""
+        stats = self._get_stats(quench_cav)
+        stats.last_reset_time = time()  # Apply cooldown
+        stats.total_real_quenches += 1
+        stats.last_check_was_quenched = True
+
+    def record_not_quenched(self, quench_cav: QuenchCavity):
+        """Record that cavity is not quenched."""
+        stats = self._get_stats(quench_cav)
+        stats.last_check_was_quenched = False
 
     def get_summary(self) -> Dict[str, dict]:
         """Get summary of all cavity statistics."""
         return {
             cavity_id: {
                 "total_resets": stats.total_resets,
-                "failed_resets": stats.failed_reset_count,
-                "last_reset": stats.last_reset_time,
+                "total_real_quenches": stats.total_real_quenches,
+                "currently_quenched": stats.last_check_was_quenched,
             }
             for cavity_id, stats in self.cavity_stats.items()
-            if stats.total_resets > 0
+            if stats.total_resets > 0 or stats.total_real_quenches > 0
         }
-
-
-def _should_check_cavity(quench_cav: QuenchCavity) -> bool:
-    """Determine if cavity should be checked for quench."""
-    return (
-        quench_cav.hw_mode == HW_MODE_ONLINE_VALUE and not quench_cav.turned_off
-    )
 
 
 def _handle_quenched_cavity(
@@ -133,28 +109,32 @@ def _handle_quenched_cavity(
     counts: Dict[str, int],
 ) -> None:
     """Handle a cavity that is in quenched state."""
-    logger.warning(f"Quench detected on {quench_cav}")
-
-    # Check if we can reset this cavity
+    # Check cooldown
     can_reset, reason = reset_tracker.can_reset(quench_cav)
-
     if not can_reset:
-        logger.info(f"Skipping {quench_cav} - {reason}")
+        logger.debug(f"{quench_cav} quenched but {reason}")
         counts["skipped"] += 1
         return
 
-    # Attempt reset
-    logger.info(f"Attempting reset for {quench_cav}")
-    success = quench_cav.reset_quench()
+    # Validate if it's a fake quench
+    logger.info(f"Quench detected on {quench_cav}, validating...")
+    is_real = quench_cav.validate_quench(wait_for_update=True)
 
-    reset_tracker.record_reset(quench_cav, success)
+    if is_real:
+        logger.warning(f"REAL quench on {quench_cav}, NOT resetting")
+        counts["real_quench"] += 1
+        reset_tracker.record_real_quench(quench_cav)
+        return
 
-    if success:
-        counts["reset"] += 1
-        logger.info(f"Successfully reset {quench_cav}")
-    else:
-        counts["error"] += 1
-        logger.error(f"Failed to reset {quench_cav}")
+    # Fake quench - send reset command (non-blocking)
+    logger.info(f"FAKE quench on {quench_cav}, sending reset command")
+
+    if not quench_cav._interlock_reset_pv_obj:
+        quench_cav._interlock_reset_pv_obj = PV(quench_cav.interlock_reset_pv)
+
+    quench_cav._interlock_reset_pv_obj.put(1, wait=False)
+    reset_tracker.record_fake_quench_reset(quench_cav)
+    counts["reset"] += 1
 
 
 def _update_heartbeat(watcher_pv: PV) -> None:
@@ -173,7 +153,7 @@ def check_cavities(
     reset_tracker: CavityResetTracker,
 ) -> Dict[str, int]:
     """
-    Check all cavities for quench conditions and attempt reset if needed.
+    Check all cavities for quench conditions and send reset commands if needed.
 
     Args:
         cavity_list: List of QuenchCavity objects to monitor
@@ -181,39 +161,51 @@ def check_cavities(
         reset_tracker: Tracker for per-cavity reset cooldowns
 
     Returns:
-        Dict with counts: reset, skipped, error, checked
+        Dict with counts: reset, skipped, error, checked, real_quench
     """
-    counts = {"reset": 0, "skipped": 0, "error": 0, "checked": 0}
+    counts = {
+        "reset": 0,
+        "skipped": 0,
+        "error": 0,
+        "checked": 0,
+        "real_quench": 0,
+    }
 
     try:
         for quench_cav in cavity_list:
             try:
                 # Skip offline or turned off cavities
-                if not _should_check_cavity(quench_cav):
+                if (
+                    quench_cav.hw_mode != HW_MODE_ONLINE_VALUE
+                    or quench_cav.turned_off
+                ):
                     continue
 
                 counts["checked"] += 1
 
-                if quench_cav.is_quenched:
-                    _handle_quenched_cavity(quench_cav, reset_tracker, counts)
+                # If not quenched, record and move on
+                if not quench_cav.is_quenched:
+                    reset_tracker.record_not_quenched(quench_cav)
+                    continue
+
+                # Handle quenched cavity
+                _handle_quenched_cavity(quench_cav, reset_tracker, counts)
 
             except (CavityFaultError, PVInvalidError) as e:
                 logger.error(f"Error checking {quench_cav}: {e}")
                 counts["error"] += 1
-                continue
             except Exception as e:
                 logger.error(
                     f"Unexpected error checking {quench_cav}: {e}",
                     exc_info=True,
                 )
                 counts["error"] += 1
-                continue
 
-        # Log summary if anything happened
-        if counts["reset"] > 0 or counts["skipped"] > 0:
+        # Log summary if anything interesting happened
+        if any(counts[k] > 0 for k in ["reset", "real_quench", "error"]):
             logger.info(
-                f"Cycle summary: {counts['checked']} checked, "
-                f"{counts['reset']} reset, {counts['skipped']} skipped, "
+                f"Cycle: {counts['checked']} checked, {counts['reset']} reset, "
+                f"{counts['real_quench']} real quenches, {counts['skipped']} skipped, "
                 f"{counts['error']} errors"
             )
 
@@ -227,12 +219,7 @@ def check_cavities(
 
 
 def initialize_watcher_pv() -> PV:
-    """
-    Initialize and reset the heartbeat PV.
-
-    Returns:
-        Initialized PV object
-    """
+    """Initialize and reset the heartbeat PV."""
     pv_name = "PHYS:SYS0:1:SC_CAV_QNCH_RESET_HEARTBEAT"
     logger.info(f"Initializing watcher PV: {pv_name}")
 
@@ -247,17 +234,12 @@ def initialize_watcher_pv() -> PV:
 
 
 def load_cavities() -> List[QuenchCavity]:
-    """
-    Load cavity list from QUENCH_MACHINE.
-
-    Returns:
-        List of QuenchCavity objects
-    """
+    """Load cavity list from QUENCH_MACHINE."""
     logger.info("Loading cavity list from QUENCH_MACHINE...")
 
     try:
         cavities = list(QUENCH_MACHINE.all_iterator)
-        logger.info("Successfully loaded cavities")
+        logger.info(f"Successfully loaded {len(cavities)} cavities")
         return cavities
 
     except Exception as e:
@@ -271,12 +253,40 @@ def _log_final_summary(reset_tracker: CavityResetTracker) -> None:
     if summary:
         logger.info("=" * 80)
         logger.info("Final Reset Statistics:")
-        for cavity_id, stats in summary.items():
+
+        # Separate by current state
+        currently_quenched = {
+            k: v for k, v in summary.items() if v["currently_quenched"]
+        }
+        successfully_cleared = {
+            k: v for k, v in summary.items() if not v["currently_quenched"]
+        }
+
+        if successfully_cleared:
             logger.info(
-                f"  {cavity_id}: "
-                f"{stats['total_resets']} total resets, "
-                f"{stats['failed_resets']} failed"
+                f"\nSuccessfully cleared ({len(successfully_cleared)} cavities):"
             )
+            for cavity_id, stats in successfully_cleared.items():
+                logger.info(
+                    f"  {cavity_id}: {stats['total_resets']} fake quench resets"
+                )
+
+        if currently_quenched:
+            logger.info(
+                f"\nStill quenched ({len(currently_quenched)} cavities):"
+            )
+            for cavity_id, stats in currently_quenched.items():
+                msg_parts = []
+                if stats["total_resets"] > 0:
+                    msg_parts.append(
+                        f"{stats['total_resets']} fake quench resets"
+                    )
+                if stats["total_real_quenches"] > 0:
+                    msg_parts.append(
+                        f"{stats['total_real_quenches']} real quenches detected"
+                    )
+                logger.info(f"  {cavity_id}: {', '.join(msg_parts)}")
+
         logger.info("=" * 80)
     else:
         logger.info("No resets were performed during this session")
@@ -324,7 +334,6 @@ def main():
         logger.critical(f"Fatal error in main: {e}", exc_info=True)
         raise
     finally:
-        # Final summary only logged on shutdown
         if reset_tracker:
             _log_final_summary(reset_tracker)
 
