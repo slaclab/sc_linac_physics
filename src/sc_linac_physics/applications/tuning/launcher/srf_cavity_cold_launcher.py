@@ -10,6 +10,7 @@ from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     ALL_CRYOMODULES,
     CavityAbortError,
+    STATUS_ERROR_VALUE,
 )
 
 logger = custom_logger(
@@ -50,9 +51,13 @@ def detune_cavity(cavity: TuneCavity) -> bool:
         )
         return True
     except CavityAbortError as e:
+        cavity.set_status_message(str(e), level=logging.ERROR)
+        cavity.status = STATUS_ERROR_VALUE
         logger.error(str(e))
         return False
     except Exception as e:
+        cavity.set_status_message(str(e), level=logging.ERROR)
+        cavity.status = STATUS_ERROR_VALUE
         logger.exception(
             f"Error detuning {cavity}",
             extra={
