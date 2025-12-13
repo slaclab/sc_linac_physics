@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v8.5.0 (2025-12-13)
+
+### Features
+
+- **cryomodule-plots**: Remove heater signals and set JT valve range to 0-80%
+  ([#194](https://github.com/slaclab/sc_linac_physics/pull/194),
+  [`2abfea5`](https://github.com/slaclab/sc_linac_physics/commit/2abfea563851e8e18dbf823a5c63f3f2f6bb8884))
+
+
 ## v8.4.0 (2025-12-12)
 
 ### Chores
