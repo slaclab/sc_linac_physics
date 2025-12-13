@@ -163,7 +163,7 @@ class LinacGroupedCryomodulePlotDisplay(Display):
         "aact_mean_sum_pv": (0, 144),
         "ds_level_pv": (80, 100),
         "us_level_pv": (60, 80),
-        "jt_valve_readback_pv": (0,80),  
+        "jt_valve_readback_pv": (0, 80),
     }
 
     def __init__(self, parent=None, args=None, macros=None):
