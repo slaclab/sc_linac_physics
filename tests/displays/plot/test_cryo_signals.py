@@ -49,7 +49,6 @@ def mock_machine():
             cm.jt_valve_readback_pv = f"CLIC:CM{cm_name}:3001:PVJT:ORBV"
             cm.ds_level_pv = f"CLL:CM{cm_name}:2301:DS:LVL"
             cm.us_level_pv = f"CLL:CM{cm_name}:2601:US:LVL"
-            cm.heater_readback_pv = f"CPIC:CM{cm_name}:0000:EHCV:ORBV"
             cm.aact_mean_sum_pv = f"ACCL:{linac_name}:{cm_name}00:AACTMEANSUM"
 
             linac.cryomodules[cm_name] = cm
@@ -260,11 +259,10 @@ class TestPVSelection:
     def test_correct_pvs_added(self, display):
         """Test that correct PV types are added to plots."""
         # Check that SELECTED_PV_ATTRIBUTES are used
-        assert len(display.SELECTED_PV_ATTRIBUTES) == 5
+        assert len(display.SELECTED_PV_ATTRIBUTES) == 4
         assert "jt_valve_readback_pv" in display.SELECTED_PV_ATTRIBUTES
         assert "ds_level_pv" in display.SELECTED_PV_ATTRIBUTES
         assert "us_level_pv" in display.SELECTED_PV_ATTRIBUTES
-        assert "heater_readback_pv" in display.SELECTED_PV_ATTRIBUTES
         assert "aact_mean_sum_pv" in display.SELECTED_PV_ATTRIBUTES
 
 
@@ -275,7 +273,7 @@ class TestGlobalAxisRangeDialog:
         """Test that dialog can be created."""
         dialog = GlobalAxisRangeDialog(display.SELECTED_PV_ATTRIBUTES, display)
         assert dialog is not None
-        assert len(dialog.axis_controls) == 5
+        assert len(dialog.axis_controls) == 4
 
     def test_dialog_has_controls_for_all_pv_types(self, display):
         """Test that dialog has controls for all PV types."""
@@ -413,8 +411,7 @@ class TestDefaultRanges:
 
     def test_auto_scale_defaults(self, display):
         """Test that some PVs default to auto-scale."""
-        assert display.DEFAULT_AXIS_RANGES["jt_valve_readback_pv"] is None
-        assert display.DEFAULT_AXIS_RANGES["heater_readback_pv"] is None
+        assert display.DEFAULT_AXIS_RANGES["jt_valve_readback_pv"] == (0, 80)
 
 
 class TestUIComponents:
