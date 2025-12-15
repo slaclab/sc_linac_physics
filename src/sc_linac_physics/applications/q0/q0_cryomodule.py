@@ -293,7 +293,6 @@ class Q0Cryomodule(Cryomodule):
         camonitor_clear(self.heater_readback_pv)
 
         self.current_data_run.end_time = datetime.now()
-
         print("Heater run done")
 
     def wait_for_ll_drop(self, target_ll_diff):
@@ -312,7 +311,8 @@ class Q0Cryomodule(Cryomodule):
 
     def fill_heater_readback_buffer(self, value, **kwargs):
         if self.current_data_run:
-            self.current_data_run.heater_readback_buffer.append(value)
+            buffer = self.current_data_run.heater_readback_buffer
+            buffer.append(value)
 
     # to be called after setup_for_q0 and each cavity's setup_SELA
     def takeNewQ0Measurement(
