@@ -684,7 +684,7 @@ class TestEdgeCasesAndErrorHandling:
 
     def test_cavity_length_consistency(self):
         """Test that cavity lengths are consistent with cavity type."""
-        regular = CavityPVGroup("REG:", isHL=False)
+        regular = CavityPVGroup("REG:", isHL=False, cm_group=mock_cm_group)
         hl = CavityPVGroup("HL:", isHL=True)
 
         assert regular.length > hl.length  # Regular cavities are longer
@@ -693,7 +693,7 @@ class TestEdgeCasesAndErrorHandling:
 
     def test_random_value_consistency(self):
         """Test that random values are consistent within single instance."""
-        cavity = CavityPVGroup("TEST:", isHL=False)
+        cavity = CavityPVGroup("TEST:", isHL=False, cm_group=mock_cm_group)
 
         # All detune values should be the same (set from same random value)
         assert cavity.detune.value == cavity.detune_rfs.value
