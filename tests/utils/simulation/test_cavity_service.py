@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -11,11 +11,11 @@ pytest_plugins = ("pytest_asyncio",)
 @pytest.fixture
 def mock_cm_group():
     """Create a mock cryomodule group for cavity testing."""
-    cm_group = MagicMock()
+    cm_group = Mock()
     cm_group.total_power = 0.0
-    cm_group.heater = MagicMock()
+    cm_group.heater = Mock()
     cm_group.heater.mode.value = 2
-    cm_group.heater.setpoint = MagicMock()
+    cm_group.heater.setpoint = Mock()
     cm_group.heater.setpoint.value = 0.0
     cm_group.heater.setpoint.write = AsyncMock()
     return cm_group
