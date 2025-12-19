@@ -682,7 +682,7 @@ class TestEdgeCasesAndErrorHandling:
         expected_gradient = large_amplitude / regular_cavity.length
         mock_gdes.assert_called_once_with(expected_gradient, verify_value=False)
 
-    def test_cavity_length_consistency(self):
+    def test_cavity_length_consistency(self, mock_cm_group):
         """Test that cavity lengths are consistent with cavity type."""
         regular = CavityPVGroup("REG:", isHL=False, cm_group=mock_cm_group)
         hl = CavityPVGroup("HL:", isHL=True)
@@ -691,7 +691,7 @@ class TestEdgeCasesAndErrorHandling:
         assert regular.length == 1.038
         assert hl.length == 0.346
 
-    def test_random_value_consistency(self):
+    def test_random_value_consistency(self, mock_cm_group):
         """Test that random values are consistent within single instance."""
         cavity = CavityPVGroup("TEST:", isHL=False, cm_group=mock_cm_group)
 
