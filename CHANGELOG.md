@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v8.6.0 (2025-12-19)
+
+### Features
+
+- **simulation**: Add cryogenic helium service logic with JT valve and heater control
+  ([#195](https://github.com/slaclab/sc_linac_physics/pull/195),
+  [`c1e9fb6`](https://github.com/slaclab/sc_linac_physics/commit/c1e9fb6833cb80f86a4848210a8eff60197c24d0))
+
+
 ## v8.5.1 (2025-12-17)
 
 ### Refactoring
