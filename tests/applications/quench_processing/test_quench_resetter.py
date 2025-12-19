@@ -12,7 +12,6 @@ from sc_linac_physics.applications.quench_processing.quench_cavity import (
 from sc_linac_physics.applications.quench_processing.quench_resetter import (
     CavityResetStats,
     CavityResetTracker,
-    _should_check_cavity,
     _handle_quenched_cavity,
     _update_heartbeat,
     check_cavities,
@@ -36,23 +35,23 @@ class TestCavityResetStats:
         """Test that default values are set correctly."""
         stats = CavityResetStats()
         assert stats.total_resets == 0
+        assert stats.total_real_quenches == 0
         assert stats.last_reset_time is None
-        assert stats.last_successful_reset is None
-        assert stats.failed_reset_count == 0
+        assert stats.last_check_was_quenched is False
 
     def test_custom_values(self):
         """Test initialization with custom values."""
         now = time()
         stats = CavityResetStats(
             total_resets=5,
+            total_real_quenches=2,
             last_reset_time=now,
-            last_successful_reset=now - 10,
-            failed_reset_count=2,
+            last_check_was_quenched=True,
         )
         assert stats.total_resets == 5
+        assert stats.total_real_quenches == 2
         assert stats.last_reset_time == now
-        assert stats.last_successful_reset == now - 10
-        assert stats.failed_reset_count == 2
+        assert stats.last_check_was_quenched is True
 
 
 class TestCavityResetTracker:
@@ -97,7 +96,7 @@ class TestCavityResetTracker:
 
     def test_can_reset_during_cooldown(self, tracker, mock_cavity):
         """Test that reset is blocked during cooldown."""
-        tracker.record_reset(mock_cavity, success=True)
+        tracker.record_fake_quench_reset(mock_cavity)
         can_reset, reason = tracker.can_reset(mock_cavity)
         assert can_reset is False
         assert "cooldown active" in reason
@@ -110,7 +109,7 @@ class TestCavityResetTracker:
         """Test that reset is allowed after cooldown period."""
         # First reset at time 100
         mock_time.return_value = 100.0
-        tracker.record_reset(mock_cavity, success=True)
+        tracker.record_fake_quench_reset(mock_cavity)
 
         # Check during cooldown (101.5 seconds)
         mock_time.return_value = 101.5
@@ -123,86 +122,63 @@ class TestCavityResetTracker:
         assert can_reset is True
         assert reason == "ready"
 
-    def test_get_time_until_ready_no_reset(self, tracker, mock_cavity):
-        """Test time until ready when no reset has occurred."""
-        time_remaining = tracker.get_time_until_ready(mock_cavity)
-        assert time_remaining == 0.0
-
     @patch(
         "sc_linac_physics.applications.quench_processing.quench_resetter.time"
     )
-    def test_get_time_until_ready_during_cooldown(
-        self, mock_time, tracker, mock_cavity
-    ):
-        """Test time calculation during cooldown."""
+    def test_record_fake_quench_reset(self, mock_time, tracker, mock_cavity):
+        """Test recording a fake quench reset."""
         mock_time.return_value = 100.0
-        tracker.record_reset(mock_cavity, success=True)
-
-        mock_time.return_value = 101.0
-        time_remaining = tracker.get_time_until_ready(mock_cavity)
-        assert time_remaining == pytest.approx(1.0, abs=0.01)
-
-    @patch(
-        "sc_linac_physics.applications.quench_processing.quench_resetter.time"
-    )
-    def test_get_time_until_ready_after_cooldown(
-        self, mock_time, tracker, mock_cavity
-    ):
-        """Test time calculation after cooldown expires."""
-        mock_time.return_value = 100.0
-        tracker.record_reset(mock_cavity, success=True)
-
-        mock_time.return_value = 105.0
-        time_remaining = tracker.get_time_until_ready(mock_cavity)
-        assert time_remaining == 0.0
-
-    @patch(
-        "sc_linac_physics.applications.quench_processing.quench_resetter.time"
-    )
-    def test_record_reset_success(self, mock_time, tracker, mock_cavity):
-        """Test recording a successful reset."""
-        mock_time.return_value = 100.0
-        tracker.record_reset(mock_cavity, success=True)
+        tracker.record_fake_quench_reset(mock_cavity)
 
         stats = tracker._get_stats(mock_cavity)
         assert stats.total_resets == 1
         assert stats.last_reset_time == 100.0
-        assert stats.last_successful_reset == 100.0
-        assert stats.failed_reset_count == 0
+        assert stats.total_real_quenches == 0
+        # Don't check last_check_was_quenched - it's set by check_cavities, not here
 
     @patch(
         "sc_linac_physics.applications.quench_processing.quench_resetter.time"
     )
-    def test_record_reset_failure(self, mock_time, tracker, mock_cavity):
-        """Test recording a failed reset."""
+    def test_record_real_quench(self, mock_time, tracker, mock_cavity):
+        """Test recording a real quench."""
         mock_time.return_value = 100.0
-        tracker.record_reset(mock_cavity, success=False)
+        tracker.record_real_quench(mock_cavity)
 
         stats = tracker._get_stats(mock_cavity)
-        assert stats.total_resets == 1
-        assert stats.last_reset_time == 100.0
-        assert stats.last_successful_reset is None
-        assert stats.failed_reset_count == 1
+        assert stats.total_resets == 0
+        assert stats.total_real_quenches == 1
+        assert stats.last_reset_time == 100.0  # Cooldown still applies
+        assert stats.last_check_was_quenched is True
+
+    def test_record_not_quenched(self, tracker, mock_cavity):
+        """Test recording that a cavity is not quenched."""
+        # First mark as quenched via record_real_quench (which does set the flag)
+        tracker.record_real_quench(mock_cavity)
+        stats = tracker._get_stats(mock_cavity)
+        assert stats.last_check_was_quenched is True
+
+        # Then mark as not quenched
+        tracker.record_not_quenched(mock_cavity)
+        assert stats.last_check_was_quenched is False
 
     @patch(
         "sc_linac_physics.applications.quench_processing.quench_resetter.time"
     )
-    def test_record_multiple_resets(self, mock_time, tracker, mock_cavity):
-        """Test recording multiple resets."""
+    def test_record_multiple_operations(self, mock_time, tracker, mock_cavity):
+        """Test recording multiple operations."""
         mock_time.return_value = 100.0
-        tracker.record_reset(mock_cavity, success=True)
+        tracker.record_fake_quench_reset(mock_cavity)
 
         mock_time.return_value = 105.0
-        tracker.record_reset(mock_cavity, success=False)
+        tracker.record_real_quench(mock_cavity)
 
         mock_time.return_value = 110.0
-        tracker.record_reset(mock_cavity, success=True)
+        tracker.record_fake_quench_reset(mock_cavity)
 
         stats = tracker._get_stats(mock_cavity)
-        assert stats.total_resets == 3
+        assert stats.total_resets == 2
+        assert stats.total_real_quenches == 1
         assert stats.last_reset_time == 110.0
-        assert stats.last_successful_reset == 110.0
-        assert stats.failed_reset_count == 1
 
     def test_get_summary_empty(self, tracker):
         """Test summary when no resets have occurred."""
@@ -212,7 +188,7 @@ class TestCavityResetTracker:
     @patch(
         "sc_linac_physics.applications.quench_processing.quench_resetter.time"
     )
-    def test_get_summary_with_resets(self, mock_time, tracker):
+    def test_get_summary_with_operations(self, mock_time, tracker):
         """Test summary with multiple cavities."""
         cavity1 = MagicMock(spec=QuenchCavity)
         cavity1.__str__ = MagicMock(return_value="CM01_Cav1")
@@ -220,57 +196,28 @@ class TestCavityResetTracker:
         cavity2.__str__ = MagicMock(return_value="CM01_Cav2")
 
         mock_time.return_value = 100.0
-        tracker.record_reset(cavity1, success=True)
-        tracker.record_reset(cavity1, success=False)
+        tracker.record_fake_quench_reset(cavity1)
+        tracker.record_real_quench(cavity1)
 
         mock_time.return_value = 105.0
-        tracker.record_reset(cavity2, success=True)
+        tracker.record_fake_quench_reset(cavity2)
+        tracker.record_not_quenched(cavity2)  # Cleared
 
         summary = tracker.get_summary()
         assert len(summary) == 2
-        assert summary["CM01_Cav1"]["total_resets"] == 2
-        assert summary["CM01_Cav1"]["failed_resets"] == 1
+        assert summary["CM01_Cav1"]["total_resets"] == 1
+        assert summary["CM01_Cav1"]["total_real_quenches"] == 1
+        assert summary["CM01_Cav1"]["currently_quenched"] is True
         assert summary["CM01_Cav2"]["total_resets"] == 1
-        assert summary["CM01_Cav2"]["failed_resets"] == 0
+        assert summary["CM01_Cav2"]["total_real_quenches"] == 0
+        assert summary["CM01_Cav2"]["currently_quenched"] is False
 
-    def test_get_summary_excludes_no_resets(self, tracker, mock_cavity):
-        """Test that summary excludes cavities with no resets."""
-        # Just get stats without recording reset
+    def test_get_summary_excludes_no_operations(self, tracker, mock_cavity):
+        """Test that summary excludes cavities with no operations."""
+        # Just get stats without recording anything
         tracker._get_stats(mock_cavity)
         summary = tracker.get_summary()
         assert summary == {}
-
-
-class TestShouldCheckCavity:
-    """Tests for _should_check_cavity function."""
-
-    def test_should_check_online_cavity(self):
-        """Test that online, running cavity should be checked."""
-        cavity = Mock()
-        cavity.hw_mode = HW_MODE_ONLINE_VALUE  # This is 0
-        cavity.turned_off = False
-        assert _should_check_cavity(cavity) is True
-
-    def test_should_not_check_offline_cavity(self):
-        """Test that offline cavity should not be checked."""
-        cavity = Mock()
-        cavity.hw_mode = HW_MODE_OFFLINE_VALUE  # This is 2, not 0!
-        cavity.turned_off = False
-        assert _should_check_cavity(cavity) is False
-
-    def test_should_not_check_turned_off_cavity(self):
-        """Test that turned off cavity should not be checked."""
-        cavity = Mock()
-        cavity.hw_mode = HW_MODE_ONLINE_VALUE  # 0
-        cavity.turned_off = True
-        assert _should_check_cavity(cavity) is False
-
-    def test_should_not_check_offline_and_turned_off(self):
-        """Test cavity that is both offline and turned off."""
-        cavity = Mock()
-        cavity.hw_mode = HW_MODE_OFFLINE_VALUE  # 2, not 0!
-        cavity.turned_off = True
-        assert _should_check_cavity(cavity) is False
 
 
 class TestHandleQuenchedCavity:
@@ -281,7 +228,9 @@ class TestHandleQuenchedCavity:
         """Create a mock QuenchCavity."""
         cavity = MagicMock(spec=QuenchCavity)
         cavity.__str__ = MagicMock(return_value="CM01_Cav1")
-        cavity.reset_quench = MagicMock(return_value=True)
+        cavity.validate_quench = MagicMock(return_value=False)  # Fake quench
+        cavity._interlock_reset_pv_obj = None
+        cavity.interlock_reset_pv = "TEST:RESET"
         return cavity
 
     @pytest.fixture
@@ -292,29 +241,42 @@ class TestHandleQuenchedCavity:
     @pytest.fixture
     def counts(self):
         """Create counts dictionary."""
-        return {"reset": 0, "skipped": 0, "error": 0, "checked": 0}
+        return {
+            "reset": 0,
+            "skipped": 0,
+            "error": 0,
+            "checked": 0,
+            "real_quench": 0,
+        }
 
-    def test_handle_quench_successful_reset(self, mock_cavity, tracker, counts):
-        """Test successful quench reset."""
-        mock_cavity.reset_quench.return_value = True
+    @patch("sc_linac_physics.applications.quench_processing.quench_resetter.PV")
+    def test_handle_fake_quench_reset(
+        self, mock_pv_class, mock_cavity, tracker, counts
+    ):
+        """Test handling a fake quench with successful reset."""
+        mock_pv = MagicMock()
+        mock_pv_class.return_value = mock_pv
+        mock_cavity.validate_quench.return_value = False  # Fake quench
 
         _handle_quenched_cavity(mock_cavity, tracker, counts)
 
         assert counts["reset"] == 1
+        assert counts["real_quench"] == 0
         assert counts["skipped"] == 0
-        assert counts["error"] == 0
-        mock_cavity.reset_quench.assert_called_once()
+        mock_cavity.validate_quench.assert_called_once_with(
+            wait_for_update=True
+        )
+        mock_pv.put.assert_called_once_with(1, wait=False)
 
-    def test_handle_quench_failed_reset(self, mock_cavity, tracker, counts):
-        """Test failed quench reset."""
-        mock_cavity.reset_quench.return_value = False
+    def test_handle_real_quench(self, mock_cavity, tracker, counts):
+        """Test handling a real quench (no reset)."""
+        mock_cavity.validate_quench.return_value = True  # Real quench
 
         _handle_quenched_cavity(mock_cavity, tracker, counts)
 
         assert counts["reset"] == 0
+        assert counts["real_quench"] == 1
         assert counts["skipped"] == 0
-        assert counts["error"] == 1
-        mock_cavity.reset_quench.assert_called_once()
 
     @patch(
         "sc_linac_physics.applications.quench_processing.quench_resetter.time"
@@ -325,7 +287,7 @@ class TestHandleQuenchedCavity:
         """Test that cavity is skipped during cooldown."""
         # First reset
         mock_time.return_value = 100.0
-        tracker.record_reset(mock_cavity, success=True)
+        tracker.record_fake_quench_reset(mock_cavity)
 
         # Try again immediately
         mock_time.return_value = 100.5
@@ -333,8 +295,8 @@ class TestHandleQuenchedCavity:
 
         assert counts["reset"] == 0
         assert counts["skipped"] == 1
-        assert counts["error"] == 0
-        mock_cavity.reset_quench.assert_not_called()
+        assert counts["real_quench"] == 0
+        mock_cavity.validate_quench.assert_not_called()
 
 
 class TestUpdateHeartbeat:
@@ -369,24 +331,14 @@ class TestCheckCavities:
         for i in range(3):
             cavity = Mock()
             cavity.__str__ = Mock(return_value=f"CM01_Cav{i+1}")
-            cavity.hw_mode = HW_MODE_ONLINE_VALUE  # 0
+            cavity.hw_mode = HW_MODE_ONLINE_VALUE
             cavity.turned_off = False
             cavity.is_quenched = False
+            cavity.validate_quench = Mock(return_value=False)
+            cavity._interlock_reset_pv_obj = None
+            cavity.interlock_reset_pv = f"TEST:CAV{i+1}:RESET"
             cavities.append(cavity)
         return cavities
-
-    def test_check_cavities_skips_offline(
-        self, mock_cavities, mock_pv, tracker
-    ):
-        """Test that offline cavities are skipped."""
-        # Set the first cavity to be offline
-        mock_cavities[0].hw_mode = HW_MODE_OFFLINE_VALUE  # Use 2, not 0!
-
-        counts = check_cavities(mock_cavities, mock_pv, tracker)
-
-        # Only online cavities are checked (counted)
-        assert counts["checked"] == 2
-        assert counts["reset"] == 0
 
     @pytest.fixture
     def mock_pv(self):
@@ -406,34 +358,84 @@ class TestCheckCavities:
 
         assert counts["checked"] == 3
         assert counts["reset"] == 0
+        assert counts["real_quench"] == 0
         assert counts["skipped"] == 0
         assert counts["error"] == 0
         mock_pv.put.assert_called_once_with(1)
 
-    def test_check_cavities_with_quench(self, mock_cavities, mock_pv, tracker):
-        """Test checking cavities with one quenched."""
+    @patch("sc_linac_physics.applications.quench_processing.quench_resetter.PV")
+    def test_check_cavities_with_fake_quench(
+        self, mock_pv_class, mock_cavities, mock_pv, tracker
+    ):
+        """Test checking cavities with one fake quench."""
+        mock_reset_pv = MagicMock()
+        mock_pv_class.return_value = mock_reset_pv
+
         type(mock_cavities[1]).is_quenched = PropertyMock(return_value=True)
-        mock_cavities[1].reset_quench = MagicMock(return_value=True)
+        mock_cavities[1].validate_quench = MagicMock(
+            return_value=False
+        )  # Fake quench
 
         counts = check_cavities(mock_cavities, mock_pv, tracker)
 
         assert counts["checked"] == 3
         assert counts["reset"] == 1
+        assert counts["real_quench"] == 0
         assert counts["skipped"] == 0
         assert counts["error"] == 0
+        mock_reset_pv.put.assert_called_once_with(1, wait=False)
+
+    def test_check_cavities_with_real_quench(
+        self, mock_cavities, mock_pv, tracker
+    ):
+        """Test checking cavities with one real quench."""
+        type(mock_cavities[1]).is_quenched = PropertyMock(return_value=True)
+        mock_cavities[1].validate_quench = MagicMock(
+            return_value=True
+        )  # Real quench
+
+        counts = check_cavities(mock_cavities, mock_pv, tracker)
+
+        assert counts["checked"] == 3
+        assert counts["reset"] == 0
+        assert counts["real_quench"] == 1
+        assert counts["skipped"] == 0
+        assert counts["error"] == 0
+
+    def test_check_cavities_skips_offline(
+        self, mock_cavities, mock_pv, tracker
+    ):
+        """Test that offline cavities are skipped."""
+        mock_cavities[0].hw_mode = HW_MODE_OFFLINE_VALUE
+
+        counts = check_cavities(mock_cavities, mock_pv, tracker)
+
+        # Only online cavities are checked
+        assert counts["checked"] == 2
+        assert counts["reset"] == 0
+
+    def test_check_cavities_skips_turned_off(
+        self, mock_cavities, mock_pv, tracker
+    ):
+        """Test that turned off cavities are skipped."""
+        mock_cavities[0].turned_off = True
+
+        counts = check_cavities(mock_cavities, mock_pv, tracker)
+
+        assert counts["checked"] == 2
+        assert counts["reset"] == 0
 
     def test_check_cavities_handles_cavity_fault_error(
         self, mock_cavities, mock_pv, tracker
     ):
         """Test handling of CavityFaultError."""
-        # Make accessing is_quenched raise an error
         type(mock_cavities[1]).is_quenched = PropertyMock(
             side_effect=CavityFaultError("Fault")
         )
 
         counts = check_cavities(mock_cavities, mock_pv, tracker)
 
-        assert counts["checked"] == 3  # All cavities incremented counter
+        assert counts["checked"] == 3
         assert counts["error"] == 1
 
     def test_check_cavities_handles_pv_invalid_error(
@@ -460,16 +462,58 @@ class TestCheckCavities:
 
         assert counts["error"] == 1
 
-    def test_check_cavities_critical_error_handling(
+    def test_check_cavities_records_not_quenched(
         self, mock_cavities, mock_pv, tracker
     ):
-        """Test that critical errors don't crash the function."""
-        # Make heartbeat update fail
-        mock_pv.put.side_effect = Exception("Critical PV error")
+        """Test that non-quenched cavities are recorded properly."""
+        # First set one as quenched
+        tracker.record_fake_quench_reset(mock_cavities[0])
+
+        # Then check again (now not quenched)
+        _ = check_cavities(mock_cavities, mock_pv, tracker)
+
+        stats = tracker._get_stats(mock_cavities[0])
+        assert stats.last_check_was_quenched is False
+
+    @patch("sc_linac_physics.applications.quench_processing.quench_resetter.PV")
+    @patch(
+        "sc_linac_physics.applications.quench_processing.quench_resetter.time"
+    )
+    def test_check_cavities_respects_cooldown(
+        self, mock_time, mock_pv_class, mock_cavities, mock_pv, tracker
+    ):
+        """Test that cooldown prevents repeated resets."""
+        mock_reset_pv = MagicMock()
+        mock_pv_class.return_value = mock_reset_pv
+
+        type(mock_cavities[0]).is_quenched = PropertyMock(return_value=True)
+        mock_cavities[0].validate_quench = MagicMock(return_value=False)
+
+        # First check at time 100
+        mock_time.return_value = 100.0
+        counts1 = check_cavities(mock_cavities, mock_pv, tracker)
+        assert counts1["reset"] == 1
+
+        # Second check at time 101 (during cooldown)
+        mock_time.return_value = 101.0
+        counts2 = check_cavities(mock_cavities, mock_pv, tracker)
+        assert counts2["reset"] == 0
+        assert counts2["skipped"] == 1
+
+        # Third check at time 104 (after cooldown)
+        mock_time.return_value = 104.0
+        counts3 = check_cavities(mock_cavities, mock_pv, tracker)
+        assert counts3["reset"] == 1
+
+    def test_check_cavities_heartbeat_failure_handled(
+        self, mock_cavities, mock_pv, tracker
+    ):
+        """Test that heartbeat update failures are handled gracefully."""
+        mock_pv.get.side_effect = Exception("Heartbeat error")
 
         counts = check_cavities(mock_cavities, mock_pv, tracker)
 
-        # Function should still return counts
+        # Should still return counts despite heartbeat error
         assert "checked" in counts
 
 
@@ -521,10 +565,9 @@ class TestLoadCavities:
     def test_load_cavities_failure(self, mock_machine):
         """Test cavity loading failure."""
 
-        # Create a generator that raises an exception when iterated
         def failing_iterator():
             raise Exception("Load failed")
-            yield  # Never reached, but makes this a generator
+            yield
 
         mock_machine.all_iterator = failing_iterator()
 
@@ -535,14 +578,60 @@ class TestLoadCavities:
 class TestLogFinalSummary:
     """Tests for _log_final_summary function."""
 
-    def test_log_final_summary_with_resets(self):
-        """Test logging summary with reset data."""
+    @patch(
+        "sc_linac_physics.applications.quench_processing.quench_resetter.time"
+    )
+    def test_log_final_summary_with_cleared_cavities(self, mock_time):
+        """Test logging summary with successfully cleared cavities."""
         tracker = CavityResetTracker()
         cavity = MagicMock(spec=QuenchCavity)
         cavity.__str__ = MagicMock(return_value="CM01_Cav1")
 
-        tracker.record_reset(cavity, success=True)
-        tracker.record_reset(cavity, success=False)
+        mock_time.return_value = 100.0
+        tracker.record_fake_quench_reset(cavity)
+        tracker.record_not_quenched(cavity)  # Cleared
+
+        # Should not raise
+        _log_final_summary(tracker)
+
+    @patch(
+        "sc_linac_physics.applications.quench_processing.quench_resetter.time"
+    )
+    def test_log_final_summary_with_persistent_quenches(self, mock_time):
+        """Test logging summary with persistent quenches."""
+        tracker = CavityResetTracker()
+
+        fake_cavity = MagicMock(spec=QuenchCavity)
+        fake_cavity.__str__ = MagicMock(return_value="CM01_Cav1")
+
+        real_cavity = MagicMock(spec=QuenchCavity)
+        real_cavity.__str__ = MagicMock(return_value="CM01_Cav2")
+
+        mock_time.return_value = 100.0
+        tracker.record_fake_quench_reset(fake_cavity)  # Still quenched
+        tracker.record_real_quench(real_cavity)  # Real quench
+
+        # Should not raise
+        _log_final_summary(tracker)
+
+    @patch(
+        "sc_linac_physics.applications.quench_processing.quench_resetter.time"
+    )
+    def test_log_final_summary_mixed_results(self, mock_time):
+        """Test logging summary with mixed results."""
+        tracker = CavityResetTracker()
+
+        cleared = MagicMock(spec=QuenchCavity)
+        cleared.__str__ = MagicMock(return_value="CM01_Cav1")
+
+        persistent = MagicMock(spec=QuenchCavity)
+        persistent.__str__ = MagicMock(return_value="CM01_Cav2")
+
+        mock_time.return_value = 100.0
+        tracker.record_fake_quench_reset(cleared)
+        tracker.record_not_quenched(cleared)  # Successfully cleared
+
+        tracker.record_real_quench(persistent)  # Still quenched
 
         # Should not raise
         _log_final_summary(tracker)
@@ -591,6 +680,7 @@ class TestMain:
             "skipped": 0,
             "error": 0,
             "checked": 1,
+            "real_quench": 0,
         }
         mock_sleep.side_effect = [None, KeyboardInterrupt()]
 
@@ -630,14 +720,14 @@ class TestMain:
     @patch(
         "sc_linac_physics.applications.quench_processing.quench_resetter.check_cavities"
     )
-    def test_main_check_cavities_exception(
+    def test_main_continues_on_error(
         self,
         mock_check_cavities,
         mock_init_pv,
         mock_load_cavities,
         mock_sleep,
     ):
-        """Test that main catches check_cavities exceptions and continues."""
+        """Test that main continues after check_cavities errors."""
         from sc_linac_physics.applications.quench_processing.quench_resetter import (
             main,
         )
@@ -647,20 +737,19 @@ class TestMain:
         mock_cavities = [MagicMock(spec=QuenchCavity)]
         mock_load_cavities.return_value = mock_cavities
 
-        # check_cavities returns normally (doesn't raise)
-        # The real function catches all exceptions internally
+        # check_cavities catches exceptions internally
         mock_check_cavities.return_value = {
             "reset": 0,
             "skipped": 0,
             "error": 1,
             "checked": 0,
+            "real_quench": 0,
         }
         mock_sleep.side_effect = [None, KeyboardInterrupt()]
 
         # Should not raise
         main()
 
-        # Should have called check_cavities twice before interrupt
         assert mock_check_cavities.call_count == 2
 
 

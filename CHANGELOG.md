@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v8.5.1 (2025-12-17)
+
+### Refactoring
+
+- **quench**: Optimize batch reset processing and improve tracking
+  ([#193](https://github.com/slaclab/sc_linac_physics/pull/193),
+  [`9186530`](https://github.com/slaclab/sc_linac_physics/commit/918653046932caf3f39db26c56f9c9f42ca3357f))
+
+
 ## v8.5.0 (2025-12-13)
 
 ### Features
