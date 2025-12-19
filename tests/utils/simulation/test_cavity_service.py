@@ -685,7 +685,7 @@ class TestEdgeCasesAndErrorHandling:
     def test_cavity_length_consistency(self, mock_cm_group):
         """Test that cavity lengths are consistent with cavity type."""
         regular = CavityPVGroup("REG:", isHL=False, cm_group=mock_cm_group)
-        hl = CavityPVGroup("HL:", isHL=True)
+        hl = CavityPVGroup("HL:", isHL=True, cm_group=mock_cm_group)
 
         assert regular.length > hl.length  # Regular cavities are longer
         assert regular.length == 1.038
