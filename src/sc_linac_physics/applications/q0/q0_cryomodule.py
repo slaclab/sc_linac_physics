@@ -311,8 +311,7 @@ class Q0Cryomodule(Cryomodule):
 
     def fill_heater_readback_buffer(self, value, **kwargs):
         if self.current_data_run:
-            buffer = self.current_data_run.heater_readback_buffer
-            buffer.append(value)
+            self.current_data_run.heater_readback_buffer.append(value)
 
     # to be called after setup_for_q0 and each cavity's setup_SELA
     def takeNewQ0Measurement(
