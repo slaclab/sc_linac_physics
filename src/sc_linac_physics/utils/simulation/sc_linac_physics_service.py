@@ -78,6 +78,7 @@ ALARM_STATES = ("RUNNING", "NOT_RUNNING", "INVALID")
 RACK_A_CAVITIES = range(1, 5)
 
 # Launcher type configuration
+# Launcher type configuration
 LAUNCHER_TYPES = {
     "setup": {
         "cavity": SetupCavityPVGroup,
@@ -273,7 +274,29 @@ class SCLinacPhysicsService(Service):
     def _setup_cryomodule_level_pvs(self, cm_name, cm_prefix, linac_name):
         """Set up PVs at the cryomodule level."""
         # Cryomodule-level channels
-        self.add_pvs(HeaterPVGroup(prefix=f"CPIC:CM{cm_name}:0000:EHCV:"))
+        cm_group = CryomodulePVGroup(prefix=f"{cm_prefix}00:")
+
+        # Store cm_group for cavity registration
+        if not hasattr(self, "_cm_group"):
+            self._cm_group = {}
+        self._cm_group[cm_name] = cm_group
+
+        # liquid level group
+        liquid_level_prefix = f"CLL:CM{cm_name}:"
+        ll_group = LiquidLevelPVGroup(prefix=liquid_level_prefix)
+        self.add_pvs(ll_group)
+        if cm_group:
+            cm_group.ll_group = ll_group
+
+        # heater group
+        heater_prefix = f"CPIC:CM{cm_name}:0000:EHCV:"
+        heater_group = HeaterPVGroup(prefix=heater_prefix, cm_group=cm_group)
+        self.add_pvs(heater_group)
+
+        # Register heater with its cryomodule
+        if cm_group:
+            cm_group.heater = heater_group
+
         self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(
             enum_strings=("Close", "Open"), value=1
         )
@@ -288,7 +311,7 @@ class SCLinacPhysicsService(Service):
         self.add_pvs(CryoPVGroup(prefix=f"CLL:CM{cm_name}:2601:US:"))
         self.add_pvs(BeamlineVacuumPVGroup(prefix=f"{cm_prefix}00:"))
         self.add_pvs(CouplerVacuumPVGroup(prefix=f"{cm_prefix}10:"))
-        self.add_pvs(CryomodulePVGroup(prefix=f"{cm_prefix}00:"))
+        self.add_pvs(cm_group)
 
     def _setup_cavities_and_racks(self, linac_name, cm_name, cm_prefix, is_hl):
         """Set up all cavities and organize launcher groups by cavity and rack.
@@ -385,10 +408,18 @@ class SCLinacPhysicsService(Service):
             LauncherGroups: Container with all launcher types
         """
         cav_prefix = f"{cm_prefix}{cav_num}0:"
+        # Get the cryomodule group
+        cm_group = self._cm_group.get(cm_name)
 
         # Cavity group
-        cavity_group = CavityPVGroup(prefix=cav_prefix, isHL=is_hl)
+        cavity_group = CavityPVGroup(
+            prefix=cav_prefix, isHL=is_hl, cm_group=cm_group
+        )
         self.add_pvs(cavity_group)
+
+        # Register cavity with its cryomodule
+        if cm_group:
+            cm_group.cavities[cav_num] = cavity_group
 
         # Tuner groups
         piezo_group = PiezoPVGroup(
@@ -408,8 +439,9 @@ class SCLinacPhysicsService(Service):
             SSAPVGroup(prefix=f"{cav_prefix}SSA:", cavityGroup=cavity_group)
         )
         self.add_pvs(CavFaultPVGroup(prefix=cav_prefix))
-        self.add_pvs(JTPVGroup(prefix=f"CLIC:CM{cm_name}:3001:PVJT:"))
-        self.add_pvs(LiquidLevelPVGroup(prefix=f"CLL:CM{cm_name}:"))
+        jt_prefix = f"CLIC:CM{cm_name}:3001:PVJT:"
+        jt_group = JTPVGroup(prefix=jt_prefix, cm_group=cm_group)
+        self.add_pvs(jt_group)
         self.add_pvs(HOMPVGroup(prefix=f"CTE:CM{cm_name}:1{cav_num}"))
 
         # Note: Rack and RFS setup moved to CM level

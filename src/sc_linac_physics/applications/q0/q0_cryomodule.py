@@ -293,7 +293,6 @@ class Q0Cryomodule(Cryomodule):
         camonitor_clear(self.heater_readback_pv)
 
         self.current_data_run.end_time = datetime.now()
-
         print("Heater run done")
 
     def wait_for_ll_drop(self, target_ll_diff):

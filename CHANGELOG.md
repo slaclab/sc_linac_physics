@@ -2,6 +2,57 @@
 
 <!-- version list -->
 
+## v8.6.0 (2025-12-19)
+
+### Features
+
+- **simulation**: Add cryogenic helium service logic with JT valve and heater control
+  ([#195](https://github.com/slaclab/sc_linac_physics/pull/195),
+  [`c1e9fb6`](https://github.com/slaclab/sc_linac_physics/commit/c1e9fb6833cb80f86a4848210a8eff60197c24d0))
+
+
+## v8.5.1 (2025-12-17)
+
+### Refactoring
+
+- **quench**: Optimize batch reset processing and improve tracking
+  ([#193](https://github.com/slaclab/sc_linac_physics/pull/193),
+  [`9186530`](https://github.com/slaclab/sc_linac_physics/commit/918653046932caf3f39db26c56f9c9f42ca3357f))
+
+
+## v8.5.0 (2025-12-13)
+
+### Features
+
+- **cryomodule-plots**: Remove heater signals and set JT valve range to 0-80%
+  ([#194](https://github.com/slaclab/sc_linac_physics/pull/194),
+  [`2abfea5`](https://github.com/slaclab/sc_linac_physics/commit/2abfea563851e8e18dbf823a5c63f3f2f6bb8884))
+
+
+## v8.4.0 (2025-12-12)
+
+### Chores
+
+- **tuner**: Patching failing tests ([#192](https://github.com/slaclab/sc_linac_physics/pull/192),
+  [`5192bb0`](https://github.com/slaclab/sc_linac_physics/commit/5192bb050d836dcbea5a04db7693dc5e885479db))
+
+### Features
+
+- **tuning**: Improve error handling and UI layout with resizable splitters
+  ([#192](https://github.com/slaclab/sc_linac_physics/pull/192),
+  [`5192bb0`](https://github.com/slaclab/sc_linac_physics/commit/5192bb050d836dcbea5a04db7693dc5e885479db))
+
+### Testing
+
+- Add comprehensive unit and integration tests for tuning GUI
+  ([#190](https://github.com/slaclab/sc_linac_physics/pull/190),
+  [`58f619a`](https://github.com/slaclab/sc_linac_physics/commit/58f619aee2f8fc2f9da9141260ecccb8df22b5d2))
+
+- Replace failing fault count display tests with simplified version
+  ([#188](https://github.com/slaclab/sc_linac_physics/pull/188),
+  [`058fe51`](https://github.com/slaclab/sc_linac_physics/commit/058fe5143f76f5170ca670df76d8d7b2ec2ed3c4))
+
+
 ## v8.3.2 (2025-12-10)
 
 ### Bug Fixes

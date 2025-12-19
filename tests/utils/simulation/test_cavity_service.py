@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -9,15 +9,28 @@ pytest_plugins = ("pytest_asyncio",)
 
 
 @pytest.fixture
-def regular_cavity():
-    """Create a regular (non-harmonic linearizer) cavity for testing."""
-    return CavityPVGroup("TEST:CAV:", isHL=False)
+def mock_cm_group():
+    """Create a mock cryomodule group for cavity testing."""
+    cm_group = Mock()
+    cm_group.total_power = 0.0
+    cm_group.heater = Mock()
+    cm_group.heater.mode.value = 2
+    cm_group.heater.setpoint = Mock()
+    cm_group.heater.setpoint.value = 0.0
+    cm_group.heater.setpoint.write = AsyncMock()
+    return cm_group
 
 
 @pytest.fixture
-def hl_cavity():
+def regular_cavity(mock_cm_group):
+    """Create a regular (non-harmonic linearizer) cavity for testing."""
+    return CavityPVGroup("TEST:CAV:", isHL=False, cm_group=mock_cm_group)
+
+
+@pytest.fixture
+def hl_cavity(mock_cm_group):
     """Create a harmonic linearizer cavity for testing."""
-    return CavityPVGroup("TEST:HL:", isHL=True)
+    return CavityPVGroup("TEST:HL:", isHL=True, cm_group=mock_cm_group)
 
 
 class TestCavityPVGroupInitialization:
@@ -27,12 +40,14 @@ class TestCavityPVGroupInitialization:
         """Test initialization of regular cavity."""
         assert regular_cavity.is_hl is False
         assert regular_cavity.length == 1.038
+        assert regular_cavity.frequency == 1.3e9
         assert regular_cavity.prefix == "TEST:CAV:"
 
     def test_hl_cavity_initialization(self, hl_cavity):
         """Test initialization of harmonic linearizer cavity."""
         assert hl_cavity.is_hl is True
         assert hl_cavity.length == 0.346
+        assert hl_cavity.frequency == 3.9e9
         assert hl_cavity.prefix == "TEST:HL:"
 
     def test_default_property_values(self, regular_cavity):
@@ -667,18 +682,18 @@ class TestEdgeCasesAndErrorHandling:
         expected_gradient = large_amplitude / regular_cavity.length
         mock_gdes.assert_called_once_with(expected_gradient, verify_value=False)
 
-    def test_cavity_length_consistency(self):
+    def test_cavity_length_consistency(self, mock_cm_group):
         """Test that cavity lengths are consistent with cavity type."""
-        regular = CavityPVGroup("REG:", isHL=False)
-        hl = CavityPVGroup("HL:", isHL=True)
+        regular = CavityPVGroup("REG:", isHL=False, cm_group=mock_cm_group)
+        hl = CavityPVGroup("HL:", isHL=True, cm_group=mock_cm_group)
 
         assert regular.length > hl.length  # Regular cavities are longer
         assert regular.length == 1.038
         assert hl.length == 0.346
 
-    def test_random_value_consistency(self):
+    def test_random_value_consistency(self, mock_cm_group):
         """Test that random values are consistent within single instance."""
-        cavity = CavityPVGroup("TEST:", isHL=False)
+        cavity = CavityPVGroup("TEST:", isHL=False, cm_group=mock_cm_group)
 
         # All detune values should be the same (set from same random value)
         assert cavity.detune.value == cavity.detune_rfs.value

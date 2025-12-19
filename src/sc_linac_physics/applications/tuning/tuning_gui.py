@@ -215,6 +215,7 @@ class CavitySection(QObject):
 
 
 class RackScreen(QObject):
+
     def __init__(self, rack: Rack, parent=None):
         # Initialize QObject first with just parent
         QObject.__init__(self, parent)
@@ -248,10 +249,15 @@ class RackScreen(QObject):
         control_panel = self._create_compact_control_panel()
         splitter.addWidget(control_panel)
 
-        # Initial sizes: 80% plot, 20% controls
+        # Initial sizes: give plot more space but allow resize
         splitter.setSizes([800, 200])
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(0, 3)  # Plot gets 3x stretch
+        splitter.setStretchFactor(
+            1, 0
+        )  # Control panel doesn't stretch initially
+
+        # Set handle width for better visibility
+        splitter.setHandleWidth(4)
 
         main_layout.addWidget(splitter)
 
@@ -297,10 +303,15 @@ class RackScreen(QObject):
 
     def _create_compact_control_panel(self) -> QWidget:
         """Create space-efficient control panel."""
-        from PyQt5.QtWidgets import QScrollArea, QFrame
+        from PyQt5.QtWidgets import QScrollArea, QFrame, QSizePolicy
 
         panel = QWidget()
         panel.setMaximumWidth(350)
+        panel.setMinimumWidth(250)  # Add minimum width
+
+        # Set size policy to prefer minimum size but allow growth
+        panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
         panel_layout = QVBoxLayout()
         panel_layout.setSpacing(4)
         panel_layout.setContentsMargins(4, 4, 4, 4)
@@ -432,12 +443,11 @@ class Tuner(Display):
 
         main_layout.addLayout(control_bar_layout)
 
-        # Container for rack displays
-        self.rack_container = QWidget()
-        self.rack_layout = QHBoxLayout()
-        self.rack_layout.setContentsMargins(0, 0, 0, 0)
-        self.rack_container.setLayout(self.rack_layout)
-        main_layout.addWidget(self.rack_container)
+        # Container for rack displays - use QSplitter instead of QWidget
+        from PyQt5.QtWidgets import QSplitter
+
+        self.rack_splitter = QSplitter(QtCore.Qt.Horizontal)
+        main_layout.addWidget(self.rack_splitter)
 
         self.machine: Machine = Machine(
             cavity_class=TuneCavity,
@@ -563,9 +573,18 @@ class Tuner(Display):
             # Cache for future use
             self.rack_screen_cache[cm_name] = (rack_a_screen, rack_b_screen)
 
-        # Add to layout
-        self.rack_layout.addWidget(rack_a_screen.groupbox)
-        self.rack_layout.addWidget(rack_b_screen.groupbox)
+        # Add to splitter instead of layout
+        self.rack_splitter.addWidget(rack_a_screen.groupbox)
+        self.rack_splitter.addWidget(rack_b_screen.groupbox)
+
+        # Set equal sizes for both racks
+        self.rack_splitter.setSizes([500, 500])
+        self.rack_splitter.setStretchFactor(0, 1)
+        self.rack_splitter.setStretchFactor(1, 1)
+
+        # Set handle width for better visibility
+        self.rack_splitter.setHandleWidth(4)
+
         self.current_rack_screens = (rack_a_screen, rack_b_screen)
 
         # Update window title
@@ -575,8 +594,6 @@ class Tuner(Display):
         """Remove current rack displays from layout."""
         if self.current_rack_screens:
             for rack_screen in self.current_rack_screens:
-                self.rack_layout.removeWidget(rack_screen.groupbox)
-                rack_screen.groupbox.setParent(
-                    None
-                )  # Hide but don't delete (for caching)
+                # Remove from splitter
+                rack_screen.groupbox.setParent(None)
             self.current_rack_screens = None

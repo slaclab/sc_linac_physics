@@ -16,6 +16,13 @@ from caproto.server import (
     PvpropertyBoolEnum,
 )
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sc_linac_physics.utils.simulation.cryomodule_service import (
+        CryomodulePVGroup,
+    )
+
 
 class CavityPVGroup(PVGroup):
     acon: PvpropertyFloat = pvproperty(value=16.6, name="ACON", precision=2)
@@ -260,7 +267,7 @@ class CavityPVGroup(PVGroup):
 
     # Control for simulating different quench types (for testing)
     quench_type: PvpropertyEnum = pvproperty(
-        value=0,
+        value=2,
         name="SIM:QUENCH_TYPE",
         dtype=ChannelType.ENUM,
         enum_strings=("Real", "Spurious", "Random"),
@@ -272,11 +279,21 @@ class CavityPVGroup(PVGroup):
     HL_FREQ = 3.9e9
     NORMAL_FREQ = 1.3e9
 
-    def __init__(self, prefix, isHL: bool):
+    def __init__(self, prefix, isHL: bool, cm_group):
         super().__init__(prefix)
         self.is_hl = isHL
         self.length = self.HL_LENGTH if isHL else self.NORMAL_LENGTH
         self.frequency = self.HL_FREQ if isHL else self.NORMAL_FREQ
+        self.cm_group: "CryomodulePVGroup" = cm_group
+
+    @property
+    def power(self):
+        """Calculate RF power dissipated in cavity (Watts)."""
+        amplitude_mv = self.amean.value  # MV
+        amplitude_v = amplitude_mv * 1e6  # Convert to Volts
+        q0 = self.q0.value
+        power = (amplitude_v * amplitude_v) / (1012 * q0)
+        return power
 
     @quench_latch.putter
     async def quench_latch(self, instance, value):
@@ -443,22 +460,30 @@ class CavityPVGroup(PVGroup):
 
     @interlock_reset.putter
     async def interlock_reset(self, instance, value):
-        if value == 1:  # Only act on "Reset" command
+        if value:  # Any non-zero/non-empty value triggers reset
             await self.quench_latch.write(0)
-            await self.ssa_latch.write(0)  # Reset SSA latch too
+            await self.ssa_latch.write(0)
             # Restore amplitude only if RF is on
             if self.rf_state_act.value == 1:
                 await self.aact.write(self.ades.value)
                 await self.amean.write(self.ades.value)
-            # Reset the command
+            # Reset the command back to default
             await self.interlock_reset.write(0)
 
     @ades.putter
     async def ades(self, instance, value):
+        power_prev = self.power
         await self.aact.write(value)
         await self.amean.write(value)
+        power_new = self.power
+        delta = -(power_new - power_prev)
         gradient = value / self.length
         await self.gdes.write(gradient, verify_value=False)  # Skip the putter
+
+        if self.cm_group.heater.mode.value == 2:  # SEQUENCER
+            await self.cm_group.heater.setpoint.write(
+                self.cm_group.heater.setpoint.value + delta
+            )
 
     @pdes.putter
     async def pdes(self, instance, value):
