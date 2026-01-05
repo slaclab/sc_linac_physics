@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v8.7.0 (2026-01-05)
+
+### Features
+
+- Add reusable tooltip utility for pyqtgraph plots
+  ([#196](https://github.com/slaclab/sc_linac_physics/pull/196),
+  [`097c0c3`](https://github.com/slaclab/sc_linac_physics/commit/097c0c3d0699cc62623258c4fd19510ff0aedf49))
+
+
 ## v8.6.0 (2025-12-19)
 
 ### Features
