@@ -11,7 +11,7 @@ if not hasattr(pg.PlotWidget, "autoRangeEnabled"):
 
     pg.PlotWidget.autoRangeEnabled = autoRangeEnabled
 from typing import Tuple, Optional
-
+from sc_linac_physics.utils.plot_tooltip import PlotTooltip
 import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
@@ -34,7 +34,6 @@ class BasePlot(QWidget):
         self.plot_type = plot_type
         self.config = config or {}
         self.plot_curves = {}
-        self.tooltips = {}
 
         # Setup UI components common to all plots
         self.setup_ui()
@@ -117,12 +116,13 @@ class BasePlot(QWidget):
         if "y_range" in config:
             widget.setYRange(*config["y_range"])
 
-        # Connect signal for tooltips
-        widget.scene().sigMouseMoved.connect(
-            lambda ev: self._show_tooltip(plot_type, ev)
-        )
+        self.tooltip = PlotTooltip(self.plot_widget, self.get_formatter())
 
         return widget
+
+    def get_formatter(self):
+        """Override in subclasses for custom tooltip formatting."""
+        return lambda x, y: f"X: {x:.2f}, Y: {y:.2f}"
 
     def _get_cavity_pen(self, cavity_num):
         """
@@ -152,56 +152,6 @@ class BasePlot(QWidget):
         qcolor.setAlpha(150)  # 60% opacity
 
         return pg.mkPen(qcolor, width=2, style=style)
-
-    def _show_tooltip(self, plot_type, ev):
-        """
-        Show tooltip w/ data values on hover
-
-        Args:
-            plot_type: Type of plot
-            ev: Mouse event
-        """
-        try:
-            plot = self.plot_widget
-            view = plot.plotItem.vb
-            if plot.sceneBoundingRect().contains(ev):
-                mouse_point = view.mapSceneToView(ev)
-                x, y = mouse_point.x(), mouse_point.y()
-
-                # Format tooltip based on plot type
-                tooltip = self._format_tooltip(plot_type, x, y)
-                if not tooltip:
-                    return
-
-                # Update/create tooltip label
-                if plot_type not in self.tooltips:
-                    self.tooltips[plot_type] = pg.TextItem(
-                        text=tooltip,
-                        color=(255, 255, 255),
-                        border="k",
-                        fill=(0, 0, 0, 180),
-                    )
-                    plot.addItem(self.tooltips[plot_type])
-
-                self.tooltips[plot_type].setText(tooltip)
-                self.tooltips[plot_type].setPos(x, y)
-                self.tooltips[plot_type].show()
-        except Exception as e:
-            print(f"Tooltip error: {str(e)}")
-
-    def _format_tooltip(self, plot_type, x, y):
-        """
-        Format tooltip text based on plot type
-
-        Args:
-            plot_type: Type of plot
-            x: X coordinate
-            y: Y coordinate
-
-        Returns:
-            str: Tooltip text
-        """
-        return f"X: {x:.2f}, Y: {y:.2f}"
 
     def _preprocess_data(
         self, cavity_channel_data: dict, channel_type: str = "DF"
@@ -263,8 +213,8 @@ class BasePlot(QWidget):
         self.plot_widget.clear()
         self.plot_curves = {}
         # Hide tooltip if it exists
-        if self.plot_type in self.tooltips:
-            self.tooltips[self.plot_type].hide()
+        if self.tooltip:
+            self.tooltip.hide()
 
     def update_plot(self, cavity_num, data):
         """
