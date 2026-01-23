@@ -2,6 +2,50 @@
 
 <!-- version list -->
 
+## v9.0.0 (2026-01-23)
+
+### Chores
+
+- Patching failing tests ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- Patching mock pv ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- Reduce cyclomatic complexity ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+### Features
+
+- **cavity-display**: Add logging, error handling, and graceful shutdown
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- **cavity-display**: Auto-enable debug mode on macOS
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- **cavity-display**: Optimize cavity fault monitoring with batch PV initialization and improved
+  logging ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+### Performance Improvements
+
+- **cavity_display**: Optimize fault checking with batch PV reads
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+### Refactoring
+
+- Restructure EPICS utils into modular package
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- **cavity_display**: Remove redundant fault PV initialization
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+
 ## v8.7.0 (2026-01-05)
 
 ### Features
