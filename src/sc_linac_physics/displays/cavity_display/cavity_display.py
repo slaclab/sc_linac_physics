@@ -48,18 +48,6 @@ class CavityDisplayGUI(Display):
 
         self.gui_machine = GUIMachine()
 
-        # Setup audio alerts - with debug output
-        print("Initializing audio manager...")
-        self.audio_manager = AudioAlertManager(self.gui_machine, parent=self)
-        print(
-            f"Audio manager created. Alarm sound: {self.audio_manager.alarm_sound}"
-        )
-        print(f"Warning sound: {self.audio_manager.warning_sound}")
-
-        # Test audio immediately on startup
-        print("Testing audio on startup...")
-        QTimer.singleShot(2000, self.test_audio_on_startup)
-
         self.header = QHBoxLayout()
         heartbeat_indicator = PyDMByteIndicator(
             init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR"
@@ -193,9 +181,6 @@ class CavityDisplayGUI(Display):
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(5000)
-        # Connect audio manager to flash window
-        if hasattr(self, "audio_manager"):
-            self.audio_manager.new_alarm.connect(self.flash_window)
 
         # Add search box to header
         self.search_box = QLineEdit()
@@ -247,17 +232,7 @@ class CavityDisplayGUI(Display):
         self.screenshot_btn.clicked.connect(self.save_screenshot)
         self.header.addWidget(self.screenshot_btn)
 
-    def test_audio_on_startup(self):
-        """Test audio system on startup"""
-        print("Playing test beep...")
-        from PyQt5.QtWidgets import QApplication
-
-        QApplication.beep()
-        print("Beep command sent")
-
-        if hasattr(self, "audio_manager"):
-            print("Testing alarm sound...")
-            self.audio_manager._play_alarm_sound()
+        self.audio_manager = AudioAlertManager(self.gui_machine, parent=self)
 
     def save_screenshot(self):
         """Save a screenshot of the current display"""

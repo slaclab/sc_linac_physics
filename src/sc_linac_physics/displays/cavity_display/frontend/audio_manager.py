@@ -69,7 +69,7 @@ class AudioAlertManager(QObject):
             print(f"✓ Loaded escalation sound: {escalation_path}")
 
     def _connect_to_cavities(self):
-        """Connect to all cavity severity changes"""
+        """Connect to all cavity severity changes via signals"""
         cavity_count = 0
 
         linacs = self.gui_machine.linacs
@@ -88,29 +88,28 @@ class AudioAlertManager(QObject):
 
                 for cavity in cavities:
                     cavity_count += 1
-                    original_handler = (
-                        cavity.cavity_widget.severity_channel_value_changed
-                    )
-
-                    def new_handler(value, cav=cavity, orig=original_handler):
-                        print(
-                            f"Severity changed for CM{cav.cryomodule.name} Cav{cav.number}: {value}"
+                    # Connect to the severity_changed signal
+                    cavity.cavity_widget.severity_changed.connect(
+                        lambda value, cav=cavity: self._on_severity_change(
+                            cav, value
                         )
-                        orig(value)
-                        self._on_severity_change(cav, value)
-
-                    cavity.cavity_widget.severity_channel_value_changed = (
-                        new_handler
                     )
 
-        print(f"✓ Audio manager connected to {cavity_count} cavities")
+        print(
+            f"✓ Audio manager connected to {cavity_count} cavities via signals"
+        )
 
     def _on_severity_change(self, cavity, severity):
         """Handle severity change for a cavity"""
         cavity_id = f"{cavity.cryomodule.name}_{cavity.number}"
 
+        print(
+            f"Audio manager: CM{cavity.cryomodule.name} Cav{cavity.number} severity={severity}"
+        )
+
         if severity == 2:  # Red alarm
             if cavity_id not in self.alerted_alarms:
+                print(f"  -> Playing alarm sound for {cavity_id}")
                 self._play_alarm_sound()
                 self.alerted_alarms.add(cavity_id)
                 self.unacknowledged_alarms[cavity_id] = time.time()
@@ -121,6 +120,7 @@ class AudioAlertManager(QObject):
 
         elif severity == 1:  # Yellow warning
             if cavity_id not in self.alerted_warnings:
+                print(f"  -> Playing warning sound for {cavity_id}")
                 self._play_warning_sound()
                 self.alerted_warnings.add(cavity_id)
                 print(
@@ -128,6 +128,11 @@ class AudioAlertManager(QObject):
                 )
 
         else:  # Cleared
+            if (
+                cavity_id in self.alerted_alarms
+                or cavity_id in self.alerted_warnings
+            ):
+                print(f"  -> Cleared: {cavity_id}")
             self.alerted_alarms.discard(cavity_id)
             self.alerted_warnings.discard(cavity_id)
             self.unacknowledged_alarms.pop(cavity_id, None)

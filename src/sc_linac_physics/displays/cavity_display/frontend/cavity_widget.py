@@ -2,11 +2,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import QMenu
 from pydm import Display, PyDMChannel
 from pydm.widgets.drawing import PyDMDrawingPolygon
-from qtpy.QtCore import Signal, QPoint, QRectF, Property as qtProperty, Qt, Slot
+from qtpy.QtCore import QPoint, QRectF, Property as qtProperty, Qt, Slot
 from qtpy.QtGui import (
     QColor,
     QCursor,
@@ -50,7 +50,8 @@ SHAPE_PARAMETER_DICT = {
 
 class CavityWidget(PyDMDrawingPolygon):
     press_pos: Optional[QPoint] = None
-    clicked = Signal()  # Changed from pyqtSignal()
+    clicked = pyqtSignal()
+    severity_changed = pyqtSignal(int)  # NEW: emit severity value
 
     def __init__(self, parent=None, init_channel=None):
         super(CavityWidget, self).__init__(parent, init_channel)
@@ -131,6 +132,9 @@ class CavityWidget(PyDMDrawingPolygon):
         if shape_params:
             old_severity = self._last_severity
             self._last_severity = value
+
+            # Emit signal for others to listen to
+            self.severity_changed.emit(value)
 
             # Trigger pulse animation for new alarms/warnings
             if value == 2 and old_severity != 2:  # New red alarm

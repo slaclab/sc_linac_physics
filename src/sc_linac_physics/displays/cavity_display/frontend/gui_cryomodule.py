@@ -47,23 +47,18 @@ class GUICryomodule(Cryomodule):
         for gui_cavity in self.cavities.values():
             self.vlayout.addLayout(gui_cavity.vert_layout)
 
-            # Connect to cavity severity changes to update CM status
-            self._connect_severity_handler(gui_cavity)
+            # Connect to severity change signal
+            gui_cavity.cavity_widget.severity_changed.connect(
+                self.on_cavity_severity_changed
+            )
 
         # Initial status update
         self.update_cm_status()
 
-    def _connect_severity_handler(self, gui_cavity):
-        """Connect to cavity severity changes to update CM status"""
-        original_handler = (
-            gui_cavity.cavity_widget.severity_channel_value_changed
-        )
-
-        def new_handler(value):
-            original_handler(value)
-            self.update_cm_status()
-
-        gui_cavity.cavity_widget.severity_channel_value_changed = new_handler
+    def on_cavity_severity_changed(self, severity):
+        """Slot called when any cavity severity changes"""
+        print(f"CM{self.name}: Cavity severity changed to {severity}")
+        self.update_cm_status()
 
     def update_cm_status(self):
         """Update cryomodule status bar based on cavity states"""
@@ -80,6 +75,10 @@ class GUICryomodule(Cryomodule):
                 alarm_count += 1
             elif severity == 1:
                 warning_count += 1
+
+        print(
+            f"CM{self.name} status: {alarm_count} alarms, {warning_count} warnings"
+        )
 
         # Update status bar color and tooltip
         if alarm_count > 0:
@@ -126,9 +125,3 @@ class GUICryomodule(Cryomodule):
 
         self.label.setToolTip(tooltip)
         self.status_bar.setToolTip(tooltip)
-
-    @property
-    def pydm_macros(self):
-        return "AREA={linac_name},CM={cm_name},RFNAME=CM{cm_name}".format(
-            linac_name=self.linac.name, cm_name=self.name
-        )
