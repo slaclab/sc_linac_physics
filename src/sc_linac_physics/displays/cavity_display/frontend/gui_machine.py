@@ -14,8 +14,14 @@ class GUIMachine(Machine):
     def __init__(self, lazy_fault_pvs=True):
         self.lazy_fault_pvs = lazy_fault_pvs
         super().__init__(cavity_class=GUICavity, cryomodule_class=GUICryomodule)
+
         self.top_half = QHBoxLayout()
+        self.top_half.setSpacing(8)  # Space between CMs
+        self.top_half.setContentsMargins(5, 5, 5, 5)
+
         self.bottom_half = QHBoxLayout()
+        self.bottom_half.setSpacing(8)  # Space between CMs
+        self.bottom_half.setContentsMargins(5, 5, 5, 5)
 
         for i in range(0, 3):
             gui_linac = self.linacs[i]
@@ -23,7 +29,9 @@ class GUIMachine(Machine):
                 self.top_half.addLayout(gui_cm.vlayout)
 
             if i != 2:
-                self.top_half.addWidget(make_line())
+                separator = make_line()
+                separator.setFixedWidth(2)  # Thinner separator
+                self.top_half.addWidget(separator)
 
         l3b = self.linacs[3]
         for gui_cm in l3b.cryomodules.values():

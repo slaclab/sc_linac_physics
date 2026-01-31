@@ -43,7 +43,12 @@ class GUICavity(BackendCavity):
         self._fault_display: Optional[Display] = None
         self.fault_display_grid_layout = make_header()
 
+        # In the __init__ method, update the layout setup:
+
         self.vert_layout = QVBoxLayout()
+        self.vert_layout.setSpacing(1)  # Minimal spacing
+        self.vert_layout.setContentsMargins(0, 0, 0, 0)  # No margins
+
         self.cavity_widget = CavityWidget()
         self.cavity_widget.setMinimumSize(10, 10)
         self.cavity_widget.setAccessibleName("cavity_widget")
@@ -54,24 +59,30 @@ class GUICavity(BackendCavity):
         self.cavity_widget.clicked.connect(self.show_fault_display)
 
         self.hor_layout = QHBoxLayout()
+        self.hor_layout.setSpacing(0)  # No space between bars
+        self.hor_layout.setContentsMargins(0, 0, 0, 0)
 
         self.ssa_bar = PyDMByteIndicator()
         self.ssa_bar.setAccessibleName("SSA")
         self.ssa_bar.onColor = QColor(92, 255, 92)
         self.ssa_bar.offColor = QColor(40, 40, 40)
-        self.ssa_bar.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.ssa_bar.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed
+        )  # Changed to Expanding
         self.ssa_bar.showLabels = False
         self.ssa_bar.channel = self.ssa.status_pv
-        self.ssa_bar.setFixedHeight(5)
+        self.ssa_bar.setFixedHeight(4)  # Slightly smaller
 
         self.rf_bar = PyDMByteIndicator()
         self.rf_bar.setAccessibleName("RFSTATE")
         self.rf_bar.onColor = QColor(14, 191, 255)
         self.rf_bar.offColor = QColor(40, 40, 40)
-        self.rf_bar.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.rf_bar.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed
+        )  # Changed to Expanding
         self.rf_bar.showLabels = False
         self.rf_bar.channel = self.rf_state_pv
-        self.rf_bar.setFixedHeight(5)
+        self.rf_bar.setFixedHeight(4)  # Slightly smaller
 
         self.hor_layout.addWidget(self.ssa_bar)
         self.hor_layout.addWidget(self.rf_bar)

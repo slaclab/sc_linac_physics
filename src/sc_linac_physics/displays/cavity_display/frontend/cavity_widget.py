@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QMenu
 from pydm import Display, PyDMChannel
 from pydm.widgets.drawing import PyDMDrawingPolygon
 from qtpy.QtCore import Signal, QPoint, QRectF, Property as qtProperty, Qt, Slot
@@ -54,6 +56,7 @@ class CavityWidget(PyDMDrawingPolygon):
         super(CavityWidget, self).__init__(parent, init_channel)
         self._num_points = 4
         self._cavity_text = ""
+        self._cavity_description = ""  # NEW: store description
         self._underline = False
         self._pen = QPen(BLACK_TEXT_COLOR)  # Shape's border color
         self._rotation = 0
@@ -64,6 +67,7 @@ class CavityWidget(PyDMDrawingPolygon):
         self.alarmSensitiveBorder = False
         self.alarmSensitiveContent = False
         self._faultDisplay: Display = None
+        self._last_severity = None  # NEW: track last severity
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setContentsMargins(0, 0, 0, 0)
 
@@ -120,33 +124,86 @@ class CavityWidget(PyDMDrawingPolygon):
         )
         self._severity_channel.connect()
 
-    @Slot(int)
-    def severity_channel_value_changed(self, value: int):
-        """Handle severity channel value changes with better error handling."""
-        try:
-            shape_params = SHAPE_PARAMETER_DICT.get(
-                value, SHAPE_PARAMETER_DICT[3]
-            )
+    def severity_channel_value_changed(self, value):
+        """Handle severity changes and trigger animations for new alarms"""
+        shape_params = SHAPE_PARAMETER_DICT.get(value)
+
+        if shape_params:
+            old_severity = self._last_severity
+            self._last_severity = value
+
+            # Trigger pulse animation for new alarms/warnings
+            if value == 2 and old_severity != 2:  # New red alarm
+                self.start_pulse_animation()
+            elif value == 1 and old_severity not in [
+                1,
+                2,
+            ]:  # New yellow warning
+                self.start_pulse_animation()
+
             self.change_shape(shape_params)
-        except Exception as e:
-            print(f"Error updating severity: {e}")
-            # Fallback to default state
-            self.change_shape(SHAPE_PARAMETER_DICT[3])
+
+    def contextMenuEvent(self, event):
+        """Show context menu on right-click"""
+        menu = QMenu()
+
+        # Get parent cavity object
+        cavity = self.get_parent_cavity()
+        if not cavity:
+            return
+
+        # Fault Details action
+        details_action = menu.addAction("📋 Fault Details")
+        details_action.triggered.connect(lambda: cavity.show_fault_display())
+
+        # Acknowledge (if alarming)
+        severity = getattr(self, "_last_severity", None)
+        if severity == 2:
+            ack_action = menu.addAction("✓ Acknowledge Alarm")
+            # Connect to audio manager if available
+            ack_action.triggered.connect(lambda: self.acknowledge_alarm(cavity))
+
+        menu.addSeparator()
+
+        # Copy info
+        copy_action = menu.addAction("📄 Copy Info")
+        copy_action.triggered.connect(lambda: self.copy_cavity_info(cavity))
+
+        menu.exec_(event.globalPos())
+
+    def get_parent_cavity(self):
+        """Find the parent GUICavity object"""
+        # This needs to be set when creating the widget
+        return getattr(self, "_parent_cavity", None)
+
+    def copy_cavity_info(self, cavity):
+        """Copy cavity information to clipboard"""
+        from PyQt5.QtWidgets import QApplication
+
+        info = f"CM{cavity.cryomodule.name} Cavity {cavity.number}\n"
+        info += f"Description: {self._cavity_description}\n"
+        info += f"Severity: {self._last_severity}"
+
+        clipboard = QApplication.clipboard()
+        clipboard.setText(info)
 
     @Slot()
     @Slot(object)
     @Slot(str)
     @Slot(np.ndarray)
     def description_changed(self, value=None):
+        """Store description for use in alarm sidebar"""
         if value is None:
+            self._cavity_description = ""
             self.setToolTip("No description available")
         else:
             try:
                 if isinstance(value, np.ndarray):
-                    # Handle numpy array
+                    # Handle numpy array - convert to string
                     if value.size == 0:
-                        desc = "Empty array"
+                        desc = ""
                     else:
+                        # Convert byte array to string
                         desc = "".join(
                             chr(int(i)) for i in value if 0 <= int(i) <= 127
                         )
@@ -157,12 +214,61 @@ class CavityWidget(PyDMDrawingPolygon):
                     # Handle string or other types
                     desc = str(value)
 
+                # Now strip after conversion
+                self._cavity_description = desc.strip()
                 self.setToolTip(desc.strip())
+
             except Exception as e:
                 print(f"Error processing description: {e}")
+                self._cavity_description = ""
                 self.setToolTip("Description processing error")
 
         self.update()
+
+    def highlight(self):
+        """
+        Briefly highlight this cavity widget to show it was selected.
+        Called when user clicks on it in the alarm sidebar.
+        """
+        original_pen_width = self._pen.width()
+        original_pen_color = self._pen.color()
+
+        # Flash with yellow border
+        self._pen.setWidth(6)
+        self._pen.setColor(QColor(255, 255, 0))
+        self.update()
+
+        # Reset after 1 second
+        QTimer.singleShot(
+            1000,
+            lambda: self._unhighlight(original_pen_width, original_pen_color),
+        )
+
+    def _unhighlight(self, original_width, original_color):
+        """Reset to original pen settings"""
+        self._pen.setWidth(original_width)
+        self._pen.setColor(original_color)
+        self.update()
+
+    def start_pulse_animation(self):
+        """
+        Brief pulse animation to catch attention when cavity transitions
+        to alarm or warning state.
+        """
+        original_pen_width = self._pen.width()
+
+        def pulse_step(step):
+            if step < 3:  # 3 pulses
+                self._pen.setWidth(5)  # Thick border
+                self.update()
+                QTimer.singleShot(150, lambda: reset_and_continue(step))
+
+        def reset_and_continue(step):
+            self._pen.setWidth(original_pen_width)
+            self.update()
+            QTimer.singleShot(150, lambda: pulse_step(step + 1))
+
+        pulse_step(0)
 
     def change_shape(self, shape_parameter_object):
         self.brush.setColor(shape_parameter_object.fillColor)
