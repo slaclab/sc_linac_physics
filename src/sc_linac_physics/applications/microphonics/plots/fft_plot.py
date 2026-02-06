@@ -7,6 +7,7 @@ from sc_linac_physics.applications.microphonics.utils.constants import (
 from sc_linac_physics.applications.microphonics.utils.data_processing import (
     calculate_fft,
 )
+from sc_linac_physics.utils.plot_tooltip import PlotTooltip
 
 
 class FFTPlot(BasePlot):
@@ -69,7 +70,7 @@ class FFTPlot(BasePlot):
 
     def get_formatter(self):
         """Tooltip formatter for FFT plot."""
-        return lambda x, y: f"Frequency: {x:.1f} Hz\nAmplitude: {y:.3f}"
+        return PlotTooltip.make_formatter("Frequency (Hz)", "Amplitude")
 
     def update_plot(self, cavity_num, cavity_channel_data):
         """Update FFT plot w/ new data

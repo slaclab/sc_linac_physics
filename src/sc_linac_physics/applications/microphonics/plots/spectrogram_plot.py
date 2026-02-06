@@ -33,7 +33,6 @@ class SpectrogramPlot(BasePlot):
         # Colorbar
         self.colormap = pg.colormap.get("viridis")
         self.colorbar = None
-        self.plot_tooltips = {}
 
         # Grid controls
         self.grid_controls_widget = None
@@ -88,9 +87,6 @@ class SpectrogramPlot(BasePlot):
 
     def _refresh_grid_layout(self):
         """Central method to refresh entire grid layout"""
-        for tooltip in self.plot_tooltips.values():
-            tooltip.cleanup()
-        self.plot_tooltips.clear()
         # Clear all
         self.graphics_layout.clear()
         self.plot_items.clear()
@@ -156,18 +152,14 @@ class SpectrogramPlot(BasePlot):
                 plot_item.setXRange(t[0], t[-1], padding=0)
 
             plot_item.setYRange(f[0], f[-1], padding=0)
-            self.plot_tooltips[cavity_num] = PlotTooltip(
-                plot_item,
-                lambda x, y: f"Time: {x:.3f} s\nFrequency: {y:.1f} Hz",
-            )
 
         # Add colorbar
         if visible_cavities:
             self._add_colorbar(num_rows)
 
-    def _show_tooltip(self, plot_type, ev):
-        """Override tooltip behavior"""
-        pass
+    def get_formatter(self):
+        """Tooltip formatter for spectrogram plot."""
+        return PlotTooltip.make_formatter("Time (s)", "Frequency (Hz)")
 
     def update_plot(self, cavity_num, cavity_channel_data):
         df_data, is_valid = self._preprocess_data(
@@ -284,9 +276,5 @@ class SpectrogramPlot(BasePlot):
         self.cavity_data_cache.clear()
         self.cavity_order.clear()
         self.cavity_is_visible_flags.clear()
-
-        for tooltip in self.plot_tooltips.values():
-            tooltip.cleanup()
-        self.plot_tooltips.clear()
 
         self._refresh_grid_layout()

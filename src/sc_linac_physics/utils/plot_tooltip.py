@@ -98,3 +98,10 @@ class PlotTooltip:
             self._plot_item.removeItem(self._tooltip)
         except (RuntimeError, AttributeError):
             pass
+
+    @staticmethod
+    def make_formatter(
+        x_label: str, y_label: str
+    ) -> Callable[[float, float], str]:
+        """Create a formatter from axis labels."""
+        return lambda x, y: f"{x_label}: {x:.2f}\n{y_label}: {y:.2f}"
