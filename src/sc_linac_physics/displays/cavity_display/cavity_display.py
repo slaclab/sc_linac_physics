@@ -1,3 +1,4 @@
+from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QColor, QCursor
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -5,6 +6,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QPushButton,
     QGroupBox,
+    QApplication,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
@@ -84,6 +86,15 @@ class CavityDisplayGUI(Display):
             self.fault_count_button, self.fault_count_display
         )
 
+        # Auto-zoom tracking
+        self.current_zoom = 60
+        self._resize_timer = None
+
+        # Apply initial zoom
+        QTimer.singleShot(100, lambda: self.apply_zoom(60))
+
+        self.setWindowTitle("SRF Cavity Display")
+
     def add_header_button(self, button: QPushButton, display: Display):
         button.clicked.connect(lambda: showDisplay(display))
 
@@ -92,3 +103,75 @@ class CavityDisplayGUI(Display):
         button.setCursor(QCursor(icon.pixmap(16, 16)))
         button.openInNewWindow = True
         self.header.addWidget(button)
+
+    def apply_zoom(self, zoom_percent):
+        """Apply zoom to the entire display."""
+
+        # Apply scaling to machine
+        self.gui_machine.set_zoom_level(zoom_percent)
+
+        # Force layout update
+        QApplication.processEvents()
+        self.groupbox.updateGeometry()
+        self.groupbox.adjustSize()
+        self.update()
+
+    def showEvent(self, event):
+        """Auto-fit zoom when window is first shown."""
+        super().showEvent(event)
+        QTimer.singleShot(200, lambda: self.apply_zoom(60))
+
+    def resizeEvent(self, event):
+        """Auto-adjust zoom when user resizes window."""
+        super().resizeEvent(event)
+
+        if self._resize_timer:
+            self._resize_timer.stop()
+
+        self._resize_timer = QTimer()
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(self.auto_fit_on_resize)
+        self._resize_timer.start(300)
+
+    def auto_fit_on_resize(self):
+        """Calculate optimal zoom when user resizes window."""
+        if not hasattr(self, "groupbox") or not self.groupbox:
+            return
+
+        # Don't recalculate at minimum size
+        if self.width() <= 800 or self.height() <= 600:
+            if abs(self.current_zoom - 55) > 2:
+                self.current_zoom = 55
+                self.apply_zoom(55)
+            return
+
+        # Get available space
+        available_height = self.height() - 200
+        available_width = self.width() - 40
+
+        # Measure content at 100%
+        self.gui_machine.set_zoom_level(100)
+        QApplication.processEvents()
+
+        content_height = self.groupbox.sizeHint().height()
+        content_width = self.groupbox.sizeHint().width()
+
+        # Calculate optimal zoom
+        height_zoom = (
+            (available_height / content_height * 100)
+            if content_height > 0
+            else 100
+        )
+        width_zoom = (
+            (available_width / content_width * 100)
+            if content_width > 0
+            else 100
+        )
+
+        optimal_zoom = min(height_zoom, width_zoom)
+        optimal_zoom = max(55, min(100, optimal_zoom))
+        optimal_zoom = round(optimal_zoom / 5) * 5
+
+        if abs(optimal_zoom - self.current_zoom) > 2:
+            self.current_zoom = optimal_zoom
+            self.apply_zoom(optimal_zoom)
