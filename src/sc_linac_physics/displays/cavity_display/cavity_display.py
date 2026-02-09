@@ -2,9 +2,10 @@ from PyQt5.QtGui import QColor, QCursor
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
-    QFrame,
     QPushButton,
     QGroupBox,
+    QLabel,
+    QApplication,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
@@ -20,7 +21,6 @@ from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display imp
 from sc_linac_physics.displays.cavity_display.frontend.gui_machine import (
     GUIMachine,
 )
-from sc_linac_physics.displays.cavity_display.frontend.utils import make_line
 
 
 class CavityDisplayGUI(Display):
@@ -29,6 +29,10 @@ class CavityDisplayGUI(Display):
         self.setStyleSheet(
             "background-color: rgb(35, 35, 35); color: rgb(255, 255, 255); font-size: 15pt;"
         )
+
+        # Set window size constraints
+        self.resize(1200, 800)
+        self.setMinimumSize(1100, 700)
 
         self.gui_machine = GUIMachine()
 
@@ -66,10 +70,7 @@ class CavityDisplayGUI(Display):
         self.groupbox_vlayout.addLayout(self.header)
         self.setLayout(self.vlayout)
 
-        self.groupbox_vlayout.addLayout(self.gui_machine.top_half)
-        self.groupbox_vlayout.addSpacing(10)
-        self.groupbox_vlayout.addWidget(make_line(QFrame.HLine))
-        self.groupbox_vlayout.addLayout(self.gui_machine.bottom_half)
+        self.groupbox_vlayout.addLayout(self.gui_machine.main_layout)
 
         self.groupbox = QGroupBox()
         self.groupbox.setLayout(self.groupbox_vlayout)
@@ -92,3 +93,35 @@ class CavityDisplayGUI(Display):
         button.setCursor(QCursor(icon.pixmap(16, 16)))
         button.openInNewWindow = True
         self.header.addWidget(button)
+
+    def apply_zoom(self, zoom_percent):
+        """Apply zoom to the entire display."""
+        scale = zoom_percent / 100.0
+
+        # Apply scaling to machine
+        self.gui_machine.set_zoom_level(zoom_percent)
+
+        # Update CM label fonts
+        for cm_widget in self.gui_machine.cm_widgets:
+            cm_layout = cm_widget.layout()
+            if cm_layout and cm_layout.count() > 0:
+                label_widget = cm_layout.itemAt(0).widget()
+                if isinstance(label_widget, QLabel):
+                    label_widget.setStyleSheet(
+                        f"""
+                        QLabel {{
+                            font-weight: bold;
+                            font-size: {max(6, int(9 * scale))}pt;
+                            color: white;
+                            background-color: rgb(50, 50, 50);
+                            padding: {max(1, int(2 * scale))}px;
+                            border-radius: {max(1, int(2 * scale))}px;
+                        }}
+                    """
+                    )
+
+        # Force layout update
+        QApplication.processEvents()
+        self.groupbox.updateGeometry()
+        self.groupbox.adjustSize()
+        self.update()
