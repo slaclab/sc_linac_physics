@@ -1,5 +1,6 @@
 # tests/test_integration.py
 """Integration tests using actual console scripts."""
+
 import pytest
 
 
