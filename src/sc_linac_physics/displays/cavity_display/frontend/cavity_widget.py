@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+from PyQt5.QtCore import QTimer
 from pydm import Display, PyDMChannel
 from pydm.widgets.drawing import PyDMDrawingPolygon
 from qtpy.QtCore import Signal, QPoint, QRectF, Property as qtProperty, Qt, Slot
@@ -54,18 +55,49 @@ class CavityWidget(PyDMDrawingPolygon):
         super(CavityWidget, self).__init__(parent, init_channel)
         self._num_points = 4
         self._cavity_text = ""
+        self._cavity_description = ""
         self._underline = False
-        self._pen = QPen(BLACK_TEXT_COLOR)  # Shape's border color
+        self._pen = QPen(BLACK_TEXT_COLOR)
         self._rotation = 0
-        self._brush.setColor(QColor(201, 255, 203))  # Shape's fill color
+        self._brush.setColor(QColor(201, 255, 203))
         self._pen.setWidth(1)
         self._severity_channel: Optional[PyDMChannel] = None
         self._description_channel: Optional[PyDMChannel] = None
         self.alarmSensitiveBorder = False
         self.alarmSensitiveContent = False
         self._faultDisplay: Display = None
+        self._last_severity = None
+        self._acknowledged = False
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setContentsMargins(0, 0, 0, 0)
+
+        # Enable context menu
+        self.setContextMenuPolicy(Qt.DefaultContextMenu)
+        self.setAcceptDrops(False)
+
+    def highlight(self):
+        """Briefly highlight this cavity widget to show it was selected."""
+        original_pen_width = self._pen.width()
+        original_pen_color = self._pen.color()
+
+        # Flash with thick yellow border
+        self._pen.setWidth(5)
+        self._pen.setColor(QColor(255, 255, 0))
+        self.update()
+
+        # Reset after 500ms
+        QTimer.singleShot(
+            500,
+            lambda: self._reset_highlight(
+                original_pen_width, original_pen_color
+            ),
+        )
+
+    def _reset_highlight(self, width, color):
+        """Reset highlight to original state."""
+        self._pen.setWidth(width)
+        self._pen.setColor(color)
+        self.update()
 
     # The following two functions were copy/pasted from stack overflow
     def mousePressEvent(self, event: QMouseEvent):
@@ -120,18 +152,22 @@ class CavityWidget(PyDMDrawingPolygon):
         )
         self._severity_channel.connect()
 
-    @Slot(int)
-    def severity_channel_value_changed(self, value: int):
-        """Handle severity channel value changes with better error handling."""
-        try:
-            shape_params = SHAPE_PARAMETER_DICT.get(
-                value, SHAPE_PARAMETER_DICT[3]
-            )
-            self.change_shape(shape_params)
-        except Exception as e:
-            print(f"Error updating severity: {e}")
-            # Fallback to default state
-            self.change_shape(SHAPE_PARAMETER_DICT[3])
+    def severity_channel_value_changed(self, value):
+        """Handle severity changes"""
+        shape_params = SHAPE_PARAMETER_DICT.get(value)
+
+        if shape_params:
+            self._last_severity = value
+
+            # Emit signal for others to listen to
+            self.severity_changed.emit(value)
+
+            # Update shape appearance directly
+            self.brush.setColor(shape_params.fillColor)
+            self._pen.setColor(shape_params.borderColor)
+            self._num_points = shape_params.numPoints
+            self._rotation = shape_params.rotation
+            self.update()
 
     @Slot()
     @Slot(object)

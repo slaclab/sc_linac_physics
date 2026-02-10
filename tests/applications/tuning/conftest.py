@@ -1,5 +1,6 @@
 # tests/applications/tuning/conftest.py
 """Fixtures specific to tuning GUI tests."""
+
 from unittest.mock import Mock, patch
 
 import pytest
