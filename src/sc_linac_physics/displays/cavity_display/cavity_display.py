@@ -107,35 +107,52 @@ class CavityDisplayGUI(Display):
     def apply_zoom(self, zoom_percent):
         """Apply zoom to the entire display."""
 
+        # Safety check: ensure widgets exist and haven't been deleted
+        if not hasattr(self, "groupbox") or self.groupbox is None:
+            return
+
+        try:
+            # Check if C++ object still exists (will raise RuntimeError if deleted)
+            self.groupbox.objectName()
+        except RuntimeError:
+            # Widget was deleted, abort safely
+            return
+
         # Apply scaling to machine
         self.gui_machine.set_zoom_level(zoom_percent)
 
         # Force layout update
         QApplication.processEvents()
-        self.groupbox.updateGeometry()
-        self.groupbox.adjustSize()
+
+        # Additional safety check before updateGeometry
+        try:
+            self.groupbox.updateGeometry()
+            self.groupbox.adjustSize()
+        except RuntimeError:
+            # Widget was deleted during processing
+            return
+
         self.update()
 
     def showEvent(self, event):
         """Auto-fit zoom when window is first shown."""
         super().showEvent(event)
-        QTimer.singleShot(200, lambda: self.apply_zoom(60))
 
-    def resizeEvent(self, event):
-        """Auto-adjust zoom when user resizes window."""
-        super().resizeEvent(event)
-
-        if self._resize_timer:
-            self._resize_timer.stop()
-
-        self._resize_timer = QTimer()
-        self._resize_timer.setSingleShot(True)
-        self._resize_timer.timeout.connect(self.auto_fit_on_resize)
-        self._resize_timer.start(300)
+        # Use parented timer
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self.apply_zoom(60))
+        timer.start(200)
 
     def auto_fit_on_resize(self):
         """Calculate optimal zoom when user resizes window."""
         if not hasattr(self, "groupbox") or not self.groupbox:
+            return
+
+        # Add safety check
+        try:
+            self.groupbox.objectName()
+        except RuntimeError:
             return
 
         # Don't recalculate at minimum size
@@ -153,8 +170,11 @@ class CavityDisplayGUI(Display):
         self.gui_machine.set_zoom_level(100)
         QApplication.processEvents()
 
-        content_height = self.groupbox.sizeHint().height()
-        content_width = self.groupbox.sizeHint().width()
+        try:
+            content_height = self.groupbox.sizeHint().height()
+            content_width = self.groupbox.sizeHint().width()
+        except RuntimeError:
+            return
 
         # Calculate optimal zoom
         height_zoom = (
@@ -175,3 +195,15 @@ class CavityDisplayGUI(Display):
         if abs(optimal_zoom - self.current_zoom) > 2:
             self.current_zoom = optimal_zoom
             self.apply_zoom(optimal_zoom)
+
+    def resizeEvent(self, event):
+        """Auto-adjust zoom when user resizes window."""
+        super().resizeEvent(event)
+
+        if self._resize_timer:
+            self._resize_timer.stop()
+
+        self._resize_timer = QTimer()
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(self.auto_fit_on_resize)
+        self._resize_timer.start(300)
