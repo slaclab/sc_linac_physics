@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+from PyQt5.QtWidgets import QApplication, QMessageBox, QMenu
 from pydm import Display, PyDMChannel
 from pydm.widgets.drawing import PyDMDrawingPolygon
 from qtpy.QtCore import Signal, QPoint, QRectF, Property as qtProperty, Qt, Slot
@@ -67,14 +68,18 @@ class CavityWidget(PyDMDrawingPolygon):
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setContentsMargins(0, 0, 0, 0)
 
-    # The following two functions were copy/pasted from stack overflow
     def mousePressEvent(self, event: QMouseEvent):
+        """Handle mouse press for left-click and right-click."""
         if event.button() == Qt.LeftButton:
             self.press_pos = event.pos()
+        elif event.button() == Qt.RightButton:
+            self.show_context_menu(event.globalPos())
+            event.accept()
+        else:
+            super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
-        # ensure that the left button was pressed *and* released within the
-        # geometry of the widget; if so, emit the signal;
+        """Handle left-click release to emit clicked signal."""
         if (
             self.press_pos is not None
             and event.button() == Qt.LeftButton
@@ -82,6 +87,86 @@ class CavityWidget(PyDMDrawingPolygon):
         ):
             self.clicked.emit()
         self.press_pos = None
+
+    def show_context_menu(self, global_pos):
+        """Display context menu with cavity actions."""
+        cavity = getattr(self, "_parent_cavity", None)
+        if not cavity:
+            return
+
+        menu = QMenu()
+
+        # Fault Details
+        details_action = menu.addAction("📋 Fault Details")
+        details_action.triggered.connect(lambda: cavity.show_fault_display())
+
+        # Acknowledge (only if there's an alarm or warning)
+        severity = getattr(self, "_last_severity", None)
+        if severity == 2:
+            ack_action = menu.addAction("✓ Acknowledge Alarm")
+            ack_action.triggered.connect(
+                lambda: self.acknowledge_issue(cavity, "Alarm")
+            )
+        elif severity == 1:
+            ack_action = menu.addAction("✓ Acknowledge Warning")
+            ack_action.triggered.connect(
+                lambda: self.acknowledge_issue(cavity, "Warning")
+            )
+
+        menu.addSeparator()
+
+        # Copy Info
+        copy_action = menu.addAction("📄 Copy Info")
+        copy_action.triggered.connect(lambda: self.copy_cavity_info(cavity))
+
+        menu.exec_(global_pos)
+
+    def acknowledge_issue(self, cavity, severity_text):
+        """Acknowledge an alarm or warning and stop audio."""
+        description = (
+            self._cavity_description
+            if self._cavity_description
+            else "No description available"
+        )
+        reply = QMessageBox.question(
+            None,
+            f"Acknowledge {severity_text}",
+            f"Acknowledge {severity_text.lower()} for CM{cavity.cryomodule.name} Cavity {cavity.number}?\n\n"
+            f"Description: {description}",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            cavity_id = f"{cavity.cryomodule.name}_{cavity.number}"
+
+            # Find parent display and stop audio
+            parent_display = self._get_parent_display()
+            if parent_display and hasattr(parent_display, "audio_manager"):
+                parent_display.audio_manager.acknowledge_cavity(cavity_id)
+                print(
+                    f"✓ Acknowledged {severity_text} for CM{cavity.cryomodule.name} Cav{cavity.number}"
+                )
+
+    def _get_parent_display(self):
+        """Walk up widget tree to find CavityDisplayGUI."""
+        widget = self
+        max_depth = 20
+
+        for _ in range(max_depth):
+            widget = widget.parent() if hasattr(widget, "parent") else None
+            if widget and hasattr(widget, "audio_manager"):
+                return widget
+
+        return None
+
+    def copy_cavity_info(self, cavity):
+        """Copy cavity information to clipboard."""
+        info = f"CM{cavity.cryomodule.name} Cavity {cavity.number}\n"
+        info += f"Description: {self._cavity_description if self._cavity_description else 'None'}\n"
+        info += f"Severity: {self._last_severity}"
+
+        clipboard = QApplication.clipboard()
+        clipboard.setText(info)
 
     @qtProperty(str)
     def cavity_text(self):

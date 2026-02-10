@@ -52,6 +52,7 @@ class GUICavity(BackendCavity):
             QSizePolicy.Preferred, QSizePolicy.Preferred
         )
         self.cavity_widget.clicked.connect(self.show_fault_display)
+        self.cavity_widget._parent_cavity = self
 
         self.hor_layout = QHBoxLayout()
 
