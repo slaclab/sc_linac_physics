@@ -107,8 +107,7 @@ class CavityDisplayGUI(Display):
             if cm_layout and cm_layout.count() > 0:
                 label_widget = cm_layout.itemAt(0).widget()
                 if isinstance(label_widget, QLabel):
-                    label_widget.setStyleSheet(
-                        f"""
+                    label_widget.setStyleSheet(f"""
                         QLabel {{
                             font-weight: bold;
                             font-size: {max(6, int(9 * scale))}pt;
@@ -117,8 +116,7 @@ class CavityDisplayGUI(Display):
                             padding: {max(1, int(2 * scale))}px;
                             border-radius: {max(1, int(2 * scale))}px;
                         }}
-                    """
-                    )
+                    """)
 
         # Force layout update
         QApplication.processEvents()

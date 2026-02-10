@@ -177,8 +177,7 @@ class GUIMachine(Machine):
 
         colors = self.LINAC_COLORS.get(linac_key, self.DEFAULT_COLORS)
 
-        label.setStyleSheet(
-            f"""
+        label.setStyleSheet(f"""
             QLabel {{
                 font-weight: bold;
                 font-size: 10pt;
@@ -188,8 +187,7 @@ class GUIMachine(Machine):
                 border-radius: 2px;
                 margin-bottom: 2px;
             }}
-        """
-        )
+        """)
         label.setFixedHeight(20)
 
         return label
@@ -198,14 +196,12 @@ class GUIMachine(Machine):
         """Wrap a cryomodule in a widget for the layout."""
         cm_widget = QWidget()
         cm_widget.setLayout(gui_cm.vlayout)
-        cm_widget.setStyleSheet(
-            """
+        cm_widget.setStyleSheet("""
             QWidget {
                 background-color: rgb(40, 40, 40);
                 border: none;
             }
-        """
-        )
+        """)
         cm_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.cm_widgets.append(cm_widget)
@@ -215,15 +211,13 @@ class GUIMachine(Machine):
         """Apply border and styling to a linac section."""
         colors = self.LINAC_COLORS.get(linac_key, self.DEFAULT_COLORS)
 
-        section.setStyleSheet(
-            f"""
+        section.setStyleSheet(f"""
             QWidget {{
                 background-color: rgb(35, 35, 35);
                 border: 2px solid {colors['border']};
                 border-radius: 3px;
             }}
-        """
-        )
+        """)
 
         section.linac_key = linac_key
         section.border_color = colors["border"]
@@ -286,15 +280,13 @@ class GUIMachine(Machine):
 
         for section in self.linac_sections:
             if hasattr(section, "border_color"):
-                section.setStyleSheet(
-                    f"""
+                section.setStyleSheet(f"""
                     QWidget {{
                         background-color: rgb(35, 35, 35);
                         border: {border_width}px solid {section.border_color};
                         border-radius: {border_radius}px;
                     }}
-                """
-                )
+                """)
                 if section.layout():
                     section.layout().setContentsMargins(
                         padding, padding, padding, padding
