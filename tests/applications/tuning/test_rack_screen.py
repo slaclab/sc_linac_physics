@@ -1,5 +1,6 @@
 # tests/applications/tuning/test_rack_screen.py
 """Tests for RackScreen component."""
+
 import pytest
 
 
