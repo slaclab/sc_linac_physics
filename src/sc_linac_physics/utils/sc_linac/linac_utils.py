@@ -5,53 +5,45 @@ from numpy import polyfit
 
 from sc_linac_physics.utils.epics import PV
 
-# Global list of superconducting linac objects
+# Cryomodule definitions
 L0B = ["01"]
 L1B = ["02", "03"]
 L1BHL = ["H1", "H2"]
-L2B = ["04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15"]
-L3B = [
-    "16",
-    "17",
-    "18",
-    "19",
-    "20",
-    "21",
-    "22",
-    "23",
-    "24",
-    "25",
-    "26",
-    "27",
-    "28",
-    "29",
-    "30",
-    "31",
-    "32",
-    "33",
-    "34",
-    "35",
+L2B = [f"{i:02d}" for i in range(4, 16)]
+L3B = [f"{i:02d}" for i in range(16, 36)]
+L4B = [f"{i:02d}" for i in range(37, 60)]
+
+# Derived collections
+ALL_CRYOMODULES = L0B + L1B + L1BHL + L2B + L3B + L4B
+ALL_CRYOMODULES_NO_HL = L0B + L1B + L2B + L3B + L4B
+
+# Linac groupings
+LINAC_TUPLES = [
+    ("L0B", L0B),
+    ("L1B", L1B),
+    ("L2B", L2B),
+    ("L3B", L3B),
+    ("L4B", L4B),
 ]
+LINAC_CM_DICT = dict(enumerate([L0B, L1B + L1BHL, L2B, L3B, L4B]))
+LINAC_CM_MAP = [L0B, L1B + L1BHL, L2B, L3B, L4B]
 
-LINAC_TUPLES = [("L0B", L0B), ("L1B", L1B), ("L2B", L2B), ("L3B", L3B)]
-LINAC_CM_DICT = {0: L0B, 1: L1B, 2: L2B, 3: L3B}
-LINAC_CM_MAP = [L0B, L1B + L1BHL, L2B, L3B]
-
+# Vacuum systems
 BEAMLINE_VACUUM_INFIXES = [
     ["0198"],
     ["0202", "H292"],
     ["0402", "1592"],
     ["1602", "2594", "2598", "3592"],
+    [],  # L4B - update with actual values when known
 ]
+
 INSULATING_VACUUM_CRYOMODULES = [
     ["01"],
     ["02", "H1"],
-    ["04", "06", "08", "10", "12", "14"],
+    [f"{i:02d}" for i in range(4, 16, 2)],  # Even numbers 04-14
     ["16", "18", "20", "22", "24", "27", "29", "31", "33", "34"],
+    [],  # L4B - update with actual values when known
 ]
-
-ALL_CRYOMODULES = L0B + L1B + L1BHL + L2B + L3B
-ALL_CRYOMODULES_NO_HL = L0B + L1B + L2B + L3B
 
 CHARACTERIZATION_CRASHED_VALUE = 0
 CHARACTERIZATION_RUNNING_VALUE = 2
