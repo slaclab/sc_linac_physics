@@ -3,6 +3,7 @@
 """
 Tests for SEL phase optimizer script
 """
+
 import time
 from unittest.mock import Mock, patch, call
 

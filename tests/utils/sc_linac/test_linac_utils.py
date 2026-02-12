@@ -52,6 +52,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     STATUS_READY_VALUE,
     STATUS_ERROR_VALUE,
     ESTIMATED_MICROSTEPS_PER_HZ_HL,
+    L4B,
 )
 
 
@@ -72,7 +73,9 @@ class TestConstants:
 
     def test_all_cryomodules_composition(self):
         """Test that ALL_CRYOMODULES contains all expected modules"""
-        expected_total = len(L0B) + len(L1B) + len(L1BHL) + len(L2B) + len(L3B)
+        expected_total = (
+            len(L0B) + len(L1B) + len(L1BHL) + len(L2B) + len(L3B) + len(L4B)
+        )
         assert len(ALL_CRYOMODULES) == expected_total
 
         # Check that all individual lists are represented
@@ -81,7 +84,7 @@ class TestConstants:
 
     def test_all_cryomodules_no_hl_composition(self):
         """Test that ALL_CRYOMODULES_NO_HL excludes HL modules"""
-        expected_total = len(L0B) + len(L1B) + len(L2B) + len(L3B)
+        expected_total = len(L0B) + len(L1B) + len(L2B) + len(L3B) + len(L4B)
         assert len(ALL_CRYOMODULES_NO_HL) == expected_total
 
         # Check that HL modules are not included
@@ -90,16 +93,17 @@ class TestConstants:
 
     def test_linac_tuples_structure(self):
         """Test LINAC_TUPLES structure"""
-        assert len(LINAC_TUPLES) == 4
+        assert len(LINAC_TUPLES) == 5
         names = [name for name, _ in LINAC_TUPLES]
-        assert names == ["L0B", "L1B", "L2B", "L3B"]
+        assert names == ["L0B", "L1B", "L2B", "L3B", "L4B"]
 
     def test_linac_cm_dict_structure(self):
         """Test LINAC_CM_DICT mapping"""
         assert LINAC_CM_DICT[0] == L0B
-        assert LINAC_CM_DICT[1] == L1B
+        assert LINAC_CM_DICT[1] == L1B + L1BHL
         assert LINAC_CM_DICT[2] == L2B
         assert LINAC_CM_DICT[3] == L3B
+        assert LINAC_CM_DICT[4] == L4B
 
     def test_linac_cm_map_structure(self):
         """Test LINAC_CM_MAP includes HL modules"""
@@ -152,13 +156,14 @@ class TestConstants:
 
     def test_vacuum_structures(self):
         """Test vacuum-related data structures"""
-        assert len(BEAMLINE_VACUUM_INFIXES) == 4
-        assert len(INSULATING_VACUUM_CRYOMODULES) == 4
+        assert len(BEAMLINE_VACUUM_INFIXES) == 5
+        assert len(INSULATING_VACUUM_CRYOMODULES) == 5
 
         # Check that each beamline has corresponding vacuum info
         for i, beamline_vacuums in enumerate(BEAMLINE_VACUUM_INFIXES):
             assert isinstance(beamline_vacuums, list)
-            assert len(beamline_vacuums) > 0
+            if i < 4:
+                assert len(beamline_vacuums) > 0
 
     def test_park_detune_constant(self):
         """Test PARK_DETUNE constant"""
@@ -353,7 +358,7 @@ class TestDataStructureIntegrity:
 
     def test_linac_cm_dict_completeness(self):
         """Test that LINAC_CM_DICT covers all expected linacs"""
-        expected_keys = [0, 1, 2, 3]  # L0B, L1B, L2B, L3B
+        expected_keys = [0, 1, 2, 3, 4]  # L0B, L1B, L2B, L3B, L4B
         assert set(LINAC_CM_DICT.keys()) == set(expected_keys)
 
     def test_linac_cm_map_consistency(self):
@@ -370,7 +375,7 @@ class TestDataStructureIntegrity:
         assert len(BEAMLINE_VACUUM_INFIXES) == len(
             INSULATING_VACUUM_CRYOMODULES
         )
-        assert len(BEAMLINE_VACUUM_INFIXES) == 4  # L0B, L1B, L2B, L3B
+        assert len(BEAMLINE_VACUUM_INFIXES) == 5  # L0B, L1B, L2B, L3B, L4B
 
     def test_cryo_name_map_validity(self):
         """Test that CRYO_NAME_MAP keys exist in HL modules"""
