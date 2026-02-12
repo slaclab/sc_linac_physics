@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v9.1.0 (2026-02-12)
+
+### Chores
+
+- Patching tests ([#201](https://github.com/slaclab/sc_linac_physics/pull/201),
+  [`029b946`](https://github.com/slaclab/sc_linac_physics/commit/029b946c2dd3a87ece6fc6cc2fa6b4d9f72609aa))
+
+- Rerunning black ([#202](https://github.com/slaclab/sc_linac_physics/pull/202),
+  [`9b3cde7`](https://github.com/slaclab/sc_linac_physics/commit/9b3cde7017f06c541b3b71ac56bb2520899a251c))
+
+- Rerunning black ([#201](https://github.com/slaclab/sc_linac_physics/pull/201),
+  [`029b946`](https://github.com/slaclab/sc_linac_physics/commit/029b946c2dd3a87ece6fc6cc2fa6b4d9f72609aa))
+
+### Features
+
+- Add is_currently_faulted() method to Fault class
+  ([#202](https://github.com/slaclab/sc_linac_physics/pull/202),
+  [`9b3cde7`](https://github.com/slaclab/sc_linac_physics/commit/9b3cde7017f06c541b3b71ac56bb2520899a251c))
+
+- L4B Support ([#201](https://github.com/slaclab/sc_linac_physics/pull/201),
+  [`029b946`](https://github.com/slaclab/sc_linac_physics/commit/029b946c2dd3a87ece6fc6cc2fa6b4d9f72609aa))
+
+### Testing
+
+- Add unit tests for cryomodule service components
+  ([#197](https://github.com/slaclab/sc_linac_physics/pull/197),
+  [`df12c01`](https://github.com/slaclab/sc_linac_physics/commit/df12c01742cb6fad48fb629689fc39b80808dfcc))
+
+
 ## v9.0.0 (2026-01-23)
 
 ### Chores
