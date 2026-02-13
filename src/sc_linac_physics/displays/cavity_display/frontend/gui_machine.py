@@ -28,3 +28,44 @@ class GUIMachine(Machine):
         l3b = self.linacs[3]
         for gui_cm in l3b.cryomodules.values():
             self.bottom_half.addLayout(gui_cm.vlayout)
+
+    def set_zoom_level(self, zoom_percent):
+        """Apply zoom scaling to all elements."""
+        scale = zoom_percent / 100.0
+
+        # Scale all cavities
+        self._scale_cavities(scale)
+
+        # Scale spacing
+        self._scale_spacing(scale)
+
+    def _scale_cavities(self, scale):
+        """Scale all cavity widgets."""
+        linacs = (
+            self.linacs
+            if isinstance(self.linacs, list)
+            else list(self.linacs.values())
+        )
+
+        for linac in linacs:
+            cryomodules = linac.cryomodules
+            if isinstance(cryomodules, dict):
+                cryomodules = cryomodules.values()
+
+            for cm in cryomodules:
+                cavities = cm.cavities
+                if isinstance(cavities, dict):
+                    cavities = cavities.values()
+
+                for cavity in cavities:
+                    cavity.set_scale(scale)
+
+    def _scale_spacing(self, scale):
+        """Scale spacing between elements."""
+        spacing = max(2, int(8 * scale))
+
+        # Scale the existing top_half and bottom_half layouts
+        if hasattr(self, "top_half"):
+            self.top_half.setSpacing(spacing)
+        if hasattr(self, "bottom_half"):
+            self.bottom_half.setSpacing(spacing)

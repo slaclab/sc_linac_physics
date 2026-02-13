@@ -9,7 +9,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QGroupBox,
     QScrollArea,
-    QAbstractScrollArea,
     QLabel,
 )
 from edmbutton import PyDMEDMDisplayButton
@@ -167,24 +166,51 @@ class GUICavity(BackendCavity):
 
     @property
     def fault_display(self):
+        """Lazy-load the fault display window."""
         if not self._fault_display:
             groupbox = QGroupBox()
             groupbox.setLayout(self.fault_display_grid_layout)
-            self.populate_fault_display()
+            groupbox.setFlat(True)
 
             self._fault_display = Display()
             self._fault_display.setWindowTitle(f"{self} Faults")
             vlayout = QVBoxLayout()
-
             self._fault_display.setLayout(vlayout)
 
             scroll_area = QScrollArea()
-            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-            scroll_area.setSizeAdjustPolicy(
-                QAbstractScrollArea.AdjustToContents
-            )
+            scroll_area.setWidget(groupbox)
             scroll_area.setWidgetResizable(True)
             vlayout.addWidget(scroll_area)
-            scroll_area.setWidget(groupbox)
+
+            self.populate_fault_display()
 
         return self._fault_display
+
+    def set_scale(self, scale):  # ADD THIS ENTIRE METHOD
+        """Scale the cavity widget and indicators based on zoom level."""
+        base_cavity_size = 50
+        base_indicator_height = 4
+
+        scaled_cavity_size = max(20, int(base_cavity_size * scale))
+        scaled_indicator_height = max(1, int(base_indicator_height * scale))
+
+        # Scale cavity widget
+        self.cavity_widget.setFixedSize(scaled_cavity_size, scaled_cavity_size)
+        self.cavity_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.cavity_widget.setMinimumSize(
+            scaled_cavity_size, scaled_cavity_size
+        )
+        self.cavity_widget.setMaximumSize(
+            scaled_cavity_size, scaled_cavity_size
+        )
+
+        # Scale indicator bars
+        bar_width = scaled_cavity_size // 2
+        self.ssa_bar.setFixedSize(bar_width, scaled_indicator_height)
+        self.rf_bar.setFixedSize(bar_width, scaled_indicator_height)
+
+        # Update layout
+        self.vert_layout.invalidate()
+        self.vert_layout.update()
+        self.cavity_widget.updateGeometry()
+        self.cavity_widget.update()
