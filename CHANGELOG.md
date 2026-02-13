@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.2.1 (2026-02-13)
+
+### Refactoring
+
+- **cavity-display**: Restructure machine layout with linac sections
+  ([#204](https://github.com/slaclab/sc_linac_physics/pull/204),
+  [`a678f75`](https://github.com/slaclab/sc_linac_physics/commit/a678f754b0725e6f3f9ca2b1deaba93e77b4b055))
+
+
 ## v9.2.0 (2026-02-13)
 
 ### Chores
