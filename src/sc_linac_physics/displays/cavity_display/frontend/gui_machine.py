@@ -21,32 +21,32 @@ from sc_linac_physics.utils.sc_linac.linac import Machine
 class GUIMachine(Machine):
     """GUI representation of the machine with all linacs and cryomodules."""
 
-    # Linac color scheme (avoiding status colors: green, yellow, red, purple, gray)
+    # Linac color scheme
     LINAC_COLORS = {
-        0: {
-            "border": "rgb(100, 180, 255)",
+        0: {  # Deep Blue - high luminance for dark mode visibility
+            "border": "rgb(80, 160, 255)",
             "text": "rgb(100, 180, 255)",
             "bg": "rgb(20, 40, 80)",
         },
-        1: {
-            "border": "rgb(0, 200, 200)",
-            "text": "rgb(0, 220, 220)",
+        1: {  # Cyan - bright and crisp on dark backgrounds
+            "border": "rgb(0, 220, 220)",
+            "text": "rgb(40, 240, 240)",
             "bg": "rgb(0, 60, 60)",
         },
-        2: {
-            "border": "rgb(255, 140, 0)",
-            "text": "rgb(255, 160, 40)",
-            "bg": "rgb(80, 50, 10)",
+        2: {  # Coral - warm with good contrast
+            "border": "rgb(255, 140, 110)",
+            "text": "rgb(255, 160, 130)",
+            "bg": "rgb(80, 40, 30)",
         },
-        3: {
-            "border": "rgb(255, 100, 180)",
-            "text": "rgb(255, 120, 200)",
-            "bg": "rgb(80, 30, 60)",
+        3: {  # Magenta - vibrant and distinct
+            "border": "rgb(255, 80, 180)",
+            "text": "rgb(255, 110, 200)",
+            "bg": "rgb(80, 25, 60)",
         },
-        4: {
-            "border": "rgb(100, 200, 255)",
-            "text": "rgb(120, 200, 255)",
-            "bg": "rgb(30, 50, 80)",
+        4: {  # Amber - warm golden tone
+            "border": "rgb(255, 190, 60)",
+            "text": "rgb(255, 210, 90)",
+            "bg": "rgb(80, 60, 15)",
         },
     }
 
@@ -80,7 +80,11 @@ class GUIMachine(Machine):
 
     def _build_layout(self):
         """Build the complete GUI layout with all linacs and cryomodules."""
-        all_cms_with_linac = self._collect_all_cms()
+        all_cms_with_linac = [
+            (linac_idx, linac.cryomodules[cm_key])
+            for linac_idx, linac in enumerate(self.linacs)
+            for cm_key in sorted(linac.cryomodules.keys())
+        ]
 
         # Create rows
         for row_start in range(0, len(all_cms_with_linac), self.cms_per_row):
@@ -90,31 +94,6 @@ class GUIMachine(Machine):
             row_layout = self._create_row(row_cms)
             self.row_layouts.append(row_layout)
             self.main_layout.addLayout(row_layout)
-
-    def _collect_all_cms(self):
-        """Collect all cryomodules with their linac information."""
-        all_cms = []
-
-        linacs = self.linacs
-        if isinstance(linacs, dict):
-            linacs = [(key, linacs[key]) for key in sorted(linacs.keys())]
-        else:
-            linacs = [(i, linac) for i, linac in enumerate(linacs)]
-
-        for linac_key, linac in linacs:
-            cryomodules = linac.cryomodules
-            if isinstance(cryomodules, dict):
-                cryomodules = [
-                    (key, cryomodules[key])
-                    for key in sorted(cryomodules.keys())
-                ]
-            else:
-                cryomodules = [(i, cm) for i, cm in enumerate(cryomodules)]
-
-            for _, gui_cm in cryomodules:
-                all_cms.append((linac_key, gui_cm))
-
-        return all_cms
 
     def _create_row(self, row_cms):
         """Create a row layout containing linac sections."""
@@ -243,23 +222,9 @@ class GUIMachine(Machine):
 
     def _scale_cavities(self, scale):
         """Scale all cavity widgets."""
-        linacs = (
-            self.linacs
-            if isinstance(self.linacs, list)
-            else list(self.linacs.values())
-        )
-
-        for linac in linacs:
-            cryomodules = linac.cryomodules
-            if isinstance(cryomodules, dict):
-                cryomodules = cryomodules.values()
-
-            for cm in cryomodules:
-                cavities = cm.cavities
-                if isinstance(cavities, dict):
-                    cavities = cavities.values()
-
-                for cavity in cavities:
+        for linac in self.linacs:
+            for cm in linac.cryomodules.values():
+                for cavity in cm.cavities.values():
                     cavity.set_scale(scale)
 
     def _scale_spacing(self, scale):
