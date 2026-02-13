@@ -9,7 +9,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QGroupBox,
     QScrollArea,
-    QAbstractScrollArea,
     QLabel,
 )
 from edmbutton import PyDMEDMDisplayButton
@@ -246,7 +245,7 @@ class GUICavity(BackendCavity):
         if not self._fault_display:
             groupbox = QGroupBox()
             groupbox.setLayout(self.fault_display_grid_layout)
-            self.populate_fault_display()
+            groupbox.setFlat(True)
 
             self._fault_display = Display()
             self._fault_display.setWindowTitle(f"{self} Faults")
@@ -254,12 +253,10 @@ class GUICavity(BackendCavity):
             self._fault_display.setLayout(vlayout)
 
             scroll_area = QScrollArea()
-            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-            scroll_area.setSizeAdjustPolicy(
-                QAbstractScrollArea.AdjustToContents
-            )
+            scroll_area.setWidget(groupbox)
             scroll_area.setWidgetResizable(True)
             vlayout.addWidget(scroll_area)
-            scroll_area.setWidget(groupbox)
+
+            self.populate_fault_display()
 
         return self._fault_display

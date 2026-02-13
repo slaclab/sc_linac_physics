@@ -1,7 +1,9 @@
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, QSettings, QTimer
-from PyQt5.QtGui import QColor, QCursor, QKeySequence
+from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtGui import QColor, QCursor
+from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
@@ -102,8 +104,7 @@ class CavityDisplayGUI(Display):
         # Search box
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search CM or Cavity...")
-        self.search_box.setStyleSheet(
-            """
+        self.search_box.setStyleSheet("""
                 QLineEdit {
                     background-color: rgb(50, 50, 50);
                     color: white;
@@ -115,8 +116,7 @@ class CavityDisplayGUI(Display):
                 QLineEdit:focus {
                     border: 2px solid rgb(100, 150, 255);
                 }
-            """
-        )
+            """)
         self.search_box.textChanged.connect(self.filter_cavities)
         self.search_box.setMaximumWidth(200)
 
@@ -125,8 +125,7 @@ class CavityDisplayGUI(Display):
         self.clear_search_btn.setToolTip("Clear search")
         self.clear_search_btn.clicked.connect(lambda: self.search_box.clear())
         self.clear_search_btn.setMaximumWidth(30)
-        self.clear_search_btn.setStyleSheet(
-            """
+        self.clear_search_btn.setStyleSheet("""
                 QPushButton {
                     background-color: rgb(60, 60, 60);
                     color: white;
@@ -137,8 +136,7 @@ class CavityDisplayGUI(Display):
                 QPushButton:hover {
                     background-color: rgb(80, 80, 80);
                 }
-            """
-        )
+            """)
 
         self.header.addWidget(QLabel("Search:"))
         self.header.addWidget(self.search_box)
@@ -156,8 +154,7 @@ class CavityDisplayGUI(Display):
         self.audio_toggle_btn.setChecked(False)
         self.audio_toggle_btn.setToolTip("Enable/disable audio alerts")
         self.audio_toggle_btn.clicked.connect(self.toggle_audio)
-        self.audio_toggle_btn.setStyleSheet(
-            """
+        self.audio_toggle_btn.setStyleSheet("""
                 QPushButton {
                     background-color: rgb(60, 60, 60);
                     color: white;
@@ -173,8 +170,7 @@ class CavityDisplayGUI(Display):
                 QPushButton:hover {
                     background-color: rgb(80, 80, 80);
                 }
-            """
-        )
+            """)
         self.header.addWidget(self.audio_toggle_btn)
 
         # Add the machine layout
@@ -183,14 +179,12 @@ class CavityDisplayGUI(Display):
         # Main groupbox
         self.groupbox = QGroupBox()
         self.groupbox.setLayout(self.groupbox_vlayout)
-        self.groupbox.setStyleSheet(
-            """
+        self.groupbox.setStyleSheet("""
             QGroupBox {
                 border: none;
                 background-color: rgb(35, 35, 35);
             }
-            """
-        )
+            """)
 
         # Alarm sidebar
         self.alarm_sidebar = AlarmSidebarWidget(self.gui_machine, parent=self)
@@ -204,8 +198,7 @@ class CavityDisplayGUI(Display):
         self.groupbox.setMinimumWidth(600)
 
         # Splitter styling
-        self.splitter.setStyleSheet(
-            """
+        self.splitter.setStyleSheet("""
             QSplitter::handle {
                 background-color: rgb(100, 100, 100);
                 width: 3px;
@@ -216,8 +209,7 @@ class CavityDisplayGUI(Display):
             QSplitter::handle:pressed {
                 background-color: rgb(200, 200, 200);
             }
-            """
-        )
+            """)
 
         self.splitter.setCollapsible(0, False)
         self.splitter.setCollapsible(1, True)
@@ -240,8 +232,7 @@ class CavityDisplayGUI(Display):
 
         # Status bar
         self.status_bar = QStatusBar()
-        self.status_bar.setStyleSheet(
-            """
+        self.status_bar.setStyleSheet("""
                 QStatusBar {
                     background-color: rgb(50, 50, 50);
                     color: white;
@@ -249,8 +240,7 @@ class CavityDisplayGUI(Display):
                     padding: 3px;
                     max-height: 30px;
                 }
-            """
-        )
+            """)
 
         self.status_label = QLabel("Initializing...")
         self.status_label.setStyleSheet("font-size: 11pt;")
@@ -374,8 +364,7 @@ class CavityDisplayGUI(Display):
             if cm_layout and cm_layout.count() > 0:
                 label_widget = cm_layout.itemAt(0).widget()
                 if isinstance(label_widget, QLabel):
-                    label_widget.setStyleSheet(
-                        f"""
+                    label_widget.setStyleSheet(f"""
                         QLabel {{
                             font-weight: bold;
                             font-size: {max(6, int(9 * scale))}pt;
@@ -384,8 +373,7 @@ class CavityDisplayGUI(Display):
                             padding: {max(1, int(2 * scale))}px;
                             border-radius: {max(1, int(2 * scale))}px;
                         }}
-                    """
-                    )
+                    """)
 
         # Force layout update
         QApplication.processEvents()
@@ -483,21 +471,9 @@ class CavityDisplayGUI(Display):
         warnings = 0
         ok = 0
 
-        linacs = self.gui_machine.linacs
-        if isinstance(linacs, dict):
-            linacs = linacs.values()
-
-        for linac in linacs:
-            cryomodules = linac.cryomodules
-            if isinstance(cryomodules, dict):
-                cryomodules = cryomodules.values()
-
-            for cm in cryomodules:
-                cavities = cm.cavities
-                if isinstance(cavities, dict):
-                    cavities = cavities.values()
-
-                for cavity in cavities:
+        for linac in self.gui_machine.linacs:
+            for cm in linac.cryomodules.values():
+                for cavity in cm.cavities.values():
                     total += 1
                     severity = getattr(
                         cavity.cavity_widget, "_last_severity", None
@@ -509,7 +485,11 @@ class CavityDisplayGUI(Display):
                     else:
                         ok += 1
 
-        # Build status message with consistent formatting
+        # Build status message
+        self._update_status_display(total, alarms, warnings, ok)
+
+    def _update_status_display(self, total, alarms, warnings, ok):
+        """Update the status bar display with counts."""
         status_parts = []
 
         if alarms > 0:
@@ -527,30 +507,25 @@ class CavityDisplayGUI(Display):
 
         status_text = " | ".join(status_parts)
 
-        # Color based on severity
+        # Determine color based on severity
         if alarms > 0:
             bg_color = "rgb(150, 0, 0)"
-            text_color = "white"
         elif warnings > 0:
             bg_color = "rgb(200, 120, 0)"
-            text_color = "white"
         else:
             bg_color = "rgb(0, 100, 0)"
-            text_color = "white"
 
         self.status_label.setText(status_text)
-        self.status_bar.setStyleSheet(
-            f"""
+        self.status_bar.setStyleSheet(f"""
             QStatusBar {{
                 background-color: {bg_color};
-                color: {text_color};
+                color: white;
                 font-size: 11pt;
                 font-weight: bold;
                 padding: 3px;
                 max-height: 30px;
             }}
-        """
-        )
+        """)
 
     def _setup_shortcuts(self):
         """Setup keyboard shortcuts for common actions"""
@@ -600,6 +575,15 @@ class CavityDisplayGUI(Display):
             if item:
                 cavity = item.data(Qt.UserRole)
                 self.scroll_to_cavity(cavity)
+
+        # Auto-zoom tracking
+        self.current_zoom = 60
+        self._resize_timer = None
+
+        # Apply initial zoom
+        QTimer.singleShot(100, lambda: self.apply_zoom(60))
+
+        self.setWindowTitle("SRF Cavity Display")
 
     def add_header_button(self, button: QPushButton, display: Display):
         button.clicked.connect(lambda: showDisplay(display))
