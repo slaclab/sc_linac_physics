@@ -1,10 +1,10 @@
+from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QColor, QCursor
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QPushButton,
     QGroupBox,
-    QLabel,
     QApplication,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
@@ -85,6 +85,15 @@ class CavityDisplayGUI(Display):
             self.fault_count_button, self.fault_count_display
         )
 
+        # Auto-zoom tracking
+        self.current_zoom = 60
+        self._resize_timer = None
+
+        # Apply initial zoom
+        QTimer.singleShot(100, lambda: self.apply_zoom(60))
+
+        self.setWindowTitle("SRF Cavity Display")
+
     def add_header_button(self, button: QPushButton, display: Display):
         button.clicked.connect(lambda: showDisplay(display))
 
@@ -96,30 +105,104 @@ class CavityDisplayGUI(Display):
 
     def apply_zoom(self, zoom_percent):
         """Apply zoom to the entire display."""
-        scale = zoom_percent / 100.0
+
+        # Safety check: ensure widgets exist and haven't been deleted
+        if not hasattr(self, "groupbox") or self.groupbox is None:
+            return
+
+        try:
+            # Check if C++ object still exists (will raise RuntimeError if deleted)
+            self.groupbox.objectName()
+        except RuntimeError:
+            # Widget was deleted, abort safely
+            return
 
         # Apply scaling to machine
         self.gui_machine.set_zoom_level(zoom_percent)
 
-        # Update CM label fonts
-        for cm_widget in self.gui_machine.cm_widgets:
-            cm_layout = cm_widget.layout()
-            if cm_layout and cm_layout.count() > 0:
-                label_widget = cm_layout.itemAt(0).widget()
-                if isinstance(label_widget, QLabel):
-                    label_widget.setStyleSheet(f"""
-                        QLabel {{
-                            font-weight: bold;
-                            font-size: {max(6, int(9 * scale))}pt;
-                            color: white;
-                            background-color: rgb(50, 50, 50);
-                            padding: {max(1, int(2 * scale))}px;
-                            border-radius: {max(1, int(2 * scale))}px;
-                        }}
-                    """)
-
         # Force layout update
         QApplication.processEvents()
-        self.groupbox.updateGeometry()
-        self.groupbox.adjustSize()
+
+        # Additional safety check before updateGeometry
+        try:
+            self.groupbox.updateGeometry()
+            self.groupbox.adjustSize()
+        except RuntimeError:
+            # Widget was deleted during processing
+            return
+
         self.update()
+
+    def showEvent(self, event):
+        """Auto-fit zoom when window is first shown."""
+        super().showEvent(event)
+
+        # Use parented timer
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self.apply_zoom(60))
+        timer.start(200)
+
+    def auto_fit_on_resize(self):
+        """Calculate optimal zoom when user resizes window."""
+        if not hasattr(self, "groupbox") or not self.groupbox:
+            return
+
+        # Add safety check
+        try:
+            self.groupbox.objectName()
+        except RuntimeError:
+            return
+
+        # Don't recalculate at minimum size
+        if self.width() <= 800 or self.height() <= 600:
+            if abs(self.current_zoom - 55) > 2:
+                self.current_zoom = 55
+                self.apply_zoom(55)
+            return
+
+        # Get available space
+        available_height = self.height() - 200
+        available_width = self.width() - 40
+
+        # Measure content at 100%
+        self.gui_machine.set_zoom_level(100)
+        QApplication.processEvents()
+
+        try:
+            content_height = self.groupbox.sizeHint().height()
+            content_width = self.groupbox.sizeHint().width()
+        except RuntimeError:
+            return
+
+        # Calculate optimal zoom
+        height_zoom = (
+            (available_height / content_height * 100)
+            if content_height > 0
+            else 100
+        )
+        width_zoom = (
+            (available_width / content_width * 100)
+            if content_width > 0
+            else 100
+        )
+
+        optimal_zoom = min(height_zoom, width_zoom)
+        optimal_zoom = max(55, min(100, optimal_zoom))
+        optimal_zoom = round(optimal_zoom / 5) * 5
+
+        if abs(optimal_zoom - self.current_zoom) > 2:
+            self.current_zoom = optimal_zoom
+            self.apply_zoom(optimal_zoom)
+
+    def resizeEvent(self, event):
+        """Auto-adjust zoom when user resizes window."""
+        super().resizeEvent(event)
+
+        if self._resize_timer:
+            self._resize_timer.stop()
+
+        self._resize_timer = QTimer()
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(self.auto_fit_on_resize)
+        self._resize_timer.start(300)

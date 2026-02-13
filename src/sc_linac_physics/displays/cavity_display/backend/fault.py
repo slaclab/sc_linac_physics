@@ -200,6 +200,17 @@ class Fault:
             self._create_pv_obj()
         return self._pv_obj
 
+    def is_currently_faulted(self) -> bool:
+        """Check if the PV is currently in a fault state.
+
+        Returns:
+            True if currently faulted, False if OK.
+
+        Raises:
+            PVInvalidError: If PV is disconnected or invalid.
+        """
+        return self.is_faulted(self.pv_obj)
+
     def is_currently_faulted_with_value(
         self, value: Union[float, int, str, None]
     ) -> bool:

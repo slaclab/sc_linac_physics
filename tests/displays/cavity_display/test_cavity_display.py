@@ -66,18 +66,18 @@ def mock_show_display(monkeypatch):
 
 
 @pytest.fixture
-def display(mock_show_display, monkeypatch):
+def display(mock_show_display, monkeypatch, qtbot):
     """Create a CavityDisplayGUI instance with mocked components."""
     # Patch the components before importing CavityDisplayGUI
 
     monkeypatch.setattr(
         "sc_linac_physics.displays.cavity_display.frontend.fault_count_display.FaultCountDisplay",
         MockFaultCountDisplay,
-    ),
+    )
     monkeypatch.setattr(
         "sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display.DecoderDisplay",
         MockDecoderDisplay,
-    ),
+    )
     monkeypatch.setattr(
         "sc_linac_physics.displays.cavity_display.frontend.gui_machine.GUIMachine",
         MockGUIMachine,
@@ -94,20 +94,22 @@ def display(mock_show_display, monkeypatch):
         patch.object(CavityDisplayGUI, "showMaximized"),
     ):
         display = CavityDisplayGUI()
+        qtbot.addWidget(display)
+        qtbot.wait(150)  # Wait for initialization timers
+
         yield display
+
         display.close()
+        display.deleteLater()
 
 
 def test_launches(qtbot: QtBot, display):
     """Test that the application launches successfully."""
-    qtbot.addWidget(display)
     assert display.windowTitle() == "SRF Cavity Display"
 
 
 def test_header_buttons(qtbot: QtBot, display):
     """Test that header buttons are created correctly."""
-    qtbot.addWidget(display)
-
     # Check that buttons exist
     assert hasattr(display, "decoder_button")
     assert hasattr(display, "fault_count_button")
@@ -125,8 +127,6 @@ def test_header_buttons(qtbot: QtBot, display):
 
 def test_button_connections(qtbot: QtBot, display, mock_show_display):
     """Test that button connections work with our mocked showDisplay function."""
-    qtbot.addWidget(display)
-
     # Verify that buttons have signal connections
     assert display.decoder_button.receivers(display.decoder_button.clicked) > 0
     assert (
@@ -152,8 +152,6 @@ def test_button_connections(qtbot: QtBot, display, mock_show_display):
 
 def test_add_header_button(qtbot: QtBot, display, mock_show_display):
     """Test the add_header_button method directly."""
-    qtbot.addWidget(display)
-
     # Create a new test button and display
     from PyQt5.QtWidgets import QPushButton
 
