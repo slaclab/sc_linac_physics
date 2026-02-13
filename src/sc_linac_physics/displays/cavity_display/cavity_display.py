@@ -3,7 +3,6 @@ from PyQt5.QtGui import QColor, QCursor
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
-    QFrame,
     QPushButton,
     QGroupBox,
     QApplication,
@@ -22,7 +21,6 @@ from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display imp
 from sc_linac_physics.displays.cavity_display.frontend.gui_machine import (
     GUIMachine,
 )
-from sc_linac_physics.displays.cavity_display.frontend.utils import make_line
 
 
 class CavityDisplayGUI(Display):
@@ -31,6 +29,10 @@ class CavityDisplayGUI(Display):
         self.setStyleSheet(
             "background-color: rgb(35, 35, 35); color: rgb(255, 255, 255); font-size: 15pt;"
         )
+
+        # Set window size constraints
+        self.resize(1200, 800)
+        self.setMinimumSize(1100, 700)
 
         self.gui_machine = GUIMachine()
 
@@ -68,10 +70,7 @@ class CavityDisplayGUI(Display):
         self.groupbox_vlayout.addLayout(self.header)
         self.setLayout(self.vlayout)
 
-        self.groupbox_vlayout.addLayout(self.gui_machine.top_half)
-        self.groupbox_vlayout.addSpacing(10)
-        self.groupbox_vlayout.addWidget(make_line(QFrame.HLine))
-        self.groupbox_vlayout.addLayout(self.gui_machine.bottom_half)
+        self.groupbox_vlayout.addLayout(self.gui_machine.main_layout)
 
         self.groupbox = QGroupBox()
         self.groupbox.setLayout(self.groupbox_vlayout)
