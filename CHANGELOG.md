@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v9.2.0 (2026-02-13)
+
+### Chores
+
+- Patching test ([#203](https://github.com/slaclab/sc_linac_physics/pull/203),
+  [`8d14dc8`](https://github.com/slaclab/sc_linac_physics/commit/8d14dc84a2b3e9db3fb5d53e08f01e73e6b1c3f3))
+
+- Patching tests ([#203](https://github.com/slaclab/sc_linac_physics/pull/203),
+  [`8d14dc8`](https://github.com/slaclab/sc_linac_physics/commit/8d14dc84a2b3e9db3fb5d53e08f01e73e6b1c3f3))
+
+### Features
+
+- **cavity-display**: Add zoom and scaling system
+  ([#203](https://github.com/slaclab/sc_linac_physics/pull/203),
+  [`8d14dc8`](https://github.com/slaclab/sc_linac_physics/commit/8d14dc84a2b3e9db3fb5d53e08f01e73e6b1c3f3))
+
+
 ## v9.1.0 (2026-02-12)
 
 ### Chores
