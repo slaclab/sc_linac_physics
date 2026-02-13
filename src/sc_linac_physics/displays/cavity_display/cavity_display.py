@@ -6,6 +6,8 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QGroupBox,
     QApplication,
+    QLabel,
+    QLineEdit,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
@@ -69,6 +71,47 @@ class CavityDisplayGUI(Display):
         self.groupbox_vlayout = QVBoxLayout()
         self.groupbox_vlayout.addLayout(self.header)
         self.setLayout(self.vlayout)
+
+        # Search box
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Search CM or Cavity...")
+        self.search_box.setStyleSheet("""
+                        QLineEdit {
+                            background-color: rgb(50, 50, 50);
+                            color: white;
+                            border: 1px solid rgb(100, 100, 100);
+                            border-radius: 3px;
+                            padding: 5px;
+                            font-size: 11pt;
+                        }
+                        QLineEdit:focus {
+                            border: 2px solid rgb(100, 150, 255);
+                        }
+                    """)
+        self.search_box.textChanged.connect(self.filter_cavities)
+        self.search_box.setMaximumWidth(200)
+
+        # Clear search button
+        self.clear_search_btn = QPushButton("✕")
+        self.clear_search_btn.setToolTip("Clear search")
+        self.clear_search_btn.clicked.connect(lambda: self.search_box.clear())
+        self.clear_search_btn.setMaximumWidth(30)
+        self.clear_search_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: rgb(60, 60, 60);
+                            color: white;
+                            border: 1px solid rgb(100, 100, 100);
+                            border-radius: 3px;
+                            padding: 3px;
+                        }
+                        QPushButton:hover {
+                            background-color: rgb(80, 80, 80);
+                        }
+                    """)
+
+        self.header.addWidget(QLabel("Search:"))
+        self.header.addWidget(self.search_box)
+        self.header.addWidget(self.clear_search_btn)
 
         self.groupbox_vlayout.addLayout(self.gui_machine.main_layout)
 
@@ -206,3 +249,38 @@ class CavityDisplayGUI(Display):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self.auto_fit_on_resize)
         self._resize_timer.start(300)
+
+    def filter_cavities(self, search_text):
+        """Filter/highlight cavities based on search text"""
+        search_text = search_text.lower().strip()
+
+        linacs = self.gui_machine.linacs
+        if isinstance(linacs, dict):
+            linacs = linacs.values()
+
+        for linac in linacs:
+            cryomodules = linac.cryomodules
+            if isinstance(cryomodules, dict):
+                cryomodules = cryomodules.values()
+
+            for cm in cryomodules:
+                cavities = cm.cavities
+                if isinstance(cavities, dict):
+                    cavities = cavities.values()
+
+                for cavity in cavities:
+                    cm_match = f"{cm.name}".lower() in search_text
+                    cav_match = (
+                        f"cav{cavity.number}".lower() in search_text
+                        or f"{cavity.number}" == search_text
+                    )
+
+                    if search_text == "" or cm_match or cav_match:
+                        cavity.cavity_widget.setVisible(True)
+                        cavity.cavity_widget.setGraphicsEffect(None)
+                    else:
+                        from PyQt5.QtWidgets import QGraphicsOpacityEffect
+
+                        opacity_effect = QGraphicsOpacityEffect()
+                        opacity_effect.setOpacity(0.2)
+                        cavity.cavity_widget.setGraphicsEffect(opacity_effect)
