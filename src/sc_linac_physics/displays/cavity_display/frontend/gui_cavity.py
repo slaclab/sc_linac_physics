@@ -107,6 +107,7 @@ class GUICavity(BackendCavity):
                     {
                         "channel": self.ssa.status_pv,
                         "trigger": True,
+                        "use_enum": True,
                     }
                 ],
                 "property": "Opacity",
