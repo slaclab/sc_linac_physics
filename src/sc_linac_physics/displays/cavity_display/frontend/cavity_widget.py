@@ -3,7 +3,7 @@ from typing import Optional
 
 import numpy as np
 from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QMenu, QApplication
+from PyQt5.QtWidgets import QApplication, QMenu
 from pydm import Display, PyDMChannel
 from pydm.widgets.drawing import PyDMDrawingPolygon
 from qtpy.QtCore import Signal, QPoint, QRectF, Property as qtProperty, Qt, Slot
@@ -69,14 +69,20 @@ class CavityWidget(PyDMDrawingPolygon):
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setContentsMargins(0, 0, 0, 0)
 
-    # The following two functions were copy/pasted from stack overflow
     def mousePressEvent(self, event: QMouseEvent):
+        """Handle mouse press for left-click and right-click."""
         if event.button() == Qt.LeftButton:
             self.press_pos = event.pos()
+            event.accept()
+        elif event.button() == Qt.RightButton:
+            self.show_context_menu(event.globalPos())
+            event.accept()
+            return
+        else:
+            super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
-        # ensure that the left button was pressed *and* released within the
-        # geometry of the widget; if so, emit the signal;
+        """Handle left-click release to emit clicked signal."""
         if (
             self.press_pos is not None
             and event.button() == Qt.LeftButton
@@ -84,6 +90,26 @@ class CavityWidget(PyDMDrawingPolygon):
         ):
             self.clicked.emit()
         self.press_pos = None
+
+    def show_context_menu(self, global_pos):
+        """Display context menu with cavity actions."""
+        cavity = getattr(self, "_parent_cavity", None)
+        if not cavity:
+            return
+
+        menu = QMenu()
+
+        # Fault Details
+        details_action = menu.addAction("📋 Fault Details")
+        details_action.triggered.connect(lambda: cavity.show_fault_display())
+
+        menu.addSeparator()
+
+        # Copy Info
+        copy_action = menu.addAction("📄 Copy Info")
+        copy_action.triggered.connect(lambda: self.copy_cavity_info(cavity))
+
+        menu.exec_(global_pos)
 
     @qtProperty(str)
     def cavity_text(self):
@@ -218,26 +244,6 @@ class CavityWidget(PyDMDrawingPolygon):
             painter.drawText(rectf, self._cavity_text, text_option)
             painter.setPen(self._pen)
             painter.restore()
-
-    def show_context_menu(self, global_pos):
-        """Display context menu with cavity actions."""
-        cavity = getattr(self, "_parent_cavity", None)
-        if not cavity:
-            return
-
-        menu = QMenu()
-
-        # Fault Details
-        details_action = menu.addAction("📋 Fault Details")
-        details_action.triggered.connect(lambda: cavity.show_fault_display())
-
-        menu.addSeparator()
-
-        # Copy Info
-        copy_action = menu.addAction("📄 Copy Info")
-        copy_action.triggered.connect(lambda: self.copy_cavity_info(cavity))
-
-        menu.exec_(global_pos)
 
     def copy_cavity_info(self, cavity):
         """Copy cavity information to clipboard."""
