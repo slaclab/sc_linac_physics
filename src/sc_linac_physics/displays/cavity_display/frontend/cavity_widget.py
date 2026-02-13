@@ -66,6 +66,7 @@ class CavityWidget(PyDMDrawingPolygon):
         self._faultDisplay: Display = None
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setContentsMargins(0, 0, 0, 0)
+        self._last_severity = None
 
     # The following two functions were copy/pasted from stack overflow
     def mousePressEvent(self, event: QMouseEvent):
@@ -123,6 +124,8 @@ class CavityWidget(PyDMDrawingPolygon):
     @Slot(int)
     def severity_channel_value_changed(self, value: int):
         """Handle severity channel value changes with better error handling."""
+        self._last_severity = value  # Track current severity
+
         try:
             shape_params = SHAPE_PARAMETER_DICT.get(
                 value, SHAPE_PARAMETER_DICT[3]
