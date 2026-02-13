@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QSettings
 from PyQt5.QtGui import QColor, QCursor
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -6,6 +6,8 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QGroupBox,
     QApplication,
+    QStatusBar,
+    QLabel,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
@@ -44,7 +46,6 @@ class CavityDisplayGUI(Display):
         heartbeat_indicator.offColor = QColor(0, 255, 0)
         heartbeat_indicator.showLabels = False
         heartbeat_indicator.circles = True
-        heartbeat_indicator.showLabels = False
 
         heartbeat_label = PyDMLabel(
             init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR"
@@ -84,6 +85,37 @@ class CavityDisplayGUI(Display):
         self.add_header_button(
             self.fault_count_button, self.fault_count_display
         )
+
+        # Settings
+        self.settings = QSettings("SLAC", "CavityDisplay")
+
+        # Restore saved geometry
+        if self.settings.contains("window_geometry"):
+            self.restoreGeometry(self.settings.value("window_geometry"))
+
+        # Status bar
+        self.status_bar = QStatusBar()
+        self.status_bar.setStyleSheet("""
+                        QStatusBar {
+                            background-color: rgb(50, 50, 50);
+                            color: white;
+                            font-size: 11pt;
+                            padding: 3px;
+                            max-height: 30px;
+                        }
+                    """)
+
+        self.status_label = QLabel("Initializing...")
+        self.status_label.setStyleSheet("font-size: 11pt;")
+        self.status_bar.addWidget(self.status_label)
+
+        # Add status bar to layout
+        self.vlayout.addWidget(self.status_bar)
+
+        # Status update timer
+        self.status_timer = QTimer()
+        self.status_timer.timeout.connect(self.update_status)
+        self.status_timer.start(5000)
 
         # Auto-zoom tracking
         self.current_zoom = 60
@@ -206,3 +238,72 @@ class CavityDisplayGUI(Display):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self.auto_fit_on_resize)
         self._resize_timer.start(300)
+
+    def closeEvent(self, event):
+        """Clean up and save state when window closes."""
+        # Save window state
+        self.settings.setValue("window_geometry", self.saveGeometry())
+        super().closeEvent(event)
+
+    def update_status(self):
+        """Update status bar with summary"""
+        total = 0
+        alarms = 0
+        warnings = 0
+        ok = 0
+
+        for linac in self.gui_machine.linacs:
+            for cm in linac.cryomodules.values():
+                for cavity in cm.cavities.values():
+                    total += 1
+                    severity = getattr(
+                        cavity.cavity_widget, "_last_severity", None
+                    )
+                    if severity == 2:
+                        alarms += 1
+                    elif severity == 1:
+                        warnings += 1
+                    else:
+                        ok += 1
+
+        # Build status message
+        self._update_status_display(total, alarms, warnings, ok)
+
+    def _update_status_display(self, total, alarms, warnings, ok):
+        """Update the status bar display with counts."""
+        status_parts = []
+
+        if alarms > 0:
+            status_parts.append(
+                f"🔴 {alarms} ALARM{'S' if alarms != 1 else ''}"
+            )
+
+        if warnings > 0:
+            status_parts.append(
+                f"🟡 {warnings} WARNING{'S' if warnings != 1 else ''}"
+            )
+
+        status_parts.append(f"✓ {ok} OK")
+        status_parts.append(f"Total: {total}")
+
+        status_text = " | ".join(status_parts)
+
+        # Determine color based on severity
+        if alarms > 0:
+            bg_color = "rgb(150, 0, 0)"
+        elif warnings > 0:
+            bg_color = "rgb(200, 120, 0)"
+        else:
+            bg_color = "rgb(0, 100, 0)"
+
+        self.status_label.setText(status_text)
+        self.status_bar.setStyleSheet(f"""
+            QStatusBar {{
+                background-color: {bg_color};
+                color: white;
+                font-size: 11pt;
+                font-weight: bold;
+                padding: 3px;
+                max-height: 30px;
+            }}
+        """)
