@@ -1,5 +1,5 @@
-from PyQt5.QtCore import QTimer, QSettings
-from PyQt5.QtGui import QColor, QCursor
+from PyQt5.QtCore import QTimer, QSettings, Qt
+from PyQt5.QtGui import QColor, QCursor, QKeySequence
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
@@ -9,12 +9,17 @@ from PyQt5.QtWidgets import (
     QStatusBar,
     QLabel,
     QLineEdit,
+    QSplitter,
+    QShortcut,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
 from pydm.utilities import IconFont
 from pydm.widgets import PyDMByteIndicator, PyDMLabel
 
+from sc_linac_physics.displays.cavity_display.frontend.alarm_sidebar import (
+    AlarmSidebarWidget,
+)
 from sc_linac_physics.displays.cavity_display.frontend.fault_count_display import (
     FaultCountDisplay,
 )
@@ -115,9 +120,46 @@ class CavityDisplayGUI(Display):
 
         self.groupbox_vlayout.addLayout(self.gui_machine.main_layout)
 
+        # Main groupbox
         self.groupbox = QGroupBox()
         self.groupbox.setLayout(self.groupbox_vlayout)
-        self.vlayout.addWidget(self.groupbox)
+        self.groupbox.setStyleSheet("""
+                    QGroupBox {
+                        border: none;
+                        background-color: rgb(35, 35, 35);
+                    }
+                    """)
+
+        # Alarm sidebar
+        self.alarm_sidebar = AlarmSidebarWidget(self.gui_machine, parent=self)
+        self.alarm_sidebar.cavity_clicked.connect(self.scroll_to_cavity)
+
+        # Splitter for main display and sidebar
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.addWidget(self.groupbox)
+        self.splitter.addWidget(self.alarm_sidebar)
+        self.splitter.setSizes([8500, 1500])
+        self.groupbox.setMinimumWidth(600)
+
+        # Splitter styling
+        self.splitter.setStyleSheet("""
+                    QSplitter::handle {
+                        background-color: rgb(100, 100, 100);
+                        width: 3px;
+                    }
+                    QSplitter::handle:hover {
+                        background-color: rgb(150, 150, 150);
+                    }
+                    QSplitter::handle:pressed {
+                        background-color: rgb(200, 200, 200);
+                    }
+                    """)
+
+        self.splitter.setCollapsible(0, False)
+        self.splitter.setCollapsible(1, True)
+
+        # Replace self.vlayout.addWidget(self.groupbox) with:
+        self.vlayout.addWidget(self.splitter)
 
         self.fault_count_display: FaultCountDisplay = FaultCountDisplay()
         self.fault_count_button: QPushButton = QPushButton("Fault Counter")
@@ -134,6 +176,9 @@ class CavityDisplayGUI(Display):
         # Restore saved geometry
         if self.settings.contains("window_geometry"):
             self.restoreGeometry(self.settings.value("window_geometry"))
+
+        if self.settings.contains("splitter_state"):
+            self.splitter.restoreState(self.settings.value("splitter_state"))
 
         # Status bar
         self.status_bar = QStatusBar()
@@ -158,6 +203,9 @@ class CavityDisplayGUI(Display):
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(5000)
+
+        # Setup keyboard shortcuts
+        self._setup_shortcuts()
 
         # Auto-zoom tracking
         self.current_zoom = 60
@@ -237,7 +285,11 @@ class CavityDisplayGUI(Display):
 
         # Get available space
         available_height = self.height() - 200
-        available_width = self.width() - 40
+        # Get available space
+        sidebar_width = (
+            self.alarm_sidebar.width() if self.alarm_sidebar.isVisible() else 0
+        )
+        available_width = self.width() - sidebar_width - 40
 
         # Measure content at 100%
         self.gui_machine.set_zoom_level(100)
@@ -281,10 +333,77 @@ class CavityDisplayGUI(Display):
         self._resize_timer.timeout.connect(self.auto_fit_on_resize)
         self._resize_timer.start(300)
 
+    def _setup_shortcuts(self):
+        """Setup keyboard shortcuts for common actions"""
+        # F5 - Refresh alarm list
+        refresh_shortcut = QShortcut(QKeySequence("F5"), self)
+        refresh_shortcut.activated.connect(self.alarm_sidebar.update_alarm_list)
+
+        # Ctrl+H - Toggle sidebar
+        toggle_shortcut = QShortcut(QKeySequence("Ctrl+H"), self)
+        toggle_shortcut.activated.connect(self.toggle_sidebar)
+
+        # F3 - Jump to next alarm
+        next_alarm_shortcut = QShortcut(QKeySequence("F3"), self)
+        next_alarm_shortcut.activated.connect(self.jump_to_next_alarm)
+
+        # Shift+F3 - Jump to previous alarm
+        prev_alarm_shortcut = QShortcut(QKeySequence("Shift+F3"), self)
+        prev_alarm_shortcut.activated.connect(self.jump_to_previous_alarm)
+
+    def toggle_sidebar(self):
+        """Toggle sidebar visibility"""
+        if self.alarm_sidebar.isVisible():
+            self.alarm_sidebar.hide()
+        else:
+            self.alarm_sidebar.show()
+
+    def jump_to_next_alarm(self):
+        """Jump to next alarm in the list"""
+        current_row = self.alarm_sidebar.alarm_list.currentRow()
+        next_row = current_row + 1
+
+        if next_row < self.alarm_sidebar.alarm_list.count():
+            self.alarm_sidebar.alarm_list.setCurrentRow(next_row)
+            item = self.alarm_sidebar.alarm_list.currentItem()
+            if item:
+                cavity = item.data(Qt.UserRole)
+                self.scroll_to_cavity(cavity)
+
+    def jump_to_previous_alarm(self):
+        """Jump to previous alarm in the list"""
+        current_row = self.alarm_sidebar.alarm_list.currentRow()
+        prev_row = current_row - 1
+
+        if prev_row >= 0:
+            self.alarm_sidebar.alarm_list.setCurrentRow(prev_row)
+            item = self.alarm_sidebar.alarm_list.currentItem()
+            if item:
+                cavity = item.data(Qt.UserRole)
+                self.scroll_to_cavity(cavity)
+
+    def scroll_to_cavity(self, cavity):
+        """
+        Highlight a specific cavity when clicked from alarm sidebar.
+        No scrolling needed since everything is visible.
+
+        Args:
+            cavity: GUICavity object to highlight
+        """
+        # This will be implemented in PR #4 when we add the highlight() method
+        # For now, just pass
+        pass
+
     def closeEvent(self, event):
         """Clean up and save state when window closes."""
         # Save window state
+        self.settings.setValue("splitter_state", self.splitter.saveState())
         self.settings.setValue("window_geometry", self.saveGeometry())
+
+        # Cleanup
+        if hasattr(self, "alarm_sidebar"):
+            self.alarm_sidebar.stop_refresh()
+
         super().closeEvent(event)
 
     def update_status(self):
