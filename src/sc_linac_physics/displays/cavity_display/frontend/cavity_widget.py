@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QMenu, QApplication
 from pydm import Display, PyDMChannel
 from pydm.widgets.drawing import PyDMDrawingPolygon
 from qtpy.QtCore import Signal, QPoint, QRectF, Property as qtProperty, Qt, Slot
@@ -216,3 +218,54 @@ class CavityWidget(PyDMDrawingPolygon):
             painter.drawText(rectf, self._cavity_text, text_option)
             painter.setPen(self._pen)
             painter.restore()
+
+    def show_context_menu(self, global_pos):
+        """Display context menu with cavity actions."""
+        cavity = getattr(self, "_parent_cavity", None)
+        if not cavity:
+            return
+
+        menu = QMenu()
+
+        # Fault Details
+        details_action = menu.addAction("📋 Fault Details")
+        details_action.triggered.connect(lambda: cavity.show_fault_display())
+
+        menu.addSeparator()
+
+        # Copy Info
+        copy_action = menu.addAction("📄 Copy Info")
+        copy_action.triggered.connect(lambda: self.copy_cavity_info(cavity))
+
+        menu.exec_(global_pos)
+
+    def copy_cavity_info(self, cavity):
+        """Copy cavity information to clipboard."""
+        info = f"CM{cavity.cryomodule.name} Cavity {cavity.number}\n"
+        info += f"Description: {self._cavity_description if self._cavity_description else 'None'}\n"
+        info += f"Severity: {self._last_severity}"
+
+        clipboard = QApplication.clipboard()
+        clipboard.setText(info)
+
+    def highlight(self):
+        """Briefly highlight this cavity widget."""
+        original_pen_width = self._pen.width()
+        original_pen_color = self._pen.color()
+
+        # Flash with yellow border
+        self._pen.setWidth(6)
+        self._pen.setColor(QColor(255, 255, 0))
+        self.update()
+
+        # Reset after 1 second
+        QTimer.singleShot(
+            1000,
+            lambda: self._unhighlight(original_pen_width, original_pen_color),
+        )
+
+    def _unhighlight(self, original_width, original_color):
+        """Reset to original pen settings"""
+        self._pen.setWidth(original_width)
+        self._pen.setColor(original_color)
+        self.update()

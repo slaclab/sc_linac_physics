@@ -206,3 +206,14 @@ class CavityDisplayGUI(Display):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self.auto_fit_on_resize)
         self._resize_timer.start(300)
+
+    def scroll_to_cavity(self, cavity):
+        """
+        Highlight a specific cavity when clicked from alarm sidebar.
+        No scrolling needed since everything is visible.
+
+        Args:
+            cavity: GUICavity object to highlight
+        """
+        if hasattr(cavity, "cavity_widget"):
+            cavity.cavity_widget.highlight()
