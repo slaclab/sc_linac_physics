@@ -100,6 +100,23 @@ class GUICavity(BackendCavity):
         self.rf_bar.setFixedHeight(4)
         self.rf_bar.setMaximumWidth(50)
 
+        # SSA visibility rule
+        rule = [
+            {
+                "channels": [
+                    {
+                        "channel": self.ssa.status_pv,
+                        "trigger": True,
+                    }
+                ],
+                "property": "Opacity",
+                "expression": "ch[0] == 'SSA On'",
+                "initial_value": "0",
+                "name": "show",
+            }
+        ]
+        self.ssa_bar.rules = json.dumps(rule)
+
         hor_layout.addWidget(self.ssa_bar)
         hor_layout.addWidget(self.rf_bar)
 
@@ -114,22 +131,6 @@ class GUICavity(BackendCavity):
         self.cavity_widget.channel = status_pv
         self.cavity_widget.severity_channel = severity_pv
         self.cavity_widget.description_channel = description_pv
-
-        # SSA visibility rule
-        rule = [
-            {
-                "channels": [
-                    {
-                        "channel": self.ssa.pv_addr("CONF"),
-                        "trigger": True,
-                    }
-                ],
-                "property": "Visible",
-                "expression": "ch[0] == 1",
-                "name": "show",
-            }
-        ]
-        self.ssa_bar.rules = json.dumps(rule)
 
     def populate_fault_display(self):
         for idx, fault in enumerate(self.faults.values()):
