@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from PyQt5.QtCore import QTimer, QSettings, Qt
 from PyQt5.QtGui import QColor, QCursor, QKeySequence
 from PyQt5.QtWidgets import (
@@ -11,6 +13,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QSplitter,
     QShortcut,
+    QFileDialog,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
@@ -123,6 +126,12 @@ class CavityDisplayGUI(Display):
                     """)
         self.search_box.textChanged.connect(self.filter_cavities)
         self.search_box.setMaximumWidth(200)
+
+        # Screenshot button
+        self.screenshot_btn = QPushButton("📷 Screenshot")
+        self.screenshot_btn.setToolTip("Save screenshot of current display")
+        self.screenshot_btn.clicked.connect(self.save_screenshot)
+        self.header.addWidget(self.screenshot_btn)
 
         # Clear search button
         self.clear_search_btn = QPushButton("✕")
@@ -448,6 +457,16 @@ class CavityDisplayGUI(Display):
 
         super().closeEvent(event)
 
+    def flash_window(self, cavity=None):
+        """Flash/alert the window to grab attention"""
+        QApplication.alert(self, 0)
+
+        if cavity:
+            original_title = self.windowTitle()
+            alarm_title = f"⚠️ ALARM: CM{cavity.cryomodule.name} Cav{cavity.number} - {original_title}"
+            self.setWindowTitle(alarm_title)
+            QTimer.singleShot(5000, lambda: self.setWindowTitle(original_title))
+
     def update_status(self):
         """Update status bar with summary"""
         total = 0
@@ -510,6 +529,26 @@ class CavityDisplayGUI(Display):
                 max-height: 30px;
             }}
         """)
+
+    def save_screenshot(self):
+        """Save a screenshot of the current display"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_filename = f"cavity_display_{timestamp}.png"
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Screenshot",
+            default_filename,
+            "PNG Files (*.png);;All Files (*)",
+        )
+
+        if filename:
+            pixmap = self.groupbox.grab()
+            pixmap.save(filename)
+
+            if hasattr(self, "status_label"):
+                self.status_label.setText(f"✓ Screenshot saved: {filename}")
+                QTimer.singleShot(5000, self.update_status)
 
     def filter_cavities(self, search_text):
         """Filter/highlight cavities based on search text"""
