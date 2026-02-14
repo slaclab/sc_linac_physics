@@ -1,7 +1,11 @@
+import logging
 import time
 
 from PyQt5.QtCore import QTimer, QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
+
+from sc_linac_physics.displays.cavity_display.utils.utils import CAV_LOG_DIR
+from sc_linac_physics.utils.logger import custom_logger
 
 
 class AudioAlertManager(QObject):
@@ -13,6 +17,14 @@ class AudioAlertManager(QObject):
         super().__init__(parent)
         self.gui_machine = gui_machine
         self._enabled = False
+
+        # Initialize alarm logger
+        self.alarm_logger = custom_logger(
+            name="cavity_display.alarms",
+            log_filename="cavity_alarms",
+            level=logging.INFO,
+            log_dir=CAV_LOG_DIR,
+        )
 
         # Track alerted cavities
         self.alerted_alarms = set()
@@ -63,12 +75,60 @@ class AudioAlertManager(QObject):
                 self.unacknowledged_alarms[cavity_id] = time.time()
                 self.new_alarm.emit(cavity)
 
+                # Log the alarm
+                description = getattr(
+                    cavity.cavity_widget, "_cavity_description", ""
+                )
+                self.alarm_logger.error(
+                    f"NEW ALARM: CM{cavity.cryomodule.name} Cavity {cavity.number}",
+                    extra={
+                        "extra_data": {
+                            "cryomodule": cavity.cryomodule.name,
+                            "cavity": cavity.number,
+                            "severity": "ALARM",
+                            "description": description,
+                        }
+                    },
+                )
+
         elif severity == 1:  # Yellow warning
             if cavity_id not in self.alerted_warnings:
                 self._play_warning_sound()
                 self.alerted_warnings.add(cavity_id)
 
+                # Log the warning
+                description = getattr(
+                    cavity.cavity_widget, "_cavity_description", ""
+                )
+                self.alarm_logger.warning(
+                    f"NEW WARNING: CM{cavity.cryomodule.name} Cavity {cavity.number}",
+                    extra={
+                        "extra_data": {
+                            "cryomodule": cavity.cryomodule.name,
+                            "cavity": cavity.number,
+                            "severity": "WARNING",
+                            "description": description,
+                        }
+                    },
+                )
+
         else:  # Cleared
+            if (
+                cavity_id in self.alerted_alarms
+                or cavity_id in self.alerted_warnings
+            ):
+                # Log the clear
+                self.alarm_logger.info(
+                    f"CLEARED: CM{cavity.cryomodule.name} Cavity {cavity.number}",
+                    extra={
+                        "extra_data": {
+                            "cryomodule": cavity.cryomodule.name,
+                            "cavity": cavity.number,
+                            "severity": "OK",
+                        }
+                    },
+                )
+
             self.alerted_alarms.discard(cavity_id)
             self.alerted_warnings.discard(cavity_id)
             self.unacknowledged_alarms.pop(cavity_id, None)
@@ -88,6 +148,22 @@ class AudioAlertManager(QObject):
             if current_time - timestamp > 120:  # 2 minutes
                 self._play_escalation_sound()
 
+                # Log the escalation
+                cm_name, cav_num = cavity_id.split("_")
+                self.alarm_logger.warning(
+                    f"ESCALATION: CM{cm_name} Cavity {cav_num} unacknowledged for 2+ minutes",
+                    extra={
+                        "extra_data": {
+                            "cryomodule": cm_name,
+                            "cavity": int(cav_num),
+                            "action": "ESCALATION",
+                            "unacknowledged_seconds": int(
+                                current_time - timestamp
+                            ),
+                        }
+                    },
+                )
+
     def acknowledge_cavity(self, cavity_id):
         """
         Acknowledge alarm for a specific cavity and stop audio/escalation.
@@ -97,6 +173,19 @@ class AudioAlertManager(QObject):
         """
         if cavity_id in self.unacknowledged_alarms:
             self.unacknowledged_alarms.pop(cavity_id)
+
+            # Log the acknowledgment
+            cm_name, cav_num = cavity_id.split("_")
+            self.alarm_logger.info(
+                f"ACKNOWLEDGED: CM{cm_name} Cavity {cav_num}",
+                extra={
+                    "extra_data": {
+                        "cryomodule": cm_name,
+                        "cavity": int(cav_num),
+                        "action": "ACKNOWLEDGED",
+                    }
+                },
+            )
 
         self.acknowledged_cavities.add(cavity_id)
 
