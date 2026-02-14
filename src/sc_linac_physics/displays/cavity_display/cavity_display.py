@@ -20,6 +20,9 @@ from pydm.widgets import PyDMByteIndicator, PyDMLabel
 from sc_linac_physics.displays.cavity_display.frontend.alarm_sidebar import (
     AlarmSidebarWidget,
 )
+from sc_linac_physics.displays.cavity_display.frontend.audio_manager import (
+    AudioAlertManager,
+)
 from sc_linac_physics.displays.cavity_display.frontend.fault_count_display import (
     FaultCountDisplay,
 )
@@ -76,6 +79,31 @@ class CavityDisplayGUI(Display):
         self.groupbox_vlayout = QVBoxLayout()
         self.groupbox_vlayout.addLayout(self.header)
         self.setLayout(self.vlayout)
+
+        self.audio_enabled = False  # Default OFF
+        self.audio_toggle_btn = QPushButton("🔇 Audio Off")
+        self.audio_toggle_btn.setCheckable(True)
+        self.audio_toggle_btn.setChecked(False)
+        self.audio_toggle_btn.setToolTip("Enable/disable audio alerts")
+        self.audio_toggle_btn.clicked.connect(self.toggle_audio)
+        self.audio_toggle_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: rgb(60, 60, 60);
+                            color: white;
+                            border: 1px solid rgb(100, 100, 100);
+                            padding: 5px 10px;
+                            border-radius: 3px;
+                            font-size: 10pt;
+                        }
+                        QPushButton:checked {
+                            background-color: rgb(0, 100, 0);
+                            border: 1px solid rgb(0, 150, 0);
+                        }
+                        QPushButton:hover {
+                            background-color: rgb(80, 80, 80);
+                        }
+                    """)
+        self.header.addWidget(self.audio_toggle_btn)
 
         # Search box
         self.search_box = QLineEdit()
@@ -204,6 +232,10 @@ class CavityDisplayGUI(Display):
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(5000)
 
+        # Audio manager - create but don't activate yet
+        self.audio_manager = AudioAlertManager(self.gui_machine, parent=self)
+        self.audio_manager.setEnabled(False)  # Start disabled
+
         # Setup keyboard shortcuts
         self._setup_shortcuts()
 
@@ -254,6 +286,25 @@ class CavityDisplayGUI(Display):
             return
 
         self.update()
+
+    def toggle_audio(self):
+        """Toggle audio alerts on/off."""
+        self.audio_enabled = self.audio_toggle_btn.isChecked()
+
+        if self.audio_enabled:
+            self.audio_toggle_btn.setText("🔊 Audio On")
+            self.audio_manager.setEnabled(True)
+            self.audio_manager.start_monitoring()
+            if hasattr(self, "status_label"):
+                self.status_label.setText("✓ Audio alerts enabled")
+                QTimer.singleShot(3000, self.update_status)
+        else:
+            self.audio_toggle_btn.setText("🔇 Audio Off")
+            self.audio_manager.setEnabled(False)
+            self.audio_manager.stop_monitoring()
+            if hasattr(self, "status_label"):
+                self.status_label.setText("Audio alerts disabled")
+                QTimer.singleShot(3000, self.update_status)
 
     def showEvent(self, event):
         """Auto-fit zoom when window is first shown."""
@@ -391,6 +442,9 @@ class CavityDisplayGUI(Display):
         # Cleanup
         if hasattr(self, "alarm_sidebar"):
             self.alarm_sidebar.stop_refresh()
+
+        if hasattr(self, "audio_manager"):
+            self.audio_manager.stop_monitoring()
 
         super().closeEvent(event)
 

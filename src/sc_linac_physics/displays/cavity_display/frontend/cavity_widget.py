@@ -3,7 +3,7 @@ from typing import Optional
 
 import numpy as np
 from PyQt5.QtCore import QTimer, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QMenu
+from PyQt5.QtWidgets import QApplication, QMenu, QMessageBox
 from pydm import Display, PyDMChannel
 from pydm.widgets.drawing import PyDMDrawingPolygon
 from qtpy.QtCore import QPoint, QRectF, Property as qtProperty, Qt, Slot
@@ -69,10 +69,11 @@ class CavityWidget(PyDMDrawingPolygon):
         self._description_channel: Optional[PyDMChannel] = None
         self.alarmSensitiveBorder = False
         self.alarmSensitiveContent = False
-        self._faultDisplay: Display = None
+        self._faultDisplay: Optional[Display] = None
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setContentsMargins(0, 0, 0, 0)
         self._last_severity = None
+        self._acknowledged = False
 
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press for left-click and right-click."""
@@ -108,6 +109,19 @@ class CavityWidget(PyDMDrawingPolygon):
         details_action = menu.addAction("📋 Fault Details")
         details_action.triggered.connect(lambda: cavity.show_fault_display())
 
+        # Acknowledge (only if there's an alarm or warning)
+        severity = getattr(self, "_last_severity", None)
+        if severity == 2:
+            ack_action = menu.addAction("✓ Acknowledge Alarm")
+            ack_action.triggered.connect(
+                lambda: self.acknowledge_issue(cavity, "Alarm")
+            )
+        elif severity == 1:
+            ack_action = menu.addAction("✓ Acknowledge Warning")
+            ack_action.triggered.connect(
+                lambda: self.acknowledge_issue(cavity, "Warning")
+            )
+
         menu.addSeparator()
 
         # Copy Info
@@ -115,6 +129,72 @@ class CavityWidget(PyDMDrawingPolygon):
         copy_action.triggered.connect(lambda: self.copy_cavity_info(cavity))
 
         menu.exec_(global_pos)
+
+    def acknowledge_issue(self, cavity, severity_text):
+        """Acknowledge an alarm or warning and stop audio."""
+        description = (
+            self._cavity_description
+            if self._cavity_description
+            else "No description available"
+        )
+        reply = QMessageBox.question(
+            None,
+            f"Acknowledge {severity_text}",
+            f"Acknowledge {severity_text.lower()} for CM{cavity.cryomodule.name} Cavity {cavity.number}?\n\n"
+            f"Description: {description}",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            cavity_id = f"{cavity.cryomodule.name}_{cavity.number}"
+
+            # Store acknowledgment globally
+            app = QApplication.instance()
+            if not hasattr(app, "acknowledged_cavities"):
+                app.acknowledged_cavities = set()
+            app.acknowledged_cavities.add(cavity_id)
+
+            # Mark this widget as acknowledged
+            self._acknowledged = True
+
+            # Stop audio via parent display
+            parent_display = self._get_parent_display()
+            if parent_display:
+                self._stop_audio_completely(parent_display, cavity_id)
+                self._update_status_bar(parent_display, cavity, severity_text)
+
+            print(
+                f"✓ Acknowledged {severity_text} for CM{cavity.cryomodule.name} Cav{cavity.number}"
+            )
+
+    def _stop_audio_completely(self, parent_display, cavity_id):
+        """Stop all audio alerts."""
+        if hasattr(parent_display, "audio_manager"):
+            audio_mgr = parent_display.audio_manager
+
+            if hasattr(audio_mgr, "acknowledge_cavity"):
+                audio_mgr.acknowledge_cavity(cavity_id)
+                print(f"  Called audio_manager.acknowledge_cavity({cavity_id})")
+
+    def _update_status_bar(self, parent_display, cavity, severity_text):
+        """Update status bar with acknowledgment message."""
+        if hasattr(parent_display, "status_label"):
+            parent_display.status_label.setText(
+                f"✓ Acknowledged {severity_text} for CM{cavity.cryomodule.name} Cav{cavity.number}"
+            )
+            QTimer.singleShot(5000, parent_display.update_status)
+
+    def _get_parent_display(self):
+        """Walk up widget tree to find CavityDisplayGUI."""
+        widget = self
+        max_depth = 20
+
+        for _ in range(max_depth):
+            widget = widget.parent() if hasattr(widget, "parent") else None
+            if widget and hasattr(widget, "audio_manager"):
+                return widget
+
+        return None
 
     @qtProperty(str)
     def cavity_text(self):
