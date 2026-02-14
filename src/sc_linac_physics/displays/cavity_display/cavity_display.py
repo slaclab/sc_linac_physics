@@ -457,16 +457,6 @@ class CavityDisplayGUI(Display):
 
         super().closeEvent(event)
 
-    def flash_window(self, cavity=None):
-        """Flash/alert the window to grab attention"""
-        QApplication.alert(self, 0)
-
-        if cavity:
-            original_title = self.windowTitle()
-            alarm_title = f"⚠️ ALARM: CM{cavity.cryomodule.name} Cav{cavity.number} - {original_title}"
-            self.setWindowTitle(alarm_title)
-            QTimer.singleShot(5000, lambda: self.setWindowTitle(original_title))
-
     def update_status(self):
         """Update status bar with summary"""
         total = 0
