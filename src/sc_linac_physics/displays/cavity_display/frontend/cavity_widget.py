@@ -2,11 +2,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QMenu
 from pydm import Display, PyDMChannel
 from pydm.widgets.drawing import PyDMDrawingPolygon
-from qtpy.QtCore import Signal, QPoint, QRectF, Property as qtProperty, Qt, Slot
+from qtpy.QtCore import QPoint, QRectF, Property as qtProperty, Qt, Slot
 from qtpy.QtGui import (
     QColor,
     QCursor,
@@ -49,8 +49,11 @@ SHAPE_PARAMETER_DICT = {
 
 
 class CavityWidget(PyDMDrawingPolygon):
+    """Custom widget for displaying cavity status."""
+
     press_pos: Optional[QPoint] = None
-    clicked = Signal()  # Changed from pyqtSignal()
+    clicked = pyqtSignal()
+    severity_changed = pyqtSignal(int)
 
     def __init__(self, parent=None, init_channel=None):
         super(CavityWidget, self).__init__(parent, init_channel)
@@ -151,19 +154,18 @@ class CavityWidget(PyDMDrawingPolygon):
         self._severity_channel.connect()
 
     @Slot(int)
-    def severity_channel_value_changed(self, value: int):
-        """Handle severity channel value changes with better error handling."""
-        self._last_severity = value  # Track current severity
+    def severity_channel_value_changed(self, value):
+        """Handle severity changes"""
+        shape_params = SHAPE_PARAMETER_DICT.get(value)
 
-        try:
-            shape_params = SHAPE_PARAMETER_DICT.get(
-                value, SHAPE_PARAMETER_DICT[3]
-            )
+        if shape_params:
+            self._last_severity = value
+
+            # Emit signal for others to listen to
+            self.severity_changed.emit(value)
+
+            # Update shape appearance
             self.change_shape(shape_params)
-        except Exception as e:
-            print(f"Error updating severity: {e}")
-            # Fallback to default state
-            self.change_shape(SHAPE_PARAMETER_DICT[3])
 
     @Slot()
     @Slot(object)
