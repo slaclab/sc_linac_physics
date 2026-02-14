@@ -56,6 +56,7 @@ class CavityWidget(PyDMDrawingPolygon):
         super(CavityWidget, self).__init__(parent, init_channel)
         self._num_points = 4
         self._cavity_text = ""
+        self._cavity_description = ""
         self._underline = False
         self._pen = QPen(BLACK_TEXT_COLOR)  # Shape's border color
         self._rotation = 0
@@ -68,6 +69,7 @@ class CavityWidget(PyDMDrawingPolygon):
         self._faultDisplay: Display = None
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setContentsMargins(0, 0, 0, 0)
+        self._last_severity = None
 
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press for left-click and right-click."""
@@ -151,6 +153,8 @@ class CavityWidget(PyDMDrawingPolygon):
     @Slot(int)
     def severity_channel_value_changed(self, value: int):
         """Handle severity channel value changes with better error handling."""
+        self._last_severity = value  # Track current severity
+
         try:
             shape_params = SHAPE_PARAMETER_DICT.get(
                 value, SHAPE_PARAMETER_DICT[3]
@@ -166,28 +170,30 @@ class CavityWidget(PyDMDrawingPolygon):
     @Slot(str)
     @Slot(np.ndarray)
     def description_changed(self, value=None):
+        """Store description for use in alarm sidebar"""
         if value is None:
+            self._cavity_description = ""
             self.setToolTip("No description available")
         else:
             try:
                 if isinstance(value, np.ndarray):
-                    # Handle numpy array
                     if value.size == 0:
-                        desc = "Empty array"
+                        desc = ""
                     else:
                         desc = "".join(
                             chr(int(i)) for i in value if 0 <= int(i) <= 127
                         )
                 elif isinstance(value, (bytes, bytearray)):
-                    # Handle bytes
                     desc = value.decode("utf-8", errors="ignore")
                 else:
-                    # Handle string or other types
                     desc = str(value)
 
+                self._cavity_description = desc.strip()  # THIS LINE stores it
                 self.setToolTip(desc.strip())
+
             except Exception as e:
                 print(f"Error processing description: {e}")
+                self._cavity_description = ""
                 self.setToolTip("Description processing error")
 
         self.update()
