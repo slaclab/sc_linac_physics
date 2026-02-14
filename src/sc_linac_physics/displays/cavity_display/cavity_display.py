@@ -71,8 +71,16 @@ class CavityDisplayGUI(Display):
         self.header.addWidget(heartbeat_counter)
         self.header.addStretch()
 
+        button_stylesheet = """
+                            QPushButton {
+                                padding: 5px 10px;
+                                font-size: 10pt;
+                            }
+                        """
+
         self.decoder_window: DecoderDisplay = DecoderDisplay()
         self.decoder_button = QPushButton("Three Letter Code Decoder")
+        self.decoder_button.setStyleSheet(button_stylesheet)
         self.add_header_button(self.decoder_button, self.decoder_window)
 
         self.setWindowTitle("SRF Cavity Display")
@@ -80,6 +88,8 @@ class CavityDisplayGUI(Display):
         self.vlayout = QVBoxLayout()
         self.vlayout.setContentsMargins(0, 0, 0, 0)
         self.groupbox_vlayout = QVBoxLayout()
+        self.groupbox_vlayout.setContentsMargins(5, 5, 5, 5)
+        self.groupbox_vlayout.setSpacing(8)
         self.groupbox_vlayout.addLayout(self.header)
         self.setLayout(self.vlayout)
 
@@ -200,6 +210,7 @@ class CavityDisplayGUI(Display):
 
         self.fault_count_display: FaultCountDisplay = FaultCountDisplay()
         self.fault_count_button: QPushButton = QPushButton("Fault Counter")
+        self.fault_count_button.setStyleSheet(button_stylesheet)
         self.fault_count_button.setToolTip(
             "See fault history using archived data"
         )
@@ -268,32 +279,32 @@ class CavityDisplayGUI(Display):
 
     def apply_zoom(self, zoom_percent):
         """Apply zoom to the entire display."""
-
-        # Safety check: ensure widgets exist and haven't been deleted
-        if not hasattr(self, "groupbox") or self.groupbox is None:
-            return
-
-        try:
-            # Check if C++ object still exists (will raise RuntimeError if deleted)
-            self.groupbox.objectName()
-        except RuntimeError:
-            # Widget was deleted, abort safely
-            return
+        scale = zoom_percent / 100.0
 
         # Apply scaling to machine
         self.gui_machine.set_zoom_level(zoom_percent)
 
+        # Update CM label fonts
+        for cm_widget in self.gui_machine.cm_widgets:
+            cm_layout = cm_widget.layout()
+            if cm_layout and cm_layout.count() > 0:
+                label_widget = cm_layout.itemAt(0).widget()
+                if isinstance(label_widget, QLabel):
+                    label_widget.setStyleSheet(f"""
+                        QLabel {{
+                            font-weight: bold;
+                            font-size: {max(6, int(9 * scale))}pt;
+                            color: white;
+                            background-color: rgb(50, 50, 50);
+                            padding: {max(1, int(2 * scale))}px;
+                            border-radius: {max(1, int(2 * scale))}px;
+                        }}
+                    """)
+
         # Force layout update
         QApplication.processEvents()
-
-        # Additional safety check before updateGeometry
-        try:
-            self.groupbox.updateGeometry()
-            self.groupbox.adjustSize()
-        except RuntimeError:
-            # Widget was deleted during processing
-            return
-
+        self.groupbox.updateGeometry()
+        self.groupbox.adjustSize()
         self.update()
 
     def toggle_audio(self):
@@ -330,54 +341,47 @@ class CavityDisplayGUI(Display):
         if not hasattr(self, "groupbox") or not self.groupbox:
             return
 
-        # Add safety check
-        try:
-            self.groupbox.objectName()
-        except RuntimeError:
-            return
-
         # Don't recalculate at minimum size
-        if self.width() <= 800 or self.height() <= 600:
+        if (
+            self.width() <= self.minimumWidth() + 50
+            or self.height() <= self.minimumHeight() + 50
+        ):
             if abs(self.current_zoom - 55) > 2:
                 self.current_zoom = 55
                 self.apply_zoom(55)
             return
 
         # Get available space
-        available_height = self.height() - 200
-        # Get available space
         sidebar_width = (
             self.alarm_sidebar.width() if self.alarm_sidebar.isVisible() else 0
         )
+        available_height = self.height() - 200
         available_width = self.width() - sidebar_width - 40
 
         # Measure content at 100%
         self.gui_machine.set_zoom_level(100)
         QApplication.processEvents()
 
-        try:
-            content_height = self.groupbox.sizeHint().height()
-            content_width = self.groupbox.sizeHint().width()
-        except RuntimeError:
-            return
+        content_height = self.groupbox.sizeHint().height()
+        content_width = self.groupbox.sizeHint().width()
 
         # Calculate optimal zoom
         height_zoom = (
-            (available_height / content_height * 100)
+            (available_height / content_height) * 100
             if content_height > 0
             else 100
         )
         width_zoom = (
-            (available_width / content_width * 100)
+            (available_width / content_width) * 100
             if content_width > 0
             else 100
         )
 
-        optimal_zoom = min(height_zoom, width_zoom)
-        optimal_zoom = max(55, min(100, optimal_zoom))
+        optimal_zoom = min(height_zoom, width_zoom, 100)
+        optimal_zoom = max(optimal_zoom, 40)
         optimal_zoom = round(optimal_zoom / 5) * 5
 
-        if abs(optimal_zoom - self.current_zoom) > 2:
+        if abs(optimal_zoom - self.current_zoom) > 3:
             self.current_zoom = optimal_zoom
             self.apply_zoom(optimal_zoom)
 
