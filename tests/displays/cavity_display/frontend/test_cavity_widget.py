@@ -318,7 +318,7 @@ class TestCavityWidgetChannelHandlers:
         test_array = np.array([999, 1000])  # Invalid ASCII but filtered out
         cavity_widget.description_changed(test_array)
         # This results in empty string, not an error
-        assert cavity_widget.toolTip() == ""
+        assert cavity_widget.toolTip() == "No description available"
 
 
 class TestCavityWidgetShapeChanging:
