@@ -156,16 +156,29 @@ class CavityWidget(PyDMDrawingPolygon):
     @Slot(int)
     def severity_channel_value_changed(self, value):
         """Handle severity changes"""
-        shape_params = SHAPE_PARAMETER_DICT.get(value)
+        try:
+            shape_params = SHAPE_PARAMETER_DICT.get(value)
 
-        if shape_params:
-            self._last_severity = value
+            if shape_params:
+                self._last_severity = value
 
-            # Emit signal for others to listen to
-            self.severity_changed.emit(value)
+                # Emit signal for others to listen to
+                self.severity_changed.emit(value)
 
-            # Update shape appearance
-            self.change_shape(shape_params)
+                # Update shape appearance
+                self.change_shape(shape_params)
+            else:
+                # Fallback to default (disconnected state) for invalid values
+                self._last_severity = None
+                default_params = SHAPE_PARAMETER_DICT.get(3)
+                if default_params:
+                    self.change_shape(default_params)
+        except Exception as e:
+            print(f"Error updating severity: {e}")
+            # Fallback to default state
+            default_params = SHAPE_PARAMETER_DICT.get(3)
+            if default_params:
+                self.change_shape(default_params)
 
     @Slot()
     @Slot(object)
@@ -180,7 +193,7 @@ class CavityWidget(PyDMDrawingPolygon):
             try:
                 if isinstance(value, np.ndarray):
                     if value.size == 0:
-                        desc = ""
+                        desc = "Empty array"  # Changed from ""
                     else:
                         desc = "".join(
                             chr(int(i)) for i in value if 0 <= int(i) <= 127
@@ -190,8 +203,12 @@ class CavityWidget(PyDMDrawingPolygon):
                 else:
                     desc = str(value)
 
-                self._cavity_description = desc.strip()  # THIS LINE stores it
-                self.setToolTip(desc.strip())
+                self._cavity_description = (
+                    desc.strip() if desc != "Empty array" else ""
+                )
+                self.setToolTip(
+                    desc.strip() if desc.strip() else "No description available"
+                )
 
             except Exception as e:
                 print(f"Error processing description: {e}")
