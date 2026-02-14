@@ -163,10 +163,6 @@ class CavityWidget(PyDMDrawingPolygon):
                 self._stop_audio_completely(parent_display, cavity_id)
                 self._update_status_bar(parent_display, cavity, severity_text)
 
-            print(
-                f"✓ Acknowledged {severity_text} for CM{cavity.cryomodule.name} Cav{cavity.number}"
-            )
-
     def _stop_audio_completely(self, parent_display, cavity_id):
         """Stop all audio alerts."""
         if hasattr(parent_display, "audio_manager"):
@@ -174,7 +170,6 @@ class CavityWidget(PyDMDrawingPolygon):
 
             if hasattr(audio_mgr, "acknowledge_cavity"):
                 audio_mgr.acknowledge_cavity(cavity_id)
-                print(f"  Called audio_manager.acknowledge_cavity({cavity_id})")
 
     def _update_status_bar(self, parent_display, cavity, severity_text):
         """Update status bar with acknowledgment message."""

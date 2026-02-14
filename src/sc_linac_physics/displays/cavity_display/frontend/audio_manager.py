@@ -27,7 +27,6 @@ class AudioAlertManager(QObject):
     def setEnabled(self, enabled: bool):
         """Enable or disable audio alerts."""
         self._enabled = enabled
-        print(f"AudioManager: {'Enabled' if enabled else 'Disabled'}")
 
     def start_monitoring(self):
         """Start monitoring cavities for alarms."""
@@ -35,15 +34,16 @@ class AudioAlertManager(QObject):
             self._connect_to_cavities()
             self._connected = True
 
+        # Check for existing alarms
+        self._scan_existing_alarms()
+
         self.escalation_timer.start(30000)
         self._enabled = True
-        print("AudioManager: Started monitoring")
 
     def stop_monitoring(self):
         """Stop monitoring and silence all audio."""
         self.escalation_timer.stop()
         self._enabled = False
-        print("AudioManager: Stopped monitoring")
 
     def _on_severity_change(self, cavity, severity):
         """Handle severity change for a cavity - only if enabled."""
@@ -58,31 +58,17 @@ class AudioAlertManager(QObject):
 
         if severity == 2:  # Red alarm
             if cavity_id not in self.alerted_alarms:
-                print(f"  -> Playing alarm sound for {cavity_id}")
                 self._play_alarm_sound()
                 self.alerted_alarms.add(cavity_id)
                 self.unacknowledged_alarms[cavity_id] = time.time()
                 self.new_alarm.emit(cavity)
-                print(
-                    f"🔴 NEW ALARM: CM{cavity.cryomodule.name} Cavity {cavity.number}"
-                )
 
         elif severity == 1:  # Yellow warning
             if cavity_id not in self.alerted_warnings:
-                print(f"  -> Playing warning sound for {cavity_id}")
                 self._play_warning_sound()
                 self.alerted_warnings.add(cavity_id)
-                print(
-                    f"🟡 NEW WARNING: CM{cavity.cryomodule.name} Cavity {cavity.number}"
-                )
 
         else:  # Cleared
-            if (
-                cavity_id in self.alerted_alarms
-                or cavity_id in self.alerted_warnings
-            ):
-                print(f"  -> Cleared: {cavity_id}")
-
             self.alerted_alarms.discard(cavity_id)
             self.alerted_warnings.discard(cavity_id)
             self.unacknowledged_alarms.pop(cavity_id, None)
@@ -100,9 +86,6 @@ class AudioAlertManager(QObject):
                 continue
 
             if current_time - timestamp > 120:  # 2 minutes
-                print(
-                    f"⚠️ ESCALATION: {cavity_id} unacknowledged for 2+ minutes"
-                )
                 self._play_escalation_sound()
 
     def acknowledge_cavity(self, cavity_id):
@@ -112,15 +95,10 @@ class AudioAlertManager(QObject):
         Args:
             cavity_id: String in format "CM_NUMBER" e.g. "16_1" for CM16 Cav1
         """
-        print(f"AudioManager: Acknowledging {cavity_id}")
-
         if cavity_id in self.unacknowledged_alarms:
             self.unacknowledged_alarms.pop(cavity_id)
-            print(f"  Removed {cavity_id} from unacknowledged_alarms")
 
         self.acknowledged_cavities.add(cavity_id)
-        print(f"  Added {cavity_id} to acknowledged_cavities")
-        print(f"  Currently acknowledged: {self.acknowledged_cavities}")
 
     def acknowledge_alarm(self, cavity):
         """
@@ -129,7 +107,6 @@ class AudioAlertManager(QObject):
         """
         cavity_id = f"{cavity.cryomodule.name}_{cavity.number}"
         self.acknowledge_cavity(cavity_id)
-        print(f"✓ Acknowledged (legacy): {cavity_id}")
 
     def _connect_to_cavities(self):
         """Connect to all cavity severity changes via signals"""
@@ -145,10 +122,6 @@ class AudioAlertManager(QObject):
                         )
                     )
 
-        print(
-            f"✓ Audio manager connected to {cavity_count} cavities via signals"
-        )
-
     def _play_alarm_sound(self):
         """Play alarm sound - double beep"""
         QApplication.beep()
@@ -163,3 +136,22 @@ class AudioAlertManager(QObject):
         QApplication.beep()
         QTimer.singleShot(200, QApplication.beep)
         QTimer.singleShot(400, QApplication.beep)
+
+    def _scan_existing_alarms(self):
+        """Scan for alarms that existed before monitoring started."""
+        for linac in self.gui_machine.linacs:
+            for cm in linac.cryomodules.values():
+                for cavity in cm.cavities.values():
+                    severity = getattr(
+                        cavity.cavity_widget, "_last_severity", None
+                    )
+                    cavity_id = f"{cavity.cryomodule.name}_{cavity.number}"
+
+                    if severity == 2:  # Existing alarm
+                        self._play_alarm_sound()
+                        self.alerted_alarms.add(cavity_id)
+                        self.unacknowledged_alarms[cavity_id] = time.time()
+
+                    elif severity == 1:  # Existing warning
+                        self._play_warning_sound()
+                        self.alerted_warnings.add(cavity_id)
