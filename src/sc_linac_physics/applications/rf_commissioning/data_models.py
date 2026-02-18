@@ -1,5 +1,7 @@
 """Data models for RF commissioning workflow."""
 
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 
 
@@ -26,3 +28,24 @@ class PhaseStatus(Enum):
     COMPLETE = "complete"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+@dataclass
+class PhaseCheckpoint:
+    """Snapshot of data at a phase boundary."""
+
+    timestamp: datetime = field(default_factory=datetime.now)
+    operator: str = ""
+    notes: str = ""
+    measurements: dict = field(default_factory=dict)
+    error_message: str = ""
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "operator": self.operator,
+            "notes": self.notes,
+            "measurements": self.measurements,
+            "error_message": self.error_message,
+        }
