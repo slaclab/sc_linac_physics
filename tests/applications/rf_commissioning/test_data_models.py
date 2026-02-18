@@ -11,6 +11,7 @@ from sc_linac_physics.applications.rf_commissioning import (
     PiezoPreRFCheck,
     ColdLandingData,
     SSACharacterization,
+    CavityCharacterization,
 )
 
 
@@ -437,4 +438,101 @@ class TestSSACharacterization:
 
         assert result["max_drive"] is None
         assert result["max_drive_percent"] is None
+        assert result["is_complete"] is False
+
+
+class TestCavityCharacterization:
+    """Test CavityCharacterization data model."""
+
+    def test_default_initialization(self):
+        """Test default values."""
+        char = CavityCharacterization()
+
+        assert char.loaded_q is None
+        assert char.probe_q is None
+        assert char.scale_factor is None
+        assert isinstance(char.timestamp, datetime)
+        assert char.notes == ""
+
+    def test_with_data(self):
+        """Test with all data."""
+        char = CavityCharacterization(
+            loaded_q=3.0e7,
+            probe_q=1.5e9,
+            scale_factor=2.5,
+        )
+
+        assert char.loaded_q == 3.0e7
+        assert char.probe_q == 1.5e9
+        assert char.scale_factor == 2.5
+
+    def test_is_complete_true(self):
+        """Test completion when required fields set."""
+        char = CavityCharacterization(
+            loaded_q=3.0e7,
+            scale_factor=2.5,
+        )
+
+        assert char.is_complete is True
+
+    def test_is_complete_without_probe_q(self):
+        """Test completion without probe_q (optional)."""
+        char = CavityCharacterization(
+            loaded_q=3.0e7,
+            scale_factor=2.5,
+        )
+
+        assert char.is_complete is True
+
+    def test_is_complete_missing_loaded_q(self):
+        """Test incomplete when missing loaded_q."""
+        char = CavityCharacterization(
+            scale_factor=2.5,
+        )
+
+        assert char.is_complete is False
+
+    def test_is_complete_missing_scale_factor(self):
+        """Test incomplete when missing scale_factor."""
+        char = CavityCharacterization(
+            loaded_q=3.0e7,
+        )
+
+        assert char.is_complete is False
+
+    def test_is_complete_all_none(self):
+        """Test incomplete when all None."""
+        char = CavityCharacterization()
+
+        assert char.is_complete is False
+
+    def test_to_dict(self):
+        """Test serialization."""
+        timestamp = datetime(2024, 1, 15, 10, 30)
+        char = CavityCharacterization(
+            loaded_q=3.0e7,
+            probe_q=1.5e9,
+            scale_factor=2.5,
+            timestamp=timestamp,
+            notes="Excellent cavity",
+        )
+
+        result = char.to_dict()
+
+        assert result["loaded_q"] == 3.0e7
+        assert result["probe_q"] == 1.5e9
+        assert result["scale_factor"] == 2.5
+        assert result["is_complete"] is True
+        assert result["timestamp"] == "2024-01-15T10:30:00"
+        assert result["notes"] == "Excellent cavity"
+
+    def test_to_dict_incomplete(self):
+        """Test serialization when incomplete."""
+        char = CavityCharacterization(loaded_q=3.0e7)
+
+        result = char.to_dict()
+
+        assert result["loaded_q"] == 3.0e7
+        assert result["probe_q"] is None
+        assert result["scale_factor"] is None
         assert result["is_complete"] is False
