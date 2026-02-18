@@ -727,6 +727,164 @@ class TestHighPowerRampData:
 class TestCommissioningRecord:
     """Test CommissioningRecord data model."""
 
+    def test_store_piezo_pre_rf(self):
+        """Test storing piezo pre-RF check data."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        piezo_check = PiezoPreRFCheck(
+            capacitance_a=1.5e-9,
+            capacitance_b=1.6e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+        )
+
+        record.piezo_pre_rf = piezo_check
+
+        assert record.piezo_pre_rf is not None
+        assert record.piezo_pre_rf.capacitance_a == 1.5e-9
+        assert record.piezo_pre_rf.passed is True
+
+    def test_store_cold_landing(self):
+        """Test storing cold landing data."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        cold_landing = ColdLandingData(
+            initial_detune_hz=15000.0,
+            steps_to_resonance=50,
+            final_detune_hz=500.0,
+        )
+
+        record.cold_landing = cold_landing
+
+        assert record.cold_landing is not None
+        assert record.cold_landing.initial_detune_khz == 15.0
+        assert record.cold_landing.is_complete is True
+
+    def test_store_ssa_characterization(self):
+        """Test storing SSA characterization data."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        ssa_char = SSACharacterization(
+            max_drive=0.65,
+            initial_drive=0.8,
+            num_attempts=1,
+        )
+
+        record.ssa_char = ssa_char
+
+        assert record.ssa_char is not None
+        assert record.ssa_char.max_drive_percent == 65.0
+        assert record.ssa_char.succeeded_first_try is True
+
+    def test_store_cavity_characterization(self):
+        """Test storing cavity characterization data."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        cavity_char = CavityCharacterization(
+            loaded_q=3.0e7,
+            probe_q=1.5e9,
+            scale_factor=2.5,
+        )
+
+        record.cavity_char = cavity_char
+
+        assert record.cavity_char is not None
+        assert record.cavity_char.loaded_q == 3.0e7
+        assert record.cavity_char.is_complete is True
+
+    def test_store_piezo_with_rf(self):
+        """Test storing piezo with-RF test data."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        piezo_rf = PiezoWithRFTest(
+            amplifier_gain_a=1.2,
+            amplifier_gain_b=1.3,
+            detune_gain=0.95,
+        )
+
+        record.piezo_with_rf = piezo_rf
+
+        assert record.piezo_with_rf is not None
+        assert record.piezo_with_rf.amplifier_gain_a == 1.2
+        assert record.piezo_with_rf.is_complete is True
+
+    def test_store_high_power_ramp(self):
+        """Test storing high power ramp data."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        high_power = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=True,
+        )
+
+        record.high_power = high_power
+
+        assert record.high_power is not None
+        assert record.high_power.final_amplitude == 16.5
+        assert record.high_power.is_complete is True
+
+    def test_store_all_data(self):
+        """Test storing all data types together."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        record.piezo_pre_rf = PiezoPreRFCheck(
+            capacitance_a=1.5e-9,
+            capacitance_b=1.6e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+        )
+        record.cold_landing = ColdLandingData(
+            initial_detune_hz=15000.0,
+            steps_to_resonance=50,
+            final_detune_hz=500.0,
+        )
+        record.ssa_char = SSACharacterization(
+            max_drive=0.65,
+            num_attempts=1,
+        )
+        record.cavity_char = CavityCharacterization(
+            loaded_q=3.0e7,
+            scale_factor=2.5,
+        )
+        record.piezo_with_rf = PiezoWithRFTest(
+            amplifier_gain_a=1.2,
+            amplifier_gain_b=1.3,
+            detune_gain=0.95,
+        )
+        record.high_power = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=True,
+        )
+
+        # Verify all data stored
+        assert record.piezo_pre_rf.passed is True
+        assert record.cold_landing.is_complete is True
+        assert record.ssa_char.is_complete is True
+        assert record.cavity_char.is_complete is True
+        assert record.piezo_with_rf.is_complete is True
+        assert record.high_power.is_complete is True
+
     def test_set_phase_status(self):
         """Test setting phase status."""
         record = CommissioningRecord(
