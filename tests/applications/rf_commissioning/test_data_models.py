@@ -7,6 +7,7 @@ from sc_linac_physics.applications.rf_commissioning import (
     PhaseStatus,
     PhaseCheckpoint,
     PiezoPreRFCheck,
+    ColdLandingData,
 )
 
 
@@ -213,3 +214,109 @@ class TestPiezoPreRFCheck:
         assert "PASS" in result["status_description"]
         assert result["timestamp"] == "2024-01-15T10:30:00"
         assert result["notes"] == "Good test"
+
+
+class TestColdLandingData:
+    """Test ColdLandingData data model."""
+
+    def test_default_initialization(self):
+        """Test default values."""
+        data = ColdLandingData()
+
+        assert data.initial_detune_hz is None
+        assert data.initial_timestamp is None
+        assert data.steps_to_resonance is None
+        assert data.final_detune_hz is None
+        assert data.final_timestamp is None
+        assert data.notes == ""
+
+    def test_detune_conversion(self):
+        """Test Hz to kHz conversion."""
+        data = ColdLandingData(
+            initial_detune_hz=15000.0,
+            final_detune_hz=500.0,
+        )
+
+        assert data.initial_detune_khz == 15.0
+        assert data.final_detune_khz == 0.5
+
+    def test_detune_conversion_none(self):
+        """Test conversion when values are None."""
+        data = ColdLandingData()
+
+        assert data.initial_detune_khz is None
+        assert data.final_detune_khz is None
+
+    def test_is_complete_true(self):
+        """Test completion when all required data present."""
+        data = ColdLandingData(
+            initial_detune_hz=15000.0,
+            steps_to_resonance=50,
+            final_detune_hz=500.0,
+        )
+
+        assert data.is_complete is True
+
+    def test_is_complete_missing_initial(self):
+        """Test incomplete when missing initial detune."""
+        data = ColdLandingData(
+            steps_to_resonance=50,
+            final_detune_hz=500.0,
+        )
+
+        assert data.is_complete is False
+
+    def test_is_complete_missing_steps(self):
+        """Test incomplete when missing steps."""
+        data = ColdLandingData(
+            initial_detune_hz=15000.0,
+            final_detune_hz=500.0,
+        )
+
+        assert data.is_complete is False
+
+    def test_is_complete_missing_final(self):
+        """Test incomplete when missing final detune."""
+        data = ColdLandingData(
+            initial_detune_hz=15000.0,
+            steps_to_resonance=50,
+        )
+
+        assert data.is_complete is False
+
+    def test_to_dict(self):
+        """Test serialization."""
+        initial_time = datetime(2024, 1, 15, 10, 30)
+        final_time = datetime(2024, 1, 15, 11, 0)
+
+        data = ColdLandingData(
+            initial_detune_hz=15000.0,
+            initial_timestamp=initial_time,
+            steps_to_resonance=50,
+            final_detune_hz=500.0,
+            final_timestamp=final_time,
+            notes="Tuned successfully",
+        )
+
+        result = data.to_dict()
+
+        assert result["initial_detune_hz"] == 15000.0
+        assert result["initial_detune_khz"] == 15.0
+        assert result["initial_timestamp"] == "2024-01-15T10:30:00"
+        assert result["steps_to_resonance"] == 50
+        assert result["final_detune_hz"] == 500.0
+        assert result["final_detune_khz"] == 0.5
+        assert result["final_timestamp"] == "2024-01-15T11:00:00"
+        assert result["is_complete"] is True
+        assert result["notes"] == "Tuned successfully"
+
+    def test_to_dict_with_none_timestamps(self):
+        """Test serialization with None timestamps."""
+        data = ColdLandingData(
+            initial_detune_hz=15000.0,
+        )
+
+        result = data.to_dict()
+
+        assert result["initial_timestamp"] is None
+        assert result["final_timestamp"] is None
