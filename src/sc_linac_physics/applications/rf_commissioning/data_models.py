@@ -150,3 +150,60 @@ class ColdLandingData:
             "is_complete": self.is_complete,
             "notes": self.notes,
         }
+
+
+@dataclass
+class SSACharacterization:
+    """SSA calibration results."""
+
+    max_drive: Optional[float] = None  # 0.0-1.0
+    initial_drive: Optional[float] = None
+    num_attempts: int = 0
+    timestamp: datetime = field(default_factory=datetime.now)
+    notes: str = ""
+
+    @property
+    def max_drive_percent(self) -> Optional[float]:
+        """Maximum drive as percentage (0-100)."""
+        if self.max_drive is None:
+            return None
+        return self.max_drive * 100
+
+    @property
+    def initial_drive_percent(self) -> Optional[float]:
+        """Initial drive as percentage (0-100)."""
+        if self.initial_drive is None:
+            return None
+        return self.initial_drive * 100
+
+    @property
+    def drive_reduction(self) -> Optional[float]:
+        """Total reduction in drive level."""
+        if self.initial_drive is None or self.max_drive is None:
+            return None
+        return self.initial_drive - self.max_drive
+
+    @property
+    def succeeded_first_try(self) -> bool:
+        """Check if calibration succeeded on first attempt."""
+        return self.num_attempts == 1
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if calibration completed successfully."""
+        return self.max_drive is not None
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "max_drive": self.max_drive,
+            "max_drive_percent": self.max_drive_percent,
+            "initial_drive": self.initial_drive,
+            "initial_drive_percent": self.initial_drive_percent,
+            "num_attempts": self.num_attempts,
+            "drive_reduction": self.drive_reduction,
+            "succeeded_first_try": self.succeeded_first_try,
+            "is_complete": self.is_complete,
+            "timestamp": self.timestamp.isoformat(),
+            "notes": self.notes,
+        }
