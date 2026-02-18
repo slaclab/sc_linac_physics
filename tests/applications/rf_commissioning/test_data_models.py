@@ -13,6 +13,7 @@ from sc_linac_physics.applications.rf_commissioning import (
     SSACharacterization,
     CavityCharacterization,
     PiezoWithRFTest,
+    HighPowerRampData,
 )
 
 
@@ -636,4 +637,87 @@ class TestPiezoWithRFTest:
         assert result["amplifier_gain_a"] == 1.2
         assert result["amplifier_gain_b"] is None
         assert result["detune_gain"] is None
+        assert result["is_complete"] is False
+
+
+class TestHighPowerRampData:
+    """Test HighPowerRampData data model."""
+
+    def test_default_initialization(self):
+        """Test default values."""
+        ramp = HighPowerRampData()
+
+        assert ramp.final_amplitude is None
+        assert ramp.one_hour_complete is False
+        assert isinstance(ramp.timestamp, datetime)
+        assert ramp.notes == ""
+
+    def test_with_data(self):
+        """Test with complete data."""
+        ramp = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=True,
+        )
+
+        assert ramp.final_amplitude == 16.5
+        assert ramp.one_hour_complete is True
+
+    def test_is_complete_true(self):
+        """Test completion when both requirements met."""
+        ramp = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=True,
+        )
+
+        assert ramp.is_complete is True
+
+    def test_is_complete_missing_amplitude(self):
+        """Test incomplete when missing final_amplitude."""
+        ramp = HighPowerRampData(
+            one_hour_complete=True,
+        )
+
+        assert ramp.is_complete is False
+
+    def test_is_complete_hour_not_done(self):
+        """Test incomplete when one hour not complete."""
+        ramp = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=False,
+        )
+
+        assert ramp.is_complete is False
+
+    def test_is_complete_both_missing(self):
+        """Test incomplete when both missing."""
+        ramp = HighPowerRampData()
+
+        assert ramp.is_complete is False
+
+    def test_to_dict(self):
+        """Test serialization."""
+        timestamp = datetime(2024, 1, 15, 10, 30)
+        ramp = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=True,
+            timestamp=timestamp,
+            notes="Successful ramp",
+        )
+
+        result = ramp.to_dict()
+
+        assert result["final_amplitude"] == 16.5
+        assert result["one_hour_complete"] is True
+        assert result["is_complete"] is True
+        assert result["timestamp"] == "2024-01-15T10:30:00"
+        assert result["notes"] == "Successful ramp"
+
+    def test_to_dict_incomplete(self):
+        """Test serialization when incomplete."""
+        ramp = HighPowerRampData(final_amplitude=16.5)
+
+        result = ramp.to_dict()
+
+        assert result["final_amplitude"] == 16.5
+        assert result["one_hour_complete"] is False
         assert result["is_complete"] is False
