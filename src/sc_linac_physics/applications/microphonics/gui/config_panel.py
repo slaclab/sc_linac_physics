@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
+
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget,
@@ -16,6 +17,7 @@ from PyQt5.QtWidgets import (
     QTabWidget,
     QFileDialog,
 )
+
 
 from sc_linac_physics.applications.microphonics.utils.constants import (
     BASE_HARDWARE_SAMPLE_RATE,
@@ -37,6 +39,7 @@ from sc_linac_physics.applications.microphonics.utils.ui_utils import (
 
 class ConfigPanel(QWidget):
     """Config panel for Microphonics GUI.
+
 
     This providess the controls for:
     - Linac and CM selection
@@ -64,6 +67,7 @@ class ConfigPanel(QWidget):
         self.linac_buttons = {}
         self.cryo_buttons = {}
         self.cryo_layout = None
+        self.select_all_cms_btn = None
         self.decim_combo = None
         self.buffer_spin = None
         self.start_button = None
@@ -87,6 +91,7 @@ class ConfigPanel(QWidget):
         # Main vertical layout
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(2)
 
         main_layout.addWidget(self.create_linac_section())
         main_layout.addWidget(self.create_cavity_section())
@@ -97,7 +102,6 @@ class ConfigPanel(QWidget):
 
         # Add the horizontal layout to the main layout
         main_layout.addLayout(bottom_layout)
-        main_layout.addStretch()
 
     def get_selected_decimation(self):
         """Returns the currently selected decimation value from the UI."""
@@ -124,6 +128,8 @@ class ConfigPanel(QWidget):
         """Create linac and CM selection group"""
         group = QGroupBox("Linac Configuration")
         layout = QVBoxLayout()
+        layout.setSpacing(4)
+        layout.setContentsMargins(4, 4, 4, 4)
 
         # Linac selection buttons
         linac_layout = QHBoxLayout()
@@ -142,8 +148,23 @@ class ConfigPanel(QWidget):
 
         # CM selection grid
         self.cryo_group = QGroupBox("Cryomodule Selection")
+        cryo_group_layout = QVBoxLayout()
         self.cryo_layout = QGridLayout()
-        self.cryo_group.setLayout(self.cryo_layout)
+        cryo_group_layout.setContentsMargins(2, 2, 2, 2)
+        cryo_group_layout.setSpacing(2)
+        self.cryo_layout = QGridLayout()
+        self.cryo_layout.setSpacing(2)
+        self.cryo_layout.setContentsMargins(0, 0, 0, 0)
+        cryo_group_layout.addLayout(self.cryo_layout)
+
+        # Select all cms button
+        self.select_all_cms_btn = QPushButton("Select All CMs")
+        self.select_all_cms_btn.setEnabled(False)  # Disabled for now
+        self.select_all_cms_btn.setFixedHeight(22)
+        self.select_all_cms_btn.clicked.connect(self._select_all_cms)
+        cryo_group_layout.addWidget(self.select_all_cms_btn)
+        self.cryo_group.setLayout(cryo_group_layout)
+        self.cryo_group.setMinimumHeight(100)
         layout.addWidget(self.cryo_group)
 
         group.setLayout(layout)
@@ -154,14 +175,14 @@ class ConfigPanel(QWidget):
         group = QGroupBox("Cavity Selection")
         layout = QVBoxLayout()
 
+        layout.setSpacing(2)
+        layout.setContentsMargins(2, 2, 2, 2)
+
         # Rack configuration
         rack_config = {
             "A": {"title": "Rack A (1-4)", "cavities": [1, 2, 3, 4]},
             "B": {"title": "Rack B (5-8)", "cavities": [5, 6, 7, 8]},
         }
-        # Create cavity selection tabs
-        cavity_tabs = {}
-        select_all_buttons = {}
 
         cavity_tabs, select_all_buttons = create_cavity_selection_tabs(
             self, rack_config, self._select_all_cavities
@@ -177,6 +198,7 @@ class ConfigPanel(QWidget):
                 layout.addWidget(child)
                 break
         self.select_all_btn = QPushButton("Select All (1-8)")
+        self.select_all_btn.setFixedHeight(24)
         self.select_all_btn.clicked.connect(self.select_all_cavities)
         layout.addWidget(self.select_all_btn)
         group.setLayout(layout)
@@ -243,6 +265,45 @@ class ConfigPanel(QWidget):
             self.configChanged.emit(config)
         finally:
             self.is_updating = False
+
+    def _select_all_cms(self):
+        """Select/deselect all cryomodules for the current linac"""
+        if self.is_updating:
+            return
+
+        if not self.cryo_buttons:
+            return
+
+        self.is_updating = True
+        try:
+            all_selected = all(
+                btn.isChecked() for btn in self.cryo_buttons.values()
+            )
+
+            new_state = not all_selected
+
+            for btn in self.cryo_buttons.values():
+                btn.setChecked(new_state)
+
+            self._update_select_all_cms_button_text()
+
+            self._emit_config_changed()
+
+        finally:
+            self.is_updating = False
+
+    def _update_select_all_cms_button_text(self):
+        """Update Select All CMs button text based on current selection state"""
+        if not self.cryo_buttons:
+            self.select_all_cms_btn.setText("Select All CMs")
+            return
+
+        all_selected = all(
+            btn.isChecked() for btn in self.cryo_buttons.values()
+        )
+        self.select_all_cms_btn.setText(
+            "Deselect All CMs" if all_selected else "Select All CMs"
+        )
 
     def create_settings_section(self):
         """Create acquisition settings section"""
@@ -379,7 +440,11 @@ class ConfigPanel(QWidget):
         self.cryo_buttons.clear()
 
         if not self.selected_linac:
+            self.select_all_cms_btn.setEnabled(False)
+            self.select_all_cms_btn.setText("Select All CMs")
             return
+        self.select_all_cms_btn.setEnabled(True)
+        self.select_all_cms_btn.setText("Select All CMs")
 
         # Add new buttons
         modules = VALID_LINACS[self.selected_linac]
@@ -402,11 +467,22 @@ class ConfigPanel(QWidget):
             button_items,
             self.cryo_layout,
             checkable=True,
-            connect_to=lambda _: self._emit_config_changed(),
+            connect_to=self._on_cm_selection_changed,
             custom_properties=custom_properties,
             grid_layout=True,
-            max_cols=6,
+            max_cols=9,
         )
+        for btn in self.cryo_buttons.values():
+            btn.setFixedHeight(22)
+            btn.setMinimumWidth(30)
+        num_rows = (len(modules) + 8) // 9
+        for row in range(num_rows):
+            self.cryo_layout.setRowMinimumHeight(row, 24)
+
+    def _on_cm_selection_changed(self, module_id):
+        """Handle cryomodule selection changes"""
+        self._update_select_all_cms_button_text()
+        self._emit_config_changed()
 
     def validate_cavity_selection(
         self, is_bulk_action: bool = False
@@ -426,6 +502,10 @@ class ConfigPanel(QWidget):
             return "Please select at least one cavity"
 
         return None
+
+    def get_selected_cm_count(self) -> int:
+        """Return number of currently selected cryomodules"""
+        return sum(1 for btn in self.cryo_buttons.values() if btn.isChecked())
 
     def _emit_config_changed(self):
         """Emit configuration whenever it changes"""

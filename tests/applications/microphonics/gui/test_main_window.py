@@ -162,6 +162,7 @@ def test_measurement_start_stop(gui):
         "buffer_count": 1,
     }
     gui.config_panel.mock.get_config.return_value = mock_config
+    gui.config_panel.mock.get_selected_cm_count.return_value = 1
 
     # Start measurement
     gui.start_measurement()
