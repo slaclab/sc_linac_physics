@@ -2,12 +2,15 @@
 
 from datetime import datetime
 
+import pytest
+
 from sc_linac_physics.applications.rf_commissioning import (
     CommissioningPhase,
     PhaseStatus,
     PhaseCheckpoint,
     PiezoPreRFCheck,
     ColdLandingData,
+    SSACharacterization,
 )
 
 
@@ -320,3 +323,118 @@ class TestColdLandingData:
 
         assert result["initial_timestamp"] is None
         assert result["final_timestamp"] is None
+
+
+class TestSSACharacterization:
+    """Test SSACharacterization data model."""
+
+    def test_default_initialization(self):
+        """Test default values."""
+        ssa = SSACharacterization()
+
+        assert ssa.max_drive is None
+        assert ssa.initial_drive is None
+        assert ssa.num_attempts == 0
+        assert isinstance(ssa.timestamp, datetime)
+        assert ssa.notes == ""
+
+    def test_drive_percent_conversion(self):
+        """Test drive to percentage conversion."""
+        ssa = SSACharacterization(
+            max_drive=0.65,
+            initial_drive=0.8,
+        )
+
+        assert ssa.max_drive_percent == 65.0
+        assert ssa.initial_drive_percent == 80.0
+
+    def test_drive_percent_none(self):
+        """Test percentage conversion with None values."""
+        ssa = SSACharacterization()
+
+        assert ssa.max_drive_percent is None
+        assert ssa.initial_drive_percent is None
+
+    def test_drive_reduction(self):
+        """Test drive reduction calculation."""
+        ssa = SSACharacterization(
+            max_drive=0.65,
+            initial_drive=0.8,
+        )
+
+        assert ssa.drive_reduction == pytest.approx(0.15)
+
+    def test_drive_reduction_none(self):
+        """Test drive reduction with None values."""
+        ssa = SSACharacterization(max_drive=0.65)
+        assert ssa.drive_reduction is None
+
+        ssa = SSACharacterization(initial_drive=0.8)
+        assert ssa.drive_reduction is None
+
+        ssa = SSACharacterization()
+        assert ssa.drive_reduction is None
+
+    def test_succeeded_first_try(self):
+        """Test first attempt success detection."""
+        ssa = SSACharacterization(
+            max_drive=0.65,
+            num_attempts=1,
+        )
+
+        assert ssa.succeeded_first_try is True
+
+    def test_multiple_attempts(self):
+        """Test multiple attempts."""
+        ssa = SSACharacterization(
+            max_drive=0.65,
+            num_attempts=3,
+        )
+
+        assert ssa.succeeded_first_try is False
+
+    def test_is_complete_true(self):
+        """Test completion when max_drive is set."""
+        ssa = SSACharacterization(max_drive=0.65)
+
+        assert ssa.is_complete is True
+
+    def test_is_complete_false(self):
+        """Test incomplete when max_drive is None."""
+        ssa = SSACharacterization()
+
+        assert ssa.is_complete is False
+
+    def test_to_dict(self):
+        """Test serialization."""
+        timestamp = datetime(2024, 1, 15, 10, 30)
+        ssa = SSACharacterization(
+            max_drive=0.65,
+            initial_drive=0.8,
+            num_attempts=2,
+            timestamp=timestamp,
+            notes="Required adjustment",
+        )
+
+        result = ssa.to_dict()
+
+        assert result["max_drive"] == 0.65
+        assert result["max_drive_percent"] == 65.0
+        assert result["initial_drive"] == 0.8
+        assert result["initial_drive_percent"] == 80.0
+        assert result["num_attempts"] == 2
+        assert result["drive_reduction"] == pytest.approx(0.15)
+        assert result["succeeded_first_try"] is False
+        assert result["is_complete"] is True
+        assert result["timestamp"] == "2024-01-15T10:30:00"
+        assert result["notes"] == "Required adjustment"
+
+    def test_to_dict_incomplete(self):
+        """Test serialization when incomplete."""
+        ssa = SSACharacterization(num_attempts=1)
+
+        result = ssa.to_dict()
+
+        assert result["max_drive"] is None
+        assert result["max_drive_percent"] is None
+        assert result["is_complete"] is False
