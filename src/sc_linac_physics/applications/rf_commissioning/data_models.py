@@ -207,3 +207,30 @@ class SSACharacterization:
             "timestamp": self.timestamp.isoformat(),
             "notes": self.notes,
         }
+
+
+@dataclass
+class CavityCharacterization:
+    """Cavity RF characterization results."""
+
+    loaded_q: Optional[float] = None
+    probe_q: Optional[float] = None
+    scale_factor: Optional[float] = None
+    timestamp: datetime = field(default_factory=datetime.now)
+    notes: str = ""
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if characterization is complete."""
+        return self.loaded_q is not None and self.scale_factor is not None
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "loaded_q": self.loaded_q,
+            "probe_q": self.probe_q,
+            "scale_factor": self.scale_factor,
+            "is_complete": self.is_complete,
+            "timestamp": self.timestamp.isoformat(),
+            "notes": self.notes,
+        }
