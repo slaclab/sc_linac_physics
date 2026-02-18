@@ -6,6 +6,7 @@ from sc_linac_physics.applications.rf_commissioning import (
     CommissioningPhase,
     PhaseStatus,
     PhaseCheckpoint,
+    PiezoPreRFCheck,
 )
 
 
@@ -120,3 +121,95 @@ class TestPhaseCheckpoint:
 
         result = checkpoint.to_dict()
         assert result["error_message"] == "SSA tripped during ramp"
+
+
+class TestPiezoPreRFCheck:
+    """Test PiezoPreRFCheck data model."""
+
+    def test_default_initialization(self):
+        """Test default values."""
+        check = PiezoPreRFCheck()
+
+        assert check.capacitance_a is None
+        assert check.capacitance_b is None
+        assert check.channel_a_passed is False
+        assert check.channel_b_passed is False
+        assert isinstance(check.timestamp, datetime)
+        assert check.notes == ""
+
+    def test_both_channels_pass(self):
+        """Test when both channels pass."""
+        check = PiezoPreRFCheck(
+            capacitance_a=1.5e-9,
+            capacitance_b=1.6e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+        )
+
+        assert check.passed is True
+        assert "PASS" in check.status_description
+        assert "1.500e-09F" in check.status_description
+        assert "1.600e-09F" in check.status_description
+
+    def test_channel_a_fails(self):
+        """Test when channel A fails."""
+        check = PiezoPreRFCheck(
+            capacitance_a=5.0e-9,
+            capacitance_b=1.6e-9,
+            channel_a_passed=False,
+            channel_b_passed=True,
+        )
+
+        assert check.passed is False
+        assert "FAIL" in check.status_description
+        assert "Ch A" in check.status_description
+
+    def test_channel_b_fails(self):
+        """Test when channel B fails."""
+        check = PiezoPreRFCheck(
+            capacitance_a=1.5e-9,
+            capacitance_b=5.0e-9,
+            channel_a_passed=True,
+            channel_b_passed=False,
+        )
+
+        assert check.passed is False
+        assert "FAIL" in check.status_description
+        assert "Ch B" in check.status_description
+
+    def test_both_channels_fail(self):
+        """Test when both channels fail."""
+        check = PiezoPreRFCheck(
+            capacitance_a=5.0e-9,
+            capacitance_b=6.0e-9,
+            channel_a_passed=False,
+            channel_b_passed=False,
+        )
+
+        assert check.passed is False
+        assert "FAIL" in check.status_description
+        assert "Ch A" in check.status_description
+        assert "Ch B" in check.status_description
+
+    def test_to_dict(self):
+        """Test serialization."""
+        timestamp = datetime(2024, 1, 15, 10, 30)
+        check = PiezoPreRFCheck(
+            capacitance_a=1.5e-9,
+            capacitance_b=1.6e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+            timestamp=timestamp,
+            notes="Good test",
+        )
+
+        result = check.to_dict()
+
+        assert result["capacitance_a"] == 1.5e-9
+        assert result["capacitance_b"] == 1.6e-9
+        assert result["channel_a_passed"] is True
+        assert result["channel_b_passed"] is True
+        assert result["passed"] is True
+        assert "PASS" in result["status_description"]
+        assert result["timestamp"] == "2024-01-15T10:30:00"
+        assert result["notes"] == "Good test"
