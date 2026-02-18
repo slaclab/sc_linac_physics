@@ -14,6 +14,7 @@ from sc_linac_physics.applications.rf_commissioning import (
     CavityCharacterization,
     PiezoWithRFTest,
     HighPowerRampData,
+    CommissioningRecord,
 )
 
 
@@ -721,3 +722,97 @@ class TestHighPowerRampData:
         assert result["final_amplitude"] == 16.5
         assert result["one_hour_complete"] is False
         assert result["is_complete"] is False
+
+
+class TestCommissioningRecord:
+    """Test CommissioningRecord data model."""
+
+    def test_default_initialization(self):
+        """Test default initialization."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        assert record.cavity_name == "CM01_CAV1"
+        assert record.cryomodule == "CM01"
+        assert isinstance(record.start_time, datetime)
+        assert record.current_phase == CommissioningPhase.PRE_CHECKS
+        assert record.end_time is None
+        assert record.overall_status == "in_progress"
+
+        # All phase data should be None initially
+        assert record.piezo_pre_rf is None
+        assert record.cold_landing is None
+        assert record.ssa_char is None
+        assert record.cavity_char is None
+        assert record.piezo_with_rf is None
+        assert record.high_power is None
+
+        # Phase tracking initialized
+        assert isinstance(record.phase_history, dict)
+        assert isinstance(record.phase_status, dict)
+
+    def test_phase_status_initialization(self):
+        """Test phase status initialized correctly."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        # PRE_CHECKS should start as IN_PROGRESS
+        assert (
+            record.get_phase_status(CommissioningPhase.PRE_CHECKS)
+            == PhaseStatus.IN_PROGRESS
+        )
+
+        # All others should be NOT_STARTED
+        for phase in CommissioningPhase:
+            if phase != CommissioningPhase.PRE_CHECKS:
+                assert record.get_phase_status(phase) == PhaseStatus.NOT_STARTED
+
+    def test_is_complete_false_initially(self):
+        """Test record is not complete initially."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        assert record.is_complete is False
+
+    def test_is_complete_true_when_complete(self):
+        """Test record is complete when phase is COMPLETE."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            current_phase=CommissioningPhase.COMPLETE,
+        )
+
+        assert record.is_complete is True
+
+    def test_elapsed_time_ongoing(self):
+        """Test elapsed time calculation for ongoing commissioning."""
+        start = datetime(2024, 1, 15, 10, 0)
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            start_time=start,
+        )
+
+        # Elapsed time should be positive
+        assert record.elapsed_time is not None
+        assert record.elapsed_time > 0
+
+    def test_elapsed_time_completed(self):
+        """Test elapsed time for completed commissioning."""
+        start = datetime(2024, 1, 15, 10, 0)
+        end = datetime(2024, 1, 15, 14, 30)  # 4.5 hours later
+
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            start_time=start,
+            end_time=end,
+        )
+
+        assert record.elapsed_time == pytest.approx(4.5)
