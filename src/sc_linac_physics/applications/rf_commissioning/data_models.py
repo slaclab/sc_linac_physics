@@ -93,3 +93,60 @@ class PiezoPreRFCheck:
             "timestamp": self.timestamp.isoformat(),
             "notes": self.notes,
         }
+
+
+@dataclass
+class ColdLandingData:
+    """Cold landing frequency measurement and tuning data."""
+
+    initial_detune_hz: Optional[float] = None
+    initial_timestamp: Optional[datetime] = None
+    steps_to_resonance: Optional[int] = None
+    final_detune_hz: Optional[float] = None
+    final_timestamp: Optional[datetime] = None
+    notes: str = ""
+
+    @property
+    def initial_detune_khz(self) -> Optional[float]:
+        """Initial detune in kHz."""
+        if self.initial_detune_hz is None:
+            return None
+        return self.initial_detune_hz / 1000
+
+    @property
+    def final_detune_khz(self) -> Optional[float]:
+        """Final detune in kHz."""
+        if self.final_detune_hz is None:
+            return None
+        return self.final_detune_hz / 1000
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if tuning is complete."""
+        return (
+            self.initial_detune_hz is not None
+            and self.steps_to_resonance is not None
+            and self.final_detune_hz is not None
+        )
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "initial_detune_hz": self.initial_detune_hz,
+            "initial_detune_khz": self.initial_detune_khz,
+            "initial_timestamp": (
+                self.initial_timestamp.isoformat()
+                if self.initial_timestamp
+                else None
+            ),
+            "steps_to_resonance": self.steps_to_resonance,
+            "final_detune_hz": self.final_detune_hz,
+            "final_detune_khz": self.final_detune_khz,
+            "final_timestamp": (
+                self.final_timestamp.isoformat()
+                if self.final_timestamp
+                else None
+            ),
+            "is_complete": self.is_complete,
+            "notes": self.notes,
+        }
