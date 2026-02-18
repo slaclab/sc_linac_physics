@@ -234,3 +234,34 @@ class CavityCharacterization:
             "timestamp": self.timestamp.isoformat(),
             "notes": self.notes,
         }
+
+
+@dataclass
+class PiezoWithRFTest:
+    """Piezo tuner with-RF test results."""
+
+    amplifier_gain_a: Optional[float] = None
+    amplifier_gain_b: Optional[float] = None
+    detune_gain: Optional[float] = None
+    timestamp: datetime = field(default_factory=datetime.now)
+    notes: str = ""
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if all measurements were taken."""
+        return (
+            self.amplifier_gain_a is not None
+            and self.amplifier_gain_b is not None
+            and self.detune_gain is not None
+        )
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "amplifier_gain_a": self.amplifier_gain_a,
+            "amplifier_gain_b": self.amplifier_gain_b,
+            "detune_gain": self.detune_gain,
+            "is_complete": self.is_complete,
+            "timestamp": self.timestamp.isoformat(),
+            "notes": self.notes,
+        }
