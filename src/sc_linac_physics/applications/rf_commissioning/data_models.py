@@ -290,3 +290,112 @@ class HighPowerRampData:
             "timestamp": self.timestamp.isoformat(),
             "notes": self.notes,
         }
+
+
+@dataclass
+class CommissioningRecord:
+    """Complete commissioning record for a cavity."""
+
+    cavity_name: str
+    cryomodule: str
+    start_time: datetime = field(default_factory=datetime.now)
+    current_phase: CommissioningPhase = CommissioningPhase.PRE_CHECKS
+
+    # Phase-specific data
+    piezo_pre_rf: Optional[PiezoPreRFCheck] = None
+    cold_landing: Optional[ColdLandingData] = None
+    ssa_char: Optional[SSACharacterization] = None
+    cavity_char: Optional[CavityCharacterization] = None
+    piezo_with_rf: Optional[PiezoWithRFTest] = None
+    high_power: Optional[HighPowerRampData] = None
+
+    # Phase tracking
+    phase_history: dict[CommissioningPhase, PhaseCheckpoint] = field(
+        default_factory=dict
+    )
+    phase_status: dict[CommissioningPhase, PhaseStatus] = field(
+        default_factory=dict
+    )
+
+    end_time: Optional[datetime] = None
+    overall_status: str = "in_progress"
+
+    def __post_init__(self):
+        """Initialize phase status tracking."""
+        if not self.phase_status:
+            for phase in CommissioningPhase:
+                self.phase_status[phase] = PhaseStatus.NOT_STARTED
+            self.phase_status[CommissioningPhase.PRE_CHECKS] = (
+                PhaseStatus.IN_PROGRESS
+            )
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if all commissioning is complete."""
+        return self.current_phase == CommissioningPhase.COMPLETE
+
+    @property
+    def elapsed_time(self) -> Optional[float]:
+        """Total elapsed time in hours."""
+        if self.end_time:
+            return (self.end_time - self.start_time).total_seconds() / 3600
+        return (datetime.now() - self.start_time).total_seconds() / 3600
+
+    def get_phase_status(self, phase: CommissioningPhase) -> PhaseStatus:
+        """Get status of a specific phase."""
+        return self.phase_status.get(phase, PhaseStatus.NOT_STARTED)
+
+    def set_phase_status(self, phase: CommissioningPhase, status: PhaseStatus):
+        """Set status of a specific phase."""
+        self.phase_status[phase] = status
+
+    def add_checkpoint(
+        self, phase: CommissioningPhase, checkpoint: PhaseCheckpoint
+    ):
+        """Add a checkpoint for a phase."""
+        self.phase_history[phase] = checkpoint
+
+    def get_checkpoint(
+        self, phase: CommissioningPhase
+    ) -> Optional[PhaseCheckpoint]:
+        """Get checkpoint for a phase."""
+        return self.phase_history.get(phase)
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "cavity_name": self.cavity_name,
+            "cryomodule": self.cryomodule,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "current_phase": self.current_phase.value,
+            "overall_status": self.overall_status,
+            "elapsed_time_hours": self.elapsed_time,
+            "is_complete": self.is_complete,
+            "piezo_pre_rf": (
+                self.piezo_pre_rf.to_dict() if self.piezo_pre_rf else None
+            ),
+            "cold_landing": (
+                self.cold_landing.to_dict() if self.cold_landing else None
+            ),
+            "ssa_characterization": (
+                self.ssa_char.to_dict() if self.ssa_char else None
+            ),
+            "cavity_characterization": (
+                self.cavity_char.to_dict() if self.cavity_char else None
+            ),
+            "piezo_with_rf": (
+                self.piezo_with_rf.to_dict() if self.piezo_with_rf else None
+            ),
+            "high_power_ramp": (
+                self.high_power.to_dict() if self.high_power else None
+            ),
+            "phase_status": {
+                phase.value: status.value
+                for phase, status in self.phase_status.items()
+            },
+            "phase_history": {
+                phase.value: checkpoint.to_dict()
+                for phase, checkpoint in self.phase_history.items()
+            },
+        }
