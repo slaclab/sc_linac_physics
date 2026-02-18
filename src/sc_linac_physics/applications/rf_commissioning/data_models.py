@@ -265,3 +265,28 @@ class PiezoWithRFTest:
             "timestamp": self.timestamp.isoformat(),
             "notes": self.notes,
         }
+
+
+@dataclass
+class HighPowerRampData:
+    """High power ramp and one-hour run results."""
+
+    final_amplitude: Optional[float] = None  # MV
+    one_hour_complete: bool = False
+    timestamp: datetime = field(default_factory=datetime.now)
+    notes: str = ""
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if ramp is complete."""
+        return self.final_amplitude is not None and self.one_hour_complete
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "final_amplitude": self.final_amplitude,
+            "one_hour_complete": self.one_hour_complete,
+            "is_complete": self.is_complete,
+            "timestamp": self.timestamp.isoformat(),
+            "notes": self.notes,
+        }
