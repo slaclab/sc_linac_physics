@@ -727,6 +727,88 @@ class TestHighPowerRampData:
 class TestCommissioningRecord:
     """Test CommissioningRecord data model."""
 
+    def test_set_phase_status(self):
+        """Test setting phase status."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        record.set_phase_status(
+            CommissioningPhase.COLD_LANDING, PhaseStatus.IN_PROGRESS
+        )
+        assert (
+            record.get_phase_status(CommissioningPhase.COLD_LANDING)
+            == PhaseStatus.IN_PROGRESS
+        )
+
+        record.set_phase_status(
+            CommissioningPhase.COLD_LANDING, PhaseStatus.COMPLETE
+        )
+        assert (
+            record.get_phase_status(CommissioningPhase.COLD_LANDING)
+            == PhaseStatus.COMPLETE
+        )
+
+    def test_add_checkpoint(self):
+        """Test adding phase checkpoint."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        checkpoint = PhaseCheckpoint(
+            operator="jdoe",
+            notes="Completed successfully",
+            measurements={"detune_hz": 1000.0},
+        )
+
+        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint)
+
+        retrieved = record.get_checkpoint(CommissioningPhase.COLD_LANDING)
+        assert retrieved is not None
+        assert retrieved.operator == "jdoe"
+        assert retrieved.notes == "Completed successfully"
+        assert retrieved.measurements["detune_hz"] == 1000.0
+
+    def test_get_checkpoint_nonexistent(self):
+        """Test getting checkpoint that doesn't exist."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        checkpoint = record.get_checkpoint(CommissioningPhase.SSA_CAL)
+        assert checkpoint is None
+
+    def test_multiple_checkpoints(self):
+        """Test adding multiple checkpoints."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        checkpoint1 = PhaseCheckpoint(
+            operator="jdoe",
+            notes="Cold landing done",
+        )
+        checkpoint2 = PhaseCheckpoint(
+            operator="asmith",
+            notes="SSA calibrated",
+        )
+
+        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint1)
+        record.add_checkpoint(CommissioningPhase.SSA_CAL, checkpoint2)
+
+        assert (
+            record.get_checkpoint(CommissioningPhase.COLD_LANDING).operator
+            == "jdoe"
+        )
+        assert (
+            record.get_checkpoint(CommissioningPhase.SSA_CAL).operator
+            == "asmith"
+        )
+
     def test_default_initialization(self):
         """Test default initialization."""
         record = CommissioningRecord(
