@@ -12,6 +12,7 @@ from sc_linac_physics.applications.rf_commissioning import (
     ColdLandingData,
     SSACharacterization,
     CavityCharacterization,
+    PiezoWithRFTest,
 )
 
 
@@ -535,4 +536,104 @@ class TestCavityCharacterization:
         assert result["loaded_q"] == 3.0e7
         assert result["probe_q"] is None
         assert result["scale_factor"] is None
+        assert result["is_complete"] is False
+
+
+class TestPiezoWithRFTest:
+    """Test PiezoWithRFTest data model."""
+
+    def test_default_initialization(self):
+        """Test default values."""
+        test = PiezoWithRFTest()
+
+        assert test.amplifier_gain_a is None
+        assert test.amplifier_gain_b is None
+        assert test.detune_gain is None
+        assert isinstance(test.timestamp, datetime)
+        assert test.notes == ""
+
+    def test_with_data(self):
+        """Test with all measurements."""
+        test = PiezoWithRFTest(
+            amplifier_gain_a=1.2,
+            amplifier_gain_b=1.3,
+            detune_gain=0.95,
+        )
+
+        assert test.amplifier_gain_a == 1.2
+        assert test.amplifier_gain_b == 1.3
+        assert test.detune_gain == 0.95
+
+    def test_is_complete_true(self):
+        """Test completion when all measurements present."""
+        test = PiezoWithRFTest(
+            amplifier_gain_a=1.2,
+            amplifier_gain_b=1.3,
+            detune_gain=0.95,
+        )
+
+        assert test.is_complete is True
+
+    def test_is_complete_missing_amp_a(self):
+        """Test incomplete when missing amplifier_gain_a."""
+        test = PiezoWithRFTest(
+            amplifier_gain_b=1.3,
+            detune_gain=0.95,
+        )
+
+        assert test.is_complete is False
+
+    def test_is_complete_missing_amp_b(self):
+        """Test incomplete when missing amplifier_gain_b."""
+        test = PiezoWithRFTest(
+            amplifier_gain_a=1.2,
+            detune_gain=0.95,
+        )
+
+        assert test.is_complete is False
+
+    def test_is_complete_missing_detune(self):
+        """Test incomplete when missing detune_gain."""
+        test = PiezoWithRFTest(
+            amplifier_gain_a=1.2,
+            amplifier_gain_b=1.3,
+        )
+
+        assert test.is_complete is False
+
+    def test_is_complete_all_none(self):
+        """Test incomplete when all None."""
+        test = PiezoWithRFTest()
+
+        assert test.is_complete is False
+
+    def test_to_dict(self):
+        """Test serialization."""
+        timestamp = datetime(2024, 1, 15, 10, 30)
+        test = PiezoWithRFTest(
+            amplifier_gain_a=1.2,
+            amplifier_gain_b=1.3,
+            detune_gain=0.95,
+            timestamp=timestamp,
+            notes="Good tuner response",
+        )
+
+        result = test.to_dict()
+
+        assert result["amplifier_gain_a"] == 1.2
+        assert result["amplifier_gain_b"] == 1.3
+        assert result["detune_gain"] == 0.95
+        assert result["is_complete"] is True
+        assert result["timestamp"] == "2024-01-15T10:30:00"
+        assert result["notes"] == "Good tuner response"
+
+    def test_to_dict_incomplete(self):
+        """Test serialization when incomplete."""
+        test = PiezoWithRFTest(amplifier_gain_a=1.2)
+
+        result = test.to_dict()
+
+        assert result["amplifier_gain_a"] == 1.2
+        assert result["amplifier_gain_b"] is None
+        assert result["detune_gain"] is None
         assert result["is_complete"] is False
