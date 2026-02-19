@@ -727,6 +727,209 @@ class TestHighPowerRampData:
 class TestCommissioningRecord:
     """Test CommissioningRecord data model."""
 
+    def test_to_dict_basic(self):
+        """Test basic serialization."""
+        start = datetime(2024, 1, 15, 10, 0)
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            start_time=start,
+        )
+
+        result = record.to_dict()
+
+        assert result["cavity_name"] == "CM01_CAV1"
+        assert result["cryomodule"] == "CM01"
+        assert result["start_time"] == "2024-01-15T10:00:00"
+        assert result["end_time"] is None
+        assert result["current_phase"] == "pre_checks"
+        assert result["overall_status"] == "in_progress"
+        assert result["is_complete"] is False
+
+        # All phase data should be None
+        assert result["piezo_pre_rf"] is None
+        assert result["cold_landing"] is None
+        assert result["ssa_characterization"] is None
+        assert result["cavity_characterization"] is None
+        assert result["piezo_with_rf"] is None
+        assert result["high_power_ramp"] is None
+
+    def test_to_dict_with_end_time(self):
+        """Test serialization with end time."""
+        start = datetime(2024, 1, 15, 10, 0)
+        end = datetime(2024, 1, 15, 14, 30)
+
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            start_time=start,
+            end_time=end,
+            current_phase=CommissioningPhase.COMPLETE,
+            overall_status="complete",
+        )
+
+        result = record.to_dict()
+
+        assert result["end_time"] == "2024-01-15T14:30:00"
+        assert result["elapsed_time_hours"] == pytest.approx(4.5)
+        assert result["current_phase"] == "complete"
+        assert result["overall_status"] == "complete"
+        assert result["is_complete"] is True
+
+    def test_to_dict_with_data(self):
+        """Test serialization with phase data."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        record.piezo_pre_rf = PiezoPreRFCheck(
+            capacitance_a=1.5e-9,
+            capacitance_b=1.6e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+        )
+        record.cold_landing = ColdLandingData(
+            initial_detune_hz=15000.0,
+            steps_to_resonance=50,
+            final_detune_hz=500.0,
+        )
+
+        result = record.to_dict()
+
+        # Check nested data serialized correctly
+        assert result["piezo_pre_rf"] is not None
+        assert result["piezo_pre_rf"]["capacitance_a"] == 1.5e-9
+        assert result["piezo_pre_rf"]["passed"] is True
+
+        assert result["cold_landing"] is not None
+        assert result["cold_landing"]["initial_detune_hz"] == 15000.0
+        assert result["cold_landing"]["steps_to_resonance"] == 50
+        assert result["cold_landing"]["is_complete"] is True
+
+    def test_to_dict_with_phase_status(self):
+        """Test serialization includes phase status."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        record.set_phase_status(
+            CommissioningPhase.COLD_LANDING, PhaseStatus.COMPLETE
+        )
+        record.set_phase_status(
+            CommissioningPhase.SSA_CAL, PhaseStatus.IN_PROGRESS
+        )
+
+        result = record.to_dict()
+
+        assert "phase_status" in result
+        assert result["phase_status"]["pre_checks"] == "in_progress"
+        assert result["phase_status"]["cold_landing"] == "complete"
+        assert result["phase_status"]["ssa_cal"] == "in_progress"
+
+    def test_to_dict_with_checkpoints(self):
+        """Test serialization includes checkpoints."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        checkpoint = PhaseCheckpoint(
+            timestamp=datetime(2024, 1, 15, 11, 0),
+            operator="jdoe",
+            notes="Completed cold landing",
+            measurements={"detune_hz": 500.0},
+        )
+
+        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint)
+
+        result = record.to_dict()
+
+        assert "phase_history" in result
+        assert "cold_landing" in result["phase_history"]
+        assert result["phase_history"]["cold_landing"]["operator"] == "jdoe"
+        assert (
+            result["phase_history"]["cold_landing"]["notes"]
+            == "Completed cold landing"
+        )
+        assert (
+            result["phase_history"]["cold_landing"]["measurements"]["detune_hz"]
+            == 500.0
+        )
+
+    def test_to_dict_complete_record(self):
+        """Test serialization of complete record with all data."""
+        start = datetime(2024, 1, 15, 10, 0)
+        end = datetime(2024, 1, 15, 14, 30)
+
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            start_time=start,
+            end_time=end,
+            current_phase=CommissioningPhase.COMPLETE,
+            overall_status="complete",
+        )
+
+        # Add all phase data
+        record.piezo_pre_rf = PiezoPreRFCheck(
+            capacitance_a=1.5e-9,
+            capacitance_b=1.6e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+        )
+        record.cold_landing = ColdLandingData(
+            initial_detune_hz=15000.0,
+            steps_to_resonance=50,
+            final_detune_hz=500.0,
+        )
+        record.ssa_char = SSACharacterization(
+            max_drive=0.65,
+            num_attempts=1,
+        )
+        record.cavity_char = CavityCharacterization(
+            loaded_q=3.0e7,
+            scale_factor=2.5,
+        )
+        record.piezo_with_rf = PiezoWithRFTest(
+            amplifier_gain_a=1.2,
+            amplifier_gain_b=1.3,
+            detune_gain=0.95,
+        )
+        record.high_power = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=True,
+        )
+
+        # Add checkpoints
+        for phase in [
+            CommissioningPhase.PRE_CHECKS,
+            CommissioningPhase.COLD_LANDING,
+            CommissioningPhase.SSA_CAL,
+        ]:
+            checkpoint = PhaseCheckpoint(
+                operator="jdoe",
+                notes=f"Completed {phase.value}",
+            )
+            record.add_checkpoint(phase, checkpoint)
+            record.set_phase_status(phase, PhaseStatus.COMPLETE)
+
+        result = record.to_dict()
+
+        # Verify structure is complete
+        assert result["is_complete"] is True
+        assert result["piezo_pre_rf"] is not None
+        assert result["cold_landing"] is not None
+        assert result["ssa_characterization"] is not None
+        assert result["cavity_characterization"] is not None
+        assert result["piezo_with_rf"] is not None
+        assert result["high_power_ramp"] is not None
+        assert len(result["phase_history"]) == 3
+        assert result["phase_status"]["pre_checks"] == "complete"
+        assert result["phase_status"]["cold_landing"] == "complete"
+        assert result["phase_status"]["ssa_cal"] == "complete"
+
     def test_store_piezo_pre_rf(self):
         """Test storing piezo pre-RF check data."""
         record = CommissioningRecord(
