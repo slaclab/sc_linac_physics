@@ -1,69 +1,50 @@
-"""RF commissioning workflow application.
+"""
+RF Commissioning Application
 
-This module provides data models and workflow management for commissioning
-superconducting RF cavities, following LCLS-II operational procedures.
+Manual commissioning workflow for superconducting cavities with emphasis on
+careful operator-guided procedures and comprehensive data recording.
 
-Example Usage
--------------
-Create a new commissioning record and track progress through phases::
+Key Features:
+- Phase-based commissioning workflow
+- Cold landing frequency measurement
+- SQLite database for local data persistence
+- Complete audit trail with operator tracking
+- Resume capability from any phase
 
+Usage:
     from sc_linac_physics.applications.rf_commissioning import (
-        CommissioningRecord,
         CommissioningPhase,
         PhaseStatus,
-        PiezoPreRFCheck,
         ColdLandingData,
+        CommissioningRecord,
+        CommissioningDatabase,
     )
 
-    # Start commissioning a cavity
+    # Create a commissioning record
     record = CommissioningRecord(
-        cavity_name="CM01_CAV1",
-        cryomodule="CM01",
+        cavity_name="L1B_CM02_CAV3",
+        cryomodule="02",
     )
 
-    # Record piezo pre-RF check
-    piezo_check = PiezoPreRFCheck(
-        capacitance_a=1.5e-9,
-        capacitance_b=1.6e-9,
-        channel_a_passed=True,
-        channel_b_passed=True,
-    )
-    record.piezo_pre_rf = piezo_check
-
-    # Complete pre-checks phase
-    record.set_phase_status(CommissioningPhase.PRE_CHECKS, PhaseStatus.COMPLETE)
-    record.current_phase = CommissioningPhase.COLD_LANDING
-
-    # Record cold landing
+    # Record cold landing measurement
     cold_landing = ColdLandingData(
-        initial_detune_hz=15000.0,
-        steps_to_resonance=50,
-        final_detune_hz=500.0,
+        initial_detune_hz=-143766,
+        steps_to_resonance=14376,
+        final_detune_hz=-234,
     )
+
     record.cold_landing = cold_landing
 
-    # Export to dictionary for storage
-    data = record.to_dict()
+    # Save to database
+    db = CommissioningDatabase("commissioning.db")
+    db.initialize()
+    record_id = db.save_record(record)
 
-Data Models
------------
-The module provides these main data structures:
-
-* **CommissioningRecord**: Main container tracking entire commissioning process
-* **PiezoPreRFCheck**: Piezo tuner capacitance check results
-* **ColdLandingData**: Initial frequency measurement and tuning
-* **SSACharacterization**: Solid-state amplifier calibration
-* **CavityCharacterization**: Cavity Q and scale factor measurements
-* **PiezoWithRFTest**: Piezo tuner performance with RF
-* **HighPowerRampData**: Final high-power ramp results
-* **PhaseCheckpoint**: Snapshot at phase boundaries
-
-Each data model includes:
-- Type-safe fields with defaults
-- Computed properties for derived values
-- Validation via ``is_complete`` properties
-- Serialization via ``to_dict()`` methods
+    # Resume later
+    active_sessions = db.get_active_records()
 """
+
+__version__ = "0.1.0"
 
 from .data_models import (
     CavityCharacterization,
@@ -77,16 +58,23 @@ from .data_models import (
     PiezoWithRFTest,
     SSACharacterization,
 )
+from .database import CommissioningDatabase
 
 __all__ = [
-    "CavityCharacterization",
-    "ColdLandingData",
+    # Enums
     "CommissioningPhase",
-    "CommissioningRecord",
-    "HighPowerRampData",
-    "PhaseCheckpoint",
     "PhaseStatus",
+    # Phase tracking
+    "PhaseCheckpoint",
+    # Phase-specific data
     "PiezoPreRFCheck",
-    "PiezoWithRFTest",
+    "ColdLandingData",
     "SSACharacterization",
+    "CavityCharacterization",
+    "PiezoWithRFTest",
+    "HighPowerRampData",
+    # Main record
+    "CommissioningRecord",
+    # Database
+    "CommissioningDatabase",
 ]
