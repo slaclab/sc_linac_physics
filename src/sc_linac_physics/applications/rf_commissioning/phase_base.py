@@ -257,6 +257,10 @@ class PhaseBase(ABC):
                         # Wait before retry (could use result.retry_delay_seconds)
                         continue
                     else:
+                        # ADD THIS BLOCK - mark as failed after max retries
+                        self.context.record.phase_status[self.phase_type] = (
+                            PhaseStatus.FAILED
+                        )
                         self._create_checkpoint(
                             step_name=step_name,
                             success=False,
@@ -266,6 +270,10 @@ class PhaseBase(ABC):
                         return False
 
                 else:  # PhaseResult.FAILED
+                    # ADD THIS LINE - mark as failed
+                    self.context.record.phase_status[self.phase_type] = (
+                        PhaseStatus.FAILED
+                    )
                     self._create_checkpoint(
                         step_name=step_name,
                         success=False,
@@ -333,9 +341,7 @@ class PhaseBase(ABC):
 
     def _mark_phase_completed(self) -> None:
         """Mark phase as completed in the record."""
-        self.context.record.phase_status[self.phase_type] = (
-            PhaseStatus.COMPLETED
-        )
+        self.context.record.phase_status[self.phase_type] = PhaseStatus.COMPLETE
         self._create_checkpoint(
             step_name="phase_complete",
             success=True,
@@ -362,6 +368,7 @@ class PhaseBase(ABC):
         Args:
             exception: The exception that was raised
         """
+
         self.context.record.phase_status[self.phase_type] = PhaseStatus.FAILED
         self._create_checkpoint(
             step_name=f"step_{self._current_step_index}",

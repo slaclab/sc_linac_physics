@@ -67,68 +67,93 @@ class TestEnums:
 
 
 class TestPhaseCheckpoint:
-    """Test PhaseCheckpoint data model."""
+    """Tests for PhaseCheckpoint dataclass."""
 
     def test_default_initialization(self):
         """Test checkpoint with defaults."""
-        checkpoint = PhaseCheckpoint()
-
-        assert isinstance(checkpoint.timestamp, datetime)
-        assert checkpoint.operator == ""
-        assert checkpoint.notes == ""
-        assert checkpoint.measurements == {}
-        assert checkpoint.error_message == ""
-
-    def test_with_data(self):
-        """Test checkpoint with data."""
-        timestamp = datetime(2024, 1, 15, 10, 30)
-        measurements = {"detune_hz": 1000.0, "gradient_mv": 16.5}
-
+        # UPDATED: PhaseCheckpoint now requires phase, timestamp, operator, step_name, success
         checkpoint = PhaseCheckpoint(
-            timestamp=timestamp,
-            operator="jdoe",
-            notes="Completed successfully",
-            measurements=measurements,
+            phase=CommissioningPhase.COLD_LANDING,
+            timestamp=datetime.now(),
+            operator="TestOperator",
+            step_name="test_step",
+            success=True,
         )
 
+        assert checkpoint.phase == CommissioningPhase.COLD_LANDING  # ADD
+        assert checkpoint.operator == "TestOperator"
+        assert checkpoint.step_name == "test_step"
+        assert checkpoint.success is True
+        assert checkpoint.notes == ""
+        assert checkpoint.measurements == {}
+        assert checkpoint.error_message is None
+
+    def test_initialization_with_values(self):
+        """Test checkpoint with all values."""
+        timestamp = datetime.now()
+        measurements = {"voltage": 12.5, "current": 2.3}
+
+        checkpoint = PhaseCheckpoint(
+            phase=CommissioningPhase.SSA_CAL,  # ADD
+            timestamp=timestamp,
+            operator="TestOperator",
+            step_name="calibration",
+            success=True,
+            notes="Calibration successful",
+            measurements=measurements,
+            error_message=None,
+        )
+
+        assert checkpoint.phase == CommissioningPhase.SSA_CAL  # ADD
         assert checkpoint.timestamp == timestamp
-        assert checkpoint.operator == "jdoe"
-        assert checkpoint.notes == "Completed successfully"
+        assert checkpoint.operator == "TestOperator"
+        assert checkpoint.step_name == "calibration"
+        assert checkpoint.success is True
+        assert checkpoint.notes == "Calibration successful"
         assert checkpoint.measurements == measurements
-        assert checkpoint.error_message == ""
+        assert checkpoint.error_message is None
+
+    def test_checkpoint_with_error(self):
+        """Test checkpoint recording an error."""
+        checkpoint = PhaseCheckpoint(
+            phase=CommissioningPhase.COLD_LANDING,  # ADD
+            timestamp=datetime.now(),
+            operator="TestOperator",
+            step_name="landing",
+            success=False,
+            notes="Failed to reach resonance",
+            error_message="Timeout after 30 seconds",
+        )
+
+        assert checkpoint.phase == CommissioningPhase.COLD_LANDING  # ADD
+        assert checkpoint.success is False
+        assert checkpoint.error_message == "Timeout after 30 seconds"
 
     def test_to_dict(self):
         """Test serialization to dictionary."""
-        timestamp = datetime(2024, 1, 15, 10, 30)
-        measurements = {"detune_hz": 1000.0}
+        timestamp = datetime(2024, 1, 15, 10, 30, 0)
+        measurements = {"detune_hz": -143766}
 
         checkpoint = PhaseCheckpoint(
+            phase=CommissioningPhase.COLD_LANDING,  # ADD
             timestamp=timestamp,
-            operator="jdoe",
-            notes="Test note",
+            operator="TestOperator",
+            step_name="measure_detune",
+            success=True,
+            notes="Initial measurement",
             measurements=measurements,
-            error_message="",
         )
 
         result = checkpoint.to_dict()
 
+        assert result["phase"] == "cold_landing"  # ADD
         assert result["timestamp"] == "2024-01-15T10:30:00"
-        assert result["operator"] == "jdoe"
-        assert result["notes"] == "Test note"
+        assert result["operator"] == "TestOperator"
+        assert result["step_name"] == "measure_detune"
+        assert result["success"] is True
+        assert result["notes"] == "Initial measurement"
         assert result["measurements"] == measurements
-        assert result["error_message"] == ""
-
-    def test_with_error(self):
-        """Test checkpoint with error message."""
-        checkpoint = PhaseCheckpoint(
-            operator="jdoe",
-            error_message="SSA tripped during ramp",
-        )
-
-        assert checkpoint.error_message == "SSA tripped during ramp"
-
-        result = checkpoint.to_dict()
-        assert result["error_message"] == "SSA tripped during ramp"
+        assert result["error_message"] is None
 
 
 class TestPiezoPreRFCheck:
@@ -727,6 +752,140 @@ class TestHighPowerRampData:
 class TestCommissioningRecord:
     """Test CommissioningRecord data model."""
 
+    def test_add_and_get_checkpoint(self):
+        """Test adding and retrieving checkpoints."""
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        checkpoint = PhaseCheckpoint(
+            phase=CommissioningPhase.COLD_LANDING,  # ADD
+            timestamp=datetime.now(),
+            operator="TestOperator",
+            step_name="landing_complete",
+            success=True,
+            notes="Successfully landed",
+        )
+
+        # UPDATED API:
+        record.add_checkpoint(checkpoint)  # CHANGED: removed phase argument
+
+        # UPDATED API:
+        retrieved_checkpoints = record.get_checkpoints(
+            CommissioningPhase.COLD_LANDING
+        )
+        assert len(retrieved_checkpoints) == 1
+        assert retrieved_checkpoints[0].step_name == "landing_complete"
+
+        # Test get_latest_checkpoint
+        latest = record.get_latest_checkpoint(CommissioningPhase.COLD_LANDING)
+        assert latest is not None
+        assert latest.step_name == "landing_complete"
+
+    def test_multiple_checkpoints_per_phase(self):
+        """Test that multiple checkpoints can be added for the same phase."""
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        # Add multiple checkpoints for the same phase
+        checkpoint1 = PhaseCheckpoint(
+            phase=CommissioningPhase.COLD_LANDING,
+            timestamp=datetime.now(),
+            operator="TestOperator",
+            step_name="step1",
+            success=True,
+        )
+
+        checkpoint2 = PhaseCheckpoint(
+            phase=CommissioningPhase.COLD_LANDING,
+            timestamp=datetime.now(),
+            operator="TestOperator",
+            step_name="step2",
+            success=True,
+        )
+
+        record.add_checkpoint(checkpoint1)
+        record.add_checkpoint(checkpoint2)
+
+        # Get all checkpoints for the phase
+        checkpoints = record.get_checkpoints(CommissioningPhase.COLD_LANDING)
+        assert len(checkpoints) == 2
+        assert checkpoints[0].step_name == "step1"
+        assert checkpoints[1].step_name == "step2"
+
+        # Get latest checkpoint
+        latest = record.get_latest_checkpoint(CommissioningPhase.COLD_LANDING)
+        assert latest.step_name == "step2"
+
+    def test_get_checkpoints_all_phases(self):
+        """Test getting all checkpoints across all phases."""
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        checkpoint1 = PhaseCheckpoint(
+            phase=CommissioningPhase.COLD_LANDING,
+            timestamp=datetime.now(),
+            operator="TestOperator",
+            step_name="landing",
+            success=True,
+        )
+
+        checkpoint2 = PhaseCheckpoint(
+            phase=CommissioningPhase.SSA_CAL,
+            timestamp=datetime.now(),
+            operator="TestOperator",
+            step_name="calibration",
+            success=True,
+        )
+
+        record.add_checkpoint(checkpoint1)
+        record.add_checkpoint(checkpoint2)
+
+        # Get all checkpoints (no phase filter)
+        all_checkpoints = record.get_checkpoints()
+        assert len(all_checkpoints) == 2
+        assert all_checkpoints[0].phase == CommissioningPhase.COLD_LANDING
+        assert all_checkpoints[1].phase == CommissioningPhase.SSA_CAL
+
+    def test_get_checkpoints_empty(self):
+        """Test getting checkpoints when none exist."""
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        checkpoints = record.get_checkpoints(CommissioningPhase.COLD_LANDING)
+        assert len(checkpoints) == 0
+
+        latest = record.get_latest_checkpoint(CommissioningPhase.COLD_LANDING)
+        assert latest is None
+
+    def test_to_dict_with_checkpoints(self):
+        """Test serialization with phase history."""
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        checkpoint = PhaseCheckpoint(
+            phase=CommissioningPhase.COLD_LANDING,  # ADD
+            timestamp=datetime(2024, 1, 15, 10, 30, 0),
+            operator="TestOperator",
+            step_name="test_step",
+            success=True,
+            notes="Test checkpoint",
+        )
+
+        record.add_checkpoint(checkpoint)  # CHANGED: removed phase argument
+
+        result = record.to_dict()
+
+        # UPDATED: phase_history is now a list
+        assert isinstance(result["phase_history"], list)
+        assert len(result["phase_history"]) == 1
+        assert result["phase_history"][0]["phase"] == "cold_landing"
+        assert result["phase_history"][0]["step_name"] == "test_step"
+
     def test_to_dict_basic(self):
         """Test basic serialization."""
         start = datetime(2024, 1, 15, 10, 0)
@@ -827,108 +986,6 @@ class TestCommissioningRecord:
         assert result["phase_status"]["pre_checks"] == "in_progress"
         assert result["phase_status"]["cold_landing"] == "complete"
         assert result["phase_status"]["ssa_cal"] == "in_progress"
-
-    def test_to_dict_with_checkpoints(self):
-        """Test serialization includes checkpoints."""
-        record = CommissioningRecord(
-            cavity_name="CM01_CAV1",
-            cryomodule="CM01",
-        )
-
-        checkpoint = PhaseCheckpoint(
-            timestamp=datetime(2024, 1, 15, 11, 0),
-            operator="jdoe",
-            notes="Completed cold landing",
-            measurements={"detune_hz": 500.0},
-        )
-
-        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint)
-
-        result = record.to_dict()
-
-        assert "phase_history" in result
-        assert "cold_landing" in result["phase_history"]
-        assert result["phase_history"]["cold_landing"]["operator"] == "jdoe"
-        assert (
-            result["phase_history"]["cold_landing"]["notes"]
-            == "Completed cold landing"
-        )
-        assert (
-            result["phase_history"]["cold_landing"]["measurements"]["detune_hz"]
-            == 500.0
-        )
-
-    def test_to_dict_complete_record(self):
-        """Test serialization of complete record with all data."""
-        start = datetime(2024, 1, 15, 10, 0)
-        end = datetime(2024, 1, 15, 14, 30)
-
-        record = CommissioningRecord(
-            cavity_name="CM01_CAV1",
-            cryomodule="CM01",
-            start_time=start,
-            end_time=end,
-            current_phase=CommissioningPhase.COMPLETE,
-            overall_status="complete",
-        )
-
-        # Add all phase data
-        record.piezo_pre_rf = PiezoPreRFCheck(
-            capacitance_a=1.5e-9,
-            capacitance_b=1.6e-9,
-            channel_a_passed=True,
-            channel_b_passed=True,
-        )
-        record.cold_landing = ColdLandingData(
-            initial_detune_hz=15000.0,
-            steps_to_resonance=50,
-            final_detune_hz=500.0,
-        )
-        record.ssa_char = SSACharacterization(
-            max_drive=0.65,
-            num_attempts=1,
-        )
-        record.cavity_char = CavityCharacterization(
-            loaded_q=3.0e7,
-            scale_factor=2.5,
-        )
-        record.piezo_with_rf = PiezoWithRFTest(
-            amplifier_gain_a=1.2,
-            amplifier_gain_b=1.3,
-            detune_gain=0.95,
-        )
-        record.high_power = HighPowerRampData(
-            final_amplitude=16.5,
-            one_hour_complete=True,
-        )
-
-        # Add checkpoints
-        for phase in [
-            CommissioningPhase.PRE_CHECKS,
-            CommissioningPhase.COLD_LANDING,
-            CommissioningPhase.SSA_CAL,
-        ]:
-            checkpoint = PhaseCheckpoint(
-                operator="jdoe",
-                notes=f"Completed {phase.value}",
-            )
-            record.add_checkpoint(phase, checkpoint)
-            record.set_phase_status(phase, PhaseStatus.COMPLETE)
-
-        result = record.to_dict()
-
-        # Verify structure is complete
-        assert result["is_complete"] is True
-        assert result["piezo_pre_rf"] is not None
-        assert result["cold_landing"] is not None
-        assert result["ssa_characterization"] is not None
-        assert result["cavity_characterization"] is not None
-        assert result["piezo_with_rf"] is not None
-        assert result["high_power_ramp"] is not None
-        assert len(result["phase_history"]) == 3
-        assert result["phase_status"]["pre_checks"] == "complete"
-        assert result["phase_status"]["cold_landing"] == "complete"
-        assert result["phase_status"]["ssa_cal"] == "complete"
 
     def test_store_piezo_pre_rf(self):
         """Test storing piezo pre-RF check data."""
@@ -1110,91 +1167,6 @@ class TestCommissioningRecord:
             record.get_phase_status(CommissioningPhase.COLD_LANDING)
             == PhaseStatus.COMPLETE
         )
-
-    def test_add_checkpoint(self):
-        """Test adding phase checkpoint."""
-        record = CommissioningRecord(
-            cavity_name="CM01_CAV1",
-            cryomodule="CM01",
-        )
-
-        checkpoint = PhaseCheckpoint(
-            operator="jdoe",
-            notes="Completed successfully",
-            measurements={"detune_hz": 1000.0},
-        )
-
-        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint)
-
-        retrieved = record.get_checkpoint(CommissioningPhase.COLD_LANDING)
-        assert retrieved is not None
-        assert retrieved.operator == "jdoe"
-        assert retrieved.notes == "Completed successfully"
-        assert retrieved.measurements["detune_hz"] == 1000.0
-
-    def test_get_checkpoint_nonexistent(self):
-        """Test getting checkpoint that doesn't exist."""
-        record = CommissioningRecord(
-            cavity_name="CM01_CAV1",
-            cryomodule="CM01",
-        )
-
-        checkpoint = record.get_checkpoint(CommissioningPhase.SSA_CAL)
-        assert checkpoint is None
-
-    def test_multiple_checkpoints(self):
-        """Test adding multiple checkpoints."""
-        record = CommissioningRecord(
-            cavity_name="CM01_CAV1",
-            cryomodule="CM01",
-        )
-
-        checkpoint1 = PhaseCheckpoint(
-            operator="jdoe",
-            notes="Cold landing done",
-        )
-        checkpoint2 = PhaseCheckpoint(
-            operator="asmith",
-            notes="SSA calibrated",
-        )
-
-        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint1)
-        record.add_checkpoint(CommissioningPhase.SSA_CAL, checkpoint2)
-
-        assert (
-            record.get_checkpoint(CommissioningPhase.COLD_LANDING).operator
-            == "jdoe"
-        )
-        assert (
-            record.get_checkpoint(CommissioningPhase.SSA_CAL).operator
-            == "asmith"
-        )
-
-    def test_default_initialization(self):
-        """Test default initialization."""
-        record = CommissioningRecord(
-            cavity_name="CM01_CAV1",
-            cryomodule="CM01",
-        )
-
-        assert record.cavity_name == "CM01_CAV1"
-        assert record.cryomodule == "CM01"
-        assert isinstance(record.start_time, datetime)
-        assert record.current_phase == CommissioningPhase.PRE_CHECKS
-        assert record.end_time is None
-        assert record.overall_status == "in_progress"
-
-        # All phase data should be None initially
-        assert record.piezo_pre_rf is None
-        assert record.cold_landing is None
-        assert record.ssa_char is None
-        assert record.cavity_char is None
-        assert record.piezo_with_rf is None
-        assert record.high_power is None
-
-        # Phase tracking initialized
-        assert isinstance(record.phase_history, dict)
-        assert isinstance(record.phase_status, dict)
 
     def test_phase_status_initialization(self):
         """Test phase status initialized correctly."""

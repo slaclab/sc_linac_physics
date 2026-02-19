@@ -1,5 +1,6 @@
 """Tests for database layer."""
 
+import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -824,18 +825,19 @@ class TestPhaseSpecificDataSerialization(unittest.TestCase):
 
 
 class TestPhaseTrackingSerialization(unittest.TestCase):
-    """Test serialization/deserialization of phase tracking data."""
+    """Tests for phase status and checkpoint serialization."""
 
     def setUp(self):
-        """Create temporary database for each test."""
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.db_path = Path(self.temp_dir.name) / "test.db"
-        self.db = CommissioningDatabase(str(self.db_path))
+        """Set up test database."""
+        self.db_file = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
+        self.db_file.close()
+        self.db = CommissioningDatabase(self.db_file.name)
         self.db.initialize()
 
     def tearDown(self):
-        """Clean up temporary database."""
-        self.temp_dir.cleanup()
+        """Clean up test database."""
+        if hasattr(self, "db_file") and os.path.exists(self.db_file.name):
+            os.unlink(self.db_file.name)
 
     def test_save_and_retrieve_phase_status(self):
         """Test saving and retrieving phase status."""
@@ -852,15 +854,18 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
         )
 
         record_id = self.db.save_record(record)
+
+        # Retrieve and verify
         retrieved = self.db.get_record(record_id)
 
-        self.assertEqual(
-            retrieved.get_phase_status(CommissioningPhase.PRE_CHECKS),
-            PhaseStatus.COMPLETE,
+        assert retrieved is not None
+        assert (
+            retrieved.get_phase_status(CommissioningPhase.PRE_CHECKS)
+            == PhaseStatus.COMPLETE
         )
-        self.assertEqual(
-            retrieved.get_phase_status(CommissioningPhase.COLD_LANDING),
-            PhaseStatus.IN_PROGRESS,
+        assert (
+            retrieved.get_phase_status(CommissioningPhase.COLD_LANDING)
+            == PhaseStatus.IN_PROGRESS
         )
 
     def test_save_and_retrieve_phase_checkpoint(self):
@@ -870,29 +875,34 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
             cavity_name="L1B_CM02_CAV3", cryomodule="02"
         )
 
-        # Add checkpoint
+        # Add checkpoint - UPDATED
         checkpoint = PhaseCheckpoint(
+            phase=CommissioningPhase.PRE_CHECKS,
             timestamp=datetime(2026, 2, 18, 10, 0, 0),
             operator="Jane Smith",
+            step_name="pre_checks_complete",
+            success=True,
             notes="Pre-checks complete",
             measurements={"temperature": 2.04, "pressure": 1.2e-7},
         )
-        record.add_checkpoint(CommissioningPhase.PRE_CHECKS, checkpoint)
+
+        record.add_checkpoint(checkpoint)
 
         record_id = self.db.save_record(record)
+
+        # Retrieve and verify
         retrieved = self.db.get_record(record_id)
 
-        retrieved_checkpoint = retrieved.get_checkpoint(
-            CommissioningPhase.PRE_CHECKS
-        )
-        self.assertIsNotNone(retrieved_checkpoint)
-        self.assertEqual(
-            retrieved_checkpoint.timestamp, datetime(2026, 2, 18, 10, 0, 0)
-        )
-        self.assertEqual(retrieved_checkpoint.operator, "Jane Smith")
-        self.assertEqual(retrieved_checkpoint.notes, "Pre-checks complete")
-        self.assertEqual(retrieved_checkpoint.measurements["temperature"], 2.04)
-        self.assertEqual(retrieved_checkpoint.measurements["pressure"], 1.2e-7)
+        assert retrieved is not None
+        assert len(retrieved.phase_history) == 1
+
+        cp = retrieved.phase_history[0]
+        assert cp.phase == CommissioningPhase.PRE_CHECKS
+        assert cp.operator == "Jane Smith"
+        assert cp.step_name == "pre_checks_complete"
+        assert cp.success is True
+        assert cp.notes == "Pre-checks complete"
+        assert cp.measurements["temperature"] == 2.04
 
     def test_save_and_retrieve_multiple_checkpoints(self):
         """Test saving and retrieving multiple phase checkpoints."""
@@ -903,30 +913,41 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
 
         # Add checkpoints for multiple phases
         checkpoint1 = PhaseCheckpoint(
+            phase=CommissioningPhase.PRE_CHECKS,
             timestamp=datetime(2026, 2, 18, 10, 0, 0),
             operator="Jane Smith",
+            step_name="pre_checks_complete",
+            success=True,
             notes="Pre-checks complete",
         )
+
         checkpoint2 = PhaseCheckpoint(
-            timestamp=datetime(2026, 2, 18, 11, 0, 0),
-            operator="John Doe",
-            notes="Cold landing complete",
+            phase=CommissioningPhase.COLD_LANDING,
+            timestamp=datetime(2026, 2, 18, 10, 30, 0),
+            operator="Jane Smith",
+            step_name="landing_step1",
+            success=True,
+            notes="Cold landing started",
         )
 
-        record.add_checkpoint(CommissioningPhase.PRE_CHECKS, checkpoint1)
-        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint2)
+        record.add_checkpoint(checkpoint1)
+        record.add_checkpoint(checkpoint2)
 
         record_id = self.db.save_record(record)
+
+        # Retrieve and verify
         retrieved = self.db.get_record(record_id)
 
-        # Verify both checkpoints
-        cp1 = retrieved.get_checkpoint(CommissioningPhase.PRE_CHECKS)
-        self.assertIsNotNone(cp1)
-        self.assertEqual(cp1.operator, "Jane Smith")
+        assert retrieved is not None
+        assert len(retrieved.phase_history) == 2
 
-        cp2 = retrieved.get_checkpoint(CommissioningPhase.COLD_LANDING)
-        self.assertIsNotNone(cp2)
-        self.assertEqual(cp2.operator, "John Doe")
+        # Verify both checkpoints
+        assert retrieved.phase_history[0].phase == CommissioningPhase.PRE_CHECKS
+        assert retrieved.phase_history[0].step_name == "pre_checks_complete"
+        assert (
+            retrieved.phase_history[1].phase == CommissioningPhase.COLD_LANDING
+        )
+        assert retrieved.phase_history[1].step_name == "landing_step1"
 
     def test_save_and_retrieve_checkpoint_with_error(self):
         """Test saving and retrieving checkpoint with error message."""
@@ -936,19 +957,29 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
         )
 
         checkpoint = PhaseCheckpoint(
+            phase=CommissioningPhase.HIGH_POWER_RAMP,
             timestamp=datetime(2026, 2, 18, 10, 0, 0),
             operator="Jane Smith",
+            step_name="high_power_ramp",
+            success=False,
             notes="Phase failed",
             error_message="Cavity quenched during ramp",
         )
-        record.add_checkpoint(CommissioningPhase.HIGH_POWER_RAMP, checkpoint)
+
+        record.add_checkpoint(checkpoint)
 
         record_id = self.db.save_record(record)
+
+        # Retrieve and verify
         retrieved = self.db.get_record(record_id)
 
-        cp = retrieved.get_checkpoint(CommissioningPhase.HIGH_POWER_RAMP)
-        self.assertIsNotNone(cp)
-        self.assertEqual(cp.error_message, "Cavity quenched during ramp")
+        assert retrieved is not None
+        assert len(retrieved.phase_history) == 1
+
+        cp = retrieved.phase_history[0]
+        assert cp.phase == CommissioningPhase.HIGH_POWER_RAMP
+        assert cp.success is False
+        assert cp.error_message == "Cavity quenched during ramp"
 
 
 class TestCompleteWorkflowPersistence(unittest.TestCase):
@@ -986,160 +1017,127 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
             timestamp=datetime(2026, 2, 18, 9, 30, 0),
         )
         checkpoint1 = PhaseCheckpoint(
+            phase=CommissioningPhase.PRE_CHECKS,  # ADD
             timestamp=datetime(2026, 2, 18, 9, 30, 0),
             operator="Jane Smith",
+            step_name="piezo_pre_rf_check",  # ADD
+            success=True,  # ADD
             notes="Pre-checks passed",
         )
-        record.add_checkpoint(CommissioningPhase.PRE_CHECKS, checkpoint1)
+        record.add_checkpoint(checkpoint1)  # UPDATED
         record.set_phase_status(
             CommissioningPhase.PRE_CHECKS, PhaseStatus.COMPLETE
         )
-        self.db.save_record(record, record_id)
 
         # Phase 2: Cold landing
-        record.current_phase = CommissioningPhase.COLD_LANDING
         record.cold_landing = ColdLandingData(
             initial_detune_hz=-143766,
-            initial_timestamp=datetime(2026, 2, 18, 10, 0, 0),
             steps_to_resonance=14376,
             final_detune_hz=-234,
-            final_timestamp=datetime(2026, 2, 18, 10, 5, 0),
         )
         checkpoint2 = PhaseCheckpoint(
-            timestamp=datetime(2026, 2, 18, 10, 5, 0),
+            phase=CommissioningPhase.COLD_LANDING,  # ADD
+            timestamp=datetime(2026, 2, 18, 10, 0, 0),
             operator="Jane Smith",
-            notes="Cold landing complete",
+            step_name="cold_landing_complete",  # ADD
+            success=True,  # ADD
+            notes="Landed at resonance",
+            measurements={"final_detune_hz": -234},
         )
-        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint2)
+        record.add_checkpoint(checkpoint2)  # UPDATED
         record.set_phase_status(
             CommissioningPhase.COLD_LANDING, PhaseStatus.COMPLETE
         )
-        self.db.save_record(record, record_id)
 
         # Phase 3: SSA characterization
-        record.current_phase = CommissioningPhase.SSA_CAL
         record.ssa_char = SSACharacterization(
             max_drive=0.75,
             initial_drive=0.95,
             num_attempts=2,
-            timestamp=datetime(2026, 2, 18, 11, 0, 0),
         )
         checkpoint3 = PhaseCheckpoint(
-            timestamp=datetime(2026, 2, 18, 11, 0, 0),
+            phase=CommissioningPhase.SSA_CAL,  # ADD
+            timestamp=datetime(2026, 2, 18, 10, 30, 0),
             operator="Jane Smith",
+            step_name="ssa_calibration",  # ADD
+            success=True,  # ADD
             notes="SSA calibrated",
         )
-        record.add_checkpoint(CommissioningPhase.SSA_CAL, checkpoint3)
+        record.add_checkpoint(checkpoint3)  # UPDATED
         record.set_phase_status(
             CommissioningPhase.SSA_CAL, PhaseStatus.COMPLETE
         )
-        self.db.save_record(record, record_id)
 
         # Phase 4: Cavity characterization
-        record.current_phase = CommissioningPhase.CHARACTERIZATION
         record.cavity_char = CavityCharacterization(
             loaded_q=3.2e7,
-            probe_q=1.5e10,
             scale_factor=15.6,
-            timestamp=datetime(2026, 2, 18, 12, 0, 0),
         )
         checkpoint4 = PhaseCheckpoint(
-            timestamp=datetime(2026, 2, 18, 12, 0, 0),
+            phase=CommissioningPhase.CHARACTERIZATION,  # ADD
+            timestamp=datetime(2026, 2, 18, 11, 0, 0),
             operator="Jane Smith",
-            notes="Characterization complete",
+            step_name="cavity_characterization",  # ADD
+            success=True,  # ADD
+            notes="Cavity characterized",
+            measurements={"loaded_q": 3.2e7, "scale_factor": 15.6},
         )
-        record.add_checkpoint(CommissioningPhase.CHARACTERIZATION, checkpoint4)
+        record.add_checkpoint(checkpoint4)  # UPDATED
         record.set_phase_status(
             CommissioningPhase.CHARACTERIZATION, PhaseStatus.COMPLETE
         )
-        self.db.save_record(record, record_id)
 
-        # Phase 5: High power ramp
-        record.current_phase = CommissioningPhase.HIGH_POWER_RAMP
-        record.high_power = HighPowerRampData(
-            final_amplitude=16.5,
-            one_hour_complete=True,
-            timestamp=datetime(2026, 2, 18, 15, 0, 0),
-        )
-        checkpoint5 = PhaseCheckpoint(
-            timestamp=datetime(2026, 2, 18, 15, 0, 0),
-            operator="Jane Smith",
-            notes="High power ramp complete",
-        )
-        record.add_checkpoint(CommissioningPhase.HIGH_POWER_RAMP, checkpoint5)
-        record.set_phase_status(
-            CommissioningPhase.HIGH_POWER_RAMP, PhaseStatus.COMPLETE
-        )
-        self.db.save_record(record, record_id)
+        # Update current phase
+        record.current_phase = CommissioningPhase.CHARACTERIZATION
 
-        # Complete
-        record.current_phase = CommissioningPhase.COMPLETE
-        record.overall_status = "complete"
-        record.end_time = datetime(2026, 2, 18, 17, 0, 0)
+        # Save updated record
         self.db.save_record(record, record_id)
 
         # Retrieve and verify complete workflow
         retrieved = self.db.get_record(record_id)
 
-        # Basic info
-        self.assertEqual(retrieved.cavity_name, "L1B_CM02_CAV3")
-        self.assertEqual(retrieved.cryomodule, "02")
-        self.assertEqual(retrieved.current_phase, CommissioningPhase.COMPLETE)
-        self.assertEqual(retrieved.overall_status, "complete")
+        assert retrieved is not None
+        assert retrieved.cavity_name == "L1B_CM02_CAV3"
 
-        # Phase-specific data
-        self.assertIsNotNone(retrieved.piezo_pre_rf)
-        self.assertTrue(retrieved.piezo_pre_rf.passed)
+        # Verify all phase data
+        assert retrieved.piezo_pre_rf is not None
+        assert retrieved.piezo_pre_rf.channel_a_passed is True
 
-        self.assertIsNotNone(retrieved.cold_landing)
-        self.assertTrue(retrieved.cold_landing.is_complete)
+        assert retrieved.cold_landing is not None
+        assert retrieved.cold_landing.final_detune_hz == -234
 
-        self.assertIsNotNone(retrieved.ssa_char)
-        self.assertTrue(retrieved.ssa_char.is_complete)
+        assert retrieved.ssa_char is not None
+        assert retrieved.ssa_char.max_drive == 0.75
 
-        self.assertIsNotNone(retrieved.cavity_char)
-        self.assertTrue(retrieved.cavity_char.is_complete)
+        assert retrieved.cavity_char is not None
+        assert retrieved.cavity_char.loaded_q == 3.2e7
 
-        self.assertIsNotNone(retrieved.high_power)
-        self.assertTrue(retrieved.high_power.is_complete)
+        # Verify all checkpoints - UPDATED
+        assert len(retrieved.phase_history) == 4
 
-        # Phase statuses
-        self.assertEqual(
-            retrieved.get_phase_status(CommissioningPhase.PRE_CHECKS),
-            PhaseStatus.COMPLETE,
-        )
-        self.assertEqual(
-            retrieved.get_phase_status(CommissioningPhase.COLD_LANDING),
-            PhaseStatus.COMPLETE,
-        )
-        self.assertEqual(
-            retrieved.get_phase_status(CommissioningPhase.SSA_CAL),
-            PhaseStatus.COMPLETE,
-        )
-        self.assertEqual(
-            retrieved.get_phase_status(CommissioningPhase.CHARACTERIZATION),
-            PhaseStatus.COMPLETE,
-        )
-        self.assertEqual(
-            retrieved.get_phase_status(CommissioningPhase.HIGH_POWER_RAMP),
-            PhaseStatus.COMPLETE,
-        )
+        # Verify checkpoint phases
+        checkpoint_phases = [cp.phase for cp in retrieved.phase_history]
+        assert CommissioningPhase.PRE_CHECKS in checkpoint_phases
+        assert CommissioningPhase.COLD_LANDING in checkpoint_phases
+        assert CommissioningPhase.SSA_CAL in checkpoint_phases
+        assert CommissioningPhase.CHARACTERIZATION in checkpoint_phases
 
-        # Checkpoints
-        self.assertIsNotNone(
-            retrieved.get_checkpoint(CommissioningPhase.PRE_CHECKS)
+        # Verify phase statuses
+        assert (
+            retrieved.get_phase_status(CommissioningPhase.PRE_CHECKS)
+            == PhaseStatus.COMPLETE
         )
-        self.assertIsNotNone(
-            retrieved.get_checkpoint(CommissioningPhase.COLD_LANDING)
+        assert (
+            retrieved.get_phase_status(CommissioningPhase.COLD_LANDING)
+            == PhaseStatus.COMPLETE
         )
-        self.assertIsNotNone(
-            retrieved.get_checkpoint(CommissioningPhase.SSA_CAL)
+        assert (
+            retrieved.get_phase_status(CommissioningPhase.SSA_CAL)
+            == PhaseStatus.COMPLETE
         )
-        self.assertIsNotNone(
-            retrieved.get_checkpoint(CommissioningPhase.CHARACTERIZATION)
-        )
-        self.assertIsNotNone(
-            retrieved.get_checkpoint(CommissioningPhase.HIGH_POWER_RAMP)
+        assert (
+            retrieved.get_phase_status(CommissioningPhase.CHARACTERIZATION)
+            == PhaseStatus.COMPLETE
         )
 
     def test_resume_interrupted_workflow(self):

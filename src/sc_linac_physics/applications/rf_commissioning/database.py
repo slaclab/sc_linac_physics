@@ -142,11 +142,11 @@ class CommissioningDatabase:
             }
         )
 
+        # UPDATED: phase_history is now a list, not a dict
         phase_history_json = json.dumps(
-            {
-                phase.value: checkpoint.to_dict()
-                for phase, checkpoint in record.phase_history.items()
-            }
+            [
+                checkpoint.to_dict() for checkpoint in record.phase_history
+            ]  # CHANGED THIS LINE
         )
 
         with self._get_connection() as conn:
@@ -317,26 +317,32 @@ class CommissioningDatabase:
             SSACharacterization,
         )
 
-        # Deserialize phase status
-        phase_status = {}
-        phase_status_data = json.loads(row["phase_status"])
-        for phase_str, status_str in phase_status_data.items():
-            phase_status[CommissioningPhase(phase_str)] = PhaseStatus(
-                status_str
-            )
+        # Deserialize phase_status
+        phase_status_dict = json.loads(row["phase_status"])
+        phase_status = {
+            CommissioningPhase(phase): PhaseStatus(status)
+            for phase, status in phase_status_dict.items()
+        }
 
-        # Deserialize phase history
-        phase_history = {}
-        phase_history_data = json.loads(row["phase_history"])
-        for phase_str, checkpoint_dict in phase_history_data.items():
+        # UPDATED: Deserialize phase_history as list
+        phase_history_list = json.loads(row["phase_history"])
+        phase_history = []
+        for (
+            cp_dict
+        ) in phase_history_list:  # CHANGED: iterate over list instead of dict
             checkpoint = PhaseCheckpoint(
-                timestamp=datetime.fromisoformat(checkpoint_dict["timestamp"]),
-                operator=checkpoint_dict["operator"],
-                notes=checkpoint_dict["notes"],
-                measurements=checkpoint_dict["measurements"],
-                error_message=checkpoint_dict["error_message"],
+                phase=CommissioningPhase(cp_dict["phase"]),  # ADD this line
+                timestamp=datetime.fromisoformat(cp_dict["timestamp"]),
+                operator=cp_dict["operator"],
+                step_name=cp_dict["step_name"],  # ADD this line
+                success=cp_dict["success"],  # ADD this line
+                notes=cp_dict.get("notes", ""),
+                measurements=cp_dict.get("measurements", {}),
+                error_message=cp_dict.get("error_message"),
             )
-            phase_history[CommissioningPhase(phase_str)] = checkpoint
+            phase_history.append(
+                checkpoint
+            )  # CHANGED: append to list instead of dict
 
         # Deserialize phase-specific data
         piezo_pre_rf = None

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 
 class CommissioningPhase(Enum):
@@ -29,27 +29,6 @@ class PhaseStatus(Enum):
     COMPLETE = "complete"
     FAILED = "failed"
     SKIPPED = "skipped"
-
-
-@dataclass
-class PhaseCheckpoint:
-    """Snapshot of data at a phase boundary."""
-
-    timestamp: datetime = field(default_factory=datetime.now)
-    operator: str = ""
-    notes: str = ""
-    measurements: dict = field(default_factory=dict)
-    error_message: str = ""
-
-    def to_dict(self) -> dict:
-        """Serialize to dictionary."""
-        return {
-            "timestamp": self.timestamp.isoformat(),
-            "operator": self.operator,
-            "notes": self.notes,
-            "measurements": self.measurements,
-            "error_message": self.error_message,
-        }
 
 
 @dataclass
@@ -293,6 +272,44 @@ class HighPowerRampData:
 
 
 @dataclass
+class PhaseCheckpoint:
+    """Checkpoint recording a specific event during a commissioning phase.
+
+    Attributes:
+        phase: The commissioning phase this checkpoint belongs to
+        timestamp: When the checkpoint was created
+        operator: Name of the operator
+        step_name: Name of the step being executed
+        success: Whether the step was successful
+        notes: Human-readable notes about the step
+        measurements: Optional measurement data from the step
+        error_message: Optional error message if step failed
+    """
+
+    phase: CommissioningPhase  # ADD THIS LINE
+    timestamp: datetime
+    operator: str
+    step_name: str
+    success: bool
+    notes: str = ""
+    measurements: Dict[str, Any] = field(default_factory=dict)
+    error_message: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "phase": self.phase.value,  # ADD THIS LINE
+            "timestamp": self.timestamp.isoformat(),
+            "operator": self.operator,
+            "step_name": self.step_name,
+            "success": self.success,
+            "notes": self.notes,
+            "measurements": self.measurements,
+            "error_message": self.error_message,
+        }
+
+
+@dataclass
 class CommissioningRecord:
     """Complete commissioning record for a cavity."""
 
@@ -310,9 +327,9 @@ class CommissioningRecord:
     high_power: Optional[HighPowerRampData] = None
 
     # Phase tracking
-    phase_history: dict[CommissioningPhase, PhaseCheckpoint] = field(
-        default_factory=dict
-    )
+    phase_history: List[PhaseCheckpoint] = field(
+        default_factory=list
+    )  # CHANGED: was dict[CommissioningPhase, PhaseCheckpoint]
     phase_status: dict[CommissioningPhase, PhaseStatus] = field(
         default_factory=dict
     )
@@ -349,17 +366,43 @@ class CommissioningRecord:
         """Set status of a specific phase."""
         self.phase_status[phase] = status
 
-    def add_checkpoint(
-        self, phase: CommissioningPhase, checkpoint: PhaseCheckpoint
-    ):
-        """Add a checkpoint for a phase."""
-        self.phase_history[phase] = checkpoint
+    # UPDATED METHODS:
+    def add_checkpoint(self, checkpoint: PhaseCheckpoint):
+        """Add a checkpoint to the history.
 
-    def get_checkpoint(
-        self, phase: CommissioningPhase
+        Args:
+            checkpoint: The checkpoint to add
+        """
+        self.phase_history.append(checkpoint)
+
+    def get_checkpoints(
+        self, phase: Optional[CommissioningPhase] = None
+    ) -> List[PhaseCheckpoint]:
+        """Get checkpoints, optionally filtered by phase.
+
+        Args:
+            phase: If provided, only return checkpoints for this phase
+
+        Returns:
+            List of checkpoints (all or filtered by phase)
+        """
+        if phase is None:
+            return self.phase_history
+        return [cp for cp in self.phase_history if cp.phase == phase]
+
+    def get_latest_checkpoint(
+        self, phase: Optional[CommissioningPhase] = None
     ) -> Optional[PhaseCheckpoint]:
-        """Get checkpoint for a phase."""
-        return self.phase_history.get(phase)
+        """Get the most recent checkpoint, optionally for a specific phase.
+
+        Args:
+            phase: If provided, get latest checkpoint for this phase only
+
+        Returns:
+            Most recent checkpoint, or None if no checkpoints exist
+        """
+        checkpoints = self.get_checkpoints(phase)
+        return checkpoints[-1] if checkpoints else None
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -394,8 +437,7 @@ class CommissioningRecord:
                 phase.value: status.value
                 for phase, status in self.phase_status.items()
             },
-            "phase_history": {
-                phase.value: checkpoint.to_dict()
-                for phase, checkpoint in self.phase_history.items()
-            },
+            "phase_history": [
+                cp.to_dict() for cp in self.phase_history
+            ],  # CHANGED: was dict comprehension
         }
