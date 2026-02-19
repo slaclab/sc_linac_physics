@@ -437,3 +437,183 @@ class CommissioningDatabase:
         )
 
         return record
+
+    def get_record_by_cavity(
+        self, cavity_name: str, active_only: bool = True
+    ) -> Optional["CommissioningRecord"]:
+        """Get most recent record for a cavity.
+
+        Args:
+            cavity_name: Full cavity name (e.g., "L1B_CM02_CAV3")
+            active_only: If True, only return if status is "in_progress"
+
+        Returns:
+            Most recent CommissioningRecord for cavity, or None
+
+        Example:
+            >>> # Get active session for cavity
+            >>> record = db.get_record_by_cavity("L1B_CM02_CAV3")
+            >>>
+            >>> # Get most recent session (completed or active)
+            >>> record = db.get_record_by_cavity("L1B_CM02_CAV3", active_only=False)
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            query = """
+                SELECT * FROM commissioning_records
+                WHERE cavity_name = ?
+            """
+            params = [cavity_name]
+
+            if active_only:
+                query += " AND overall_status = ?"
+                params.append("in_progress")
+
+            query += " ORDER BY start_time DESC LIMIT 1"
+
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+
+            if row is None:
+                return None
+
+            return self._row_to_record(row)
+
+    def get_records_by_cryomodule(
+        self, cryomodule: str, active_only: bool = False
+    ) -> list["CommissioningRecord"]:
+        """Get all records for a cryomodule.
+
+        Args:
+            cryomodule: Cryomodule number (e.g., "02")
+            active_only: If True, only return records with status "in_progress"
+
+        Returns:
+            List of CommissioningRecords, sorted by start time (newest first)
+
+        Example:
+            >>> # Get all records for CM02
+            >>> records = db.get_records_by_cryomodule("02")
+            >>>
+            >>> # Get only active sessions
+            >>> active = db.get_records_by_cryomodule("02", active_only=True)
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            query = """
+                SELECT * FROM commissioning_records
+                WHERE cryomodule = ?
+            """
+            params = [cryomodule]
+
+            if active_only:
+                query += " AND overall_status = ?"
+                params.append("in_progress")
+
+            query += " ORDER BY start_time DESC"
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+            return [self._row_to_record(row) for row in rows]
+
+    def get_active_records(self) -> list["CommissioningRecord"]:
+        """Get all in-progress commissioning records.
+
+        Returns:
+            List of CommissioningRecords with status "in_progress",
+            sorted by start time (newest first)
+
+        Example:
+            >>> # Resume all interrupted sessions
+            >>> active_sessions = db.get_active_records()
+            >>> for session in active_sessions:
+            ...     print(f"Resume: {session.cavity_name} at {session.current_phase.value}")
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM commissioning_records
+                WHERE overall_status = ?
+                ORDER BY start_time DESC
+            """,
+                ("in_progress",),
+            )
+            rows = cursor.fetchall()
+
+            return [self._row_to_record(row) for row in rows]
+
+    def delete_record(self, record_id: int) -> bool:
+        """Delete a commissioning record.
+
+        Args:
+            record_id: Database ID of record to delete
+
+        Returns:
+            True if record was deleted, False if not found
+
+        Example:
+            >>> if db.delete_record(record_id):
+            ...     print("Record deleted")
+            ... else:
+            ...     print("Record not found")
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM commissioning_records WHERE id = ?", (record_id,)
+            )
+            return cursor.rowcount > 0
+
+    def get_database_stats(self) -> dict:
+        """Get statistics about the database.
+
+        Returns:
+            Dictionary with counts of records by status, phase, and cryomodule
+
+        Example:
+            >>> stats = db.get_database_stats()
+            >>> print(f"Total records: {stats['total_records']}")
+            >>> print(f"Active: {stats['by_status'].get('in_progress', 0)}")
+            >>> print(f"CM02 cavities: {stats['by_cryomodule'].get('02', 0)}")
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Total records
+            cursor.execute("SELECT COUNT(*) FROM commissioning_records")
+            total = cursor.fetchone()[0]
+
+            # By status
+            cursor.execute("""
+                SELECT overall_status, COUNT(*)
+                FROM commissioning_records
+                GROUP BY overall_status
+            """)
+            by_status = dict(cursor.fetchall())
+
+            # By current phase
+            cursor.execute("""
+                SELECT current_phase, COUNT(*)
+                FROM commissioning_records
+                GROUP BY current_phase
+            """)
+            by_phase = dict(cursor.fetchall())
+
+            # By cryomodule
+            cursor.execute("""
+                SELECT cryomodule, COUNT(*)
+                FROM commissioning_records
+                GROUP BY cryomodule
+            """)
+            by_cryomodule = dict(cursor.fetchall())
+
+            return {
+                "total_records": total,
+                "by_status": by_status,
+                "by_phase": by_phase,
+                "by_cryomodule": by_cryomodule,
+            }
