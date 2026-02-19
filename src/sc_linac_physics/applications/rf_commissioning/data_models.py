@@ -10,6 +10,7 @@ class CommissioningPhase(Enum):
     """Phases of cavity commissioning workflow."""
 
     PRE_CHECKS = "pre_checks"
+    PIEZO_PRE_RF = "piezo_pre_rf"
     COLD_LANDING = "cold_landing"
     SSA_CAL = "ssa_cal"
     COARSE_TUNE = "coarse_tune"
