@@ -8,6 +8,14 @@ from pathlib import Path
 from sc_linac_physics.applications.rf_commissioning import (
     CommissioningRecord,
     CommissioningPhase,
+    PhaseStatus,
+    PhaseCheckpoint,
+    PiezoPreRFCheck,
+    ColdLandingData,
+    SSACharacterization,
+    CavityCharacterization,
+    PiezoWithRFTest,
+    HighPowerRampData,
 )
 from sc_linac_physics.applications.rf_commissioning.database import (
     CommissioningDatabase,
@@ -540,6 +548,638 @@ class TestTransactionHandling(unittest.TestCase):
             cursor.execute("SELECT COUNT(*) FROM commissioning_records")
             count = cursor.fetchone()[0]
             self.assertEqual(count, 0)
+
+
+class TestPhaseSpecificDataSerialization(unittest.TestCase):
+    """Test serialization/deserialization of phase-specific data."""
+
+    def setUp(self):
+        """Create temporary database for each test."""
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "test.db"
+        self.db = CommissioningDatabase(str(self.db_path))
+        self.db.initialize()
+
+    def tearDown(self):
+        """Clean up temporary database."""
+        self.temp_dir.cleanup()
+
+    def test_save_and_retrieve_with_piezo_pre_rf(self):
+        """Test saving and retrieving record with piezo pre-RF data."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        record.piezo_pre_rf = PiezoPreRFCheck(
+            capacitance_a=1.2e-9,
+            capacitance_b=1.3e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+            timestamp=datetime(2026, 2, 18, 9, 30, 0),
+            notes="Both channels passed",
+        )
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        self.assertIsNotNone(retrieved.piezo_pre_rf)
+        self.assertEqual(retrieved.piezo_pre_rf.capacitance_a, 1.2e-9)
+        self.assertEqual(retrieved.piezo_pre_rf.capacitance_b, 1.3e-9)
+        self.assertTrue(retrieved.piezo_pre_rf.channel_a_passed)
+        self.assertTrue(retrieved.piezo_pre_rf.channel_b_passed)
+        self.assertEqual(
+            retrieved.piezo_pre_rf.timestamp, datetime(2026, 2, 18, 9, 30, 0)
+        )
+        self.assertEqual(retrieved.piezo_pre_rf.notes, "Both channels passed")
+
+    def test_save_and_retrieve_with_cold_landing(self):
+        """Test saving and retrieving record with cold landing data."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        record.cold_landing = ColdLandingData(
+            initial_detune_hz=-143766,
+            initial_timestamp=datetime(2026, 2, 18, 10, 0, 0),
+            steps_to_resonance=14376,
+            final_detune_hz=-234,
+            final_timestamp=datetime(2026, 2, 18, 10, 5, 0),
+            notes="Cold landing complete",
+        )
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        self.assertIsNotNone(retrieved.cold_landing)
+        self.assertEqual(retrieved.cold_landing.initial_detune_hz, -143766)
+        self.assertEqual(
+            retrieved.cold_landing.initial_timestamp,
+            datetime(2026, 2, 18, 10, 0, 0),
+        )
+        self.assertEqual(retrieved.cold_landing.steps_to_resonance, 14376)
+        self.assertEqual(retrieved.cold_landing.final_detune_hz, -234)
+        self.assertEqual(
+            retrieved.cold_landing.final_timestamp,
+            datetime(2026, 2, 18, 10, 5, 0),
+        )
+        self.assertEqual(retrieved.cold_landing.notes, "Cold landing complete")
+
+    def test_save_and_retrieve_with_ssa_char(self):
+        """Test saving and retrieving record with SSA characterization."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        record.ssa_char = SSACharacterization(
+            max_drive=0.75,
+            initial_drive=0.95,
+            num_attempts=2,
+            timestamp=datetime(2026, 2, 18, 11, 0, 0),
+            notes="SSA calibrated",
+        )
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        self.assertIsNotNone(retrieved.ssa_char)
+        self.assertEqual(retrieved.ssa_char.max_drive, 0.75)
+        self.assertEqual(retrieved.ssa_char.initial_drive, 0.95)
+        self.assertEqual(retrieved.ssa_char.num_attempts, 2)
+        self.assertEqual(
+            retrieved.ssa_char.timestamp, datetime(2026, 2, 18, 11, 0, 0)
+        )
+        self.assertEqual(retrieved.ssa_char.notes, "SSA calibrated")
+
+    def test_save_and_retrieve_with_cavity_char(self):
+        """Test saving and retrieving record with cavity characterization."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        record.cavity_char = CavityCharacterization(
+            loaded_q=3.2e7,
+            probe_q=1.5e10,
+            scale_factor=15.6,
+            timestamp=datetime(2026, 2, 18, 12, 0, 0),
+            notes="Characterization complete",
+        )
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        self.assertIsNotNone(retrieved.cavity_char)
+        self.assertEqual(retrieved.cavity_char.loaded_q, 3.2e7)
+        self.assertEqual(retrieved.cavity_char.probe_q, 1.5e10)
+        self.assertEqual(retrieved.cavity_char.scale_factor, 15.6)
+        self.assertEqual(
+            retrieved.cavity_char.timestamp, datetime(2026, 2, 18, 12, 0, 0)
+        )
+        self.assertEqual(
+            retrieved.cavity_char.notes, "Characterization complete"
+        )
+
+    def test_save_and_retrieve_with_piezo_with_rf(self):
+        """Test saving and retrieving record with piezo with-RF data."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        record.piezo_with_rf = PiezoWithRFTest(
+            amplifier_gain_a=2.5,
+            amplifier_gain_b=2.6,
+            detune_gain=1.2,
+            timestamp=datetime(2026, 2, 18, 13, 0, 0),
+            notes="Piezo tested with RF",
+        )
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        self.assertIsNotNone(retrieved.piezo_with_rf)
+        self.assertEqual(retrieved.piezo_with_rf.amplifier_gain_a, 2.5)
+        self.assertEqual(retrieved.piezo_with_rf.amplifier_gain_b, 2.6)
+        self.assertEqual(retrieved.piezo_with_rf.detune_gain, 1.2)
+        self.assertEqual(
+            retrieved.piezo_with_rf.timestamp, datetime(2026, 2, 18, 13, 0, 0)
+        )
+        self.assertEqual(retrieved.piezo_with_rf.notes, "Piezo tested with RF")
+
+    def test_save_and_retrieve_with_high_power(self):
+        """Test saving and retrieving record with high power data."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        record.high_power = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=True,
+            timestamp=datetime(2026, 2, 18, 15, 0, 0),
+            notes="One hour run complete",
+        )
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        self.assertIsNotNone(retrieved.high_power)
+        self.assertEqual(retrieved.high_power.final_amplitude, 16.5)
+        self.assertTrue(retrieved.high_power.one_hour_complete)
+        self.assertEqual(
+            retrieved.high_power.timestamp, datetime(2026, 2, 18, 15, 0, 0)
+        )
+        self.assertEqual(retrieved.high_power.notes, "One hour run complete")
+
+    def test_save_and_retrieve_with_all_phase_data(self):
+        """Test saving and retrieving record with all phase-specific data."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        # Add all phase-specific data
+        record.piezo_pre_rf = PiezoPreRFCheck(
+            capacitance_a=1.2e-9,
+            capacitance_b=1.3e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+        )
+
+        record.cold_landing = ColdLandingData(
+            initial_detune_hz=-143766,
+            steps_to_resonance=14376,
+            final_detune_hz=-234,
+        )
+
+        record.ssa_char = SSACharacterization(
+            max_drive=0.75, initial_drive=0.95, num_attempts=2
+        )
+
+        record.cavity_char = CavityCharacterization(
+            loaded_q=3.2e7, scale_factor=15.6
+        )
+
+        record.piezo_with_rf = PiezoWithRFTest(
+            amplifier_gain_a=2.5, amplifier_gain_b=2.6, detune_gain=1.2
+        )
+
+        record.high_power = HighPowerRampData(
+            final_amplitude=16.5, one_hour_complete=True
+        )
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        # Verify all data is present
+        self.assertIsNotNone(retrieved.piezo_pre_rf)
+        self.assertIsNotNone(retrieved.cold_landing)
+        self.assertIsNotNone(retrieved.ssa_char)
+        self.assertIsNotNone(retrieved.cavity_char)
+        self.assertIsNotNone(retrieved.piezo_with_rf)
+        self.assertIsNotNone(retrieved.high_power)
+
+    def test_save_and_retrieve_with_none_phase_data(self):
+        """Test that None phase data is handled correctly."""
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        # All phase-specific data is None by default
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        self.assertIsNone(retrieved.piezo_pre_rf)
+        self.assertIsNone(retrieved.cold_landing)
+        self.assertIsNone(retrieved.ssa_char)
+        self.assertIsNone(retrieved.cavity_char)
+        self.assertIsNone(retrieved.piezo_with_rf)
+        self.assertIsNone(retrieved.high_power)
+
+    def test_update_adds_phase_data(self):
+        """Test updating record to add phase-specific data."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        # Save without cold landing
+        record_id = self.db.save_record(record)
+
+        # Add cold landing and update
+        record.cold_landing = ColdLandingData(
+            initial_detune_hz=-143766,
+            steps_to_resonance=14376,
+            final_detune_hz=-234,
+        )
+        self.db.save_record(record, record_id)
+
+        # Retrieve and verify
+        retrieved = self.db.get_record(record_id)
+        self.assertIsNotNone(retrieved.cold_landing)
+        self.assertEqual(retrieved.cold_landing.initial_detune_hz, -143766)
+
+
+class TestPhaseTrackingSerialization(unittest.TestCase):
+    """Test serialization/deserialization of phase tracking data."""
+
+    def setUp(self):
+        """Create temporary database for each test."""
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "test.db"
+        self.db = CommissioningDatabase(str(self.db_path))
+        self.db.initialize()
+
+    def tearDown(self):
+        """Clean up temporary database."""
+        self.temp_dir.cleanup()
+
+    def test_save_and_retrieve_phase_status(self):
+        """Test saving and retrieving phase status."""
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        # Update phase status
+        record.set_phase_status(
+            CommissioningPhase.PRE_CHECKS, PhaseStatus.COMPLETE
+        )
+        record.set_phase_status(
+            CommissioningPhase.COLD_LANDING, PhaseStatus.IN_PROGRESS
+        )
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        self.assertEqual(
+            retrieved.get_phase_status(CommissioningPhase.PRE_CHECKS),
+            PhaseStatus.COMPLETE,
+        )
+        self.assertEqual(
+            retrieved.get_phase_status(CommissioningPhase.COLD_LANDING),
+            PhaseStatus.IN_PROGRESS,
+        )
+
+    def test_save_and_retrieve_phase_checkpoint(self):
+        """Test saving and retrieving phase checkpoints."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        # Add checkpoint
+        checkpoint = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 10, 0, 0),
+            operator="Jane Smith",
+            notes="Pre-checks complete",
+            measurements={"temperature": 2.04, "pressure": 1.2e-7},
+        )
+        record.add_checkpoint(CommissioningPhase.PRE_CHECKS, checkpoint)
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        retrieved_checkpoint = retrieved.get_checkpoint(
+            CommissioningPhase.PRE_CHECKS
+        )
+        self.assertIsNotNone(retrieved_checkpoint)
+        self.assertEqual(
+            retrieved_checkpoint.timestamp, datetime(2026, 2, 18, 10, 0, 0)
+        )
+        self.assertEqual(retrieved_checkpoint.operator, "Jane Smith")
+        self.assertEqual(retrieved_checkpoint.notes, "Pre-checks complete")
+        self.assertEqual(retrieved_checkpoint.measurements["temperature"], 2.04)
+        self.assertEqual(retrieved_checkpoint.measurements["pressure"], 1.2e-7)
+
+    def test_save_and_retrieve_multiple_checkpoints(self):
+        """Test saving and retrieving multiple phase checkpoints."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        # Add checkpoints for multiple phases
+        checkpoint1 = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 10, 0, 0),
+            operator="Jane Smith",
+            notes="Pre-checks complete",
+        )
+        checkpoint2 = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 11, 0, 0),
+            operator="John Doe",
+            notes="Cold landing complete",
+        )
+
+        record.add_checkpoint(CommissioningPhase.PRE_CHECKS, checkpoint1)
+        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint2)
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        # Verify both checkpoints
+        cp1 = retrieved.get_checkpoint(CommissioningPhase.PRE_CHECKS)
+        self.assertIsNotNone(cp1)
+        self.assertEqual(cp1.operator, "Jane Smith")
+
+        cp2 = retrieved.get_checkpoint(CommissioningPhase.COLD_LANDING)
+        self.assertIsNotNone(cp2)
+        self.assertEqual(cp2.operator, "John Doe")
+
+    def test_save_and_retrieve_checkpoint_with_error(self):
+        """Test saving and retrieving checkpoint with error message."""
+
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3", cryomodule="02"
+        )
+
+        checkpoint = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 10, 0, 0),
+            operator="Jane Smith",
+            notes="Phase failed",
+            error_message="Cavity quenched during ramp",
+        )
+        record.add_checkpoint(CommissioningPhase.HIGH_POWER_RAMP, checkpoint)
+
+        record_id = self.db.save_record(record)
+        retrieved = self.db.get_record(record_id)
+
+        cp = retrieved.get_checkpoint(CommissioningPhase.HIGH_POWER_RAMP)
+        self.assertIsNotNone(cp)
+        self.assertEqual(cp.error_message, "Cavity quenched during ramp")
+
+
+class TestCompleteWorkflowPersistence(unittest.TestCase):
+    """Test persisting a complete commissioning workflow."""
+
+    def setUp(self):
+        """Create temporary database for each test."""
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "test.db"
+        self.db = CommissioningDatabase(str(self.db_path))
+        self.db.initialize()
+
+    def tearDown(self):
+        """Clean up temporary database."""
+        self.temp_dir.cleanup()
+
+    def test_complete_workflow_persistence(self):
+        """Test persisting a complete commissioning workflow."""
+
+        # Create initial record
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3",
+            cryomodule="02",
+            start_time=datetime(2026, 2, 18, 9, 0, 0),
+        )
+
+        record_id = self.db.save_record(record)
+
+        # Phase 1: Piezo pre-RF check
+        record.piezo_pre_rf = PiezoPreRFCheck(
+            capacitance_a=1.2e-9,
+            capacitance_b=1.3e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+            timestamp=datetime(2026, 2, 18, 9, 30, 0),
+        )
+        checkpoint1 = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 9, 30, 0),
+            operator="Jane Smith",
+            notes="Pre-checks passed",
+        )
+        record.add_checkpoint(CommissioningPhase.PRE_CHECKS, checkpoint1)
+        record.set_phase_status(
+            CommissioningPhase.PRE_CHECKS, PhaseStatus.COMPLETE
+        )
+        self.db.save_record(record, record_id)
+
+        # Phase 2: Cold landing
+        record.current_phase = CommissioningPhase.COLD_LANDING
+        record.cold_landing = ColdLandingData(
+            initial_detune_hz=-143766,
+            initial_timestamp=datetime(2026, 2, 18, 10, 0, 0),
+            steps_to_resonance=14376,
+            final_detune_hz=-234,
+            final_timestamp=datetime(2026, 2, 18, 10, 5, 0),
+        )
+        checkpoint2 = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 10, 5, 0),
+            operator="Jane Smith",
+            notes="Cold landing complete",
+        )
+        record.add_checkpoint(CommissioningPhase.COLD_LANDING, checkpoint2)
+        record.set_phase_status(
+            CommissioningPhase.COLD_LANDING, PhaseStatus.COMPLETE
+        )
+        self.db.save_record(record, record_id)
+
+        # Phase 3: SSA characterization
+        record.current_phase = CommissioningPhase.SSA_CAL
+        record.ssa_char = SSACharacterization(
+            max_drive=0.75,
+            initial_drive=0.95,
+            num_attempts=2,
+            timestamp=datetime(2026, 2, 18, 11, 0, 0),
+        )
+        checkpoint3 = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 11, 0, 0),
+            operator="Jane Smith",
+            notes="SSA calibrated",
+        )
+        record.add_checkpoint(CommissioningPhase.SSA_CAL, checkpoint3)
+        record.set_phase_status(
+            CommissioningPhase.SSA_CAL, PhaseStatus.COMPLETE
+        )
+        self.db.save_record(record, record_id)
+
+        # Phase 4: Cavity characterization
+        record.current_phase = CommissioningPhase.CHARACTERIZATION
+        record.cavity_char = CavityCharacterization(
+            loaded_q=3.2e7,
+            probe_q=1.5e10,
+            scale_factor=15.6,
+            timestamp=datetime(2026, 2, 18, 12, 0, 0),
+        )
+        checkpoint4 = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 12, 0, 0),
+            operator="Jane Smith",
+            notes="Characterization complete",
+        )
+        record.add_checkpoint(CommissioningPhase.CHARACTERIZATION, checkpoint4)
+        record.set_phase_status(
+            CommissioningPhase.CHARACTERIZATION, PhaseStatus.COMPLETE
+        )
+        self.db.save_record(record, record_id)
+
+        # Phase 5: High power ramp
+        record.current_phase = CommissioningPhase.HIGH_POWER_RAMP
+        record.high_power = HighPowerRampData(
+            final_amplitude=16.5,
+            one_hour_complete=True,
+            timestamp=datetime(2026, 2, 18, 15, 0, 0),
+        )
+        checkpoint5 = PhaseCheckpoint(
+            timestamp=datetime(2026, 2, 18, 15, 0, 0),
+            operator="Jane Smith",
+            notes="High power ramp complete",
+        )
+        record.add_checkpoint(CommissioningPhase.HIGH_POWER_RAMP, checkpoint5)
+        record.set_phase_status(
+            CommissioningPhase.HIGH_POWER_RAMP, PhaseStatus.COMPLETE
+        )
+        self.db.save_record(record, record_id)
+
+        # Complete
+        record.current_phase = CommissioningPhase.COMPLETE
+        record.overall_status = "complete"
+        record.end_time = datetime(2026, 2, 18, 17, 0, 0)
+        self.db.save_record(record, record_id)
+
+        # Retrieve and verify complete workflow
+        retrieved = self.db.get_record(record_id)
+
+        # Basic info
+        self.assertEqual(retrieved.cavity_name, "L1B_CM02_CAV3")
+        self.assertEqual(retrieved.cryomodule, "02")
+        self.assertEqual(retrieved.current_phase, CommissioningPhase.COMPLETE)
+        self.assertEqual(retrieved.overall_status, "complete")
+
+        # Phase-specific data
+        self.assertIsNotNone(retrieved.piezo_pre_rf)
+        self.assertTrue(retrieved.piezo_pre_rf.passed)
+
+        self.assertIsNotNone(retrieved.cold_landing)
+        self.assertTrue(retrieved.cold_landing.is_complete)
+
+        self.assertIsNotNone(retrieved.ssa_char)
+        self.assertTrue(retrieved.ssa_char.is_complete)
+
+        self.assertIsNotNone(retrieved.cavity_char)
+        self.assertTrue(retrieved.cavity_char.is_complete)
+
+        self.assertIsNotNone(retrieved.high_power)
+        self.assertTrue(retrieved.high_power.is_complete)
+
+        # Phase statuses
+        self.assertEqual(
+            retrieved.get_phase_status(CommissioningPhase.PRE_CHECKS),
+            PhaseStatus.COMPLETE,
+        )
+        self.assertEqual(
+            retrieved.get_phase_status(CommissioningPhase.COLD_LANDING),
+            PhaseStatus.COMPLETE,
+        )
+        self.assertEqual(
+            retrieved.get_phase_status(CommissioningPhase.SSA_CAL),
+            PhaseStatus.COMPLETE,
+        )
+        self.assertEqual(
+            retrieved.get_phase_status(CommissioningPhase.CHARACTERIZATION),
+            PhaseStatus.COMPLETE,
+        )
+        self.assertEqual(
+            retrieved.get_phase_status(CommissioningPhase.HIGH_POWER_RAMP),
+            PhaseStatus.COMPLETE,
+        )
+
+        # Checkpoints
+        self.assertIsNotNone(
+            retrieved.get_checkpoint(CommissioningPhase.PRE_CHECKS)
+        )
+        self.assertIsNotNone(
+            retrieved.get_checkpoint(CommissioningPhase.COLD_LANDING)
+        )
+        self.assertIsNotNone(
+            retrieved.get_checkpoint(CommissioningPhase.SSA_CAL)
+        )
+        self.assertIsNotNone(
+            retrieved.get_checkpoint(CommissioningPhase.CHARACTERIZATION)
+        )
+        self.assertIsNotNone(
+            retrieved.get_checkpoint(CommissioningPhase.HIGH_POWER_RAMP)
+        )
+
+    def test_resume_interrupted_workflow(self):
+        """Test resuming an interrupted workflow from database."""
+
+        # Simulate interrupted workflow
+        record = CommissioningRecord(
+            cavity_name="L1B_CM02_CAV3",
+            cryomodule="02",
+            start_time=datetime(2026, 2, 18, 9, 0, 0),
+        )
+
+        record.piezo_pre_rf = PiezoPreRFCheck(
+            capacitance_a=1.2e-9,
+            capacitance_b=1.3e-9,
+            channel_a_passed=True,
+            channel_b_passed=True,
+        )
+        record.set_phase_status(
+            CommissioningPhase.PRE_CHECKS, PhaseStatus.COMPLETE
+        )
+        record.current_phase = CommissioningPhase.COLD_LANDING
+
+        self.db.save_record(record)
+
+        # Simulate crash/restart - retrieve active record
+        active_records = self.db.get_active_records()
+        self.assertEqual(len(active_records), 1)
+
+        resumed = active_records[0]
+        self.assertEqual(resumed.cavity_name, "L1B_CM02_CAV3")
+        self.assertEqual(resumed.current_phase, CommissioningPhase.COLD_LANDING)
+        self.assertIsNotNone(resumed.piezo_pre_rf)
+
+        # Continue from where we left off
+        resumed_from_db = self.db.get_record_by_cavity("L1B_CM02_CAV3")
+        self.assertIsNotNone(resumed_from_db)
+        self.assertEqual(
+            resumed_from_db.current_phase, CommissioningPhase.COLD_LANDING
+        )
 
 
 if __name__ == "__main__":
