@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.5.0 (2026-02-23)
+
+### Bug Fixes
+
+- **cavity-display**: Patch status bar
+  ([#210](https://github.com/slaclab/sc_linac_physics/pull/210),
+  [`2f84421`](https://github.com/slaclab/sc_linac_physics/commit/2f84421dc59d67240c4a8d83b9d61172fd9d267b))
+
+### Features
+
+- **cavity-display**: Add search and filter functionality
+  ([#210](https://github.com/slaclab/sc_linac_physics/pull/210),
+  [`2f84421`](https://github.com/slaclab/sc_linac_physics/commit/2f84421dc59d67240c4a8d83b9d61172fd9d267b))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#210](https://github.com/slaclab/sc_linac_physics/pull/210),
+  [`2f84421`](https://github.com/slaclab/sc_linac_physics/commit/2f84421dc59d67240c4a8d83b9d61172fd9d267b))
+
+
 ## v9.4.0 (2026-02-23)
 
 ### Bug Fixes
