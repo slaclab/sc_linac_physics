@@ -394,21 +394,9 @@ class CavityDisplayGUI(Display):
         """Filter/highlight cavities based on search text"""
         search_text = search_text.lower().strip()
 
-        linacs = self.gui_machine.linacs
-        if isinstance(linacs, dict):
-            linacs = linacs.values()
-
-        for linac in linacs:
-            cryomodules = linac.cryomodules
-            if isinstance(cryomodules, dict):
-                cryomodules = cryomodules.values()
-
-            for cm in cryomodules:
-                cavities = cm.cavities
-                if isinstance(cavities, dict):
-                    cavities = cavities.values()
-
-                for cavity in cavities:
+        for linac in self.gui_machine.linacs:
+            for cm in linac.cryomodules.values():
+                for cavity in cm.cavities.values():
                     cm_match = f"{cm.name}".lower() in search_text
                     cav_match = (
                         f"cav{cavity.number}".lower() in search_text
