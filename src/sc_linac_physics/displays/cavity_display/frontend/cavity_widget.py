@@ -156,6 +156,7 @@ class CavityWidget(PyDMDrawingPolygon):
     @Slot(int)
     def severity_channel_value_changed(self, value):
         """Handle severity changes"""
+        self._last_severity = value  # Track current severity
         try:
             shape_params = SHAPE_PARAMETER_DICT.get(value)
 
