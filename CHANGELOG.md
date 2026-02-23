@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v9.3.0 (2026-02-19)
+
+### Bug Fixes
+
+- **cavity-display**: Patch status bar
+  ([#211](https://github.com/slaclab/sc_linac_physics/pull/211),
+  [`4ad97df`](https://github.com/slaclab/sc_linac_physics/commit/4ad97df7c7ac13a7b47622a0bba37dd6c0d379fe))
+
+### Features
+
+- **cavity-display**: Add alarm sidebar with responsive design
+  ([#211](https://github.com/slaclab/sc_linac_physics/pull/211),
+  [`4ad97df`](https://github.com/slaclab/sc_linac_physics/commit/4ad97df7c7ac13a7b47622a0bba37dd6c0d379fe))
+
+- **cavity-display**: Add search and filter functionality
+  ([#211](https://github.com/slaclab/sc_linac_physics/pull/211),
+  [`4ad97df`](https://github.com/slaclab/sc_linac_physics/commit/4ad97df7c7ac13a7b47622a0bba37dd6c0d379fe))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#211](https://github.com/slaclab/sc_linac_physics/pull/211),
+  [`4ad97df`](https://github.com/slaclab/sc_linac_physics/commit/4ad97df7c7ac13a7b47622a0bba37dd6c0d379fe))
+
+### Testing
+
+- **cavity-display**: Add tests and improve fault heatmap utilities
+  ([#200](https://github.com/slaclab/sc_linac_physics/pull/200),
+  [`29288c8`](https://github.com/slaclab/sc_linac_physics/commit/29288c89e8f8c33c1977df99c737ec435ecd6de1))
+
+
 ## v9.2.1 (2026-02-13)
 
 ### Refactoring
