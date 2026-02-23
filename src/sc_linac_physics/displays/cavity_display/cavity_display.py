@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QSplitter,
     QShortcut,
+    QGraphicsOpacityEffect,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
@@ -176,7 +177,6 @@ class CavityDisplayGUI(Display):
         # Restore saved geometry
         if self.settings.contains("window_geometry"):
             self.restoreGeometry(self.settings.value("window_geometry"))
-
         if self.settings.contains("splitter_state"):
             self.splitter.restoreState(self.settings.value("splitter_state"))
 
@@ -213,8 +213,6 @@ class CavityDisplayGUI(Display):
 
         # Apply initial zoom
         QTimer.singleShot(100, lambda: self.apply_zoom(60))
-
-        self.setWindowTitle("SRF Cavity Display")
 
     def add_header_button(self, button: QPushButton, display: Display):
         button.clicked.connect(lambda: showDisplay(display))
@@ -283,9 +281,8 @@ class CavityDisplayGUI(Display):
                 self.apply_zoom(55)
             return
 
-        # Get available space
+        # Get available space (accounting for sidebar)
         available_height = self.height() - 200
-        # Get available space
         sidebar_width = (
             self.alarm_sidebar.width() if self.alarm_sidebar.isVisible() else 0
         )
@@ -394,81 +391,6 @@ class CavityDisplayGUI(Display):
         # For now, just pass
         pass
 
-    def closeEvent(self, event):
-        """Clean up and save state when window closes."""
-        # Save window state
-        self.settings.setValue("splitter_state", self.splitter.saveState())
-        self.settings.setValue("window_geometry", self.saveGeometry())
-
-        # Cleanup
-        if hasattr(self, "alarm_sidebar"):
-            self.alarm_sidebar.stop_refresh()
-
-        super().closeEvent(event)
-
-    def update_status(self):
-        """Update status bar with summary"""
-        total = 0
-        alarms = 0
-        warnings = 0
-        ok = 0
-
-        for linac in self.gui_machine.linacs:
-            for cm in linac.cryomodules.values():
-                for cavity in cm.cavities.values():
-                    total += 1
-                    severity = getattr(
-                        cavity.cavity_widget, "_last_severity", None
-                    )
-                    if severity == 2:
-                        alarms += 1
-                    elif severity == 1:
-                        warnings += 1
-                    else:
-                        ok += 1
-
-        # Build status message
-        self._update_status_display(total, alarms, warnings, ok)
-
-    def _update_status_display(self, total, alarms, warnings, ok):
-        """Update the status bar display with counts."""
-        status_parts = []
-
-        if alarms > 0:
-            status_parts.append(
-                f"🔴 {alarms} ALARM{'S' if alarms != 1 else ''}"
-            )
-
-        if warnings > 0:
-            status_parts.append(
-                f"🟡 {warnings} WARNING{'S' if warnings != 1 else ''}"
-            )
-
-        status_parts.append(f"✓ {ok} OK")
-        status_parts.append(f"Total: {total}")
-
-        status_text = " | ".join(status_parts)
-
-        # Determine color based on severity
-        if alarms > 0:
-            bg_color = "rgb(150, 0, 0)"
-        elif warnings > 0:
-            bg_color = "rgb(200, 120, 0)"
-        else:
-            bg_color = "rgb(0, 100, 0)"
-
-        self.status_label.setText(status_text)
-        self.status_bar.setStyleSheet(f"""
-            QStatusBar {{
-                background-color: {bg_color};
-                color: white;
-                font-size: 11pt;
-                font-weight: bold;
-                padding: 3px;
-                max-height: 30px;
-            }}
-        """)
-
     def filter_cavities(self, search_text):
         """Filter/highlight cavities based on search text"""
         search_text = search_text.lower().strip()
@@ -498,8 +420,101 @@ class CavityDisplayGUI(Display):
                         cavity.cavity_widget.setVisible(True)
                         cavity.cavity_widget.setGraphicsEffect(None)
                     else:
-                        from PyQt5.QtWidgets import QGraphicsOpacityEffect
-
                         opacity_effect = QGraphicsOpacityEffect()
                         opacity_effect.setOpacity(0.2)
                         cavity.cavity_widget.setGraphicsEffect(opacity_effect)
+
+    def update_status(self):
+        """Update status bar with summary.
+
+        Severity codes:
+        - 0: No alarm (OK)
+        - 1: Minor alarm (WARNING)
+        - 2: Major alarm (ALARM)
+        - 3: Invalid (disconnected/error)
+        """
+        total = 0
+        alarms = 0
+        warnings = 0
+        ok = 0
+        invalid = 0
+
+        for linac in self.gui_machine.linacs:
+            for cm in linac.cryomodules.values():
+                for cavity in cm.cavities.values():
+                    total += 1
+
+                    severity = getattr(
+                        cavity.cavity_widget, "_last_severity", None
+                    )
+
+                    if severity == 3:  # Invalid
+                        invalid += 1
+                    elif severity == 2:  # Alarm
+                        alarms += 1
+                    elif severity == 1:  # Warning
+                        warnings += 1
+                    else:  # OK or None
+                        ok += 1
+
+        # Build status message
+        self._update_status_display(total, alarms, warnings, ok, invalid)
+
+    def _update_status_display(self, total, alarms, warnings, ok, invalid):
+        """Update the status bar display with counts."""
+        status_parts = []
+
+        if alarms > 0:
+            status_parts.append(
+                f"🔴 {alarms} ALARM{'S' if alarms != 1 else ''}"
+            )
+
+        if warnings > 0:
+            status_parts.append(
+                f"🟡 {warnings} WARNING{'S' if warnings != 1 else ''}"
+            )
+
+        status_parts.append(f"✓ {ok} OK")
+
+        if invalid > 0:
+            status_parts.append(
+                f"<span style='color: rgb(200, 100, 255);'>🟣 {invalid} INVALID</span>"
+            )
+
+        status_parts.append(f"Total: {total}")
+
+        status_text = " | ".join(status_parts)
+
+        # Determine color based on severity
+        if alarms > 0:
+            bg_color = "rgb(150, 0, 0)"
+        elif warnings > 0:
+            bg_color = "rgb(200, 120, 0)"
+        elif invalid > 0:
+            bg_color = "rgb(100, 50, 150)"  # Purple for invalid
+        else:
+            bg_color = "rgb(0, 100, 0)"
+
+        self.status_label.setText(status_text)
+        self.status_bar.setStyleSheet(f"""
+            QStatusBar {{
+                background-color: {bg_color};
+                color: white;
+                font-size: 11pt;
+                font-weight: bold;
+                padding: 3px;
+                max-height: 30px;
+            }}
+        """)
+
+    def closeEvent(self, event):
+        """Clean up and save state when window closes."""
+        # Save window state
+        self.settings.setValue("splitter_state", self.splitter.saveState())
+        self.settings.setValue("window_geometry", self.saveGeometry())
+
+        # Cleanup
+        if hasattr(self, "alarm_sidebar"):
+            self.alarm_sidebar.stop_refresh()
+
+        super().closeEvent(event)
