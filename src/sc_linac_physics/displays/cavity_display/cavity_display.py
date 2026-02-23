@@ -6,11 +6,11 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QGroupBox,
     QApplication,
+    QSplitter,
+    QShortcut,
     QStatusBar,
     QLabel,
     QLineEdit,
-    QSplitter,
-    QShortcut,
     QGraphicsOpacityEffect,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
@@ -159,7 +159,6 @@ class CavityDisplayGUI(Display):
         self.splitter.setCollapsible(0, False)
         self.splitter.setCollapsible(1, True)
 
-        # Replace self.vlayout.addWidget(self.groupbox) with:
         self.vlayout.addWidget(self.splitter)
 
         self.fault_count_display: FaultCountDisplay = FaultCountDisplay()
@@ -395,21 +394,9 @@ class CavityDisplayGUI(Display):
         """Filter/highlight cavities based on search text"""
         search_text = search_text.lower().strip()
 
-        linacs = self.gui_machine.linacs
-        if isinstance(linacs, dict):
-            linacs = linacs.values()
-
-        for linac in linacs:
-            cryomodules = linac.cryomodules
-            if isinstance(cryomodules, dict):
-                cryomodules = cryomodules.values()
-
-            for cm in cryomodules:
-                cavities = cm.cavities
-                if isinstance(cavities, dict):
-                    cavities = cavities.values()
-
-                for cavity in cavities:
+        for linac in self.gui_machine.linacs:
+            for cm in linac.cryomodules.values():
+                for cavity in cm.cavities.values():
                     cm_match = f"{cm.name}".lower() in search_text
                     cav_match = (
                         f"cav{cavity.number}".lower() in search_text
