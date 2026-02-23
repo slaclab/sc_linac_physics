@@ -246,30 +246,42 @@ class CavityDisplayGUI(Display):
         super().closeEvent(event)
 
     def update_status(self):
-        """Update status bar with summary"""
+        """Update status bar with summary.
+
+        Severity codes:
+        - 0: No alarm (OK)
+        - 1: Minor alarm (WARNING)
+        - 2: Major alarm (ALARM)
+        - 3: Invalid (disconnected/error)
+        """
         total = 0
         alarms = 0
         warnings = 0
         ok = 0
+        invalid = 0
 
         for linac in self.gui_machine.linacs:
             for cm in linac.cryomodules.values():
                 for cavity in cm.cavities.values():
                     total += 1
+
                     severity = getattr(
                         cavity.cavity_widget, "_last_severity", None
                     )
-                    if severity == 2:
+
+                    if severity == 3:  # Invalid
+                        invalid += 1
+                    elif severity == 2:  # Alarm
                         alarms += 1
-                    elif severity == 1:
+                    elif severity == 1:  # Warning
                         warnings += 1
-                    else:
+                    else:  # OK or None
                         ok += 1
 
         # Build status message
-        self._update_status_display(total, alarms, warnings, ok)
+        self._update_status_display(total, alarms, warnings, ok, invalid)
 
-    def _update_status_display(self, total, alarms, warnings, ok):
+    def _update_status_display(self, total, alarms, warnings, ok, invalid):
         """Update the status bar display with counts."""
         status_parts = []
 
@@ -284,6 +296,12 @@ class CavityDisplayGUI(Display):
             )
 
         status_parts.append(f"✓ {ok} OK")
+
+        if invalid > 0:
+            status_parts.append(
+                f"<span style='color: rgb(200, 100, 255);'>🟣 {invalid} INVALID</span>"
+            )
+
         status_parts.append(f"Total: {total}")
 
         status_text = " | ".join(status_parts)
@@ -293,6 +311,8 @@ class CavityDisplayGUI(Display):
             bg_color = "rgb(150, 0, 0)"
         elif warnings > 0:
             bg_color = "rgb(200, 120, 0)"
+        elif invalid > 0:
+            bg_color = "rgb(100, 50, 150)"  # Purple for invalid
         else:
             bg_color = "rgb(0, 100, 0)"
 
