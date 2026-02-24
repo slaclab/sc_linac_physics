@@ -170,7 +170,7 @@ class PhaseBase(ABC):
         2. Marks phase as started
         3. Executes each step with retry logic
         4. Handles errors and creates checkpoints
-        5. Finalizes phase on success
+        5. Finalizes phase on success OR failure  # ← Updated
 
         Returns:
             True if phase completed successfully, False otherwise
@@ -198,11 +198,13 @@ class PhaseBase(ABC):
                 # Check for abort request
                 if self.context.is_abort_requested():
                     self._handle_abort(step_name)
+                    self.finalize_phase()  # ← Call finalize even on abort
                     return False
 
                 # Execute step with retry logic
                 success = self._execute_step_with_retry(step_name)
                 if not success:
+                    self.finalize_phase()  # ← Call finalize even on failure
                     return False
 
             # All steps completed successfully
@@ -212,6 +214,7 @@ class PhaseBase(ABC):
 
         except Exception as e:
             self._handle_exception(e)
+            self.finalize_phase()  # ← Call finalize even on exception
             return False
 
     def _execute_step_with_retry(self, step_name: str) -> bool:

@@ -26,6 +26,7 @@ from sc_linac_physics.applications.rf_commissioning.phase_base import (
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     PIEZO_PRE_RF_CHECKOUT_PASS_VALUE,
     PIEZO_SCRIPT_RUNNING_VALUE,
+    PIEZO_SCRIPT_COMPLETE_VALUE,
 )
 
 
@@ -168,17 +169,35 @@ class PiezoPreRFPhase(PhaseBase):
         self, piezo: CommissioningPiezo
     ) -> PhaseStepResult:
         """Verify piezo is ready for testing."""
+        if self.context.dry_run:
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message="[DRY RUN] Would verify initial state",
+                data={
+                    "test_status": 1,  # Complete
+                    "channel_a_status": 0,  # Pass
+                    "channel_b_status": 0,  # Pass
+                },
+            )
+
         try:
             # Check if test is already running
             test_status = piezo.prerf_test_status_pv_obj.get()
 
-            if test_status == PIEZO_SCRIPT_RUNNING_VALUE:
+            # Handle both int and string enum values
+            if isinstance(test_status, str):
+                is_running = test_status == "Running"
+            else:
+                is_running = test_status == PIEZO_SCRIPT_RUNNING_VALUE
+
+            if is_running:
                 return PhaseStepResult(
                     result=PhaseResult.FAILED,
                     message="Piezo test already in progress",
                     data={"test_status": test_status},
                 )
 
+            # Status is Idle or Complete - both are valid starting states
             # Check both channels are accessible
             cha_status = piezo.prerf_cha_status_pv_obj.get()
             chb_status = piezo.prerf_chb_status_pv_obj.get()
@@ -208,23 +227,38 @@ class PiezoPreRFPhase(PhaseBase):
                     message="[DRY RUN] Would trigger pre-RF test",
                 )
 
-            # Start the test
+            # Trigger the test
             piezo.prerf_test_start_pv_obj.put(1)
-            time.sleep(1)  # Wait for test to start
 
-            # Verify test started
-            test_status = piezo.prerf_test_status_pv_obj.get()
+            # Wait briefly for trigger to process
+            time.sleep(0.5)
 
-            if test_status != PIEZO_SCRIPT_RUNNING_VALUE:
+            # Read the initial status - should be Running or might already be Complete
+            test_status = piezo.prerf_test_status_pv_obj.get(use_monitor=False)
+
+            # Handle both int and string
+            if isinstance(test_status, str):
+                is_running = test_status == "Running"
+                is_complete = test_status == "Complete"
+                is_crash = test_status == "Crash"
+            else:
+                is_running = test_status == PIEZO_SCRIPT_RUNNING_VALUE
+                is_complete = test_status == PIEZO_SCRIPT_COMPLETE_VALUE
+                is_crash = test_status == 0  # Crash
+
+            # Accept Running or Complete as valid (test triggered successfully)
+            # Only fail if it's in Crash state
+            if is_crash:
                 return PhaseStepResult(
                     result=PhaseResult.FAILED,
-                    message=f"Test failed to start (status={test_status})",
+                    message=f"Test crashed (status={test_status})",
                     data={"test_status": test_status},
                 )
 
+            # Test triggered successfully (either Running or already Complete)
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
-                message="Pre-RF test started successfully",
+                message="Pre-RF test triggered successfully",
                 data={"test_status": test_status},
             )
 
@@ -264,8 +298,14 @@ class PiezoPreRFPhase(PhaseBase):
                 # Check test status
                 test_status = piezo.prerf_test_status_pv_obj.get()
 
+                # Handle both int and string
+                if isinstance(test_status, str):
+                    is_running = test_status == "Running"
+                else:
+                    is_running = test_status == PIEZO_SCRIPT_RUNNING_VALUE
+
                 # Wait while running
-                if test_status != PIEZO_SCRIPT_RUNNING_VALUE:
+                if not is_running:
                     return PhaseStepResult(
                         result=PhaseResult.SUCCESS,
                         message=f"Test completed in {elapsed:.1f}s",
@@ -288,9 +328,7 @@ class PiezoPreRFPhase(PhaseBase):
         """
         Validate the test results.
 
-        Matches the logic from the worker function:
-        - Both channels must have PIEZO_PRE_RF_CHECKOUT_PASS_VALUE status
-        - Capacitance values are recorded but not validated
+        Handles both integer and string enum values from real/simulated EPICS.
         """
         try:
             # Get channel statuses
@@ -301,24 +339,29 @@ class PiezoPreRFPhase(PhaseBase):
             cha_msg = piezo.prerf_cha_testmsg_pv_obj.get()
             chb_msg = piezo.prerf_chb_testmsg_pv_obj.get()
 
-            # Get capacitance values for recording (not validation)
+            # Get capacitance values
             cap_a = piezo.capacitance_a_pv_obj.get()
             cap_b = piezo.capacitance_b_pv_obj.get()
 
-            # Check if both channels passed (0 = pass)
-            both_passed = (
-                cha_status == PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
-                and chb_status == PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
-            )
+            # Check if both channels passed - handle both int and string
+            def is_pass(status):
+                if isinstance(status, str):
+                    return status == "Pass"
+                else:
+                    return status == PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
+
+            cha_passed = is_pass(cha_status)
+            chb_passed = is_pass(chb_status)
+            both_passed = cha_passed and chb_passed
 
             # Build detailed message
             if not both_passed:
                 messages = []
-                if cha_status != PIEZO_PRE_RF_CHECKOUT_PASS_VALUE:
+                if not cha_passed:
                     messages.append(
                         f"Channel A failed (status={cha_status}): {cha_msg}"
                     )
-                if chb_status != PIEZO_PRE_RF_CHECKOUT_PASS_VALUE:
+                if not chb_passed:
                     messages.append(
                         f"Channel B failed (status={chb_status}): {chb_msg}"
                     )
