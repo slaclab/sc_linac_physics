@@ -39,9 +39,9 @@ class TimeSeriesPlot(BasePlot):
         vb.setLimits(xMin=0)  # Prevent negative time
         vb.sigRangeChangedManually.connect(self._on_range_changed)
 
-    def _format_tooltip(self, plot_type, x, y):
-        """Override base tooltip formatting"""
-        return f"Time: {x:.3f} s\nDetuning: {y:.2f} Hz"
+    def get_formatter(self):
+        """Tooltip formatter for time series plot."""
+        return lambda x, y: f"Time: {x:.3f} s\nDetuning: {y:.2f} Hz"
 
     def _decimate_data(self, times, values, target_points):
         """Decimation that still preserves important features"""
