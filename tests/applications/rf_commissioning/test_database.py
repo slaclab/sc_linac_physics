@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from sc_linac_physics.applications.rf_commissioning import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     CommissioningPhase,
     PhaseStatus,
@@ -18,7 +18,7 @@ from sc_linac_physics.applications.rf_commissioning import (
     PiezoWithRFTest,
     HighPowerRampData,
 )
-from sc_linac_physics.applications.rf_commissioning.database import (
+from sc_linac_physics.applications.rf_commissioning.models.database import (
     CommissioningDatabase,
 )
 
@@ -134,7 +134,9 @@ class TestSaveAndRetrieve(unittest.TestCase):
         self.assertEqual(retrieved.cavity_name, "L1B_CM02_CAV3")
         self.assertEqual(retrieved.cryomodule, "02")
         self.assertEqual(retrieved.start_time, start_time)
-        self.assertEqual(retrieved.current_phase, CommissioningPhase.PRE_CHECKS)
+        self.assertEqual(
+            retrieved.current_phase, CommissioningPhase.PIEZO_PRE_RF
+        )
         self.assertEqual(retrieved.overall_status, "in_progress")
 
     def test_get_nonexistent_record(self):
@@ -436,7 +438,7 @@ class TestDeleteAndStats(unittest.TestCase):
             cavity_name="L1B_CM02_CAV1",
             cryomodule="02",
             overall_status="in_progress",
-            current_phase=CommissioningPhase.PRE_CHECKS,
+            current_phase=CommissioningPhase.PIEZO_PRE_RF,
         )
         record2 = CommissioningRecord(
             cavity_name="L1B_CM02_CAV2",
@@ -460,7 +462,7 @@ class TestDeleteAndStats(unittest.TestCase):
         self.assertEqual(stats["total_records"], 3)
         self.assertEqual(stats["by_status"]["in_progress"], 2)
         self.assertEqual(stats["by_status"]["complete"], 1)
-        self.assertEqual(stats["by_phase"]["pre_checks"], 1)
+        self.assertEqual(stats["by_phase"]["piezo_pre_rf"], 1)
         self.assertEqual(stats["by_phase"]["cold_landing"], 1)
         self.assertEqual(stats["by_phase"]["complete"], 1)
         self.assertEqual(stats["by_cryomodule"]["02"], 2)
@@ -497,7 +499,7 @@ class TestTransactionHandling(unittest.TestCase):
                     "L1B_CM02_CAV3",
                     "02",
                     datetime.now().isoformat(),
-                    "pre_checks",
+                    "piezo_pre_rf",
                     "in_progress",
                     "{}",
                     "{}",
@@ -530,7 +532,7 @@ class TestTransactionHandling(unittest.TestCase):
                         "L1B_CM02_CAV3",
                         "02",
                         datetime.now().isoformat(),
-                        "pre_checks",
+                        "piezo_pre_rf",
                         "in_progress",
                         "{}",
                         "{}",
@@ -847,7 +849,7 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
 
         # Update phase status
         record.set_phase_status(
-            CommissioningPhase.PRE_CHECKS, PhaseStatus.COMPLETE
+            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
         )
         record.set_phase_status(
             CommissioningPhase.COLD_LANDING, PhaseStatus.IN_PROGRESS
@@ -860,7 +862,7 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
 
         assert retrieved is not None
         assert (
-            retrieved.get_phase_status(CommissioningPhase.PRE_CHECKS)
+            retrieved.get_phase_status(CommissioningPhase.PIEZO_PRE_RF)
             == PhaseStatus.COMPLETE
         )
         assert (
@@ -877,10 +879,10 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
 
         # Add checkpoint - UPDATED
         checkpoint = PhaseCheckpoint(
-            phase=CommissioningPhase.PRE_CHECKS,
+            phase=CommissioningPhase.PIEZO_PRE_RF,
             timestamp=datetime(2026, 2, 18, 10, 0, 0),
             operator="Jane Smith",
-            step_name="pre_checks_complete",
+            step_name="piezo_pre_rf_complete",
             success=True,
             notes="Pre-checks complete",
             measurements={"temperature": 2.04, "pressure": 1.2e-7},
@@ -897,9 +899,9 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
         assert len(retrieved.phase_history) == 1
 
         cp = retrieved.phase_history[0]
-        assert cp.phase == CommissioningPhase.PRE_CHECKS
+        assert cp.phase == CommissioningPhase.PIEZO_PRE_RF
         assert cp.operator == "Jane Smith"
-        assert cp.step_name == "pre_checks_complete"
+        assert cp.step_name == "piezo_pre_rf_complete"
         assert cp.success is True
         assert cp.notes == "Pre-checks complete"
         assert cp.measurements["temperature"] == 2.04
@@ -913,10 +915,10 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
 
         # Add checkpoints for multiple phases
         checkpoint1 = PhaseCheckpoint(
-            phase=CommissioningPhase.PRE_CHECKS,
+            phase=CommissioningPhase.PIEZO_PRE_RF,
             timestamp=datetime(2026, 2, 18, 10, 0, 0),
             operator="Jane Smith",
-            step_name="pre_checks_complete",
+            step_name="piezo_pre_rf_complete",
             success=True,
             notes="Pre-checks complete",
         )
@@ -942,8 +944,10 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
         assert len(retrieved.phase_history) == 2
 
         # Verify both checkpoints
-        assert retrieved.phase_history[0].phase == CommissioningPhase.PRE_CHECKS
-        assert retrieved.phase_history[0].step_name == "pre_checks_complete"
+        assert (
+            retrieved.phase_history[0].phase == CommissioningPhase.PIEZO_PRE_RF
+        )
+        assert retrieved.phase_history[0].step_name == "piezo_pre_rf_complete"
         assert (
             retrieved.phase_history[1].phase == CommissioningPhase.COLD_LANDING
         )
@@ -957,10 +961,10 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
         )
 
         checkpoint = PhaseCheckpoint(
-            phase=CommissioningPhase.HIGH_POWER_RAMP,
+            phase=CommissioningPhase.HIGH_POWER,
             timestamp=datetime(2026, 2, 18, 10, 0, 0),
             operator="Jane Smith",
-            step_name="high_power_ramp",
+            step_name="high_power",
             success=False,
             notes="Phase failed",
             error_message="Cavity quenched during ramp",
@@ -977,7 +981,7 @@ class TestPhaseTrackingSerialization(unittest.TestCase):
         assert len(retrieved.phase_history) == 1
 
         cp = retrieved.phase_history[0]
-        assert cp.phase == CommissioningPhase.HIGH_POWER_RAMP
+        assert cp.phase == CommissioningPhase.HIGH_POWER
         assert cp.success is False
         assert cp.error_message == "Cavity quenched during ramp"
 
@@ -1017,7 +1021,7 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
             timestamp=datetime(2026, 2, 18, 9, 30, 0),
         )
         checkpoint1 = PhaseCheckpoint(
-            phase=CommissioningPhase.PRE_CHECKS,  # ADD
+            phase=CommissioningPhase.PIEZO_PRE_RF,  # ADD
             timestamp=datetime(2026, 2, 18, 9, 30, 0),
             operator="Jane Smith",
             step_name="piezo_pre_rf_check",  # ADD
@@ -1026,7 +1030,7 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
         )
         record.add_checkpoint(checkpoint1)  # UPDATED
         record.set_phase_status(
-            CommissioningPhase.PRE_CHECKS, PhaseStatus.COMPLETE
+            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
         )
 
         # Phase 2: Cold landing
@@ -1056,16 +1060,16 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
             num_attempts=2,
         )
         checkpoint3 = PhaseCheckpoint(
-            phase=CommissioningPhase.SSA_CAL,  # ADD
+            phase=CommissioningPhase.SSA_CHAR,  # ADD
             timestamp=datetime(2026, 2, 18, 10, 30, 0),
             operator="Jane Smith",
-            step_name="ssa_calibration",  # ADD
+            step_name="ssa_charibration",  # ADD
             success=True,  # ADD
             notes="SSA calibrated",
         )
         record.add_checkpoint(checkpoint3)  # UPDATED
         record.set_phase_status(
-            CommissioningPhase.SSA_CAL, PhaseStatus.COMPLETE
+            CommissioningPhase.SSA_CHAR, PhaseStatus.COMPLETE
         )
 
         # Phase 4: Cavity characterization
@@ -1074,7 +1078,7 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
             scale_factor=15.6,
         )
         checkpoint4 = PhaseCheckpoint(
-            phase=CommissioningPhase.CHARACTERIZATION,  # ADD
+            phase=CommissioningPhase.CAVITY_CHAR,  # ADD
             timestamp=datetime(2026, 2, 18, 11, 0, 0),
             operator="Jane Smith",
             step_name="cavity_characterization",  # ADD
@@ -1084,11 +1088,11 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
         )
         record.add_checkpoint(checkpoint4)  # UPDATED
         record.set_phase_status(
-            CommissioningPhase.CHARACTERIZATION, PhaseStatus.COMPLETE
+            CommissioningPhase.CAVITY_CHAR, PhaseStatus.COMPLETE
         )
 
         # Update current phase
-        record.current_phase = CommissioningPhase.CHARACTERIZATION
+        record.current_phase = CommissioningPhase.CAVITY_CHAR
 
         # Save updated record
         self.db.save_record(record, record_id)
@@ -1117,14 +1121,14 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
 
         # Verify checkpoint phases
         checkpoint_phases = [cp.phase for cp in retrieved.phase_history]
-        assert CommissioningPhase.PRE_CHECKS in checkpoint_phases
+        assert CommissioningPhase.PIEZO_PRE_RF in checkpoint_phases
         assert CommissioningPhase.COLD_LANDING in checkpoint_phases
-        assert CommissioningPhase.SSA_CAL in checkpoint_phases
-        assert CommissioningPhase.CHARACTERIZATION in checkpoint_phases
+        assert CommissioningPhase.SSA_CHAR in checkpoint_phases
+        assert CommissioningPhase.CAVITY_CHAR in checkpoint_phases
 
         # Verify phase statuses
         assert (
-            retrieved.get_phase_status(CommissioningPhase.PRE_CHECKS)
+            retrieved.get_phase_status(CommissioningPhase.PIEZO_PRE_RF)
             == PhaseStatus.COMPLETE
         )
         assert (
@@ -1132,11 +1136,11 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
             == PhaseStatus.COMPLETE
         )
         assert (
-            retrieved.get_phase_status(CommissioningPhase.SSA_CAL)
+            retrieved.get_phase_status(CommissioningPhase.SSA_CHAR)
             == PhaseStatus.COMPLETE
         )
         assert (
-            retrieved.get_phase_status(CommissioningPhase.CHARACTERIZATION)
+            retrieved.get_phase_status(CommissioningPhase.CAVITY_CHAR)
             == PhaseStatus.COMPLETE
         )
 
@@ -1157,7 +1161,7 @@ class TestCompleteWorkflowPersistence(unittest.TestCase):
             channel_b_passed=True,
         )
         record.set_phase_status(
-            CommissioningPhase.PRE_CHECKS, PhaseStatus.COMPLETE
+            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
         )
         record.current_phase = CommissioningPhase.COLD_LANDING
 

@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, Any, List
 
-from .data_models import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     CommissioningPhase,
     PhaseCheckpoint,
@@ -45,6 +45,7 @@ class PhaseContext:
     dry_run: bool = False
     parameters: Dict[str, Any] = field(default_factory=dict)
     abort_requested: bool = False
+    progress_callback: Optional[callable] = None
 
     def request_abort(self) -> None:
         """Request graceful abort of current phase."""
@@ -166,16 +167,29 @@ class PhaseBase(ABC):
         """Execute the complete phase.
 
         This is the main entry point for phase execution. It:
-        1. Validates prerequisites
-        2. Marks phase as started
-        3. Executes each step with retry logic
-        4. Handles errors and creates checkpoints
-        5. Finalizes phase on success OR failure  # ← Updated
+        1. Validates phase ordering (previous phase complete)
+        2. Validates phase-specific prerequisites
+        3. Marks phase as started
+        4. Executes each step with retry logic
+        5. Handles errors and creates checkpoints
+        6. Finalizes phase on success OR failure
 
         Returns:
             True if phase completed successfully, False otherwise
         """
-        # Validate prerequisites
+        # First check phase ordering
+        can_start, ordering_message = self.context.record.can_start_phase(
+            self.phase_type
+        )
+        if not can_start:
+            self._create_checkpoint(
+                step_name="phase_ordering_check",
+                success=False,
+                notes=f"Phase ordering violation: {ordering_message}",
+            )
+            return False
+
+        # Then validate phase-specific prerequisites
         is_valid, message = self.validate_prerequisites()
         if not is_valid:
             self._create_checkpoint(
@@ -198,23 +212,25 @@ class PhaseBase(ABC):
                 # Check for abort request
                 if self.context.is_abort_requested():
                     self._handle_abort(step_name)
-                    self.finalize_phase()  # ← Call finalize even on abort
                     return False
 
                 # Execute step with retry logic
                 success = self._execute_step_with_retry(step_name)
                 if not success:
-                    self.finalize_phase()  # ← Call finalize even on failure
                     return False
 
             # All steps completed successfully
-            self.finalize_phase()
+            try:
+                self.finalize_phase()
+            except Exception as e:
+                self._handle_exception(e)
+                return False
+
             self._mark_phase_completed()
             return True
 
         except Exception as e:
             self._handle_exception(e)
-            self.finalize_phase()  # ← Call finalize even on exception
             return False
 
     def _execute_step_with_retry(self, step_name: str) -> bool:
@@ -226,6 +242,14 @@ class PhaseBase(ABC):
         Returns:
             True if step succeeded, False if it failed after retries
         """
+
+        # Notify progress callback
+        if self.context.progress_callback:
+            steps = self.get_phase_steps()
+            current_index = steps.index(step_name) if step_name in steps else 0
+            progress = int((current_index / len(steps)) * 100)
+            self.context.progress_callback(step_name, progress)
+
         while self._retry_count < self._max_retries_per_step:
             try:
                 result = self.execute_step(step_name)

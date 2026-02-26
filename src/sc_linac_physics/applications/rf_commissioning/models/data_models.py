@@ -9,17 +9,60 @@ from typing import Optional, Dict, Any, List
 class CommissioningPhase(Enum):
     """Phases of cavity commissioning workflow."""
 
-    PRE_CHECKS = "pre_checks"
     PIEZO_PRE_RF = "piezo_pre_rf"
     COLD_LANDING = "cold_landing"
-    SSA_CAL = "ssa_cal"
-    COARSE_TUNE = "coarse_tune"
-    CHARACTERIZATION = "characterization"
-    LOW_POWER_RF = "low_power_rf"
-    FINE_TUNE = "fine_tune"
-    HIGH_POWER_RAMP = "high_power_ramp"
-    OPERATIONAL = "operational"
+    SSA_CHAR = "ssa_char"
+    CAVITY_CHAR = "cavity_char"
+    PIEZO_WITH_RF = "piezo_with_rf"
+    HIGH_POWER = "high_power"
     COMPLETE = "complete"
+
+    @classmethod
+    def get_phase_order(cls) -> List["CommissioningPhase"]:
+        """Get the required sequential order of phases.
+
+        Returns:
+            List of phases in the order they must be executed
+        """
+        return [
+            cls.PIEZO_PRE_RF,
+            cls.COLD_LANDING,
+            cls.SSA_CHAR,
+            cls.CAVITY_CHAR,
+            cls.PIEZO_WITH_RF,
+            cls.HIGH_POWER,
+            cls.COMPLETE,
+        ]
+
+    def get_next_phase(self) -> Optional["CommissioningPhase"]:
+        """Get the next phase in the sequence.
+
+        Returns:
+            Next phase, or None if this is the last phase
+        """
+        phase_order = self.get_phase_order()
+        try:
+            current_index = phase_order.index(self)
+            if current_index < len(phase_order) - 1:
+                return phase_order[current_index + 1]
+        except ValueError:
+            pass
+        return None
+
+    def get_previous_phase(self) -> Optional["CommissioningPhase"]:
+        """Get the previous phase in the sequence.
+
+        Returns:
+            Previous phase, or None if this is the first phase
+        """
+        phase_order = self.get_phase_order()
+        try:
+            current_index = phase_order.index(self)
+            if current_index > 0:
+                return phase_order[current_index - 1]
+        except ValueError:
+            pass
+        return None
 
 
 class PhaseStatus(Enum):
@@ -317,7 +360,7 @@ class CommissioningRecord:
     cavity_name: str
     cryomodule: str
     start_time: datetime = field(default_factory=datetime.now)
-    current_phase: CommissioningPhase = CommissioningPhase.PRE_CHECKS
+    current_phase: CommissioningPhase = CommissioningPhase.PIEZO_PRE_RF
 
     # Phase-specific data
     piezo_pre_rf: Optional[PiezoPreRFCheck] = None
@@ -343,9 +386,7 @@ class CommissioningRecord:
         if not self.phase_status:
             for phase in CommissioningPhase:
                 self.phase_status[phase] = PhaseStatus.NOT_STARTED
-            self.phase_status[CommissioningPhase.PRE_CHECKS] = (
-                PhaseStatus.IN_PROGRESS
-            )
+            self.phase_status[self.current_phase] = PhaseStatus.IN_PROGRESS
 
     @property
     def is_complete(self) -> bool:
@@ -366,6 +407,71 @@ class CommissioningRecord:
     def set_phase_status(self, phase: CommissioningPhase, status: PhaseStatus):
         """Set status of a specific phase."""
         self.phase_status[phase] = status
+
+    def can_start_phase(self, phase: CommissioningPhase) -> tuple[bool, str]:
+        """Check if a phase can be started based on prerequisites.
+
+        Args:
+            phase: The phase to check
+
+        Returns:
+            Tuple of (can_start, reason)
+            - can_start: True if the phase can be started
+            - reason: Explanation of why or why not
+        """
+        # Check if already complete
+        if self.get_phase_status(phase) == PhaseStatus.COMPLETE:
+            return False, f"{phase.value} already completed"
+
+        # PIEZO_PRE_RF is the first phase and can always be started
+        if phase == CommissioningPhase.PIEZO_PRE_RF:
+            return True, "Piezo Pre-RF is the first phase"
+
+        # Check if previous phase is complete
+        previous_phase = phase.get_previous_phase()
+        if previous_phase is None:
+            return True, "No previous phase required"
+
+        previous_status = self.get_phase_status(previous_phase)
+        if previous_status != PhaseStatus.COMPLETE:
+            return (
+                False,
+                f"Previous phase {previous_phase.value} must complete first (status: {previous_status.value})",
+            )
+
+        return True, f"Prerequisites met for {phase.value}"
+
+    def advance_to_next_phase(self) -> tuple[bool, str]:
+        """Advance to the next phase in the sequence.
+
+        Returns:
+            Tuple of (success, message)
+            - success: True if phase was advanced
+            - message: Explanation of outcome
+        """
+        # Check if current phase is complete
+        current_status = self.get_phase_status(self.current_phase)
+        if current_status != PhaseStatus.COMPLETE:
+            return (
+                False,
+                f"Cannot advance: {self.current_phase.value} is not complete (status: {current_status.value})",
+            )
+
+        # Get next phase
+        next_phase = self.current_phase.get_next_phase()
+        if next_phase is None:
+            return False, f"{self.current_phase.value} is the final phase"
+
+        # Validate can start next phase
+        can_start, reason = self.can_start_phase(next_phase)
+        if not can_start:
+            return False, f"Cannot start {next_phase.value}: {reason}"
+
+        # Update current phase
+        self.current_phase = next_phase
+        self.phase_status[next_phase] = PhaseStatus.IN_PROGRESS
+
+        return True, f"Advanced to {next_phase.value}"
 
     # UPDATED METHODS:
     def add_checkpoint(self, checkpoint: PhaseCheckpoint):
@@ -431,7 +537,7 @@ class CommissioningRecord:
             "piezo_with_rf": (
                 self.piezo_with_rf.to_dict() if self.piezo_with_rf else None
             ),
-            "high_power_ramp": (
+            "high_power": (
                 self.high_power.to_dict() if self.high_power else None
             ),
             "phase_status": {

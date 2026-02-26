@@ -3,9 +3,11 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
-from sc_linac_physics.applications.rf_commissioning import CommissioningRecord
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningRecord,
+)
 
 
 class CommissioningDatabase:
@@ -524,6 +526,75 @@ class CommissioningDatabase:
             rows = cursor.fetchall()
 
             return [self._row_to_record(row) for row in rows]
+
+    def load_record(self, record_id: int) -> Optional["CommissioningRecord"]:
+        """Alias for get_record for compatibility."""
+        return self.get_record(record_id)
+
+    def get_all_records(self) -> List[dict]:
+        """
+        Get all commissioning records as dictionaries.
+
+        Returns:
+            List of record dictionaries with basic info for browsing
+        """
+        try:
+            records = []
+
+            # Query all records from the database
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT id FROM commissioning_records
+                    ORDER BY start_time DESC
+                """)
+                rows = cursor.fetchall()
+
+            # Load each record
+            for row in rows:
+                record_id = row[0]
+                record = self.get_record(
+                    record_id
+                )  # Use existing get_record method
+
+                if record:
+                    # Create a simplified dict for the browser
+                    record_dict = {
+                        "id": record_id,
+                        "cryomodule_name": record.cavity_name,  # Full cavity name
+                        "start_time": (
+                            record.start_time.isoformat()
+                            if record.start_time
+                            else None
+                        ),
+                        "end_time": (
+                            record.end_time.isoformat()
+                            if record.end_time
+                            else None
+                        ),
+                        "current_phase": record.current_phase.value,
+                        "overall_status": record.overall_status,
+                    }
+
+                    # Add piezo_pre_rf results if available
+                    if record.piezo_pre_rf:
+                        record_dict["piezo_pre_rf"] = {
+                            "channel_a_passed": record.piezo_pre_rf.channel_a_passed,
+                            "channel_b_passed": record.piezo_pre_rf.channel_b_passed,
+                            "capacitance_a": record.piezo_pre_rf.capacitance_a,
+                            "capacitance_b": record.piezo_pre_rf.capacitance_b,
+                        }
+
+                    records.append(record_dict)
+
+            return records
+
+        except Exception as e:
+            print(f"Error getting all records: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return []
 
     def get_active_records(self) -> list["CommissioningRecord"]:
         """Get all in-progress commissioning records.

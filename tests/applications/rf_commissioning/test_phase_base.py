@@ -2,12 +2,12 @@
 
 from typing import List
 
-from sc_linac_physics.applications.rf_commissioning import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     CommissioningPhase,
     PhaseStatus,
 )
-from sc_linac_physics.applications.rf_commissioning.phase_base import (
+from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
     PhaseContext,
     PhaseResult,
@@ -26,6 +26,9 @@ class TestPhase(PhaseBase):
         self.prerequisites_message = "All prerequisites met"
         self.step_results = {}  # Map step_name -> PhaseStepResult
         self.finalize_called = False
+        previous_phase = self.phase_type.get_previous_phase()
+        if previous_phase is not None:
+            context.record.phase_status[previous_phase] = PhaseStatus.COMPLETE
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -799,7 +802,7 @@ class TestPhaseStateTracking:
         )
 
         # Initially should be PIEZO_PRE_RF (first phase)
-        assert record.current_phase == CommissioningPhase.PRE_CHECKS
+        assert record.current_phase == CommissioningPhase.PIEZO_PRE_RF
 
         context = PhaseContext(record=record, operator="TestOperator")
         phase = TestPhase(context)

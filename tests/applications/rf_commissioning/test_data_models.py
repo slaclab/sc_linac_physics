@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from sc_linac_physics.applications.rf_commissioning import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PhaseStatus,
     PhaseCheckpoint,
@@ -24,15 +24,12 @@ class TestEnums:
     def test_commissioning_phase_values(self):
         """Test all commissioning phases are defined."""
         expected_phases = [
-            "pre_checks",
+            "piezo_pre_rf",
             "cold_landing",
-            "ssa_cal",
-            "coarse_tune",
-            "characterization",
-            "low_power_rf",
-            "fine_tune",
-            "high_power_ramp",
-            "operational",
+            "ssa_char",
+            "cavity_char",
+            "piezo_with_rf",
+            "high_power",
             "complete",
         ]
 
@@ -54,8 +51,9 @@ class TestEnums:
 
     def test_commissioning_phase_access(self):
         """Test accessing phases by name."""
-        assert CommissioningPhase.PRE_CHECKS.value == "pre_checks"
+        assert CommissioningPhase.PIEZO_PRE_RF.value == "piezo_pre_rf"
         assert CommissioningPhase.COLD_LANDING.value == "cold_landing"
+        assert CommissioningPhase.HIGH_POWER.value == "high_power"
         assert CommissioningPhase.COMPLETE.value == "complete"
 
     def test_phase_status_access(self):
@@ -94,7 +92,7 @@ class TestPhaseCheckpoint:
         measurements = {"voltage": 12.5, "current": 2.3}
 
         checkpoint = PhaseCheckpoint(
-            phase=CommissioningPhase.SSA_CAL,  # ADD
+            phase=CommissioningPhase.SSA_CHAR,
             timestamp=timestamp,
             operator="TestOperator",
             step_name="calibration",
@@ -104,7 +102,7 @@ class TestPhaseCheckpoint:
             error_message=None,
         )
 
-        assert checkpoint.phase == CommissioningPhase.SSA_CAL  # ADD
+        assert checkpoint.phase == CommissioningPhase.SSA_CHAR
         assert checkpoint.timestamp == timestamp
         assert checkpoint.operator == "TestOperator"
         assert checkpoint.step_name == "calibration"
@@ -833,7 +831,7 @@ class TestCommissioningRecord:
         )
 
         checkpoint2 = PhaseCheckpoint(
-            phase=CommissioningPhase.SSA_CAL,
+            phase=CommissioningPhase.SSA_CHAR,
             timestamp=datetime.now(),
             operator="TestOperator",
             step_name="calibration",
@@ -847,7 +845,7 @@ class TestCommissioningRecord:
         all_checkpoints = record.get_checkpoints()
         assert len(all_checkpoints) == 2
         assert all_checkpoints[0].phase == CommissioningPhase.COLD_LANDING
-        assert all_checkpoints[1].phase == CommissioningPhase.SSA_CAL
+        assert all_checkpoints[1].phase == CommissioningPhase.SSA_CHAR
 
     def test_get_checkpoints_empty(self):
         """Test getting checkpoints when none exist."""
@@ -901,7 +899,7 @@ class TestCommissioningRecord:
         assert result["cryomodule"] == "CM01"
         assert result["start_time"] == "2024-01-15T10:00:00"
         assert result["end_time"] is None
-        assert result["current_phase"] == "pre_checks"
+        assert result["current_phase"] == "piezo_pre_rf"
         assert result["overall_status"] == "in_progress"
         assert result["is_complete"] is False
 
@@ -911,7 +909,7 @@ class TestCommissioningRecord:
         assert result["ssa_characterization"] is None
         assert result["cavity_characterization"] is None
         assert result["piezo_with_rf"] is None
-        assert result["high_power_ramp"] is None
+        assert result["high_power"] is None
 
     def test_to_dict_with_end_time(self):
         """Test serialization with end time."""
@@ -977,15 +975,15 @@ class TestCommissioningRecord:
             CommissioningPhase.COLD_LANDING, PhaseStatus.COMPLETE
         )
         record.set_phase_status(
-            CommissioningPhase.SSA_CAL, PhaseStatus.IN_PROGRESS
+            CommissioningPhase.SSA_CHAR, PhaseStatus.IN_PROGRESS
         )
 
         result = record.to_dict()
 
         assert "phase_status" in result
-        assert result["phase_status"]["pre_checks"] == "in_progress"
+        assert result["phase_status"]["piezo_pre_rf"] == "in_progress"
         assert result["phase_status"]["cold_landing"] == "complete"
-        assert result["phase_status"]["ssa_cal"] == "in_progress"
+        assert result["phase_status"]["ssa_char"] == "in_progress"
 
     def test_store_piezo_pre_rf(self):
         """Test storing piezo pre-RF check data."""
@@ -1083,7 +1081,7 @@ class TestCommissioningRecord:
         assert record.piezo_with_rf.amplifier_gain_a == 1.2
         assert record.piezo_with_rf.is_complete is True
 
-    def test_store_high_power_ramp(self):
+    def test_store_high_power(self):
         """Test storing high power ramp data."""
         record = CommissioningRecord(
             cavity_name="CM01_CAV1",
@@ -1175,15 +1173,15 @@ class TestCommissioningRecord:
             cryomodule="CM01",
         )
 
-        # PRE_CHECKS should start as IN_PROGRESS
+        # PIEZO_PRE_RF should start as IN_PROGRESS
         assert (
-            record.get_phase_status(CommissioningPhase.PRE_CHECKS)
+            record.get_phase_status(CommissioningPhase.PIEZO_PRE_RF)
             == PhaseStatus.IN_PROGRESS
         )
 
         # All others should be NOT_STARTED
         for phase in CommissioningPhase:
-            if phase != CommissioningPhase.PRE_CHECKS:
+            if phase != CommissioningPhase.PIEZO_PRE_RF:
                 assert record.get_phase_status(phase) == PhaseStatus.NOT_STARTED
 
     def test_is_complete_false_initially(self):
@@ -1196,7 +1194,7 @@ class TestCommissioningRecord:
         assert record.is_complete is False
 
     def test_is_complete_true_when_complete(self):
-        """Test record is complete when phase is COMPLETE."""
+        """Test record is complete when at COMPLETE phase."""
         record = CommissioningRecord(
             cavity_name="CM01_CAV1",
             cryomodule="CM01",
@@ -1231,3 +1229,235 @@ class TestCommissioningRecord:
         )
 
         assert record.elapsed_time == pytest.approx(4.5)
+
+
+class TestPhaseOrdering:
+    """Tests for phase ordering and validation."""
+
+    def test_get_phase_order(self):
+        """Test that phase order is correctly defined."""
+        order = CommissioningPhase.get_phase_order()
+
+        assert len(order) == 7
+        assert order[0] == CommissioningPhase.PIEZO_PRE_RF
+        assert order[1] == CommissioningPhase.COLD_LANDING
+        assert order[2] == CommissioningPhase.SSA_CHAR
+        assert order[3] == CommissioningPhase.CAVITY_CHAR
+        assert order[4] == CommissioningPhase.PIEZO_WITH_RF
+        assert order[5] == CommissioningPhase.HIGH_POWER
+        assert order[6] == CommissioningPhase.COMPLETE
+        assert order[-1] == CommissioningPhase.COMPLETE
+
+    def test_get_next_phase(self):
+        """Test getting next phase in sequence."""
+        assert (
+            CommissioningPhase.PIEZO_PRE_RF.get_next_phase()
+            == CommissioningPhase.COLD_LANDING
+        )
+        assert (
+            CommissioningPhase.COLD_LANDING.get_next_phase()
+            == CommissioningPhase.SSA_CHAR
+        )
+        assert (
+            CommissioningPhase.SSA_CHAR.get_next_phase()
+            == CommissioningPhase.CAVITY_CHAR
+        )
+        assert (
+            CommissioningPhase.CAVITY_CHAR.get_next_phase()
+            == CommissioningPhase.PIEZO_WITH_RF
+        )
+        assert (
+            CommissioningPhase.PIEZO_WITH_RF.get_next_phase()
+            == CommissioningPhase.HIGH_POWER
+        )
+        assert (
+            CommissioningPhase.HIGH_POWER.get_next_phase()
+            == CommissioningPhase.COMPLETE
+        )
+        assert CommissioningPhase.COMPLETE.get_next_phase() is None
+
+    def test_get_previous_phase(self):
+        """Test getting previous phase in sequence."""
+        assert CommissioningPhase.PIEZO_PRE_RF.get_previous_phase() is None
+        assert (
+            CommissioningPhase.COLD_LANDING.get_previous_phase()
+            == CommissioningPhase.PIEZO_PRE_RF
+        )
+        assert (
+            CommissioningPhase.SSA_CHAR.get_previous_phase()
+            == CommissioningPhase.COLD_LANDING
+        )
+        assert (
+            CommissioningPhase.CAVITY_CHAR.get_previous_phase()
+            == CommissioningPhase.SSA_CHAR
+        )
+        assert (
+            CommissioningPhase.PIEZO_WITH_RF.get_previous_phase()
+            == CommissioningPhase.CAVITY_CHAR
+        )
+        assert (
+            CommissioningPhase.HIGH_POWER.get_previous_phase()
+            == CommissioningPhase.PIEZO_WITH_RF
+        )
+        assert (
+            CommissioningPhase.COMPLETE.get_previous_phase()
+            == CommissioningPhase.HIGH_POWER
+        )
+
+    def test_can_start_first_phase(self):
+        """Test that PIEZO_PRE_RF can always be started."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        can_start, reason = record.can_start_phase(
+            CommissioningPhase.PIEZO_PRE_RF
+        )
+        assert can_start is True
+        assert "first phase" in reason.lower()
+
+    def test_cannot_start_phase_without_previous(self):
+        """Test that phases cannot start without previous phase complete."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            current_phase=CommissioningPhase.PIEZO_PRE_RF,
+        )
+
+        # Try to start SSA_CHAR without completing COLD_LANDING
+        can_start, reason = record.can_start_phase(CommissioningPhase.SSA_CHAR)
+        assert can_start is False
+        assert "cold_landing" in reason.lower()
+        assert "must complete first" in reason.lower()
+
+    def test_can_start_phase_with_previous_complete(self):
+        """Test that phase can start when previous is complete."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            current_phase=CommissioningPhase.COLD_LANDING,
+        )
+
+        # Mark PIEZO_PRE_RF and COLD_LANDING as complete
+        record.set_phase_status(
+            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
+        )
+        record.set_phase_status(
+            CommissioningPhase.COLD_LANDING, PhaseStatus.COMPLETE
+        )
+
+        # Now SSA_CHAR should be allowed
+        can_start, reason = record.can_start_phase(CommissioningPhase.SSA_CHAR)
+        assert can_start is True
+        assert "prerequisites met" in reason.lower()
+
+    def test_cannot_restart_completed_phase(self):
+        """Test that completed phases cannot be restarted."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+        )
+
+        record.set_phase_status(
+            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
+        )
+
+        can_start, reason = record.can_start_phase(
+            CommissioningPhase.PIEZO_PRE_RF
+        )
+        assert can_start is False
+        assert "already completed" in reason.lower()
+
+    def test_advance_to_next_phase_success(self):
+        """Test successfully advancing to next phase."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            current_phase=CommissioningPhase.PIEZO_PRE_RF,
+        )
+
+        # Mark PIEZO_PRE_RF complete
+        record.set_phase_status(
+            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
+        )
+
+        # Advance to next phase
+        success, message = record.advance_to_next_phase()
+
+        assert success is True
+        assert "cold_landing" in message.lower()
+        assert record.current_phase == CommissioningPhase.COLD_LANDING
+        assert (
+            record.get_phase_status(CommissioningPhase.COLD_LANDING)
+            == PhaseStatus.IN_PROGRESS
+        )
+
+    def test_advance_to_next_phase_not_complete(self):
+        """Test that cannot advance if current phase not complete."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            current_phase=CommissioningPhase.PIEZO_PRE_RF,
+        )
+
+        # Don't mark current phase complete
+        record.set_phase_status(
+            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.IN_PROGRESS
+        )
+
+        # Try to advance
+        success, message = record.advance_to_next_phase()
+
+        assert success is False
+        assert "not complete" in message.lower()
+        assert (
+            record.current_phase == CommissioningPhase.PIEZO_PRE_RF
+        )  # Unchanged
+
+    def test_advance_from_final_phase(self):
+        """Test that cannot advance past COMPLETE phase."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            current_phase=CommissioningPhase.COMPLETE,
+        )
+
+        record.set_phase_status(
+            CommissioningPhase.COMPLETE, PhaseStatus.COMPLETE
+        )
+
+        success, message = record.advance_to_next_phase()
+
+        assert success is False
+        assert "final phase" in message.lower()
+
+    def test_sequential_phase_advancement(self):
+        """Test advancing through multiple phases in sequence."""
+        record = CommissioningRecord(
+            cavity_name="CM01_CAV1",
+            cryomodule="CM01",
+            current_phase=CommissioningPhase.PIEZO_PRE_RF,
+        )
+
+        # Complete and advance through first 3 phases
+        phases_to_test = [
+            CommissioningPhase.PIEZO_PRE_RF,
+            CommissioningPhase.COLD_LANDING,
+            CommissioningPhase.SSA_CHAR,
+        ]
+
+        for phase in phases_to_test:
+            assert record.current_phase == phase
+            record.set_phase_status(phase, PhaseStatus.COMPLETE)
+
+            success, _ = record.advance_to_next_phase()
+            if phase != CommissioningPhase.SSA_CHAR:  # Not testing beyond this
+                assert success is True
+
+        # Should now be at CAVITY_CHAR
+        assert record.current_phase == CommissioningPhase.CAVITY_CHAR
+        assert (
+            record.get_phase_status(CommissioningPhase.CAVITY_CHAR)
+            == PhaseStatus.IN_PROGRESS
+        )

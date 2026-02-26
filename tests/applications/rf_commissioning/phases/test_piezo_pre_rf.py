@@ -7,15 +7,15 @@ from unittest.mock import Mock
 
 import pytest
 
-from sc_linac_physics.applications.rf_commissioning.commissioning_piezo import (
+from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
 )
-from sc_linac_physics.applications.rf_commissioning.data_models import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     CommissioningPhase,
     PhaseStatus,
 )
-from sc_linac_physics.applications.rf_commissioning.phase_base import (
+from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
     PhaseResult,
 )
@@ -416,7 +416,7 @@ class TestPiezoPreRFPhase:
         result = phase.execute_step("validate_results")
 
         # Create checkpoint manually (normally done by run())
-        from sc_linac_physics.applications.rf_commissioning.data_models import (
+        from sc_linac_physics.applications.rf_commissioning.models.data_models import (
             PhaseCheckpoint,
         )
 
@@ -640,7 +640,7 @@ class TestPiezoPreRFPhase:
         assert record.piezo_pre_rf is None
         assert (
             record.phase_status[CommissioningPhase.PIEZO_PRE_RF]
-            == PhaseStatus.NOT_STARTED
+            == PhaseStatus.IN_PROGRESS
         )
 
         # Run phase

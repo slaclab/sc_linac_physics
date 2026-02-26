@@ -317,17 +317,8 @@ class PiezoPVGroup(PVGroup):
 
         await sleep(1)
 
-        # Get failure mode
-        fail_mode_str = self.simulate_failure.value
-        enum_to_int = {
-            "No Failure": 0,
-            "Channel A Fail (Low Cap)": 1,
-            "Channel B Fail (Low Cap)": 2,
-            "Both Fail (No Connection)": 3,
-            "Channel A Fail (High Cap)": 4,
-            "Timeout": 5,
-        }
-        fail_mode = enum_to_int.get(fail_mode_str, -1)
+        # Get failure mode - it's already an integer!
+        fail_mode = self.simulate_failure.value  # Already 0, 1, 2, 3, 4, or 5
 
         if fail_mode == 0:  # No failure
             await self.prerf_cha_status.write(0)  # Pass
@@ -386,7 +377,7 @@ class PiezoPVGroup(PVGroup):
         # Set test status to Complete
         await self.prerf_test_status.write(1)  # Complete
 
-        # Determine overall result
+        # Determine overall result - compare to strings!
         overall_pass = (
             self.prerf_cha_status.value == "Pass"
             and self.prerf_chb_status.value == "Pass"

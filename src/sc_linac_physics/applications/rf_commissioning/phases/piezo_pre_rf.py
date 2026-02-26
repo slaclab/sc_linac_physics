@@ -9,14 +9,14 @@ import time
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 
-from sc_linac_physics.applications.rf_commissioning.commissioning_piezo import (
+from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
 )
-from sc_linac_physics.applications.rf_commissioning.data_models import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PiezoPreRFCheck,
 )
-from sc_linac_physics.applications.rf_commissioning.phase_base import (
+from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
     PhaseContext,
     PhaseResult,
@@ -26,7 +26,6 @@ from sc_linac_physics.applications.rf_commissioning.phase_base import (
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     PIEZO_PRE_RF_CHECKOUT_PASS_VALUE,
     PIEZO_SCRIPT_RUNNING_VALUE,
-    PIEZO_SCRIPT_COMPLETE_VALUE,
 )
 
 
@@ -238,12 +237,8 @@ class PiezoPreRFPhase(PhaseBase):
 
             # Handle both int and string
             if isinstance(test_status, str):
-                is_running = test_status == "Running"
-                is_complete = test_status == "Complete"
                 is_crash = test_status == "Crash"
             else:
-                is_running = test_status == PIEZO_SCRIPT_RUNNING_VALUE
-                is_complete = test_status == PIEZO_SCRIPT_COMPLETE_VALUE
                 is_crash = test_status == 0  # Crash
 
             # Accept Running or Complete as valid (test triggered successfully)
@@ -251,14 +246,14 @@ class PiezoPreRFPhase(PhaseBase):
             if is_crash:
                 return PhaseStepResult(
                     result=PhaseResult.FAILED,
-                    message=f"Test crashed (status={test_status})",
+                    message=f"Failed to start test (status={test_status})",
                     data={"test_status": test_status},
                 )
 
             # Test triggered successfully (either Running or already Complete)
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
-                message="Pre-RF test triggered successfully",
+                message="Test started successfully",
                 data={"test_status": test_status},
             )
 
