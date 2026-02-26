@@ -12,6 +12,7 @@ from .data_models import (
     PiezoWithRFTest,
     HighPowerRampData,
 )
+from .database import CommissioningDatabase  # NEW
 
 __all__ = [
     "CommissioningPhase",
@@ -24,4 +25,5 @@ __all__ = [
     "CavityCharacterization",
     "PiezoWithRFTest",
     "HighPowerRampData",
+    "CommissioningDatabase",  # NEW
 ]
