@@ -199,7 +199,7 @@ class AudioAlertManager(QObject):
             return
 
         current_time = time.time()
-        escalated_count = 0
+        escalated_cavities = []
 
         for cavity_id, timestamp in list(self.unacknowledged_alarms.items()):
             if cavity_id in self.acknowledged_cavities:
@@ -207,26 +207,28 @@ class AudioAlertManager(QObject):
 
             elapsed = current_time - timestamp
             if elapsed > 120:  # 2 minutes
-                audio_alert_logger.warning(
-                    "ESCALATION: Unacknowledged alarm",
-                    extra={
-                        "extra_data": {
-                            "cavity_id": cavity_id,
-                            "unacknowledged_duration_sec": round(elapsed, 1),
-                            "alarm_timestamp": timestamp,
-                        }
-                    },
+                escalated_cavities.append(
+                    {
+                        "cavity_id": cavity_id,
+                        "duration_sec": round(elapsed, 1),
+                        "timestamp": timestamp,
+                    }
                 )
-                self._play_escalation_sound()
-                escalated_count += 1
 
-        if escalated_count > 0:
-            audio_alert_logger.info(
-                "Escalation check completed",
+        if escalated_cavities:
+            # Single escalation sound for all unacknowledged alarms
+            self._play_escalation_sound()
+
+            audio_alert_logger.warning(
+                f"ESCALATION: {len(escalated_cavities)} unacknowledged alarm(s)",
                 extra={
                     "extra_data": {
-                        "escalated_count": escalated_count,
+                        "escalated_count": len(escalated_cavities),
                         "total_unacknowledged": len(self.unacknowledged_alarms),
+                        "escalated_cavities": escalated_cavities,
+                        "longest_unack_sec": max(
+                            c["duration_sec"] for c in escalated_cavities
+                        ),
                     }
                 },
             )

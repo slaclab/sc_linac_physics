@@ -10,6 +10,32 @@ from sc_linac_physics.displays.cavity_display.frontend.audio_manager import (
 
 
 @pytest.fixture
+def multi_cavity_machine():
+    """Create machine with multiple cavities"""
+    machine = Mock()
+
+    cavities = {}
+    for i in range(1, 4):
+        cavity = Mock()
+        cavity.number = i
+        cavity.cryomodule = Mock()
+        cavity.cryomodule.name = "16"
+        cavity.cavity_widget = Mock()
+        cavity.cavity_widget.severity_changed = Mock()
+        cavities[i] = cavity
+
+    cryomodule = Mock()
+    cryomodule.name = "16"
+    cryomodule.cavities = cavities
+
+    linac = Mock()
+    linac.cryomodules = {"16": cryomodule}
+    machine.linacs = [linac]
+
+    return machine
+
+
+@pytest.fixture
 def mock_logger():
     """Mock the audio alert logger"""
     with patch(
@@ -234,6 +260,149 @@ class TestAcknowledgment:
 
 class TestEscalation:
     """Test escalation functionality"""
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+    )
+    def test_escalation_single_sound_multiple_alarms(
+        self, mock_time, qtbot, multi_cavity_machine
+    ):
+        """Test that multiple escalated alarms only trigger one escalation sound"""
+        manager = AudioAlertManager(multi_cavity_machine)
+        manager.setEnabled(True)
+
+        # Trigger 3 alarms
+        mock_time.return_value = 1000.0
+        cav1 = multi_cavity_machine.linacs[0].cryomodules["16"].cavities[1]
+        cav2 = multi_cavity_machine.linacs[0].cryomodules["16"].cavities[2]
+        cav3 = multi_cavity_machine.linacs[0].cryomodules["16"].cavities[3]
+
+        manager._on_severity_change(cav1, 2)
+        manager._on_severity_change(cav2, 2)
+        manager._on_severity_change(cav3, 2)
+
+        assert len(manager.unacknowledged_alarms) == 3
+
+        # Advance time > 2 minutes
+        mock_time.return_value = 1121.0
+
+        with patch.object(manager, "_play_escalation_sound") as mock_escalation:
+            manager._check_escalation()
+
+            # Should only be called ONCE despite 3 unacknowledged alarms
+            mock_escalation.assert_called_once()
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+    )
+    def test_escalation_logs_all_cavities(
+        self, mock_time, qtbot, multi_cavity_machine
+    ):
+        """Test that escalation logs all unacknowledged cavities in single message"""
+        manager = AudioAlertManager(multi_cavity_machine)
+        manager.setEnabled(True)
+
+        # Trigger 3 alarms at different times
+        mock_time.return_value = 1000.0
+        cav1 = multi_cavity_machine.linacs[0].cryomodules["16"].cavities[1]
+        manager._on_severity_change(cav1, 2)
+
+        mock_time.return_value = 1020.0  # 20 seconds later
+        cav2 = multi_cavity_machine.linacs[0].cryomodules["16"].cavities[2]
+        manager._on_severity_change(cav2, 2)
+
+        mock_time.return_value = 1040.0  # 40 seconds from start
+        cav3 = multi_cavity_machine.linacs[0].cryomodules["16"].cavities[3]
+        manager._on_severity_change(cav3, 2)
+
+        # Advance time so all are past 2 minutes
+        mock_time.return_value = 1200.0  # 200 seconds from first alarm
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.audio_alert_logger"
+        ) as mock_logger:
+            manager._check_escalation()
+
+            # Should have one warning call with all cavities
+            warning_calls = [
+                call
+                for call in mock_logger.warning.call_args_list
+                if len(call[0]) > 0 and "ESCALATION" in call[0][0]
+            ]
+
+            assert len(warning_calls) == 1
+
+            # Check the extra_data contains info about all 3 cavities
+            call_kwargs = warning_calls[0][1]
+            extra_data = call_kwargs["extra"]["extra_data"]
+
+            assert extra_data["escalated_count"] == 3
+            assert len(extra_data["escalated_cavities"]) == 3
+            assert "longest_unack_sec" in extra_data
+
+            # Verify cavity IDs are logged
+            cavity_ids = [
+                c["cavity_id"] for c in extra_data["escalated_cavities"]
+            ]
+            assert "16_1" in cavity_ids
+            assert "16_2" in cavity_ids
+            assert "16_3" in cavity_ids
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+    )
+    def test_no_escalation_sound_when_no_alarms(self, mock_time, audio_manager):
+        """Test that no escalation sound plays when there are no unacknowledged alarms"""
+        audio_manager.setEnabled(True)
+        mock_time.return_value = 1000.0
+
+        with patch.object(
+            audio_manager, "_play_escalation_sound"
+        ) as mock_escalation:
+            audio_manager._check_escalation()
+            mock_escalation.assert_not_called()
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+    )
+    def test_escalation_includes_duration_info(
+        self, mock_time, qtbot, multi_cavity_machine
+    ):
+        """Test that escalation log includes duration information"""
+        manager = AudioAlertManager(multi_cavity_machine)
+        manager.setEnabled(True)
+
+        # Trigger 2 alarms at different times
+        mock_time.return_value = 1000.0
+        cav1 = multi_cavity_machine.linacs[0].cryomodules["16"].cavities[1]
+        manager._on_severity_change(cav1, 2)
+
+        mock_time.return_value = 1060.0  # 1 minute later
+        cav2 = multi_cavity_machine.linacs[0].cryomodules["16"].cavities[2]
+        manager._on_severity_change(cav2, 2)
+
+        # Advance time so first is >3min, second is >2min
+        mock_time.return_value = 1200.0
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.audio_alert_logger"
+        ) as mock_logger:
+            manager._check_escalation()
+
+            warning_call = mock_logger.warning.call_args
+            extra_data = warning_call[1]["extra"]["extra_data"]
+
+            # Check duration tracking
+            assert (
+                extra_data["longest_unack_sec"] == 200.0
+            )  # First alarm: 200 seconds
+
+            # Verify individual cavity durations
+            durations = [
+                c["duration_sec"] for c in extra_data["escalated_cavities"]
+            ]
+            assert 200.0 in durations  # First cavity
+            assert 140.0 in durations  # Second cavity
 
     @patch(
         "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
