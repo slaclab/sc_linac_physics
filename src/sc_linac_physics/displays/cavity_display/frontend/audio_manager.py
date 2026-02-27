@@ -28,6 +28,7 @@ class AudioAlertManager(QObject):
         super().__init__(parent)
         self.gui_machine = gui_machine
         self._enabled = False
+        self._connected = False  # Track if cavity signals are connected
 
         # Track alerted cavities
         self.alerted_alarms = set()
@@ -38,6 +39,9 @@ class AudioAlertManager(QObject):
         # Escalation tracking
         self._last_escalation_sound_time = 0
         self._escalation_sound_interval = 300  # Only play sound every 5 minutes
+        self._escalation_log_interval = (
+            300  # Per-cavity log rate limit (5 minutes)
+        )
         self._per_cavity_escalation = (
             {}
         )  # Track when each cavity was last escalated
@@ -51,8 +55,10 @@ class AudioAlertManager(QObject):
             extra={
                 "extra_data": {
                     "enabled": self._enabled,
+                    "connected": self._connected,
                     "escalation_interval_ms": 30000,
                     "escalation_sound_interval_sec": self._escalation_sound_interval,
+                    "escalation_log_interval_sec": self._escalation_log_interval,
                 }
             },
         )
@@ -155,7 +161,7 @@ class AudioAlertManager(QObject):
 
     def start_monitoring(self):
         """Start monitoring cavities for alarms."""
-        if not hasattr(self, "_connected"):
+        if not self._connected:
             self._connect_to_cavities()
             self._connected = True
 
