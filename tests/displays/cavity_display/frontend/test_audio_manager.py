@@ -154,7 +154,13 @@ class TestMonitoring:
 
     def test_connect_to_cavities(self, audio_manager, mock_cavity, mock_logger):
         """Test that cavities are connected via signals"""
+        # Should start as not connected
+        assert audio_manager._connected is False
+
         audio_manager.start_monitoring()
+
+        # Should be connected after start
+        assert audio_manager._connected is True
 
         # Verify signal connection was called
         mock_cavity.cavity_widget.severity_changed.connect.assert_called()
@@ -486,10 +492,17 @@ class TestStateManagement:
         assert "16_1" in audio_manager.alerted_warnings
         assert "16_1" not in audio_manager.acknowledged_cavities  # Cleared
 
-    def test_acknowledged_warning_to_alarm_no_sound(
+    def test_acknowledged_alarm_retriggerable_after_deescalation(
         self, audio_manager, mock_cavity
     ):
-        """Test acknowledged warning→alarm doesn't play sound but updates state"""
+        """Test that alarm→warning de-escalation clears acknowledgment, allowing re-trigger
+
+        Scenario:
+        1. Cavity has warning then alarm
+        2. Alarm is acknowledged
+        3. De-escalates to warning (clears acknowledgment)
+        4. Returns to alarm (should trigger sound because ack was cleared)
+        """
         audio_manager.setEnabled(True)
 
         # Warning, then alarm and acknowledge at alarm level
@@ -497,15 +510,19 @@ class TestStateManagement:
         audio_manager._on_severity_change(mock_cavity, 2)
         audio_manager.acknowledge_cavity("16_1")
 
-        # Back to warning then to alarm again
+        assert "16_1" in audio_manager.acknowledged_cavities
+
+        # Back to warning - this clears acknowledgment
         audio_manager._on_severity_change(mock_cavity, 1)
 
+        # Verify acknowledgment was cleared
+        assert "16_1" not in audio_manager.acknowledged_cavities
+
         with patch.object(audio_manager, "_play_alarm_sound") as mock_alarm:
-            # Should NOT play sound (state update only)
-            # Actually this SHOULD play because ack was cleared on de-escalation
+            # Return to alarm - should trigger because ack was cleared
             audio_manager._on_severity_change(mock_cavity, 2)
 
-            # Should play because acknowledgment was cleared
+            # Should play sound (acknowledgment was cleared during de-escalation)
             assert mock_alarm.call_count == 1
 
 
