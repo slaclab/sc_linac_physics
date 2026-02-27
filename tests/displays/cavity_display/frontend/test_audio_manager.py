@@ -484,43 +484,53 @@ class TestEscalation:
 class TestSounds:
     """Test sound playback methods"""
 
-    @patch(
-        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-    )
-    def test_alarm_sound_double_beep(self, mock_beep, audio_manager, qtbot):
-        """Test alarm sound produces double beep"""
-        audio_manager._play_alarm_sound()
+    def test_alarm_sound_double_beep(self, audio_manager, qtbot):
+        """Test alarm sound schedules double beep"""
+        with (
+            patch(
+                "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
+            ) as mock_beep,
+            patch(
+                "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QTimer.singleShot"
+            ) as mock_timer,
+        ):
 
-        # First beep happens immediately
-        assert mock_beep.call_count == 1
+            audio_manager._play_alarm_sound()
 
-        # Wait for second beep (200ms delay)
-        qtbot.wait(250)
-        assert mock_beep.call_count == 2
+            # First beep happens immediately
+            assert mock_beep.call_count == 1
 
-    @patch(
-        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-    )
-    def test_warning_sound_single_beep(self, mock_beep, audio_manager):
+            # Second beep is scheduled via singleShot
+            mock_timer.assert_called_once_with(200, QApplication.beep)
+
+    def test_warning_sound_single_beep(self, audio_manager):
         """Test warning sound produces single beep"""
-        audio_manager._play_warning_sound()
-        assert mock_beep.call_count == 1
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
+        ) as mock_beep:
+            audio_manager._play_warning_sound()
+            assert mock_beep.call_count == 1
 
-    @patch(
-        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-    )
-    def test_escalation_sound_triple_beep(
-        self, mock_beep, audio_manager, qtbot
-    ):
-        """Test escalation sound produces triple beep"""
-        audio_manager._play_escalation_sound()
+    def test_escalation_sound_triple_beep(self, audio_manager):
+        """Test escalation sound schedules triple beep"""
+        with (
+            patch(
+                "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
+            ) as mock_beep,
+            patch(
+                "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QTimer.singleShot"
+            ) as mock_timer,
+        ):
 
-        # First beep immediate
-        assert mock_beep.call_count == 1
+            audio_manager._play_escalation_sound()
 
-        # Wait for all beeps (200ms, 400ms delays)
-        qtbot.wait(500)
-        assert mock_beep.call_count == 3
+            # First beep happens immediately
+            assert mock_beep.call_count == 1
+
+            # Two more beeps are scheduled via singleShot
+            assert mock_timer.call_count == 2
+            mock_timer.assert_any_call(200, QApplication.beep)
+            mock_timer.assert_any_call(400, QApplication.beep)
 
 
 class TestSignals:
@@ -628,263 +638,315 @@ class TestMultipleCavities:
         assert "16_1" not in manager.alerted_alarms
         assert "16_2" in manager.alerted_alarms
 
-    class TestEdgeCases:
-        """Test edge cases and error conditions"""
 
-        def test_severity_change_before_start(self, audio_manager, mock_cavity):
-            """Test handling severity change before monitoring starts"""
-            # Should not crash, but shouldn't alert either
-            audio_manager._on_severity_change(mock_cavity, 2)
-            assert "16_1" not in audio_manager.alerted_alarms
+class TestEdgeCases:
+    """Test edge cases and error conditions"""
 
-        def test_invalid_severity_values(self, audio_manager, mock_cavity):
-            """Test handling invalid severity values"""
-            audio_manager.setEnabled(True)
+    def test_cleared_severity_processed_when_disabled(
+        self, audio_manager, mock_cavity
+    ):
+        """Test severity=0 clears state even when manager is disabled"""
+        audio_manager.setEnabled(True)
 
-            # Test negative severity
-            audio_manager._on_severity_change(mock_cavity, -1)
-            assert "16_1" not in audio_manager.alerted_alarms
+        # Trigger alarm
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert "16_1" in audio_manager.alerted_alarms
 
-            # Test high severity
-            audio_manager._on_severity_change(mock_cavity, 999)
-            assert "16_1" not in audio_manager.alerted_alarms
+        # Disable manager
+        audio_manager.setEnabled(False)
 
-        def test_rapid_severity_changes(self, audio_manager, mock_cavity):
-            """Test rapid severity changes don't cause issues"""
-            audio_manager.setEnabled(True)
+        # Clear the cavity - should still clear state
+        audio_manager._on_severity_change(mock_cavity, 0)
 
-            with patch.object(audio_manager, "_play_alarm_sound") as mock_alarm:
-                # Rapidly toggle between states
-                for _ in range(10):
-                    audio_manager._on_severity_change(mock_cavity, 2)
-                    audio_manager._on_severity_change(mock_cavity, 0)
+        # State should be cleared despite manager being disabled
+        assert "16_1" not in audio_manager.alerted_alarms
+        assert "16_1" not in audio_manager.unacknowledged_alarms
 
-                # Should only play alarm on first occurrence in each cycle
-                assert mock_alarm.call_count <= 10
+    def test_new_alarms_ignored_when_disabled(self, audio_manager, mock_cavity):
+        """Test new alarms are ignored when disabled but clears still work"""
+        audio_manager.setEnabled(False)
 
-        def test_acknowledge_clears_from_escalation_queue(
-            self, audio_manager, mock_cavity
-        ):
-            """Test acknowledged alarm is removed from escalation checking"""
-            audio_manager.setEnabled(True)
-            audio_manager._on_severity_change(mock_cavity, 2)
+        # Try to trigger alarm while disabled
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert "16_1" not in audio_manager.alerted_alarms
 
-            cavity_id = "16_1"
-            initial_timestamp = audio_manager.unacknowledged_alarms.get(
-                cavity_id
-            )
-            assert initial_timestamp is not None
+        # Enable and trigger
+        audio_manager.setEnabled(True)
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert "16_1" in audio_manager.alerted_alarms
 
-            audio_manager.acknowledge_cavity(cavity_id)
+        # Disable and clear - should still clear
+        audio_manager.setEnabled(False)
+        audio_manager._on_severity_change(mock_cavity, 0)
+        assert "16_1" not in audio_manager.alerted_alarms
 
-            assert cavity_id not in audio_manager.unacknowledged_alarms
+    def test_stop_monitoring_with_clear_state(self, audio_manager, mock_cavity):
+        """Test stopping with clear_state option"""
+        audio_manager.setEnabled(True)
 
-        def test_restart_monitoring_preserves_state(
-            self, audio_manager, mock_cavity
-        ):
-            """Test stopping and restarting monitoring"""
-            audio_manager.start_monitoring()
-            audio_manager._on_severity_change(mock_cavity, 2)
+        # Trigger some alarms
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert len(audio_manager.alerted_alarms) == 1
 
-            assert "16_1" in audio_manager.alerted_alarms
+        # Stop with clear
+        audio_manager.stop_monitoring(clear_state=True)
 
-            audio_manager.stop_monitoring()
-            audio_manager.start_monitoring()
+        assert len(audio_manager.alerted_alarms) == 0
+        assert len(audio_manager.unacknowledged_alarms) == 0
+        assert len(audio_manager.acknowledged_cavities) == 0
 
-            # State should persist
-            assert "16_1" in audio_manager.alerted_alarms
+    def test_severity_change_before_start(self, audio_manager, mock_cavity):
+        """Test handling severity change before monitoring starts"""
+        # Should not crash, but shouldn't alert either
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert "16_1" not in audio_manager.alerted_alarms
 
-        def test_empty_machine(self, qtbot):
-            """Test manager with no cavities"""
-            machine = Mock()
-            machine.linacs = []
+    def test_invalid_severity_values(self, audio_manager, mock_cavity):
+        """Test handling invalid severity values"""
+        audio_manager.setEnabled(True)
 
-            manager = AudioAlertManager(machine)
-            manager.start_monitoring()
+        # Test negative severity
+        audio_manager._on_severity_change(mock_cavity, -1)
+        assert "16_1" not in audio_manager.alerted_alarms
 
-            # Should not crash
-            assert manager._enabled is True
+        # Test high severity
+        audio_manager._on_severity_change(mock_cavity, 999)
+        assert "16_1" not in audio_manager.alerted_alarms
 
-    class TestIntegration:
-        """Integration tests simulating real-world scenarios"""
+    def test_rapid_severity_changes(self, audio_manager, mock_cavity):
+        """Test rapid severity changes don't cause issues"""
+        audio_manager.setEnabled(True)
 
-        @patch(
-            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
-        )
-        @patch(
-            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-        )
-        def test_full_alarm_lifecycle(
-            self, mock_beep, mock_time, audio_manager, mock_cavity, qtbot
-        ):
-            """Test complete alarm lifecycle: trigger -> escalate -> acknowledge -> clear"""
-            audio_manager.start_monitoring()
-
-            # Step 1: Alarm triggers
-            mock_time.return_value = 1000.0
-            with qtbot.waitSignal(audio_manager.new_alarm, timeout=1000):
+        with patch.object(audio_manager, "_play_alarm_sound") as mock_alarm:
+            # Rapidly toggle between states
+            for _ in range(10):
                 audio_manager._on_severity_change(mock_cavity, 2)
+                audio_manager._on_severity_change(mock_cavity, 0)
 
-            assert "16_1" in audio_manager.alerted_alarms
-            assert "16_1" in audio_manager.unacknowledged_alarms
+            # Should only play alarm on first occurrence in each cycle
+            assert mock_alarm.call_count <= 10
 
-            # Step 2: Escalation after 2 minutes
-            mock_time.return_value = 1121.0
-            mock_beep.reset_mock()
+    def test_acknowledge_clears_from_escalation_queue(
+        self, audio_manager, mock_cavity
+    ):
+        """Test acknowledged alarm is removed from escalation checking"""
+        audio_manager.setEnabled(True)
+        audio_manager._on_severity_change(mock_cavity, 2)
+
+        cavity_id = "16_1"
+        initial_timestamp = audio_manager.unacknowledged_alarms.get(cavity_id)
+        assert initial_timestamp is not None
+
+        audio_manager.acknowledge_cavity(cavity_id)
+
+        assert cavity_id not in audio_manager.unacknowledged_alarms
+
+    def test_restart_monitoring_preserves_state(
+        self, audio_manager, mock_cavity
+    ):
+        """Test stopping and restarting monitoring"""
+        audio_manager.start_monitoring()
+        audio_manager._on_severity_change(mock_cavity, 2)
+
+        assert "16_1" in audio_manager.alerted_alarms
+
+        audio_manager.stop_monitoring()
+        audio_manager.start_monitoring()
+
+        # State should persist
+        assert "16_1" in audio_manager.alerted_alarms
+
+    def test_empty_machine(self, qtbot):
+        """Test manager with no cavities"""
+        machine = Mock()
+        machine.linacs = []
+
+        manager = AudioAlertManager(machine)
+        manager.start_monitoring()
+
+        # Should not crash
+        assert manager._enabled is True
+
+
+class TestIntegration:
+    """Integration tests simulating real-world scenarios"""
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+    )
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
+    )
+    def test_full_alarm_lifecycle(
+        self, mock_beep, mock_time, audio_manager, mock_cavity, qtbot
+    ):
+        """Test complete alarm lifecycle: trigger -> escalate -> acknowledge -> clear"""
+        audio_manager.start_monitoring()
+
+        # Step 1: Alarm triggers
+        mock_time.return_value = 1000.0
+        with qtbot.waitSignal(audio_manager.new_alarm, timeout=1000):
+            audio_manager._on_severity_change(mock_cavity, 2)
+
+        assert "16_1" in audio_manager.alerted_alarms
+        assert "16_1" in audio_manager.unacknowledged_alarms
+
+        # Step 2: Escalation after 2 minutes
+        mock_time.return_value = 1121.0
+        mock_beep.reset_mock()
+        audio_manager._check_escalation()
+        assert mock_beep.called
+
+        # Step 3: Acknowledge
+        audio_manager.acknowledge_cavity("16_1")
+        assert "16_1" in audio_manager.acknowledged_cavities
+        assert "16_1" not in audio_manager.unacknowledged_alarms
+
+        # Step 4: Clear alarm
+        audio_manager._on_severity_change(mock_cavity, 0)
+        assert "16_1" not in audio_manager.alerted_alarms
+        assert "16_1" not in audio_manager.acknowledged_cavities
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
+    )
+    def test_warning_to_alarm_escalation(
+        self, mock_beep, audio_manager, mock_cavity
+    ):
+        """Test cavity going from warning to alarm"""
+        audio_manager.setEnabled(True)
+
+        # Start with warning
+        audio_manager._on_severity_change(mock_cavity, 1)
+        assert "16_1" in audio_manager.alerted_warnings
+        assert "16_1" not in audio_manager.alerted_alarms
+
+        mock_beep.reset_mock()
+
+        # Escalate to alarm
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert "16_1" in audio_manager.alerted_alarms
+        assert mock_beep.called
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
+    )
+    def test_alarm_to_warning_deescalation(
+        self, mock_beep, audio_manager, mock_cavity
+    ):
+        """Test cavity going from alarm to warning properly clears alarm state"""
+        audio_manager.setEnabled(True)
+
+        # Start with alarm
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert "16_1" in audio_manager.alerted_alarms
+        assert "16_1" not in audio_manager.alerted_warnings
+
+        # De-escalate to warning
+        audio_manager._on_severity_change(mock_cavity, 1)
+
+        # Should be cleared from alarms and added to warnings
+        assert "16_1" not in audio_manager.alerted_alarms  # NOW PASSES!
+        assert "16_1" in audio_manager.alerted_warnings
+        assert (
+            "16_1" not in audio_manager.unacknowledged_alarms
+        )  # Escalation stopped
+
+    def test_alarm_re_trigger_after_warning(self, audio_manager, mock_cavity):
+        """Test alarm can re-trigger after de-escalating to warning"""
+        audio_manager.setEnabled(True)
+
+        with patch.object(audio_manager, "_play_alarm_sound") as mock_alarm:
+            # Alarm → Warning → Alarm
+            audio_manager._on_severity_change(mock_cavity, 2)
+            assert mock_alarm.call_count == 1
+
+            audio_manager._on_severity_change(mock_cavity, 1)
+
+            # Should trigger alarm sound again
+            audio_manager._on_severity_change(mock_cavity, 2)
+            assert mock_alarm.call_count == 2  # Re-triggered!
+
+    def test_disable_during_active_alarm(self, audio_manager, mock_cavity):
+        """Test disabling manager during active alarm"""
+        audio_manager.setEnabled(True)
+        audio_manager._on_severity_change(mock_cavity, 2)
+
+        assert "16_1" in audio_manager.alerted_alarms
+
+        # Disable manager
+        audio_manager.setEnabled(False)
+
+        with patch.object(
+            audio_manager, "_play_escalation_sound"
+        ) as mock_escalation:
             audio_manager._check_escalation()
-            assert mock_beep.called
+            mock_escalation.assert_not_called()
 
-            # Step 3: Acknowledge
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+    )
+    def test_multiple_escalations_over_time(
+        self, mock_time, audio_manager, mock_cavity
+    ):
+        """Test escalation continues for persistent alarms"""
+        audio_manager.setEnabled(True)
+
+        mock_time.return_value = 1000.0
+        audio_manager._on_severity_change(mock_cavity, 2)
+
+        escalation_count = 0
+
+        with patch.object(
+            audio_manager, "_play_escalation_sound"
+        ) as mock_escalation:
+            # Check multiple times over 10 minutes
+            for minutes in [3, 5, 7, 10]:
+                mock_time.return_value = 1000.0 + (minutes * 60)
+                audio_manager._check_escalation()
+                if mock_escalation.called:
+                    escalation_count += 1
+                mock_escalation.reset_mock()
+
+        assert escalation_count > 0
+
+
+class TestConcurrency:
+    """Test thread safety and concurrent operations"""
+
+    def test_concurrent_severity_changes(self, audio_manager):
+        """Test handling severity changes from multiple cavities simultaneously"""
+        audio_manager.setEnabled(True)
+
+        cavities = []
+        for i in range(5):
+            cavity = Mock()
+            cavity.number = i
+            cavity.cryomodule = Mock()
+            cavity.cryomodule.name = "16"
+            cavities.append(cavity)
+
+        # Trigger all at once
+        for cavity in cavities:
+            audio_manager._on_severity_change(cavity, 2)
+
+        assert len(audio_manager.alerted_alarms) == 5
+        assert len(audio_manager.unacknowledged_alarms) == 5
+
+    def test_acknowledge_during_escalation_check(
+        self, audio_manager, mock_cavity
+    ):
+        """Test acknowledging while escalation is checking"""
+        audio_manager.setEnabled(True)
+        audio_manager._on_severity_change(mock_cavity, 2)
+
+        with patch.object(audio_manager, "_play_escalation_sound"):
+            # Acknowledge during escalation
             audio_manager.acknowledge_cavity("16_1")
-            assert "16_1" in audio_manager.acknowledged_cavities
-            assert "16_1" not in audio_manager.unacknowledged_alarms
+            audio_manager._check_escalation()
 
-            # Step 4: Clear alarm
-            audio_manager._on_severity_change(mock_cavity, 0)
-            assert "16_1" not in audio_manager.alerted_alarms
-            assert "16_1" not in audio_manager.acknowledged_cavities
-
-        @patch(
-            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-        )
-        def test_warning_to_alarm_escalation(
-            self, mock_beep, audio_manager, mock_cavity
-        ):
-            """Test cavity going from warning to alarm"""
-            audio_manager.setEnabled(True)
-
-            # Start with warning
-            audio_manager._on_severity_change(mock_cavity, 1)
-            assert "16_1" in audio_manager.alerted_warnings
-            assert "16_1" not in audio_manager.alerted_alarms
-
-            mock_beep.reset_mock()
-
-            # Escalate to alarm
-            audio_manager._on_severity_change(mock_cavity, 2)
-            assert "16_1" in audio_manager.alerted_alarms
-            assert mock_beep.called
-
-        @patch(
-            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-        )
-        def test_alarm_to_warning_deescalation(
-            self, mock_beep, audio_manager, mock_cavity
-        ):
-            """Test cavity going from alarm to warning properly clears alarm state"""
-            audio_manager.setEnabled(True)
-
-            # Start with alarm
-            audio_manager._on_severity_change(mock_cavity, 2)
-            assert "16_1" in audio_manager.alerted_alarms
-            assert "16_1" not in audio_manager.alerted_warnings
-
-            # De-escalate to warning
-            audio_manager._on_severity_change(mock_cavity, 1)
-
-            # Should be cleared from alarms and added to warnings
-            assert "16_1" not in audio_manager.alerted_alarms  # NOW PASSES!
-            assert "16_1" in audio_manager.alerted_warnings
-            assert (
-                "16_1" not in audio_manager.unacknowledged_alarms
-            )  # Escalation stopped
-
-        def test_alarm_re_trigger_after_warning(
-            self, audio_manager, mock_cavity
-        ):
-            """Test alarm can re-trigger after de-escalating to warning"""
-            audio_manager.setEnabled(True)
-
-            with patch.object(audio_manager, "_play_alarm_sound") as mock_alarm:
-                # Alarm → Warning → Alarm
-                audio_manager._on_severity_change(mock_cavity, 2)
-                assert mock_alarm.call_count == 1
-
-                audio_manager._on_severity_change(mock_cavity, 1)
-
-                # Should trigger alarm sound again
-                audio_manager._on_severity_change(mock_cavity, 2)
-                assert mock_alarm.call_count == 2  # Re-triggered!
-
-        def test_disable_during_active_alarm(self, audio_manager, mock_cavity):
-            """Test disabling manager during active alarm"""
-            audio_manager.setEnabled(True)
-            audio_manager._on_severity_change(mock_cavity, 2)
-
-            assert "16_1" in audio_manager.alerted_alarms
-
-            # Disable manager
-            audio_manager.setEnabled(False)
-
-            with patch.object(
-                audio_manager, "_play_escalation_sound"
-            ) as mock_escalation:
-                audio_manager._check_escalation()
-                mock_escalation.assert_not_called()
-
-        @patch(
-            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
-        )
-        def test_multiple_escalations_over_time(
-            self, mock_time, audio_manager, mock_cavity
-        ):
-            """Test escalation continues for persistent alarms"""
-            audio_manager.setEnabled(True)
-
-            mock_time.return_value = 1000.0
-            audio_manager._on_severity_change(mock_cavity, 2)
-
-            escalation_count = 0
-
-            with patch.object(
-                audio_manager, "_play_escalation_sound"
-            ) as mock_escalation:
-                # Check multiple times over 10 minutes
-                for minutes in [3, 5, 7, 10]:
-                    mock_time.return_value = 1000.0 + (minutes * 60)
-                    audio_manager._check_escalation()
-                    if mock_escalation.called:
-                        escalation_count += 1
-                    mock_escalation.reset_mock()
-
-            assert escalation_count > 0
-
-    class TestConcurrency:
-        """Test thread safety and concurrent operations"""
-
-        def test_concurrent_severity_changes(self, audio_manager):
-            """Test handling severity changes from multiple cavities simultaneously"""
-            audio_manager.setEnabled(True)
-
-            cavities = []
-            for i in range(5):
-                cavity = Mock()
-                cavity.number = i
-                cavity.cryomodule = Mock()
-                cavity.cryomodule.name = "16"
-                cavities.append(cavity)
-
-            # Trigger all at once
-            for cavity in cavities:
-                audio_manager._on_severity_change(cavity, 2)
-
-            assert len(audio_manager.alerted_alarms) == 5
-            assert len(audio_manager.unacknowledged_alarms) == 5
-
-        def test_acknowledge_during_escalation_check(
-            self, audio_manager, mock_cavity
-        ):
-            """Test acknowledging while escalation is checking"""
-            audio_manager.setEnabled(True)
-            audio_manager._on_severity_change(mock_cavity, 2)
-
-            with patch.object(audio_manager, "_play_escalation_sound"):
-                # Acknowledge during escalation
-                audio_manager.acknowledge_cavity("16_1")
-                audio_manager._check_escalation()
-
-            # Should not crash
-            assert "16_1" in audio_manager.acknowledged_cavities
+        # Should not crash
+        assert "16_1" in audio_manager.acknowledged_cavities
 
 
 # Pytest configuration for Qt testing

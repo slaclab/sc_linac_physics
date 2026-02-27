@@ -36,7 +36,7 @@ class AudioAlertManager(QObject):
         self.acknowledged_cavities = set()
 
         # Escalation timer
-        self.escalation_timer = QTimer()
+        self.escalation_timer = QTimer(self)
         self.escalation_timer.timeout.connect(self._check_escalation)
 
         audio_alert_logger.debug(
@@ -75,10 +75,31 @@ class AudioAlertManager(QObject):
             },
         )
 
-    def stop_monitoring(self):
-        """Stop monitoring and silence all audio."""
+    def stop_monitoring(self, clear_state=False):
+        """
+        Stop monitoring and silence all audio.
+
+        Args:
+            clear_state: If True, clear all tracked alarms/warnings when stopping
+        """
         self.escalation_timer.stop()
         self._enabled = False
+
+        if clear_state:
+            cleared_count = len(self.alerted_alarms) + len(
+                self.alerted_warnings
+            )
+            self.alerted_alarms.clear()
+            self.alerted_warnings.clear()
+            self.unacknowledged_alarms.clear()
+            self.acknowledged_cavities.clear()
+
+            if cleared_count > 0:
+                audio_alert_logger.info(
+                    "Cleared all tracked alarms on stop",
+                    extra={"extra_data": {"cleared_count": cleared_count}},
+                )
+
         audio_alert_logger.info(
             "Audio alert monitoring stopped",
             extra={
@@ -86,18 +107,17 @@ class AudioAlertManager(QObject):
                     "active_alarms": len(self.alerted_alarms),
                     "active_warnings": len(self.alerted_warnings),
                     "unacknowledged": len(self.unacknowledged_alarms),
+                    "state_cleared": clear_state,
                 }
             },
         )
 
     def _on_severity_change(self, cavity, severity):
         """Handle severity change for a cavity - only if enabled."""
-        if not self._enabled:
-            return
-
         cavity_id = f"{cavity.cryomodule.name}_{cavity.number}"
 
-        # Special handling for severity 0 (cleared) - always process
+        # Special handling for severity 0 (cleared) - ALWAYS process, even when disabled
+        # This ensures state is cleared when cavities return to normal, regardless of enabled state
         if severity == 0:
             was_active = (
                 cavity_id in self.alerted_alarms
@@ -116,6 +136,7 @@ class AudioAlertManager(QObject):
                             "was_alarm": cavity_id in self.alerted_alarms,
                             "was_warning": cavity_id in self.alerted_warnings,
                             "was_acknowledged": was_acknowledged,
+                            "manager_enabled": self._enabled,
                         }
                     },
                 )
@@ -125,6 +146,10 @@ class AudioAlertManager(QObject):
             self.alerted_warnings.discard(cavity_id)
             self.unacknowledged_alarms.pop(cavity_id, None)
             self.acknowledged_cavities.discard(cavity_id)
+            return
+
+        # Only process alarms/warnings if enabled
+        if not self._enabled:
             return
 
         # Check if already acknowledged (only blocks NEW alarms, not clearing)
