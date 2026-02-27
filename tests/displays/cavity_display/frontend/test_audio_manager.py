@@ -225,6 +225,110 @@ class TestEscalation:
     @patch(
         "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
     )
+    def test_time_since_last_sound_logged_correctly(
+        self, mock_time, audio_manager, mock_cavity
+    ):
+        """Test that time_since_last_sound_sec reflects actual interval"""
+        audio_manager.setEnabled(True)
+        audio_manager._escalation_sound_interval = 60  # 1 minute for testing
+
+        # Trigger alarm
+        mock_time.return_value = 1000.0
+        audio_manager._on_severity_change(mock_cavity, 2)
+
+        # First escalation check
+        mock_time.return_value = 1125.0
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.audio_alert_logger"
+        ) as mock_logger:
+            audio_manager._check_escalation()
+
+            # First time should have None (no previous sound)
+            log_call = mock_logger.log.call_args
+            extra_data = log_call[1]["extra"]["extra_data"]
+            assert extra_data["time_since_last_sound_sec"] is None
+
+        # Second escalation check 90 seconds later
+        mock_time.return_value = 1215.0  # 90 seconds after first sound
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.audio_alert_logger"
+        ) as mock_logger:
+            audio_manager._check_escalation()
+
+            # Should show 90 seconds
+            log_call = mock_logger.log.call_args
+            extra_data = log_call[1]["extra"]["extra_data"]
+            assert extra_data["time_since_last_sound_sec"] == 90.0
+
+    def test_cleared_cavity_removes_escalation_tracking(
+        self, audio_manager, mock_cavity
+    ):
+        """Test that clearing a cavity removes it from per-cavity escalation tracking"""
+        audio_manager.setEnabled(True)
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+        ) as mock_time:
+            # Trigger alarm and escalate
+            mock_time.return_value = 1000.0
+            audio_manager._on_severity_change(mock_cavity, 2)
+
+            mock_time.return_value = 1125.0
+            audio_manager._check_escalation()
+
+            # Should be in escalation tracking
+            assert "16_1" in audio_manager._per_cavity_escalation
+
+            # Clear the cavity
+            audio_manager._on_severity_change(mock_cavity, 0)
+
+            # Should be removed from escalation tracking
+            assert "16_1" not in audio_manager._per_cavity_escalation
+
+    def test_cleared_then_new_alarm_logs_immediately(
+        self, audio_manager, mock_cavity
+    ):
+        """Test that a new alarm after clear logs immediately (not rate-limited)"""
+        audio_manager.setEnabled(True)
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+        ) as mock_time:
+            # First alarm cycle
+            mock_time.return_value = 1000.0
+            audio_manager._on_severity_change(mock_cavity, 2)
+
+            mock_time.return_value = 1125.0
+            audio_manager._check_escalation()
+            assert "16_1" in audio_manager._per_cavity_escalation
+            first_escalation_time = audio_manager._per_cavity_escalation["16_1"]
+
+            # Clear
+            mock_time.return_value = 1130.0
+            audio_manager._on_severity_change(mock_cavity, 0)
+            assert "16_1" not in audio_manager._per_cavity_escalation
+
+            # New alarm 10 seconds later (well within 5-minute window)
+            mock_time.return_value = 1140.0
+            audio_manager._on_severity_change(mock_cavity, 2)
+
+            # Escalate again (2+ minutes after new alarm)
+            mock_time.return_value = 1265.0
+            audio_manager._check_escalation()
+
+            # Should be in tracking again (fresh start)
+            assert "16_1" in audio_manager._per_cavity_escalation
+            second_escalation_time = audio_manager._per_cavity_escalation[
+                "16_1"
+            ]
+
+            # Should be a new timestamp (not rate-limited by first alarm)
+            assert second_escalation_time == 1265.0
+            assert second_escalation_time != first_escalation_time
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+    )
     def test_escalation_rate_limiting(
         self, mock_time, audio_manager, mock_cavity
     ):
@@ -521,6 +625,37 @@ class TestMultipleCavities:
 
 class TestEdgeCases:
     """Test edge cases and error conditions"""
+
+    def test_cleared_severity_clears_all_tracking(
+        self, audio_manager, mock_cavity
+    ):
+        """Test that severity=0 clears all tracking including escalation"""
+        audio_manager.setEnabled(True)
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+        ) as mock_time:
+            # Setup: alarm and escalate (don't acknowledge to keep escalation tracking)
+            mock_time.return_value = 1000.0
+            audio_manager._on_severity_change(mock_cavity, 2)
+
+            mock_time.return_value = 1125.0
+            audio_manager._check_escalation()
+
+            # Verify tracking is populated
+            assert "16_1" in audio_manager.alerted_alarms
+            assert "16_1" in audio_manager.unacknowledged_alarms
+            assert "16_1" in audio_manager._per_cavity_escalation
+
+            # Clear
+            audio_manager._on_severity_change(mock_cavity, 0)
+
+            # All tracking should be cleared
+            assert "16_1" not in audio_manager.alerted_alarms
+            assert "16_1" not in audio_manager.alerted_warnings
+            assert "16_1" not in audio_manager.unacknowledged_alarms
+            assert "16_1" not in audio_manager.acknowledged_cavities
+            assert "16_1" not in audio_manager._per_cavity_escalation
 
     def test_cleared_severity_processed_when_disabled(
         self, audio_manager, mock_cavity

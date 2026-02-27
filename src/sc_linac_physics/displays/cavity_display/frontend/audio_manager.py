@@ -88,17 +88,29 @@ class AudioAlertManager(QObject):
                     self._per_cavity_escalation[cavity_id] = current_time
 
         if escalated_cavities:
+            # Capture PREVIOUS timestamp before updating
+            previous_sound_time = self._last_escalation_sound_time
+
             # Determine if we should play sound (global rate limit)
             should_play_sound = (
-                current_time - self._last_escalation_sound_time
+                current_time - previous_sound_time
             ) >= self._escalation_sound_interval
 
             # Filter cavities that should be logged this cycle
             newly_escalated = [c for c in escalated_cavities if c["should_log"]]
 
+            # Calculate time since last sound BEFORE updating
+            time_since_last_sound = (
+                round(current_time - previous_sound_time, 1)
+                if previous_sound_time > 0
+                else None
+            )
+
             if should_play_sound and escalated_cavities:
                 self._play_escalation_sound()
-                self._last_escalation_sound_time = current_time
+                self._last_escalation_sound_time = (
+                    current_time  # Update AFTER capturing
+                )
                 log_level = logging.WARNING
                 message_prefix = "ESCALATION (sound)"
             else:
@@ -126,15 +138,7 @@ class AudioAlertManager(QObject):
                             "longest_unack_sec": max(
                                 c["duration_sec"] for c in escalated_cavities
                             ),
-                            "time_since_last_sound_sec": (
-                                round(
-                                    current_time
-                                    - self._last_escalation_sound_time,
-                                    1,
-                                )
-                                if self._last_escalation_sound_time > 0
-                                else None
-                            ),
+                            "time_since_last_sound_sec": time_since_last_sound,
                         }
                     },
                 )
@@ -253,6 +257,9 @@ class AudioAlertManager(QObject):
         self.alerted_warnings.discard(cavity_id)
         self.unacknowledged_alarms.pop(cavity_id, None)
         self.acknowledged_cavities.discard(cavity_id)
+        self._per_cavity_escalation.pop(
+            cavity_id, None
+        )  # Clear escalation tracking too
 
     def _handle_alarm_severity(
         self, cavity_id: str, cavity, is_acknowledged: bool
