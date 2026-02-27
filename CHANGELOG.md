@@ -2,6 +2,52 @@
 
 <!-- version list -->
 
+## v9.6.0 (2026-02-26)
+
+### Bug Fixes
+
+- Adding severity_changed signal ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- Patching right click not working ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- Putting accidentally deleted flag back
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Patch status bar
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Restore original SSA visibility rule
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+### Features
+
+- **cavity-display**: Add alarm sidebar with responsive design
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Add search and filter functionality
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Enhance cavity widget with context menu and signals
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+### Testing
+
+- Patching failing tests ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+
 ## v9.5.0 (2026-02-23)
 
 ### Bug Fixes

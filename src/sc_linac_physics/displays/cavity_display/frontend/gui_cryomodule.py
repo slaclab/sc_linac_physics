@@ -98,13 +98,7 @@ class GUICryomodule(Cryomodule):
         alarm_count = 0
         warning_count = 0
 
-        cavities = (
-            self.cavities.values()
-            if isinstance(self.cavities, dict)
-            else self.cavities
-        )
-
-        for cavity in cavities:
+        for cavity in self.cavities.values():
             severity = getattr(cavity.cavity_widget, "_last_severity", None)
             if severity == 2:
                 alarm_count += 1
