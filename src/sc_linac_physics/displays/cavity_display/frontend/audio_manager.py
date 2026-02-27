@@ -73,7 +73,9 @@ class AudioAlertManager(QObject):
             if elapsed > 120:  # 2 minutes
                 # Check if this cavity needs logging (every 5 min per cavity)
                 last_logged = self._per_cavity_escalation.get(cavity_id, 0)
-                should_log = (current_time - last_logged) >= 300  # 5 minutes
+                should_log = (
+                    current_time - last_logged
+                ) >= self._escalation_sound_interval  # 5 minutes
 
                 escalated_cavities.append(
                     {
@@ -334,6 +336,9 @@ class AudioAlertManager(QObject):
         """Handle de-escalation from alarm to warning."""
         self.alerted_alarms.discard(cavity_id)
         self.unacknowledged_alarms.pop(cavity_id, None)
+
+        # Reset per-cavity escalation tracking so future alarms are not rate-limited
+        self._per_cavity_escalation.pop(cavity_id, None)
 
         # Clear acknowledgment on de-escalation so future alarms can trigger
         if is_acknowledged:
