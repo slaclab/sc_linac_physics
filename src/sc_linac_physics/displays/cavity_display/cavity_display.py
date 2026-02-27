@@ -1,21 +1,20 @@
 from datetime import datetime
 
-from PyQt5.QtCore import QTimer
-from PyQt5.QtCore import Qt, QSettings
-from PyQt5.QtGui import QColor, QCursor
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtCore import QSettings, QTimer, Qt
+from PyQt5.QtGui import QColor, QCursor, QKeySequence
 from PyQt5.QtWidgets import (
-    QHBoxLayout,
-    QVBoxLayout,
-    QPushButton,
+    QApplication,
+    QFileDialog,
+    QGraphicsOpacityEffect,
     QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QShortcut,
     QSplitter,
     QStatusBar,
-    QLabel,
-    QShortcut,
-    QApplication,
-    QLineEdit,
-    QFileDialog,
+    QVBoxLayout,
 )
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
@@ -40,24 +39,20 @@ from sc_linac_physics.displays.cavity_display.frontend.gui_machine import (
 
 
 class CavityDisplayGUI(Display):
-
     def __init__(self, parent=None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.setStyleSheet(
             "background-color: rgb(35, 35, 35); color: rgb(255, 255, 255); font-size: 15pt;"
         )
+        self.setWindowTitle("SRF Cavity Display")
 
-        # Set window size constraints
         self.resize(1200, 800)
         self.setMinimumSize(1100, 700)
 
-        # Initialize GUI machine
         self.gui_machine = GUIMachine()
 
-        # Header layout
         self.header = QHBoxLayout()
 
-        # Heartbeat indicator
         heartbeat_indicator = PyDMByteIndicator(
             init_channel="ALRM:SYS0:SC_CAV_FAULT:ALHBERR"
         )
@@ -78,12 +73,10 @@ class CavityDisplayGUI(Display):
         self.header.addWidget(heartbeat_counter)
         self.header.addStretch()
 
-        # Decoder window button
         self.decoder_window = DecoderDisplay()
         self.decoder_button = QPushButton("Three Letter Code Decoder")
         self.add_header_button(self.decoder_button, self.decoder_window)
 
-        # Fault counter button
         self.fault_count_display = FaultCountDisplay()
         self.fault_count_button = QPushButton("Fault Counter")
         self.fault_count_button.setToolTip(
@@ -93,90 +86,85 @@ class CavityDisplayGUI(Display):
             self.fault_count_button, self.fault_count_display
         )
 
-        self.setWindowTitle("SRF Cavity Display")
-
-        # Main container for cavity grid
-        self.groupbox_vlayout = QVBoxLayout()
-        self.groupbox_vlayout.setContentsMargins(5, 5, 5, 5)
-        self.groupbox_vlayout.setSpacing(8)
-        self.groupbox_vlayout.addLayout(self.header)
-
-        # Search box
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search CM or Cavity...")
         self.search_box.setStyleSheet("""
-                QLineEdit {
-                    background-color: rgb(50, 50, 50);
-                    color: white;
-                    border: 1px solid rgb(100, 100, 100);
-                    border-radius: 3px;
-                    padding: 5px;
-                    font-size: 11pt;
-                }
-                QLineEdit:focus {
-                    border: 2px solid rgb(100, 150, 255);
-                }
+            QLineEdit {
+                background-color: rgb(50, 50, 50);
+                color: white;
+                border: 1px solid rgb(100, 100, 100);
+                border-radius: 3px;
+                padding: 5px;
+                font-size: 11pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid rgb(100, 150, 255);
+            }
             """)
         self.search_box.textChanged.connect(self.filter_cavities)
         self.search_box.setMaximumWidth(200)
 
-        # Clear search button
         self.clear_search_btn = QPushButton("✕")
         self.clear_search_btn.setToolTip("Clear search")
         self.clear_search_btn.clicked.connect(lambda: self.search_box.clear())
         self.clear_search_btn.setMaximumWidth(30)
         self.clear_search_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: rgb(60, 60, 60);
-                    color: white;
-                    border: 1px solid rgb(100, 100, 100);
-                    border-radius: 3px;
-                    padding: 3px;
-                }
-                QPushButton:hover {
-                    background-color: rgb(80, 80, 80);
-                }
+            QPushButton {
+                background-color: rgb(60, 60, 60);
+                color: white;
+                border: 1px solid rgb(100, 100, 100);
+                border-radius: 3px;
+                padding: 3px;
+            }
+            QPushButton:hover {
+                background-color: rgb(80, 80, 80);
+            }
             """)
 
         self.header.addWidget(QLabel("Search:"))
         self.header.addWidget(self.search_box)
         self.header.addWidget(self.clear_search_btn)
 
-        # Screenshot button
         self.screenshot_btn = QPushButton("📷 Screenshot")
         self.screenshot_btn.setToolTip("Save screenshot of current display")
         self.screenshot_btn.clicked.connect(self.save_screenshot)
         self.header.addWidget(self.screenshot_btn)
 
-        self.audio_enabled = False  # Default OFF
+        self.audio_enabled = False
         self.audio_toggle_btn = QPushButton("🔇 Audio Off")
         self.audio_toggle_btn.setCheckable(True)
         self.audio_toggle_btn.setChecked(False)
         self.audio_toggle_btn.setToolTip("Enable/disable audio alerts")
         self.audio_toggle_btn.clicked.connect(self.toggle_audio)
         self.audio_toggle_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: rgb(60, 60, 60);
-                    color: white;
-                    border: 1px solid rgb(100, 100, 100);
-                    padding: 5px 10px;
-                    border-radius: 3px;
-                    font-size: 10pt;
-                }
-                QPushButton:checked {
-                    background-color: rgb(0, 100, 0);
-                    border: 1px solid rgb(0, 150, 0);
-                }
-                QPushButton:hover {
-                    background-color: rgb(80, 80, 80);
-                }
+            QPushButton {
+                background-color: rgb(60, 60, 60);
+                color: white;
+                border: 1px solid rgb(100, 100, 100);
+                padding: 5px 10px;
+                border-radius: 3px;
+                font-size: 10pt;
+            }
+            QPushButton:checked {
+                background-color: rgb(0, 100, 0);
+                border: 1px solid rgb(0, 150, 0);
+            }
+            QPushButton:hover {
+                background-color: rgb(80, 80, 80);
+            }
             """)
         self.header.addWidget(self.audio_toggle_btn)
 
-        # Add the machine layout
+        self.vlayout = QVBoxLayout()
+        self.vlayout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(self.vlayout)
+
+        self.groupbox_vlayout = QVBoxLayout()
+        self.groupbox_vlayout.setContentsMargins(5, 5, 5, 5)
+        self.groupbox_vlayout.setSpacing(8)
+        self.groupbox_vlayout.addLayout(self.header)
         self.groupbox_vlayout.addLayout(self.gui_machine.main_layout)
 
-        # Main groupbox
         self.groupbox = QGroupBox()
         self.groupbox.setLayout(self.groupbox_vlayout)
         self.groupbox.setStyleSheet("""
@@ -186,18 +174,14 @@ class CavityDisplayGUI(Display):
             }
             """)
 
-        # Alarm sidebar
         self.alarm_sidebar = AlarmSidebarWidget(self.gui_machine, parent=self)
         self.alarm_sidebar.cavity_clicked.connect(self.scroll_to_cavity)
 
-        # Splitter for main display and sidebar
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.addWidget(self.groupbox)
         self.splitter.addWidget(self.alarm_sidebar)
         self.splitter.setSizes([8500, 1500])
         self.groupbox.setMinimumWidth(600)
-
-        # Splitter styling
         self.splitter.setStyleSheet("""
             QSplitter::handle {
                 background-color: rgb(100, 100, 100);
@@ -210,88 +194,80 @@ class CavityDisplayGUI(Display):
                 background-color: rgb(200, 200, 200);
             }
             """)
-
         self.splitter.setCollapsible(0, False)
         self.splitter.setCollapsible(1, True)
-
-        # Main layout
-        self.vlayout = QVBoxLayout()
-        self.vlayout.setContentsMargins(0, 0, 0, 0)
         self.vlayout.addWidget(self.splitter)
-        self.setLayout(self.vlayout)
 
-        # Settings
         self.settings = QSettings("SLAC", "CavityDisplay")
-
-        # Restore saved geometry
         if self.settings.contains("window_geometry"):
             self.restoreGeometry(self.settings.value("window_geometry"))
-
         if self.settings.contains("splitter_state"):
             self.splitter.restoreState(self.settings.value("splitter_state"))
 
-        # Status bar
         self.status_bar = QStatusBar()
         self.status_bar.setStyleSheet("""
-                QStatusBar {
-                    background-color: rgb(50, 50, 50);
-                    color: white;
-                    font-size: 11pt;
-                    padding: 3px;
-                    max-height: 30px;
-                }
+            QStatusBar {
+                background-color: rgb(50, 50, 50);
+                color: white;
+                font-size: 11pt;
+                padding: 3px;
+                max-height: 30px;
+            }
             """)
-
         self.status_label = QLabel("Initializing...")
         self.status_label.setStyleSheet("font-size: 11pt;")
         self.status_bar.addWidget(self.status_label)
-
-        # Add splitter and status bar to layout
-        self.vlayout.addWidget(self.splitter)
         self.vlayout.addWidget(self.status_bar)
 
-        # Status update timer
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(5000)
 
-        # Audio manager - create but don't activate yet
         self.audio_manager = AudioAlertManager(self.gui_machine, parent=self)
-        self.audio_manager.setEnabled(False)  # Start disabled
+        self.audio_manager.setEnabled(False)
 
-        # Auto-zoom tracking
+        saved_audio_enabled = bool(
+            self.settings.value("audio_enabled", False, type=bool)
+        )
+        self.audio_toggle_btn.setChecked(saved_audio_enabled)
+        self.toggle_audio()
+
+        self._setup_shortcuts()
+
         self.current_zoom = 60
         self._resize_timer = None
-
-        # Apply initial zoom
         QTimer.singleShot(100, lambda: self.apply_zoom(60))
 
     def toggle_audio(self):
-        """Toggle audio alerts on/off."""
         self.audio_enabled = self.audio_toggle_btn.isChecked()
 
         if self.audio_enabled:
             self.audio_toggle_btn.setText("🔊 Audio On")
             self.audio_manager.setEnabled(True)
             self.audio_manager.start_monitoring()
-            if hasattr(self, "status_label"):
-                self.status_label.setText("✓ Audio alerts enabled")
-                QTimer.singleShot(3000, self.update_status)
+            self.status_label.setText("✓ Audio alerts enabled")
         else:
             self.audio_toggle_btn.setText("🔇 Audio Off")
             self.audio_manager.setEnabled(False)
             self.audio_manager.stop_monitoring()
-            if hasattr(self, "status_label"):
-                self.status_label.setText("Audio alerts disabled")
-                QTimer.singleShot(3000, self.update_status)
+            self.status_label.setText("Audio alerts disabled")
+
+        QTimer.singleShot(3000, self.update_status)
+
+    def add_header_button(self, button: QPushButton, display: Display):
+        button.clicked.connect(lambda: showDisplay(display))
+
+        icon = IconFont().icon("file")
+        button.setIcon(icon)
+        button.setCursor(QCursor(icon.pixmap(16, 16)))
+        button.openInNewWindow = True
+        self.header.addWidget(button)
 
     def showEvent(self, event):
-        """Auto-fit zoom when window is first shown."""
         super().showEvent(event)
         QTimer.singleShot(200, lambda: self.apply_zoom(60))
 
     def resizeEvent(self, event):
-        """Auto-adjust zoom when user resizes window."""
         super().resizeEvent(event)
 
         if self._resize_timer:
@@ -303,11 +279,9 @@ class CavityDisplayGUI(Display):
         self._resize_timer.start(300)
 
     def auto_fit_on_resize(self):
-        """Calculate optimal zoom when user resizes window."""
-        if not hasattr(self, "groupbox") or not self.groupbox:
+        if not hasattr(self, "groupbox") or self.groupbox is None:
             return
 
-        # Don't recalculate at minimum size
         if (
             self.width() <= self.minimumWidth() + 50
             or self.height() <= self.minimumHeight() + 50
@@ -317,21 +291,18 @@ class CavityDisplayGUI(Display):
                 self.apply_zoom(55)
             return
 
-        # Get available space
+        available_height = self.height() - 200
         sidebar_width = (
             self.alarm_sidebar.width() if self.alarm_sidebar.isVisible() else 0
         )
-        available_height = self.height() - 200
         available_width = self.width() - sidebar_width - 40
 
-        # Measure content at 100%
         self.gui_machine.set_zoom_level(100)
         QApplication.processEvents()
 
         content_height = self.groupbox.sizeHint().height()
         content_width = self.groupbox.sizeHint().width()
 
-        # Calculate optimal zoom
         height_zoom = (
             (available_height / content_height * 100)
             if content_height > 0
@@ -352,14 +323,18 @@ class CavityDisplayGUI(Display):
             self.apply_zoom(optimal_zoom)
 
     def apply_zoom(self, zoom_percent):
-        """Apply zoom to the entire display."""
-        scale = zoom_percent / 100.0
+        if not hasattr(self, "groupbox") or self.groupbox is None:
+            return
 
-        # Apply scaling to machine
+        try:
+            self.groupbox.objectName()
+        except RuntimeError:
+            return
+
         self.gui_machine.set_zoom_level(zoom_percent)
 
-        # Update CM label fonts
-        for cm_widget in self.gui_machine.cm_widgets:
+        scale = zoom_percent / 100.0
+        for cm_widget in getattr(self.gui_machine, "cm_widgets", []):
             cm_layout = cm_widget.layout()
             if cm_layout and cm_layout.count() > 0:
                 label_widget = cm_layout.itemAt(0).widget()
@@ -373,54 +348,64 @@ class CavityDisplayGUI(Display):
                             padding: {max(1, int(2 * scale))}px;
                             border-radius: {max(1, int(2 * scale))}px;
                         }}
-                    """)
+                        """)
 
-        # Force layout update
         QApplication.processEvents()
-        self.groupbox.updateGeometry()
-        self.groupbox.adjustSize()
+
+        try:
+            self.groupbox.updateGeometry()
+            self.groupbox.adjustSize()
+        except RuntimeError:
+            return
+
         self.update()
 
-    def closeEvent(self, event):
-        """Clean up and save state when window closes."""
-        # Save window state
-        self.settings.setValue("splitter_state", self.splitter.saveState())
-        self.settings.setValue("window_geometry", self.saveGeometry())
-        self.settings.setValue(
-            "audio_enabled", self.audio_enabled
-        )  # Save audio preference
+    def _setup_shortcuts(self):
+        refresh_shortcut = QShortcut(QKeySequence("F5"), self)
+        refresh_shortcut.activated.connect(self.alarm_sidebar.update_alarm_list)
 
-        # Cleanup
-        if hasattr(self, "alarm_sidebar"):
-            self.alarm_sidebar.stop_refresh()
+        toggle_shortcut = QShortcut(QKeySequence("Ctrl+H"), self)
+        toggle_shortcut.activated.connect(self.toggle_sidebar)
 
-        if hasattr(self, "audio_manager"):
-            self.audio_manager.stop_monitoring()
+        next_alarm_shortcut = QShortcut(QKeySequence("F3"), self)
+        next_alarm_shortcut.activated.connect(self.jump_to_next_alarm)
 
-        super().closeEvent(event)
+        prev_alarm_shortcut = QShortcut(QKeySequence("Shift+F3"), self)
+        prev_alarm_shortcut.activated.connect(self.jump_to_previous_alarm)
 
-    def save_screenshot(self):
-        """Save a screenshot of the current display"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_filename = f"cavity_display_{timestamp}.png"
+    def toggle_sidebar(self):
+        if self.alarm_sidebar.isVisible():
+            self.alarm_sidebar.hide()
+        else:
+            self.alarm_sidebar.show()
 
-        filename, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Screenshot",
-            default_filename,
-            "PNG Files (*.png);;All Files (*)",
-        )
+    def jump_to_next_alarm(self):
+        current_row = self.alarm_sidebar.alarm_list.currentRow()
+        next_row = current_row + 1
 
-        if filename:
-            pixmap = self.groupbox.grab()
-            pixmap.save(filename)
+        if next_row < self.alarm_sidebar.alarm_list.count():
+            self.alarm_sidebar.alarm_list.setCurrentRow(next_row)
+            item = self.alarm_sidebar.alarm_list.currentItem()
+            if item:
+                cavity = item.data(Qt.UserRole)
+                self.scroll_to_cavity(cavity)
 
-            if hasattr(self, "status_label"):
-                self.status_label.setText(f"Screenshot saved: {filename}")
-                QTimer.singleShot(5000, self.update_status)
+    def jump_to_previous_alarm(self):
+        current_row = self.alarm_sidebar.alarm_list.currentRow()
+        prev_row = current_row - 1
+
+        if prev_row >= 0:
+            self.alarm_sidebar.alarm_list.setCurrentRow(prev_row)
+            item = self.alarm_sidebar.alarm_list.currentItem()
+            if item:
+                cavity = item.data(Qt.UserRole)
+                self.scroll_to_cavity(cavity)
+
+    def scroll_to_cavity(self, cavity):
+        if hasattr(cavity, "cavity_widget"):
+            cavity.cavity_widget.highlight()
 
     def filter_cavities(self, search_text):
-        """Filter/highlight cavities based on search text"""
         search_text = search_text.lower().strip()
 
         linacs = self.gui_machine.linacs
@@ -448,48 +433,78 @@ class CavityDisplayGUI(Display):
                         cavity.cavity_widget.setVisible(True)
                         cavity.cavity_widget.setGraphicsEffect(None)
                     else:
-                        from PyQt5.QtWidgets import QGraphicsOpacityEffect
-
                         opacity_effect = QGraphicsOpacityEffect()
                         opacity_effect.setOpacity(0.2)
                         cavity.cavity_widget.setGraphicsEffect(opacity_effect)
 
+    def save_screenshot(self):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_filename = f"cavity_display_{timestamp}.png"
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Screenshot",
+            default_filename,
+            "PNG Files (*.png);;All Files (*)",
+        )
+
+        if filename:
+            pixmap = self.groupbox.grab()
+            pixmap.save(filename)
+            self.status_label.setText(f"Screenshot saved: {filename}")
+            QTimer.singleShot(5000, self.update_status)
+
     def flash_window(self, cavity=None):
-        """Flash/alert the window to grab attention"""
         QApplication.alert(self, 0)
 
         if cavity:
             original_title = self.windowTitle()
-            alarm_title = f"⚠️ ALARM: CM{cavity.cryomodule.name} Cav{cavity.number} - {original_title}"
+            alarm_title = (
+                f"⚠️ ALARM: CM{cavity.cryomodule.name} Cav{cavity.number} - "
+                f"{original_title}"
+            )
             self.setWindowTitle(alarm_title)
             QTimer.singleShot(5000, lambda: self.setWindowTitle(original_title))
 
     def update_status(self):
-        """Update status bar with summary"""
         total = 0
         alarms = 0
         warnings = 0
         ok = 0
+        invalid = 0
 
-        for linac in self.gui_machine.linacs:
-            for cm in linac.cryomodules.values():
-                for cavity in cm.cavities.values():
+        linacs = self.gui_machine.linacs
+        if isinstance(linacs, dict):
+            linacs = linacs.values()
+
+        for linac in linacs:
+            cryomodules = linac.cryomodules
+            if isinstance(cryomodules, dict):
+                cryomodules = cryomodules.values()
+
+            for cm in cryomodules:
+                cavities = cm.cavities
+                if isinstance(cavities, dict):
+                    cavities = cavities.values()
+
+                for cavity in cavities:
                     total += 1
                     severity = getattr(
                         cavity.cavity_widget, "_last_severity", None
                     )
-                    if severity == 2:
+
+                    if severity == 3:
+                        invalid += 1
+                    elif severity == 2:
                         alarms += 1
                     elif severity == 1:
                         warnings += 1
                     else:
                         ok += 1
 
-        # Build status message
-        self._update_status_display(total, alarms, warnings, ok)
+        self._update_status_display(total, alarms, warnings, ok, invalid)
 
-    def _update_status_display(self, total, alarms, warnings, ok):
-        """Update the status bar display with counts."""
+    def _update_status_display(self, total, alarms, warnings, ok, invalid):
         status_parts = []
 
         if alarms > 0:
@@ -503,19 +518,22 @@ class CavityDisplayGUI(Display):
             )
 
         status_parts.append(f"✓ {ok} OK")
+
+        if invalid > 0:
+            status_parts.append(f"🟣 {invalid} INVALID")
+
         status_parts.append(f"Total: {total}")
+        self.status_label.setText(" | ".join(status_parts))
 
-        status_text = " | ".join(status_parts)
-
-        # Determine color based on severity
         if alarms > 0:
             bg_color = "rgb(150, 0, 0)"
         elif warnings > 0:
             bg_color = "rgb(200, 120, 0)"
+        elif invalid > 0:
+            bg_color = "rgb(100, 50, 150)"
         else:
             bg_color = "rgb(0, 100, 0)"
 
-        self.status_label.setText(status_text)
         self.status_bar.setStyleSheet(f"""
             QStatusBar {{
                 background-color: {bg_color};
@@ -525,82 +543,17 @@ class CavityDisplayGUI(Display):
                 padding: 3px;
                 max-height: 30px;
             }}
-        """)
+            """)
 
-    def _setup_shortcuts(self):
-        """Setup keyboard shortcuts for common actions"""
-        # F5 - Refresh alarm list
-        refresh_shortcut = QShortcut(QKeySequence("F5"), self)
-        refresh_shortcut.activated.connect(self.alarm_sidebar.update_alarm_list)
+    def closeEvent(self, event):
+        self.settings.setValue("splitter_state", self.splitter.saveState())
+        self.settings.setValue("window_geometry", self.saveGeometry())
+        self.settings.setValue("audio_enabled", self.audio_enabled)
 
-        # Ctrl+H - Toggle sidebar
-        toggle_shortcut = QShortcut(QKeySequence("Ctrl+H"), self)
-        toggle_shortcut.activated.connect(self.toggle_sidebar)
+        if hasattr(self, "alarm_sidebar"):
+            self.alarm_sidebar.stop_refresh()
 
-        # F3 - Jump to next alarm
-        next_alarm_shortcut = QShortcut(QKeySequence("F3"), self)
-        next_alarm_shortcut.activated.connect(self.jump_to_next_alarm)
+        if hasattr(self, "audio_manager"):
+            self.audio_manager.stop_monitoring()
 
-        # Shift+F3 - Jump to previous alarm
-        prev_alarm_shortcut = QShortcut(QKeySequence("Shift+F3"), self)
-        prev_alarm_shortcut.activated.connect(self.jump_to_previous_alarm)
-
-    def toggle_sidebar(self):
-        """Toggle sidebar visibility"""
-        if self.alarm_sidebar.isVisible():
-            self.alarm_sidebar.hide()
-        else:
-            self.alarm_sidebar.show()
-
-    def jump_to_next_alarm(self):
-        """Jump to next alarm in the list"""
-        current_row = self.alarm_sidebar.alarm_list.currentRow()
-        next_row = current_row + 1
-
-        if next_row < self.alarm_sidebar.alarm_list.count():
-            self.alarm_sidebar.alarm_list.setCurrentRow(next_row)
-            item = self.alarm_sidebar.alarm_list.currentItem()
-            if item:
-                cavity = item.data(Qt.UserRole)
-                self.scroll_to_cavity(cavity)
-
-    def jump_to_previous_alarm(self):
-        """Jump to previous alarm in the list"""
-        current_row = self.alarm_sidebar.alarm_list.currentRow()
-        prev_row = current_row - 1
-
-        if prev_row >= 0:
-            self.alarm_sidebar.alarm_list.setCurrentRow(prev_row)
-            item = self.alarm_sidebar.alarm_list.currentItem()
-            if item:
-                cavity = item.data(Qt.UserRole)
-                self.scroll_to_cavity(cavity)
-
-        # Auto-zoom tracking
-        self.current_zoom = 60
-        self._resize_timer = None
-
-        # Apply initial zoom
-        QTimer.singleShot(100, lambda: self.apply_zoom(60))
-
-        self.setWindowTitle("SRF Cavity Display")
-
-    def add_header_button(self, button: QPushButton, display: Display):
-        button.clicked.connect(lambda: showDisplay(display))
-
-        icon = IconFont().icon("file")
-        button.setIcon(icon)
-        button.setCursor(QCursor(icon.pixmap(16, 16)))
-        button.openInNewWindow = True
-        self.header.addWidget(button)
-
-    def scroll_to_cavity(self, cavity):
-        """
-        Highlight a specific cavity when clicked from alarm sidebar.
-        No scrolling needed since everything is visible.
-
-        Args:
-            cavity: GUICavity object to highlight
-        """
-        if hasattr(cavity, "cavity_widget"):
-            cavity.cavity_widget.highlight()
+        super().closeEvent(event)

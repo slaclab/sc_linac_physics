@@ -4,20 +4,20 @@ from typing import TYPE_CHECKING, Optional
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
-    QVBoxLayout,
-    QHBoxLayout,
-    QSizePolicy,
     QGroupBox,
-    QScrollArea,
+    QHBoxLayout,
     QLabel,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
 )
 from edmbutton import PyDMEDMDisplayButton
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
 from pydm.widgets import (
     PyDMByteIndicator,
-    PyDMShellCommand,
     PyDMRelatedDisplayButton,
+    PyDMShellCommand,
 )
 
 from sc_linac_physics.displays.cavity_display.backend.backend_cavity import (
@@ -27,9 +27,9 @@ from sc_linac_physics.displays.cavity_display.frontend.cavity_widget import (
     CavityWidget,
 )
 from sc_linac_physics.displays.cavity_display.frontend.utils import (
-    make_header,
     EnumLabel,
     PyDMFaultButton,
+    make_header,
 )
 
 if TYPE_CHECKING:
@@ -44,20 +44,14 @@ class GUICavity(BackendCavity):
         self._fault_display: Optional[Display] = None
         self.fault_display_grid_layout = make_header()
 
-        # Build the cavity widget layout
         self._build_cavity_layout(cavity_num)
-
-        # Configure PV channels
         self._setup_pv_channels()
 
     def _build_cavity_layout(self, cavity_num):
-        """Build the complete layout for the cavity widget."""
-        # Main vertical layout
         self.vert_layout = QVBoxLayout()
         self.vert_layout.setSpacing(0)
         self.vert_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Cavity widget (diamond/shape)
         self.cavity_widget = CavityWidget()
         self.cavity_widget.setMinimumSize(40, 40)
         self.cavity_widget.setMaximumSize(100, 100)
@@ -65,22 +59,18 @@ class GUICavity(BackendCavity):
         self.cavity_widget.cavity_text = str(cavity_num)
         self.cavity_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.cavity_widget.clicked.connect(self.show_fault_display)
-        self.cavity_widget._parent_cavity = self  # Link back for context menu
+        self.cavity_widget._parent_cavity = self
 
-        # Status indicator bars (SSA and RF state)
         self.hor_layout = self._create_status_bars()
 
-        # Add to layout
         self.vert_layout.addWidget(self.cavity_widget, alignment=Qt.AlignCenter)
         self.vert_layout.addLayout(self.hor_layout)
 
     def _create_status_bars(self):
-        """Create SSA and RF status indicator bars."""
         hor_layout = QHBoxLayout()
         hor_layout.setSpacing(0)
         hor_layout.setContentsMargins(0, 0, 0, 0)
 
-        # SSA bar
         self.ssa_bar = PyDMByteIndicator()
         self.ssa_bar.setAccessibleName("SSA")
         self.ssa_bar.onColor = QColor(92, 255, 92)
@@ -91,7 +81,6 @@ class GUICavity(BackendCavity):
         self.ssa_bar.setFixedHeight(4)
         self.ssa_bar.setMaximumWidth(50)
 
-        # RF bar
         self.rf_bar = PyDMByteIndicator()
         self.rf_bar.setAccessibleName("RFSTATE")
         self.rf_bar.onColor = QColor(14, 191, 255)
@@ -102,22 +91,6 @@ class GUICavity(BackendCavity):
         self.rf_bar.setFixedHeight(4)
         self.rf_bar.setMaximumWidth(50)
 
-        hor_layout.addWidget(self.ssa_bar)
-        hor_layout.addWidget(self.rf_bar)
-
-        return hor_layout
-
-    def _setup_pv_channels(self):
-        """Configure PV channels for the cavity widget."""
-        severity_pv = self.pv_addr("CUDSEVR")
-        status_pv = self.pv_addr("CUDSTATUS")
-        description_pv = self.pv_addr("CUDDESC")
-
-        self.cavity_widget.channel = status_pv
-        self.cavity_widget.severity_channel = severity_pv
-        self.cavity_widget.description_channel = description_pv
-
-        # SSA visibility rule
         rule = [
             {
                 "channels": [
@@ -135,6 +108,20 @@ class GUICavity(BackendCavity):
         ]
         self.ssa_bar.rules = json.dumps(rule)
 
+        hor_layout.addWidget(self.ssa_bar)
+        hor_layout.addWidget(self.rf_bar)
+
+        return hor_layout
+
+    def _setup_pv_channels(self):
+        severity_pv = self.pv_addr("CUDSEVR")
+        status_pv = self.pv_addr("CUDSTATUS")
+        description_pv = self.pv_addr("CUDDESC")
+
+        self.cavity_widget.channel = status_pv
+        self.cavity_widget.severity_channel = severity_pv
+        self.cavity_widget.description_channel = description_pv
+
     def set_scale(self, scale):
         """Scale the cavity widget and indicators based on zoom level."""
         base_cavity_size = 50
@@ -143,7 +130,6 @@ class GUICavity(BackendCavity):
         scaled_cavity_size = max(20, int(base_cavity_size * scale))
         scaled_indicator_height = max(1, int(base_indicator_height * scale))
 
-        # Scale cavity widget
         self.cavity_widget.setFixedSize(scaled_cavity_size, scaled_cavity_size)
         self.cavity_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.cavity_widget.setMinimumSize(
@@ -153,12 +139,10 @@ class GUICavity(BackendCavity):
             scaled_cavity_size, scaled_cavity_size
         )
 
-        # Scale indicator bars
         bar_width = scaled_cavity_size // 2
         self.ssa_bar.setFixedSize(bar_width, scaled_indicator_height)
         self.rf_bar.setFixedSize(bar_width, scaled_indicator_height)
 
-        # Update layout
         self.vert_layout.invalidate()
         self.vert_layout.update()
         self.cavity_widget.updateGeometry()
@@ -169,12 +153,10 @@ class GUICavity(BackendCavity):
         for idx, fault in enumerate(self.faults.values()):
             row_idx = idx + 1
 
-            # Code label
             code_label = QLabel(fault.tlc)
             code_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
             code_label.setAlignment(Qt.AlignCenter)
 
-            # Description
             short_description_label = QLabel(fault.short_description)
             short_description_label.setSizePolicy(
                 QSizePolicy.Maximum, QSizePolicy.Preferred
@@ -182,7 +164,6 @@ class GUICavity(BackendCavity):
             short_description_label.setAlignment(Qt.AlignLeft)
             short_description_label.setWordWrap(True)
 
-            # Action
             action_label = QLabel(fault.action)
             action_label.setSizePolicy(
                 QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding
@@ -190,14 +171,11 @@ class GUICavity(BackendCavity):
             action_label.setAlignment(Qt.AlignLeft)
             action_label.setWordWrap(True)
 
-            # Status
             status_label = EnumLabel(fault=fault, code_label=code_label)
             status_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
 
-            # Button
             button = self._create_fault_button(fault)
 
-            # Add to grid
             self.fault_display_grid_layout.addWidget(code_label, row_idx, 0)
             self.fault_display_grid_layout.addWidget(
                 short_description_label, row_idx, 1
@@ -207,25 +185,21 @@ class GUICavity(BackendCavity):
             self.fault_display_grid_layout.addWidget(action_label, row_idx, 4)
 
     def _create_fault_button(self, fault):
-        """Create appropriate button based on fault button level."""
         if fault.button_level == "EDM":
             button = PyDMEDMDisplayButton()
             button.filenames = [fault.button_command]
             button.macros = fault.macros + (
                 "," + fault.button_macro if fault.button_macro else ""
             )
-
         elif fault.button_level == "SCRIPT":
             button = PyDMShellCommand()
             button.commands = [fault.button_command]
-
         elif fault.button_level == "PYDM":
             button = PyDMFaultButton(filename=fault.button_command)
             button.openInNewWindow = True
             button.macros = self.cryomodule.pydm_macros + (
                 "," + fault.button_macro if fault.button_macro else ""
             )
-
         else:
             button = PyDMRelatedDisplayButton()
             button.setEnabled(False)
@@ -236,7 +210,6 @@ class GUICavity(BackendCavity):
         return button
 
     def show_fault_display(self):
-        """Show the fault details display window."""
         showDisplay(self.fault_display)
 
     @property
