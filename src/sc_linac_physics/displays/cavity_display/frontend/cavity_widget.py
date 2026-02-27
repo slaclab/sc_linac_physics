@@ -154,14 +154,15 @@ class CavityWidget(PyDMDrawingPolygon):
         self._severity_channel.connect()
 
     @Slot(int)
-    def severity_channel_value_changed(self, value: int):
-        """Handle severity channel value changes with better error handling."""
+    def severity_channel_value_changed(self, value):
+        """Handle severity changes"""
         self._last_severity = value  # Track current severity
-
         try:
             shape_params = SHAPE_PARAMETER_DICT.get(value)
 
             if shape_params:
+                self._last_severity = value
+
                 # Emit signal for others to listen to
                 self.severity_changed.emit(value)
 
@@ -169,6 +170,7 @@ class CavityWidget(PyDMDrawingPolygon):
                 self.change_shape(shape_params)
             else:
                 # Fallback to default (disconnected state) for invalid values
+                self._last_severity = None
                 default_params = SHAPE_PARAMETER_DICT.get(3)
                 if default_params:
                     self.change_shape(default_params)
