@@ -1,5 +1,6 @@
 # test_audio_manager.py
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
+from unittest.mock import patch
 
 import pytest
 from PyQt5.QtWidgets import QApplication
@@ -7,6 +8,24 @@ from PyQt5.QtWidgets import QApplication
 from sc_linac_physics.displays.cavity_display.frontend.audio_manager import (
     AudioAlertManager,
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_audio_output():
+    """Automatically mock all audio/UI outputs to prevent side effects in tests.
+
+    Patches QApplication.beep and QTimer.singleShot by default.
+    Individual tests can override these if they need to verify behavior.
+    """
+    with (
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
+        ) as mock_beep,
+        patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QTimer.singleShot"
+        ) as mock_timer,
+    ):
+        yield {"beep": mock_beep, "timer": mock_timer}
 
 
 @pytest.fixture
@@ -493,53 +512,44 @@ class TestStateManagement:
 class TestSounds:
     """Test sound playback methods"""
 
-    def test_alarm_sound_double_beep(self, audio_manager, qtbot):
+    def test_alarm_sound_double_beep(
+        self, audio_manager, qtbot, mock_audio_output
+    ):
         """Test alarm sound schedules double beep"""
-        with (
-            patch(
-                "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-            ) as mock_beep,
-            patch(
-                "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QTimer.singleShot"
-            ) as mock_timer,
-        ):
+        mock_beep = mock_audio_output["beep"]
+        mock_timer = mock_audio_output["timer"]
 
-            audio_manager._play_alarm_sound()
+        audio_manager._play_alarm_sound()
 
-            # First beep happens immediately
-            assert mock_beep.call_count == 1
+        # First beep happens immediately
+        assert mock_beep.call_count == 1
 
-            # Second beep is scheduled via singleShot
-            mock_timer.assert_called_once_with(200, QApplication.beep)
+        # Second beep is scheduled via singleShot
+        mock_timer.assert_called_once_with(200, QApplication.beep)
 
-    def test_warning_sound_single_beep(self, audio_manager):
+    def test_warning_sound_single_beep(self, audio_manager, mock_audio_output):
         """Test warning sound produces single beep"""
-        with patch(
-            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-        ) as mock_beep:
-            audio_manager._play_warning_sound()
-            assert mock_beep.call_count == 1
+        mock_beep = mock_audio_output["beep"]
 
-    def test_escalation_sound_triple_beep(self, audio_manager):
+        audio_manager._play_warning_sound()
+        assert mock_beep.call_count == 1
+
+    def test_escalation_sound_triple_beep(
+        self, audio_manager, mock_audio_output
+    ):
         """Test escalation sound schedules triple beep"""
-        with (
-            patch(
-                "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-            ) as mock_beep,
-            patch(
-                "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QTimer.singleShot"
-            ) as mock_timer,
-        ):
+        mock_beep = mock_audio_output["beep"]
+        mock_timer = mock_audio_output["timer"]
 
-            audio_manager._play_escalation_sound()
+        audio_manager._play_escalation_sound()
 
-            # First beep happens immediately
-            assert mock_beep.call_count == 1
+        # First beep happens immediately
+        assert mock_beep.call_count == 1
 
-            # Two more beeps are scheduled via singleShot
-            assert mock_timer.call_count == 2
-            mock_timer.assert_any_call(200, QApplication.beep)
-            mock_timer.assert_any_call(400, QApplication.beep)
+        # Two more beeps are scheduled via singleShot
+        assert mock_timer.call_count == 2
+        mock_timer.assert_any_call(200, QApplication.beep)
+        mock_timer.assert_any_call(400, QApplication.beep)
 
 
 class TestSignals:
@@ -789,13 +799,11 @@ class TestIntegration:
     @patch(
         "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
     )
-    @patch(
-        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-    )
     def test_full_alarm_lifecycle(
-        self, mock_beep, mock_time, audio_manager, mock_cavity, qtbot
+        self, mock_time, audio_manager, mock_cavity, qtbot, mock_audio_output
     ):
         """Test complete alarm lifecycle: trigger -> escalate -> acknowledge -> clear"""
+        mock_beep = mock_audio_output["beep"]
         audio_manager.start_monitoring()
 
         # Step 1: Alarm triggers
@@ -822,14 +830,12 @@ class TestIntegration:
         assert "16_1" not in audio_manager.alerted_alarms
         assert "16_1" not in audio_manager.acknowledged_cavities
 
-    @patch(
-        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-    )
     def test_warning_to_alarm_escalation(
-        self, mock_beep, audio_manager, mock_cavity
+        self, audio_manager, mock_cavity, mock_audio_output
     ):
         """Test cavity going from warning to alarm"""
         audio_manager.setEnabled(True)
+        mock_beep = mock_audio_output["beep"]
 
         # Start with warning
         audio_manager._on_severity_change(mock_cavity, 1)
@@ -843,11 +849,8 @@ class TestIntegration:
         assert "16_1" in audio_manager.alerted_alarms
         assert mock_beep.called
 
-    @patch(
-        "sc_linac_physics.displays.cavity_display.frontend.audio_manager.QApplication.beep"
-    )
     def test_alarm_to_warning_deescalation(
-        self, mock_beep, audio_manager, mock_cavity
+        self, audio_manager, mock_cavity, mock_audio_output
     ):
         """Test cavity going from alarm to warning properly clears alarm state"""
         audio_manager.setEnabled(True)
@@ -861,11 +864,9 @@ class TestIntegration:
         audio_manager._on_severity_change(mock_cavity, 1)
 
         # Should be cleared from alarms and added to warnings
-        assert "16_1" not in audio_manager.alerted_alarms  # NOW PASSES!
+        assert "16_1" not in audio_manager.alerted_alarms
         assert "16_1" in audio_manager.alerted_warnings
-        assert (
-            "16_1" not in audio_manager.unacknowledged_alarms
-        )  # Escalation stopped
+        assert "16_1" not in audio_manager.unacknowledged_alarms
 
     def test_alarm_re_trigger_after_warning(self, audio_manager, mock_cavity):
         """Test alarm can re-trigger after de-escalating to warning"""
