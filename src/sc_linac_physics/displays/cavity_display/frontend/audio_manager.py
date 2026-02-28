@@ -195,12 +195,20 @@ class AudioAlertManager(QObject):
             self.alerted_warnings.clear()
             self.unacknowledged_alarms.clear()
             self.acknowledged_cavities.clear()
-            self._per_cavity_escalation.clear()  # Clear escalation tracking too
+            self._per_cavity_escalation.clear()
+
+            # Reset global escalation timing for fresh start
+            self._last_escalation_sound_time = 0
 
             if cleared_count > 0:
                 audio_alert_logger.info(
                     "Cleared all tracked alarms on stop",
-                    extra={"extra_data": {"cleared_count": cleared_count}},
+                    extra={
+                        "extra_data": {
+                            "cleared_count": cleared_count,
+                            "escalation_state_reset": True,
+                        }
+                    },
                 )
 
         audio_alert_logger.info(
@@ -314,6 +322,9 @@ class AudioAlertManager(QObject):
         self, cavity_id: str, cavity, is_acknowledged: bool
     ) -> None:
         """Handle severity 2 (alarm) state."""
+        # Capture timestamp once for consistency
+        now = time.time()
+
         # Always update state, even if acknowledged
         was_already_alarm = cavity_id in self.alerted_alarms
         self.alerted_alarms.add(cavity_id)
@@ -331,12 +342,12 @@ class AudioAlertManager(QObject):
                         "cm": cavity.cryomodule.name,
                         "cavity_num": cavity.number,
                         "severity": 2,
-                        "timestamp": time.time(),
+                        "timestamp": now,  # Use captured timestamp
                     }
                 },
             )
             self._play_alarm_sound()
-            self.unacknowledged_alarms[cavity_id] = time.time()
+            self.unacknowledged_alarms[cavity_id] = now  # Use same timestamp
             self.new_alarm.emit(cavity)
         elif is_acknowledged:
             audio_alert_logger.debug(
@@ -448,9 +459,13 @@ class AudioAlertManager(QObject):
             )
             return False
 
+        # Capture time once
+        now = time.time()
         unack_duration = None
         if is_unacknowledged:
-            unack_duration = time.time() - self.unacknowledged_alarms[cavity_id]
+            unack_duration = (
+                now - self.unacknowledged_alarms[cavity_id]
+            )  # Use captured time
             self.unacknowledged_alarms.pop(cavity_id)
 
         self.acknowledged_cavities.add(cavity_id)

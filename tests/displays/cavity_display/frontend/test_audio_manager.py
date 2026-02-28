@@ -839,7 +839,11 @@ class TestEdgeCases:
     def test_restart_monitoring_preserves_state(
         self, audio_manager, mock_cavity
     ):
-        """Test stopping and restarting monitoring"""
+        """Test stopping and restarting monitoring
+
+        Note: This uses stop_monitoring(clear_state=False) which preserves state.
+        For cleared state behavior, see test_stop_with_clear_resets_escalation_timing.
+        """
         audio_manager.start_monitoring()
         audio_manager._on_severity_change(mock_cavity, 2)
 
@@ -848,7 +852,7 @@ class TestEdgeCases:
         audio_manager.stop_monitoring()
         audio_manager.start_monitoring()
 
-        # State should persist
+        # State should persist (clear_state=False)
         assert "16_1" in audio_manager.alerted_alarms
 
     def test_empty_machine(self, qtbot):
