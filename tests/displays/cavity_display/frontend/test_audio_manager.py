@@ -795,16 +795,18 @@ class TestEdgeCases:
         assert "16_1" not in audio_manager.alerted_alarms
 
     def test_invalid_severity_values(self, audio_manager, mock_cavity):
-        """Test handling invalid severity values"""
+        """Test handling invalid severity values (not documented states)"""
         audio_manager.setEnabled(True)
 
-        # Test negative severity
+        # Test negative severity (undefined)
         audio_manager._on_severity_change(mock_cavity, -1)
         assert "16_1" not in audio_manager.alerted_alarms
 
-        # Test high severity
+        # Test high severity (undefined)
         audio_manager._on_severity_change(mock_cavity, 999)
         assert "16_1" not in audio_manager.alerted_alarms
+
+        # Note: severity 3 (invalid/disconnected) is tested in TestInvalidSeverity
 
     def test_rapid_severity_changes(self, audio_manager, mock_cavity):
         """Test rapid severity changes don't cause issues"""
@@ -863,6 +865,42 @@ class TestEdgeCases:
 
 class TestIntegration:
     """Integration tests simulating real-world scenarios"""
+
+    def test_alarm_invalid_reconnect_lifecycle(
+        self, audio_manager, mock_cavity, qtbot
+    ):
+        """Test complete alarm→invalid→reconnect→alarm lifecycle"""
+        audio_manager.start_monitoring()
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+        ) as mock_time:
+            # Step 1: Alarm triggers
+            mock_time.return_value = 1000.0
+            with qtbot.waitSignal(audio_manager.new_alarm, timeout=1000):
+                audio_manager._on_severity_change(mock_cavity, 2)
+
+            assert "16_1" in audio_manager.alerted_alarms
+            assert "16_1" in audio_manager.unacknowledged_alarms
+
+            # Step 2: Cavity disconnects/becomes invalid
+            audio_manager._on_severity_change(mock_cavity, 3)
+
+            assert "16_1" not in audio_manager.alerted_alarms
+            assert "16_1" not in audio_manager.unacknowledged_alarms
+
+            # Step 3: Cavity reconnects in OK state
+            mock_time.return_value = 1100.0
+            audio_manager._on_severity_change(mock_cavity, 0)
+
+            # Step 4: New alarm after reconnect
+            mock_time.return_value = 1200.0
+            with qtbot.waitSignal(audio_manager.new_alarm, timeout=1000):
+                audio_manager._on_severity_change(mock_cavity, 2)
+
+            # Should trigger fresh alarm
+            assert "16_1" in audio_manager.alerted_alarms
+            assert "16_1" in audio_manager.unacknowledged_alarms
 
     @patch(
         "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
@@ -1031,6 +1069,176 @@ class TestConcurrency:
 
         # Should not crash
         assert "16_1" in audio_manager.acknowledged_cavities
+
+
+class TestInvalidSeverity:
+    """Test handling of severity 3 (invalid/disconnected state)"""
+
+    def test_invalid_severity_clears_alarm_state(
+        self, audio_manager, mock_cavity
+    ):
+        """Test severity 3 clears alarm tracking to prevent continued escalation"""
+        audio_manager.setEnabled(True)
+
+        # Trigger alarm
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert "16_1" in audio_manager.alerted_alarms
+        assert "16_1" in audio_manager.unacknowledged_alarms
+
+        # Cavity becomes invalid/disconnected
+        audio_manager._on_severity_change(mock_cavity, 3)
+
+        # Should clear all alarm state
+        assert "16_1" not in audio_manager.alerted_alarms
+        assert "16_1" not in audio_manager.unacknowledged_alarms
+        assert "16_1" not in audio_manager.acknowledged_cavities
+
+    def test_invalid_severity_clears_warning_state(
+        self, audio_manager, mock_cavity
+    ):
+        """Test severity 3 clears warning tracking"""
+        audio_manager.setEnabled(True)
+
+        # Trigger warning
+        audio_manager._on_severity_change(mock_cavity, 1)
+        assert "16_1" in audio_manager.alerted_warnings
+
+        # Cavity becomes invalid
+        audio_manager._on_severity_change(mock_cavity, 3)
+
+        # Should clear warning state
+        assert "16_1" not in audio_manager.alerted_warnings
+
+    def test_invalid_severity_clears_escalation_tracking(
+        self, audio_manager, mock_cavity
+    ):
+        """Test severity 3 clears per-cavity escalation tracking"""
+        audio_manager.setEnabled(True)
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+        ) as mock_time:
+            # Trigger alarm and escalate
+            mock_time.return_value = 1000.0
+            audio_manager._on_severity_change(mock_cavity, 2)
+
+            mock_time.return_value = 1125.0
+            audio_manager._check_escalation()
+
+            # Should be in escalation tracking
+            assert "16_1" in audio_manager._per_cavity_escalation
+
+            # Cavity becomes invalid
+            audio_manager._on_severity_change(mock_cavity, 3)
+
+            # Should clear escalation tracking
+            assert "16_1" not in audio_manager._per_cavity_escalation
+
+    def test_invalid_severity_stops_ongoing_escalation(
+        self, audio_manager, mock_cavity
+    ):
+        """Test that invalid state stops escalation beeps"""
+        audio_manager.setEnabled(True)
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.time.time"
+        ) as mock_time:
+            # Trigger alarm
+            mock_time.return_value = 1000.0
+            audio_manager._on_severity_change(mock_cavity, 2)
+
+            # Cavity becomes invalid before escalation
+            mock_time.return_value = 1100.0
+            audio_manager._on_severity_change(mock_cavity, 3)
+
+            # Try to escalate - should do nothing
+            mock_time.return_value = 1200.0
+            with patch.object(
+                audio_manager, "_play_escalation_sound"
+            ) as mock_sound:
+                audio_manager._check_escalation()
+                mock_sound.assert_not_called()
+
+    def test_invalid_severity_processed_when_disabled(
+        self, audio_manager, mock_cavity
+    ):
+        """Test severity 3 clears state even when manager is disabled"""
+        audio_manager.setEnabled(True)
+
+        # Trigger alarm
+        audio_manager._on_severity_change(mock_cavity, 2)
+        assert "16_1" in audio_manager.alerted_alarms
+
+        # Disable manager
+        audio_manager.setEnabled(False)
+
+        # Cavity becomes invalid - should still clear state
+        audio_manager._on_severity_change(mock_cavity, 3)
+
+        # State should be cleared despite manager being disabled
+        assert "16_1" not in audio_manager.alerted_alarms
+        assert "16_1" not in audio_manager.unacknowledged_alarms
+
+    def test_invalid_severity_logs_warning(self, audio_manager, mock_cavity):
+        """Test that invalid state is logged as warning for diagnostics"""
+        audio_manager.setEnabled(True)
+
+        # Trigger alarm
+        audio_manager._on_severity_change(mock_cavity, 2)
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.audio_manager.audio_alert_logger"
+        ) as mock_logger:
+            # Cavity becomes invalid
+            audio_manager._on_severity_change(mock_cavity, 3)
+
+            # Should log as warning (not info like normal clear)
+            mock_logger.warning.assert_called_once()
+            call_args = mock_logger.warning.call_args
+            assert (
+                "invalid" in call_args[0][0].lower()
+                or "disconnected" in call_args[0][0].lower()
+            )
+
+            # Should include relevant context
+            extra_data = call_args[1]["extra"]["extra_data"]
+            assert extra_data["cavity_id"] == "16_1"
+            assert extra_data["severity"] == 3
+            assert extra_data["was_alarm"] is True
+
+    def test_invalid_then_alarm_retriggerable(self, audio_manager, mock_cavity):
+        """Test that alarm can re-trigger after invalid→alarm cycle"""
+        audio_manager.setEnabled(True)
+
+        with patch.object(audio_manager, "_play_alarm_sound") as mock_alarm:
+            # First alarm
+            audio_manager._on_severity_change(mock_cavity, 2)
+            assert mock_alarm.call_count == 1
+
+            # Goes invalid
+            audio_manager._on_severity_change(mock_cavity, 3)
+            assert "16_1" not in audio_manager.alerted_alarms
+
+            # New alarm should trigger
+            audio_manager._on_severity_change(mock_cavity, 2)
+            assert mock_alarm.call_count == 2
+
+    def test_acknowledged_alarm_to_invalid_clears_ack(
+        self, audio_manager, mock_cavity
+    ):
+        """Test that invalid state clears acknowledgment"""
+        audio_manager.setEnabled(True)
+
+        # Alarm and acknowledge
+        audio_manager._on_severity_change(mock_cavity, 2)
+        audio_manager.acknowledge_cavity("16_1")
+        assert "16_1" in audio_manager.acknowledged_cavities
+
+        # Goes invalid
+        audio_manager._on_severity_change(mock_cavity, 3)
+
+        # Acknowledgment should be cleared
+        assert "16_1" not in audio_manager.acknowledged_cavities
 
 
 # Pytest configuration for Qt testing
