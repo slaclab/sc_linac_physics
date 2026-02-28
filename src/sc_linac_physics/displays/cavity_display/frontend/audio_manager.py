@@ -81,7 +81,7 @@ class AudioAlertManager(QObject):
                 last_logged = self._per_cavity_escalation.get(cavity_id, 0)
                 should_log = (
                     current_time - last_logged
-                ) >= self._escalation_sound_interval  # 5 minutes
+                ) >= self._escalation_log_interval  # 5 minutes
 
                 escalated_cavities.append(
                     {
@@ -375,6 +375,9 @@ class AudioAlertManager(QObject):
         """
         Acknowledge alarm for a specific cavity and stop audio/escalation.
 
+        Only alarms (severity 2) can be acknowledged. Warnings are informational
+        and do not require acknowledgment.
+
         Args:
             cavity_id: String in format "CM_NUMBER" e.g. "16_1" for CM16 Cav1
             force: If True, acknowledge even if not currently alarmed (use with caution)
@@ -386,14 +389,17 @@ class AudioAlertManager(QObject):
         is_warned = cavity_id in self.alerted_warnings
         is_unacknowledged = cavity_id in self.unacknowledged_alarms
 
-        # Only acknowledge if actually in an alarm/warning state (unless forced)
-        if not force and not is_alarmed and not is_warned:
+        # Only acknowledge ALARMS (not warnings), unless forced
+        if not force and not is_alarmed:
+            reason = "not_alarmed" if not is_warned else "warning_only"
             audio_alert_logger.info(
-                "Acknowledge request ignored - cavity not in alarm state",
+                "Acknowledge request ignored - only alarms can be acknowledged",
                 extra={
                     "extra_data": {
                         "cavity_id": cavity_id,
-                        "reason": "not_alarmed",
+                        "reason": reason,
+                        "is_alarm": is_alarmed,
+                        "is_warning": is_warned,
                         "current_alarms": len(self.alerted_alarms),
                         "current_warnings": len(self.alerted_warnings),
                     }
