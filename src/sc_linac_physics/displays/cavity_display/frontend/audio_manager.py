@@ -215,13 +215,54 @@ class AudioAlertManager(QObject):
             },
         )
 
+    def _handle_invalid_severity(self, cavity_id: str, cavity) -> None:
+        """Handle severity 3 (invalid/disconnected) state.
+
+        Treats invalid state similarly to cleared - stops escalation and clears
+        tracking, but logs as invalid rather than cleared for diagnostics.
+        """
+        was_active = (
+            cavity_id in self.alerted_alarms
+            or cavity_id in self.alerted_warnings
+        )
+        was_acknowledged = cavity_id in self.acknowledged_cavities
+        was_unacknowledged = cavity_id in self.unacknowledged_alarms
+
+        if was_active or was_acknowledged or was_unacknowledged:
+            audio_alert_logger.warning(
+                "Cavity became invalid/disconnected - clearing alarm/warning state",
+                extra={
+                    "extra_data": {
+                        "cavity_id": cavity_id,
+                        "cm": cavity.cryomodule.name,
+                        "cavity_num": cavity.number,
+                        "severity": 3,
+                        "was_alarm": cavity_id in self.alerted_alarms,
+                        "was_warning": cavity_id in self.alerted_warnings,
+                        "was_acknowledged": was_acknowledged,
+                        "was_unacknowledged": was_unacknowledged,
+                        "manager_enabled": self._enabled,
+                    }
+                },
+            )
+
+        # Clear all tracking for this cavity (same as cleared, but different log level)
+        self.alerted_alarms.discard(cavity_id)
+        self.alerted_warnings.discard(cavity_id)
+        self.unacknowledged_alarms.pop(cavity_id, None)
+        self.acknowledged_cavities.discard(cavity_id)
+        self._per_cavity_escalation.pop(cavity_id, None)
+
     def _on_severity_change(self, cavity, severity):
         """Handle severity change for a cavity - only if enabled."""
         cavity_id = f"{cavity.cryomodule.name}_{cavity.number}"
 
-        # Special handling for severity 0 (cleared) - ALWAYS process, even when disabled
+        # Handle severity 0 (cleared) and 3 (invalid/disconnected) - ALWAYS process
         if severity == 0:
             self._handle_cleared_severity(cavity_id, cavity)
+            return
+        elif severity == 3:
+            self._handle_invalid_severity(cavity_id, cavity)
             return
 
         # Only process alarms/warnings if enabled
