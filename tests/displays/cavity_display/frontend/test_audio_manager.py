@@ -175,6 +175,57 @@ class TestMonitoring:
 class TestAcknowledgment:
     """Test alarm acknowledgment functionality"""
 
+    def test_cannot_acknowledge_warning_only(self, audio_manager, mock_cavity):
+        """Test that warnings cannot be acknowledged (only alarms)"""
+        audio_manager.setEnabled(True)
+
+        # Trigger warning
+        audio_manager._on_severity_change(mock_cavity, 1)
+        assert "16_1" in audio_manager.alerted_warnings
+
+        # Try to acknowledge warning - should fail
+        result = audio_manager.acknowledge_cavity("16_1")
+
+        assert result is False
+        assert "16_1" not in audio_manager.acknowledged_cavities
+
+    def test_warning_then_alarm_triggers_normally(
+        self, audio_manager, mock_cavity
+    ):
+        """Test that warning→alarm transition triggers alarm normally
+
+        Regression test: Previously, acknowledging a warning would prevent
+        subsequent alarm from triggering sound/signal.
+        """
+        audio_manager.setEnabled(True)
+
+        # Trigger warning
+        audio_manager._on_severity_change(mock_cavity, 1)
+
+        # Try to acknowledge warning (should fail now)
+        audio_manager.acknowledge_cavity("16_1")
+        assert "16_1" not in audio_manager.acknowledged_cavities
+
+        with patch.object(audio_manager, "_play_alarm_sound") as mock_alarm:
+            # Escalate to alarm - should trigger normally
+            audio_manager._on_severity_change(mock_cavity, 2)
+
+            # Should play sound (NOT treated as acknowledged)
+            assert mock_alarm.call_count == 1
+            assert "16_1" in audio_manager.unacknowledged_alarms
+
+    def test_force_acknowledge_warning(self, audio_manager, mock_cavity):
+        """Test forced acknowledgment of warning (edge case)"""
+        audio_manager.setEnabled(True)
+
+        audio_manager._on_severity_change(mock_cavity, 1)
+
+        # Force acknowledge warning (bypass check)
+        result = audio_manager.acknowledge_cavity("16_1", force=True)
+
+        assert result is True
+        assert "16_1" in audio_manager.acknowledged_cavities
+
     def test_acknowledge_only_active_alarms(self, audio_manager):
         """Test that acknowledging non-existent alarm returns False"""
         # Try to acknowledge cavity that hasn't alarmed
