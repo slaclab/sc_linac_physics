@@ -386,9 +386,8 @@ class CavityDisplayGUI(Display):
         Args:
             cavity: GUICavity object to highlight
         """
-        # This will be implemented in PR #4 when we add the highlight() method
-        # For now, just pass
-        pass
+        if hasattr(cavity, "cavity_widget"):
+            cavity.cavity_widget.highlight()
 
     def filter_cavities(self, search_text):
         """Filter/highlight cavities based on search text"""
@@ -432,7 +431,9 @@ class CavityDisplayGUI(Display):
                     total += 1
 
                     severity = getattr(
-                        cavity.cavity_widget, "_last_severity", None
+                        cavity.cavity_widget,
+                        "_last_severity",
+                        None,
                     )
 
                     if severity == 3:  # Invalid
@@ -484,15 +485,15 @@ class CavityDisplayGUI(Display):
 
         self.status_label.setText(status_text)
         self.status_bar.setStyleSheet(f"""
-            QStatusBar {{
-                background-color: {bg_color};
-                color: white;
-                font-size: 11pt;
-                font-weight: bold;
-                padding: 3px;
-                max-height: 30px;
-            }}
-        """)
+                QStatusBar {{
+                    background-color: {bg_color};
+                    color: white;
+                    font-size: 11pt;
+                    font-weight: bold;
+                    padding: 3px;
+                    max-height: 30px;
+                }}
+            """)
 
     def closeEvent(self, event):
         """Clean up and save state when window closes."""
