@@ -20,12 +20,12 @@ from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
 from pydm.utilities import IconFont
 from pydm.widgets import PyDMByteIndicator, PyDMLabel
+from sc_linac_physics.displays.cavity_display.frontend.audio_manager import (
+    AudioAlertManager,
+)
 
 from sc_linac_physics.displays.cavity_display.frontend.alarm_sidebar import (
     AlarmSidebarWidget,
-)
-from sc_linac_physics.displays.cavity_display.frontend.audio_manager import (
-    AudioAlertManager,
 )
 from sc_linac_physics.displays.cavity_display.frontend.fault_count_display import (
     FaultCountDisplay,
@@ -219,7 +219,8 @@ class CavityDisplayGUI(Display):
         self.status_bar.addWidget(self.status_label)
         self.vlayout.addWidget(self.status_bar)
 
-        self.status_timer = QTimer()
+        # Create status_timer with parent for proper lifecycle management
+        self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(5000)
 
@@ -234,9 +235,12 @@ class CavityDisplayGUI(Display):
 
         self._setup_shortcuts()
 
+        # Create resize timer once with parent
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(self.auto_fit_on_resize)
+
         self.current_zoom = 60
-        self._resize_timer = None
-        QTimer.singleShot(100, lambda: self.apply_zoom(60))
 
     def toggle_audio(self):
         self.audio_enabled = self.audio_toggle_btn.isChecked()
@@ -270,12 +274,7 @@ class CavityDisplayGUI(Display):
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
-        if self._resize_timer:
-            self._resize_timer.stop()
-
-        self._resize_timer = QTimer()
-        self._resize_timer.setSingleShot(True)
-        self._resize_timer.timeout.connect(self.auto_fit_on_resize)
+        # Reuse existing timer instead of creating new ones
         self._resize_timer.start(300)
 
     def auto_fit_on_resize(self):
@@ -450,21 +449,14 @@ class CavityDisplayGUI(Display):
 
         if filename:
             pixmap = self.groupbox.grab()
-            pixmap.save(filename)
-            self.status_label.setText(f"Screenshot saved: {filename}")
+            # Check return value to detect save failures
+            if pixmap.save(filename):
+                self.status_label.setText(f"✓ Screenshot saved: {filename}")
+            else:
+                self.status_label.setText(
+                    f"✗ Failed to save screenshot: {filename}"
+                )
             QTimer.singleShot(5000, self.update_status)
-
-    def flash_window(self, cavity=None):
-        QApplication.alert(self, 0)
-
-        if cavity:
-            original_title = self.windowTitle()
-            alarm_title = (
-                f"⚠️ ALARM: CM{cavity.cryomodule.name} Cav{cavity.number} - "
-                f"{original_title}"
-            )
-            self.setWindowTitle(alarm_title)
-            QTimer.singleShot(5000, lambda: self.setWindowTitle(original_title))
 
     def update_status(self):
         total = 0
@@ -555,5 +547,12 @@ class CavityDisplayGUI(Display):
 
         if hasattr(self, "audio_manager"):
             self.audio_manager.stop_monitoring()
+
+        # Stop timers explicitly before close (good practice)
+        if hasattr(self, "status_timer"):
+            self.status_timer.stop()
+
+        if hasattr(self, "_resize_timer"):
+            self._resize_timer.stop()
 
         super().closeEvent(event)
