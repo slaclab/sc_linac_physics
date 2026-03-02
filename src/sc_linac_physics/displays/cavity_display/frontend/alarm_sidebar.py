@@ -1,16 +1,16 @@
 from typing import TYPE_CHECKING
 
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QTimer, Qt, pyqtSignal
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QHBoxLayout,
-    QComboBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 if TYPE_CHECKING:
@@ -20,14 +20,10 @@ if TYPE_CHECKING:
 
 
 class AlarmSidebarWidget(QWidget):
-    """
-    Responsive sidebar widget that adapts to width.
-    Shows full text when wide, compact symbols when narrow.
-    """
+    """Responsive sidebar widget for alarm/warning navigation."""
 
     cavity_clicked = pyqtSignal(object)
 
-    # Width thresholds for different display modes
     COMPACT_WIDTH = 150
     FULL_WIDTH = 250
 
@@ -36,21 +32,17 @@ class AlarmSidebarWidget(QWidget):
         self.gui_machine = gui_machine
         self.alarm_cavities = []
         self.warning_cavities = []
-        self.display_mode = "full"  # "compact" or "full"
+        self.display_mode = "full"
 
         self._setup_ui()
         self._start_refresh_timer()
-
-        # Initial update
         self.update_alarm_list()
 
     def _setup_ui(self):
-        """Setup the sidebar UI components"""
         layout = QVBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(5)
 
-        # Alarm count label
         self.alarm_count_label = QLabel("ALARMS: 0")
         self.alarm_count_label.setAlignment(Qt.AlignCenter)
         self.alarm_count_label.setStyleSheet("""
@@ -60,11 +52,10 @@ class AlarmSidebarWidget(QWidget):
             color: white;
             padding: 5px;
             border-radius: 3px;
-        """)
+            """)
         self.alarm_count_label.setWordWrap(True)
         self.alarm_count_label.setToolTip("Active Alarms")
 
-        # Warning count label
         self.warning_count_label = QLabel("WARNINGS: 0")
         self.warning_count_label.setAlignment(Qt.AlignCenter)
         self.warning_count_label.setStyleSheet("""
@@ -74,11 +65,10 @@ class AlarmSidebarWidget(QWidget):
             color: black;
             padding: 4px;
             border-radius: 3px;
-        """)
+            """)
         self.warning_count_label.setWordWrap(True)
         self.warning_count_label.setToolTip("Active Warnings")
 
-        # List of active issues
         self.alarm_list = QListWidget()
         self.alarm_list.setStyleSheet("""
             QListWidget {
@@ -97,11 +87,10 @@ class AlarmSidebarWidget(QWidget):
             QListWidget::item:selected {
                 background-color: rgb(80, 80, 120);
             }
-        """)
+            """)
         self.alarm_list.itemClicked.connect(self._on_alarm_clicked)
         self.alarm_list.itemDoubleClicked.connect(self._on_alarm_double_clicked)
 
-        # Filter combo
         filter_layout = QHBoxLayout()
         self.filter_combo = QComboBox()
         self.filter_combo.addItems(["All", "Alarms Only", "Warnings Only"])
@@ -114,11 +103,10 @@ class AlarmSidebarWidget(QWidget):
                 padding: 3px;
                 font-size: 9pt;
             }
-        """)
+            """)
         filter_layout.addWidget(QLabel("Filter:"))
         filter_layout.addWidget(self.filter_combo)
 
-        # Refresh button
         self.refresh_button = QPushButton("↻ Refresh")
         self.refresh_button.setToolTip("Refresh alarm list")
         self.refresh_button.clicked.connect(self.update_alarm_list)
@@ -134,9 +122,8 @@ class AlarmSidebarWidget(QWidget):
             QPushButton:hover {
                 background-color: rgb(80, 80, 80);
             }
-        """)
+            """)
 
-        # Add widgets to layout
         layout.addWidget(self.alarm_count_label)
         layout.addWidget(self.warning_count_label)
         layout.addLayout(filter_layout)
@@ -148,34 +135,22 @@ class AlarmSidebarWidget(QWidget):
         self.setMaximumWidth(300)
 
     def resizeEvent(self, event):
-        """Handle resize to switch between compact and full display modes"""
         super().resizeEvent(event)
 
-        new_width = event.size().width()
-
-        # Determine display mode based on width
-        if new_width < self.COMPACT_WIDTH:
-            new_mode = "compact"
-        else:
-            new_mode = "full"
-
-        # Only update if mode changed
-        if new_mode != self.display_mode:
-            self.display_mode = new_mode
-            self._update_display_mode()
+        self.display_mode = (
+            "compact" if event.size().width() < self.COMPACT_WIDTH else "full"
+        )
+        self._update_display_mode()
 
     def _update_display_mode(self):
-        """Update UI elements based on current display mode"""
         alarm_count = len(self.alarm_cavities)
         warning_count = len(self.warning_cavities)
 
         if self.display_mode == "compact":
-            # Compact mode: just emoji and number
             self.alarm_count_label.setText(f"🔴\n{alarm_count}")
             self.warning_count_label.setText(f"🟡\n{warning_count}")
             self.refresh_button.setText("↻")
 
-            # Smaller font for compact mode
             self.alarm_count_label.setStyleSheet("""
                 font-size: 14pt;
                 font-weight: bold;
@@ -183,7 +158,7 @@ class AlarmSidebarWidget(QWidget):
                 color: white;
                 padding: 4px;
                 border-radius: 3px;
-            """)
+                """)
             self.warning_count_label.setStyleSheet("""
                 font-size: 12pt;
                 font-weight: bold;
@@ -191,48 +166,40 @@ class AlarmSidebarWidget(QWidget):
                 color: black;
                 padding: 3px;
                 border-radius: 3px;
-            """)
-
-            # Update list items to compact format
+                """)
             self._rebuild_alarm_list_compact()
+            return
 
-        else:
-            # Full mode: text labels
-            self.alarm_count_label.setText(f"ALARMS: {alarm_count}")
-            self.warning_count_label.setText(f"WARNINGS: {warning_count}")
-            self.refresh_button.setText("↻ Refresh")
+        self.alarm_count_label.setText(f"ALARMS: {alarm_count}")
+        self.warning_count_label.setText(f"WARNINGS: {warning_count}")
+        self.refresh_button.setText("↻ Refresh")
 
-            # Normal font for full mode
-            alarm_bg = "rgb(150, 0, 0)" if alarm_count > 0 else "rgb(0, 100, 0)"
-            self.alarm_count_label.setStyleSheet(f"""
-                font-size: 16pt;
-                font-weight: bold;
-                background-color: {alarm_bg};
-                color: white;
-                padding: 5px;
-                border-radius: 3px;
+        alarm_bg = "rgb(150, 0, 0)" if alarm_count > 0 else "rgb(0, 100, 0)"
+        self.alarm_count_label.setStyleSheet(f"""
+            font-size: 16pt;
+            font-weight: bold;
+            background-color: {alarm_bg};
+            color: white;
+            padding: 5px;
+            border-radius: 3px;
             """)
 
-            warning_bg = (
-                "rgb(255, 165, 0)" if warning_count > 0 else "rgb(60, 60, 60)"
-            )
-            warning_color = (
-                "black" if warning_count > 0 else "rgb(180, 180, 180)"
-            )
-            self.warning_count_label.setStyleSheet(f"""
-                font-size: 14pt;
-                font-weight: bold;
-                background-color: {warning_bg};
-                color: {warning_color};
-                padding: 4px;
-                border-radius: 3px;
+        warning_bg = (
+            "rgb(255, 165, 0)" if warning_count > 0 else "rgb(60, 60, 60)"
+        )
+        warning_color = "black" if warning_count > 0 else "rgb(180, 180, 180)"
+        self.warning_count_label.setStyleSheet(f"""
+            font-size: 14pt;
+            font-weight: bold;
+            background-color: {warning_bg};
+            color: {warning_color};
+            padding: 4px;
+            border-radius: 3px;
             """)
 
-            # Update list items to full format
-            self._rebuild_alarm_list_full()
+        self._rebuild_alarm_list_full()
 
     def _rebuild_alarm_list_compact(self):
-        """Rebuild list in compact format"""
         self.alarm_list.clear()
 
         filter_mode = self.filter_combo.currentText()
@@ -241,19 +208,20 @@ class AlarmSidebarWidget(QWidget):
             for cavity in sorted(
                 self.alarm_cavities, key=lambda c: (c.cryomodule.name, c.number)
             ):
-                item = self._create_compact_alarm_item(cavity, is_alarm=True)
-                self.alarm_list.addItem(item)
+                self.alarm_list.addItem(
+                    self._create_compact_alarm_item(cavity, is_alarm=True)
+                )
 
         if filter_mode in ["All", "Warnings Only"]:
             for cavity in sorted(
                 self.warning_cavities,
                 key=lambda c: (c.cryomodule.name, c.number),
             ):
-                item = self._create_compact_alarm_item(cavity, is_alarm=False)
-                self.alarm_list.addItem(item)
+                self.alarm_list.addItem(
+                    self._create_compact_alarm_item(cavity, is_alarm=False)
+                )
 
     def _rebuild_alarm_list_full(self):
-        """Rebuild list in full format"""
         self.alarm_list.clear()
 
         filter_mode = self.filter_combo.currentText()
@@ -262,19 +230,20 @@ class AlarmSidebarWidget(QWidget):
             for cavity in sorted(
                 self.alarm_cavities, key=lambda c: (c.cryomodule.name, c.number)
             ):
-                item = self._create_full_alarm_item(cavity, is_alarm=True)
-                self.alarm_list.addItem(item)
+                self.alarm_list.addItem(
+                    self._create_full_alarm_item(cavity, is_alarm=True)
+                )
 
         if filter_mode in ["All", "Warnings Only"]:
             for cavity in sorted(
                 self.warning_cavities,
                 key=lambda c: (c.cryomodule.name, c.number),
             ):
-                item = self._create_full_alarm_item(cavity, is_alarm=False)
-                self.alarm_list.addItem(item)
+                self.alarm_list.addItem(
+                    self._create_full_alarm_item(cavity, is_alarm=False)
+                )
 
     def _create_compact_alarm_item(self, cavity, is_alarm=True):
-        """Create a compact format list item for a cavity"""
         cm_name = cavity.cryomodule.name
         cav_num = cavity.number
 
@@ -286,7 +255,6 @@ class AlarmSidebarWidget(QWidget):
         item.setData(Qt.UserRole, cavity)
         item.setForeground(color)
 
-        # Full info in tooltip
         description = getattr(cavity.cavity_widget, "_cavity_description", "")
         tooltip = f"CM{cm_name} Cavity {cav_num}"
         if description:
@@ -296,7 +264,6 @@ class AlarmSidebarWidget(QWidget):
         return item
 
     def _create_full_alarm_item(self, cavity, is_alarm=True):
-        """Create a full format list item for a cavity"""
         cm_name = cavity.cryomodule.name
         cav_num = cavity.number
 
@@ -316,7 +283,6 @@ class AlarmSidebarWidget(QWidget):
         item.setData(Qt.UserRole, cavity)
         item.setForeground(color)
 
-        # Full description in tooltip
         full_desc = getattr(cavity.cavity_widget, "_cavity_description", "")
         if full_desc:
             item.setToolTip(f"CM{cm_name} Cavity {cav_num}: {full_desc}")
@@ -324,13 +290,11 @@ class AlarmSidebarWidget(QWidget):
         return item
 
     def _start_refresh_timer(self):
-        """Start timer to refresh alarm list periodically"""
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self.update_alarm_list)
         self.refresh_timer.start(2000)
 
     def _get_all_cavities(self):
-        """Generator to iterate over all cavities"""
         linacs = self.gui_machine.linacs
         if isinstance(linacs, dict):
             linacs = linacs.values()
@@ -349,36 +313,29 @@ class AlarmSidebarWidget(QWidget):
                     yield cavity
 
     def update_alarm_list(self):
-        """Scan all cavities and update the alarm/warning lists"""
         self.alarm_cavities.clear()
         self.warning_cavities.clear()
 
-        # Collect all cavities with issues
         for cavity in self._get_all_cavities():
             severity = getattr(cavity.cavity_widget, "_last_severity", None)
-
-            if severity == 2:  # Red alarm
+            if severity == 2:
                 self.alarm_cavities.append(cavity)
-            elif severity == 1:  # Yellow warning
+            elif severity == 1:
                 self.warning_cavities.append(cavity)
 
-        # Update display based on current mode
         self._update_display_mode()
 
     def _on_alarm_clicked(self, item: QListWidgetItem):
-        """Handle single click - highlight cavity"""
         cavity = item.data(Qt.UserRole)
         if cavity:
             self.cavity_clicked.emit(cavity)
 
     def _on_alarm_double_clicked(self, item: QListWidgetItem):
-        """Handle double click - open fault details"""
         cavity = item.data(Qt.UserRole)
         if cavity:
             self.cavity_clicked.emit(cavity)
             cavity.show_fault_display()
 
     def stop_refresh(self):
-        """Stop the refresh timer (call when closing)"""
         if hasattr(self, "refresh_timer"):
             self.refresh_timer.stop()
