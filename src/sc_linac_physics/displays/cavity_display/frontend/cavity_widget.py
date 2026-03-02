@@ -108,10 +108,14 @@ class CavityWidget(PyDMDrawingPolygon):
 
     @severity_channel.setter
     def severity_channel(self, value: str):
-        self._severity_channel = PyDMChannel(
-            address=value, value_slot=self.severity_channel_value_changed
-        )
-        self._severity_channel.connect()
+        if hasattr(self, "_severity_channel") and self._severity_channel:
+            self._severity_channel.disconnect()
+
+        if value:
+            self._severity_channel = PyDMChannel(
+                address=value, value_slot=self.severity_channel_value_changed
+            )
+            self._severity_channel.connect()
 
     @qtProperty(bool)
     def underline(self):
@@ -123,27 +127,48 @@ class CavityWidget(PyDMDrawingPolygon):
 
     @Slot(int)
     def severity_channel_value_changed(self, value):
+        """Handle severity channel value changes."""
+        # Clear acknowledgment if severity returns to normal
+        if value == 0:
+            self._clear_acknowledgment()
+            self._acknowledged = False
+
+        # Try to apply the severity shape
+        shape_params = SHAPE_PARAMETER_DICT.get(value)
+        if shape_params is not None:
+            self._apply_severity_shape(value, shape_params)
+        else:
+            self._apply_fallback_shape()
+
+    def _clear_acknowledgment(self):
+        """Clear acknowledgment state when severity returns to normal."""
+        cavity = getattr(self, "_parent_cavity", None)
+        if not cavity:
+            return
+
+        cavity_id = f"{cavity.cryomodule.name}_{cavity.number}"
+        app = QApplication.instance()
+        if hasattr(app, "acknowledged_cavities"):
+            app.acknowledged_cavities.discard(cavity_id)
+
+    def _apply_severity_shape(self, value, shape_params):
+        """Apply shape parameters for a valid severity value."""
         try:
-            shape_params = SHAPE_PARAMETER_DICT.get(value)
-
-            if shape_params is not None:
-                self._last_severity = value
-                self.severity_changed.emit(value)
-                self.change_shape(shape_params)
-                return
-
-            self._last_severity = None
-            fallback = SHAPE_PARAMETER_DICT.get(3)
-            if fallback is not None:
-                self.change_shape(fallback)
+            self._last_severity = value
+            self.severity_changed.emit(value)
+            self.change_shape(shape_params)
         except Exception:
-            self._last_severity = None
-            fallback = SHAPE_PARAMETER_DICT.get(3)
-            if fallback is not None:
-                try:
-                    self.change_shape(fallback)
-                except Exception:
-                    pass
+            self._apply_fallback_shape()
+
+    def _apply_fallback_shape(self):
+        """Apply fallback shape when severity is invalid or error occurs."""
+        self._last_severity = None
+        fallback = SHAPE_PARAMETER_DICT.get(3)
+        if fallback is not None:
+            try:
+                self.change_shape(fallback)
+            except Exception:
+                pass
 
     @Slot()
     @Slot(object)
@@ -186,10 +211,11 @@ class CavityWidget(PyDMDrawingPolygon):
         self.update()
 
     def change_shape(self, shape_parameter_object):
-        self._brush.setColor(shape_parameter_object.fillColor)
-        self._pen.setColor(shape_parameter_object.borderColor)
-        self._num_points = shape_parameter_object.numPoints
-        self._rotation = shape_parameter_object.rotation
+        """Change the shape using public properties to ensure proper updates."""
+        self.brush = shape_parameter_object.fillColor
+        self.penColor = shape_parameter_object.borderColor
+        self.numberOfPoints = shape_parameter_object.numPoints
+        self.rotation = shape_parameter_object.rotation
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -247,7 +273,7 @@ class CavityWidget(PyDMDrawingPolygon):
             else "No description available"
         )
         reply = QMessageBox.question(
-            None,
+            self,
             f"Acknowledge {severity_text}",
             f"Acknowledge {severity_text.lower()} for CM{cavity.cryomodule.name} Cavity {cavity.number}?\n\n"
             f"Description: {description}",
@@ -347,5 +373,4 @@ class CavityWidget(PyDMDrawingPolygon):
             text_option = QTextOption()
             text_option.setAlignment(Qt.AlignCenter)
             painter.drawText(rectf, self._cavity_text, text_option)
-            painter.setPen(self._pen)
             painter.restore()
