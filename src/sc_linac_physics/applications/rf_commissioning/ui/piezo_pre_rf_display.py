@@ -4,11 +4,15 @@ PyDM-compatible display for running piezo pre-RF tests with live PV readouts
 """
 
 from datetime import datetime
+
 from PyQt5.QtCore import pyqtSlot, QTimer, pyqtSignal
-from PyQt5.QtWidgets import QMessageBox
-from sc_linac_physics.applications.rf_commissioning import CommissioningRecord
-from sc_linac_physics.applications.rf_commissioning.session_manager import (
-    CommissioningSession,
+from PyQt5.QtWidgets import (
+    QMessageBox,
+    QInputDialog,
+)
+
+from sc_linac_physics.applications.rf_commissioning import (
+    CommissioningRecord,
 )
 from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_controller import (
     PiezoPreRFController,
@@ -16,13 +20,16 @@ from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_con
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     PiezoPreRFCheck,
 )
+from sc_linac_physics.applications.rf_commissioning.session_manager import (
+    CommissioningSession,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
+    PhaseDisplayBase,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.ui_builder import (
     PiezoPreRFUI,
     LOCAL_CAP_STYLE,
     LOCAL_LABEL_STYLE,
-)
-from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
-    PhaseDisplayBase,
 )
 
 
@@ -43,6 +50,7 @@ class PiezoPreRFDisplay(PhaseDisplayBase):
         self.step_progress_signal.connect(self._on_step_progress)
 
         self.setup_ui()
+        self._load_operator_list()
         self.controller.setup_pv_connections()
 
     def setup_ui(self):
@@ -63,6 +71,58 @@ class PiezoPreRFDisplay(PhaseDisplayBase):
     def _bind_ui_widgets(self) -> None:
         for name, widget in self.ui.widgets.items():
             setattr(self, name, widget)
+
+        if hasattr(self, "operator_combo"):
+            self.operator_combo.currentIndexChanged.connect(
+                self._on_operator_selected
+            )
+
+    def _load_operator_list(self) -> None:
+        if not hasattr(self, "operator_combo"):
+            return
+
+        self.operator_combo.blockSignals(True)
+        self.operator_combo.clear()
+        self.operator_combo.addItem("Select operator...", None)
+
+        for name in self.session.get_operators():
+            self.operator_combo.addItem(name, name)
+
+        self.operator_combo.addItem("Add operator...", "__add__")
+        self.operator_combo.blockSignals(False)
+
+    def _on_operator_selected(self) -> None:
+        if not hasattr(self, "operator_combo"):
+            return
+
+        selection = self.operator_combo.currentData()
+        if selection != "__add__":
+            return
+
+        name, ok = QInputDialog.getText(
+            self, "Add Operator", "Enter your name:"
+        )
+        clean_name = name.strip()
+        if not ok or not clean_name:
+            self.operator_combo.setCurrentIndex(0)
+            return
+
+        self.session.add_operator(clean_name)
+        self._load_operator_list()
+
+        idx = self.operator_combo.findData(clean_name)
+        if idx >= 0:
+            self.operator_combo.setCurrentIndex(idx)
+
+    def get_selected_operator(self) -> str | None:
+        if not hasattr(self, "operator_combo"):
+            return None
+
+        selection = self.operator_combo.currentData()
+        if selection in (None, "__add__"):
+            return None
+
+        return str(selection)
 
     def _on_step_progress(self, step_name: str, progress: int):
         """Handle step progress updates."""

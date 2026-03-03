@@ -12,14 +12,14 @@ from sc_linac_physics.applications.rf_commissioning import (
     PhaseContext,
     CommissioningPiezo,
 )
+from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
+    PiezoPreRFPhase,
+)
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.database_browser_dialog import (
     DatabaseBrowserDialog,
-)
-from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
-    PiezoPreRFPhase,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -37,14 +37,20 @@ class PiezoPreRFController:
 
     def setup_pv_connections(self) -> None:
         """Connect spinbox changes to PV updates."""
-        self.view.cm_spinbox.valueChanged.connect(self.update_pv_addresses)
-        self.view.cav_spinbox.valueChanged.connect(self.update_pv_addresses)
+        # QComboBox uses currentIndexChanged instead of valueChanged
+        self.view.cm_spinbox.currentIndexChanged.connect(
+            self.update_pv_addresses
+        )
+        self.view.cav_spinbox.currentIndexChanged.connect(
+            self.update_pv_addresses
+        )
         self.update_pv_addresses()
 
     def update_pv_addresses(self) -> None:
         """Update PV addresses based on current cavity selection."""
-        cm = self.view.cm_spinbox.value()
-        cav = self.view.cav_spinbox.value()
+        # Get values from QComboBox (using currentText() instead of value())
+        cm = int(self.view.cm_spinbox.currentText())
+        cav = int(self.view.cav_spinbox.currentText())
 
         try:
             if not self.machine:
@@ -72,8 +78,16 @@ class PiezoPreRFController:
 
     def on_run_automated_test(self) -> None:
         """Handle Run Automated Test button click."""
-        cm = self.view.cm_spinbox.value()
-        cav = self.view.cav_spinbox.value()
+        operator = self._get_operator()
+        if not operator:
+            self.view.show_error(
+                "Please select an operator before running the test."
+            )
+            return
+
+        # Get values from QComboBox
+        cm = int(self.view.cm_spinbox.currentText())
+        cav = int(self.view.cav_spinbox.currentText())
 
         cavity_name = f"L1B_CM{cm:02d}_CAV{cav}"
         self.view.log_message(f"Starting automated test for {cavity_name}")
@@ -108,7 +122,7 @@ class PiezoPreRFController:
 
             self.context = PhaseContext(
                 record=record,
-                operator="GUI User",
+                operator=operator,
                 dry_run=self.view.dry_run_checkbox.isChecked(),
                 parameters={"cavity": cavity},
             )
@@ -178,6 +192,7 @@ class PiezoPreRFController:
                 self.view.log_message("Warning: Failed to save to database")
 
             if self.context and self.context.record.piezo_pre_rf:
+                self._append_measurement_history()
                 self.view._update_local_results(
                     self.context.record.piezo_pre_rf
                 )
@@ -216,6 +231,7 @@ class PiezoPreRFController:
                 self.view.log_message("Partial results saved to database")
 
             if self.context and self.context.record.piezo_pre_rf:
+                self._append_measurement_history(error_msg=error_msg)
                 self.view._update_local_results(
                     self.context.record.piezo_pre_rf
                 )
@@ -232,6 +248,41 @@ class PiezoPreRFController:
         self.view.abort_button.setEnabled(False)
         self.view.save_button.setEnabled(True)
         self.view.show_error(f"Test failed: {error_msg}")
+
+    def _get_operator(self) -> str:
+        if hasattr(self.view, "get_selected_operator"):
+            operator = self.view.get_selected_operator()
+            if operator:
+                return operator
+        return ""
+
+    def _get_notes(self) -> Optional[str]:
+        notes = self.view.notes_input.toPlainText().strip()
+        return notes or None
+
+    def _append_measurement_history(
+        self, error_msg: Optional[str] = None
+    ) -> None:
+        if not (self.context and self.context.record.piezo_pre_rf):
+            return
+
+        notes = self._get_notes()
+        if error_msg:
+            notes = (
+                f"{notes}\nPhase failed: {error_msg}"
+                if notes
+                else f"Phase failed: {error_msg}"
+            )
+
+        self.session.add_measurement_to_history(
+            CommissioningPhase.PIEZO_PRE_RF,
+            self.context.record.piezo_pre_rf,
+            operator=self._get_operator(),
+            notes=notes,
+        )
+
+        if hasattr(self.view, "refresh_notes"):
+            self.view.refresh_notes()
 
     def on_abort(self) -> None:
         """Handle abort button click."""

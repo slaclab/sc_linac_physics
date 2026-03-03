@@ -1,13 +1,37 @@
 """SQLite database interface for RF commissioning records."""
 
 import sqlite3
+import typing
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, List
 
+if typing.TYPE_CHECKING:
+    from sc_linac_physics.applications.rf_commissioning import (
+        CommissioningPhase,
+    )
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
 )
+
+
+class RecordConflictError(Exception):
+    """Raised when optimistic locking detects a conflict.
+
+    This occurs when another user/process has modified the record
+    since it was last loaded.
+    """
+
+    def __init__(
+        self, record_id: int, expected_version: int, actual_version: int
+    ):
+        self.record_id = record_id
+        self.expected_version = expected_version
+        self.actual_version = actual_version
+        super().__init__(
+            f"Record {record_id} was modified by another user. "
+            f"Expected version {expected_version}, found {actual_version}."
+        )
 
 
 class CommissioningDatabase:
@@ -88,9 +112,33 @@ class CommissioningDatabase:
 
                     -- Metadata
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    general_notes TEXT NOT NULL DEFAULT '[]'
                 )
             """)
+
+            # Migration: Add version column if it doesn't exist
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM pragma_table_info('commissioning_records')
+                WHERE name='version'
+            """)
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("""
+                    ALTER TABLE commissioning_records
+                    ADD COLUMN version INTEGER NOT NULL DEFAULT 1
+                """)
+
+            # Migration: Add general_notes column if it doesn't exist
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM pragma_table_info('commissioning_records')
+                WHERE name='general_notes'
+            """)
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("""
+                    ALTER TABLE commissioning_records
+                    ADD COLUMN general_notes TEXT NOT NULL DEFAULT '[]'
+                """)
 
             # Create indexes for common queries
             cursor.execute("""
@@ -113,23 +161,59 @@ class CommissioningDatabase:
                 ON commissioning_records(current_phase)
             """)
 
+            # Create measurement history table for tracking all measurement attempts
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS measurement_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    record_id INTEGER NOT NULL,
+                    phase TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    operator TEXT,
+                    measurement_data TEXT NOT NULL,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+
+                    FOREIGN KEY (record_id) REFERENCES commissioning_records(id)
+                )
+            """)
+
+            # Create index for efficient history queries
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_measurement_history_record
+                ON measurement_history(record_id, phase)
+            """)
+
+            # Create operators table for approved operator list
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS operators (
+                    name TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL
+                )
+            """)
+
     def save_record(
-        self, record: "CommissioningRecord", record_id: Optional[int] = None
+        self,
+        record: "CommissioningRecord",
+        record_id: Optional[int] = None,
+        expected_version: Optional[int] = None,
     ) -> int:
-        """Save or update a commissioning record.
+        """Save or update a commissioning record with optimistic locking.
 
         Args:
             record: CommissioningRecord to save
             record_id: If provided, updates existing record. Otherwise creates new.
+            expected_version: For updates, the version expected. Raises RecordConflictError if mismatch.
 
         Returns:
             Database ID of the saved record
 
+        Raises:
+            RecordConflictError: If expected_version doesn't match current version (concurrent modification)
+
         Example:
-            >>> record = CommissioningRecord(cavity_name="L1B_CM02_CAV3", cryomodule="02")
-            >>> record_id = db.save_record(record)  # Create
+            >>> record, version = db.load_record_with_version(record_id)
             >>> record.current_phase = CommissioningPhase.SSA_CAL
-            >>> db.save_record(record, record_id)  # Update
+            >>> db.save_record(record, record_id, expected_version=version)  # Safe update
         """
         import json
         from datetime import datetime
@@ -216,7 +300,23 @@ class CommissioningDatabase:
                 )
                 return cursor.lastrowid
             else:
-                # Update existing record
+                # Update existing record with optimistic locking
+                if expected_version is not None:
+                    # Check current version
+                    cursor.execute(
+                        "SELECT version FROM commissioning_records WHERE id = ?",
+                        (record_id,),
+                    )
+                    row = cursor.fetchone()
+                    if row is None:
+                        raise ValueError(f"Record {record_id} not found")
+
+                    current_version = row[0]
+                    if current_version != expected_version:
+                        raise RecordConflictError(
+                            record_id, expected_version, current_version
+                        )
+
                 cursor.execute(
                     """
                     UPDATE commissioning_records SET
@@ -225,7 +325,8 @@ class CommissioningDatabase:
                         piezo_pre_rf = ?, cold_landing = ?, ssa_char = ?, cavity_char = ?,
                         piezo_with_rf = ?, high_power = ?,
                         phase_status = ?, phase_history = ?,
-                        updated_at = ?
+                        updated_at = ?,
+                        version = version + 1
                     WHERE id = ?
                 """,
                     (
@@ -297,6 +398,36 @@ class CommissioningDatabase:
                 return None
 
             return self._row_to_record(row)
+
+    def get_record_with_version(
+        self, record_id: int
+    ) -> Optional[tuple["CommissioningRecord", int]]:
+        """Retrieve a record with its version number for optimistic locking.
+
+        Args:
+            record_id: Database ID of the record
+
+        Returns:
+            Tuple of (CommissioningRecord, version) if found, None otherwise
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM commissioning_records WHERE id = ?", (record_id,)
+            )
+            row = cursor.fetchone()
+
+            if row is None:
+                return None
+
+            version = row["version"] if "version" in row.keys() else 1
+            return self._row_to_record(row), version
+
+    def load_record_with_version(
+        self, record_id: int
+    ) -> Optional[tuple["CommissioningRecord", int]]:
+        """Alias for get_record_with_version."""
+        return self.get_record_with_version(record_id)
 
     def _row_to_record(self, row: sqlite3.Row) -> "CommissioningRecord":
         """Convert database row to CommissioningRecord.
@@ -694,3 +825,476 @@ class CommissioningDatabase:
                 "by_phase": by_phase,
                 "by_cryomodule": by_cryomodule,
             }
+
+    def add_measurement_history(
+        self,
+        record_id: int,
+        phase: "CommissioningPhase",
+        measurement_data,
+        operator: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> int:
+        """Add a measurement attempt to history (append-only, no conflicts).
+
+        This allows multiple users to take measurements concurrently without
+        version conflicts. Each measurement is recorded separately.
+
+        Args:
+            record_id: ID of the commissioning record
+            phase: Which phase this measurement is for
+            measurement_data: The phase-specific data object (PiezoPreRFCheck, etc.)
+            operator: Who took the measurement
+            notes: Optional notes about this measurement
+
+        Returns:
+            History entry ID
+
+        Example:
+            >>> # User A takes a measurement
+            >>> piezo_data = PiezoPreRFCheck(...)
+            >>> db.add_measurement_history(record_id, CommissioningPhase.PIEZO_PRE_RF, piezo_data)
+            >>>
+            >>> # User B can also take a measurement - both get recorded!
+            >>> piezo_data2 = PiezoPreRFCheck(...)
+            >>> db.add_measurement_history(record_id, CommissioningPhase.PIEZO_PRE_RF, piezo_data2)
+        """
+        import json
+        from datetime import datetime
+
+        now = datetime.now().isoformat()
+
+        # Serialize measurement data
+        if hasattr(measurement_data, "to_dict"):
+            data_json = json.dumps(measurement_data.to_dict())
+        else:
+            data_json = json.dumps(measurement_data)
+
+        notes_payload = []
+        if notes:
+            notes_payload.append(
+                {"timestamp": now, "operator": operator, "note": notes}
+            )
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO measurement_history (
+                    record_id, phase, timestamp, operator, measurement_data, notes, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record_id,
+                    phase.value,
+                    now,
+                    operator,
+                    data_json,
+                    json.dumps(notes_payload),
+                    now,
+                ),
+            )
+            return cursor.lastrowid
+
+    def get_operators(self) -> List[str]:
+        """Return the list of approved operators."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM operators ORDER BY name")
+            rows = cursor.fetchall()
+            return [row[0] for row in rows]
+
+    def add_operator(self, name: str) -> bool:
+        """Add a new operator to the approved list."""
+        from datetime import datetime
+
+        clean_name = name.strip()
+        if not clean_name:
+            return False
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO operators (name, created_at) VALUES (?, ?)",
+                (clean_name, datetime.now().isoformat()),
+            )
+            return cursor.rowcount > 0
+
+    def get_measurement_history(
+        self,
+        record_id: int,
+        phase: Optional["CommissioningPhase"] = None,
+    ) -> List[dict]:
+        """Get all measurement attempts for a record.
+
+        Args:
+            record_id: ID of the commissioning record
+            phase: Optional - filter to specific phase only
+
+        Returns:
+            List of measurement history entries with metadata
+
+        Example:
+            >>> # Get all measurements
+            >>> history = db.get_measurement_history(record_id)
+            >>>
+            >>> # Get just piezo pre-RF attempts
+            >>> piezo_history = db.get_measurement_history(
+            ...     record_id, CommissioningPhase.PIEZO_PRE_RF
+            ... )
+            >>> print(f"Took {len(piezo_history)} piezo measurements")
+        """
+        import json
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            if phase:
+                cursor.execute(
+                    """
+                    SELECT * FROM measurement_history
+                    WHERE record_id = ? AND phase = ?
+                    ORDER BY timestamp DESC
+                    """,
+                    (record_id, phase.value),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM measurement_history
+                    WHERE record_id = ?
+                    ORDER BY timestamp DESC
+                    """,
+                    (record_id,),
+                )
+
+            rows = cursor.fetchall()
+
+            history = []
+            for row in rows:
+                notes_value = row["notes"]
+                notes_list = []
+                if notes_value:
+                    try:
+                        parsed = json.loads(notes_value)
+                        if isinstance(parsed, list):
+                            notes_list = parsed
+                        elif isinstance(parsed, str):
+                            notes_list = [
+                                {
+                                    "timestamp": None,
+                                    "operator": None,
+                                    "note": parsed,
+                                }
+                            ]
+                    except json.JSONDecodeError:
+                        notes_list = [
+                            {
+                                "timestamp": None,
+                                "operator": None,
+                                "note": notes_value,
+                            }
+                        ]
+
+                entry = {
+                    "id": row["id"],
+                    "phase": row["phase"],
+                    "timestamp": row["timestamp"],
+                    "operator": row["operator"],
+                    "notes": notes_list,
+                    "measurement_data": json.loads(row["measurement_data"]),
+                }
+                history.append(entry)
+
+            return history
+
+    def get_measurement_notes(
+        self,
+        record_id: int,
+        phase: Optional["CommissioningPhase"] = None,
+    ) -> List[dict]:
+        """Flatten measurement notes across history entries.
+
+        Returns a list of notes with entry_id and note index for editing.
+        """
+        history = self.get_measurement_history(record_id, phase)
+        notes = []
+
+        for entry in history:
+            notes_list = entry.get("notes") or []
+            for index, note_item in enumerate(notes_list):
+                notes.append(
+                    {
+                        "entry_id": entry["id"],
+                        "note_index": index,
+                        "phase": entry["phase"],
+                        "measurement_timestamp": entry.get("timestamp"),
+                        "timestamp": note_item.get("timestamp"),
+                        "operator": note_item.get("operator"),
+                        "note": note_item.get("note", ""),
+                    }
+                )
+
+        def sort_key(item: dict) -> str:
+            return (
+                item.get("timestamp") or item.get("measurement_timestamp") or ""
+            )
+
+        return sorted(notes, key=sort_key, reverse=True)
+
+    def append_measurement_note(
+        self,
+        entry_id: int,
+        operator: Optional[str],
+        note: str,
+    ) -> bool:
+        """Append a note to a measurement history entry.
+
+        Args:
+            entry_id: Measurement history entry ID
+            operator: Note author
+            note: Note text
+
+        Returns:
+            True if updated, False if entry not found
+        """
+        import json
+        from datetime import datetime
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT notes FROM measurement_history WHERE id = ?",
+                (entry_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return False
+
+            existing = row[0]
+            notes_list = []
+            if existing:
+                try:
+                    parsed = json.loads(existing)
+                    if isinstance(parsed, list):
+                        notes_list = parsed
+                    elif isinstance(parsed, str):
+                        notes_list = [
+                            {
+                                "timestamp": None,
+                                "operator": None,
+                                "note": parsed,
+                            }
+                        ]
+                except json.JSONDecodeError:
+                    notes_list = [
+                        {"timestamp": None, "operator": None, "note": existing}
+                    ]
+
+            notes_list.append(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "operator": operator,
+                    "note": note,
+                }
+            )
+
+            cursor.execute(
+                "UPDATE measurement_history SET notes = ? WHERE id = ?",
+                (json.dumps(notes_list), entry_id),
+            )
+            return cursor.rowcount > 0
+
+    # ==================== GENERAL NOTES METHODS ====================
+
+    def get_general_notes(self, record_id: int) -> List[dict]:
+        """Get all general notes for a commissioning record.
+
+        Args:
+            record_id: Commissioning record ID
+
+        Returns:
+            List of note dicts with timestamp, operator, note
+        """
+        import json
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT general_notes FROM commissioning_records WHERE id = ?",
+                (record_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return []
+
+            general_notes_str = row[0] or "[]"
+            try:
+                notes_list = json.loads(general_notes_str)
+                if not isinstance(notes_list, list):
+                    return []
+                return notes_list
+            except json.JSONDecodeError:
+                return []
+
+    def append_general_note(
+        self,
+        record_id: int,
+        operator: Optional[str],
+        note: str,
+    ) -> bool:
+        """Append a general note to a commissioning record.
+
+        Args:
+            record_id: Commissioning record ID
+            operator: Note author
+            note: Note text
+
+        Returns:
+            True if updated, False if record not found
+        """
+        import json
+        from datetime import datetime
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT general_notes FROM commissioning_records WHERE id = ?",
+                (record_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return False
+
+            existing = row[0] or "[]"
+            try:
+                notes_list = json.loads(existing)
+                if not isinstance(notes_list, list):
+                    notes_list = []
+            except json.JSONDecodeError:
+                notes_list = []
+
+            notes_list.append(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "operator": operator,
+                    "note": note,
+                }
+            )
+
+            cursor.execute(
+                "UPDATE commissioning_records SET general_notes = ? WHERE id = ?",
+                (json.dumps(notes_list), record_id),
+            )
+            return cursor.rowcount > 0
+
+    def update_general_note(
+        self,
+        record_id: int,
+        note_index: int,
+        operator: Optional[str],
+        note: str,
+    ) -> bool:
+        """Update a specific general note by index.
+
+        Args:
+            record_id: Commissioning record ID
+            note_index: Index of note to update
+            operator: Note author
+            note: Note text
+
+        Returns:
+            True if updated, False if record/note not found
+        """
+        import json
+        from datetime import datetime
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT general_notes FROM commissioning_records WHERE id = ?",
+                (record_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return False
+
+            existing = row[0] or "[]"
+            try:
+                notes_list = json.loads(existing)
+                if not isinstance(notes_list, list):
+                    notes_list = []
+            except json.JSONDecodeError:
+                notes_list = []
+
+            if note_index < 0 or note_index >= len(notes_list):
+                return False
+
+            notes_list[note_index] = {
+                "timestamp": datetime.now().isoformat(),
+                "operator": operator,
+                "note": note,
+                "edited_at": datetime.now().isoformat(),
+            }
+
+            cursor.execute(
+                "UPDATE commissioning_records SET general_notes = ? WHERE id = ?",
+                (json.dumps(notes_list), record_id),
+            )
+            return cursor.rowcount > 0
+
+    def update_measurement_note(
+        self,
+        entry_id: int,
+        note_index: int,
+        operator: Optional[str],
+        note: str,
+    ) -> bool:
+        """Update a specific note entry by index."""
+        import json
+        from datetime import datetime
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT notes FROM measurement_history WHERE id = ?",
+                (entry_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return False
+
+            existing = row[0]
+            notes_list = []
+            if existing:
+                try:
+                    parsed = json.loads(existing)
+                    if isinstance(parsed, list):
+                        notes_list = parsed
+                    elif isinstance(parsed, str):
+                        notes_list = [
+                            {
+                                "timestamp": None,
+                                "operator": None,
+                                "note": parsed,
+                            }
+                        ]
+                except json.JSONDecodeError:
+                    notes_list = [
+                        {"timestamp": None, "operator": None, "note": existing}
+                    ]
+
+            if note_index < 0 or note_index >= len(notes_list):
+                return False
+
+            notes_list[note_index] = {
+                "timestamp": datetime.now().isoformat(),
+                "operator": operator,
+                "note": note,
+                "edited_at": datetime.now().isoformat(),
+            }
+
+            cursor.execute(
+                "UPDATE measurement_history SET notes = ? WHERE id = ?",
+                (json.dumps(notes_list), entry_id),
+            )
+            return cursor.rowcount > 0

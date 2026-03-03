@@ -11,6 +11,9 @@ from sc_linac_physics.applications.rf_commissioning import (
     CommissioningPhase,
     PhaseStatus,
 )
+from sc_linac_physics.applications.rf_commissioning.models.database import (
+    RecordConflictError,
+)
 
 
 class CommissioningSession:
@@ -48,6 +51,7 @@ class CommissioningSession:
 
         self._active_record: Optional[CommissioningRecord] = None
         self._active_record_id: Optional[int] = None
+        self._active_record_version: Optional[int] = None
 
     @property
     def database(self) -> CommissioningDatabase:
@@ -72,6 +76,7 @@ class CommissioningSession:
         )
 
         self._active_record_id = self.db.save_record(self._active_record)
+        self._active_record_version = 1  # New records start at version 1
         return self._active_record, self._active_record_id
 
     def get_active_record(self) -> Optional[CommissioningRecord]:
@@ -98,18 +103,39 @@ class CommissioningSession:
         """
         return self._active_record is not None
 
+    def get_operators(self) -> list[str]:
+        """Get approved operator list."""
+        return self.db.get_operators()
+
+    def add_operator(self, name: str) -> bool:
+        """Add operator to approved list."""
+        return self.db.add_operator(name)
+
     def save_active_record(self) -> bool:
-        """Save the active record to database.
+        """Save the active record to database with optimistic locking.
 
         Returns:
             True if saved successfully, False otherwise
+
+        Raises:
+            RecordConflictError: If another user modified the record since it was loaded
         """
         if not self._active_record or self._active_record_id is None:
             return False
 
         try:
-            self.db.save_record(self._active_record, self._active_record_id)
+            self.db.save_record(
+                self._active_record,
+                self._active_record_id,
+                expected_version=self._active_record_version,
+            )
+            # Increment local version on successful save
+            if self._active_record_version is not None:
+                self._active_record_version += 1
             return True
+        except RecordConflictError:
+            # Re-raise conflict errors for UI to handle
+            raise
         except Exception as e:
             print(f"Failed to save active record: {e}")
             return False
@@ -123,18 +149,22 @@ class CommissioningSession:
         Returns:
             Loaded record or None if not found
         """
-        record = self.db.load_record(record_id)
+        result = self.db.load_record_with_version(record_id)
 
-        if record:
+        if result:
+            record, version = result
             self._active_record = record
             self._active_record_id = record_id
+            self._active_record_version = version
+            return record
 
-        return record
+        return None
 
     def clear_active_record(self) -> None:
         """Clear the active record (e.g., when starting fresh)."""
         self._active_record = None
         self._active_record_id = None
+        self._active_record_version = None
 
     def can_run_phase(self, phase: CommissioningPhase) -> tuple[bool, str]:
         """Check if a phase can be run on the active record.
@@ -232,3 +262,149 @@ class CommissioningSession:
                 else False
             ),
         }
+
+    def add_measurement_to_history(
+        self,
+        phase: CommissioningPhase,
+        measurement_data,
+        operator: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> bool:
+        """Add a measurement to history for the active record.
+
+        This is the recommended way to record measurements as multiple users
+        can add measurements concurrently without conflicts.
+
+        Args:
+            phase: Which phase the measurement is for
+            measurement_data: The phase-specific data object
+            operator: Who took the measurement
+            notes: Optional notes
+
+        Returns:
+            True if added successfully, False if no active record
+
+        Example:
+            >>> # Take a piezo measurement and record it
+            >>> piezo_data = PiezoPreRFCheck(...)
+            >>> session.add_measurement_to_history(
+            ...     CommissioningPhase.PIEZO_PRE_RF,
+            ...     piezo_data,
+            ...     operator="John Doe"
+            ... )
+            >>>
+            >>> # Optionally also update the main record's current measurement
+            >>> record = session.get_active_record()
+            >>> record.piezo_pre_rf = piezo_data
+            >>> session.save_active_record()
+        """
+        if not self._active_record or self._active_record_id is None:
+            return False
+
+        try:
+            self.db.add_measurement_history(
+                self._active_record_id,
+                phase,
+                measurement_data,
+                operator,
+                notes,
+            )
+            return True
+        except Exception as e:
+            print(f"Failed to add measurement to history: {e}")
+            return False
+
+    def get_measurement_history(
+        self, phase: Optional[CommissioningPhase] = None
+    ) -> list[dict]:
+        """Get measurement history for the active record.
+
+        Args:
+            phase: Optional - filter to specific phase
+
+        Returns:
+            List of measurement history entries
+        """
+        if self._active_record_id is None:
+            return []
+
+        return self.db.get_measurement_history(self._active_record_id, phase)
+
+    def get_measurement_notes(
+        self, phase: Optional[CommissioningPhase] = None
+    ) -> list[dict]:
+        """Get flattened measurement notes for the active record."""
+        if self._active_record_id is None:
+            return []
+
+        return self.db.get_measurement_notes(self._active_record_id, phase)
+
+    def append_measurement_note(
+        self,
+        entry_id: int,
+        operator: Optional[str],
+        note: str,
+    ) -> bool:
+        """Append a note to a measurement history entry."""
+        try:
+            return self.db.append_measurement_note(entry_id, operator, note)
+        except Exception as e:
+            print(f"Failed to append measurement note: {e}")
+            return False
+
+    def update_measurement_note(
+        self,
+        entry_id: int,
+        note_index: int,
+        operator: Optional[str],
+        note: str,
+    ) -> bool:
+        """Update a specific measurement note by index."""
+        try:
+            return self.db.update_measurement_note(
+                entry_id, note_index, operator, note
+            )
+        except Exception as e:
+            print(f"Failed to update measurement note: {e}")
+            return False
+
+    # ==================== GENERAL NOTES METHODS ====================
+
+    def get_general_notes(self) -> list[dict]:
+        """Get all general notes for the active record."""
+        if self._active_record_id is None:
+            return []
+        return self.db.get_general_notes(self._active_record_id)
+
+    def append_general_note(
+        self,
+        operator: Optional[str],
+        note: str,
+    ) -> bool:
+        """Append a general note to the active commissioning record."""
+        if self._active_record_id is None:
+            return False
+        try:
+            return self.db.append_general_note(
+                self._active_record_id, operator, note
+            )
+        except Exception as e:
+            print(f"Failed to append general note: {e}")
+            return False
+
+    def update_general_note(
+        self,
+        note_index: int,
+        operator: Optional[str],
+        note: str,
+    ) -> bool:
+        """Update a specific general note by index."""
+        if self._active_record_id is None:
+            return False
+        try:
+            return self.db.update_general_note(
+                self._active_record_id, note_index, operator, note
+            )
+        except Exception as e:
+            print(f"Failed to update general note: {e}")
+            return False

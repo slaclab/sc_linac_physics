@@ -17,7 +17,7 @@ from .models.data_models import (
     PiezoWithRFTest,
     HighPowerRampData,
 )
-from .models.database import CommissioningDatabase
+from .models.database import CommissioningDatabase, RecordConflictError
 from .phases.phase_base import (
     PhaseBase,
     PhaseContext,
@@ -46,6 +46,7 @@ __all__ = [
     "PhaseExecutionError",
     # Database
     "CommissioningDatabase",
+    "RecordConflictError",
     # Hardware extensions
     "CommissioningPiezo",
 ]
