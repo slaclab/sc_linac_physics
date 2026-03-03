@@ -137,10 +137,14 @@ class AlarmSidebarWidget(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
-        self.display_mode = (
+        new_mode = (
             "compact" if event.size().width() < self.COMPACT_WIDTH else "full"
         )
-        self._update_display_mode()
+
+        # Only update if mode actually changed
+        if new_mode != self.display_mode:
+            self.display_mode = new_mode
+            self._update_display_mode()
 
     def _update_display_mode(self):
         alarm_count = len(self.alarm_cavities)
