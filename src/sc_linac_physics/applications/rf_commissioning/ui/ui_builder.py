@@ -79,9 +79,6 @@ class PiezoPreRFUI:
         left_panel = QVBoxLayout()
         left_panel.setSpacing(6)
 
-        # STEP 1: Compact setup row (Operator + Cavity Selection)
-        left_panel.addLayout(self._build_setup_row())
-
         # Top toolbar
         left_panel.addLayout(self._build_main_toolbar())
 
@@ -177,9 +174,9 @@ class PiezoPreRFUI:
         return toolbar
 
     def _build_piezo_controls(self) -> QGroupBox:
-        """Build Piezo controls - now more compact without cavity selection."""
+        """Build Piezo controls."""
         group = QGroupBox("Piezo Tuner Pre-RF Test")
-        layout = QGridLayout()  # Use grid directly instead of nested layouts
+        layout = QGridLayout()
         layout.setSpacing(5)
         layout.setContentsMargins(8, 8, 8, 8)
 

@@ -357,8 +357,9 @@ class PhaseCheckpoint:
 class CommissioningRecord:
     """Complete commissioning record for a cavity."""
 
-    cavity_name: str
+    linac: str
     cryomodule: str
+    cavity_number: str
     start_time: datetime = field(default_factory=datetime.now)
     current_phase: CommissioningPhase = CommissioningPhase.PIEZO_PRE_RF
 
@@ -392,6 +393,16 @@ class CommissioningRecord:
     def is_complete(self) -> bool:
         """Check if all commissioning is complete."""
         return self.current_phase == CommissioningPhase.COMPLETE
+
+    @property
+    def full_cavity_name(self) -> str:
+        """Get the full formatted cavity name for display (e.g., L1B_CM02_CAV3)."""
+        return f"{self.linac}_CM{self.cryomodule}_CAV{self.cavity_number}"
+
+    @property
+    def short_cavity_name(self) -> str:
+        """Get the short formatted cavity name (e.g., 02_CAV3)."""
+        return f"{self.cryomodule}_CAV{self.cavity_number}"
 
     @property
     def elapsed_time(self) -> Optional[float]:
@@ -514,8 +525,9 @@ class CommissioningRecord:
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
         return {
-            "cavity_name": self.cavity_name,
+            "linac": self.linac,
             "cryomodule": self.cryomodule,
+            "cavity_number": self.cavity_number,
             "start_time": self.start_time.isoformat(),
             "end_time": self.end_time.isoformat() if self.end_time else None,
             "current_phase": self.current_phase.value,

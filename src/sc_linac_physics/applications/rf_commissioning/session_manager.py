@@ -34,7 +34,7 @@ class CommissioningSession:
         # ... etc.
 
         # Controllers use session methods:
-        session.start_new_record(cavity_name, cryomodule)
+        session.start_new_record(cryomodule="02", cavity_number="3")
         record = session.get_active_record()
         session.save_active_record()
         session.load_record(record_id)
@@ -59,20 +59,33 @@ class CommissioningSession:
         return self.db
 
     def start_new_record(
-        self, cavity_name: str, cryomodule: str
+        self, cryomodule: str, cavity_number: str, linac: Optional[str] = None
     ) -> tuple[CommissioningRecord, int]:
         """Create a new commissioning record and save to database.
 
         Args:
-            cavity_name: Name of the cavity (e.g., "L1B_CM02_CAV3")
-            cryomodule: Cryomodule identifier (e.g., "02")
+            cryomodule: Cryomodule identifier (e.g., "02", "H1")
+            cavity_number: Cavity number (e.g., "1", "3")
+            linac: Linac identifier (e.g., "L1B"). If None, will be derived from cryomodule.
 
         Returns:
             Tuple of (new_record, record_id)
         """
+        from sc_linac_physics.utils.sc_linac.linac_utils import (
+            get_linac_for_cryomodule,
+        )
+
+        if linac is None:
+            linac = get_linac_for_cryomodule(cryomodule)
+            if not linac:
+                raise ValueError(
+                    f"Cannot determine linac for cryomodule '{cryomodule}'"
+                )
+
         self._active_record = CommissioningRecord(
-            cavity_name=cavity_name,
+            linac=linac,
             cryomodule=cryomodule,
+            cavity_number=cavity_number,
         )
 
         self._active_record_id = self.db.save_record(self._active_record)
@@ -245,12 +258,28 @@ class CommissioningSession:
         Returns:
             Dictionary with session information
         """
+        cavity_name = None
+        if self._active_record:
+            cavity_name = (
+                f"{self._active_record.linac}_CM{self._active_record.cryomodule}"
+                f"_CAV{self._active_record.cavity_number}"
+            )
+
         return {
             "has_active_record": self.has_active_record(),
             "active_record_id": self._active_record_id,
-            "cavity_name": (
-                self._active_record.cavity_name if self._active_record else None
+            "linac": (
+                self._active_record.linac if self._active_record else None
             ),
+            "cryomodule": (
+                self._active_record.cryomodule if self._active_record else None
+            ),
+            "cavity_number": (
+                self._active_record.cavity_number
+                if self._active_record
+                else None
+            ),
+            "cavity_name": cavity_name,  # Formatted for display
             "current_phase": (
                 self._active_record.current_phase.value
                 if self._active_record

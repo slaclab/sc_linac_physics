@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass
 from typing import Optional, Type
 
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, Qt, QSettings
 from PyQt5.QtWidgets import (
     QTabWidget,
     QVBoxLayout,
@@ -13,16 +13,20 @@ from PyQt5.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QPushButton,
-    QGroupBox,
     QTableWidget,
     QTableWidgetItem,
     QComboBox,
     QLabel,
-    QTextEdit,
     QDialogButtonBox,
     QAbstractItemView,
-    QInputDialog,
+    QWidget,
+    QSplitter,
+    QLineEdit,
     QSizePolicy,
+    QInputDialog,
+    QTextEdit,
+    QGroupBox,
+    QFrame,
 )
 from pydm import Display, PyDMApplication
 
@@ -45,6 +49,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import
 from sc_linac_physics.applications.rf_commissioning.ui.piezo_pre_rf_display import (
     PiezoPreRFDisplay,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 @dataclass(frozen=True)
@@ -57,46 +62,70 @@ class PhaseTabSpec:
 
 
 class MultiPhaseCommissioningDisplay(Display):
-    """Container window that hosts multiple phase displays."""
+    """Container window that hosts multiple phase displays.
+
+    This redesigned display keeps critical information always visible:
+    - Operator selection
+    - Cavity/cryomodule selection
+    - Progress indicator
+    - Sync status
+    - Notes panel
+
+    External updates are prominently displayed with reload options.
+    """
 
     def __init__(
         self,
         parent=None,
         session: Optional[CommissioningSession] = None,
         phase_specs: Optional[list[PhaseTabSpec]] = None,
-        refresh_interval_ms: int = 30000,
-    ) -> None:
+        refresh_interval_ms: int = 5000,
+    ):
         super().__init__(parent)
         self.setWindowTitle("RF Commissioning")
+        self.setMinimumSize(1200, 800)
 
         self.session = session or CommissioningSession("commissioning.db")
         self.phase_specs = phase_specs or self._default_phase_specs()
 
-        # Create main layout with reduced margins
-        layout = QVBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(5)
+        # Track update banner state
+        self._update_banner = None
 
-        # Add toolbar with compact spacing
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(5)
+        # Create main layout
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        history_btn = QPushButton("View Measurement History")
-        history_btn.clicked.connect(self._show_measurement_history)
-        toolbar.addWidget(history_btn)
+        # 1. PERSISTENT HEADER (always visible)
+        header = self._build_header_panel()
+        main_layout.addWidget(header)
 
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
+        # Banner will be inserted at position 1 when needed
 
-        # Add tabs - give this the most space
+        # 2. COMPACT PROGRESS (always visible)
+        progress = self._build_compact_progress_bar()
+        main_layout.addWidget(progress)
+
+        # 3. MAIN CONTENT AREA (scrollable)
+        content_splitter = QSplitter(Qt.Vertical)
+
+        # Phase tabs
         self.tabs = QTabWidget()
-        layout.addWidget(self.tabs, stretch=3)  # Priority space allocation
+        self.tabs.setTabPosition(QTabWidget.North)
+        content_splitter.addWidget(self.tabs)
 
-        # Add collapsible notes panel
-        self.notes_panel = self._build_notes_panel()
-        layout.addWidget(self.notes_panel, stretch=1)  # Less priority
+        # Notes panel (collapsible but always accessible)
+        notes_panel = self._build_enhanced_notes_panel()
+        content_splitter.addWidget(notes_panel)
 
-        self.setLayout(layout)
+        # Initial sizes: 70% tabs, 30% notes
+        content_splitter.setSizes([700, 300])
+        content_splitter.setCollapsible(0, False)  # Tabs can't collapse
+        content_splitter.setCollapsible(1, True)  # Notes can collapse
+
+        main_layout.addWidget(content_splitter)
+
+        self.setLayout(main_layout)
 
         self._phase_displays: list[PhaseDisplayBase] = []
         self._init_tabs()
@@ -109,98 +138,819 @@ class MultiPhaseCommissioningDisplay(Display):
         if refresh_interval_ms > 0:
             self._refresh_timer.start(refresh_interval_ms)
 
+        # REMOVED: self._restore_last_session()
+        # Operator must explicitly select operator and cavity each time
+
     def _default_phase_specs(self) -> list[PhaseTabSpec]:
+        """Default phase specifications - add more phases as they're implemented."""
         return [
             PhaseTabSpec(
-                title="1. Piezo Pre-RF",
+                title="Piezo Pre-RF",
                 display_class=PiezoPreRFDisplay,
                 phase=CommissioningPhase.PIEZO_PRE_RF,
+            ),
+            # Uncomment and add as you implement each phase:
+            # PhaseTabSpec(
+            #     title="Cold Landing",
+            #     display_class=ColdLandingDisplay,
+            #     phase=CommissioningPhase.COLD_LANDING,
+            # ),
+            # PhaseTabSpec(
+            #     title="SSA Characterization",
+            #     display_class=SSACharDisplay,
+            #     phase=CommissioningPhase.SSA_CHAR,
+            # ),
+            # PhaseTabSpec(
+            #     title="Cavity Characterization",
+            #     display_class=CavityCharDisplay,
+            #     phase=CommissioningPhase.CAVITY_CHAR,
+            # ),
+            # PhaseTabSpec(
+            #     title="Piezo with RF",
+            #     display_class=PiezoWithRFDisplay,
+            #     phase=CommissioningPhase.PIEZO_WITH_RF,
+            # ),
+            # PhaseTabSpec(
+            #     title="High Power",
+            #     display_class=HighPowerDisplay,
+            #     phase=CommissioningPhase.HIGH_POWER,
+            # ),
+        ]
+
+    # =============================================================================
+    # HEADER PANEL - Always visible operator/cavity selection
+    # =============================================================================
+    def _build_header_panel(self) -> QWidget:
+        """Build persistent header with operator and cavity selection."""
+        header = QWidget()
+        header.setStyleSheet("""
+            QWidget {
+                background-color: #2b2b2b;
+                border-bottom: 2px solid #4a4a4a;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #555;
+                border-radius: 5px;
+                margin-top: 6px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Cavity section - comes FIRST (don't need operator to browse)
+        cavity_group = QGroupBox("Cavity Selection")
+        cavity_layout = QHBoxLayout()
+
+        self.cryomodule_combo = QComboBox()
+        self.cryomodule_combo.setMinimumWidth(80)
+        self.cryomodule_combo.addItem("Select CM...", "")
+        self.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
+        cavity_layout.addWidget(QLabel("CM:"))
+        cavity_layout.addWidget(self.cryomodule_combo)
+
+        self.cavity_combo = QComboBox()
+        self.cavity_combo.setMinimumWidth(60)
+        self.cavity_combo.addItem("Select Cav...", "")
+        self.cavity_combo.addItems([str(i) for i in range(1, 9)])
+        cavity_layout.addWidget(QLabel("Cav:"))
+        cavity_layout.addWidget(self.cavity_combo)
+
+        # Load existing record button - doesn't require operator
+        load_btn = QPushButton("📂 Load Record")
+        load_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 6px 12px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        load_btn.setToolTip(
+            "Browse and load existing commissioning records for this cavity"
+        )
+        load_btn.clicked.connect(self._on_load_record)
+        cavity_layout.addWidget(load_btn)
+
+        cavity_group.setLayout(cavity_layout)
+        layout.addWidget(cavity_group)
+
+        # Current cavity display
+        self.current_cavity_label = QLabel("No cavity selected")
+        self.current_cavity_label.setStyleSheet("""
+            QLabel {
+                color: #888;
+                font-weight: bold;
+                padding: 5px 10px;
+                background-color: rgba(100, 100, 100, 0.2);
+                border-radius: 3px;
+                font-size: 10pt;
+            }
+        """)
+        layout.addWidget(self.current_cavity_label)
+
+        # Update current cavity label and PVs when selection changes
+        self.cryomodule_combo.currentIndexChanged.connect(
+            self._update_current_cavity_display
+        )
+        self.cryomodule_combo.currentIndexChanged.connect(
+            self._on_cavity_selection_changed
+        )
+        self.cavity_combo.currentIndexChanged.connect(
+            self._update_current_cavity_display
+        )
+        self.cavity_combo.currentIndexChanged.connect(
+            self._on_cavity_selection_changed
+        )
+
+        # Separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet("color: #555;")
+        layout.addWidget(separator)
+
+        # Operator section - needed for running tests
+        op_group = QGroupBox("Operator (Required for Tests)")
+        op_layout = QHBoxLayout()
+        self.operator_combo = QComboBox()
+        self.operator_combo.setMinimumWidth(200)
+        self.operator_combo.currentIndexChanged.connect(
+            self._on_operator_changed
+        )
+        self._populate_operator_combo()
+        op_layout.addWidget(self.operator_combo)
+        op_group.setLayout(op_layout)
+        layout.addWidget(op_group)
+
+        # Sync status indicator
+        self.sync_status = QLabel("○ No Record Loaded")
+        self.sync_status.setStyleSheet("""
+            QLabel {
+                color: #888;
+                font-weight: bold;
+                padding: 5px 10px;
+                background-color: rgba(100, 100, 100, 0.2);
+                border-radius: 3px;
+            }
+        """)
+        layout.addWidget(self.sync_status)
+
+        layout.addStretch()
+
+        # Quick actions
+        save_btn = QPushButton("💾 Save")
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 6px 12px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        save_btn.clicked.connect(self._on_manual_save)
+        layout.addWidget(save_btn)
+
+        history_btn = QPushButton("📊 History")
+        history_btn.clicked.connect(self._show_measurement_history)
+        layout.addWidget(history_btn)
+
+        header.setLayout(layout)
+        return header
+
+    def _on_load_record(self) -> None:
+        """Load an existing commissioning record for the selected cavity."""
+        cryomodule = self.cryomodule_combo.currentText()
+        cavity = self.cavity_combo.currentText()
+
+        if cryomodule == "Select CM..." or not cryomodule:
+            QMessageBox.information(
+                self, "Cavity Required", "Please select a cryomodule first."
+            )
+            self.cryomodule_combo.setFocus()
+            return
+
+        if cavity == "Select Cav..." or not cavity:
+            QMessageBox.information(
+                self, "Cavity Required", "Please select a cavity number first."
+            )
+            self.cavity_combo.setFocus()
+            return
+
+        # Get linac for this cryomodule
+        from sc_linac_physics.utils.sc_linac.linac_utils import (
+            get_linac_for_cryomodule,
+        )
+
+        linac = get_linac_for_cryomodule(cryomodule)
+        if not linac:
+            QMessageBox.warning(
+                self,
+                "Invalid Cryomodule",
+                f"Cannot determine linac for cryomodule '{cryomodule}'",
+            )
+            return
+
+        cavity_display_name = f"{linac}_CM{cryomodule}_CAV{cavity}"
+
+        # Get all records from database
+        all_records = self.session.db.get_all_records()
+
+        # Filter records for this specific cavity
+        existing_records = [
+            r
+            for r in all_records
+            if (
+                r.get("linac") == linac
+                and r.get("cryomodule") == cryomodule
+                and r.get("cavity_number") == cavity
             )
         ]
 
-    def _init_tabs(self) -> None:
-        for spec in self.phase_specs:
-            display = spec.display_class(session=self.session)
-            self._phase_displays.append(display)
-            self.tabs.addTab(display, spec.title)
+        if existing_records:
+            self._show_record_selector(
+                cavity_display_name, linac, cryomodule, cavity, existing_records
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "No Existing Records",
+                f"No commissioning records found for {cavity_display_name}.\n\n"
+                f"To start commissioning this cavity:\n"
+                f"1. Select an operator\n"
+                f"2. Navigate to a phase tab (e.g., Piezo Pre-RF)\n"
+                f"3. Click 'Run Automated Test'\n\n"
+                f"A new record will be created automatically.",
+            )
 
-    def _build_notes_panel(self) -> QGroupBox:
-        group = QGroupBox("Notes")
-        group.setCheckable(True)  # Make collapsible
-        group.setChecked(True)  # Start expanded
+    def _update_current_cavity_display(self) -> None:
+        """Update the current cavity display label."""
+        cryomodule = self.cryomodule_combo.currentText()
+        cavity = self.cavity_combo.currentText()
 
+        if (
+            cryomodule == "Select CM..."
+            or cavity == "Select Cav..."
+            or not cryomodule
+            or not cavity
+        ):
+            self.current_cavity_label.setText("No cavity selected")
+            self.current_cavity_label.setStyleSheet("""
+                QLabel {
+                    color: #888;
+                    font-weight: bold;
+                    padding: 5px 10px;
+                    background-color: rgba(100, 100, 100, 0.2);
+                    border-radius: 3px;
+                    font-size: 10pt;
+                }
+            """)
+        else:
+            cavity_name = f"{cryomodule}_CAV{cavity}"
+
+            # Check if records exist for this cavity
+            from sc_linac_physics.utils.sc_linac.linac_utils import (
+                get_linac_for_cryomodule,
+            )
+
+            linac = get_linac_for_cryomodule(cryomodule)
+            if linac:
+                existing_records = self.session.db.find_records_for_cavity(
+                    linac, cryomodule, cavity
+                )
+            else:
+                existing_records = []
+
+            if existing_records:
+                self.current_cavity_label.setText(
+                    f"🎯 {cavity_name} ({len(existing_records)} records)"
+                )
+                self.current_cavity_label.setStyleSheet("""
+                    QLabel {
+                        color: #2196F3;
+                        font-weight: bold;
+                        padding: 5px 10px;
+                        background-color: rgba(33, 150, 243, 0.2);
+                        border-radius: 3px;
+                        font-size: 10pt;
+                    }
+                """)
+            else:
+                self.current_cavity_label.setText(f"🎯 {cavity_name} (new)")
+                self.current_cavity_label.setStyleSheet("""
+                    QLabel {
+                        color: #4CAF50;
+                        font-weight: bold;
+                        padding: 5px 10px;
+                        background-color: rgba(76, 175, 80, 0.2);
+                        border-radius: 3px;
+                        font-size: 10pt;
+                    }
+                """)
+
+    def _on_cavity_selection_changed(self) -> None:
+        """Update PV addresses when cavity selection changes in dropdowns."""
+        cryomodule = self.cryomodule_combo.currentText()
+        cavity = self.cavity_combo.currentText()
+
+        # Skip if no valid selection
+        if (
+            cryomodule == "Select CM..."
+            or cavity == "Select Cav..."
+            or not cryomodule
+            or not cavity
+        ):
+            return
+
+        # Update PV addresses on the current phase's display controller
+        current_index = self.tabs.currentIndex()
+        if 0 <= current_index < len(self._phase_displays):
+            display = self._phase_displays[current_index]
+            if hasattr(display, "controller") and hasattr(
+                display.controller, "update_pv_addresses"
+            ):
+                display.controller.update_pv_addresses(cryomodule, cavity)
+
+    def _populate_operator_combo(self, restore_selection: str = None) -> None:
+        """Populate operator dropdown - no default selection for safety."""
+        self.operator_combo.blockSignals(True)
+        self.operator_combo.clear()
+
+        operators = self.session.get_operators()
+
+        # Always start with placeholder - no default
+        self.operator_combo.addItem("👤 Select operator...", "")
+
+        if operators:
+            # Add all operators
+            for op in operators:
+                self.operator_combo.addItem(f"👤 {op}", op)
+
+        self.operator_combo.insertSeparator(self.operator_combo.count())
+        self.operator_combo.addItem("➕ Add new operator...", "__add__")
+
+        # Only restore if explicitly requested (e.g., after adding new operator)
+        if restore_selection:
+            idx = self.operator_combo.findData(restore_selection)
+            if idx >= 0:
+                self.operator_combo.setCurrentIndex(idx)
+        # REMOVED: else block that auto-restored from settings
+
+        self.operator_combo.blockSignals(False)
+
+    def _on_operator_changed(self, index: int) -> None:
+        """Handle operator selection change."""
+        selection = self.operator_combo.currentData()
+
+        if selection == "__add__":
+            self._add_new_operator()
+
+    def _add_new_operator(self) -> None:
+        """Add a new operator with validation."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Operator")
         layout = QVBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
+
+        layout.addWidget(QLabel("Enter your full name:"))
+
+        name_input = QLineEdit()
+        name_input.setPlaceholderText("First Last")
+        layout.addWidget(name_input)
+
+        layout.addWidget(QLabel("Initials (optional):"))
+        initials_input = QLineEdit()
+        initials_input.setPlaceholderText("FL")
+        initials_input.setMaxLength(4)
+        layout.addWidget(initials_input)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        dialog.setLayout(layout)
+
+        if dialog.exec_() == QDialog.Accepted:
+            name = name_input.text().strip()
+            if name:
+                self.session.add_operator(name)
+                self._populate_operator_combo(restore_selection=name)
+                return
+
+        # Reset to previous selection if cancelled
+        self.operator_combo.setCurrentIndex(0)
+
+    # =============================================================================
+    # PROGRESS BAR - Compact horizontal phase indicator
+    # =============================================================================
+
+    def _build_compact_progress_bar(self) -> QWidget:
+        """Build a compact horizontal progress indicator."""
+        widget = QWidget()
+        widget.setMaximumHeight(80)
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: #1e1e1e;
+                border-bottom: 1px solid #333;
+            }
+        """)
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(10, 5, 10, 5)
+
+        title = QLabel("Commissioning Progress")
+        title.setStyleSheet("color: #aaa; font-size: 11px; font-weight: bold;")
+        main_layout.addWidget(title)
+
+        layout = QHBoxLayout()
         layout.setSpacing(5)
 
-        filter_row = QHBoxLayout()
-        filter_row.setSpacing(5)
-        filter_row.addWidget(QLabel("Phase:"))
-        self.notes_phase_filter = QComboBox()
-        self.notes_phase_filter.addItem("All phases", None)
-        for phase in CommissioningPhase:
-            self.notes_phase_filter.addItem(phase.value, phase)
-        self.notes_phase_filter.currentIndexChanged.connect(self._load_notes)
-        filter_row.addWidget(self.notes_phase_filter)
-        filter_row.addStretch()
-        layout.addLayout(filter_row)
+        # Define phases with custom labels
+        phases = [
+            ("Piezo\nPre-RF", CommissioningPhase.PIEZO_PRE_RF),
+            ("Cold\nLanding", CommissioningPhase.COLD_LANDING),
+            ("SSA\nChar", CommissioningPhase.SSA_CHAR),
+            ("Cavity\nChar", CommissioningPhase.CAVITY_CHAR),
+            ("Piezo\n@ RF", CommissioningPhase.PIEZO_WITH_RF),
+            ("High\nPower", CommissioningPhase.HIGH_POWER),
+            ("Complete", CommissioningPhase.COMPLETE),
+        ]
 
-        self.notes_table = QTableWidget()
-        self.notes_table.setColumnCount(6)
-        self.notes_table.setHorizontalHeaderLabels(
-            [
-                "Type",
-                "Phase",
-                "Measurement Time",
-                "Note Time",
-                "Operator",
-                "Note",
-            ]
+        self.phase_indicators = {}
+
+        for i, (label, phase) in enumerate(phases):
+            # Phase circle
+            circle = QLabel("●")
+            circle.setAlignment(Qt.AlignCenter)
+            circle.setStyleSheet("font-size: 24px; color: #444;")
+            self.phase_indicators[phase] = circle
+
+            # Label
+            text = QLabel(label)
+            text.setAlignment(Qt.AlignCenter)
+            text.setStyleSheet("font-size: 9px; color: #888;")
+
+            # Container
+            container = QVBoxLayout()
+            container.setSpacing(2)
+            container.addWidget(circle)
+            container.addWidget(text)
+            layout.addLayout(container)
+
+            # Connector (skip after "Complete")
+            if i < len(phases) - 1:
+                connector = QLabel("─────")
+                connector.setStyleSheet("color: #444; padding-top: 15px;")
+                connector.setAlignment(Qt.AlignCenter)
+                layout.addWidget(connector)
+
+        main_layout.addLayout(layout)
+        widget.setLayout(main_layout)
+        return widget
+
+    def update_progress_indicator(self, record) -> None:
+        """Update the compact progress bar."""
+        phase_order = CommissioningPhase.get_phase_order()
+        current_idx = phase_order.index(record.current_phase)
+
+        for phase, indicator in self.phase_indicators.items():
+            idx = phase_order.index(phase)
+            if idx < current_idx:
+                # Completed
+                indicator.setStyleSheet("font-size: 24px; color: #4CAF50;")
+            elif idx == current_idx:
+                # Active
+                indicator.setStyleSheet(
+                    "font-size: 24px; color: #2196F3; font-weight: bold;"
+                )
+            else:
+                # Pending
+                indicator.setStyleSheet("font-size: 24px; color: #444;")
+
+        # =============================================================================
+        # CAVITY LOADING - Smart record selection
+        # =============================================================================
+
+    def _on_load_or_start(self) -> None:
+        """Intelligent load/start with validation and recent records."""
+        operator = self.operator_combo.currentData()
+        if not operator:
+            QMessageBox.warning(
+                self,
+                "Operator Required",
+                "Please select an operator before loading/starting a record.",
+            )
+            self.operator_combo.setFocus()
+            return
+
+        cryomodule = self.cryomodule_combo.currentText()
+        cavity = self.cavity_combo.currentText()
+
+        # Validate selections (check if placeholder still selected)
+        if cryomodule == "Select CM..." or not cryomodule:
+            QMessageBox.warning(
+                self, "Cryomodule Required", "Please select a cryomodule."
+            )
+            self.cryomodule_combo.setFocus()
+            return
+
+        if cavity == "Select Cav..." or not cavity:
+            QMessageBox.warning(
+                self, "Cavity Required", "Please select a cavity number."
+            )
+            self.cavity_combo.setFocus()
+            return
+
+        cavity_number = cavity
+
+        # Check for existing records
+        from sc_linac_physics.utils.sc_linac.linac_utils import (
+            get_linac_for_cryomodule,
         )
-        self.notes_table.setAlternatingRowColors(True)
-        self.notes_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.notes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
-        # Better space management
-        self.notes_table.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Minimum
+        linac = get_linac_for_cryomodule(cryomodule)
+        if not linac:
+            QMessageBox.warning(
+                self, "Invalid Cryomodule", f"Unknown cryomodule: {cryomodule}"
+            )
+            return
+
+        existing_records = self.session.db.find_records_for_cavity(
+            linac, cryomodule, cavity_number
         )
-        self.notes_table.setMinimumHeight(100)  # Show at least a few rows
-        self.notes_table.setMaximumHeight(250)  # Don't dominate screen
 
-        self.notes_table.horizontalHeader().setStretchLastSection(True)
-        # Reduced column widths
-        self.notes_table.setColumnWidth(0, 80)  # Type
-        self.notes_table.setColumnWidth(1, 120)  # Phase
-        self.notes_table.setColumnWidth(2, 140)  # Measurement Time
-        self.notes_table.setColumnWidth(3, 140)  # Note Time
-        self.notes_table.setColumnWidth(4, 100)  # Operator
-        layout.addWidget(self.notes_table)
+        cavity_display_name = f"{cryomodule}_CAV{cavity}"
 
-        button_row = QHBoxLayout()
-        button_row.setSpacing(5)
+        if existing_records:
+            # Show selection dialog
+            self._show_record_selector(
+                cavity_display_name,
+                linac,
+                cryomodule,
+                cavity_number,
+                existing_records,
+            )
+        else:
+            # Start new record
+            self._confirm_and_start_new(
+                cavity_display_name, linac, cryomodule, cavity_number
+            )
 
-        # Shortened button labels to save space
-        add_general_note_btn = QPushButton("+ General Note")
-        add_general_note_btn.clicked.connect(self._on_add_general_note)
-        add_measurement_note_btn = QPushButton("+ Measurement Note")
-        add_measurement_note_btn.clicked.connect(self._on_add_measurement_note)
-        edit_note_btn = QPushButton("Edit")
-        edit_note_btn.clicked.connect(self._on_edit_note)
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.clicked.connect(self._load_notes)
+    def _show_record_selector(
+        self,
+        cavity_display_name: str,
+        linac: str,
+        cryomodule: str,
+        cavity_number: str,
+        records: list,
+    ) -> None:
+        """Show dialog to select existing record or start new."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Records for {cavity_display_name}")
+        dialog.setMinimumWidth(700)
+        dialog.setMinimumHeight(400)
 
-        button_row.addWidget(add_general_note_btn)
-        button_row.addWidget(add_measurement_note_btn)
-        button_row.addWidget(edit_note_btn)
-        button_row.addWidget(refresh_btn)
-        button_row.addStretch()
-        layout.addLayout(button_row)
+        layout = QVBoxLayout()
 
-        group.setLayout(layout)
-        return group
+        header_label = QLabel(
+            f"<b>Found {len(records)} existing record(s) for {cavity_display_name}</b><br>"
+            f"<small>Select a record to view or continue working on it</small>"
+        )
+        header_label.setStyleSheet("font-size: 13px; padding: 5px;")
+        layout.addWidget(header_label)
+
+        # Table of existing records
+        table = QTableWidget()
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(
+            ["ID", "Started", "Status", "Current Phase", "Last Modified"]
+        )
+        table.setRowCount(len(records))
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setAlternatingRowColors(True)
+
+        for row, record_data in enumerate(records):
+            table.setItem(row, 0, QTableWidgetItem(str(record_data["id"])))
+            table.setItem(
+                row, 1, QTableWidgetItem(record_data.get("start_time", "")[:16])
+            )
+
+            # Status with color
+            status = record_data.get("overall_status", "in_progress")
+            status_item = QTableWidgetItem(status.replace("_", " ").title())
+            if status == "completed":
+                status_item.setForeground(Qt.darkGreen)
+            elif status == "in_progress":
+                status_item.setForeground(Qt.blue)
+            table.setItem(row, 2, status_item)
+
+            table.setItem(
+                row,
+                3,
+                QTableWidgetItem(record_data.get("current_phase", "Unknown")),
+            )
+            table.setItem(
+                row,
+                4,
+                QTableWidgetItem(record_data.get("updated_at", "Unknown")[:16]),
+            )
+
+        table.resizeColumnsToContents()
+        table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(table)
+
+        # Instructions
+        info = QLabel(
+            "💡 <i>Double-click a record to load it.<br>"
+            "You can view records without selecting an operator. "
+            "An operator is only required when running tests or making changes.</i>"
+        )
+        info.setStyleSheet("color: #888; padding: 5px;")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+
+        load_btn = QPushButton("📂 Load Selected")
+        load_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 8px 16px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #ccc;
+                color: #666;
+            }
+        """)
+        load_btn.clicked.connect(
+            lambda: self._load_selected_record(table, dialog)
+        )
+        load_btn.setEnabled(False)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(load_btn)
+        button_layout.addStretch()
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
+
+        # Enable load button when row selected
+        table.itemSelectionChanged.connect(
+            lambda: load_btn.setEnabled(len(table.selectedItems()) > 0)
+        )
+
+        # Double-click to load
+        table.cellDoubleClicked.connect(
+            lambda: self._load_selected_record(table, dialog)
+        )
+
+        dialog.setLayout(layout)
+        dialog.exec_()
+
+    def _load_selected_record(
+        self, table: QTableWidget, dialog: QDialog
+    ) -> None:
+        """Load the selected record from the table."""
+        selected_rows = set(item.row() for item in table.selectedItems())
+        if not selected_rows:
+            return
+
+        row = list(selected_rows)[0]
+        record_id = int(table.item(row, 0).text())
+
+        if self.load_record(record_id):
+            dialog.accept()
+            self._update_sync_status(True, "Record loaded")
+
+            # Save to settings for next launch
+            settings = QSettings("SLAC", "RFCommissioning")
+            settings.setValue("last_record_id", record_id)
+        else:
+            QMessageBox.critical(
+                dialog, "Load Failed", f"Failed to load record {record_id}"
+            )
+
+    def _start_new_from_dialog(
+        self,
+        cavity_display_name: str,
+        linac: str,
+        cryomodule: str,
+        cavity_number: str,
+        dialog: QDialog,
+    ) -> None:
+        """Start new record from the selection dialog."""
+        dialog.accept()
+        self._confirm_and_start_new(
+            cavity_display_name, linac, cryomodule, cavity_number
+        )
+
+    def _confirm_and_start_new(
+        self,
+        cavity_display_name: str,
+        linac: str,
+        cryomodule: str,
+        cavity_number: str,
+    ) -> None:
+        """Confirm and start a new commissioning record."""
+        reply = QMessageBox.question(
+            self,
+            "Start New Record",
+            f"Start new commissioning record for {cavity_display_name}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                self.start_new_record(cryomodule, cavity_number)
+                self._update_sync_status(True, "New record started")
+
+                # Log the start
+                operator = self.operator_combo.currentText()
+                self.session.append_general_note(
+                    operator, f"Started commissioning for {cavity_display_name}"
+                )
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Error", f"Failed to start new record: {e}"
+                )
+
+        # =============================================================================
+        # TABS - Phase navigation with visual feedback
+        # =============================================================================
+
+    def _init_tabs(self) -> None:
+        """Initialize tabs with enhanced visual feedback."""
+        for i, spec in enumerate(self.phase_specs):
+            display = spec.display_class(session=self.session)
+            self._phase_displays.append(display)
+
+            # Create tab
+            tab_widget = QWidget()
+            tab_layout = QVBoxLayout()
+            tab_layout.setContentsMargins(0, 0, 0, 0)
+            tab_layout.addWidget(display)
+            tab_widget.setLayout(tab_layout)
+
+            # Add tab with initial icon
+            self.tabs.addTab(
+                tab_widget,
+                self._get_phase_icon(spec.phase) + " " + spec.title,
+            )
+
+        # Connect tab change to auto-save
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+
+    def _get_phase_icon(self, phase: Optional[CommissioningPhase]) -> str:
+        """Get status icon for a phase."""
+        if not self.session.has_active_record():
+            return "○"
+
+        record = self.session.get_active_record()
+
+        if phase is None:
+            return "●"
+
+        phase_order = CommissioningPhase.get_phase_order()
+        current_idx = phase_order.index(record.current_phase)
+        phase_idx = phase_order.index(phase)
+
+        if phase_idx < current_idx:
+            return "✓"  # Completed
+        elif phase_idx == current_idx:
+            return "▶"  # Current
+        else:
+            return "○"  # Pending
 
     def _update_tab_states(self) -> None:
+        """Update tab states and icons."""
         if not self.session.has_active_record():
             for i in range(1, self.tabs.count()):
                 self.tabs.setTabEnabled(i, False)
@@ -216,179 +966,148 @@ class MultiPhaseCommissioningDisplay(Display):
                 continue
 
             phase_index = phase_order.index(spec.phase)
-            self.tabs.setTabEnabled(i, phase_index <= current_index)
+            is_accessible = phase_index <= current_index
 
-    def start_new_record(self, cavity_name: str, cryomodule: str) -> None:
-        record, _ = self.session.start_new_record(cavity_name, cryomodule)
-        for display in self._phase_displays:
-            display.refresh_from_record(record)
-        self._update_tab_states()
-        self.tabs.setCurrentIndex(0)
-        self._load_notes()
+            self.tabs.setTabEnabled(i, is_accessible)
 
-    def load_record(self, record_id: int) -> bool:
-        record = self.session.load_record(record_id)
-        if not record:
-            return False
+            # Update tab text with icon
+            icon = self._get_phase_icon(spec.phase)
+            self.tabs.setTabText(i, f"{icon} {spec.title}")
 
-        for display in self._phase_displays:
-            display.on_record_loaded(record, record_id)
+            # Style the tab based on status
+            if phase_index == current_index:
+                self.tabs.tabBar().setTabTextColor(i, Qt.blue)
+            elif phase_index < current_index:
+                self.tabs.tabBar().setTabTextColor(i, Qt.darkGreen)
+            else:
+                self.tabs.tabBar().setTabTextColor(i, Qt.gray)
 
-        self._update_tab_states()
+    def _on_tab_changed(self, index: int) -> None:
+        """Handle tab changes - auto-save current work."""
+        if self.session.has_active_record():
+            try:
+                self.save_active_record()
+            except RecordConflictError:
+                # Don't block tab change, but notify user
+                self._update_sync_status(False, "Unsaved changes")
 
-        for i, spec in enumerate(self.phase_specs):
-            if spec.phase == record.current_phase:
-                self.tabs.setCurrentIndex(i)
-                break
+        # =============================================================================
+        # NOTES PANEL - Always accessible note taking
+        # =============================================================================
 
-        self._load_notes()
+    def _build_enhanced_notes_panel(self) -> QWidget:
+        """Build always-accessible notes panel with better UX."""
+        widget = QWidget()
+        widget.setStyleSheet("""
+                            QWidget {
+                                background-color: #2a2a2a;
+                                border-top: 1px solid #444;
+                            }
+                        """)
 
-        return True
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
 
-    def save_active_record(self) -> bool:
-        """Save the active record with conflict detection.
+        # Header with add button
+        header = QHBoxLayout()
+        title = QLabel("📝 Notes")
+        title.setStyleSheet("font-weight: bold; font-size: 14px; color: #ddd;")
+        header.addWidget(title)
+        header.addStretch()
 
-        Returns:
-            True if saved successfully or user chose to continue, False otherwise
-        """
-        try:
-            return self.session.save_active_record()
-        except RecordConflictError as e:
-            return self._handle_save_conflict(e)
+        quick_add = QPushButton("+ Quick Note")
+        quick_add.setStyleSheet("""
+                            QPushButton {
+                                background-color: #4CAF50;
+                                color: white;
+                                border-radius: 3px;
+                                padding: 5px 15px;
+                                font-weight: bold;
+                            }
+                            QPushButton:hover {
+                                background-color: #45a049;
+                            }
+                        """)
+        quick_add.clicked.connect(self._quick_add_note)
+        header.addWidget(quick_add)
 
-    def _handle_save_conflict(self, conflict: RecordConflictError) -> bool:
-        """Handle optimistic locking conflict with merge dialog.
+        layout.addLayout(header)
 
-        Args:
-            conflict: The RecordConflictError containing conflict details
+        # Filter row
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Filter:"))
+        self.notes_phase_filter = QComboBox()
+        self.notes_phase_filter.addItem("All", None)
+        self.notes_phase_filter.addItem("Current Phase", "current")
+        for phase in CommissioningPhase:
+            self.notes_phase_filter.addItem(phase.value, phase)
+        self.notes_phase_filter.currentIndexChanged.connect(self._load_notes)
+        filter_row.addWidget(self.notes_phase_filter)
+        filter_row.addStretch()
 
-        Returns:
-            True if conflict was resolved and save succeeded, False otherwise
-        """
-        if not self.session.has_active_record():
-            return False
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setToolTip("Refresh notes")
+        refresh_btn.setFixedWidth(30)
+        refresh_btn.clicked.connect(self._load_notes)
+        filter_row.addWidget(refresh_btn)
 
-        record_id = self.session.get_active_record_id()
-        if not record_id:
-            return False
+        layout.addLayout(filter_row)
 
-        # Load the current database version
-        result = self.session.db.get_record_with_version(record_id)
-        if not result:
-            QMessageBox.critical(
-                self, "Error", "Failed to load database version for merge."
-            )
-            return False
+        # Notes table
+        self.notes_table = QTableWidget()
+        self.notes_table.setColumnCount(4)
+        self.notes_table.setHorizontalHeaderLabels(
+            ["Time", "Phase", "Operator", "Note"]
+        )
+        self.notes_table.horizontalHeader().setStretchLastSection(True)
+        self.notes_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.notes_table.setAlternatingRowColors(True)
+        self.notes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
-        db_record, db_version = result
-        local_record = self.session.get_active_record()
+        # Column widths
+        self.notes_table.setColumnWidth(0, 130)
+        self.notes_table.setColumnWidth(1, 100)
+        self.notes_table.setColumnWidth(2, 100)
+        self.notes_table.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding
+        )
+        layout.addWidget(self.notes_table)
 
-        # Show merge dialog
-        merge_dialog = MergeDialog(local_record, db_record, parent=self)
+        # Edit button row
+        button_row = QHBoxLayout()
 
-        if merge_dialog.exec_() != QDialog.Accepted:
-            # User cancelled
-            return False
+        edit_btn = QPushButton("✏️ Edit")
+        edit_btn.clicked.connect(self._on_edit_note)
+        button_row.addWidget(edit_btn)
 
-        merged_record = merge_dialog.get_merged_record()
-        if not merged_record:
-            return False
+        button_row.addStretch()
+        layout.addLayout(button_row)
 
-        # Save the merged record
-        try:
-            # Force save the merged record (no version check since we just merged)
-            self.session.db.save_record(
-                merged_record, record_id, expected_version=None
-            )
-
-            # Reload to get fresh version number and update UI
-            self.load_record(record_id)
-
-            QMessageBox.information(
-                self,
-                "Merge Successful",
-                "Your changes have been merged and saved.",
-            )
-            return True
-
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Save Failed", f"Failed to save merged record: {e}"
-            )
-            return False
-
-    def _check_for_external_changes(self) -> None:
-        """Periodically check if the active record was modified externally.
-
-        If changes are detected, notify the user and offer to reload.
-        """
-        if not self.session.has_active_record():
-            return
-
-        record_id = self.session.get_active_record_id()
-        if not record_id:
-            return
-
-        try:
-            result = self.session.db.get_record_with_version(record_id)
-            if not result:
-                return
-
-            _, db_version = result
-            local_version = self.session._active_record_version
-
-            if local_version is not None and db_version > local_version:
-                # Record was modified externally
-                msg = QMessageBox(self)
-                msg.setIcon(QMessageBox.Information)
-                msg.setWindowTitle("Record Updated")
-                msg.setText(
-                    f"This record has been updated by another user.\n\n"
-                    f"Local version: {local_version}\n"
-                    f"Database version: {db_version}\n\n"
-                    f"Would you like to reload the record?\n"
-                    f"(Your unsaved changes will be lost)"
-                )
-                msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                msg.setDefaultButton(QMessageBox.Yes)
-
-                if msg.exec_() == QMessageBox.Yes:
-                    self.load_record(record_id)
-                    self._load_notes()
-
-        except Exception as e:
-            # Don't interrupt user with refresh errors
-            print(f"Error checking for external changes: {e}")
-
-    def _show_measurement_history(self):
-        """Open dialog showing all measurement attempts."""
-        if not self.session.has_active_record():
-            QMessageBox.information(
-                self,
-                "No Active Record",
-                "Please load or create a commissioning record first.",
-            )
-            return
-
-        dialog = MeasurementHistoryDialog(self.session, parent=self)
-        dialog.exec_()
+        widget.setLayout(layout)
+        return widget
 
     def _load_notes(self) -> None:
+        """Load and display all notes for the active record."""
         if not self.session.has_active_record():
             self.notes_table.setRowCount(0)
             return
 
-        phase = self.notes_phase_filter.currentData()
+        phase_filter = self.notes_phase_filter.currentData()
+
+        # Handle "current phase" filter
+        if phase_filter == "current":
+            record = self.session.get_active_record()
+            phase_filter = record.current_phase
 
         # Get both general notes and measurement notes
-        measurement_notes = self.session.get_measurement_notes(phase)
+        measurement_notes = self.session.get_measurement_notes(phase_filter)
         general_notes = self.session.get_general_notes()
 
-        # Combine notes with type indicator
+        # Combine all notes
         all_notes = []
 
-        # Add general notes
-        for note in general_notes:
+        # General notes don't have phase or measurement time
+        for note_index, note in enumerate(general_notes):
             all_notes.append(
                 {
                     "type": "General",
@@ -397,14 +1116,13 @@ class MultiPhaseCommissioningDisplay(Display):
                     "timestamp": note.get("timestamp"),
                     "operator": note.get("operator"),
                     "note": note.get("note"),
-                    "note_ref": ("general", general_notes.index(note)),
+                    "note_ref": ("general", note_index),
                 }
             )
 
-        # Add measurement notes
+        # Measurement notes have phase and measurement time
         for note in measurement_notes:
-            # Filter by phase if selected
-            if phase and note.get("phase") != phase.value:
+            if phase_filter and note.get("phase") != phase_filter.value:
                 continue
             all_notes.append(
                 {
@@ -423,34 +1141,96 @@ class MultiPhaseCommissioningDisplay(Display):
                 }
             )
 
-        # Sort by timestamp
+        # Sort by timestamp (most recent first)
         all_notes.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
 
         self.notes_table.setRowCount(len(all_notes))
 
         for row, item in enumerate(all_notes):
-            type_item = QTableWidgetItem(item["type"])
-            type_item.setData(Qt.UserRole, item["note_ref"])
-            self.notes_table.setItem(row, 0, type_item)
+            # Time column
+            time_str = item["timestamp"] or item["measurement_timestamp"] or "-"
+            time_item = QTableWidgetItem(time_str)
+            time_item.setData(Qt.UserRole, item["note_ref"])
+            self.notes_table.setItem(row, 0, time_item)
 
-            phase_item = QTableWidgetItem(item["phase"])
+            # Phase column
+            phase_str = item["phase"] or "General"
+            phase_item = QTableWidgetItem(phase_str)
             self.notes_table.setItem(row, 1, phase_item)
 
-            measurement_time = item["measurement_timestamp"]
-            measurement_item = QTableWidgetItem(measurement_time)
-            self.notes_table.setItem(row, 2, measurement_item)
-
-            note_time = item["timestamp"] or ""
-            note_time_item = QTableWidgetItem(note_time)
-            self.notes_table.setItem(row, 3, note_time_item)
-
+            # Operator column
             operator_item = QTableWidgetItem(item["operator"] or "Unknown")
-            self.notes_table.setItem(row, 4, operator_item)
+            self.notes_table.setItem(row, 2, operator_item)
 
+            # Note column
             note_item = QTableWidgetItem(item["note"] or "")
-            self.notes_table.setItem(row, 5, note_item)
+            self.notes_table.setItem(row, 3, note_item)
+
+    def _quick_add_note(self) -> None:
+        """Quick note entry without complex dialog."""
+        if not self.session.has_active_record():
+            QMessageBox.warning(
+                self,
+                "No Record",
+                "Please load or create a commissioning record first.",
+            )
+            return
+
+        operator = self.operator_combo.currentData()
+        if not operator:
+            QMessageBox.warning(
+                self, "Operator Required", "Please select an operator first."
+            )
+            self.operator_combo.setFocus()
+            return
+
+        # Simple text input
+        note, ok = QInputDialog.getMultiLineText(
+            self,
+            "Quick Note",
+            f"Operator: {self.operator_combo.currentText()}\n\nEnter note:",
+        )
+
+        if ok and note.strip():
+            if self.session.append_general_note(operator, note.strip()):
+                self._load_notes()
+                # Auto-scroll to top to see new note
+                self.notes_table.scrollToTop()
+
+    def _on_edit_note(self) -> None:
+        """Edit selected note."""
+        note_ref = self._get_selected_note_ref()
+        if not note_ref:
+            QMessageBox.information(
+                self, "No Selection", "Please select a note to edit."
+            )
+            return
+
+        row = self.notes_table.currentRow()
+        current_operator = self.notes_table.item(row, 2).text()
+        current_note = self.notes_table.item(row, 3).text()
+
+        operator, note = self._build_note_dialog(
+            "Edit Note", current_operator, current_note
+        )
+        if not note:
+            return
+
+        note_type, ref_data = note_ref
+
+        if note_type == "general":
+            note_index = ref_data
+            if self.session.update_general_note(note_index, operator, note):
+                self._load_notes()
+        elif note_type == "measurement":
+            entry_id, note_index = ref_data
+            if self.session.update_measurement_note(
+                entry_id, note_index, operator, note
+            ):
+                self._load_notes()
 
     def _get_selected_note_ref(self):
+        """Get reference to selected note."""
         selected = self.notes_table.selectedItems()
         if not selected:
             return None
@@ -458,39 +1238,16 @@ class MultiPhaseCommissioningDisplay(Display):
         row = selected[0].row()
         return self.notes_table.item(row, 0).data(Qt.UserRole)
 
-    def _resolve_note_phase(self) -> Optional[CommissioningPhase]:
-        phase = self.notes_phase_filter.currentData()
-        if phase:
-            return phase
-
-        current_index = self.tabs.currentIndex()
-        if 0 <= current_index < len(self.phase_specs):
-            spec = self.phase_specs[current_index]
-            if spec.phase:
-                return spec.phase
-
-        choices = [p.value for p in CommissioningPhase]
-        selection, ok = QInputDialog.getItem(
-            self,
-            "Select Phase",
-            "Choose a phase for this note:",
-            choices,
-            0,
-            False,
-        )
-        if not ok:
-            return None
-
-        return CommissioningPhase(selection)
-
     def _build_note_dialog(
         self,
         title: str,
         operator_default: str,
         note_default: str = "",
     ) -> tuple[Optional[str], Optional[str]]:
+        """Build note editing dialog."""
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
+        dialog.setMinimumWidth(500)
         layout = QVBoxLayout(dialog)
 
         op_row = QHBoxLayout()
@@ -502,7 +1259,7 @@ class MultiPhaseCommissioningDisplay(Display):
         layout.addWidget(QLabel("Note:"))
         note_input = QTextEdit()
         note_input.setPlainText(note_default)
-        note_input.setFixedHeight(100)
+        note_input.setMinimumHeight(100)
         layout.addWidget(note_input)
 
         def populate_operator_combo(selected: str | None) -> None:
@@ -553,79 +1310,299 @@ class MultiPhaseCommissioningDisplay(Display):
         note_text = note_input.toPlainText().strip() or None
         return operator, note_text
 
-    def _on_add_general_note(self) -> None:
+        # =============================================================================
+        # SYNC STATUS - External change detection and notification
+        # =============================================================================
+
+    def _update_sync_status(self, is_synced: bool, message: str = "") -> None:
+        """Update the global sync status indicator."""
+        if is_synced:
+            self.sync_status.setText("● Synced")
+            self.sync_status.setStyleSheet("""
+                        QLabel {
+                            color: #4CAF50;
+                            font-weight: bold;
+                            padding: 5px 10px;
+                            background-color: rgba(76, 175, 80, 0.15);
+                            border-radius: 3px;
+                        }
+                    """)
+        else:
+            self.sync_status.setText(f"⚠ {message or 'Out of Sync'}")
+            self.sync_status.setStyleSheet("""
+                        QLabel {
+                            color: #FF9800;
+                            font-weight: bold;
+                            padding: 5px 10px;
+                            background-color: rgba(255, 152, 0, 0.15);
+                            border-radius: 3px;
+                            border: 1px solid #FF9800;
+                        }
+                    """)
+
+    def _check_for_external_changes(self) -> None:
+        """Enhanced change detection with visible notification."""
         if not self.session.has_active_record():
-            QMessageBox.information(
-                self,
-                "No Active Record",
-                "Please load or create a commissioning record first.",
-            )
             return
 
-        operator, note = self._build_note_dialog("Add General Note", "")
-        if not note:
+        record_id = self.session.get_active_record_id()
+        if not record_id:
             return
 
-        if self.session.append_general_note(operator, note):
-            self._load_notes()
+        try:
+            result = self.session.db.get_record_with_version(record_id)
+            if not result:
+                return
 
-    def _on_add_measurement_note(self) -> None:
-        if not self.session.has_active_record():
-            QMessageBox.information(
-                self,
-                "No Active Record",
-                "Please load or create a commissioning record first.",
-            )
-            return
+            db_record, db_version = result
+            local_version = self.session._active_record_version
 
-        phase = self._resolve_note_phase()
-        if not phase:
-            return
+            if local_version is not None and db_version > local_version:
+                # Show prominent notification banner
+                self._show_update_banner(db_version, local_version)
 
-        history = self.session.get_measurement_history(phase)
-        if not history:
-            QMessageBox.information(
-                self,
-                "No Measurements",
-                "Run a measurement for this phase before adding notes.",
-            )
-            return
+        except Exception as e:
+            print(f"Error checking for external changes: {e}")
 
-        entry_id = history[0]["id"]
-        operator, note = self._build_note_dialog("Add Note", "")
-        if not note:
-            return
+    def _show_update_banner(self, db_version: int, local_version: int) -> None:
+        """Show a prominent banner when external updates are detected."""
+        if hasattr(self, "_update_banner") and self._update_banner:
+            return  # Banner already showing
 
-        if self.session.append_measurement_note(entry_id, operator, note):
-            self._load_notes()
+        self._update_banner = QWidget()
+        self._update_banner.setStyleSheet("""
+                    QWidget {
+                        background-color: #FF9800;
+                        border: 2px solid #F57C00;
+                        border-left: 5px solid #F57C00;
+                    }
+                    QLabel {
+                        color: white;
+                        font-weight: bold;
+                        padding: 5px;
+                    }
+                    QPushButton {
+                        background-color: white;
+                        color: #F57C00;
+                        font-weight: bold;
+                        padding: 8px 16px;
+                        border-radius: 4px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background-color: #f5f5f5;
+                    }
+                """)
 
-    def _on_edit_note(self) -> None:
-        note_ref = self._get_selected_note_ref()
-        if not note_ref:
-            return
+        layout = QHBoxLayout()
+        layout.setContentsMargins(15, 10, 15, 10)
 
-        row = self.notes_table.currentRow()
-        current_operator = self.notes_table.item(row, 4).text()
-        current_note = self.notes_table.item(row, 5).text()
+        icon = QLabel("⚠️")
+        icon.setStyleSheet("font-size: 24px;")
+        layout.addWidget(icon)
 
-        operator, note = self._build_note_dialog(
-            "Edit Note", current_operator, current_note
+        message = QLabel(
+            f"<b>This record was updated by another user</b><br>"
+            f"<small>Your version: {local_version} → Database version: {db_version}</small>"
         )
-        if not note:
+        layout.addWidget(message)
+        layout.addStretch()
+
+        reload_btn = QPushButton("🔄 Reload Now")
+        reload_btn.clicked.connect(self._reload_from_banner)
+        layout.addWidget(reload_btn)
+
+        dismiss_btn = QPushButton("✕ Dismiss")
+        dismiss_btn.clicked.connect(self._dismiss_banner)
+        layout.addWidget(dismiss_btn)
+
+        self._update_banner.setLayout(layout)
+
+        # Insert banner at position 1 (after header, before progress)
+        self.layout().insertWidget(1, self._update_banner)
+
+        # Update sync status
+        self._update_sync_status(False, "Out of Sync")
+
+    def _reload_from_banner(self) -> None:
+        """Reload record from update banner."""
+        record_id = self.session.get_active_record_id()
+        if record_id:
+            # Warn about unsaved changes
+            reply = QMessageBox.question(
+                self,
+                "Reload Record",
+                "Reloading will discard any unsaved changes. Continue?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+
+            if reply == QMessageBox.Yes:
+                self.load_record(record_id)
+                self._dismiss_banner()
+                self._update_sync_status(True, "Reloaded")
+
+    def _dismiss_banner(self) -> None:
+        """Remove the update notification banner."""
+        if hasattr(self, "_update_banner") and self._update_banner:
+            self._update_banner.deleteLater()
+            self._update_banner = None
+
+        # =============================================================================
+        # RECORD MANAGEMENT
+        # =============================================================================
+
+    def start_new_record(self, cryomodule: str, cavity_number: str) -> None:
+        """Start a new commissioning record."""
+        record, _ = self.session.start_new_record(cryomodule, cavity_number)
+
+        for display in self._phase_displays:
+            display.refresh_from_record(record)
+
+        self._update_tab_states()
+        self.update_progress_indicator(record)
+        self.tabs.setCurrentIndex(0)
+        self._load_notes()
+
+    def load_record(self, record_id: int) -> bool:
+        """Load an existing commissioning record."""
+        record = self.session.load_record(record_id)
+        if not record:
+            return False
+
+        self.update_progress_indicator(record)
+
+        for display in self._phase_displays:
+            display.on_record_loaded(record, record_id)
+
+        self._update_tab_states()
+
+        # Switch to current phase tab
+        for i, spec in enumerate(self.phase_specs):
+            if spec.phase == record.current_phase:
+                self.tabs.setCurrentIndex(i)
+                break
+
+        self._load_notes()
+        self._update_sync_status(True, "Record loaded")
+
+        return True
+
+    def save_active_record(self) -> bool:
+        """Save the active record with conflict detection.
+
+        Returns:
+            True if saved successfully or user chose to continue, False otherwise
+        """
+        try:
+            success = self.session.save_active_record()
+            if success:
+                self._update_sync_status(True, "Saved")
+            return success
+        except RecordConflictError as e:
+            return self._handle_save_conflict(e)
+
+    def _on_manual_save(self) -> None:
+        """Handle manual save button click."""
+        if not self.session.has_active_record():
+            QMessageBox.information(
+                self,
+                "No Active Record",
+                "Please load or create a commissioning record first.",
+            )
             return
 
-        note_type, ref_data = note_ref
+        if self.save_active_record():
+            QMessageBox.information(
+                self,
+                "Save Successful",
+                "Record saved successfully.",
+                QMessageBox.Ok,
+            )
+        else:
+            # Error already shown by conflict handler
+            pass
 
-        if note_type == "general":
-            note_index = ref_data
-            if self.session.update_general_note(note_index, operator, note):
-                self._load_notes()
-        elif note_type == "measurement":
-            entry_id, note_index = ref_data
-            if self.session.update_measurement_note(
-                entry_id, note_index, operator, note
-            ):
-                self._load_notes()
+    def _handle_save_conflict(self, conflict: RecordConflictError) -> bool:
+        """Handle optimistic locking conflict with merge dialog.
+
+        Args:
+            conflict: The RecordConflictError containing conflict details
+
+        Returns:
+            True if conflict was resolved and save succeeded, False otherwise
+        """
+        if not self.session.has_active_record():
+            return False
+
+        record_id = self.session.get_active_record_id()
+        if not record_id:
+            return False
+
+        # Load the current database version
+        result = self.session.db.get_record_with_version(record_id)
+        if not result:
+            QMessageBox.critical(
+                self, "Error", "Failed to load database version for merge."
+            )
+            return False
+
+        db_record, db_version = result
+        local_record = self.session.get_active_record()
+
+        # Show merge dialog
+        merge_dialog = MergeDialog(local_record, db_record, parent=self)
+
+        if merge_dialog.exec_() != QDialog.Accepted:
+            # User cancelled
+            self._update_sync_status(False, "Merge cancelled")
+            return False
+
+        merged_record = merge_dialog.get_merged_record()
+        if not merged_record:
+            return False
+
+        # Save the merged record
+        try:
+            # Force save the merged record (no version check since we just merged)
+            self.session.db.save_record(
+                merged_record, record_id, expected_version=None
+            )
+
+            # Reload to get fresh version number and update UI
+            self.load_record(record_id)
+
+            QMessageBox.information(
+                self,
+                "Merge Successful",
+                "Your changes have been merged and saved.",
+            )
+            self._update_sync_status(True, "Merged and saved")
+            return True
+
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Save Failed", f"Failed to save merged record: {e}"
+            )
+            self._update_sync_status(False, "Save failed")
+            return False
+
+    # =============================================================================
+    # MEASUREMENT HISTORY
+    # =============================================================================
+
+    def _show_measurement_history(self):
+        """Open dialog showing all measurement attempts."""
+        if not self.session.has_active_record():
+            QMessageBox.information(
+                self,
+                "No Active Record",
+                "Please load or create a commissioning record first.",
+            )
+            return
+
+        dialog = MeasurementHistoryDialog(self.session, parent=self)
+        dialog.exec_()
 
 
 def main() -> int:

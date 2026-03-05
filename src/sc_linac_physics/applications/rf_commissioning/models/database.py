@@ -91,8 +91,9 @@ class CommissioningDatabase:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS commissioning_records (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    cavity_name TEXT NOT NULL,
+                    linac TEXT NOT NULL,
                     cryomodule TEXT NOT NULL,
+                    cavity_number TEXT NOT NULL,
                     start_time TEXT NOT NULL,
                     end_time TEXT,
                     current_phase TEXT NOT NULL,
@@ -142,13 +143,23 @@ class CommissioningDatabase:
 
             # Create indexes for common queries
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_cavity_name
-                ON commissioning_records(cavity_name)
+                CREATE INDEX IF NOT EXISTS idx_linac
+                ON commissioning_records(linac)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cavity_number
+                ON commissioning_records(cavity_number)
             """)
 
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_cryomodule
                 ON commissioning_records(cryomodule)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_linac_cryo_cavity
+                ON commissioning_records(linac, cryomodule, cavity_number)
             """)
 
             cursor.execute("""
@@ -160,6 +171,9 @@ class CommissioningDatabase:
                 CREATE INDEX IF NOT EXISTS idx_current_phase
                 ON commissioning_records(current_phase)
             """)
+
+            # Migration: Ensure linac, cryomodule, cavity_number columns exist and have values
+            self._migrate_cavity_fields(cursor)
 
             # Create measurement history table for tracking all measurement attempts
             cursor.execute("""
@@ -190,6 +204,38 @@ class CommissioningDatabase:
                     created_at TEXT NOT NULL
                 )
             """)
+
+    def _migrate_cavity_fields(self, cursor: sqlite3.Cursor) -> None:
+        """Migrate old records to have linac, cryomodule, cavity_number fields.
+
+        Handles records created with older schema versions.
+        """
+        try:
+            # Check if the columns exist
+            cursor.execute("PRAGMA table_info(commissioning_records)")
+            columns = {row[1] for row in cursor.fetchall()}
+
+            # Add missing columns if needed
+            if "linac" not in columns:
+                cursor.execute("""
+                    ALTER TABLE commissioning_records
+                    ADD COLUMN linac TEXT
+                """)
+
+            if "cryomodule" not in columns:
+                cursor.execute("""
+                    ALTER TABLE commissioning_records
+                    ADD COLUMN cryomodule TEXT
+                """)
+
+            if "cavity_number" not in columns:
+                cursor.execute("""
+                    ALTER TABLE commissioning_records
+                    ADD COLUMN cavity_number TEXT
+                """)
+        except Exception as e:
+            # Column might already exist or other migration issue
+            print(f"Note: Could not complete cavity fields migration: {e}")
 
     def save_record(
         self,
@@ -243,17 +289,18 @@ class CommissioningDatabase:
                 cursor.execute(
                     """
                     INSERT INTO commissioning_records (
-                        cavity_name, cryomodule, start_time, end_time,
+                        linac, cryomodule, cavity_number, start_time, end_time,
                         current_phase, overall_status,
                         piezo_pre_rf, cold_landing, ssa_char, cavity_char,
                         piezo_with_rf, high_power,
                         phase_status, phase_history,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
-                        record.cavity_name,
+                        record.linac,
                         record.cryomodule,
+                        record.cavity_number,
                         record.start_time.isoformat(),
                         (
                             record.end_time.isoformat()
@@ -320,7 +367,7 @@ class CommissioningDatabase:
                 cursor.execute(
                     """
                     UPDATE commissioning_records SET
-                        cavity_name = ?, cryomodule = ?, start_time = ?, end_time = ?,
+                        linac = ?, cryomodule = ?, cavity_number = ?, start_time = ?, end_time = ?,
                         current_phase = ?, overall_status = ?,
                         piezo_pre_rf = ?, cold_landing = ?, ssa_char = ?, cavity_char = ?,
                         piezo_with_rf = ?, high_power = ?,
@@ -330,8 +377,9 @@ class CommissioningDatabase:
                     WHERE id = ?
                 """,
                     (
-                        record.cavity_name,
+                        record.linac,
                         record.cryomodule,
+                        record.cavity_number,
                         record.start_time.isoformat(),
                         (
                             record.end_time.isoformat()
@@ -555,8 +603,9 @@ class CommissioningDatabase:
 
         # Create record
         record = CommissioningRecord(
-            cavity_name=row["cavity_name"],
+            linac=row["linac"],
             cryomodule=row["cryomodule"],
+            cavity_number=row["cavity_number"],
             start_time=datetime.fromisoformat(row["start_time"]),
             current_phase=CommissioningPhase(row["current_phase"]),
             piezo_pre_rf=piezo_pre_rf,
@@ -578,12 +627,18 @@ class CommissioningDatabase:
         return record
 
     def get_record_by_cavity(
-        self, cavity_name: str, active_only: bool = True
+        self,
+        linac: str,
+        cryomodule: str,
+        cavity_number: str,
+        active_only: bool = True,
     ) -> Optional["CommissioningRecord"]:
         """Get most recent record for a cavity.
 
         Args:
-            cavity_name: Full cavity name (e.g., "L1B_CM02_CAV3")
+            linac: Linac name (e.g., "L1B")
+            cryomodule: Cryomodule identifier (e.g., "02")
+            cavity_number: Cavity number (e.g., "1")
             active_only: If True, only return if status is "in_progress"
 
         Returns:
@@ -591,19 +646,19 @@ class CommissioningDatabase:
 
         Example:
             >>> # Get active session for cavity
-            >>> record = db.get_record_by_cavity("L1B_CM02_CAV3")
+            >>> record = db.get_record_by_cavity("L1B", "02", "3")
             >>>
             >>> # Get most recent session (completed or active)
-            >>> record = db.get_record_by_cavity("L1B_CM02_CAV3", active_only=False)
+            >>> record = db.get_record_by_cavity("L1B", "02", "3", active_only=False)
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
             query = """
                 SELECT * FROM commissioning_records
-                WHERE cavity_name = ?
+                WHERE linac = ? AND cryomodule = ? AND cavity_number = ?
             """
-            params = [cavity_name]
+            params = [linac, cryomodule, cavity_number]
 
             if active_only:
                 query += " AND overall_status = ?"
@@ -662,6 +717,28 @@ class CommissioningDatabase:
         """Alias for get_record for compatibility."""
         return self.get_record(record_id)
 
+    def find_records_for_cavity(
+        self, linac: str, cryomodule: str, cavity_number: str
+    ) -> list[dict]:
+        """Find all commissioning records for a specific cavity.
+
+        Args:
+            linac: Linac name (e.g., "L1B")
+            cryomodule: Cryomodule identifier (e.g., "02")
+            cavity_number: Cavity number (e.g., "1")
+
+        Returns:
+            List of record dictionaries for this cavity
+        """
+        all_records = self.get_all_records()
+        return [
+            r
+            for r in all_records
+            if r.get("linac") == linac
+            and r.get("cryomodule") == cryomodule
+            and r.get("cavity_number") == cavity_number
+        ]
+
     def get_all_records(self) -> List[dict]:
         """
         Get all commissioning records as dictionaries.
@@ -689,10 +766,17 @@ class CommissioningDatabase:
                 )  # Use existing get_record method
 
                 if record:
+                    # Safely extract cavity fields with fallbacks
+                    linac = record.linac or "?"
+                    cryo = record.cryomodule or "?"
+                    cavity = record.cavity_number or "?"
+
                     # Create a simplified dict for the browser
                     record_dict = {
                         "id": record_id,
-                        "cryomodule_name": record.cavity_name,  # Full cavity name
+                        "linac": linac,
+                        "cryomodule": cryo,
+                        "cavity_number": cavity,
                         "start_time": (
                             record.start_time.isoformat()
                             if record.start_time
@@ -1155,6 +1239,8 @@ class CommissioningDatabase:
         import json
         from datetime import datetime
 
+        now = datetime.now().isoformat()
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -1175,15 +1261,19 @@ class CommissioningDatabase:
 
             notes_list.append(
                 {
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": now,
                     "operator": operator,
                     "note": note,
                 }
             )
 
             cursor.execute(
-                "UPDATE commissioning_records SET general_notes = ? WHERE id = ?",
-                (json.dumps(notes_list), record_id),
+                """
+                UPDATE commissioning_records
+                SET general_notes = ?, updated_at = ?, version = version + 1
+                WHERE id = ?
+                """,
+                (json.dumps(notes_list), now, record_id),
             )
             return cursor.rowcount > 0
 
@@ -1208,6 +1298,8 @@ class CommissioningDatabase:
         import json
         from datetime import datetime
 
+        now = datetime.now().isoformat()
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -1230,15 +1322,19 @@ class CommissioningDatabase:
                 return False
 
             notes_list[note_index] = {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": now,
                 "operator": operator,
                 "note": note,
-                "edited_at": datetime.now().isoformat(),
+                "edited_at": now,
             }
 
             cursor.execute(
-                "UPDATE commissioning_records SET general_notes = ? WHERE id = ?",
-                (json.dumps(notes_list), record_id),
+                """
+                UPDATE commissioning_records
+                SET general_notes = ?, updated_at = ?, version = version + 1
+                WHERE id = ?
+                """,
+                (json.dumps(notes_list), now, record_id),
             )
             return cursor.rowcount > 0
 

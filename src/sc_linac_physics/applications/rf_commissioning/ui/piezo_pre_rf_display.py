@@ -4,11 +4,11 @@ PyDM-compatible display for running piezo pre-RF tests with live PV readouts
 """
 
 from datetime import datetime
+from typing import Optional
 
 from PyQt5.QtCore import pyqtSlot, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QMessageBox,
-    QInputDialog,
 )
 
 from sc_linac_physics.applications.rf_commissioning import (
@@ -50,7 +50,6 @@ class PiezoPreRFDisplay(PhaseDisplayBase):
         self.step_progress_signal.connect(self._on_step_progress)
 
         self.setup_ui()
-        self._load_operator_list()
         self.controller.setup_pv_connections()
 
     def setup_ui(self):
@@ -72,57 +71,35 @@ class PiezoPreRFDisplay(PhaseDisplayBase):
         for name, widget in self.ui.widgets.items():
             setattr(self, name, widget)
 
-        if hasattr(self, "operator_combo"):
-            self.operator_combo.currentIndexChanged.connect(
-                self._on_operator_selected
-            )
+    def get_current_operator(self) -> Optional[str]:
+        """Get the current operator from parent container."""
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, "operator_combo"):
+                operator = parent.operator_combo.currentData()
+                if operator and operator != "__add__":
+                    return operator
+            parent = parent.parent()
+        return None
 
-    def _load_operator_list(self) -> None:
-        if not hasattr(self, "operator_combo"):
-            return
+    def get_current_cavity(self) -> Optional[tuple[str, str]]:
+        """Get current cavity info from active record.
 
-        self.operator_combo.blockSignals(True)
-        self.operator_combo.clear()
-        self.operator_combo.addItem("Select operator...", None)
+        Returns:
+            Tuple of (cavity_name, cryomodule) or None
+        """
+        if self.session.has_active_record():
+            record = self.session.get_active_record()
+            return (record.short_cavity_name, record.cryomodule)
+        return None
 
-        for name in self.session.get_operators():
-            self.operator_combo.addItem(name, name)
+    def refresh_from_record(self, record: CommissioningRecord) -> None:
+        """Refresh display when active record changes.
 
-        self.operator_combo.addItem("Add operator...", "__add__")
-        self.operator_combo.blockSignals(False)
-
-    def _on_operator_selected(self) -> None:
-        if not hasattr(self, "operator_combo"):
-            return
-
-        selection = self.operator_combo.currentData()
-        if selection != "__add__":
-            return
-
-        name, ok = QInputDialog.getText(
-            self, "Add Operator", "Enter your name:"
-        )
-        clean_name = name.strip()
-        if not ok or not clean_name:
-            self.operator_combo.setCurrentIndex(0)
-            return
-
-        self.session.add_operator(clean_name)
-        self._load_operator_list()
-
-        idx = self.operator_combo.findData(clean_name)
-        if idx >= 0:
-            self.operator_combo.setCurrentIndex(idx)
-
-    def get_selected_operator(self) -> str | None:
-        if not hasattr(self, "operator_combo"):
-            return None
-
-        selection = self.operator_combo.currentData()
-        if selection in (None, "__add__"):
-            return None
-
-        return str(selection)
+        Note: PV connections are handled separately by cavity selection dropdowns,
+        not by the active record.
+        """
+        pass
 
     def _on_step_progress(self, step_name: str, progress: int):
         """Handle step progress updates."""
@@ -270,21 +247,41 @@ class PiezoPreRFDisplay(PhaseDisplayBase):
         """Display saved results from database."""
         self.controller.on_save_report()
 
+    def on_phase_completed(self) -> None:
+        """Notify parent container to update phase tracker."""
+        # Walk up the parent hierarchy to find MultiPhaseCommissioningDisplay
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, "phase_tracker") and hasattr(
+                parent.phase_tracker, "update_from_record"
+            ):
+                # Found the multi-phase display container
+                if (
+                    hasattr(parent, "session")
+                    and parent.session.has_active_record()
+                ):
+                    record = parent.session.get_active_record()
+                    parent.phase_tracker.update_from_record(record)
+                    parent._update_tab_states()
+                    break
+            parent = parent.parent()
+
     def on_record_loaded(
         self, record: CommissioningRecord, record_id: int
     ) -> None:
         """Display a loaded record from database in the left panel (DB results)."""
         # Note: We're NOT updating the local (orange-bordered) results,
         # only showing what was saved in the database
+        # Note: PV connections are managed separately by cavity selection dropdowns
 
-        self.log_message(f"Displaying record for {record.cavity_name}")
+        self.log_message(f"Displaying record for {record.full_cavity_name}")
 
         # Update history
         self.history_text.clear()
         self.history_text.append(
             f"=== LOADED FROM DATABASE (ID: {record_id}) ==="
         )
-        self.history_text.append(f"Cavity: {record.cavity_name}")
+        self.history_text.append(f"Cavity: {record.full_cavity_name}")
         self.history_text.append(f"Cryomodule: {record.cryomodule}")
         self.history_text.append(
             f"Started: {record.start_time.strftime('%Y-%m-%d %H:%M:%S')}"

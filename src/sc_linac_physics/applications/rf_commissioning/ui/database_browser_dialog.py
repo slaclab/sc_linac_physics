@@ -52,7 +52,7 @@ class DatabaseBrowserDialog(QDialog):
         self.table.setHorizontalHeaderLabels(
             [
                 "ID",
-                "Cryomodule",
+                "Cavity",
                 "Start Time",
                 "End Time",
                 "Phase",
@@ -169,16 +169,28 @@ class DatabaseBrowserDialog(QDialog):
         id_item.setData(Qt.UserRole, record)
         self.table.setItem(row, 0, id_item)
 
-        # Cryomodule
-        cryo_item = QTableWidgetItem(record.get("cryomodule_name", "N/A"))
+        # Cavity (formatted as Linac_CM_CAV)
+        linac = record.get("linac", "?")
+        cryo = record.get("cryomodule", "?")
+        cavity = record.get("cavity_number", "?")
+        cavity_display = f"{linac}_CM{cryo}_CAV{cavity}"
+        cryo_item = QTableWidgetItem(cavity_display)
         self.table.setItem(row, 1, cryo_item)
 
         # Start Time
-        start_time = self._format_timestamp(record.get("start_time", "N/A"))
+        start_time_str = record.get("start_time")
+        start_time = (
+            self._format_timestamp(start_time_str) if start_time_str else "N/A"
+        )
         self.table.setItem(row, 2, QTableWidgetItem(start_time))
 
         # End Time
-        end_time = self._format_timestamp(record.get("end_time", "N/A"))
+        end_time_str = record.get("end_time")
+        end_time = (
+            self._format_timestamp(end_time_str)
+            if end_time_str
+            else "Not completed"
+        )
         self.table.setItem(row, 3, QTableWidgetItem(end_time))
 
         # Phase
