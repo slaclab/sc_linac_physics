@@ -39,7 +39,7 @@ class MeasurementHistoryDialog(QDialog):
         parent=None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Measurement History")
+        self.setWindowTitle("Measurement History - All Attempts")
         self.setModal(False)
         self.resize(900, 500)
 
@@ -55,7 +55,7 @@ class MeasurementHistoryDialog(QDialog):
         # Header with phase filter
         header_layout = QHBoxLayout()
 
-        header_layout.addWidget(QLabel("Show measurements for:"))
+        header_layout.addWidget(QLabel("Phase filter (shows attempts):"))
 
         self.phase_filter = QComboBox()
         self.phase_filter.addItem("All Phases", None)
@@ -72,6 +72,12 @@ class MeasurementHistoryDialog(QDialog):
         header_layout.addStretch()
 
         layout.addLayout(header_layout)
+
+        tip_label = QLabel(
+            "Tip: Select a phase to see all previous attempts for that phase."
+        )
+        tip_label.setStyleSheet("color: #888; font-size: 9pt;")
+        layout.addWidget(tip_label)
 
         # Table
         self.table = QTableWidget()

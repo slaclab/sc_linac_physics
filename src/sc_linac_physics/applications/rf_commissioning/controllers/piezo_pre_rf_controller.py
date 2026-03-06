@@ -118,7 +118,6 @@ class PiezoPreRFController:
                 self.view.pv_chb_status: piezo.prerf_chb_status_pv,
                 self.view.pv_cha_cap: piezo.capacitance_a_pv,
                 self.view.pv_chb_cap: piezo.capacitance_b_pv,
-                self.view.go_button: piezo.prerf_test_start_pv,
             }
 
             for widget, pv_addr in pv_mapping.items():
@@ -170,7 +169,6 @@ class PiezoPreRFController:
         self.context = PhaseContext(
             record=record,
             operator=operator,
-            dry_run=self.view.dry_run_checkbox.isChecked(),
             parameters={"cavity": cavity},
         )
         self.phase = PiezoPreRFPhase(self.context)
@@ -187,7 +185,6 @@ class PiezoPreRFController:
         """Set UI widgets for an active test run."""
         self.view.run_button.setEnabled(False)
         self.view.abort_button.setEnabled(True)
-        self.view.save_button.setEnabled(False)
         self.view.local_phase_status.setText("RUNNING")
 
     def _get_selected_cavity_info(self) -> Optional[tuple[str, int, int]]:
@@ -284,13 +281,14 @@ class PiezoPreRFController:
                 f"Auto-creating commissioning record for {cavity_display_name}..."
             )
 
-            record, record_id = self.session.start_new_record(
+            record, record_id, created = self.session.start_new_record(
                 cryomodule=cryomodule,
                 cavity_number=cavity_number,
             )
 
+            status = "Created" if created else "Loaded"
             self.view.log_message(
-                f"✓ Created record ID: {record_id} for {cavity_display_name}"
+                f"✓ {status} record ID: {record_id} for {cavity_display_name}"
             )
 
             # Notify parent container to update its UI
@@ -421,7 +419,6 @@ class PiezoPreRFController:
 
         self.view.run_button.setEnabled(True)
         self.view.abort_button.setEnabled(False)
-        self.view.save_button.setEnabled(True)
 
     def on_phase_failed(self, error_msg: str) -> None:
         """Handle phase failure."""
@@ -458,7 +455,6 @@ class PiezoPreRFController:
 
         self.view.run_button.setEnabled(True)
         self.view.abort_button.setEnabled(False)
-        self.view.save_button.setEnabled(True)
         self.view.show_error(f"Test failed: {error_msg}")
 
     def _get_operator(self) -> str:

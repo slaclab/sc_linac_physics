@@ -16,11 +16,10 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QTextEdit,
     QSizePolicy,
-    QCheckBox,
     QFrame,
     QComboBox,
 )
-from pydm.widgets import PyDMLabel, PyDMPushButton
+from pydm.widgets import PyDMLabel
 
 PV_LABEL_STYLE = """
     background: #1a2a3a;
@@ -119,9 +118,7 @@ class PiezoPreRFUI:
         toolbar.setSpacing(5)
 
         # Run automated test button
-        run_button = self._register(
-            "run_button", QPushButton("🔄 Run Automated Test")
-        )
+        run_button = self._register("run_button", QPushButton("Go"))
         run_button.setStyleSheet(
             "QPushButton { background-color: #1e3a8a; color: white; "
             "font-weight: bold; padding: 8px 16px; }"
@@ -136,26 +133,6 @@ class PiezoPreRFUI:
         )
         abort_button.setEnabled(False)
 
-        # Dry run checkbox (affects all operations)
-        dry_run_checkbox = self._register(
-            "dry_run_checkbox", QCheckBox("Dry Run")
-        )
-        dry_run_checkbox.setStyleSheet("font-weight: bold;")
-
-        # Separator
-        separator = QLabel("|")
-        separator.setStyleSheet("color: #555;")
-
-        # View buttons
-        save_button = self._register(
-            "save_button", QPushButton("📊 View Results")
-        )
-        self._connect(save_button, "on_save_report")
-        save_button.setEnabled(False)
-
-        db_button = self._register("db_button", QPushButton("💾 View Database"))
-        self._connect(db_button, "on_view_database")
-
         # Timestamp
         timestamp_label = self._register("timestamp_label", QLabel())
         timestamp_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -164,10 +141,6 @@ class PiezoPreRFUI:
         # Add to toolbar
         toolbar.addWidget(run_button)
         toolbar.addWidget(abort_button)
-        toolbar.addWidget(dry_run_checkbox)
-        toolbar.addWidget(separator)
-        toolbar.addWidget(save_button)
-        toolbar.addWidget(db_button)
         toolbar.addStretch()
         toolbar.addWidget(timestamp_label)
 
@@ -240,18 +213,6 @@ class PiezoPreRFUI:
 
         layout.addLayout(offset_row, row, 1, 1, 2)
         row += 1
-
-        # Row 4: Go button
-        go_button = self._register(
-            "go_button",
-            PyDMPushButton(parent=self.parent, label="Go", pressValue=1),
-        )
-        go_button.setStyleSheet(
-            "QPushButton { background-color: #2d5016; color: white; "
-            "font-weight: bold; padding: 8px; }"
-        )
-        go_button.setFixedWidth(80)
-        layout.addWidget(go_button, row, 1)
 
         group.setLayout(layout)
         return group
@@ -334,10 +295,8 @@ class PiezoPreRFUI:
         return wrapper
 
     def _build_history(self) -> QGroupBox:
-        """Build a collapsible, space-efficient phase history section."""
+        """Build a space-efficient phase history section."""
         group = QGroupBox("Phase History")
-        group.setCheckable(True)
-        group.setChecked(False)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)

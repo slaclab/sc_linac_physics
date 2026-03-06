@@ -27,10 +27,14 @@ from PyQt5.QtWidgets import (
     QTextEdit,
     QGroupBox,
     QFrame,
+    QMenu,
 )
 from pydm import Display, PyDMApplication
 
-from sc_linac_physics.applications.rf_commissioning import CommissioningPhase
+from sc_linac_physics.applications.rf_commissioning import (
+    CommissioningPhase,
+    CommissioningRecord,
+)
 from sc_linac_physics.applications.rf_commissioning.models.database import (
     RecordConflictError,
 )
@@ -42,6 +46,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.measurement_history_dialo
 )
 from sc_linac_physics.applications.rf_commissioning.ui.merge_dialog import (
     MergeDialog,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.database_browser_dialog import (
+    DatabaseBrowserDialog,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
     PhaseDisplayBase,
@@ -85,7 +92,7 @@ class MultiPhaseCommissioningDisplay(Display):
         self.setWindowTitle("RF Commissioning")
         self.setMinimumSize(1200, 800)
 
-        self.session = session or CommissioningSession("commissioning.db")
+        self.session = session or CommissioningSession()
         self.phase_specs = phase_specs or self._default_phase_specs()
 
         # Track update banner state
@@ -222,26 +229,6 @@ class MultiPhaseCommissioningDisplay(Display):
         cavity_layout.addWidget(QLabel("Cav:"))
         cavity_layout.addWidget(self.cavity_combo)
 
-        # Load existing record button - doesn't require operator
-        load_btn = QPushButton("📂 Load Record")
-        load_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                padding: 6px 12px;
-                font-weight: bold;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
-        load_btn.setToolTip(
-            "Browse and load existing commissioning records for this cavity"
-        )
-        load_btn.clicked.connect(self._on_load_record)
-        cavity_layout.addWidget(load_btn)
-
         cavity_group.setLayout(cavity_layout)
         layout.addWidget(cavity_group)
 
@@ -309,93 +296,20 @@ class MultiPhaseCommissioningDisplay(Display):
         layout.addStretch()
 
         # Quick actions
-        save_btn = QPushButton("💾 Save")
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                padding: 6px 12px;
-                font-weight: bold;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
-        save_btn.clicked.connect(self._on_manual_save)
-        layout.addWidget(save_btn)
-
-        history_btn = QPushButton("📊 History")
+        history_btn = QPushButton("📊 Measurements")
+        history_btn.setToolTip(
+            "View all measurement attempts and filter by phase"
+        )
         history_btn.clicked.connect(self._show_measurement_history)
         layout.addWidget(history_btn)
 
+        database_btn = QPushButton("🗄️ Database")
+        database_btn.setToolTip("Browse and load commissioning records")
+        database_btn.clicked.connect(self._show_database_browser)
+        layout.addWidget(database_btn)
+
         header.setLayout(layout)
         return header
-
-    def _on_load_record(self) -> None:
-        """Load an existing commissioning record for the selected cavity."""
-        cryomodule = self.cryomodule_combo.currentText()
-        cavity = self.cavity_combo.currentText()
-
-        if cryomodule == "Select CM..." or not cryomodule:
-            QMessageBox.information(
-                self, "Cavity Required", "Please select a cryomodule first."
-            )
-            self.cryomodule_combo.setFocus()
-            return
-
-        if cavity == "Select Cav..." or not cavity:
-            QMessageBox.information(
-                self, "Cavity Required", "Please select a cavity number first."
-            )
-            self.cavity_combo.setFocus()
-            return
-
-        # Get linac for this cryomodule
-        from sc_linac_physics.utils.sc_linac.linac_utils import (
-            get_linac_for_cryomodule,
-        )
-
-        linac = get_linac_for_cryomodule(cryomodule)
-        if not linac:
-            QMessageBox.warning(
-                self,
-                "Invalid Cryomodule",
-                f"Cannot determine linac for cryomodule '{cryomodule}'",
-            )
-            return
-
-        cavity_display_name = f"{linac}_CM{cryomodule}_CAV{cavity}"
-
-        # Get all records from database
-        all_records = self.session.db.get_all_records()
-
-        # Filter records for this specific cavity
-        existing_records = [
-            r
-            for r in all_records
-            if (
-                r.get("linac") == linac
-                and r.get("cryomodule") == cryomodule
-                and r.get("cavity_number") == cavity
-            )
-        ]
-
-        if existing_records:
-            self._show_record_selector(
-                cavity_display_name, linac, cryomodule, cavity, existing_records
-            )
-        else:
-            QMessageBox.information(
-                self,
-                "No Existing Records",
-                f"No commissioning records found for {cavity_display_name}.\n\n"
-                f"To start commissioning this cavity:\n"
-                f"1. Select an operator\n"
-                f"2. Navigate to a phase tab (e.g., Piezo Pre-RF)\n"
-                f"3. Click 'Run Automated Test'\n\n"
-                f"A new record will be created automatically.",
-            )
 
     def _update_current_cavity_display(self) -> None:
         """Update the current cavity display label."""
@@ -463,7 +377,7 @@ class MultiPhaseCommissioningDisplay(Display):
                 """)
 
     def _on_cavity_selection_changed(self) -> None:
-        """Update PV addresses when cavity selection changes in dropdowns."""
+        """Update PV addresses and load record when cavity selection changes."""
         cryomodule = self.cryomodule_combo.currentText()
         cavity = self.cavity_combo.currentText()
 
@@ -484,6 +398,9 @@ class MultiPhaseCommissioningDisplay(Display):
                 display.controller, "update_pv_addresses"
             ):
                 display.controller.update_pv_addresses(cryomodule, cavity)
+
+        # Load or create record for this cavity (which refreshes notes)
+        self.start_new_record(cryomodule, cavity)
 
     def _populate_operator_combo(self, restore_selection: str = None) -> None:
         """Populate operator dropdown - no default selection for safety."""
@@ -888,14 +805,22 @@ class MultiPhaseCommissioningDisplay(Display):
 
         if reply == QMessageBox.Yes:
             try:
-                self.start_new_record(cryomodule, cavity_number)
-                self._update_sync_status(True, "New record started")
+                created = self.start_new_record(cryomodule, cavity_number)
+                if created:
+                    self._update_sync_status(True, "New record started")
+                else:
+                    self._update_sync_status(True, "Record loaded")
 
-                # Log the start
-                operator = self.operator_combo.currentText()
-                self.session.append_general_note(
-                    operator, f"Started commissioning for {cavity_display_name}"
-                )
+                if created:
+                    # Log the start
+                    operator = self.operator_combo.currentText()
+                    try:
+                        self.session.append_general_note(
+                            operator,
+                            f"Started commissioning for {cavity_display_name}",
+                        )
+                    except RecordConflictError as conflict:
+                        self._handle_note_conflict(conflict)
 
             except Exception as e:
                 QMessageBox.critical(
@@ -1071,17 +996,14 @@ class MultiPhaseCommissioningDisplay(Display):
         self.notes_table.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Expanding
         )
+
+        # Enable right-click context menu
+        self.notes_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.notes_table.customContextMenuRequested.connect(
+            self._show_notes_context_menu
+        )
+
         layout.addWidget(self.notes_table)
-
-        # Edit button row
-        button_row = QHBoxLayout()
-
-        edit_btn = QPushButton("✏️ Edit")
-        edit_btn.clicked.connect(self._on_edit_note)
-        button_row.addWidget(edit_btn)
-
-        button_row.addStretch()
-        layout.addLayout(button_row)
 
         widget.setLayout(layout)
         return widget
@@ -1192,18 +1114,31 @@ class MultiPhaseCommissioningDisplay(Display):
         )
 
         if ok and note.strip():
-            if self.session.append_general_note(operator, note.strip()):
-                self._load_notes()
-                # Auto-scroll to top to see new note
-                self.notes_table.scrollToTop()
+            try:
+                if self.session.append_general_note(operator, note.strip()):
+                    self._load_notes()
+                    # Auto-scroll to top to see new note
+                    self.notes_table.scrollToTop()
+            except RecordConflictError as conflict:
+                self._handle_note_conflict(conflict)
+
+    def _show_notes_context_menu(self, position) -> None:
+        """Show context menu for notes table."""
+        if self.notes_table.rowCount() == 0:
+            return
+
+        menu = QMenu(self)
+        edit_action = menu.addAction("✏️ Edit Note")
+
+        action = menu.exec_(self.notes_table.viewport().mapToGlobal(position))
+
+        if action == edit_action:
+            self._on_edit_note()
 
     def _on_edit_note(self) -> None:
         """Edit selected note."""
         note_ref = self._get_selected_note_ref()
         if not note_ref:
-            QMessageBox.information(
-                self, "No Selection", "Please select a note to edit."
-            )
             return
 
         row = self.notes_table.currentRow()
@@ -1220,8 +1155,11 @@ class MultiPhaseCommissioningDisplay(Display):
 
         if note_type == "general":
             note_index = ref_data
-            if self.session.update_general_note(note_index, operator, note):
-                self._load_notes()
+            try:
+                if self.session.update_general_note(note_index, operator, note):
+                    self._load_notes()
+            except RecordConflictError as conflict:
+                self._handle_note_conflict(conflict)
         elif note_type == "measurement":
             entry_id, note_index = ref_data
             if self.session.update_measurement_note(
@@ -1448,13 +1386,35 @@ class MultiPhaseCommissioningDisplay(Display):
             self._update_banner.deleteLater()
             self._update_banner = None
 
+    def _handle_note_conflict(self, conflict: RecordConflictError) -> None:
+        """Handle note update conflicts from optimistic locking."""
+        QMessageBox.warning(
+            self,
+            "Record Updated",
+            "This record was updated by another user. "
+            "Please reload before editing notes.",
+        )
+        self._show_update_banner(
+            conflict.actual_version, conflict.expected_version
+        )
+
         # =============================================================================
         # RECORD MANAGEMENT
         # =============================================================================
 
-    def start_new_record(self, cryomodule: str, cavity_number: str) -> None:
-        """Start a new commissioning record."""
-        record, _ = self.session.start_new_record(cryomodule, cavity_number)
+    def start_new_record(self, cryomodule: str, cavity_number: str) -> bool:
+        """Start a new commissioning record.
+
+        Returns:
+            True if a new record was created, False if an existing record was loaded.
+        """
+        record, record_id, created = self.session.start_new_record(
+            cryomodule, cavity_number
+        )
+
+        if not created:
+            self.load_record(record_id)
+            return False
 
         for display in self._phase_displays:
             display.refresh_from_record(record)
@@ -1463,12 +1423,15 @@ class MultiPhaseCommissioningDisplay(Display):
         self.update_progress_indicator(record)
         self.tabs.setCurrentIndex(0)
         self._load_notes()
+        return True
 
     def load_record(self, record_id: int) -> bool:
         """Load an existing commissioning record."""
         record = self.session.load_record(record_id)
         if not record:
             return False
+
+        self._sync_cavity_selection_from_record(record)
 
         self.update_progress_indicator(record)
 
@@ -1488,6 +1451,18 @@ class MultiPhaseCommissioningDisplay(Display):
 
         return True
 
+    def _sync_cavity_selection_from_record(
+        self, record: CommissioningRecord
+    ) -> None:
+        """Sync header cavity selection to a loaded record."""
+        cm_index = self.cryomodule_combo.findText(record.cryomodule)
+        if cm_index >= 0:
+            self.cryomodule_combo.setCurrentIndex(cm_index)
+
+        cav_index = self.cavity_combo.findText(str(record.cavity_number))
+        if cav_index >= 0:
+            self.cavity_combo.setCurrentIndex(cav_index)
+
     def save_active_record(self) -> bool:
         """Save the active record with conflict detection.
 
@@ -1501,27 +1476,6 @@ class MultiPhaseCommissioningDisplay(Display):
             return success
         except RecordConflictError as e:
             return self._handle_save_conflict(e)
-
-    def _on_manual_save(self) -> None:
-        """Handle manual save button click."""
-        if not self.session.has_active_record():
-            QMessageBox.information(
-                self,
-                "No Active Record",
-                "Please load or create a commissioning record first.",
-            )
-            return
-
-        if self.save_active_record():
-            QMessageBox.information(
-                self,
-                "Save Successful",
-                "Record saved successfully.",
-                QMessageBox.Ok,
-            )
-        else:
-            # Error already shown by conflict handler
-            pass
 
     def _handle_save_conflict(self, conflict: RecordConflictError) -> bool:
         """Handle optimistic locking conflict with merge dialog.
@@ -1603,6 +1557,46 @@ class MultiPhaseCommissioningDisplay(Display):
 
         dialog = MeasurementHistoryDialog(self.session, parent=self)
         dialog.exec_()
+
+    def _show_database_browser(self) -> None:
+        """Open database browser to select and load a record."""
+        cryomodule = self.cryomodule_combo.currentText()
+        cavity = self.cavity_combo.currentText()
+
+        if cryomodule == "Select CM..." or not cryomodule:
+            cryomodule = None
+
+        if cavity == "Select Cav..." or not cavity:
+            cavity = None
+
+        linac = None
+        if cryomodule:
+            from sc_linac_physics.utils.sc_linac.linac_utils import (
+                get_linac_for_cryomodule,
+            )
+
+            linac = get_linac_for_cryomodule(cryomodule)
+
+        dialog = DatabaseBrowserDialog(
+            self.session.database,
+            self,
+            cryomodule_filter=cryomodule,
+            cavity_filter=cavity,
+            linac_filter=linac,
+        )
+
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        record_id, record_data = dialog.get_selected_record()
+
+        if not record_id or not record_data:
+            return
+
+        if not self.load_record(record_id):
+            QMessageBox.critical(
+                self, "Load Failed", f"Failed to load record {record_id}"
+            )
 
 
 def main() -> int:

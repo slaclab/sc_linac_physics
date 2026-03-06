@@ -44,7 +44,7 @@ class PiezoPreRFDisplay(PhaseDisplayBase):
         super().__init__(parent, session=session)
         self.setWindowTitle("Piezo Pre-RF Test - PyDM")
 
-        self.session = session or CommissioningSession("commissioning.db")
+        self.session = session or CommissioningSession()
         self.controller = PiezoPreRFController(self, self.session)
 
         self.step_progress_signal.connect(self._on_step_progress)
@@ -58,7 +58,6 @@ class PiezoPreRFDisplay(PhaseDisplayBase):
             "toggle_piezo_enable": self.toggle_piezo_enable,
             "toggle_manual_mode": self.toggle_manual_mode,
             "on_run_automated_test": self.on_run_automated_test,
-            "on_save_report": self.on_save_report,
             "on_view_database": self.on_view_database,
         }
         self.ui = PiezoPreRFUI(self, callbacks)
@@ -241,11 +240,6 @@ class PiezoPreRFDisplay(PhaseDisplayBase):
     def on_abort(self):
         """Handle abort button click."""
         self.controller.on_abort()
-
-    @pyqtSlot()
-    def on_save_report(self):
-        """Display saved results from database."""
-        self.controller.on_save_report()
 
     def on_phase_completed(self) -> None:
         """Notify parent container to update phase tracker."""

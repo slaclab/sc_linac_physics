@@ -92,6 +92,7 @@ class CommissioningDatabase:
                 CREATE TABLE IF NOT EXISTS commissioning_records (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     linac TEXT NOT NULL,
+                    linac_number TEXT,
                     cryomodule TEXT NOT NULL,
                     cavity_number TEXT NOT NULL,
                     start_time TEXT NOT NULL,
@@ -174,6 +175,7 @@ class CommissioningDatabase:
 
             # Migration: Ensure linac, cryomodule, cavity_number columns exist and have values
             self._migrate_cavity_fields(cursor)
+            self._migrate_linac_number(cursor)
 
             # Create measurement history table for tracking all measurement attempts
             cursor.execute("""
@@ -196,6 +198,19 @@ class CommissioningDatabase:
                 CREATE INDEX IF NOT EXISTS idx_measurement_history_record
                 ON measurement_history(record_id, phase)
             """)
+
+            # Consolidate legacy duplicate records before enforcing uniqueness
+            self._consolidate_duplicate_records(cursor)
+
+            try:
+                cursor.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_cavity
+                    ON commissioning_records(linac, cryomodule, cavity_number)
+                """)
+            except sqlite3.IntegrityError as exc:
+                print(
+                    "Warning: could not create unique cavity index: " f"{exc}"
+                )
 
             # Create operators table for approved operator list
             cursor.execute("""
@@ -236,6 +251,236 @@ class CommissioningDatabase:
         except Exception as e:
             # Column might already exist or other migration issue
             print(f"Note: Could not complete cavity fields migration: {e}")
+
+    def _migrate_linac_number(self, cursor: sqlite3.Cursor) -> None:
+        """Add and populate the linac_number column when missing."""
+        try:
+            cursor.execute("PRAGMA table_info(commissioning_records)")
+            columns = {row[1] for row in cursor.fetchall()}
+
+            if "linac_number" not in columns:
+                cursor.execute("""
+                    ALTER TABLE commissioning_records
+                    ADD COLUMN linac_number TEXT
+                """)
+
+            cursor.execute(
+                "SELECT id, linac, linac_number FROM commissioning_records"
+            )
+            rows = cursor.fetchall()
+
+            for row in rows:
+                if row["linac_number"]:
+                    continue
+
+                linac_number = self._extract_linac_number(row["linac"])
+                if linac_number is None:
+                    continue
+
+                cursor.execute(
+                    "UPDATE commissioning_records SET linac_number = ? WHERE id = ?",
+                    (linac_number, row["id"]),
+                )
+        except Exception as e:
+            print(f"Note: Could not complete linac number migration: {e}")
+
+    def _extract_linac_number(self, linac: Optional[str]) -> Optional[str]:
+        """Extract numeric linac identifier from a linac string."""
+        import re
+
+        if not linac:
+            return None
+
+        digits = re.findall(r"\d+", linac)
+        if not digits:
+            return None
+
+        return "".join(digits)
+
+    def _parse_notes(self, notes_json: Optional[str]) -> list[dict]:
+        """Parse notes JSON string into list of note dictionaries."""
+        import json
+
+        if not notes_json:
+            return []
+        try:
+            parsed = json.loads(notes_json)
+            return parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            return []
+
+    def _extract_timestamp(self, phase: str, data: dict) -> Optional[str]:
+        """Extract timestamp from phase data payload."""
+        if "timestamp" in data:
+            return data.get("timestamp")
+        if phase == "cold_landing":
+            return data.get("final_timestamp") or data.get("initial_timestamp")
+        return None
+
+    def _insert_history_from_payload(
+        self,
+        cursor: sqlite3.Cursor,
+        record_id: int,
+        phase: str,
+        payload_json: str,
+        fallback_ts: Optional[str],
+    ) -> None:
+        """Insert measurement history entry from phase data payload."""
+        import json
+        from datetime import datetime
+
+        try:
+            data = json.loads(payload_json)
+        except json.JSONDecodeError:
+            return
+
+        timestamp = self._extract_timestamp(phase, data) or fallback_ts
+        if not timestamp:
+            timestamp = datetime.now().isoformat()
+
+        notes_value = data.get("notes") or None
+        cursor.execute(
+            """
+            INSERT INTO measurement_history (
+                record_id, phase, timestamp, operator,
+                measurement_data, notes, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                phase,
+                timestamp,
+                None,
+                payload_json,
+                notes_value,
+                datetime.now().isoformat(),
+            ),
+        )
+
+    def _migrate_phase_data_to_history(
+        self,
+        cursor: sqlite3.Cursor,
+        primary_id: int,
+        row: dict,
+        fallback_ts: str,
+    ) -> None:
+        """Migrate all phase data from a duplicate record to measurement history."""
+        phase_columns = [
+            "piezo_pre_rf",
+            "cold_landing",
+            "ssa_char",
+            "cavity_char",
+            "piezo_with_rf",
+            "high_power",
+        ]
+
+        for phase_col in phase_columns:
+            if row[phase_col]:
+                self._insert_history_from_payload(
+                    cursor,
+                    primary_id,
+                    phase_col,
+                    row[phase_col],
+                    fallback_ts,
+                )
+
+    def _consolidate_duplicate_group(
+        self,
+        cursor: sqlite3.Cursor,
+        linac: str,
+        cryomodule: str,
+        cavity_number: str,
+    ) -> None:
+        """Consolidate a group of duplicate records for a single cavity."""
+        import json
+        from datetime import datetime
+
+        cursor.execute(
+            """
+            SELECT id, updated_at, start_time, general_notes,
+                   piezo_pre_rf, cold_landing, ssa_char, cavity_char,
+                   piezo_with_rf, high_power
+            FROM commissioning_records
+            WHERE linac = ? AND cryomodule = ? AND cavity_number = ?
+            ORDER BY COALESCE(updated_at, start_time) DESC, id DESC
+            """,
+            (linac, cryomodule, cavity_number),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return
+
+        primary = rows[0]
+        primary_id = primary["id"]
+
+        merged_notes = self._parse_notes(primary["general_notes"])
+
+        for row in rows[1:]:
+            old_id = row["id"]
+            merged_notes.extend(self._parse_notes(row["general_notes"]))
+
+            fallback_ts = row["updated_at"] or row["start_time"]
+
+            # Migrate all phase data to measurement history
+            self._migrate_phase_data_to_history(
+                cursor, primary_id, row, fallback_ts
+            )
+
+            # Reassign existing measurement history
+            cursor.execute(
+                "UPDATE measurement_history SET record_id = ? WHERE record_id = ?",
+                (primary_id, old_id),
+            )
+
+            # Delete duplicate record
+            cursor.execute(
+                "DELETE FROM commissioning_records WHERE id = ?",
+                (old_id,),
+            )
+
+        # Update primary record with merged notes
+        if len(rows) > 1:
+            cursor.execute(
+                """
+                UPDATE commissioning_records
+                SET general_notes = ?, updated_at = ?, version = version + 1
+                WHERE id = ?
+                """,
+                (
+                    json.dumps(merged_notes),
+                    datetime.now().isoformat(),
+                    primary_id,
+                ),
+            )
+
+    def _consolidate_duplicate_records(self, cursor: sqlite3.Cursor) -> None:
+        """Merge duplicate cavity records into a single canonical record.
+
+        This preserves measurement history and notes while keeping one record
+        per cavity.
+        """
+        cursor.execute("""
+            SELECT linac, cryomodule, cavity_number, COUNT(*) as count
+            FROM commissioning_records
+            GROUP BY linac, cryomodule, cavity_number
+            HAVING count > 1
+            """)
+        groups = cursor.fetchall()
+
+        if not groups:
+            return
+
+        for group in groups:
+            linac = group["linac"]
+            cryomodule = group["cryomodule"]
+            cavity_number = group["cavity_number"]
+
+            if not linac or not cryomodule or not cavity_number:
+                continue
+
+            self._consolidate_duplicate_group(
+                cursor, linac, cryomodule, cavity_number
+            )
 
     def save_record(
         self,
@@ -284,21 +529,24 @@ class CommissioningDatabase:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
+            linac_number = self._extract_linac_number(record.linac)
+
             if record_id is None:
                 # Insert new record
                 cursor.execute(
                     """
                     INSERT INTO commissioning_records (
-                        linac, cryomodule, cavity_number, start_time, end_time,
+                        linac, linac_number, cryomodule, cavity_number, start_time, end_time,
                         current_phase, overall_status,
                         piezo_pre_rf, cold_landing, ssa_char, cavity_char,
                         piezo_with_rf, high_power,
                         phase_status, phase_history,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         record.linac,
+                        linac_number,
                         record.cryomodule,
                         record.cavity_number,
                         record.start_time.isoformat(),
@@ -367,7 +615,7 @@ class CommissioningDatabase:
                 cursor.execute(
                     """
                     UPDATE commissioning_records SET
-                        linac = ?, cryomodule = ?, cavity_number = ?, start_time = ?, end_time = ?,
+                        linac = ?, linac_number = ?, cryomodule = ?, cavity_number = ?, start_time = ?, end_time = ?,
                         current_phase = ?, overall_status = ?,
                         piezo_pre_rf = ?, cold_landing = ?, ssa_char = ?, cavity_char = ?,
                         piezo_with_rf = ?, high_power = ?,
@@ -378,6 +626,7 @@ class CommissioningDatabase:
                 """,
                     (
                         record.linac,
+                        linac_number,
                         record.cryomodule,
                         record.cavity_number,
                         record.start_time.isoformat(),
@@ -730,14 +979,83 @@ class CommissioningDatabase:
         Returns:
             List of record dictionaries for this cavity
         """
-        all_records = self.get_all_records()
-        return [
-            r
-            for r in all_records
-            if r.get("linac") == linac
-            and r.get("cryomodule") == cryomodule
-            and r.get("cavity_number") == cavity_number
-        ]
+        return self._get_record_summaries(
+            where_clause="linac = ? AND cryomodule = ? AND cavity_number = ?",
+            params=[linac, cryomodule, cavity_number],
+        )
+
+    def get_record_id_for_cavity(
+        self, linac: str, cryomodule: str, cavity_number: str
+    ) -> Optional[int]:
+        """Get the canonical record ID for a cavity, if it exists."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id FROM commissioning_records
+                WHERE linac = ? AND cryomodule = ? AND cavity_number = ?
+                ORDER BY COALESCE(updated_at, start_time) DESC, id DESC
+                LIMIT 1
+                """,
+                (linac, cryomodule, cavity_number),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return row["id"]
+
+    def _get_record_summaries(
+        self, where_clause: str = "", params: Optional[list] = None
+    ) -> List[dict]:
+        """Return lightweight record summaries for browsing."""
+        import json
+
+        params = params or []
+        query = """
+            SELECT id, linac, linac_number, cryomodule, cavity_number,
+                   start_time, end_time, current_phase, overall_status,
+                   updated_at, piezo_pre_rf
+            FROM commissioning_records
+        """
+        if where_clause:
+            query += " WHERE " + where_clause
+        query += " ORDER BY start_time DESC"
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+        records: List[dict] = []
+        for row in rows:
+            record = {
+                "id": row["id"],
+                "linac": row["linac"] or "?",
+                "linac_number": row["linac_number"],
+                "cryomodule": row["cryomodule"] or "?",
+                "cavity_number": row["cavity_number"] or "?",
+                "start_time": row["start_time"],
+                "end_time": row["end_time"],
+                "current_phase": row["current_phase"],
+                "overall_status": row["overall_status"],
+                "updated_at": row["updated_at"],
+            }
+
+            if row["piezo_pre_rf"]:
+                try:
+                    data = json.loads(row["piezo_pre_rf"])
+                    record["piezo_pre_rf"] = {
+                        "channel_a_passed": data.get("channel_a_passed"),
+                        "channel_b_passed": data.get("channel_b_passed"),
+                        "capacitance_a": data.get("capacitance_a"),
+                        "capacitance_b": data.get("capacitance_b"),
+                    }
+                except json.JSONDecodeError:
+                    pass
+
+            records.append(record)
+
+        return records
 
     def get_all_records(self) -> List[dict]:
         """
@@ -747,62 +1065,7 @@ class CommissioningDatabase:
             List of record dictionaries with basic info for browsing
         """
         try:
-            records = []
-
-            # Query all records from the database
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT id FROM commissioning_records
-                    ORDER BY start_time DESC
-                """)
-                rows = cursor.fetchall()
-
-            # Load each record
-            for row in rows:
-                record_id = row[0]
-                record = self.get_record(
-                    record_id
-                )  # Use existing get_record method
-
-                if record:
-                    # Safely extract cavity fields with fallbacks
-                    linac = record.linac or "?"
-                    cryo = record.cryomodule or "?"
-                    cavity = record.cavity_number or "?"
-
-                    # Create a simplified dict for the browser
-                    record_dict = {
-                        "id": record_id,
-                        "linac": linac,
-                        "cryomodule": cryo,
-                        "cavity_number": cavity,
-                        "start_time": (
-                            record.start_time.isoformat()
-                            if record.start_time
-                            else None
-                        ),
-                        "end_time": (
-                            record.end_time.isoformat()
-                            if record.end_time
-                            else None
-                        ),
-                        "current_phase": record.current_phase.value,
-                        "overall_status": record.overall_status,
-                    }
-
-                    # Add piezo_pre_rf results if available
-                    if record.piezo_pre_rf:
-                        record_dict["piezo_pre_rf"] = {
-                            "channel_a_passed": record.piezo_pre_rf.channel_a_passed,
-                            "channel_b_passed": record.piezo_pre_rf.channel_b_passed,
-                            "capacitance_a": record.piezo_pre_rf.capacitance_a,
-                            "capacitance_b": record.piezo_pre_rf.capacitance_b,
-                        }
-
-                    records.append(record_dict)
-
-            return records
+            return self._get_record_summaries()
 
         except Exception as e:
             print(f"Error getting all records: {e}")
@@ -1225,6 +1488,7 @@ class CommissioningDatabase:
         record_id: int,
         operator: Optional[str],
         note: str,
+        expected_version: Optional[int] = None,
     ) -> bool:
         """Append a general note to a commissioning record.
 
@@ -1232,6 +1496,7 @@ class CommissioningDatabase:
             record_id: Commissioning record ID
             operator: Note author
             note: Note text
+            expected_version: Optional optimistic locking version
 
         Returns:
             True if updated, False if record not found
@@ -1244,12 +1509,21 @@ class CommissioningDatabase:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT general_notes FROM commissioning_records WHERE id = ?",
+                "SELECT general_notes, version FROM commissioning_records WHERE id = ?",
                 (record_id,),
             )
             row = cursor.fetchone()
             if row is None:
                 return False
+
+            current_version = row["version"]
+            if (
+                expected_version is not None
+                and current_version != expected_version
+            ):
+                raise RecordConflictError(
+                    record_id, expected_version, current_version
+                )
 
             existing = row[0] or "[]"
             try:
@@ -1283,6 +1557,7 @@ class CommissioningDatabase:
         note_index: int,
         operator: Optional[str],
         note: str,
+        expected_version: Optional[int] = None,
     ) -> bool:
         """Update a specific general note by index.
 
@@ -1291,6 +1566,7 @@ class CommissioningDatabase:
             note_index: Index of note to update
             operator: Note author
             note: Note text
+            expected_version: Optional optimistic locking version
 
         Returns:
             True if updated, False if record/note not found
@@ -1303,12 +1579,21 @@ class CommissioningDatabase:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT general_notes FROM commissioning_records WHERE id = ?",
+                "SELECT general_notes, version FROM commissioning_records WHERE id = ?",
                 (record_id,),
             )
             row = cursor.fetchone()
             if row is None:
                 return False
+
+            current_version = row["version"]
+            if (
+                expected_version is not None
+                and current_version != expected_version
+            ):
+                raise RecordConflictError(
+                    record_id, expected_version, current_version
+                )
 
             existing = row[0] or "[]"
             try:

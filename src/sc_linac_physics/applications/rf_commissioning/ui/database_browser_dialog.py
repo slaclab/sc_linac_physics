@@ -16,17 +16,31 @@ from PyQt5.QtWidgets import (
     QLabel,
     QHeaderView,
     QAbstractItemView,
+    QComboBox,
 )
+
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 class DatabaseBrowserDialog(QDialog):
     """Dialog for browsing and selecting commissioning records."""
 
-    def __init__(self, db, parent=None):
+    def __init__(
+        self,
+        db,
+        parent=None,
+        cryomodule_filter: str | None = None,
+        cavity_filter: str | None = None,
+        linac_filter: str | None = None,
+    ):
         super().__init__(parent)
         self.db = db
+        self._all_records: list[dict] = []
+        self._linac_filter = linac_filter
         self.selected_record_id = None
         self.selected_record = None
+        self._initial_cryomodule = cryomodule_filter
+        self._initial_cavity = cavity_filter
 
         self.setWindowTitle("Load Commissioning Record")
         self.setModal(True)
@@ -46,13 +60,41 @@ class DatabaseBrowserDialog(QDialog):
         )
         layout.addWidget(title)
 
+        # Filter row
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Filter by cavity:"))
+
+        self.cryomodule_combo = QComboBox()
+        self.cryomodule_combo.addItem("All CM", None)
+        self.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
+        filter_layout.addWidget(QLabel("CM:"))
+        filter_layout.addWidget(self.cryomodule_combo)
+
+        self.cavity_combo = QComboBox()
+        self.cavity_combo.addItem("All Cav", None)
+        self.cavity_combo.addItems([str(i) for i in range(1, 9)])
+        filter_layout.addWidget(QLabel("Cav:"))
+        filter_layout.addWidget(self.cavity_combo)
+
+        clear_btn = QPushButton("Clear")
+        clear_btn.clicked.connect(self._clear_filters)
+        filter_layout.addWidget(clear_btn)
+
+        filter_layout.addStretch()
+        layout.addLayout(filter_layout)
+
+        self.cryomodule_combo.currentIndexChanged.connect(self._apply_filters)
+        self.cavity_combo.currentIndexChanged.connect(self._apply_filters)
+
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels(
             [
                 "ID",
-                "Cavity",
+                "Linac",
+                "CM",
+                "Cav",
                 "Start Time",
                 "End Time",
                 "Phase",
@@ -72,14 +114,14 @@ class DatabaseBrowserDialog(QDialog):
         # Adjust column widths
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
-        header.setSectionResizeMode(
-            1, QHeaderView.ResizeToContents
-        )  # Cryomodule
-        header.setSectionResizeMode(2, QHeaderView.Stretch)  # Start Time
-        header.setSectionResizeMode(3, QHeaderView.Stretch)  # End Time
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Phase
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Status
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # Result
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Linac
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # CM
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Cav
+        header.setSectionResizeMode(4, QHeaderView.Stretch)  # Start Time
+        header.setSectionResizeMode(5, QHeaderView.Stretch)  # End Time
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # Phase
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # Status
+        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # Result
 
         # Double-click to load
         self.table.doubleClicked.connect(self._on_double_click)
@@ -88,9 +130,7 @@ class DatabaseBrowserDialog(QDialog):
         layout.addWidget(self.table)
 
         # Info label
-        self.info_label = QLabel(
-            "Select a record and click 'Load' or double-click a row"
-        )
+        self.info_label = QLabel()
         self.info_label.setStyleSheet("color: #888; padding: 5px;")
         layout.addWidget(self.info_label)
 
@@ -169,20 +209,22 @@ class DatabaseBrowserDialog(QDialog):
         id_item.setData(Qt.UserRole, record)
         self.table.setItem(row, 0, id_item)
 
-        # Cavity (formatted as Linac_CM_CAV)
+        # Linac / CM / Cav
         linac = record.get("linac", "?")
+        linac_number = record.get("linac_number")
+        linac_display = linac_number or linac
         cryo = record.get("cryomodule", "?")
         cavity = record.get("cavity_number", "?")
-        cavity_display = f"{linac}_CM{cryo}_CAV{cavity}"
-        cryo_item = QTableWidgetItem(cavity_display)
-        self.table.setItem(row, 1, cryo_item)
+        self.table.setItem(row, 1, QTableWidgetItem(str(linac_display)))
+        self.table.setItem(row, 2, QTableWidgetItem(cryo))
+        self.table.setItem(row, 3, QTableWidgetItem(str(cavity)))
 
         # Start Time
         start_time_str = record.get("start_time")
         start_time = (
             self._format_timestamp(start_time_str) if start_time_str else "N/A"
         )
-        self.table.setItem(row, 2, QTableWidgetItem(start_time))
+        self.table.setItem(row, 4, QTableWidgetItem(start_time))
 
         # End Time
         end_time_str = record.get("end_time")
@@ -191,37 +233,84 @@ class DatabaseBrowserDialog(QDialog):
             if end_time_str
             else "Not completed"
         )
-        self.table.setItem(row, 3, QTableWidgetItem(end_time))
+        self.table.setItem(row, 5, QTableWidgetItem(end_time))
 
         # Phase
         phase = record.get("current_phase", "N/A")
-        self.table.setItem(row, 4, QTableWidgetItem(phase))
+        self.table.setItem(row, 6, QTableWidgetItem(phase))
 
         # Status
         status = record.get("overall_status", "N/A")
         status_item = self._create_status_item(status)
-        self.table.setItem(row, 5, status_item)
+        self.table.setItem(row, 7, status_item)
 
         # Result
         result_item = self._create_result_item(phase, record)
-        self.table.setItem(row, 6, result_item)
+        self.table.setItem(row, 8, result_item)
 
     def _load_records(self):
         """Load all records from database and populate table."""
         try:
-            all_records = self.db.get_all_records()
-            all_records.sort(
+            self._all_records = self.db.get_all_records()
+            self._all_records.sort(
                 key=lambda x: x.get("start_time", ""), reverse=True
             )
 
-            self.table.setRowCount(len(all_records))
+            if self._initial_cryomodule:
+                idx = self.cryomodule_combo.findText(self._initial_cryomodule)
+                if idx >= 0:
+                    self.cryomodule_combo.setCurrentIndex(idx)
 
-            for row, record in enumerate(all_records):
-                self._populate_table_row(row, record)
+            if self._initial_cavity:
+                idx = self.cavity_combo.findText(str(self._initial_cavity))
+                if idx >= 0:
+                    self.cavity_combo.setCurrentIndex(idx)
+
+            self._apply_filters()
 
         except Exception as e:
             self.info_label.setText(f"Error loading records: {e}")
             self.info_label.setStyleSheet("color: red; padding: 5px;")
+
+    def _clear_filters(self) -> None:
+        """Reset filters to show all records."""
+        self.cryomodule_combo.setCurrentIndex(0)
+        self.cavity_combo.setCurrentIndex(0)
+        self._apply_filters()
+
+    def _apply_filters(self) -> None:
+        """Apply cavity filters to the record list."""
+        cryo = self.cryomodule_combo.currentText()
+        cav = self.cavity_combo.currentText()
+
+        filtered = []
+        for record in self._all_records:
+            if self._linac_filter and record.get("linac") != self._linac_filter:
+                continue
+            if cryo != "All CM" and record.get("cryomodule") != cryo:
+                continue
+            if cav != "All Cav" and record.get("cavity_number") != cav:
+                continue
+            filtered.append(record)
+
+        self.table.setRowCount(len(filtered))
+        for row, record in enumerate(filtered):
+            self._populate_table_row(row, record)
+
+        self.table.clearSelection()
+        self.selected_record_id = None
+        self.selected_record = None
+        self.load_button.setEnabled(False)
+        self._update_info_label(len(filtered), len(self._all_records))
+
+    def _update_info_label(self, shown: int, total: int) -> None:
+        """Update info label with filter counts."""
+        if total == 0:
+            self.info_label.setText("No records found")
+        else:
+            self.info_label.setText(f"Showing {shown} of {total} records")
+
+        self.info_label.setStyleSheet("color: #888; padding: 5px;")
 
     def _on_selection_changed(self):
         """Handle row selection change."""
@@ -234,17 +323,21 @@ class DatabaseBrowserDialog(QDialog):
             self.load_button.setEnabled(True)
 
             # Update info label
-            cryo = self.table.item(row, 1).text()
-            phase = self.table.item(row, 4).text()
-            status = self.table.item(row, 5).text()
-            self.info_label.setText(f"Selected: {cryo} - {phase} - {status}")
+            linac = self.table.item(row, 1).text()
+            cryo = self.table.item(row, 2).text()
+            cavity = self.table.item(row, 3).text()
+            phase = self.table.item(row, 6).text()
+            status = self.table.item(row, 7).text()
+            self.info_label.setText(
+                f"Selected: {linac}_CM{cryo}_CAV{cavity} - {phase} - {status}"
+            )
             self.info_label.setStyleSheet("color: #4a9eff; padding: 5px;")
         else:
             self.selected_record_id = None
             self.selected_record = None
             self.load_button.setEnabled(False)
-            self.info_label.setText(
-                "Select a record and click 'Load' or double-click a row"
+            self._update_info_label(
+                self.table.rowCount(), len(self._all_records)
             )
             self.info_label.setStyleSheet("color: #888; padding: 5px;")
 

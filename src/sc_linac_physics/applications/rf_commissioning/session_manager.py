@@ -3,6 +3,8 @@
 Coordinates database access and record management across all commissioning phases.
 """
 
+import platform
+from pathlib import Path
 from typing import Optional
 
 from sc_linac_physics.applications.rf_commissioning import (
@@ -16,6 +18,28 @@ from sc_linac_physics.applications.rf_commissioning.models.database import (
 )
 
 
+def get_default_db_path() -> str:
+    """Get the default database path based on operating system.
+
+    Returns:
+        str: Full path to the database file
+            - Production (Rocky Linux): /home/physics/srf/commissioning.db
+            - macOS: ~/databases/commissioning.db
+    """
+    # Detect OS - Rocky Linux will report as 'Linux'
+    if platform.system() == "Linux":
+        # Production environment
+        db_dir = Path("/home/physics/srf")
+    else:
+        # Development (macOS) or other OS
+        db_dir = Path.home() / "databases"
+
+    # Create directory if it doesn't exist
+    db_dir.mkdir(parents=True, exist_ok=True)
+
+    return str(db_dir / "commissioning.db")
+
+
 class CommissioningSession:
     """Manages database and active record across all commissioning phases.
 
@@ -25,8 +49,11 @@ class CommissioningSession:
     - Consistent record state management
 
     Usage:
-        # In main application initialization
-        session = CommissioningSession(db_path="commissioning.db")
+        # In main application initialization (uses OS-specific default path)
+        session = CommissioningSession()
+
+        # Or specify a custom path
+        session = CommissioningSession(db_path="/custom/path/commissioning.db")
 
         # Pass session to each phase controller
         piezo_controller = PiezoPreRFController(view, session)
@@ -34,18 +61,25 @@ class CommissioningSession:
         # ... etc.
 
         # Controllers use session methods:
-        session.start_new_record(cryomodule="02", cavity_number="3")
+        record, record_id, created = session.start_new_record(
+            cryomodule="02", cavity_number="3"
+        )
         record = session.get_active_record()
         session.save_active_record()
         session.load_record(record_id)
     """
 
-    def __init__(self, db_path: str = "commissioning.db"):
+    def __init__(self, db_path: Optional[str] = None):
         """Initialize session with database.
 
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to SQLite database file. If None, uses OS-specific default:
+                - Production (Rocky Linux): /home/physics/srf/commissioning.db
+                - macOS: ~/databases/commissioning.db
         """
+        if db_path is None:
+            db_path = get_default_db_path()
+
         self.db = CommissioningDatabase(db_path)
         self.db.initialize()
 
@@ -60,7 +94,7 @@ class CommissioningSession:
 
     def start_new_record(
         self, cryomodule: str, cavity_number: str, linac: Optional[str] = None
-    ) -> tuple[CommissioningRecord, int]:
+    ) -> tuple[CommissioningRecord, int, bool]:
         """Create a new commissioning record and save to database.
 
         Args:
@@ -69,7 +103,7 @@ class CommissioningSession:
             linac: Linac identifier (e.g., "L1B"). If None, will be derived from cryomodule.
 
         Returns:
-            Tuple of (new_record, record_id)
+            Tuple of (record, record_id, created_new)
         """
         from sc_linac_physics.utils.sc_linac.linac_utils import (
             get_linac_for_cryomodule,
@@ -82,6 +116,14 @@ class CommissioningSession:
                     f"Cannot determine linac for cryomodule '{cryomodule}'"
                 )
 
+        existing_id = self.db.get_record_id_for_cavity(
+            linac, cryomodule, cavity_number
+        )
+        if existing_id is not None:
+            record = self.load_record(existing_id)
+            if record:
+                return record, existing_id, False
+
         self._active_record = CommissioningRecord(
             linac=linac,
             cryomodule=cryomodule,
@@ -90,7 +132,7 @@ class CommissioningSession:
 
         self._active_record_id = self.db.save_record(self._active_record)
         self._active_record_version = 1  # New records start at version 1
-        return self._active_record, self._active_record_id
+        return self._active_record, self._active_record_id, True
 
     def get_active_record(self) -> Optional[CommissioningRecord]:
         """Get the currently active commissioning record.
@@ -414,9 +456,18 @@ class CommissioningSession:
         if self._active_record_id is None:
             return False
         try:
-            return self.db.append_general_note(
-                self._active_record_id, operator, note
+            success = self.db.append_general_note(
+                self._active_record_id,
+                operator,
+                note,
+                expected_version=self._active_record_version,
             )
+            if success and self._active_record_version is not None:
+                self._active_record_version += 1
+            return success
+        except RecordConflictError:
+            # Re-raise conflict errors for UI to handle
+            raise
         except Exception as e:
             print(f"Failed to append general note: {e}")
             return False
@@ -431,9 +482,19 @@ class CommissioningSession:
         if self._active_record_id is None:
             return False
         try:
-            return self.db.update_general_note(
-                self._active_record_id, note_index, operator, note
+            success = self.db.update_general_note(
+                self._active_record_id,
+                note_index,
+                operator,
+                note,
+                expected_version=self._active_record_version,
             )
+            if success and self._active_record_version is not None:
+                self._active_record_version += 1
+            return success
+        except RecordConflictError:
+            # Re-raise conflict errors for UI to handle
+            raise
         except Exception as e:
             print(f"Failed to update general note: {e}")
             return False
