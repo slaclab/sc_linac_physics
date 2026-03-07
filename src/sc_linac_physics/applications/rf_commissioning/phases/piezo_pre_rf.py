@@ -93,6 +93,7 @@ class PiezoPreRFPhase(PhaseBase):
         """Return list of step names in execution order."""
         return [
             "verify_initial_state",
+            "setup_piezo",
             "trigger_prerf_test",
             "wait_for_completion",
             "validate_results",
@@ -116,6 +117,7 @@ class PiezoPreRFPhase(PhaseBase):
         piezo = self.cavity.piezo
 
         step_methods = {
+            "setup_piezo": lambda: self._setup_piezo(piezo),
             "verify_initial_state": lambda: self._verify_initial_state(piezo),
             "trigger_prerf_test": lambda: self._trigger_prerf_test(piezo),
             "wait_for_completion": lambda: self._wait_for_completion(piezo),
@@ -163,6 +165,35 @@ class PiezoPreRFPhase(PhaseBase):
     # =========================================================================
     # Phase Steps
     # =========================================================================
+
+    def _setup_piezo(self, piezo: CommissioningPiezo) -> PhaseStepResult:
+        """Enable piezo, set to manual mode, and initialize DC voltage to 0."""
+        if self.context.dry_run:
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message="[DRY RUN] Would setup piezo (enable, manual mode, DC=0V)",
+            )
+
+        try:
+            # Enable the piezo
+            piezo.enable()
+
+            # Set to manual mode
+            piezo.set_to_manual()
+
+            # Set DC voltage to 0
+            piezo.dc_setpoint = 0
+
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message="Piezo setup complete (enabled, manual mode, DC=0V)",
+            )
+
+        except Exception as e:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=f"Failed to setup piezo: {e}",
+            )
 
     def _verify_initial_state(
         self, piezo: CommissioningPiezo

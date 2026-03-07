@@ -290,8 +290,13 @@ class PiezoPVGroup(PVGroup):
     @enable.putter
     async def enable(self, instance, value):
         """Update enable status when enable command is issued."""
-        await self.enable_stat.write(value)
-        if value == 0:  # Disabled
+        if isinstance(value, str):
+            is_enabled = value in ("Enable", "Enabled")
+        else:
+            is_enabled = int(value) == 1
+
+        await self.enable_stat.write(1 if is_enabled else 0)
+        if not is_enabled:  # Disabled
             # Optionally reset feedback mode to manual
             await self.feedback_mode_stat.write(0)
         return value

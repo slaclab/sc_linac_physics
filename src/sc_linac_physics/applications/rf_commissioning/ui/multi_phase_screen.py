@@ -309,10 +309,8 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
         ):
             return
 
-        # Update PV addresses on the current phase's display controller
-        current_index = self.tabs.currentIndex()
-        if 0 <= current_index < len(self._phase_displays):
-            display = self._phase_displays[current_index]
+        # Update PV addresses on ALL phase displays with controllers
+        for display in self._phase_displays:
             if hasattr(display, "controller") and hasattr(
                 display.controller, "update_pv_addresses"
             ):
@@ -1421,6 +1419,15 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
         record, record_id, created = self.session.start_new_record(
             cryomodule, cavity_number
         )
+
+        # Update PV addresses for all displays to match this cavity
+        for display in self._phase_displays:
+            if hasattr(display, "controller") and hasattr(
+                display.controller, "update_pv_addresses"
+            ):
+                display.controller.update_pv_addresses(
+                    cryomodule, cavity_number
+                )
 
         # Update UI
         self.update_progress_indicator(record)

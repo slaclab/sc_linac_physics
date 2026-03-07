@@ -227,6 +227,10 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
             "toggle_piezo_enable": self.toggle_piezo_enable,
             "toggle_manual_mode": self.toggle_manual_mode,
             "on_run_automated_test": self.on_run_automated_test,
+            "on_abort_test": self.on_abort,
+            "on_pause_test": self.on_pause_test,
+            "on_toggle_step_mode": self.on_toggle_step_mode,
+            "on_next_step": self.on_next_step,
         }
         self.ui = self.UI_CLASS(self, callbacks)
         main_layout = self.ui.build()
@@ -248,6 +252,11 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
         self, record: CommissioningRecord, record_id: int
     ) -> None:
         """Update display when a record is loaded."""
+        # Update PV addresses to match the loaded record's cavity
+        if hasattr(self.controller, "update_pv_addresses"):
+            self.controller.update_pv_addresses(
+                record.cryomodule, str(record.cavity_number)
+            )
         self.refresh_from_record(record)
 
     def _on_controller_phase_completed(self, record):
@@ -367,45 +376,19 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
 
         QTimer.singleShot(1000, self.update_timestamp)
 
+    def update_piezo_readbacks(self, piezo) -> None:
+        """No-op: PyDM widgets are the source of truth for readbacks."""
+        return
+
     @pyqtSlot()
     def toggle_piezo_enable(self):
         """Toggle piezo enable/disable state."""
-        if self.enable_disable_btn.isChecked():
-            self.enable_disable_btn.setText("Enable")
-            self.piezo_status_label.setText("Enabled")
-            self.piezo_status_label.setStyleSheet(
-                "QLabel { background-color: #2d5016; color: #90ee90; "
-                "padding: 5px; border-radius: 3px; font-weight: bold; }"
-            )
-            self.log_message("Piezo enabled")
-        else:
-            self.enable_disable_btn.setText("Disable")
-            self.piezo_status_label.setText("Disabled")
-            self.piezo_status_label.setStyleSheet(
-                "QLabel { background-color: #3a3a3a; color: #cccccc; "
-                "padding: 5px; border-radius: 3px; }"
-            )
-            self.log_message("Piezo disabled")
+        self.log_message("Use the PyDM enable control for PV writes")
 
     @pyqtSlot()
     def toggle_manual_mode(self):
         """Toggle manual/feedback mode."""
-        if self.manual_feedback_btn.isChecked():
-            self.manual_feedback_btn.setText("Feedback")
-            self.mode_status_label.setText("Manual")
-            self.mode_status_label.setStyleSheet(
-                "QLabel { background-color: #5c4d1a; color: #ffd700; "
-                "padding: 5px; border-radius: 3px; font-weight: bold; }"
-            )
-            self.log_message("Manual mode activated")
-        else:
-            self.manual_feedback_btn.setText("Manual")
-            self.mode_status_label.setText("Feedback")
-            self.mode_status_label.setStyleSheet(
-                "QLabel { background-color: #3a3a3a; color: #cccccc; "
-                "padding: 5px; border-radius: 3px; }"
-            )
-            self.log_message("Feedback mode activated")
+        self.log_message("Use the PyDM mode control for PV writes")
 
     @pyqtSlot()
     def on_run_automated_test(self):
@@ -416,6 +399,21 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
     def on_abort(self):
         """Handle abort button click."""
         self.controller.on_abort()
+
+    @pyqtSlot()
+    def on_pause_test(self):
+        """Handle pause button click."""
+        self.controller.on_pause_test()
+
+    @pyqtSlot()
+    def on_toggle_step_mode(self):
+        """Handle step mode toggle."""
+        self.controller.on_toggle_step_mode()
+
+    @pyqtSlot()
+    def on_next_step(self):
+        """Handle next step button click."""
+        self.controller.on_next_step()
 
 
 class ColdLandingDisplay(BasePlaceholderDisplay):

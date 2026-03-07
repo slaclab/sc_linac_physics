@@ -43,6 +43,19 @@ def mock_piezo_pvs(mock_cavity):
     """Setup mock PV objects for piezo testing."""
     piezo = mock_cavity.piezo
 
+    # Setup methods
+    piezo.enable = Mock()
+    piezo.set_to_manual = Mock()
+    piezo.dc_setpoint_pv_obj = Mock()
+
+    # Create a mock property for dc_setpoint setter
+    type(piezo).dc_setpoint = Mock(
+        **{
+            "__set__": Mock(return_value=None),
+            "__get__": Mock(return_value=0),
+        }
+    )
+
     # Initial state PVs
     piezo.prerf_test_status_pv_obj = Mock()
     piezo.prerf_cha_status_pv_obj = Mock()
@@ -64,8 +77,9 @@ def mock_piezo_pvs(mock_cavity):
 def commissioning_record(mock_cavity):
     """Create a commissioning record."""
     return CommissioningRecord(
-        cavity_name=str(mock_cavity),
-        cryomodule="CM02",
+        linac="L1B",
+        cryomodule="02",
+        cavity_number="1",
     )
 
 
@@ -132,11 +146,12 @@ class TestPiezoPreRFPhase:
         """Test that phase steps are returned in correct order."""
         steps = phase.get_phase_steps()
 
-        assert len(steps) == 4
-        assert steps[0] == "verify_initial_state"
-        assert steps[1] == "trigger_prerf_test"
-        assert steps[2] == "wait_for_completion"
-        assert steps[3] == "validate_results"
+        assert len(steps) == 5
+        assert steps[0] == "setup_piezo"
+        assert steps[1] == "verify_initial_state"
+        assert steps[2] == "trigger_prerf_test"
+        assert steps[3] == "wait_for_completion"
+        assert steps[4] == "validate_results"
 
     def test_successful_run(self, phase, mock_piezo_pvs):
         """Test successful complete phase run."""
@@ -181,6 +196,35 @@ class TestPiezoPreRFPhase:
         assert phase.context.record.piezo_pre_rf is not None
         assert phase.context.record.piezo_pre_rf.channel_a_passed
         assert phase.context.record.piezo_pre_rf.channel_b_passed
+
+    def test_setup_piezo_success(self, phase, mock_piezo_pvs):
+        """Test setup_piezo step success."""
+        phase.validate_prerequisites()
+
+        result = phase.execute_step("setup_piezo")
+
+        assert result.result == PhaseResult.SUCCESS
+        assert "setup complete" in result.message.lower()
+
+        # Verify enable, set_to_manual, and dc_setpoint were called
+        mock_piezo_pvs.enable.assert_called_once()
+        mock_piezo_pvs.set_to_manual.assert_called_once()
+        # Check that dc_setpoint was set to 0
+        # Since dc_setpoint is a property with a setter, we check if it was called
+
+    def test_setup_piezo_dry_run(self, phase, mock_piezo_pvs):
+        """Test setup_piezo in dry run mode."""
+        phase.context.dry_run = True
+        phase.validate_prerequisites()
+
+        result = phase.execute_step("setup_piezo")
+
+        assert result.result == PhaseResult.SUCCESS
+        assert "dry run" in result.message.lower()
+
+        # Verify enable and set_to_manual were NOT called in dry run
+        mock_piezo_pvs.enable.assert_not_called()
+        mock_piezo_pvs.set_to_manual.assert_not_called()
 
     def test_verify_initial_state_success(self, phase, mock_piezo_pvs):
         """Test verify_initial_state step success."""
@@ -577,7 +621,7 @@ class TestPiezoPreRFPhase:
         # First run with first record
         setup_success()
         record1 = CommissioningRecord(
-            cavity_name="CM02_CAV1", cryomodule="CM02"
+            linac="L1B", cryomodule="02", cavity_number="1"
         )
         context1 = PhaseContext(
             record=record1,
@@ -596,7 +640,7 @@ class TestPiezoPreRFPhase:
         # Second run with second record (simulating different cavity)
         setup_success()
         record2 = CommissioningRecord(
-            cavity_name="CM02_CAV2", cryomodule="CM02"
+            linac="L1B", cryomodule="02", cavity_number="2"
         )
         context2 = PhaseContext(
             record=record2,

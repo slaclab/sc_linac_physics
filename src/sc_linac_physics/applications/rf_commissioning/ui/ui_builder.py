@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QComboBox,
 )
-from pydm.widgets import PyDMLabel
+from pydm.widgets import PyDMLabel, PyDMEnumComboBox
 
 PV_LABEL_STYLE = """
     background: #1a2a3a;
@@ -80,38 +80,261 @@ class PhaseUIBase:
             widget.clicked.connect(callback)
 
     def _build_main_toolbar(self) -> QHBoxLayout:
-        """Create a compact toolbar with automated test actions and abort."""
+        """Create an enhanced toolbar with better controls and visual hierarchy."""
         toolbar = QHBoxLayout()
-        toolbar.setSpacing(5)
+        toolbar.setSpacing(8)
+        toolbar.setContentsMargins(4, 4, 4, 4)
 
-        # Run automated test button
-        run_button = self._register("run_button", QPushButton("Go"))
-        run_button.setStyleSheet(
-            "QPushButton { background-color: #1e3a8a; color: white; "
-            "font-weight: bold; padding: 8px 16px; }"
-        )
+        # === PRIMARY CONTROLS (Left side) ===
+        primary_group = QHBoxLayout()
+        primary_group.setSpacing(4)
+
+        # Run/Start button with icon
+        run_button = self._register("run_button", QPushButton("▶ Start Test"))
+        run_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2563eb;
+                color: white;
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 4px;
+                border: none;
+                font-size: 11pt;
+            }
+            QPushButton:hover {
+                background-color: #1d4ed8;
+            }
+            QPushButton:pressed {
+                background-color: #1e40af;
+            }
+            QPushButton:disabled {
+                background-color: #475569;
+                color: #94a3b8;
+            }
+        """)
+        run_button.setFixedHeight(40)
+        run_button.setMinimumWidth(120)
         self._connect(run_button, "on_run_automated_test")
 
-        # Abort button (top-level - stops any operation)
-        abort_button = self._register("abort_button", QPushButton("⛔ Abort"))
-        abort_button.setStyleSheet(
-            "QPushButton { background-color: #5c1a1a; color: white; "
-            "font-weight: bold; padding: 8px 16px; }"
-        )
+        # Pause button
+        pause_button = self._register("pause_button", QPushButton("⏸ Pause"))
+        pause_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f59e0b;
+                color: white;
+                font-weight: bold;
+                padding: 10px 16px;
+                border-radius: 4px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #d97706;
+            }
+            QPushButton:disabled {
+                background-color: #475569;
+                color: #94a3b8;
+            }
+        """)
+        pause_button.setFixedHeight(40)
+        pause_button.setEnabled(False)
+        self._connect(pause_button, "on_pause_test")
+
+        # Abort button
+        abort_button = self._register("abort_button", QPushButton("⏹ Abort"))
+        abort_button.setStyleSheet("""
+            QPushButton {
+                background-color: #dc2626;
+                color: white;
+                font-weight: bold;
+                padding: 10px 16px;
+                border-radius: 4px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #b91c1c;
+            }
+            QPushButton:disabled {
+                background-color: #475569;
+                color: #94a3b8;
+            }
+        """)
+        abort_button.setFixedHeight(40)
         abort_button.setEnabled(False)
+        self._connect(abort_button, "on_abort_test")
+
+        primary_group.addWidget(run_button)
+        primary_group.addWidget(pause_button)
+        primary_group.addWidget(abort_button)
+
+        # Separator
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.VLine)
+        sep1.setFrameShadow(QFrame.Sunken)
+        sep1.setStyleSheet("QFrame { color: #4a4a4a; }")
+
+        # === SECONDARY CONTROLS ===
+        secondary_group = QHBoxLayout()
+        secondary_group.setSpacing(4)
+
+        # Step Mode toggle
+        step_mode_btn = self._register(
+            "step_mode_btn", QPushButton("Step Mode")
+        )
+        step_mode_btn.setCheckable(True)
+        step_mode_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #374151;
+                color: #d1d5db;
+                padding: 8px 12px;
+                border-radius: 4px;
+                border: 1px solid #4b5563;
+            }
+            QPushButton:checked {
+                background-color: #059669;
+                color: white;
+                border: 1px solid #047857;
+            }
+            QPushButton:hover {
+                background-color: #4b5563;
+            }
+        """)
+        step_mode_btn.setFixedHeight(40)
+        self._connect(step_mode_btn, "on_toggle_step_mode")
+
+        # Next Step button (only active in step mode)
+        next_step_btn = self._register("next_step_btn", QPushButton("Next →"))
+        next_step_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6366f1;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 4px;
+            }
+            QPushButton:disabled {
+                background-color: #374151;
+                color: #6b7280;
+            }
+        """)
+        next_step_btn.setFixedHeight(40)
+        next_step_btn.setEnabled(False)
+        self._connect(next_step_btn, "on_next_step")
+
+        secondary_group.addWidget(step_mode_btn)
+        secondary_group.addWidget(next_step_btn)
+
+        # === STATUS SECTION (Right side) ===
+        status_section = QVBoxLayout()
+        status_section.setSpacing(2)
+
+        # System status indicator
+        status_indicator = self._register("status_indicator", QLabel("● READY"))
+        status_indicator.setStyleSheet("""
+            QLabel {
+                color: #10b981;
+                font-weight: bold;
+                font-size: 10pt;
+            }
+        """)
+        status_indicator.setAlignment(Qt.AlignRight)
 
         # Timestamp
-        timestamp_label = self._register("timestamp_label", QLabel())
-        timestamp_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        timestamp_label.setStyleSheet("color: #888; font-size: 9pt;")
+        timestamp_label = self._register("timestamp_label", QLabel("--:--:--"))
+        timestamp_label.setAlignment(Qt.AlignRight)
+        timestamp_label.setStyleSheet("""
+            QLabel {
+                color: #9ca3af;
+                font-size: 9pt;
+                font-family: monospace;
+            }
+        """)
 
-        # Add to toolbar
-        toolbar.addWidget(run_button)
-        toolbar.addWidget(abort_button)
+        status_section.addWidget(status_indicator)
+        status_section.addWidget(timestamp_label)
+
+        # === ASSEMBLY ===
+        toolbar.addLayout(primary_group)
+        toolbar.addWidget(sep1)
+        toolbar.addLayout(secondary_group)
         toolbar.addStretch()
-        toolbar.addWidget(timestamp_label)
+        toolbar.addLayout(status_section)
 
-        return toolbar
+        # Wrap in a frame for better visual grouping
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame {
+                background-color: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                padding: 4px;
+            }
+        """)
+        frame.setLayout(toolbar)
+
+        wrapper = QVBoxLayout()
+        wrapper.setContentsMargins(0, 0, 0, 0)
+        wrapper.addWidget(frame)
+
+        return wrapper
+
+    def update_toolbar_state(self, state: str) -> None:
+        """Update toolbar button states based on test state.
+
+        Args:
+            state: One of 'idle', 'running', 'paused', 'complete', 'error'
+        """
+        run_btn = self.widgets.get("run_button")
+        pause_btn = self.widgets.get("pause_button")
+        abort_btn = self.widgets.get("abort_button")
+        status_ind = self.widgets.get("status_indicator")
+
+        if state == "idle":
+            run_btn.setEnabled(True)
+            run_btn.setText("▶ Start Test")
+            pause_btn.setEnabled(False)
+            abort_btn.setEnabled(False)
+            status_ind.setText("● READY")
+            status_ind.setStyleSheet(
+                "QLabel { color: #10b981; font-weight: bold; font-size: 10pt; }"
+            )
+
+        elif state == "running":
+            run_btn.setEnabled(False)
+            pause_btn.setEnabled(True)
+            abort_btn.setEnabled(True)
+            status_ind.setText("● RUNNING")
+            status_ind.setStyleSheet(
+                "QLabel { color: #3b82f6; font-weight: bold; font-size: 10pt; }"
+            )
+
+        elif state == "paused":
+            run_btn.setEnabled(True)
+            run_btn.setText("▶ Resume")
+            pause_btn.setEnabled(False)
+            abort_btn.setEnabled(True)
+            status_ind.setText("● PAUSED")
+            status_ind.setStyleSheet(
+                "QLabel { color: #f59e0b; font-weight: bold; font-size: 10pt; }"
+            )
+
+        elif state == "complete":
+            run_btn.setEnabled(True)
+            run_btn.setText("▶ Start Test")
+            pause_btn.setEnabled(False)
+            abort_btn.setEnabled(False)
+            status_ind.setText("✓ COMPLETE")
+            status_ind.setStyleSheet(
+                "QLabel { color: #10b981; font-weight: bold; font-size: 10pt; }"
+            )
+
+        elif state == "error":
+            run_btn.setEnabled(True)
+            run_btn.setText("▶ Retry")
+            pause_btn.setEnabled(False)
+            abort_btn.setEnabled(False)
+            status_ind.setText("✗ ERROR")
+            status_ind.setStyleSheet(
+                "QLabel { color: #dc2626; font-weight: bold; font-size: 10pt; }"
+            )
 
     def _build_history(self) -> QGroupBox:
         """Build a space-efficient phase history section."""
@@ -181,34 +404,6 @@ class PhaseUIBase:
         label.setStyleSheet(LOCAL_LABEL_STYLE)
         label.setAlignment(Qt.AlignCenter)
         return label
-
-    def _make_local_cap_label(self, text: str) -> QLabel:
-        """Create a local capacitance label with standard styling."""
-        label = QLabel(text)
-        label.setStyleSheet(LOCAL_CAP_STYLE)
-        label.setAlignment(Qt.AlignCenter)
-        return label
-
-    def _build_dataclass_readout_section(
-        self, title: str, fields: list[tuple[str, str]]
-    ) -> QGroupBox:
-        """Build a read-only section for stored dataclass values."""
-        group = QGroupBox(title)
-        layout = QGridLayout()
-        layout.setSpacing(5)
-        layout.setContentsMargins(8, 8, 8, 8)
-
-        for row, (label_text, widget_name) in enumerate(fields):
-            label = QLabel(label_text)
-            label.setStyleSheet("font-weight: bold;")
-            layout.addWidget(label, row, 0)
-
-            value = self._register(widget_name, self._make_local_label("-"))
-            value.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            layout.addWidget(value, row, 1)
-
-        group.setLayout(layout)
-        return group
 
     def _build_stored_data_section(
         self, fields: list[tuple[str, str]] = None
@@ -340,40 +535,48 @@ class PiezoPreRFUI(PhaseUIBase):
 
         row = 0
 
-        # Row 1: Enable Piezo
+        # Row 1: Enable command + readback
         layout.addWidget(QLabel("Enable Piezo:"), row, 0)
-        enable_btn = self._register(
-            "enable_disable_btn", QPushButton("Disable")
-        )
-        enable_btn.setCheckable(True)
-        enable_btn.setFixedWidth(80)
-        self._connect(enable_btn, "toggle_piezo_enable")
-        layout.addWidget(enable_btn, row, 1)
 
-        status_label = self._register("piezo_status_label", QLabel("Disabled"))
-        status_label.setStyleSheet(
-            "QLabel { background-color: #3a3a3a; color: #cccccc; "
-            "padding: 5px; border-radius: 3px; }"
+        enable_ctrl = self._register(
+            "pydm_enable_ctrl", PyDMEnumComboBox(parent=self.parent)
         )
-        layout.addWidget(status_label, row, 2)
+        enable_ctrl.setFixedWidth(120)
+        enable_ctrl.setStyleSheet(
+            "QComboBox { background-color: #1a2a3a; color: #e6f2ff; "
+            "border: 1px solid #4a9eff; border-left: 3px solid #4a9eff; "
+            "padding: 4px; border-radius: 3px; }"
+        )
+        layout.addWidget(enable_ctrl, row, 1)
+
+        enable_stat = self._register(
+            "pydm_enable_stat", PyDMLabel(parent=self.parent)
+        )
+        enable_stat.setStyleSheet(PV_LABEL_STYLE)
+        enable_stat.setAlignment(Qt.AlignCenter)
+        layout.addWidget(enable_stat, row, 2)
         row += 1
 
-        # Row 2: Manual Mode
-        layout.addWidget(QLabel("Manual Mode:"), row, 0)
-        manual_btn = self._register(
-            "manual_feedback_btn", QPushButton("Manual")
-        )
-        manual_btn.setCheckable(True)
-        manual_btn.setFixedWidth(80)
-        self._connect(manual_btn, "toggle_manual_mode")
-        layout.addWidget(manual_btn, row, 1)
+        # Row 2: Mode command + readback
+        layout.addWidget(QLabel("Mode Control:"), row, 0)
 
-        mode_label = self._register("mode_status_label", QLabel("Feedback"))
-        mode_label.setStyleSheet(
-            "QLabel { background-color: #3a3a3a; color: #cccccc; "
-            "padding: 5px; border-radius: 3px; }"
+        mode_ctrl = self._register(
+            "pydm_mode_ctrl", PyDMEnumComboBox(parent=self.parent)
         )
-        layout.addWidget(mode_label, row, 2)
+        mode_ctrl.setFixedWidth(120)
+        mode_ctrl.setStyleSheet(
+            "QComboBox { background-color: #1a2a3a; color: #e6f2ff; "
+            "border: 1px solid #4a9eff; border-left: 3px solid #4a9eff; "
+            "padding: 4px; border-radius: 3px; }"
+        )
+        layout.addWidget(mode_ctrl, row, 1)
+
+        mode_stat = self._register(
+            "pydm_mode_stat", PyDMLabel(parent=self.parent)
+        )
+        mode_stat.setStyleSheet(PV_LABEL_STYLE)
+        mode_stat.setAlignment(Qt.AlignCenter)
+        layout.addWidget(mode_stat, row, 2)
         row += 1
 
         # Row 3: DC Offset + Piezo Voltage (combined row to save space)
