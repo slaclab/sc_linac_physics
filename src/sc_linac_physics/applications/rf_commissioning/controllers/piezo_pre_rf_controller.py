@@ -3,8 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QDialog
+from PyQt5.QtCore import QTimer, pyqtSignal, QObject
 
 from sc_linac_physics.applications.rf_commissioning import (
     CommissioningPhase,
@@ -18,16 +17,16 @@ from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
-from sc_linac_physics.applications.rf_commissioning.ui.database_browser_dialog import (
-    DatabaseBrowserDialog,
-)
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 
-class PiezoPreRFController:
+class PiezoPreRFController(QObject):
     """Owns phase execution and PV wiring for the display."""
 
+    phase_completed = pyqtSignal(object)  # Emits the updated record
+
     def __init__(self, view, session: CommissioningSession) -> None:
+        super().__init__()  # Initialize QObject
         self.view = view
         self.session = session
 
@@ -390,11 +389,31 @@ class PiezoPreRFController:
         self.view.local_progress_bar.setValue(100)
 
         try:
+            # Mark current phase as complete and advance to next phase
+            if self.session.has_active_record():
+                record = self.session.get_active_record()
+
+                # Mark current phase as complete
+                record.set_phase_status(
+                    CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
+                )
+
+                # Advance to next phase
+                success, message = record.advance_to_next_phase()
+                if success:
+                    self.view.log_message(f"✓ {message}")
+                else:
+                    self.view.log_message(f"ℹ {message}")
+
+            # Save directly - let parent handle UI updates via signal
             if self.session.save_active_record():
                 record_id = self.session.get_active_record_id()
                 self.view.log_message(
                     f"Results saved to database (ID: {record_id})"
                 )
+
+                # Emit signal with updated record
+                self.phase_completed.emit(self.session.get_active_record())
             else:
                 self.view.log_message("Warning: Failed to save to database")
 
@@ -403,13 +422,9 @@ class PiezoPreRFController:
                 self.view._update_local_results(
                     self.context.record.piezo_pre_rf
                 )
-            else:
-                self.view.log_message(
-                    "Warning: No piezo_pre_rf results available"
+                self.view._update_stored_readout(
+                    self.context.record.piezo_pre_rf
                 )
-
-            # Notify display to propagate phase completion to parent
-            self.view.on_phase_completed()
 
         except Exception as exc:
             import traceback
@@ -442,6 +457,9 @@ class PiezoPreRFController:
             if self.context and self.context.record.piezo_pre_rf:
                 self._append_measurement_history(error_msg=error_msg)
                 self.view._update_local_results(
+                    self.context.record.piezo_pre_rf
+                )
+                self.view._update_stored_readout(
                     self.context.record.piezo_pre_rf
                 )
 
@@ -501,137 +519,7 @@ class PiezoPreRFController:
             self.view.log_message("Abort requested...")
             self.view.abort_button.setEnabled(False)
 
-    def on_save_report(self) -> None:
-        """Display saved results from database."""
-        record = self.session.get_active_record()
-        if not record:
-            self.view.show_info(
-                "No Results", "No test results available to display."
-            )
-            return
-
-        record_id = self.session.get_active_record_id()
-        msg = "Test results saved to database\n\n"
-        msg += f"Record ID: {record_id}\n"
-        msg += f"Cavity: {record.full_cavity_name}\n"
-        msg += f"Status: {record.overall_status}\n"
-
-        if record.piezo_pre_rf:
-            result = record.piezo_pre_rf
-            msg += "\nResults:\n"
-            msg += (
-                f"  Channel A: {'PASS' if result.channel_a_passed else 'FAIL'}"
-            )
-            if result.capacitance_a:
-                msg += f" ({result.capacitance_a * 1e9:.1f} nF)\n"
-            else:
-                msg += "\n"
-            msg += (
-                f"  Channel B: {'PASS' if result.channel_b_passed else 'FAIL'}"
-            )
-            if result.capacitance_b:
-                msg += f" ({result.capacitance_b * 1e9:.1f} nF)\n"
-            else:
-                msg += "\n"
-
-        self.view.show_info("Test Results", msg)
-
-    def on_view_database(self) -> None:
-        """Open database browser to select and load a record."""
-        dialog = DatabaseBrowserDialog(self.session.database, self.view)
-
-        if dialog.exec_() == QDialog.Accepted:
-            record_id, record_data = dialog.get_selected_record()
-
-            if record_id and record_data:
-                try:
-                    full_record = self.session.load_record(record_id)
-
-                    if full_record:
-                        self.view._display_loaded_record(full_record, record_id)
-                        self.view.log_message(
-                            f"Loaded record ID {record_id} from database"
-                        )
-                        # Update PVs for the loaded cavity
-                        self.update_pv_addresses()
-
-                        # Notify parent container
-                        self._notify_parent_record_loaded(
-                            full_record, record_id
-                        )
-                    else:
-                        self.view.show_error(
-                            f"Failed to load record {record_id}"
-                        )
-
-                except Exception as exc:
-                    import traceback
-
-                    self.view.show_error(f"Error loading record: {exc}")
-                    self.view.log_message(
-                        f"Traceback: {traceback.format_exc()}"
-                    )
-
     def _notify_parent_record_created(self, record, record_id: int) -> None:
-        """Notify parent container that a record was created.
-
-        This updates the parent's UI to reflect the new active record.
-        """
-        parent = self.view.parent()
-        while parent:
-            class_name = parent.__class__.__name__
-
-            # Update parent's UI elements
-            if hasattr(parent, "update_progress_indicator"):
-                parent.update_progress_indicator(record)
-
-            if hasattr(parent, "_update_tab_states"):
-                parent._update_tab_states()
-
-            if hasattr(parent, "_load_notes"):
-                parent._load_notes()
-
-            if hasattr(parent, "_update_sync_status"):
-                parent._update_sync_status(True, "Record created")
-
-            # REMOVED: Settings save - no auto-restore on next launch
-
-            # Only notify the immediate multi-phase container
-            if class_name == "MultiPhaseCommissioningDisplay":
-                self.view.log_message("Notified parent container of new record")
-                break
-
-            parent = parent.parent()
-
-    def _notify_parent_record_loaded(self, record, record_id: int) -> None:
-        """Notify parent container that a record was loaded.
-
-        This updates the parent's UI to reflect the loaded record.
-        """
-        parent = self.view.parent()
-        while parent:
-            class_name = parent.__class__.__name__
-
-            # Update parent's UI elements
-            if hasattr(parent, "update_progress_indicator"):
-                parent.update_progress_indicator(record)
-
-            if hasattr(parent, "_update_tab_states"):
-                parent._update_tab_states()
-
-            if hasattr(parent, "_load_notes"):
-                parent._load_notes()
-
-            if hasattr(parent, "_update_sync_status"):
-                parent._update_sync_status(True, "Record loaded")
-
-            # REMOVED: Settings save - no auto-restore
-
-            # Only notify the immediate multi-phase container
-            if class_name == "MultiPhaseCommissioningDisplay":
-                self.view.log_message(
-                    "Notified parent container of loaded record"
-                )
-                break
-
-            parent = parent.parent()
+        """Notify parent container that a record was created."""
+        self.view._notify_parent_of_record_update(record, "Record created")
+        self.view.log_message("Notified parent container of new record")

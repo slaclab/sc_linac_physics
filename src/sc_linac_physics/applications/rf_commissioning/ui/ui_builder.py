@@ -56,8 +56,8 @@ LOCAL_CAP_STYLE = """
 """
 
 
-class PiezoPreRFUI:
-    """Builds the Piezo Pre-RF display UI and exposes widget references."""
+class PhaseUIBase:
+    """Base UI builder with common components for all commissioning phases."""
 
     def __init__(
         self,
@@ -68,46 +68,13 @@ class PiezoPreRFUI:
         self.callbacks = callbacks or {}
         self.widgets: Dict[str, object] = {}
 
-    def build(self) -> QHBoxLayout:
-        """Create the main UI layout with optimized space usage."""
-        main_layout = QHBoxLayout()
-        main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(8)
-
-        # === LEFT PANEL ===
-        left_panel = QVBoxLayout()
-        left_panel.setSpacing(6)
-
-        # Top toolbar
-        left_panel.addLayout(self._build_main_toolbar())
-
-        # Piezo controls (now more compact without cavity selection)
-        left_panel.addWidget(self._build_piezo_controls())
-
-        # Phase history (collapsible)
-        left_panel.addWidget(self._build_history())
-
-        left_panel.addStretch()
-
-        # === RIGHT PANEL ===
-        right_panel = QVBoxLayout()
-        right_panel.setSpacing(6)
-
-        # Combined results section - fills available space
-        right_panel.addWidget(self._build_combined_results_section(), stretch=1)
-        # Removed addStretch() here so results section expands
-
-        # Add panels with stretch factors
-        main_layout.addLayout(left_panel, 3)
-        main_layout.addLayout(right_panel, 2)
-
-        return main_layout
-
     def _register(self, name: str, widget):
+        """Register a widget by name for easy access."""
         self.widgets[name] = widget
         return widget
 
     def _connect(self, widget, callback_key: str) -> None:
+        """Connect widget signal to callback if callback exists."""
         callback = self.callbacks.get(callback_key)
         if callback:
             widget.clicked.connect(callback)
@@ -145,6 +112,224 @@ class PiezoPreRFUI:
         toolbar.addWidget(timestamp_label)
 
         return toolbar
+
+    def _build_history(self) -> QGroupBox:
+        """Build a space-efficient phase history section."""
+        group = QGroupBox("Phase History")
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(3)
+
+        history_text = self._register("history_text", QTextEdit())
+        history_text.setReadOnly(True)
+        history_text.setStyleSheet(
+            "QTextEdit { background-color: #1a1a1a; color: #00ff00; "
+            "font-family: 'Courier New', monospace; font-size: 10pt; }"
+        )
+
+        history_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        history_text.setMinimumHeight(60)
+        history_text.setMaximumHeight(180)
+
+        layout.addWidget(history_text)
+        group.setLayout(layout)
+        return group
+
+    def _build_basic_results_section(self, phase_name: str) -> QGroupBox:
+        """Build a basic results section for placeholder phases.
+
+        Args:
+            phase_name: Name of the phase for the section title.
+        """
+        group = QGroupBox(f"{phase_name} - Status && Results")
+        layout = QVBoxLayout()
+        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Current step
+        step_label = QLabel("Current Step:")
+        step_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(step_label)
+
+        current_step = self._register("local_current_step", QLabel("-"))
+        current_step.setStyleSheet(
+            LOCAL_LABEL_STYLE + "min-height: 30px; font-size: 12pt;"
+        )
+        current_step.setAlignment(Qt.AlignCenter)
+        layout.addWidget(current_step)
+
+        # Phase status
+        phase_label = QLabel("Test Status:")
+        phase_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        layout.addWidget(phase_label)
+
+        phase_status = self._register("local_phase_status", QLabel("-"))
+        phase_status.setStyleSheet(
+            LOCAL_LABEL_STYLE + "min-height: 30px; font-size: 12pt;"
+        )
+        phase_status.setAlignment(Qt.AlignCenter)
+        layout.addWidget(phase_status)
+
+        layout.addStretch()
+        group.setLayout(layout)
+        return group
+
+    def _make_local_label(self, text: str) -> QLabel:
+        """Create a local (non-EPICS) label with standard styling."""
+        label = QLabel(text)
+        label.setStyleSheet(LOCAL_LABEL_STYLE)
+        label.setAlignment(Qt.AlignCenter)
+        return label
+
+    def _make_local_cap_label(self, text: str) -> QLabel:
+        """Create a local capacitance label with standard styling."""
+        label = QLabel(text)
+        label.setStyleSheet(LOCAL_CAP_STYLE)
+        label.setAlignment(Qt.AlignCenter)
+        return label
+
+    def _build_dataclass_readout_section(
+        self, title: str, fields: list[tuple[str, str]]
+    ) -> QGroupBox:
+        """Build a read-only section for stored dataclass values."""
+        group = QGroupBox(title)
+        layout = QGridLayout()
+        layout.setSpacing(5)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        for row, (label_text, widget_name) in enumerate(fields):
+            label = QLabel(label_text)
+            label.setStyleSheet("font-weight: bold;")
+            layout.addWidget(label, row, 0)
+
+            value = self._register(widget_name, self._make_local_label("-"))
+            value.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            layout.addWidget(value, row, 1)
+
+        group.setLayout(layout)
+        return group
+
+    def _build_stored_data_section(
+        self, fields: list[tuple[str, str]] = None
+    ) -> QGroupBox:
+        """Build a generalized 'Stored Data' section with standard fields.
+
+        Args:
+            fields: List of (label, widget_name) tuples for phase-specific fields.
+                   These will be inserted between Status and Stored At fields.
+        """
+        fields = fields or []
+        group = QGroupBox("Stored Data")
+        layout = QVBoxLayout()
+        layout.setSpacing(5)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        grid = QGridLayout()
+        grid.setSpacing(5)
+
+        row = 0
+
+        # Progress bar
+        grid.addWidget(QLabel("Progress:"), row, 0)
+        progress_bar = self._register("local_progress_bar", QProgressBar())
+        progress_bar.setStyleSheet(
+            "QProgressBar { border: 1px solid #ff9a4a; border-radius: 3px; "
+            "background-color: #2a2a1a; text-align: center; color: white; "
+            "min-height: 20px; max-height: 20px; } "
+            "QProgressBar::chunk { background-color: #ff9a4a; }"
+        )
+        grid.addWidget(progress_bar, row, 1)
+        row += 1
+
+        # Status
+        grid.addWidget(QLabel("Status:"), row, 0)
+        status_label = self._register(
+            "local_stored_status", self._make_local_label("-")
+        )
+        grid.addWidget(status_label, row, 1)
+        row += 1
+
+        # Phase-specific fields
+        for label_text, widget_name in fields:
+            grid.addWidget(QLabel(f"  {label_text}:"), row, 0)
+            value_label = self._register(
+                widget_name, self._make_local_label("-")
+            )
+            grid.addWidget(value_label, row, 1)
+            row += 1
+
+        # Stored At
+        grid.addWidget(QLabel("Stored At:"), row, 0)
+        timestamp_label = self._register(
+            "local_stored_timestamp", self._make_local_label("-")
+        )
+        grid.addWidget(timestamp_label, row, 1)
+        row += 1
+
+        # Notes
+        grid.addWidget(QLabel("Notes:"), row, 0)
+        notes_label = self._register(
+            "local_stored_notes", self._make_local_label("-")
+        )
+        notes_label.setWordWrap(True)
+        notes_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        grid.addWidget(notes_label, row, 1)
+
+        layout.addLayout(grid)
+        layout.addStretch()
+        group.setLayout(layout)
+        return group
+
+
+class PiezoPreRFUI(PhaseUIBase):
+    """Builds the Piezo Pre-RF display UI and exposes widget references."""
+
+    def build(self) -> QHBoxLayout:
+        """Create the main UI layout with optimized space usage."""
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        # === LEFT PANEL ===
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+
+        # Top toolbar
+        left_panel.addLayout(self._build_main_toolbar())
+
+        # Piezo controls (now more compact without cavity selection)
+        left_panel.addWidget(self._build_piezo_controls())
+
+        # Phase history (collapsible)
+        left_panel.addWidget(self._build_history())
+
+        left_panel.addStretch()
+
+        # === RIGHT PANEL ===
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+
+        # Combined results section - live PV data
+        right_panel.addWidget(
+            self._build_combined_results_section("Piezo Pre-RF"), stretch=1
+        )
+
+        # Stored data section - phase results
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                [
+                    ("Ch A Cap", "local_stored_cap_a"),
+                    ("Ch B Cap", "local_stored_cap_b"),
+                ]
+            )
+        )
+
+        # Add panels with stretch factors
+        main_layout.addLayout(left_panel, 3)
+        main_layout.addLayout(right_panel, 2)
+
+        return main_layout
 
     def _build_piezo_controls(self) -> QGroupBox:
         """Build Piezo controls."""
@@ -294,32 +479,15 @@ class PiezoPreRFUI:
 
         return wrapper
 
-    def _build_history(self) -> QGroupBox:
-        """Build a space-efficient phase history section."""
-        group = QGroupBox("Phase History")
+    def _build_combined_results_section(
+        self, phase_name: str = "Piezo Pre-RF"
+    ) -> QGroupBox:
+        """Combine PV and Local results into one compact section.
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(3)
-
-        history_text = self._register("history_text", QTextEdit())
-        history_text.setReadOnly(True)
-        history_text.setStyleSheet(
-            "QTextEdit { background-color: #1a1a1a; color: #00ff00; "
-            "font-family: 'Courier New', monospace; font-size: 10pt; }"
-        )
-
-        history_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        history_text.setMinimumHeight(60)
-        history_text.setMaximumHeight(180)
-
-        layout.addWidget(history_text)
-        group.setLayout(layout)
-        return group
-
-    def _build_combined_results_section(self) -> QGroupBox:
-        """Combine PV and Local results into one compact section."""
-        group = QGroupBox("Test Status & Results")
+        Args:
+            phase_name: Name of the phase for the section title.
+        """
+        group = QGroupBox(f"{phase_name} - Status && Results")
         layout = QVBoxLayout()
         layout.setSpacing(3)
         layout.setContentsMargins(5, 5, 5, 5)
@@ -332,7 +500,6 @@ class PiezoPreRFUI:
         )  # Add a bit more vertical spacing for readability
 
         # Headers
-        grid.addWidget(QLabel(""), 0, 0)
         pv_header = QLabel("Live (EPICS)")
         pv_header.setStyleSheet(
             "font-weight: bold; color: #4a9eff; font-size: 11pt;"
@@ -340,16 +507,9 @@ class PiezoPreRFUI:
         pv_header.setAlignment(Qt.AlignCenter)
         grid.addWidget(pv_header, 0, 1)
 
-        local_header = QLabel("Automated")
-        local_header.setStyleSheet(
-            "font-weight: bold; color: #ff9a4a; font-size: 11pt;"
-        )
-        local_header.setAlignment(Qt.AlignCenter)
-        grid.addWidget(local_header, 0, 2)
-
         row = 1
 
-        # Overall Status
+        # Overall Status (PV only)
         overall_label = QLabel("Overall:")
         overall_label.setStyleSheet("font-weight: bold; font-size: 10pt;")
         grid.addWidget(overall_label, row, 0)
@@ -357,26 +517,6 @@ class PiezoPreRFUI:
         pv_overall.setStyleSheet(PV_LABEL_STYLE + "min-height: 24px;")
         pv_overall.setAlignment(Qt.AlignCenter)
         grid.addWidget(pv_overall, row, 1)
-
-        local_overall = self._register(
-            "local_overall_result", self._make_local_label("-")
-        )
-        local_overall.setStyleSheet(
-            LOCAL_LABEL_STYLE + "font-weight: bold; min-height: 24px;"
-        )
-        grid.addWidget(local_overall, row, 2)
-        row += 1
-
-        # Progress (local only)
-        grid.addWidget(QLabel("Progress:"), row, 0)
-        progress_bar = self._register("local_progress_bar", QProgressBar())
-        progress_bar.setStyleSheet(
-            "QProgressBar { border: 1px solid #ff9a4a; border-radius: 3px; "
-            "background-color: #2a2a1a; text-align: center; color: white; "
-            "min-height: 20px; max-height: 20px; } "
-            "QProgressBar::chunk { background-color: #ff9a4a; }"
-        )
-        grid.addWidget(progress_bar, row, 1, 1, 2)
         row += 1
 
         # Ch A Status
@@ -385,11 +525,6 @@ class PiezoPreRFUI:
         pv_cha.setStyleSheet(PV_LABEL_STYLE)
         pv_cha.setAlignment(Qt.AlignCenter)
         grid.addWidget(pv_cha, row, 1)
-
-        local_cha = self._register(
-            "local_cha_result", self._make_local_label("-")
-        )
-        grid.addWidget(local_cha, row, 2)
         row += 1
 
         # Ch A Capacitance
@@ -401,11 +536,6 @@ class PiezoPreRFUI:
         pv_cha_cap.setAlignment(Qt.AlignCenter)
         pv_cha_cap.showUnits = True
         grid.addWidget(pv_cha_cap, row, 1)
-
-        local_cha_cap = self._register(
-            "local_cha_cap", self._make_local_cap_label("-")
-        )
-        grid.addWidget(local_cha_cap, row, 2)
         row += 1
 
         # Ch B Status
@@ -414,11 +544,6 @@ class PiezoPreRFUI:
         pv_chb.setStyleSheet(PV_LABEL_STYLE)
         pv_chb.setAlignment(Qt.AlignCenter)
         grid.addWidget(pv_chb, row, 1)
-
-        local_chb = self._register(
-            "local_chb_result", self._make_local_label("-")
-        )
-        grid.addWidget(local_chb, row, 2)
         row += 1
 
         # Ch B Capacitance
@@ -430,11 +555,6 @@ class PiezoPreRFUI:
         pv_chb_cap.setAlignment(Qt.AlignCenter)
         pv_chb_cap.showUnits = True
         grid.addWidget(pv_chb_cap, row, 1)
-
-        local_chb_cap = self._register(
-            "local_chb_cap", self._make_local_cap_label("-")
-        )
-        grid.addWidget(local_chb_cap, row, 2)
         row += 1
 
         # Step/Phase info (local only)
@@ -442,14 +562,15 @@ class PiezoPreRFUI:
         local_step = self._register(
             "local_current_step", self._make_local_label("-")
         )
-        grid.addWidget(local_step, row, 1, 1, 2)
+        grid.addWidget(local_step, row, 1)
         row += 1
 
-        grid.addWidget(QLabel("Phase:"), row, 0)
+        grid.addWidget(QLabel("Test Status:"), row, 0)
         local_phase = self._register(
             "local_phase_status", self._make_local_label("-")
         )
-        grid.addWidget(local_phase, row, 1, 1, 2)
+        grid.addWidget(local_phase, row, 1)
+        row += 1
 
         layout.addLayout(grid)
         layout.addStretch()  # Add stretch here to push content to top of group
@@ -457,14 +578,198 @@ class PiezoPreRFUI:
 
         return group
 
-    def _make_local_label(self, text: str) -> QLabel:
-        label = QLabel(text)
-        label.setStyleSheet(LOCAL_LABEL_STYLE)
-        label.setAlignment(Qt.AlignCenter)
-        return label
 
-    def _make_local_cap_label(self, text: str) -> QLabel:
-        label = QLabel(text)
-        label.setStyleSheet(LOCAL_CAP_STYLE)
-        label.setAlignment(Qt.AlignCenter)
-        return label
+# =============================================================================
+# Placeholder UI Builders for Other Phases
+# =============================================================================
+
+
+class ColdLandingUI(PhaseUIBase):
+    """UI builder for Cold Landing phase (placeholder)."""
+
+    def build(self) -> QHBoxLayout:
+        """Create the main UI layout."""
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        # Left panel
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+        left_panel.addLayout(self._build_main_toolbar())
+        left_panel.addWidget(self._build_history())
+        left_panel.addStretch()
+
+        # Right panel
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(
+            self._build_basic_results_section("Cold Landing"), stretch=1
+        )
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                [
+                    ("Initial Detune", "cold_initial_detune"),
+                    ("Steps to Resonance", "cold_steps_to_resonance"),
+                    ("Final Detune", "cold_final_detune"),
+                ]
+            )
+        )
+
+        main_layout.addLayout(left_panel, 3)
+        main_layout.addLayout(right_panel, 2)
+
+        return main_layout
+
+
+class SSACharUI(PhaseUIBase):
+    """UI builder for SSA Characterization phase (placeholder)."""
+
+    def build(self) -> QHBoxLayout:
+        """Create the main UI layout."""
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        # Left panel
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+        left_panel.addLayout(self._build_main_toolbar())
+        left_panel.addWidget(self._build_history())
+        left_panel.addStretch()
+
+        # Right panel
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(
+            self._build_basic_results_section("SSA Characterization"), stretch=1
+        )
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                [
+                    ("Max Drive", "ssa_max_drive"),
+                    ("Initial Drive", "ssa_initial_drive"),
+                    ("Attempts", "ssa_num_attempts"),
+                ]
+            )
+        )
+
+        main_layout.addLayout(left_panel, 3)
+        main_layout.addLayout(right_panel, 2)
+
+        return main_layout
+
+
+class CavityCharUI(PhaseUIBase):
+    """UI builder for Cavity Characterization phase (placeholder)."""
+
+    def build(self) -> QHBoxLayout:
+        """Create the main UI layout."""
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        # Left panel
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+        left_panel.addLayout(self._build_main_toolbar())
+        left_panel.addWidget(self._build_history())
+        left_panel.addStretch()
+
+        # Right panel
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(
+            self._build_basic_results_section("Cavity Characterization"),
+            stretch=1,
+        )
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                [
+                    ("Loaded Q", "cavity_loaded_q"),
+                    ("Probe Q", "cavity_probe_q"),
+                    ("Scale Factor", "cavity_scale_factor"),
+                ]
+            )
+        )
+
+        main_layout.addLayout(left_panel, 3)
+        main_layout.addLayout(right_panel, 2)
+
+        return main_layout
+
+
+class PiezoWithRFUI(PhaseUIBase):
+    """UI builder for Piezo with RF phase (placeholder)."""
+
+    def build(self) -> QHBoxLayout:
+        """Create the main UI layout."""
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        # Left panel
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+        left_panel.addLayout(self._build_main_toolbar())
+        left_panel.addWidget(self._build_history())
+        left_panel.addStretch()
+
+        # Right panel
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(
+            self._build_basic_results_section("Piezo with RF"), stretch=1
+        )
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                [
+                    ("Amplifier Gain A", "piezo_rf_gain_a"),
+                    ("Amplifier Gain B", "piezo_rf_gain_b"),
+                    ("Detune Gain", "piezo_rf_detune_gain"),
+                ]
+            )
+        )
+
+        main_layout.addLayout(left_panel, 3)
+        main_layout.addLayout(right_panel, 2)
+
+        return main_layout
+
+
+class HighPowerUI(PhaseUIBase):
+    """UI builder for High Power Ramp phase (placeholder)."""
+
+    def build(self) -> QHBoxLayout:
+        """Create the main UI layout."""
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        # Left panel
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+        left_panel.addLayout(self._build_main_toolbar())
+        left_panel.addWidget(self._build_history())
+        left_panel.addStretch()
+
+        # Right panel
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(
+            self._build_basic_results_section("High Power Ramp"), stretch=1
+        )
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                [
+                    ("Final Amplitude", "high_power_final_amplitude"),
+                    ("One Hour Complete", "high_power_one_hour_complete"),
+                    ("Timestamp", "high_power_timestamp"),
+                ]
+            )
+        )
+
+        main_layout.addLayout(left_panel, 3)
+        main_layout.addLayout(right_panel, 2)
+
+        return main_layout

@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QMenu,
 )
-from pydm import Display, PyDMApplication
+from pydm import Display as PyDMDisplay, PyDMApplication
 
 from sc_linac_physics.applications.rf_commissioning import (
     CommissioningPhase,
@@ -41,19 +41,24 @@ from sc_linac_physics.applications.rf_commissioning.models.database import (
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.database_browser_dialog import (
+    DatabaseBrowserDialog,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.measurement_history_dialog import (
     MeasurementHistoryDialog,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.merge_dialog import (
     MergeDialog,
 )
-from sc_linac_physics.applications.rf_commissioning.ui.database_browser_dialog import (
-    DatabaseBrowserDialog,
-)
 from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
     PhaseDisplayBase,
 )
-from sc_linac_physics.applications.rf_commissioning.ui.piezo_pre_rf_display import (
+from sc_linac_physics.applications.rf_commissioning.ui.phase_displays import (
+    ColdLandingDisplay,
+    SSACharDisplay,
+    CavityCharDisplay,
+    PiezoWithRFDisplay,
+    HighPowerDisplay,
     PiezoPreRFDisplay,
 )
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
@@ -68,7 +73,7 @@ class PhaseTabSpec:
     phase: Optional[CommissioningPhase] = None
 
 
-class MultiPhaseCommissioningDisplay(Display):
+class MultiPhaseCommissioningDisplay(PyDMDisplay):
     """Container window that hosts multiple phase displays.
 
     This redesigned display keeps critical information always visible:
@@ -149,39 +154,38 @@ class MultiPhaseCommissioningDisplay(Display):
         # Operator must explicitly select operator and cavity each time
 
     def _default_phase_specs(self) -> list[PhaseTabSpec]:
-        """Default phase specifications - add more phases as they're implemented."""
+        """Default phase specifications for all commissioning phases."""
         return [
             PhaseTabSpec(
                 title="Piezo Pre-RF",
                 display_class=PiezoPreRFDisplay,
                 phase=CommissioningPhase.PIEZO_PRE_RF,
             ),
-            # Uncomment and add as you implement each phase:
-            # PhaseTabSpec(
-            #     title="Cold Landing",
-            #     display_class=ColdLandingDisplay,
-            #     phase=CommissioningPhase.COLD_LANDING,
-            # ),
-            # PhaseTabSpec(
-            #     title="SSA Characterization",
-            #     display_class=SSACharDisplay,
-            #     phase=CommissioningPhase.SSA_CHAR,
-            # ),
-            # PhaseTabSpec(
-            #     title="Cavity Characterization",
-            #     display_class=CavityCharDisplay,
-            #     phase=CommissioningPhase.CAVITY_CHAR,
-            # ),
-            # PhaseTabSpec(
-            #     title="Piezo with RF",
-            #     display_class=PiezoWithRFDisplay,
-            #     phase=CommissioningPhase.PIEZO_WITH_RF,
-            # ),
-            # PhaseTabSpec(
-            #     title="High Power",
-            #     display_class=HighPowerDisplay,
-            #     phase=CommissioningPhase.HIGH_POWER,
-            # ),
+            PhaseTabSpec(
+                title="Cold Landing",
+                display_class=ColdLandingDisplay,
+                phase=CommissioningPhase.COLD_LANDING,
+            ),
+            PhaseTabSpec(
+                title="SSA Characterization",
+                display_class=SSACharDisplay,
+                phase=CommissioningPhase.SSA_CHAR,
+            ),
+            PhaseTabSpec(
+                title="Cavity Characterization",
+                display_class=CavityCharDisplay,
+                phase=CommissioningPhase.CAVITY_CHAR,
+            ),
+            PhaseTabSpec(
+                title="Piezo with RF",
+                display_class=PiezoWithRFDisplay,
+                phase=CommissioningPhase.PIEZO_WITH_RF,
+            ),
+            PhaseTabSpec(
+                title="High Power",
+                display_class=HighPowerDisplay,
+                phase=CommissioningPhase.HIGH_POWER,
+            ),
         ]
 
     # =============================================================================
@@ -232,29 +236,9 @@ class MultiPhaseCommissioningDisplay(Display):
         cavity_group.setLayout(cavity_layout)
         layout.addWidget(cavity_group)
 
-        # Current cavity display
-        self.current_cavity_label = QLabel("No cavity selected")
-        self.current_cavity_label.setStyleSheet("""
-            QLabel {
-                color: #888;
-                font-weight: bold;
-                padding: 5px 10px;
-                background-color: rgba(100, 100, 100, 0.2);
-                border-radius: 3px;
-                font-size: 10pt;
-            }
-        """)
-        layout.addWidget(self.current_cavity_label)
-
-        # Update current cavity label and PVs when selection changes
-        self.cryomodule_combo.currentIndexChanged.connect(
-            self._update_current_cavity_display
-        )
+        # Update PVs and load record when cavity selection changes
         self.cryomodule_combo.currentIndexChanged.connect(
             self._on_cavity_selection_changed
-        )
-        self.cavity_combo.currentIndexChanged.connect(
-            self._update_current_cavity_display
         )
         self.cavity_combo.currentIndexChanged.connect(
             self._on_cavity_selection_changed
@@ -311,71 +295,6 @@ class MultiPhaseCommissioningDisplay(Display):
         header.setLayout(layout)
         return header
 
-    def _update_current_cavity_display(self) -> None:
-        """Update the current cavity display label."""
-        cryomodule = self.cryomodule_combo.currentText()
-        cavity = self.cavity_combo.currentText()
-
-        if (
-            cryomodule == "Select CM..."
-            or cavity == "Select Cav..."
-            or not cryomodule
-            or not cavity
-        ):
-            self.current_cavity_label.setText("No cavity selected")
-            self.current_cavity_label.setStyleSheet("""
-                QLabel {
-                    color: #888;
-                    font-weight: bold;
-                    padding: 5px 10px;
-                    background-color: rgba(100, 100, 100, 0.2);
-                    border-radius: 3px;
-                    font-size: 10pt;
-                }
-            """)
-        else:
-            cavity_name = f"{cryomodule}_CAV{cavity}"
-
-            # Check if records exist for this cavity
-            from sc_linac_physics.utils.sc_linac.linac_utils import (
-                get_linac_for_cryomodule,
-            )
-
-            linac = get_linac_for_cryomodule(cryomodule)
-            if linac:
-                existing_records = self.session.db.find_records_for_cavity(
-                    linac, cryomodule, cavity
-                )
-            else:
-                existing_records = []
-
-            if existing_records:
-                self.current_cavity_label.setText(
-                    f"🎯 {cavity_name} ({len(existing_records)} records)"
-                )
-                self.current_cavity_label.setStyleSheet("""
-                    QLabel {
-                        color: #2196F3;
-                        font-weight: bold;
-                        padding: 5px 10px;
-                        background-color: rgba(33, 150, 243, 0.2);
-                        border-radius: 3px;
-                        font-size: 10pt;
-                    }
-                """)
-            else:
-                self.current_cavity_label.setText(f"🎯 {cavity_name} (new)")
-                self.current_cavity_label.setStyleSheet("""
-                    QLabel {
-                        color: #4CAF50;
-                        font-weight: bold;
-                        padding: 5px 10px;
-                        background-color: rgba(76, 175, 80, 0.2);
-                        border-radius: 3px;
-                        font-size: 10pt;
-                    }
-                """)
-
     def _on_cavity_selection_changed(self) -> None:
         """Update PV addresses and load record when cavity selection changes."""
         cryomodule = self.cryomodule_combo.currentText()
@@ -399,8 +318,26 @@ class MultiPhaseCommissioningDisplay(Display):
             ):
                 display.controller.update_pv_addresses(cryomodule, cavity)
 
-        # Load or create record for this cavity (which refreshes notes)
-        self.start_new_record(cryomodule, cavity)
+            # Load or create record for this cavity
+            record, record_id, created = self.session.start_new_record(
+                cryomodule, cavity
+            )
+
+            # Update UI to reflect the loaded/created record
+            if record:
+                self.update_progress_indicator(record)
+                self._update_tab_states()
+                self._load_notes()
+
+                # Update each phase display
+                for display in self._phase_displays:
+                    display.refresh_from_record(record)
+
+                # Set appropriate tab based on current phase
+                for i, spec in enumerate(self.phase_specs):
+                    if spec.phase == record.current_phase:
+                        self.tabs.setCurrentIndex(i)
+                        break
 
     def _populate_operator_combo(self, restore_selection: str = None) -> None:
         """Populate operator dropdown - no default selection for safety."""
@@ -480,7 +417,7 @@ class MultiPhaseCommissioningDisplay(Display):
     def _build_compact_progress_bar(self) -> QWidget:
         """Build a compact horizontal progress indicator."""
         widget = QWidget()
-        widget.setMaximumHeight(80)
+        widget.setMaximumHeight(100)
         widget.setStyleSheet("""
             QWidget {
                 background-color: #1e1e1e;
@@ -489,14 +426,18 @@ class MultiPhaseCommissioningDisplay(Display):
         """)
 
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 5, 10, 5)
+        main_layout.setContentsMargins(10, 8, 10, 8)
+        main_layout.setSpacing(8)
 
         title = QLabel("Commissioning Progress")
         title.setStyleSheet("color: #aaa; font-size: 11px; font-weight: bold;")
         main_layout.addWidget(title)
 
-        layout = QHBoxLayout()
-        layout.setSpacing(5)
+        # Container for the progress tracker
+        progress_container = QWidget()
+        progress_layout = QHBoxLayout()
+        progress_layout.setSpacing(0)
+        progress_layout.setContentsMargins(20, 0, 20, 0)
 
         # Define phases with custom labels
         phases = [
@@ -510,34 +451,60 @@ class MultiPhaseCommissioningDisplay(Display):
         ]
 
         self.phase_indicators = {}
+        self.phase_connectors = []
 
         for i, (label, phase) in enumerate(phases):
-            # Phase circle
+            # Create a container for each phase node
+            node_container = QWidget()
+            node_layout = QVBoxLayout()
+            node_layout.setSpacing(4)
+            node_layout.setContentsMargins(0, 0, 0, 0)
+            node_layout.setAlignment(Qt.AlignCenter)
+
+            # Phase circle - REMOVED setFixedSize, using minimumSize instead
             circle = QLabel("●")
             circle.setAlignment(Qt.AlignCenter)
-            circle.setStyleSheet("font-size: 24px; color: #444;")
+            circle.setMinimumSize(32, 32)  # Changed from setFixedSize
+            circle.setStyleSheet("""
+                font-size: 28px;
+                color: #444;
+                background-color: transparent;
+            """)
             self.phase_indicators[phase] = circle
 
             # Label
             text = QLabel(label)
             text.setAlignment(Qt.AlignCenter)
-            text.setStyleSheet("font-size: 9px; color: #888;")
+            text.setStyleSheet(
+                "font-size: 9px; color: #888; background-color: transparent;"
+            )
+            text.setWordWrap(True)
+            text.setFixedWidth(60)
 
-            # Container
-            container = QVBoxLayout()
-            container.setSpacing(2)
-            container.addWidget(circle)
-            container.addWidget(text)
-            layout.addLayout(container)
+            node_layout.addWidget(circle)
+            node_layout.addWidget(text)
+            node_container.setLayout(node_layout)
 
-            # Connector (skip after "Complete")
+            progress_layout.addWidget(node_container)
+
+            # Add connector line (skip after last phase)
             if i < len(phases) - 1:
-                connector = QLabel("─────")
-                connector.setStyleSheet("color: #444; padding-top: 15px;")
+                connector = QLabel("━━━━")
                 connector.setAlignment(Qt.AlignCenter)
-                layout.addWidget(connector)
+                connector.setStyleSheet("""
+                    color: #444;
+                    font-size: 16px;
+                    padding: 0px;
+                    margin: 0px 4px 24px 4px;
+                    background-color: transparent;
+                """)
+                connector.setFixedHeight(32)
+                self.phase_connectors.append(connector)
+                progress_layout.addWidget(connector)
 
-        main_layout.addLayout(layout)
+        progress_container.setLayout(progress_layout)
+        main_layout.addWidget(progress_container)
+
         widget.setLayout(main_layout)
         return widget
 
@@ -549,20 +516,58 @@ class MultiPhaseCommissioningDisplay(Display):
         for phase, indicator in self.phase_indicators.items():
             idx = phase_order.index(phase)
             if idx < current_idx:
-                # Completed
-                indicator.setStyleSheet("font-size: 24px; color: #4CAF50;")
+                # Completed - green checkmark (using more compatible character)
+                indicator.setText("✔")  # Alternative: "☑" or "●"
+                indicator.setStyleSheet("""
+                    font-size: 28px;
+                    color: #4CAF50;
+                    font-weight: bold;
+                    background-color: rgba(76, 175, 80, 0.2);
+                    border-radius: 16px;
+                    border: 2px solid #4CAF50;
+                """)
             elif idx == current_idx:
-                # Active
-                indicator.setStyleSheet(
-                    "font-size: 24px; color: #2196F3; font-weight: bold;"
-                )
+                # Active - blue with pulse effect
+                indicator.setText("▶")
+                indicator.setStyleSheet("""
+                    font-size: 24px;
+                    color: #2196F3;
+                    font-weight: bold;
+                    background-color: rgba(33, 150, 243, 0.3);
+                    border-radius: 16px;
+                    border: 2px solid #2196F3;
+                """)
             else:
-                # Pending
-                indicator.setStyleSheet("font-size: 24px; color: #444;")
+                # Pending - gray circle
+                indicator.setText("○")
+                indicator.setStyleSheet("""
+                    font-size: 28px;
+                    color: #444;
+                    background-color: transparent;
+                    border-radius: 16px;
+                """)
 
-        # =============================================================================
-        # CAVITY LOADING - Smart record selection
-        # =============================================================================
+        # Update connector lines
+        for i, connector in enumerate(self.phase_connectors):
+            if i < current_idx:
+                # Completed path - green
+                connector.setStyleSheet("""
+                    color: #4CAF50;
+                    font-size: 16px;
+                    font-weight: bold;
+                    padding: 0px;
+                    margin: 0px 4px 24px 4px;
+                    background-color: transparent;
+                """)
+            else:
+                # Pending path - gray
+                connector.setStyleSheet("""
+                    color: #444;
+                    font-size: 16px;
+                    padding: 0px;
+                    margin: 0px 4px 24px 4px;
+                    background-color: transparent;
+                """)
 
     def _on_load_or_start(self) -> None:
         """Intelligent load/start with validation and recent records."""
@@ -834,13 +839,18 @@ class MultiPhaseCommissioningDisplay(Display):
     def _init_tabs(self) -> None:
         """Initialize tabs with enhanced visual feedback."""
         for i, spec in enumerate(self.phase_specs):
-            display = spec.display_class(session=self.session)
-            self._phase_displays.append(display)
-
-            # Create tab
+            # Create tab container first
             tab_widget = QWidget()
             tab_layout = QVBoxLayout()
             tab_layout.setContentsMargins(0, 0, 0, 0)
+
+            # Create display with tab_widget as parent
+            display = spec.display_class(
+                parent=tab_widget, session=self.session
+            )
+            self._phase_displays.append(display)
+
+            # Add display to layout
             tab_layout.addWidget(display)
             tab_widget.setLayout(tab_layout)
 
@@ -1412,18 +1422,25 @@ class MultiPhaseCommissioningDisplay(Display):
             cryomodule, cavity_number
         )
 
-        if not created:
-            self.load_record(record_id)
-            return False
+        # Update UI
+        self.update_progress_indicator(record)
+        self._update_tab_states()
+        self._load_notes()
 
         for display in self._phase_displays:
             display.refresh_from_record(record)
 
-        self._update_tab_states()
-        self.update_progress_indicator(record)
-        self.tabs.setCurrentIndex(0)
-        self._load_notes()
-        return True
+        # Set appropriate tab
+        if created:
+            self.tabs.setCurrentIndex(0)
+        else:
+            # Load existing - go to current phase
+            for i, spec in enumerate(self.phase_specs):
+                if spec.phase == record.current_phase:
+                    self.tabs.setCurrentIndex(i)
+                    break
+
+        return created
 
     def load_record(self, record_id: int) -> bool:
         """Load an existing commissioning record."""
@@ -1463,16 +1480,47 @@ class MultiPhaseCommissioningDisplay(Display):
         if cav_index >= 0:
             self.cavity_combo.setCurrentIndex(cav_index)
 
+    def on_phase_advanced(self, record: CommissioningRecord) -> None:
+        """Handle notification that a phase has advanced.
+
+        Called by child phase displays when their phase completes.
+        """
+        print(f"DEBUG: Phase advanced to {record.current_phase}")
+
+        # Update all UI elements
+        self.update_progress_indicator(record)
+        self._update_tab_states()
+        self._update_sync_status(True, "Phase completed")
+
+        # Optionally switch to the next phase tab
+        for i, spec in enumerate(self.phase_specs):
+            if spec.phase == record.current_phase:
+                self.tabs.setCurrentIndex(i)
+                break
+
     def save_active_record(self) -> bool:
         """Save the active record with conflict detection.
 
         Returns:
             True if saved successfully or user chose to continue, False otherwise
         """
+        if not self.session.has_active_record():
+            return False
+
+        # Get the old phase before saving
+        old_phase = self.session.get_active_record().current_phase
+
         try:
             success = self.session.save_active_record()
             if success:
                 self._update_sync_status(True, "Saved")
+
+                # Check if phase changed and update UI
+                new_record = self.session.get_active_record()
+                if new_record and new_record.current_phase != old_phase:
+                    self.update_progress_indicator(new_record)
+                    self._update_tab_states()
+
             return success
         except RecordConflictError as e:
             return self._handle_save_conflict(e)
@@ -1609,6 +1657,17 @@ def main() -> int:
     window = MultiPhaseCommissioningDisplay()
     window.show()
     return app.exec_()
+
+
+class Display(MultiPhaseCommissioningDisplay):
+    """PyDM compatibility entrypoint class.
+
+    When launching this file directly via `pydm path/to/multi_phase_screen.py`,
+    PyDM expects a class named `Display` in the module.
+    """
+
+
+intelclass = MultiPhaseCommissioningDisplay
 
 
 if __name__ == "__main__":

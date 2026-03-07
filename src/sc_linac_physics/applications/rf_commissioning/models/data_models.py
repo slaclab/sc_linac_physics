@@ -430,13 +430,9 @@ class CommissioningRecord:
             - can_start: True if the phase can be started
             - reason: Explanation of why or why not
         """
-        # Check if already complete
-        if self.get_phase_status(phase) == PhaseStatus.COMPLETE:
-            return False, f"{phase.value} already completed"
-
-        # PIEZO_PRE_RF is the first phase and can always be started
+        # PIEZO_PRE_RF is the first phase and can always be started/restarted
         if phase == CommissioningPhase.PIEZO_PRE_RF:
-            return True, "Piezo Pre-RF is the first phase"
+            return True, "Piezo Pre-RF can be run at any time"
 
         # Check if previous phase is complete
         previous_phase = phase.get_previous_phase()
@@ -450,7 +446,7 @@ class CommissioningRecord:
                 f"Previous phase {previous_phase.value} must complete first (status: {previous_status.value})",
             )
 
-        return True, f"Prerequisites met for {phase.value}"
+        return True, f"Prerequisites met for {phase.value} (reruns allowed)"
 
     def advance_to_next_phase(self) -> tuple[bool, str]:
         """Advance to the next phase in the sequence.

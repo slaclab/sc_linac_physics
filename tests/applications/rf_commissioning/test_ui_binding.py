@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 from PyQt5.QtWidgets import QApplication, QWidget
 
-from sc_linac_physics.applications.rf_commissioning.ui.piezo_pre_rf_display import (
+from sc_linac_physics.applications.rf_commissioning.ui.phase_displays import (
     PiezoPreRFDisplay,
 )
 from sc_linac_physics.applications.rf_commissioning.ui import PiezoPreRFUI
@@ -58,7 +58,7 @@ def test_display_binds_widgets(qapp):
             pass
 
     with patch(
-        "sc_linac_physics.applications.rf_commissioning.ui.piezo_pre_rf_display.PiezoPreRFController",
+        "sc_linac_physics.applications.rf_commissioning.ui.phase_displays.PiezoPreRFController",
         DummyController,
     ):
         display = PiezoPreRFDisplay()

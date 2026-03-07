@@ -1,0 +1,552 @@
+"""
+Placeholder displays for RF commissioning phases.
+
+These are minimal implementations that provide the basic UI structure
+for each phase. They can be expanded with phase-specific functionality
+as needed.
+"""
+
+from datetime import datetime
+
+from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer
+
+from sc_linac_physics.applications.rf_commissioning import CommissioningRecord
+from sc_linac_physics.applications.rf_commissioning.session_manager import (
+    CommissioningSession,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
+    PhaseDisplayBase,
+)
+from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_controller import (
+    PiezoPreRFController,
+)
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    PiezoPreRFCheck,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.ui_builder import (
+    ColdLandingUI,
+    SSACharUI,
+    CavityCharUI,
+    PiezoWithRFUI,
+    HighPowerUI,
+    PiezoPreRFUI,
+    LOCAL_CAP_STYLE,
+    LOCAL_LABEL_STYLE,
+)
+
+
+class BasePlaceholderDisplay(PhaseDisplayBase):
+    """Base class for placeholder phase displays."""
+
+    step_progress_signal = pyqtSignal(str, int)  # (step_name, progress)
+    UI_CLASS = None  # Override in subclass
+    PHASE_NAME = ""  # Override in subclass
+    DATA_ATTR = ""  # Override with CommissioningRecord attribute name
+    READOUT_WIDGETS: tuple[str, ...] = ()
+
+    def __init__(
+        self, parent=None, session: CommissioningSession | None = None
+    ):
+        super().__init__(parent, session=session)
+        self.setWindowTitle(f"{self.PHASE_NAME} - RF Commissioning")
+        self.session = session or CommissioningSession()
+
+        # Connect progress signal
+        self.step_progress_signal.connect(self._on_step_progress)
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Create the main UI layout."""
+        callbacks = {
+            "on_run_automated_test": self.on_run_automated_test,
+        }
+        self.ui = self.UI_CLASS(self, callbacks)
+        main_layout = self.ui.build()
+        self._bind_ui_widgets()
+        self.setLayout(main_layout)
+        self.update_timestamp()
+
+    def refresh_from_record(self, record: CommissioningRecord) -> None:
+        """Refresh display when active record changes."""
+        self._update_phase_data_readouts(record)
+
+    def on_record_loaded(
+        self, record: CommissioningRecord, record_id: int
+    ) -> None:
+        """Update display when a record is loaded."""
+        self._update_phase_data_readouts(record)
+
+    def _update_phase_data_readouts(self, record: CommissioningRecord) -> None:
+        """Update readout labels from phase dataclass stored on the record."""
+        phase_data = getattr(record, self.DATA_ATTR, None)
+        if phase_data is None:
+            self._clear_phase_data_readouts()
+            if hasattr(self, "local_phase_status"):
+                self.local_phase_status.setText("No stored data")
+            self._clear_generic_stored_data()
+            return
+
+        if hasattr(self, "local_phase_status"):
+            self.local_phase_status.setText("Stored data loaded")
+
+        # Update phase-specific readout widgets
+        for widget_name, value in self._format_phase_data_readouts(
+            phase_data
+        ).items():
+            if hasattr(self, widget_name):
+                getattr(self, widget_name).setText(value)
+
+        self._set_generic_stored_data(phase_data)
+
+    def _set_generic_stored_data(self, phase_data) -> None:
+        """Update shared Stored Data fields (status/timestamp/notes)."""
+        passed = bool(getattr(phase_data, "passed", False))
+
+        if hasattr(self, "local_stored_status"):
+            status_text = "PASS" if passed else "FAIL"
+            status_style = (
+                LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
+                + "color: #90ee90;"
+                if passed
+                else LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
+                + "color: #ff6b6b;"
+            )
+            self.local_stored_status.setText(status_text)
+            self.local_stored_status.setStyleSheet(status_style)
+
+        if hasattr(self, "local_stored_timestamp"):
+            timestamp = getattr(phase_data, "timestamp", None)
+            self.local_stored_timestamp.setText(self._fmt_timestamp(timestamp))
+
+        if hasattr(self, "local_stored_notes"):
+            self.local_stored_notes.setText(
+                getattr(phase_data, "notes", None) or "-"
+            )
+
+    def _clear_generic_stored_data(self) -> None:
+        """Reset shared Stored Data fields."""
+        if hasattr(self, "local_stored_status"):
+            self.local_stored_status.setText("-")
+        if hasattr(self, "local_stored_timestamp"):
+            self.local_stored_timestamp.setText("-")
+        if hasattr(self, "local_stored_notes"):
+            self.local_stored_notes.setText("-")
+
+    def _clear_phase_data_readouts(self) -> None:
+        """Reset phase readout labels to placeholder state."""
+        for widget_name in self.READOUT_WIDGETS:
+            if hasattr(self, widget_name):
+                getattr(self, widget_name).setText("-")
+
+        self._clear_generic_stored_data()
+
+    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
+        """Format phase dataclass values for display labels."""
+        raise NotImplementedError
+
+    @staticmethod
+    def _fmt_float(
+        value: float | None, fmt: str = ".3f", unit: str = ""
+    ) -> str:
+        """Format optional float with optional engineering unit."""
+        if value is None:
+            return "-"
+        rendered = format(value, fmt)
+        return f"{rendered} {unit}".strip()
+
+    @staticmethod
+    def _fmt_timestamp(value: datetime | None) -> str:
+        """Format optional timestamp."""
+        if value is None:
+            return "-"
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+
+    def clear_results(self):
+        """Clear all result displays."""
+        if hasattr(self, "local_progress_bar"):
+            self.local_progress_bar.setValue(0)
+        if hasattr(self, "local_current_step"):
+            self.local_current_step.setText("-")
+        if hasattr(self, "local_phase_status"):
+            self.local_phase_status.setText("-")
+        if hasattr(self, "history_text"):
+            self.history_text.clear()
+
+    @pyqtSlot()
+    def on_run_automated_test(self):
+        """Placeholder for running automated test."""
+        operator = self.get_current_operator()
+        if not operator:
+            self.show_error("Please select an operator before running test.")
+            return
+
+        cavity_info = self.get_current_cavity()
+        if not cavity_info:
+            self.show_error("Please select a cavity before running test.")
+            return
+
+        self.log_message(f"Starting {self.PHASE_NAME} test...")
+        self.log_message("⚠️  This is a placeholder implementation")
+        self.log_message(
+            "Actual test logic will be implemented in phase-specific controller"
+        )
+
+        if hasattr(self, "local_phase_status"):
+            self.local_phase_status.setText("Placeholder - Not Implemented")
+
+
+class PiezoPreRFDisplay(BasePlaceholderDisplay):
+    """Display for Piezo Pre-RF phase (fully implemented)."""
+
+    UI_CLASS = PiezoPreRFUI
+    PHASE_NAME = "Piezo Pre-RF"
+    DATA_ATTR = "piezo_pre_rf"
+    READOUT_WIDGETS = (
+        "local_stored_cap_a",
+        "local_stored_cap_b",
+    )
+
+    def __init__(
+        self, parent=None, session: CommissioningSession | None = None
+    ):
+        super().__init__(parent, session=session)
+        self.setWindowTitle("Piezo Pre-RF Test - PyDM")
+
+        self.controller = PiezoPreRFController(self, self.session)
+        if hasattr(self.controller, "phase_completed"):
+            self.controller.phase_completed.connect(
+                self._on_controller_phase_completed
+            )
+        if hasattr(self.controller, "setup_pv_connections"):
+            self.controller.setup_pv_connections()
+
+    def setup_ui(self):
+        """Create the main UI layout."""
+        callbacks = {
+            "toggle_piezo_enable": self.toggle_piezo_enable,
+            "toggle_manual_mode": self.toggle_manual_mode,
+            "on_run_automated_test": self.on_run_automated_test,
+        }
+        self.ui = self.UI_CLASS(self, callbacks)
+        main_layout = self.ui.build()
+        self._bind_ui_widgets()
+        self.setLayout(main_layout)
+        self.update_timestamp()
+
+    def refresh_from_record(self, record: CommissioningRecord) -> None:
+        """Refresh display when active record changes."""
+        result = record.piezo_pre_rf
+        if result:
+            self._update_local_results(result)
+        else:
+            self.clear_results()
+
+        self._update_stored_readout(result)
+
+    def on_record_loaded(
+        self, record: CommissioningRecord, record_id: int
+    ) -> None:
+        """Update display when a record is loaded."""
+        self.refresh_from_record(record)
+
+    def _on_controller_phase_completed(self, record):
+        """Handle phase completion from controller - notify parent container."""
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, "on_phase_advanced"):
+                parent.on_phase_advanced(record)
+                break
+            parent = parent.parent()
+
+    def _update_local_results(self, result: PiezoPreRFCheck):
+        """Update local result displays (orange-bordered widgets on right panel)."""
+        pass_style = (
+            LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
+            + "color: #90ee90; font-weight: bold;"
+        )
+        fail_style = (
+            LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
+            + "color: #ff6b6b; font-weight: bold;"
+        )
+
+        if hasattr(self, "local_cha_result"):
+            self.local_cha_result.setText(
+                "PASS" if result.channel_a_passed else "FAIL"
+            )
+            self.local_cha_result.setStyleSheet(
+                pass_style if result.channel_a_passed else fail_style
+            )
+
+        if hasattr(self, "local_chb_result"):
+            self.local_chb_result.setText(
+                "PASS" if result.channel_b_passed else "FAIL"
+            )
+            self.local_chb_result.setStyleSheet(
+                pass_style if result.channel_b_passed else fail_style
+            )
+
+        if hasattr(self, "local_overall_result"):
+            self.local_overall_result.setText(
+                "PASS" if result.passed else "FAIL"
+            )
+            overall_style = (
+                pass_style if result.passed else fail_style
+            ) + "font-weight: bold;"
+            self.local_overall_result.setStyleSheet(overall_style)
+
+        if hasattr(self, "local_phase_status"):
+            self.local_phase_status.setText(
+                "Complete" if result.passed else "Incomplete"
+            )
+
+    def _update_stored_readout(self, result: PiezoPreRFCheck | None) -> None:
+        """Update stored-data labels from the record dataclass."""
+        if result is None:
+            self._clear_generic_stored_data()
+            if hasattr(self, "local_stored_cap_a"):
+                self.local_stored_cap_a.setText("-")
+            if hasattr(self, "local_stored_cap_b"):
+                self.local_stored_cap_b.setText("-")
+            return
+
+        self._set_generic_stored_data(result)
+
+        if hasattr(self, "local_stored_cap_a"):
+            cap_a_text = (
+                f"{result.capacitance_a * 1e9:.1f} nF"
+                if result.capacitance_a is not None
+                else "-"
+            )
+            self.local_stored_cap_a.setText(cap_a_text)
+
+        if hasattr(self, "local_stored_cap_b"):
+            cap_b_text = (
+                f"{result.capacitance_b * 1e9:.1f} nF"
+                if result.capacitance_b is not None
+                else "-"
+            )
+            self.local_stored_cap_b.setText(cap_b_text)
+
+    def clear_results(self):
+        """Clear all result displays."""
+        super().clear_results()
+
+        if hasattr(self, "local_cha_result"):
+            self.local_cha_result.setText("-")
+            self.local_cha_result.setStyleSheet(LOCAL_LABEL_STYLE)
+        if hasattr(self, "local_chb_result"):
+            self.local_chb_result.setText("-")
+            self.local_chb_result.setStyleSheet(LOCAL_LABEL_STYLE)
+        if hasattr(self, "local_cha_cap"):
+            self.local_cha_cap.setText("-")
+            self.local_cha_cap.setStyleSheet(LOCAL_CAP_STYLE)
+        if hasattr(self, "local_chb_cap"):
+            self.local_chb_cap.setText("-")
+            self.local_chb_cap.setStyleSheet(LOCAL_CAP_STYLE)
+        if hasattr(self, "local_overall_result"):
+            self.local_overall_result.setText("-")
+            self.local_overall_result.setStyleSheet(
+                LOCAL_LABEL_STYLE + "font-weight: bold;"
+            )
+
+        self._clear_generic_stored_data()
+        if hasattr(self, "local_stored_cap_a"):
+            self.local_stored_cap_a.setText("-")
+        if hasattr(self, "local_stored_cap_b"):
+            self.local_stored_cap_b.setText("-")
+
+    def update_timestamp(self):
+        """Update the timestamp label with current time."""
+        if hasattr(self, "timestamp_label"):
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.timestamp_label.setText(current_time)
+            self.timestamp_label.setStyleSheet(
+                "color: #888888; font-size: 9pt;"
+            )
+
+        QTimer.singleShot(1000, self.update_timestamp)
+
+    @pyqtSlot()
+    def toggle_piezo_enable(self):
+        """Toggle piezo enable/disable state."""
+        if self.enable_disable_btn.isChecked():
+            self.enable_disable_btn.setText("Enable")
+            self.piezo_status_label.setText("Enabled")
+            self.piezo_status_label.setStyleSheet(
+                "QLabel { background-color: #2d5016; color: #90ee90; "
+                "padding: 5px; border-radius: 3px; font-weight: bold; }"
+            )
+            self.log_message("Piezo enabled")
+        else:
+            self.enable_disable_btn.setText("Disable")
+            self.piezo_status_label.setText("Disabled")
+            self.piezo_status_label.setStyleSheet(
+                "QLabel { background-color: #3a3a3a; color: #cccccc; "
+                "padding: 5px; border-radius: 3px; }"
+            )
+            self.log_message("Piezo disabled")
+
+    @pyqtSlot()
+    def toggle_manual_mode(self):
+        """Toggle manual/feedback mode."""
+        if self.manual_feedback_btn.isChecked():
+            self.manual_feedback_btn.setText("Feedback")
+            self.mode_status_label.setText("Manual")
+            self.mode_status_label.setStyleSheet(
+                "QLabel { background-color: #5c4d1a; color: #ffd700; "
+                "padding: 5px; border-radius: 3px; font-weight: bold; }"
+            )
+            self.log_message("Manual mode activated")
+        else:
+            self.manual_feedback_btn.setText("Manual")
+            self.mode_status_label.setText("Feedback")
+            self.mode_status_label.setStyleSheet(
+                "QLabel { background-color: #3a3a3a; color: #cccccc; "
+                "padding: 5px; border-radius: 3px; }"
+            )
+            self.log_message("Feedback mode activated")
+
+    @pyqtSlot()
+    def on_run_automated_test(self):
+        """Handle Run Automated Test button click."""
+        self.controller.on_run_automated_test()
+
+    @pyqtSlot()
+    def on_abort(self):
+        """Handle abort button click."""
+        self.controller.on_abort()
+
+
+class ColdLandingDisplay(BasePlaceholderDisplay):
+    """Display for Cold Landing phase."""
+
+    UI_CLASS = ColdLandingUI
+    PHASE_NAME = "Cold Landing"
+    DATA_ATTR = "cold_landing"
+    READOUT_WIDGETS = (
+        "cold_initial_detune",
+        "cold_steps_to_resonance",
+        "cold_final_detune",
+        "cold_notes",
+    )
+
+    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
+        return {
+            "cold_initial_detune": self._fmt_float(
+                phase_data.initial_detune_hz, ".3f", "Hz"
+            ),
+            "cold_steps_to_resonance": (
+                str(phase_data.steps_to_resonance)
+                if phase_data.steps_to_resonance is not None
+                else "-"
+            ),
+            "cold_final_detune": self._fmt_float(
+                phase_data.final_detune_hz, ".3f", "Hz"
+            ),
+            "cold_notes": phase_data.notes or "-",
+        }
+
+
+class SSACharDisplay(BasePlaceholderDisplay):
+    """Display for SSA Characterization phase."""
+
+    UI_CLASS = SSACharUI
+    PHASE_NAME = "SSA Characterization"
+    DATA_ATTR = "ssa_char"
+    READOUT_WIDGETS = (
+        "ssa_max_drive",
+        "ssa_initial_drive",
+        "ssa_num_attempts",
+        "ssa_notes",
+    )
+
+    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
+        return {
+            "ssa_max_drive": self._fmt_float(
+                phase_data.max_drive_percent, ".2f", "%"
+            ),
+            "ssa_initial_drive": self._fmt_float(
+                phase_data.initial_drive_percent, ".2f", "%"
+            ),
+            "ssa_num_attempts": str(phase_data.num_attempts),
+            "ssa_notes": phase_data.notes or "-",
+        }
+
+
+class CavityCharDisplay(BasePlaceholderDisplay):
+    """Display for Cavity Characterization phase."""
+
+    UI_CLASS = CavityCharUI
+    PHASE_NAME = "Cavity Characterization"
+    DATA_ATTR = "cavity_char"
+    READOUT_WIDGETS = (
+        "cavity_loaded_q",
+        "cavity_probe_q",
+        "cavity_scale_factor",
+        "cavity_notes",
+    )
+
+    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
+        return {
+            "cavity_loaded_q": self._fmt_float(phase_data.loaded_q, ".3e"),
+            "cavity_probe_q": self._fmt_float(phase_data.probe_q, ".3e"),
+            "cavity_scale_factor": self._fmt_float(
+                phase_data.scale_factor, ".6f"
+            ),
+            "cavity_notes": phase_data.notes or "-",
+        }
+
+
+class PiezoWithRFDisplay(BasePlaceholderDisplay):
+    """Display for Piezo with RF phase."""
+
+    UI_CLASS = PiezoWithRFUI
+    PHASE_NAME = "Piezo with RF"
+    DATA_ATTR = "piezo_with_rf"
+    READOUT_WIDGETS = (
+        "piezo_rf_gain_a",
+        "piezo_rf_gain_b",
+        "piezo_rf_detune_gain",
+        "piezo_rf_notes",
+    )
+
+    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
+        return {
+            "piezo_rf_gain_a": self._fmt_float(
+                phase_data.amplifier_gain_a, ".6f"
+            ),
+            "piezo_rf_gain_b": self._fmt_float(
+                phase_data.amplifier_gain_b, ".6f"
+            ),
+            "piezo_rf_detune_gain": self._fmt_float(
+                phase_data.detune_gain, ".6f"
+            ),
+            "piezo_rf_notes": phase_data.notes or "-",
+        }
+
+
+class HighPowerDisplay(BasePlaceholderDisplay):
+    """Display for High Power Ramp phase."""
+
+    UI_CLASS = HighPowerUI
+    PHASE_NAME = "High Power Ramp"
+    DATA_ATTR = "high_power"
+    READOUT_WIDGETS = (
+        "high_power_final_amplitude",
+        "high_power_one_hour_complete",
+        "high_power_timestamp",
+        "high_power_notes",
+    )
+
+    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
+        return {
+            "high_power_final_amplitude": self._fmt_float(
+                phase_data.final_amplitude, ".3f", "MV"
+            ),
+            "high_power_one_hour_complete": (
+                "Yes" if phase_data.one_hour_complete else "No"
+            ),
+            "high_power_timestamp": self._fmt_timestamp(phase_data.timestamp),
+            "high_power_notes": phase_data.notes or "-",
+        }
