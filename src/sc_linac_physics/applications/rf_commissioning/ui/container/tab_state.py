@@ -1,0 +1,92 @@
+"""Tab initialization and state helpers for multi-phase commissioning."""
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QVBoxLayout, QWidget
+
+from sc_linac_physics.applications.rf_commissioning import CommissioningPhase
+from sc_linac_physics.applications.rf_commissioning.models.database import (
+    RecordConflictError,
+)
+
+
+def init_tabs(host) -> None:
+    """Initialize tabs with enhanced visual feedback."""
+    for i, spec in enumerate(host.phase_specs):
+        tab_widget = QWidget()
+        tab_layout = QVBoxLayout()
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+
+        display = spec.display_class(parent=tab_widget, session=host.session)
+        host._phase_displays.append(display)
+
+        tab_layout.addWidget(display)
+        tab_widget.setLayout(tab_layout)
+
+        host.tabs.addTab(
+            tab_widget,
+            get_phase_icon(host, spec.phase) + " " + spec.title,
+        )
+
+    host.tabs.currentChanged.connect(host._on_tab_changed)
+
+
+def get_phase_icon(host, phase: CommissioningPhase | None) -> str:
+    """Get status icon for a phase."""
+    if not host.session.has_active_record():
+        return "○"
+
+    record = host.session.get_active_record()
+
+    if phase is None:
+        return "●"
+
+    phase_order = CommissioningPhase.get_phase_order()
+    current_idx = phase_order.index(record.current_phase)
+    phase_idx = phase_order.index(phase)
+
+    if phase_idx < current_idx:
+        return "✓"
+    if phase_idx == current_idx:
+        return "▶"
+    return "○"
+
+
+def update_tab_states(host) -> None:
+    """Update tab states and icons."""
+    if not host.session.has_active_record():
+        for i in range(1, host.tabs.count()):
+            host.tabs.setTabEnabled(i, False)
+        return
+
+    record = host.session.get_active_record()
+    phase_order = CommissioningPhase.get_phase_order()
+    current_index = phase_order.index(record.current_phase)
+
+    for i, spec in enumerate(host.phase_specs):
+        if spec.phase is None:
+            host.tabs.setTabEnabled(i, True)
+            continue
+
+        phase_index = phase_order.index(spec.phase)
+        is_accessible = phase_index <= current_index
+
+        host.tabs.setTabEnabled(i, is_accessible)
+
+        icon = get_phase_icon(host, spec.phase)
+        host.tabs.setTabText(i, f"{icon} {spec.title}")
+
+        if phase_index == current_index:
+            host.tabs.tabBar().setTabTextColor(i, Qt.blue)
+        elif phase_index < current_index:
+            host.tabs.tabBar().setTabTextColor(i, Qt.darkGreen)
+        else:
+            host.tabs.tabBar().setTabTextColor(i, Qt.gray)
+
+
+def on_tab_changed(host, index: int) -> None:
+    """Handle tab changes by auto-saving current work."""
+    if host.session.has_active_record():
+        try:
+            host.save_active_record()
+        except RecordConflictError:
+            host._update_sync_status(False, "Unsaved changes")

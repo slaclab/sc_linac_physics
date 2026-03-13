@@ -42,7 +42,7 @@ class PiezoPreRFController(QObject):
         self._step_executing = False
         self._current_step_index = 0
         self._total_steps = 0
-        self._steps = []  # List of step names to execute
+        self._steps: list[str] = []
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
 
@@ -95,7 +95,9 @@ class PiezoPreRFController(QObject):
         return cavity.piezo, cm, cav
 
     def update_pv_addresses(
-        self, cryomodule: str = None, cavity_number: str = None
+        self,
+        cryomodule: Optional[str] = None,
+        cavity_number: Optional[str] = None,
     ) -> None:
         """Update PV addresses based on selected cavity from dropdowns.
 

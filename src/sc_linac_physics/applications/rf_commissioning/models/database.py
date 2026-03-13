@@ -1,18 +1,24 @@
 """SQLite database interface for RF commissioning records."""
 
-import sqlite3
-import typing
-from contextlib import contextmanager
-from pathlib import Path
-from typing import Optional, List
+from __future__ import annotations
 
-if typing.TYPE_CHECKING:
-    from sc_linac_physics.applications.rf_commissioning import (
-        CommissioningPhase,
-    )
+import json
+import logging
+import sqlite3
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
     CommissioningRecord,
+    PhaseCheckpoint,
+    PhaseStatus,
+    PHASE_REGISTRY,
+    deserialize_model,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RecordConflictError(Exception):
@@ -60,7 +66,15 @@ class CommissioningDatabase:
             db_path: Path to SQLite database file. Created if doesn't exist.
         """
         self.db_path = Path(db_path)
-        self._connection: Optional[sqlite3.Connection] = None
+
+    # Maps record attribute name → data model class for all phases that
+    # store data.  Derived automatically from PHASE_REGISTRY so adding a
+    # new phase here requires only an entry in the registry.
+    PHASE_DATA_MODELS: dict[str, type] = {
+        reg.record_attr: reg.data_model
+        for reg in PHASE_REGISTRY.values()
+        if reg.record_attr and reg.data_model
+    }
 
     @contextmanager
     def _get_connection(self):
@@ -84,11 +98,24 @@ class CommissioningDatabase:
 
         Creates the commissioning_records table with all necessary columns
         and indexes for efficient querying.
+
+        Phase-specific data columns are generated dynamically from
+        ``PHASE_DATA_MODELS`` (which itself is derived from ``PHASE_REGISTRY``),
+        so adding a new phase to the registry automatically provisions its
+        column when a fresh database is created or migrated.
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("""
+            # Build phase-data column declarations dynamically so that new
+            # phases registered in PHASE_REGISTRY are included without any
+            # manual SQL changes here.
+            phase_col_defs = "\n".join(
+                f"                    {col} TEXT,"
+                for col in self.PHASE_DATA_MODELS
+            )
+
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS commissioning_records (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     linac TEXT NOT NULL,
@@ -101,12 +128,7 @@ class CommissioningDatabase:
                     overall_status TEXT NOT NULL,
 
                     -- Phase-specific data (stored as JSON)
-                    piezo_pre_rf TEXT,
-                    cold_landing TEXT,
-                    ssa_char TEXT,
-                    cavity_char TEXT,
-                    piezo_with_rf TEXT,
-                    high_power TEXT,
+{phase_col_defs}
 
                     -- Phase tracking (stored as JSON)
                     phase_status TEXT NOT NULL,
@@ -120,27 +142,32 @@ class CommissioningDatabase:
                 )
             """)
 
-            # Migration: Add version column if it doesn't exist
-            cursor.execute("""
-                SELECT COUNT(*) as count FROM pragma_table_info('commissioning_records')
-                WHERE name='version'
-            """)
-            if cursor.fetchone()[0] == 0:
-                cursor.execute("""
-                    ALTER TABLE commissioning_records
-                    ADD COLUMN version INTEGER NOT NULL DEFAULT 1
-                """)
+            # ----------------------------------------------------------------
+            # Migrations: ensure every column exists on databases created
+            # before a column (or phase) was added.
+            # ----------------------------------------------------------------
+            cursor.execute("PRAGMA table_info(commissioning_records)")
+            existing_columns = {row[1] for row in cursor.fetchall()}
 
-            # Migration: Add general_notes column if it doesn't exist
-            cursor.execute("""
-                SELECT COUNT(*) as count FROM pragma_table_info('commissioning_records')
-                WHERE name='general_notes'
-            """)
-            if cursor.fetchone()[0] == 0:
-                cursor.execute("""
-                    ALTER TABLE commissioning_records
-                    ADD COLUMN general_notes TEXT NOT NULL DEFAULT '[]'
-                """)
+            # Legacy scalar columns
+            for col_name, ddl in [
+                ("version", "INTEGER NOT NULL DEFAULT 1"),
+                ("general_notes", "TEXT NOT NULL DEFAULT '[]'"),
+            ]:
+                if col_name not in existing_columns:
+                    cursor.execute(
+                        f"ALTER TABLE commissioning_records "
+                        f"ADD COLUMN {col_name} {ddl}"
+                    )
+
+            # Phase data columns – one migration per registered phase that is
+            # missing from the schema (handles databases predating a new phase).
+            for col_name in self.PHASE_DATA_MODELS:
+                if col_name not in existing_columns:
+                    cursor.execute(
+                        f"ALTER TABLE commissioning_records "
+                        f"ADD COLUMN {col_name} TEXT"
+                    )
 
             # Create indexes for common queries
             cursor.execute("""
@@ -201,9 +228,7 @@ class CommissioningDatabase:
                     ON commissioning_records(linac, cryomodule, cavity_number)
                 """)
             except sqlite3.IntegrityError as exc:
-                print(
-                    "Warning: could not create unique cavity index: " f"{exc}"
-                )
+                logger.warning("Could not create unique cavity index: %s", exc)
 
             # Create operators table for approved operator list
             cursor.execute("""
@@ -213,7 +238,7 @@ class CommissioningDatabase:
                 )
             """)
 
-    def _extract_linac_number(self, linac: Optional[str]) -> Optional[str]:
+    def _extract_linac_number(self, linac: str | None) -> str | None:
         """Extract numeric linac identifier from a linac string."""
         import re
 
@@ -229,8 +254,8 @@ class CommissioningDatabase:
     def save_record(
         self,
         record: "CommissioningRecord",
-        record_id: Optional[int] = None,
-        expected_version: Optional[int] = None,
+        record_id: int | None = None,
+        expected_version: int | None = None,
     ) -> int:
         """Save or update a commissioning record with optimistic locking.
 
@@ -250,9 +275,6 @@ class CommissioningDatabase:
             >>> record.current_phase = CommissioningPhase.SSA_CAL
             >>> db.save_record(record, record_id, expected_version=version)  # Safe update
         """
-        import json
-        from datetime import datetime
-
         now = datetime.now().isoformat()
 
         # Convert complex objects to JSON
@@ -269,24 +291,34 @@ class CommissioningDatabase:
                 checkpoint.to_dict() for checkpoint in record.phase_history
             ]  # CHANGED THIS LINE
         )
+        phase_data_json = {
+            attr_name: self._serialize_phase_data(getattr(record, attr_name))
+            for attr_name in self.PHASE_DATA_MODELS
+        }
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
             linac_number = self._extract_linac_number(record.linac)
 
+            # Build phase-data portions of the query dynamically so that new
+            # phases registered in PHASE_DATA_MODELS require no SQL changes here.
+            phase_col_names = list(self.PHASE_DATA_MODELS.keys())
+            phase_values = [phase_data_json[col] for col in phase_col_names]
+
             if record_id is None:
                 # Insert new record
+                phase_col_list = ", ".join(phase_col_names)
+                phase_placeholders = ", ".join("?" * len(phase_col_names))
                 cursor.execute(
-                    """
+                    f"""
                     INSERT INTO commissioning_records (
                         linac, linac_number, cryomodule, cavity_number, start_time, end_time,
                         current_phase, overall_status,
-                        piezo_pre_rf, cold_landing, ssa_char, cavity_char,
-                        piezo_with_rf, high_power,
+                        {phase_col_list},
                         phase_status, phase_history,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, {phase_placeholders}, ?, ?, ?, ?)
                 """,
                     (
                         record.linac,
@@ -301,36 +333,7 @@ class CommissioningDatabase:
                         ),
                         record.current_phase.value,
                         record.overall_status,
-                        (
-                            json.dumps(record.piezo_pre_rf.to_dict())
-                            if record.piezo_pre_rf
-                            else None
-                        ),
-                        (
-                            json.dumps(record.cold_landing.to_dict())
-                            if record.cold_landing
-                            else None
-                        ),
-                        (
-                            json.dumps(record.ssa_char.to_dict())
-                            if record.ssa_char
-                            else None
-                        ),
-                        (
-                            json.dumps(record.cavity_char.to_dict())
-                            if record.cavity_char
-                            else None
-                        ),
-                        (
-                            json.dumps(record.piezo_with_rf.to_dict())
-                            if record.piezo_with_rf
-                            else None
-                        ),
-                        (
-                            json.dumps(record.high_power.to_dict())
-                            if record.high_power
-                            else None
-                        ),
+                        *phase_values,
                         phase_status_json,
                         phase_history_json,
                         now,
@@ -356,13 +359,15 @@ class CommissioningDatabase:
                             record_id, expected_version, current_version
                         )
 
+                phase_set_clauses = ", ".join(
+                    f"{col} = ?" for col in phase_col_names
+                )
                 cursor.execute(
-                    """
+                    f"""
                     UPDATE commissioning_records SET
                         linac = ?, linac_number = ?, cryomodule = ?, cavity_number = ?, start_time = ?, end_time = ?,
                         current_phase = ?, overall_status = ?,
-                        piezo_pre_rf = ?, cold_landing = ?, ssa_char = ?, cavity_char = ?,
-                        piezo_with_rf = ?, high_power = ?,
+                        {phase_set_clauses},
                         phase_status = ?, phase_history = ?,
                         updated_at = ?,
                         version = version + 1
@@ -381,36 +386,7 @@ class CommissioningDatabase:
                         ),
                         record.current_phase.value,
                         record.overall_status,
-                        (
-                            json.dumps(record.piezo_pre_rf.to_dict())
-                            if record.piezo_pre_rf
-                            else None
-                        ),
-                        (
-                            json.dumps(record.cold_landing.to_dict())
-                            if record.cold_landing
-                            else None
-                        ),
-                        (
-                            json.dumps(record.ssa_char.to_dict())
-                            if record.ssa_char
-                            else None
-                        ),
-                        (
-                            json.dumps(record.cavity_char.to_dict())
-                            if record.cavity_char
-                            else None
-                        ),
-                        (
-                            json.dumps(record.piezo_with_rf.to_dict())
-                            if record.piezo_with_rf
-                            else None
-                        ),
-                        (
-                            json.dumps(record.high_power.to_dict())
-                            if record.high_power
-                            else None
-                        ),
+                        *phase_values,
                         phase_status_json,
                         phase_history_json,
                         now,
@@ -419,7 +395,7 @@ class CommissioningDatabase:
                 )
                 return record_id
 
-    def get_record(self, record_id: int) -> Optional["CommissioningRecord"]:
+    def get_record(self, record_id: int) -> "CommissioningRecord" | None:
         """Retrieve a record by database ID.
 
         Args:
@@ -442,7 +418,7 @@ class CommissioningDatabase:
 
     def get_record_with_version(
         self, record_id: int
-    ) -> Optional[tuple["CommissioningRecord", int]]:
+    ) -> tuple["CommissioningRecord", int] | None:
         """Retrieve a record with its version number for optimistic locking.
 
         Args:
@@ -466,7 +442,7 @@ class CommissioningDatabase:
 
     def load_record_with_version(
         self, record_id: int
-    ) -> Optional[tuple["CommissioningRecord", int]]:
+    ) -> tuple["CommissioningRecord", int] | None:
         """Alias for get_record_with_version."""
         return self.get_record_with_version(record_id)
 
@@ -475,22 +451,6 @@ class CommissioningDatabase:
 
         Handles deserialization of JSON fields and enum conversion.
         """
-        import json
-        from datetime import datetime
-
-        from .data_models import (
-            CavityCharacterization,
-            ColdLandingData,
-            CommissioningPhase,
-            CommissioningRecord,
-            HighPowerRampData,
-            PhaseCheckpoint,
-            PhaseStatus,
-            PiezoPreRFCheck,
-            PiezoWithRFTest,
-            SSACharacterization,
-        )
-
         # Deserialize phase_status
         phase_status_dict = json.loads(row["phase_status"])
         phase_status = {
@@ -500,99 +460,18 @@ class CommissioningDatabase:
 
         # UPDATED: Deserialize phase_history as list
         phase_history_list = json.loads(row["phase_history"])
-        phase_history = []
-        for (
-            cp_dict
-        ) in phase_history_list:  # CHANGED: iterate over list instead of dict
-            checkpoint = PhaseCheckpoint(
-                phase=CommissioningPhase(cp_dict["phase"]),  # ADD this line
-                timestamp=datetime.fromisoformat(cp_dict["timestamp"]),
-                operator=cp_dict["operator"],
-                step_name=cp_dict["step_name"],  # ADD this line
-                success=cp_dict["success"],  # ADD this line
-                notes=cp_dict.get("notes", ""),
-                measurements=cp_dict.get("measurements", {}),
-                error_message=cp_dict.get("error_message"),
-            )
-            phase_history.append(
-                checkpoint
-            )  # CHANGED: append to list instead of dict
+        phase_history = [
+            deserialize_model(PhaseCheckpoint, cp_dict)
+            for cp_dict in phase_history_list
+        ]
 
-        # Deserialize phase-specific data
-        piezo_pre_rf = None
-        if row["piezo_pre_rf"]:
-            data = json.loads(row["piezo_pre_rf"])
-            piezo_pre_rf = PiezoPreRFCheck(
-                capacitance_a=data["capacitance_a"],
-                capacitance_b=data["capacitance_b"],
-                channel_a_passed=data["channel_a_passed"],
-                channel_b_passed=data["channel_b_passed"],
-                timestamp=datetime.fromisoformat(data["timestamp"]),
-                notes=data["notes"],
-            )
-
-        cold_landing = None
-        if row["cold_landing"]:
-            data = json.loads(row["cold_landing"])
-            cold_landing = ColdLandingData(
-                initial_detune_hz=data["initial_detune_hz"],
-                initial_timestamp=(
-                    datetime.fromisoformat(data["initial_timestamp"])
-                    if data["initial_timestamp"]
-                    else None
-                ),
-                steps_to_resonance=data["steps_to_resonance"],
-                final_detune_hz=data["final_detune_hz"],
-                final_timestamp=(
-                    datetime.fromisoformat(data["final_timestamp"])
-                    if data["final_timestamp"]
-                    else None
-                ),
-                notes=data["notes"],
-            )
-
-        ssa_char = None
-        if row["ssa_char"]:
-            data = json.loads(row["ssa_char"])
-            ssa_char = SSACharacterization(
-                max_drive=data["max_drive"],
-                initial_drive=data["initial_drive"],
-                num_attempts=data["num_attempts"],
-                timestamp=datetime.fromisoformat(data["timestamp"]),
-                notes=data["notes"],
-            )
-
-        cavity_char = None
-        if row["cavity_char"]:
-            data = json.loads(row["cavity_char"])
-            cavity_char = CavityCharacterization(
-                loaded_q=data["loaded_q"],
-                probe_q=data["probe_q"],
-                scale_factor=data["scale_factor"],
-                timestamp=datetime.fromisoformat(data["timestamp"]),
-                notes=data["notes"],
-            )
-
-        piezo_with_rf = None
-        if row["piezo_with_rf"]:
-            data = json.loads(row["piezo_with_rf"])
-            piezo_with_rf = PiezoWithRFTest(
-                amplifier_gain_a=data["amplifier_gain_a"],
-                amplifier_gain_b=data["amplifier_gain_b"],
-                detune_gain=data["detune_gain"],
-                timestamp=datetime.fromisoformat(data["timestamp"]),
-                notes=data["notes"],
-            )
-
-        high_power = None
-        if row["high_power"]:
-            data = json.loads(row["high_power"])
-            high_power = HighPowerRampData(
-                final_amplitude=data["final_amplitude"],
-                one_hour_complete=data["one_hour_complete"],
-                timestamp=datetime.fromisoformat(data["timestamp"]),
-                notes=data["notes"],
-            )
+        # Build phase data kwargs dynamically so that new phases require no
+        # changes here.  Note: CommissioningRecord must still declare a typed
+        # field whose name matches the registry's record_attr.
+        phase_data = {
+            attr_name: self._deserialize_phase_data(row[attr_name], model_cls)
+            for attr_name, model_cls in self.PHASE_DATA_MODELS.items()
+        }
 
         # Create record
         record = CommissioningRecord(
@@ -601,12 +480,7 @@ class CommissioningDatabase:
             cavity_number=row["cavity_number"],
             start_time=datetime.fromisoformat(row["start_time"]),
             current_phase=CommissioningPhase(row["current_phase"]),
-            piezo_pre_rf=piezo_pre_rf,
-            cold_landing=cold_landing,
-            ssa_char=ssa_char,
-            cavity_char=cavity_char,
-            piezo_with_rf=piezo_with_rf,
-            high_power=high_power,
+            **phase_data,
             phase_history=phase_history,
             phase_status=phase_status,
             end_time=(
@@ -616,8 +490,21 @@ class CommissioningDatabase:
             ),
             overall_status=row["overall_status"],
         )
-
         return record
+
+    @staticmethod
+    def _serialize_phase_data(phase_data) -> str | None:
+        """Serialize a phase dataclass to JSON for storage."""
+        if phase_data is None:
+            return None
+        return json.dumps(phase_data.to_dict())
+
+    @staticmethod
+    def _deserialize_phase_data(payload: str | None, model_cls):
+        """Deserialize a stored phase payload into its dataclass."""
+        if not payload:
+            return None
+        return deserialize_model(model_cls, json.loads(payload))
 
     def get_record_by_cavity(
         self,
@@ -625,7 +512,7 @@ class CommissioningDatabase:
         cryomodule: str,
         cavity_number: str,
         active_only: bool = True,
-    ) -> Optional["CommissioningRecord"]:
+    ) -> "CommissioningRecord" | None:
         """Get most recent record for a cavity.
 
         Args:
@@ -706,7 +593,7 @@ class CommissioningDatabase:
 
             return [self._row_to_record(row) for row in rows]
 
-    def load_record(self, record_id: int) -> Optional["CommissioningRecord"]:
+    def load_record(self, record_id: int) -> "CommissioningRecord" | None:
         """Alias for get_record for compatibility."""
         return self.get_record(record_id)
 
@@ -730,7 +617,7 @@ class CommissioningDatabase:
 
     def get_record_id_for_cavity(
         self, linac: str, cryomodule: str, cavity_number: str
-    ) -> Optional[int]:
+    ) -> int | None:
         """Get the canonical record ID for a cavity, if it exists."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -749,8 +636,8 @@ class CommissioningDatabase:
             return row["id"]
 
     def _get_record_summaries(
-        self, where_clause: str = "", params: Optional[list] = None
-    ) -> List[dict]:
+        self, where_clause: str = "", params: list | None = None
+    ) -> list[dict]:
         """Return lightweight record summaries for browsing."""
         import json
 
@@ -770,7 +657,7 @@ class CommissioningDatabase:
             cursor.execute(query, params)
             rows = cursor.fetchall()
 
-        records: List[dict] = []
+        records: list[dict] = []
         for row in rows:
             record = {
                 "id": row["id"],
@@ -801,7 +688,7 @@ class CommissioningDatabase:
 
         return records
 
-    def get_all_records(self) -> List[dict]:
+    def get_all_records(self) -> list[dict]:
         """
         Get all commissioning records as dictionaries.
 
@@ -812,10 +699,7 @@ class CommissioningDatabase:
             return self._get_record_summaries()
 
         except Exception as e:
-            print(f"Error getting all records: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.exception("Error getting all records: %s", e)
             return []
 
     def get_active_records(self) -> list["CommissioningRecord"]:
@@ -922,8 +806,8 @@ class CommissioningDatabase:
         record_id: int,
         phase: "CommissioningPhase",
         measurement_data,
-        operator: Optional[str] = None,
-        notes: Optional[str] = None,
+        operator: str | None = None,
+        notes: str | None = None,
     ) -> int:
         """Add a measurement attempt to history (append-only, no conflicts).
 
@@ -986,7 +870,7 @@ class CommissioningDatabase:
             )
             return cursor.lastrowid
 
-    def get_operators(self) -> List[str]:
+    def get_operators(self) -> list[str]:
         """Return the list of approved operators."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -1013,8 +897,8 @@ class CommissioningDatabase:
     def get_measurement_history(
         self,
         record_id: int,
-        phase: Optional["CommissioningPhase"] = None,
-    ) -> List[dict]:
+        phase: "CommissioningPhase" | None = None,
+    ) -> list[dict]:
         """Get all measurement attempts for a record.
 
         Args:
@@ -1101,8 +985,8 @@ class CommissioningDatabase:
     def get_measurement_notes(
         self,
         record_id: int,
-        phase: Optional["CommissioningPhase"] = None,
-    ) -> List[dict]:
+        phase: "CommissioningPhase" | None = None,
+    ) -> list[dict]:
         """Flatten measurement notes across history entries.
 
         Returns a list of notes with entry_id and note index for editing.
@@ -1135,7 +1019,7 @@ class CommissioningDatabase:
     def append_measurement_note(
         self,
         entry_id: int,
-        operator: Optional[str],
+        operator: str | None,
         note: str,
     ) -> bool:
         """Append a note to a measurement history entry.
@@ -1197,7 +1081,7 @@ class CommissioningDatabase:
 
     # ==================== GENERAL NOTES METHODS ====================
 
-    def get_general_notes(self, record_id: int) -> List[dict]:
+    def get_general_notes(self, record_id: int) -> list[dict]:
         """Get all general notes for a commissioning record.
 
         Args:
@@ -1230,9 +1114,9 @@ class CommissioningDatabase:
     def append_general_note(
         self,
         record_id: int,
-        operator: Optional[str],
+        operator: str | None,
         note: str,
-        expected_version: Optional[int] = None,
+        expected_version: int | None = None,
     ) -> bool:
         """Append a general note to a commissioning record.
 
@@ -1299,9 +1183,9 @@ class CommissioningDatabase:
         self,
         record_id: int,
         note_index: int,
-        operator: Optional[str],
+        operator: str | None,
         note: str,
-        expected_version: Optional[int] = None,
+        expected_version: int | None = None,
     ) -> bool:
         """Update a specific general note by index.
 
@@ -1371,7 +1255,7 @@ class CommissioningDatabase:
         self,
         entry_id: int,
         note_index: int,
-        operator: Optional[str],
+        operator: str | None,
         note: str,
     ) -> bool:
         """Update a specific note entry by index."""

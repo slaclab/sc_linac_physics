@@ -2,7 +2,7 @@
 Shared UI builder for RF commissioning displays.
 """
 
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -62,13 +62,13 @@ class PhaseUIBase:
     def __init__(
         self,
         parent,
-        callbacks: Optional[Dict[str, Callable[[], None]]] = None,
+        callbacks: dict[str, Callable[[], None]] | None = None,
     ) -> None:
         self.parent = parent
         self.callbacks = callbacks or {}
-        self.widgets: Dict[str, object] = {}
+        self.widgets: dict[str, object] = {}
 
-    def _register(self, name: str, widget):
+    def _register(self, name: str, widget) -> object:
         """Register a widget by name for easy access."""
         self.widgets[name] = widget
         return widget
@@ -476,6 +476,15 @@ class PhaseUIBase:
         group.setLayout(layout)
         return group
 
+    def _get_parent_stored_data_fields(self) -> list[tuple[str, str]]:
+        """Get stored-data field definitions from the parent display."""
+        if hasattr(self.parent, "get_phase_stored_field_specs"):
+            return [
+                (spec.label, spec.widget_name)
+                for spec in self.parent.get_phase_stored_field_specs()
+            ]
+        return []
+
 
 class PiezoPreRFUI(PhaseUIBase):
     """Builds the Piezo Pre-RF display UI and exposes widget references."""
@@ -513,10 +522,7 @@ class PiezoPreRFUI(PhaseUIBase):
         # Stored data section - phase results
         right_panel.addWidget(
             self._build_stored_data_section(
-                [
-                    ("Ch A Cap", "local_stored_cap_a"),
-                    ("Ch B Cap", "local_stored_cap_b"),
-                ]
+                self._get_parent_stored_data_fields()
             )
         )
 
@@ -811,11 +817,7 @@ class ColdLandingUI(PhaseUIBase):
         )
         right_panel.addWidget(
             self._build_stored_data_section(
-                [
-                    ("Initial Detune", "cold_initial_detune"),
-                    ("Steps to Resonance", "cold_steps_to_resonance"),
-                    ("Final Detune", "cold_final_detune"),
-                ]
+                self._get_parent_stored_data_fields()
             )
         )
 
@@ -849,11 +851,7 @@ class SSACharUI(PhaseUIBase):
         )
         right_panel.addWidget(
             self._build_stored_data_section(
-                [
-                    ("Max Drive", "ssa_max_drive"),
-                    ("Initial Drive", "ssa_initial_drive"),
-                    ("Attempts", "ssa_num_attempts"),
-                ]
+                self._get_parent_stored_data_fields()
             )
         )
 
@@ -888,11 +886,7 @@ class CavityCharUI(PhaseUIBase):
         )
         right_panel.addWidget(
             self._build_stored_data_section(
-                [
-                    ("Loaded Q", "cavity_loaded_q"),
-                    ("Probe Q", "cavity_probe_q"),
-                    ("Scale Factor", "cavity_scale_factor"),
-                ]
+                self._get_parent_stored_data_fields()
             )
         )
 
@@ -926,11 +920,7 @@ class PiezoWithRFUI(PhaseUIBase):
         )
         right_panel.addWidget(
             self._build_stored_data_section(
-                [
-                    ("Amplifier Gain A", "piezo_rf_gain_a"),
-                    ("Amplifier Gain B", "piezo_rf_gain_b"),
-                    ("Detune Gain", "piezo_rf_detune_gain"),
-                ]
+                self._get_parent_stored_data_fields()
             )
         )
 
@@ -964,11 +954,49 @@ class HighPowerUI(PhaseUIBase):
         )
         right_panel.addWidget(
             self._build_stored_data_section(
-                [
-                    ("Final Amplitude", "high_power_final_amplitude"),
-                    ("One Hour Complete", "high_power_one_hour_complete"),
-                    ("Timestamp", "high_power_timestamp"),
-                ]
+                self._get_parent_stored_data_fields()
+            )
+        )
+
+        main_layout.addLayout(left_panel, 3)
+        main_layout.addLayout(right_panel, 2)
+
+        return main_layout
+
+
+class GenericPhaseUI(PhaseUIBase):
+    """Generic UI builder used automatically for phases without a specialised
+    UI class.
+
+    The phase name displayed in the results section is taken from the
+    ``PHASE_NAME`` attribute of the parent display widget, so the same class
+    works for any new phase added to ``PHASE_REGISTRY``.
+    """
+
+    def build(self) -> QHBoxLayout:
+        """Create the standard placeholder layout."""
+        phase_name = getattr(self.parent, "PHASE_NAME", "Phase")
+
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        # Left panel
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+        left_panel.addLayout(self._build_main_toolbar())
+        left_panel.addWidget(self._build_history())
+        left_panel.addStretch()
+
+        # Right panel
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(
+            self._build_basic_results_section(phase_name), stretch=1
+        )
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                self._get_parent_stored_data_fields()
             )
         )
 

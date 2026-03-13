@@ -1,7 +1,6 @@
 """Base display interface for commissioning phases."""
 
 from datetime import datetime
-from typing import Optional
 
 from PyQt5.QtWidgets import QMessageBox
 from pydm import Display
@@ -16,7 +15,7 @@ class PhaseDisplayBase(Display):
     """Common interface for phase displays used in multi-phase container."""
 
     def __init__(
-        self, parent=None, session: Optional[CommissioningSession] = None
+        self, parent=None, session: CommissioningSession | None = None
     ):
         super().__init__(parent)
         self.session = session
@@ -71,7 +70,7 @@ class PhaseDisplayBase(Display):
     # Common Helper Methods
     # =============================================================================
 
-    def get_current_operator(self) -> Optional[str]:
+    def get_current_operator(self) -> str | None:
         """Get the current operator from parent container."""
         parent = self.parent()
         while parent:
@@ -82,7 +81,7 @@ class PhaseDisplayBase(Display):
             parent = parent.parent()
         return None
 
-    def get_current_cavity(self) -> Optional[tuple[str, str]]:
+    def get_current_cavity(self) -> tuple[str, str] | None:
         """Get current cavity info from active record.
 
         Returns:

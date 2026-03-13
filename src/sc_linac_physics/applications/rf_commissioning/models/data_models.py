@@ -3,7 +3,17 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Any, Optional
+
+from sc_linac_physics.applications.rf_commissioning.models.registry import (
+    PhaseRegistration,
+    create_phase_registry,
+    validate_phase_registry_consistency,
+)
+from sc_linac_physics.applications.rf_commissioning.models.serialization import (
+    phase_display_field,
+    serialize_model,
+)
 
 
 class CommissioningPhase(Enum):
@@ -18,7 +28,7 @@ class CommissioningPhase(Enum):
     COMPLETE = "complete"
 
     @classmethod
-    def get_phase_order(cls) -> List["CommissioningPhase"]:
+    def get_phase_order(cls) -> list["CommissioningPhase"]:
         """Get the required sequential order of phases.
 
         Returns:
@@ -79,12 +89,40 @@ class PhaseStatus(Enum):
 class PiezoPreRFCheck:
     """Piezo tuner pre-RF checkout results."""
 
-    capacitance_a: Optional[float] = None  # Farads
-    capacitance_b: Optional[float] = None  # Farads
+    capacitance_a: Optional[float] = phase_display_field(
+        default=None,
+        label="Ch A Cap",
+        widget_name="local_stored_cap_a",
+        source_attr="capacitance_a_nf",
+        format_spec=".1f",
+        unit="nF",
+    )  # Farads
+    capacitance_b: Optional[float] = phase_display_field(
+        default=None,
+        label="Ch B Cap",
+        widget_name="local_stored_cap_b",
+        source_attr="capacitance_b_nf",
+        format_spec=".1f",
+        unit="nF",
+    )  # Farads
     channel_a_passed: bool = False
     channel_b_passed: bool = False
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
+
+    @property
+    def capacitance_a_nf(self) -> Optional[float]:
+        """Channel A capacitance in nF."""
+        if self.capacitance_a is None:
+            return None
+        return self.capacitance_a * 1e9
+
+    @property
+    def capacitance_b_nf(self) -> Optional[float]:
+        """Channel B capacitance in nF."""
+        if self.capacitance_b is None:
+            return None
+        return self.capacitance_b * 1e9
 
     @property
     def passed(self) -> bool:
@@ -95,7 +133,10 @@ class PiezoPreRFCheck:
     def status_description(self) -> str:
         """Human-readable status."""
         if self.passed:
-            return f"PASS: Ch A={self.capacitance_a:.3e}F, Ch B={self.capacitance_b:.3e}F"
+            return (
+                f"PASS: Ch A={self.capacitance_a:.3e}F, "
+                f"Ch B={self.capacitance_b:.3e}F"
+            )
         else:
             failures = []
             if not self.channel_a_passed:
@@ -106,26 +147,35 @@ class PiezoPreRFCheck:
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return {
-            "capacitance_a": self.capacitance_a,
-            "capacitance_b": self.capacitance_b,
-            "channel_a_passed": self.channel_a_passed,
-            "channel_b_passed": self.channel_b_passed,
-            "passed": self.passed,
-            "status_description": self.status_description,
-            "timestamp": self.timestamp.isoformat(),
-            "notes": self.notes,
-        }
+        return serialize_model(
+            self, computed_fields=("passed", "status_description")
+        )
 
 
 @dataclass
 class ColdLandingData:
     """Cold landing frequency measurement and tuning data."""
 
-    initial_detune_hz: Optional[float] = None
+    initial_detune_hz: Optional[float] = phase_display_field(
+        default=None,
+        label="Initial Detune",
+        widget_name="cold_initial_detune",
+        format_spec=".3f",
+        unit="Hz",
+    )
     initial_timestamp: Optional[datetime] = None
-    steps_to_resonance: Optional[int] = None
-    final_detune_hz: Optional[float] = None
+    steps_to_resonance: Optional[int] = phase_display_field(
+        default=None,
+        label="Steps to Resonance",
+        widget_name="cold_steps_to_resonance",
+    )
+    final_detune_hz: Optional[float] = phase_display_field(
+        default=None,
+        label="Final Detune",
+        widget_name="cold_final_detune",
+        format_spec=".3f",
+        unit="Hz",
+    )
     final_timestamp: Optional[datetime] = None
     notes: str = ""
 
@@ -154,34 +204,41 @@ class ColdLandingData:
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return {
-            "initial_detune_hz": self.initial_detune_hz,
-            "initial_detune_khz": self.initial_detune_khz,
-            "initial_timestamp": (
-                self.initial_timestamp.isoformat()
-                if self.initial_timestamp
-                else None
+        return serialize_model(
+            self,
+            computed_fields=(
+                "initial_detune_khz",
+                "final_detune_khz",
+                "is_complete",
             ),
-            "steps_to_resonance": self.steps_to_resonance,
-            "final_detune_hz": self.final_detune_hz,
-            "final_detune_khz": self.final_detune_khz,
-            "final_timestamp": (
-                self.final_timestamp.isoformat()
-                if self.final_timestamp
-                else None
-            ),
-            "is_complete": self.is_complete,
-            "notes": self.notes,
-        }
+        )
 
 
 @dataclass
 class SSACharacterization:
     """SSA calibration results."""
 
-    max_drive: Optional[float] = None  # 0.0-1.0
-    initial_drive: Optional[float] = None
-    num_attempts: int = 0
+    max_drive: Optional[float] = phase_display_field(
+        default=None,
+        label="Max Drive",
+        widget_name="ssa_max_drive",
+        source_attr="max_drive_percent",
+        format_spec=".2f",
+        unit="%",
+    )  # 0.0-1.0
+    initial_drive: Optional[float] = phase_display_field(
+        default=None,
+        label="Initial Drive",
+        widget_name="ssa_initial_drive",
+        source_attr="initial_drive_percent",
+        format_spec=".2f",
+        unit="%",
+    )
+    num_attempts: int = phase_display_field(
+        default=0,
+        label="Attempts",
+        widget_name="ssa_num_attempts",
+    )
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -218,27 +275,40 @@ class SSACharacterization:
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return {
-            "max_drive": self.max_drive,
-            "max_drive_percent": self.max_drive_percent,
-            "initial_drive": self.initial_drive,
-            "initial_drive_percent": self.initial_drive_percent,
-            "num_attempts": self.num_attempts,
-            "drive_reduction": self.drive_reduction,
-            "succeeded_first_try": self.succeeded_first_try,
-            "is_complete": self.is_complete,
-            "timestamp": self.timestamp.isoformat(),
-            "notes": self.notes,
-        }
+        return serialize_model(
+            self,
+            computed_fields=(
+                "max_drive_percent",
+                "initial_drive_percent",
+                "drive_reduction",
+                "succeeded_first_try",
+                "is_complete",
+            ),
+        )
 
 
 @dataclass
 class CavityCharacterization:
     """Cavity RF characterization results."""
 
-    loaded_q: Optional[float] = None
-    probe_q: Optional[float] = None
-    scale_factor: Optional[float] = None
+    loaded_q: Optional[float] = phase_display_field(
+        default=None,
+        label="Loaded Q",
+        widget_name="cavity_loaded_q",
+        format_spec=".3e",
+    )
+    probe_q: Optional[float] = phase_display_field(
+        default=None,
+        label="Probe Q",
+        widget_name="cavity_probe_q",
+        format_spec=".3e",
+    )
+    scale_factor: Optional[float] = phase_display_field(
+        default=None,
+        label="Scale Factor",
+        widget_name="cavity_scale_factor",
+        format_spec=".6f",
+    )
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -249,23 +319,31 @@ class CavityCharacterization:
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return {
-            "loaded_q": self.loaded_q,
-            "probe_q": self.probe_q,
-            "scale_factor": self.scale_factor,
-            "is_complete": self.is_complete,
-            "timestamp": self.timestamp.isoformat(),
-            "notes": self.notes,
-        }
+        return serialize_model(self, computed_fields=("is_complete",))
 
 
 @dataclass
 class PiezoWithRFTest:
     """Piezo tuner with-RF test results."""
 
-    amplifier_gain_a: Optional[float] = None
-    amplifier_gain_b: Optional[float] = None
-    detune_gain: Optional[float] = None
+    amplifier_gain_a: Optional[float] = phase_display_field(
+        default=None,
+        label="Amplifier Gain A",
+        widget_name="piezo_rf_gain_a",
+        format_spec=".6f",
+    )
+    amplifier_gain_b: Optional[float] = phase_display_field(
+        default=None,
+        label="Amplifier Gain B",
+        widget_name="piezo_rf_gain_b",
+        format_spec=".6f",
+    )
+    detune_gain: Optional[float] = phase_display_field(
+        default=None,
+        label="Detune Gain",
+        widget_name="piezo_rf_detune_gain",
+        format_spec=".6f",
+    )
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -280,22 +358,27 @@ class PiezoWithRFTest:
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return {
-            "amplifier_gain_a": self.amplifier_gain_a,
-            "amplifier_gain_b": self.amplifier_gain_b,
-            "detune_gain": self.detune_gain,
-            "is_complete": self.is_complete,
-            "timestamp": self.timestamp.isoformat(),
-            "notes": self.notes,
-        }
+        return serialize_model(self, computed_fields=("is_complete",))
 
 
 @dataclass
 class HighPowerRampData:
     """High power ramp and one-hour run results."""
 
-    final_amplitude: Optional[float] = None  # MV
-    one_hour_complete: bool = False
+    final_amplitude: Optional[float] = phase_display_field(
+        default=None,
+        label="Final Amplitude",
+        widget_name="high_power_final_amplitude",
+        format_spec=".3f",
+        unit="MV",
+    )  # MV
+    one_hour_complete: bool = phase_display_field(
+        default=False,
+        label="One Hour Complete",
+        widget_name="high_power_one_hour_complete",
+        true_text="Yes",
+        false_text="No",
+    )
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -306,13 +389,7 @@ class HighPowerRampData:
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return {
-            "final_amplitude": self.final_amplitude,
-            "one_hour_complete": self.one_hour_complete,
-            "is_complete": self.is_complete,
-            "timestamp": self.timestamp.isoformat(),
-            "notes": self.notes,
-        }
+        return serialize_model(self, computed_fields=("is_complete",))
 
 
 @dataclass
@@ -330,27 +407,18 @@ class PhaseCheckpoint:
         error_message: Optional error message if step failed
     """
 
-    phase: CommissioningPhase  # ADD THIS LINE
+    phase: CommissioningPhase
     timestamp: datetime
     operator: str
     step_name: str
     success: bool
     notes: str = ""
-    measurements: Dict[str, Any] = field(default_factory=dict)
-    error_message: Optional[str] = None
+    measurements: dict[str, Any] = field(default_factory=dict)
+    error_message: str | None = None
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return {
-            "phase": self.phase.value,  # ADD THIS LINE
-            "timestamp": self.timestamp.isoformat(),
-            "operator": self.operator,
-            "step_name": self.step_name,
-            "success": self.success,
-            "notes": self.notes,
-            "measurements": self.measurements,
-            "error_message": self.error_message,
-        }
+        return serialize_model(self)
 
 
 @dataclass
@@ -372,14 +440,12 @@ class CommissioningRecord:
     high_power: Optional[HighPowerRampData] = None
 
     # Phase tracking
-    phase_history: List[PhaseCheckpoint] = field(
-        default_factory=list
-    )  # CHANGED: was dict[CommissioningPhase, PhaseCheckpoint]
+    phase_history: list[PhaseCheckpoint] = field(default_factory=list)
     phase_status: dict[CommissioningPhase, PhaseStatus] = field(
         default_factory=dict
     )
 
-    end_time: Optional[datetime] = None
+    end_time: datetime | None = None
     overall_status: str = "in_progress"
 
     def __post_init__(self):
@@ -405,7 +471,7 @@ class CommissioningRecord:
         return f"{self.cryomodule}_CAV{self.cavity_number}"
 
     @property
-    def elapsed_time(self) -> Optional[float]:
+    def elapsed_time(self) -> float | None:
         """Total elapsed time in hours."""
         if self.end_time:
             return (self.end_time - self.start_time).total_seconds() / 3600
@@ -415,7 +481,9 @@ class CommissioningRecord:
         """Get status of a specific phase."""
         return self.phase_status.get(phase, PhaseStatus.NOT_STARTED)
 
-    def set_phase_status(self, phase: CommissioningPhase, status: PhaseStatus):
+    def set_phase_status(
+        self, phase: CommissioningPhase, status: PhaseStatus
+    ) -> None:
         """Set status of a specific phase."""
         self.phase_status[phase] = status
 
@@ -480,8 +548,7 @@ class CommissioningRecord:
 
         return True, f"Advanced to {next_phase.value}"
 
-    # UPDATED METHODS:
-    def add_checkpoint(self, checkpoint: PhaseCheckpoint):
+    def add_checkpoint(self, checkpoint: PhaseCheckpoint) -> None:
         """Add a checkpoint to the history.
 
         Args:
@@ -490,8 +557,8 @@ class CommissioningRecord:
         self.phase_history.append(checkpoint)
 
     def get_checkpoints(
-        self, phase: Optional[CommissioningPhase] = None
-    ) -> List[PhaseCheckpoint]:
+        self, phase: CommissioningPhase | None = None
+    ) -> list[PhaseCheckpoint]:
         """Get checkpoints, optionally filtered by phase.
 
         Args:
@@ -505,8 +572,8 @@ class CommissioningRecord:
         return [cp for cp in self.phase_history if cp.phase == phase]
 
     def get_latest_checkpoint(
-        self, phase: Optional[CommissioningPhase] = None
-    ) -> Optional[PhaseCheckpoint]:
+        self, phase: CommissioningPhase | None = None
+    ) -> PhaseCheckpoint | None:
         """Get the most recent checkpoint, optionally for a specific phase.
 
         Args:
@@ -552,7 +619,34 @@ class CommissioningRecord:
                 phase.value: status.value
                 for phase, status in self.phase_status.items()
             },
-            "phase_history": [
-                cp.to_dict() for cp in self.phase_history
-            ],  # CHANGED: was dict comprehension
+            "phase_history": [cp.to_dict() for cp in self.phase_history],
         }
+
+
+# ---------------------------------------------------------------------------
+# Central phase registry
+# ---------------------------------------------------------------------------
+# This is the *single source of truth* for every layer of the application.
+#
+# To add a new phase:
+#   1. Add a new ``CommissioningPhase`` enum value above.
+#   2. Create a dataclass for the phase results (e.g. ``MyPhaseData``).
+#   3. Add a ``PhaseRegistration`` entry below.
+#   4. Add the corresponding optional field to ``CommissioningRecord``
+#      (e.g. ``my_phase: Optional[MyPhaseData] = None``).
+#   5. Optionally register a custom display class in
+#      ``ui/phase_displays.py::PHASE_DISPLAY_MAP`` – if omitted, a
+#      generic placeholder screen is generated automatically.
+#
+# Everything else (DB schema migration, INSERT/UPDATE SQL, UI tabs, and
+# the progress indicator) is derived from this registry automatically.
+
+PHASE_REGISTRY: dict[CommissioningPhase, PhaseRegistration] = (
+    create_phase_registry()
+)
+
+validate_phase_registry_consistency(
+    phase_enum=CommissioningPhase,
+    phase_order=CommissioningPhase.get_phase_order(),
+    phase_registry=PHASE_REGISTRY,
+)

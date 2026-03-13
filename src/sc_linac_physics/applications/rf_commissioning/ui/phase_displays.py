@@ -21,10 +21,18 @@ from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_con
     PiezoPreRFController,
 )
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
+    ColdLandingData,
+    CavityCharacterization,
+    HighPowerRampData,
     PiezoPreRFCheck,
+    PiezoWithRFTest,
+    SSACharacterization,
+    get_phase_display_specs,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.ui_builder import (
     ColdLandingUI,
+    GenericPhaseUI,
     SSACharUI,
     CavityCharUI,
     PiezoWithRFUI,
@@ -39,10 +47,12 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
     """Base class for placeholder phase displays."""
 
     step_progress_signal = pyqtSignal(str, int)  # (step_name, progress)
-    UI_CLASS = None  # Override in subclass
-    PHASE_NAME = ""  # Override in subclass
-    DATA_ATTR = ""  # Override with CommissioningRecord attribute name
-    READOUT_WIDGETS: tuple[str, ...] = ()
+    # Subclasses may override UI_CLASS with a specialised builder.  When left
+    # as GenericPhaseUI the standard toolbar/history/results layout is used.
+    UI_CLASS = GenericPhaseUI
+    PHASE_NAME = ""  # Override with a human-readable phase name
+    DATA_ATTR = ""  # Override with the CommissioningRecord attribute name
+    DATA_MODEL = None  # Override with the phase dataclass type
 
     def __init__(
         self, parent=None, session: CommissioningSession | None = None
@@ -81,7 +91,7 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
         """Update readout labels from phase dataclass stored on the record."""
         phase_data = getattr(record, self.DATA_ATTR, None)
         if phase_data is None:
-            self._clear_phase_data_readouts()
+            self._clear_phase_specific_readouts()
             if hasattr(self, "local_phase_status"):
                 self.local_phase_status.setText("No stored data")
             self._clear_generic_stored_data()
@@ -90,27 +100,14 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
         if hasattr(self, "local_phase_status"):
             self.local_phase_status.setText("Stored data loaded")
 
-        # Update phase-specific readout widgets
-        for widget_name, value in self._format_phase_data_readouts(
-            phase_data
-        ).items():
-            if hasattr(self, widget_name):
-                getattr(self, widget_name).setText(value)
-
+        self._apply_phase_specific_readouts(phase_data)
         self._set_generic_stored_data(phase_data)
 
     def _set_generic_stored_data(self, phase_data) -> None:
         """Update shared Stored Data fields (status/timestamp/notes)."""
-        passed = bool(getattr(phase_data, "passed", False))
-
         if hasattr(self, "local_stored_status"):
-            status_text = "PASS" if passed else "FAIL"
-            status_style = (
-                LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
-                + "color: #90ee90;"
-                if passed
-                else LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
-                + "color: #ff6b6b;"
+            status_text, status_style = self._get_stored_status_presentation(
+                phase_data
             )
             self.local_stored_status.setText(status_text)
             self.local_stored_status.setStyleSheet(status_style)
@@ -133,17 +130,103 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
         if hasattr(self, "local_stored_notes"):
             self.local_stored_notes.setText("-")
 
-    def _clear_phase_data_readouts(self) -> None:
+    def _clear_phase_specific_readouts(self) -> None:
         """Reset phase readout labels to placeholder state."""
-        for widget_name in self.READOUT_WIDGETS:
+        for widget_name in self._get_readout_widget_names():
             if hasattr(self, widget_name):
                 getattr(self, widget_name).setText("-")
 
         self._clear_generic_stored_data()
 
+    def _apply_phase_specific_readouts(self, phase_data) -> None:
+        """Apply phase-specific formatted values to their widgets."""
+        for widget_name, value in self._format_phase_data_readouts(
+            phase_data
+        ).items():
+            if hasattr(self, widget_name):
+                getattr(self, widget_name).setText(value)
+
+    @classmethod
+    def get_phase_stored_field_specs(cls):
+        """Get ordered stored-data specs declared by the phase dataclass."""
+        if cls.DATA_MODEL is None:
+            return []
+        return get_phase_display_specs(cls.DATA_MODEL)
+
+    def _get_readout_widget_names(self) -> tuple[str, ...]:
+        """Get widget names for all phase-specific stored-data readouts."""
+        return tuple(
+            spec.widget_name for spec in self.get_phase_stored_field_specs()
+        )
+
     def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
         """Format phase dataclass values for display labels."""
-        raise NotImplementedError
+        return {
+            spec.widget_name: self._format_spec_value(
+                getattr(phase_data, spec.source_attr, None), spec
+            )
+            for spec in self.get_phase_stored_field_specs()
+        }
+
+    def _format_spec_value(self, value, spec) -> str:
+        """Format one dataclass-driven display value."""
+        if value is None:
+            return "-"
+
+        if isinstance(value, bool):
+            return spec.true_text if value else spec.false_text
+
+        if isinstance(value, datetime):
+            return self._fmt_timestamp(value)
+
+        if isinstance(value, (int, float)) and spec.format_spec:
+            return self._fmt_float(value, spec.format_spec, spec.unit)
+
+        if isinstance(value, float):
+            return self._fmt_float(value, unit=spec.unit)
+
+        if spec.unit and isinstance(value, int):
+            return f"{value} {spec.unit}".strip()
+
+        return str(value)
+
+    def _get_stored_status_presentation(self, phase_data) -> tuple[str, str]:
+        """Choose the stored-data status text and styling."""
+        if hasattr(phase_data, "passed"):
+            passed = bool(getattr(phase_data, "passed"))
+            return (
+                "PASS" if passed else "FAIL",
+                (
+                    (
+                        LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
+                        + "color: #90ee90;"
+                    )
+                    if passed
+                    else (
+                        LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
+                        + "color: #ff6b6b;"
+                    )
+                ),
+            )
+
+        if hasattr(phase_data, "is_complete"):
+            complete = bool(getattr(phase_data, "is_complete"))
+            return (
+                "COMPLETE" if complete else "INCOMPLETE",
+                (
+                    (
+                        LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
+                        + "color: #90ee90;"
+                    )
+                    if complete
+                    else (
+                        LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c4b1a")
+                        + "color: #ffd166;"
+                    )
+                ),
+            )
+
+        return "AVAILABLE", LOCAL_LABEL_STYLE
 
     @staticmethod
     def _fmt_float(
@@ -202,10 +285,7 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
     UI_CLASS = PiezoPreRFUI
     PHASE_NAME = "Piezo Pre-RF"
     DATA_ATTR = "piezo_pre_rf"
-    READOUT_WIDGETS = (
-        "local_stored_cap_a",
-        "local_stored_cap_b",
-    )
+    DATA_MODEL = PiezoPreRFCheck
 
     def __init__(
         self, parent=None, session: CommissioningSession | None = None
@@ -312,30 +392,11 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
     def _update_stored_readout(self, result: PiezoPreRFCheck | None) -> None:
         """Update stored-data labels from the record dataclass."""
         if result is None:
-            self._clear_generic_stored_data()
-            if hasattr(self, "local_stored_cap_a"):
-                self.local_stored_cap_a.setText("-")
-            if hasattr(self, "local_stored_cap_b"):
-                self.local_stored_cap_b.setText("-")
+            self._clear_phase_specific_readouts()
             return
 
         self._set_generic_stored_data(result)
-
-        if hasattr(self, "local_stored_cap_a"):
-            cap_a_text = (
-                f"{result.capacitance_a * 1e9:.1f} nF"
-                if result.capacitance_a is not None
-                else "-"
-            )
-            self.local_stored_cap_a.setText(cap_a_text)
-
-        if hasattr(self, "local_stored_cap_b"):
-            cap_b_text = (
-                f"{result.capacitance_b * 1e9:.1f} nF"
-                if result.capacitance_b is not None
-                else "-"
-            )
-            self.local_stored_cap_b.setText(cap_b_text)
+        self._apply_phase_specific_readouts(result)
 
     def clear_results(self):
         """Clear all result displays."""
@@ -422,28 +483,7 @@ class ColdLandingDisplay(BasePlaceholderDisplay):
     UI_CLASS = ColdLandingUI
     PHASE_NAME = "Cold Landing"
     DATA_ATTR = "cold_landing"
-    READOUT_WIDGETS = (
-        "cold_initial_detune",
-        "cold_steps_to_resonance",
-        "cold_final_detune",
-        "cold_notes",
-    )
-
-    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
-        return {
-            "cold_initial_detune": self._fmt_float(
-                phase_data.initial_detune_hz, ".3f", "Hz"
-            ),
-            "cold_steps_to_resonance": (
-                str(phase_data.steps_to_resonance)
-                if phase_data.steps_to_resonance is not None
-                else "-"
-            ),
-            "cold_final_detune": self._fmt_float(
-                phase_data.final_detune_hz, ".3f", "Hz"
-            ),
-            "cold_notes": phase_data.notes or "-",
-        }
+    DATA_MODEL = ColdLandingData
 
 
 class SSACharDisplay(BasePlaceholderDisplay):
@@ -452,24 +492,7 @@ class SSACharDisplay(BasePlaceholderDisplay):
     UI_CLASS = SSACharUI
     PHASE_NAME = "SSA Characterization"
     DATA_ATTR = "ssa_char"
-    READOUT_WIDGETS = (
-        "ssa_max_drive",
-        "ssa_initial_drive",
-        "ssa_num_attempts",
-        "ssa_notes",
-    )
-
-    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
-        return {
-            "ssa_max_drive": self._fmt_float(
-                phase_data.max_drive_percent, ".2f", "%"
-            ),
-            "ssa_initial_drive": self._fmt_float(
-                phase_data.initial_drive_percent, ".2f", "%"
-            ),
-            "ssa_num_attempts": str(phase_data.num_attempts),
-            "ssa_notes": phase_data.notes or "-",
-        }
+    DATA_MODEL = SSACharacterization
 
 
 class CavityCharDisplay(BasePlaceholderDisplay):
@@ -478,22 +501,7 @@ class CavityCharDisplay(BasePlaceholderDisplay):
     UI_CLASS = CavityCharUI
     PHASE_NAME = "Cavity Characterization"
     DATA_ATTR = "cavity_char"
-    READOUT_WIDGETS = (
-        "cavity_loaded_q",
-        "cavity_probe_q",
-        "cavity_scale_factor",
-        "cavity_notes",
-    )
-
-    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
-        return {
-            "cavity_loaded_q": self._fmt_float(phase_data.loaded_q, ".3e"),
-            "cavity_probe_q": self._fmt_float(phase_data.probe_q, ".3e"),
-            "cavity_scale_factor": self._fmt_float(
-                phase_data.scale_factor, ".6f"
-            ),
-            "cavity_notes": phase_data.notes or "-",
-        }
+    DATA_MODEL = CavityCharacterization
 
 
 class PiezoWithRFDisplay(BasePlaceholderDisplay):
@@ -502,26 +510,7 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
     UI_CLASS = PiezoWithRFUI
     PHASE_NAME = "Piezo with RF"
     DATA_ATTR = "piezo_with_rf"
-    READOUT_WIDGETS = (
-        "piezo_rf_gain_a",
-        "piezo_rf_gain_b",
-        "piezo_rf_detune_gain",
-        "piezo_rf_notes",
-    )
-
-    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
-        return {
-            "piezo_rf_gain_a": self._fmt_float(
-                phase_data.amplifier_gain_a, ".6f"
-            ),
-            "piezo_rf_gain_b": self._fmt_float(
-                phase_data.amplifier_gain_b, ".6f"
-            ),
-            "piezo_rf_detune_gain": self._fmt_float(
-                phase_data.detune_gain, ".6f"
-            ),
-            "piezo_rf_notes": phase_data.notes or "-",
-        }
+    DATA_MODEL = PiezoWithRFTest
 
 
 class HighPowerDisplay(BasePlaceholderDisplay):
@@ -530,21 +519,66 @@ class HighPowerDisplay(BasePlaceholderDisplay):
     UI_CLASS = HighPowerUI
     PHASE_NAME = "High Power Ramp"
     DATA_ATTR = "high_power"
-    READOUT_WIDGETS = (
-        "high_power_final_amplitude",
-        "high_power_one_hour_complete",
-        "high_power_timestamp",
-        "high_power_notes",
-    )
+    DATA_MODEL = HighPowerRampData
 
-    def _format_phase_data_readouts(self, phase_data) -> dict[str, str]:
-        return {
-            "high_power_final_amplitude": self._fmt_float(
-                phase_data.final_amplitude, ".3f", "MV"
-            ),
-            "high_power_one_hour_complete": (
-                "Yes" if phase_data.one_hour_complete else "No"
-            ),
-            "high_power_timestamp": self._fmt_timestamp(phase_data.timestamp),
-            "high_power_notes": phase_data.notes or "-",
-        }
+
+# ---------------------------------------------------------------------------
+# Phase display registry
+# ---------------------------------------------------------------------------
+# Maps CommissioningPhase values to their specialised display class.
+# Any phase NOT listed here falls back to a dynamically-created subclass of
+# BasePlaceholderDisplay that uses GenericPhaseUI.
+#
+# To add a custom screen for a new phase, just insert an entry here.
+
+PHASE_DISPLAY_MAP: dict[CommissioningPhase, type[BasePlaceholderDisplay]] = {
+    CommissioningPhase.PIEZO_PRE_RF: PiezoPreRFDisplay,
+    CommissioningPhase.COLD_LANDING: ColdLandingDisplay,
+    CommissioningPhase.SSA_CHAR: SSACharDisplay,
+    CommissioningPhase.CAVITY_CHAR: CavityCharDisplay,
+    CommissioningPhase.PIEZO_WITH_RF: PiezoWithRFDisplay,
+    CommissioningPhase.HIGH_POWER: HighPowerDisplay,
+}
+
+
+def get_phase_display_class(
+    phase: CommissioningPhase,
+    display_label: str,
+    record_attr: str,
+    data_model,
+) -> type[BasePlaceholderDisplay]:
+    """Return a display class for *phase*, creating a generic one if needed.
+
+    Looks up ``PHASE_DISPLAY_MAP`` first.  If the phase has no entry a new
+    ``BasePlaceholderDisplay`` subclass is created on the fly using
+    ``GenericPhaseUI`` so that newly registered phases get a working (though
+    un-specialised) screen automatically.
+
+    Args:
+        phase:         The ``CommissioningPhase`` enum value.
+        display_label: Human-readable tab title (used as ``PHASE_NAME``).
+        record_attr:   Attribute name on ``CommissioningRecord``.
+        data_model:    Dataclass type for phase results (may be ``None``).
+
+    Returns:
+        A concrete subclass of ``BasePlaceholderDisplay``.
+    """
+    if phase in PHASE_DISPLAY_MAP:
+        return PHASE_DISPLAY_MAP[phase]
+
+    # Dynamically build a display class for unregistered phases so callers
+    # always get a usable widget without manual boilerplate.
+    class_name = (
+        "".join(word.capitalize() for word in phase.value.split("_"))
+        + "Display"
+    )
+    return type(
+        class_name,
+        (BasePlaceholderDisplay,),
+        {
+            "UI_CLASS": GenericPhaseUI,
+            "PHASE_NAME": display_label,
+            "DATA_ATTR": record_attr or "",
+            "DATA_MODEL": data_model,
+        },
+    )

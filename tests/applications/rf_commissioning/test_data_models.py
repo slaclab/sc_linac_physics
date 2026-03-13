@@ -1,6 +1,8 @@
 """Tests for RF commissioning data models."""
 
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, Optional
 
 import pytest
 
@@ -15,7 +17,98 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     PiezoWithRFTest,
     HighPowerRampData,
     CommissioningRecord,
+    deserialize_model,
+    get_phase_display_specs,
+    serialize_model,
 )
+
+
+@dataclass
+class ExampleNestedModel:
+    """Test-only nested dataclass for generic serialization coverage."""
+
+    reading: float
+    captured_at: datetime
+
+
+@dataclass
+class ExamplePhaseModel:
+    """Test-only dataclass used to verify automatic field persistence helpers."""
+
+    phase: CommissioningPhase
+    timestamp: datetime
+    nested: ExampleNestedModel
+    notes: str = ""
+    optional_value: Optional[float] = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def is_complete(self) -> bool:
+        return self.optional_value is not None
+
+
+class TestGenericModelSerialization:
+    """Test generic dataclass serialization helpers."""
+
+    def test_serialize_model_round_trip(self):
+        """Generic helpers should round-trip nested dataclasses and enums."""
+        phase_data = ExamplePhaseModel(
+            phase=CommissioningPhase.COLD_LANDING,
+            timestamp=datetime(2026, 3, 13, 10, 15, 0),
+            nested=ExampleNestedModel(
+                reading=1.23,
+                captured_at=datetime(2026, 3, 13, 10, 16, 0),
+            ),
+            notes="round-trip",
+            optional_value=4.56,
+            metadata={"operator": "zac", "attempt": 2},
+        )
+
+        serialized = serialize_model(
+            phase_data, computed_fields=("is_complete",)
+        )
+
+        assert serialized["phase"] == "cold_landing"
+        assert serialized["timestamp"] == "2026-03-13T10:15:00"
+        assert serialized["nested"]["captured_at"] == "2026-03-13T10:16:00"
+        assert serialized["is_complete"] is True
+
+        restored = deserialize_model(ExamplePhaseModel, serialized)
+
+        assert restored == phase_data
+
+    def test_deserialize_model_uses_defaults_for_missing_new_fields(self):
+        """Missing fields should fall back to dataclass defaults for older payloads."""
+        legacy_payload = {
+            "phase": "piezo_pre_rf",
+            "timestamp": "2026-03-13T10:15:00",
+            "nested": {
+                "reading": 9.87,
+                "captured_at": "2026-03-13T10:16:00",
+            },
+            "notes": "legacy payload",
+            "metadata": {"source": "old-db"},
+        }
+
+        restored = deserialize_model(ExamplePhaseModel, legacy_payload)
+
+        assert restored.phase == CommissioningPhase.PIEZO_PRE_RF
+        assert restored.optional_value is None
+        assert restored.is_complete is False
+        assert restored.metadata == {"source": "old-db"}
+
+    def test_phase_display_specs_are_declared_on_dataclasses(self):
+        """Phase dataclasses should advertise their stored-data UI fields."""
+        cold_specs = get_phase_display_specs(ColdLandingData)
+        assert [spec.widget_name for spec in cold_specs] == [
+            "cold_initial_detune",
+            "cold_steps_to_resonance",
+            "cold_final_detune",
+        ]
+
+        piezo_specs = get_phase_display_specs(PiezoPreRFCheck)
+        assert piezo_specs[0].source_attr == "capacitance_a_nf"
+        assert piezo_specs[0].unit == "nF"
 
 
 class TestEnums:

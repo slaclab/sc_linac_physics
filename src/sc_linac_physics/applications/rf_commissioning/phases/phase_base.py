@@ -6,10 +6,11 @@ and state management.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
@@ -43,9 +44,9 @@ class PhaseContext:
     record: CommissioningRecord
     operator: str
     dry_run: bool = False
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     abort_requested: bool = False
-    progress_callback: Optional[callable] = None
+    progress_callback: Callable[[str, int], None] | None = None
 
     def request_abort(self) -> None:
         """Request graceful abort of current phase."""
@@ -69,7 +70,7 @@ class PhaseStepResult:
 
     result: PhaseResult
     message: str
-    data: Optional[Dict[str, Any]] = None
+    data: dict[str, Any] | None = None
     retry_delay_seconds: float = 5.0
 
 
@@ -133,7 +134,7 @@ class PhaseBase(ABC):
         pass
 
     @abstractmethod
-    def get_phase_steps(self) -> List[str]:
+    def get_phase_steps(self) -> list[str]:
         """Get list of step names for this phase.
 
         Returns:
@@ -284,7 +285,6 @@ class PhaseBase(ABC):
                         # Wait before retry (could use result.retry_delay_seconds)
                         continue
                     else:
-                        # ADD THIS BLOCK - mark as failed after max retries
                         self.context.record.phase_status[self.phase_type] = (
                             PhaseStatus.FAILED
                         )
@@ -297,7 +297,6 @@ class PhaseBase(ABC):
                         return False
 
                 else:  # PhaseResult.FAILED
-                    # ADD THIS LINE - mark as failed
                     self.context.record.phase_status[self.phase_type] = (
                         PhaseStatus.FAILED
                     )
@@ -330,8 +329,8 @@ class PhaseBase(ABC):
         step_name: str,
         success: bool,
         notes: str = "",
-        measurements: Optional[Dict[str, Any]] = None,
-        error_message: Optional[str] = None,
+        measurements: dict[str, Any] | None = None,
+        error_message: str | None = None,
     ) -> None:
         """Create a checkpoint in the phase history.
 

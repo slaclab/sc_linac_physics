@@ -3,9 +3,9 @@
 Coordinates database access and record management across all commissioning phases.
 """
 
+import logging
 import platform
 from pathlib import Path
-from typing import Optional
 
 from sc_linac_physics.applications.rf_commissioning import (
     CommissioningRecord,
@@ -16,6 +16,8 @@ from sc_linac_physics.applications.rf_commissioning import (
 from sc_linac_physics.applications.rf_commissioning.models.database import (
     RecordConflictError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_default_db_path() -> str:
@@ -69,7 +71,7 @@ class CommissioningSession:
         session.load_record(record_id)
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """Initialize session with database.
 
         Args:
@@ -83,9 +85,9 @@ class CommissioningSession:
         self.db = CommissioningDatabase(db_path)
         self.db.initialize()
 
-        self._active_record: Optional[CommissioningRecord] = None
-        self._active_record_id: Optional[int] = None
-        self._active_record_version: Optional[int] = None
+        self._active_record: CommissioningRecord | None = None
+        self._active_record_id: int | None = None
+        self._active_record_version: int | None = None
 
     @property
     def database(self) -> CommissioningDatabase:
@@ -93,7 +95,7 @@ class CommissioningSession:
         return self.db
 
     def start_new_record(
-        self, cryomodule: str, cavity_number: str, linac: Optional[str] = None
+        self, cryomodule: str, cavity_number: str, linac: str | None = None
     ) -> tuple[CommissioningRecord, int, bool]:
         """Create a new commissioning record and save to database.
 
@@ -134,7 +136,7 @@ class CommissioningSession:
         self._active_record_version = 1  # New records start at version 1
         return self._active_record, self._active_record_id, True
 
-    def get_active_record(self) -> Optional[CommissioningRecord]:
+    def get_active_record(self) -> CommissioningRecord | None:
         """Get the currently active commissioning record.
 
         Returns:
@@ -142,7 +144,7 @@ class CommissioningSession:
         """
         return self._active_record
 
-    def get_active_record_id(self) -> Optional[int]:
+    def get_active_record_id(self) -> int | None:
         """Get the database ID of the active record.
 
         Returns:
@@ -192,10 +194,10 @@ class CommissioningSession:
             # Re-raise conflict errors for UI to handle
             raise
         except Exception as e:
-            print(f"Failed to save active record: {e}")
+            logger.exception("Failed to save active record: %s", e)
             return False
 
-    def load_record(self, record_id: int) -> Optional[CommissioningRecord]:
+    def load_record(self, record_id: int) -> CommissioningRecord | None:
         """Load a record from database and set as active.
 
         Args:
@@ -237,7 +239,7 @@ class CommissioningSession:
         can_start, reason = self._active_record.can_start_phase(phase)
         return can_start, reason
 
-    def get_active_phase(self) -> Optional[CommissioningPhase]:
+    def get_active_phase(self) -> CommissioningPhase | None:
         """Get the current phase of the active record.
 
         Returns:
@@ -247,9 +249,7 @@ class CommissioningSession:
             return None
         return self._active_record.current_phase
 
-    def get_phase_status(
-        self, phase: CommissioningPhase
-    ) -> Optional[PhaseStatus]:
+    def get_phase_status(self, phase: CommissioningPhase) -> PhaseStatus | None:
         """Get the status of a specific phase.
 
         Args:
@@ -338,8 +338,8 @@ class CommissioningSession:
         self,
         phase: CommissioningPhase,
         measurement_data,
-        operator: Optional[str] = None,
-        notes: Optional[str] = None,
+        operator: str | None = None,
+        notes: str | None = None,
     ) -> bool:
         """Add a measurement to history for the active record.
 
@@ -382,11 +382,11 @@ class CommissioningSession:
             )
             return True
         except Exception as e:
-            print(f"Failed to add measurement to history: {e}")
+            logger.exception("Failed to add measurement to history: %s", e)
             return False
 
     def get_measurement_history(
-        self, phase: Optional[CommissioningPhase] = None
+        self, phase: CommissioningPhase | None = None
     ) -> list[dict]:
         """Get measurement history for the active record.
 
@@ -402,7 +402,7 @@ class CommissioningSession:
         return self.db.get_measurement_history(self._active_record_id, phase)
 
     def get_measurement_notes(
-        self, phase: Optional[CommissioningPhase] = None
+        self, phase: CommissioningPhase | None = None
     ) -> list[dict]:
         """Get flattened measurement notes for the active record."""
         if self._active_record_id is None:
@@ -413,21 +413,21 @@ class CommissioningSession:
     def append_measurement_note(
         self,
         entry_id: int,
-        operator: Optional[str],
+        operator: str | None,
         note: str,
     ) -> bool:
         """Append a note to a measurement history entry."""
         try:
             return self.db.append_measurement_note(entry_id, operator, note)
         except Exception as e:
-            print(f"Failed to append measurement note: {e}")
+            logger.exception("Failed to append measurement note: %s", e)
             return False
 
     def update_measurement_note(
         self,
         entry_id: int,
         note_index: int,
-        operator: Optional[str],
+        operator: str | None,
         note: str,
     ) -> bool:
         """Update a specific measurement note by index."""
@@ -436,7 +436,7 @@ class CommissioningSession:
                 entry_id, note_index, operator, note
             )
         except Exception as e:
-            print(f"Failed to update measurement note: {e}")
+            logger.exception("Failed to update measurement note: %s", e)
             return False
 
     # ==================== GENERAL NOTES METHODS ====================
@@ -449,7 +449,7 @@ class CommissioningSession:
 
     def append_general_note(
         self,
-        operator: Optional[str],
+        operator: str | None,
         note: str,
     ) -> bool:
         """Append a general note to the active commissioning record."""
@@ -469,13 +469,13 @@ class CommissioningSession:
             # Re-raise conflict errors for UI to handle
             raise
         except Exception as e:
-            print(f"Failed to append general note: {e}")
+            logger.exception("Failed to append general note: %s", e)
             return False
 
     def update_general_note(
         self,
         note_index: int,
-        operator: Optional[str],
+        operator: str | None,
         note: str,
     ) -> bool:
         """Update a specific general note by index."""
@@ -496,5 +496,5 @@ class CommissioningSession:
             # Re-raise conflict errors for UI to handle
             raise
         except Exception as e:
-            print(f"Failed to update general note: {e}")
+            logger.exception("Failed to update general note: %s", e)
             return False
