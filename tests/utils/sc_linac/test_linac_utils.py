@@ -4,6 +4,9 @@ import pytest
 
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     SCLinacObject,
+    build_cavity_pv,
+    build_cavity_pv_base,
+    build_cavity_pv_prefix,
     stepper_tol_factor,
     PulseError,
     StepperError,
@@ -292,6 +295,22 @@ class TestSCLinacObject:
         assert obj.pv_addr("SUFFIX") == "TEST:PREFIX:SUFFIX"
         assert obj.pv_addr("") == "TEST:PREFIX:"
         assert obj.pv_addr("LONG:SUFFIX:HERE") == "TEST:PREFIX:LONG:SUFFIX:HERE"
+
+
+class TestPVBuilders:
+    """Test shared PV string builder helpers."""
+
+    def test_build_cavity_pv_base(self):
+        assert build_cavity_pv_base("L0B", "01", 1) == "ACCL:L0B:0110"
+        assert build_cavity_pv_base("L1B", "H1", 8) == "ACCL:L1B:H180"
+
+    def test_build_cavity_pv_prefix(self):
+        assert build_cavity_pv_prefix("L0B", "01", 1) == "ACCL:L0B:0110:"
+
+    def test_build_cavity_pv(self):
+        assert build_cavity_pv("L0B", "01", 1, "TUNE_CONFIG") == (
+            "ACCL:L0B:0110:TUNE_CONFIG"
+        )
 
 
 class TestCalculatedConstants:

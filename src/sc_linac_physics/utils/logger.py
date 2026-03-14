@@ -13,7 +13,7 @@ from threading import Lock
 from typing import Any
 
 if sys.platform == "darwin":  # macOS
-    BASE_LOG_DIR = Path.home() / "logs"
+    BASE_LOG_DIR = Path.home() / "logfiles"
 else:  # Linux (production)
     BASE_LOG_DIR = Path("/home/physics/srf/logfiles")
 
