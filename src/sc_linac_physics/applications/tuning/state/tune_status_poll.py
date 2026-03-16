@@ -126,6 +126,7 @@ def caget_values(
     caget_command: str,
 ) -> dict[str, object | None]:
     """Bulk-read PVs in batches using the shared EPICS batch utility."""
+    # Deprecated compatibility args retained for CLI/API stability.
     _ = command_timeout_sec, caget_command
     result: dict[str, object | None] = {}
     logger.info("Reading %s PVs in batches of %s", len(pvs), batch_size)
@@ -133,7 +134,6 @@ def caget_values(
     total_batches = (len(pvs) + batch_size - 1) // batch_size if pvs else 0
     for batch_num, batch in enumerate(batched(pvs, batch_size), start=1):
         batch = list(batch)
-        total_batches = (len(pvs) + batch_size - 1) // batch_size
 
         logger.info(
             "Processing batch %s/%s (%s PVs)",

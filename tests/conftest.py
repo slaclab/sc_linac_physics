@@ -509,5 +509,4 @@ def all_script_names():
         "sc-sim",
         "sc-tune-status-poll",
         "sc-tune-status-query",
-        "sc-cavityops-poll",
     ]

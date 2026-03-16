@@ -2,6 +2,7 @@
 
 import argparse
 import sqlite3
+import sys
 from pathlib import Path
 
 from sc_linac_physics.applications.tuning.state.common import (
@@ -12,7 +13,7 @@ from sc_linac_physics.applications.tuning.state.common import (
 )
 
 
-def execute_query(db_path: Path, query: str, params=None) -> None:
+def execute_query(db_path: Path, query: str, params=None) -> bool:
     """Execute a query and print results."""
     with connect_db(db_path, row_factory=sqlite3.Row) as conn:
         try:
@@ -25,7 +26,7 @@ def execute_query(db_path: Path, query: str, params=None) -> None:
 
             if not rows:
                 print("No results")
-                return
+                return True
 
             headers = rows[0].keys()
             print(" | ".join(headers))
@@ -41,9 +42,11 @@ def execute_query(db_path: Path, query: str, params=None) -> None:
                 print(" | ".join(str(row[header]) for header in headers))
 
             print(f"\n{len(rows)} rows returned")
+            return True
 
         except sqlite3.Error as exc:
             print(f"Error: {exc}")
+            return False
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -110,17 +113,18 @@ def interactive_mode(db_path: Path) -> None:
             query_buffer = []
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
     """Entry point for tuning state database query CLI."""
     args = parse_args(argv)
     query = " ".join(args.query).strip()
     db_path = resolve_db_path(args.base_dir, args.db_path_override)
 
     if query:
-        execute_query(db_path, query)
-    else:
-        interactive_mode(db_path)
+        return 0 if execute_query(db_path, query) else 1
+
+    interactive_mode(db_path)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

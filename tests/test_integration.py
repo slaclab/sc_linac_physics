@@ -15,7 +15,7 @@ import pytest
         "sc-watcher",
         "sc-sim",
         "sc-tune-status-poll",
-        "sc-cavityops-poll",
+        "sc-tune-status-query",
     ],
 )
 def test_command_help(script_runner, command):

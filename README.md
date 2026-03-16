@@ -176,7 +176,6 @@ sc-tune-status-query "select cavity_id, tune_config_label, df_cold from cavity_s
 sc-tune-status-query --db /home/physics/srf/databases/tune_status.sqlite "select count(*) as cavities from cavity_state;"
 ```
 
-Legacy aliases `sc-cavityops-poll` and `sc-cavityops-query` remain available.
 
 If you just pulled new CLI entries, reinstall in editable mode to refresh scripts:
 

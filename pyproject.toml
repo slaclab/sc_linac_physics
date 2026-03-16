@@ -208,10 +208,6 @@ sc-cold-cm = "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher
 sc-tune-status-poll = "sc_linac_physics.applications.tuning.state.tune_status_poll:main"
 sc-tune-status-query = "sc_linac_physics.applications.tuning.state.tune_status_query:main"
 
-# Backward-compatible aliases
-sc-cavityops-poll = "sc_linac_physics.applications.tuning.state.tune_status_poll:main"
-sc-cavityops-query = "sc_linac_physics.applications.tuning.state.tune_status_query:main"
-
 [tool.check-manifest]
 ignore = [
     # Build artifacts
