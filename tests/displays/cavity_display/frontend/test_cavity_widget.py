@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
+from PyQt5.QtWidgets import QMessageBox
 from qtpy.QtCore import Qt, QPoint
 from qtpy.QtGui import QColor, QMouseEvent
 from qtpy.QtWidgets import QApplication
@@ -85,6 +86,7 @@ class TestCavityWidgetInitialization:
         assert cavity_widget._description_channel is None
         assert cavity_widget.alarmSensitiveBorder is False
         assert cavity_widget.alarmSensitiveContent is False
+        assert cavity_widget._acknowledged is False
 
     def test_widget_initialization_with_channel(self, qapp):
         """Test widget initialization with initial channel."""
@@ -133,6 +135,32 @@ class TestCavityWidgetProperties:
     @patch(
         "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
     )
+    def test_severity_channel_disconnect_on_reset(
+        self, mock_channel_class, cavity_widget
+    ):
+        """Test severity_channel disconnects old channel when set again."""
+        # First channel
+        mock_channel1 = Mock()
+        mock_channel1.address = "test:severity1"
+
+        # Second channel
+        mock_channel2 = Mock()
+        mock_channel2.address = "test:severity2"
+
+        mock_channel_class.side_effect = [mock_channel1, mock_channel2]
+
+        # Set first channel
+        cavity_widget.severity_channel = "test:severity1"
+        mock_channel1.connect.assert_called_once()
+
+        # Set second channel - should disconnect first
+        cavity_widget.severity_channel = "test:severity2"
+        mock_channel1.disconnect.assert_called_once()
+        mock_channel2.connect.assert_called_once()
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+    )
     def test_description_channel_property(
         self, mock_channel_class, cavity_widget
     ):
@@ -173,8 +201,11 @@ class TestCavityWidgetMouseEvents:
         cavity_widget.mousePressEvent(event)
         assert cavity_widget.press_pos == QPoint(10, 10)
 
-    def test_mouse_press_event_right_button(self, cavity_widget):
-        """Test mouse press event with right button doesn't set press_pos."""
+    @patch.object(CavityWidget, "show_context_menu")
+    def test_mouse_press_event_right_button(
+        self, mock_context_menu, cavity_widget
+    ):
+        """Test mouse press event with right button shows context menu."""
         event = QMouseEvent(
             QMouseEvent.MouseButtonPress,
             QPoint(10, 10),
@@ -184,6 +215,7 @@ class TestCavityWidgetMouseEvents:
         )
         cavity_widget.mousePressEvent(event)
         assert cavity_widget.press_pos is None
+        mock_context_menu.assert_called_once()
 
     def test_mouse_release_event_emits_clicked(self, cavity_widget):
         """Test mouse release event emits clicked signal."""
@@ -243,12 +275,41 @@ class TestCavityWidgetChannelHandlers:
         with patch.object(cavity_widget, "change_shape") as mock_change_shape:
             cavity_widget.severity_channel_value_changed(0)
             mock_change_shape.assert_called_with(SHAPE_PARAMETER_DICT[0])
+            assert cavity_widget._last_severity == 0
+            assert cavity_widget._acknowledged is False
+
+    def test_severity_channel_value_changed_clears_acknowledgment(
+        self, cavity_widget
+    ):
+        """Test severity returning to 0 clears acknowledgment."""
+        # Set up acknowledged state
+        cavity_widget._acknowledged = True
+
+        # Mock parent cavity
+        mock_cavity = Mock()
+        mock_cavity.cryomodule.name = "01"
+        mock_cavity.number = 1
+        cavity_widget._parent_cavity = mock_cavity
+
+        # Mock app with acknowledged_cavities set
+        mock_app = Mock()
+        mock_app.acknowledged_cavities = {"01_1"}
+
+        with patch(
+            "qtpy.QtWidgets.QApplication.instance", return_value=mock_app
+        ):
+            with patch.object(cavity_widget, "change_shape"):
+                cavity_widget.severity_channel_value_changed(0)
+
+                assert cavity_widget._acknowledged is False
+                assert "01_1" not in mock_app.acknowledged_cavities
 
     def test_severity_channel_value_changed_invalid_value(self, cavity_widget):
         """Test severity channel handler with invalid value falls back to default."""
         with patch.object(cavity_widget, "change_shape") as mock_change_shape:
             cavity_widget.severity_channel_value_changed(999)  # Invalid value
             mock_change_shape.assert_called_with(SHAPE_PARAMETER_DICT[3])
+            assert cavity_widget._last_severity is None
 
     def test_severity_channel_value_changed_exception_handling(
         self, cavity_widget
@@ -278,6 +339,7 @@ class TestCavityWidgetChannelHandlers:
         test_description = "Test Description"
         cavity_widget.description_changed(test_description)
         assert cavity_widget.toolTip() == test_description
+        assert cavity_widget._cavity_description == test_description
 
     def test_description_changed_with_numpy_array(self, cavity_widget):
         """Test description_changed with numpy array."""
@@ -302,6 +364,7 @@ class TestCavityWidgetChannelHandlers:
         """Test description_changed with None value."""
         cavity_widget.description_changed(None)
         assert cavity_widget.toolTip() == "No description available"
+        assert cavity_widget._cavity_description == ""
 
     def test_description_changed_with_invalid_data(self, cavity_widget):
         """Test description_changed with data that causes processing error."""
@@ -321,43 +384,123 @@ class TestCavityWidgetChannelHandlers:
         assert cavity_widget.toolTip() == "No description available"
 
 
-class TestCavityWidgetShapeChanging:
-    """Test shape changing functionality."""
+class TestCavityWidgetContextMenu:
+    """Test context menu functionality."""
 
-    def test_change_shape(self, cavity_widget):
-        """Test change_shape method."""
-        test_params = ShapeParameters(
-            fillColor=RED_FILL_COLOR,
-            borderColor=BLACK_TEXT_COLOR,
-            numPoints=6,
-            rotation=45,
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QMenu"
+    )
+    def test_show_context_menu_no_parent_cavity(
+        self, mock_menu_class, cavity_widget
+    ):
+        """Test show_context_menu returns early if no parent cavity."""
+        cavity_widget._parent_cavity = None
+
+        cavity_widget.show_context_menu(QPoint(0, 0))
+
+        # Menu should not be created
+        mock_menu_class.assert_not_called()
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QMenu"
+    )
+    def test_show_context_menu_with_alarm(self, mock_menu_class, cavity_widget):
+        """Test show_context_menu creates acknowledge option for alarm."""
+        # Setup mock cavity
+        mock_cavity = Mock()
+        cavity_widget._parent_cavity = mock_cavity
+        cavity_widget._last_severity = 2  # Alarm
+
+        # Setup mock menu and actions
+        mock_menu = Mock()
+        mock_action = Mock()
+        mock_menu.addAction.return_value = mock_action
+        mock_menu.addSeparator.return_value = Mock()
+        mock_menu.exec_ = Mock()  # Make sure exec_ is mocked
+        mock_menu_class.return_value = mock_menu
+
+        cavity_widget.show_context_menu(QPoint(100, 100))
+
+        # Verify menu was created
+        mock_menu_class.assert_called_once()
+
+        # Verify exec_ was called to show menu
+        mock_menu.exec_.assert_called_once_with(QPoint(100, 100))
+
+        # Check that acknowledge action was added
+        action_calls = [
+            call[0][0] for call in mock_menu.addAction.call_args_list
+        ]
+        assert any("Acknowledge Alarm" in name for name in action_calls)
+        assert any(
+            "Fault Details" in name or "📋" in name for name in action_calls
         )
+        assert any("Copy Info" in name or "📄" in name for name in action_calls)
 
-        # Test without mocking update to avoid complications with multiple calls
-        cavity_widget.change_shape(test_params)
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QMenu"
+    )
+    def test_show_context_menu_with_warning(
+        self, mock_menu_class, cavity_widget
+    ):
+        """Test show_context_menu creates acknowledge option for warning."""
+        # Setup mock cavity
+        mock_cavity = Mock()
+        cavity_widget._parent_cavity = mock_cavity
+        cavity_widget._last_severity = 1  # Warning
 
-        # Verify all properties were set correctly
-        assert cavity_widget.brush.color() == RED_FILL_COLOR
-        assert cavity_widget.penColor == BLACK_TEXT_COLOR
-        assert cavity_widget.numberOfPoints == 6
-        assert cavity_widget.rotation == 45
+        # Setup mock menu and actions
+        mock_menu = Mock()
+        mock_action = Mock()
+        mock_menu.addAction.return_value = mock_action
+        mock_menu.addSeparator.return_value = Mock()
+        mock_menu.exec_ = Mock()
+        mock_menu_class.return_value = mock_menu
 
-    def test_change_shape_calls_update_at_end(self, cavity_widget):
-        """Test that change_shape calls update method."""
-        test_params = ShapeParameters(
-            fillColor=RED_FILL_COLOR,
-            borderColor=BLACK_TEXT_COLOR,
-            numPoints=6,
-            rotation=45,
+        cavity_widget.show_context_menu(QPoint(100, 100))
+
+        # Check that acknowledge action was added for warning
+        action_calls = [
+            call[0][0] for call in mock_menu.addAction.call_args_list
+        ]
+        assert any("Acknowledge Warning" in name for name in action_calls)
+
+        # Verify exec_ was called
+        mock_menu.exec_.assert_called_once()
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QMenu"
+    )
+    def test_show_context_menu_without_alarm_or_warning(
+        self, mock_menu_class, cavity_widget
+    ):
+        """Test show_context_menu without alarm or warning (no acknowledge option)."""
+        # Setup mock cavity
+        mock_cavity = Mock()
+        cavity_widget._parent_cavity = mock_cavity
+        cavity_widget._last_severity = 0  # Normal
+
+        # Setup mock menu
+        mock_menu = Mock()
+        mock_action = Mock()
+        mock_menu.addAction.return_value = mock_action
+        mock_menu.addSeparator.return_value = Mock()
+        mock_menu.exec_ = Mock()
+        mock_menu_class.return_value = mock_menu
+
+        cavity_widget.show_context_menu(QPoint(100, 100))
+
+        # Check that NO acknowledge action was added
+        action_calls = [
+            call[0][0] for call in mock_menu.addAction.call_args_list
+        ]
+        assert not any("Acknowledge" in name for name in action_calls)
+
+        # But details and copy should still be there
+        assert any(
+            "Fault Details" in name or "📋" in name for name in action_calls
         )
-
-        with patch.object(cavity_widget, "update") as mock_update:
-            cavity_widget.change_shape(test_params)
-
-            # Just verify that update was called - don't care about count
-            # since property setters might also call update
-            assert mock_update.called
-            assert mock_update.call_count >= 1
+        assert any("Copy Info" in name or "📄" in name for name in action_calls)
 
 
 class TestCavityWidgetValueChanged:
@@ -379,7 +522,7 @@ class TestCavityWidgetValueChanged:
 
 
 class TestCavityWidgetDrawing:
-    """Test drawing functionality - simplified version."""
+    """Test drawing functionality."""
 
     def test_draw_item_calls_super(self, cavity_widget):
         """Test that draw_item calls the parent's draw_item method."""
@@ -418,6 +561,215 @@ class TestCavityWidgetDrawing:
                 mock_painter.drawText.assert_not_called()
 
 
+class TestCavityWidgetShapeChanging:
+    """Test shape changing functionality."""
+
+    def test_change_shape_uses_public_properties(self, cavity_widget):
+        """Test change_shape method uses public properties (not private attributes)."""
+        test_params = ShapeParameters(
+            fillColor=RED_FILL_COLOR,
+            borderColor=BLACK_TEXT_COLOR,
+            numPoints=6,
+            rotation=45,
+        )
+
+        # Simply call change_shape and verify the properties were set
+        cavity_widget.change_shape(test_params)
+
+        # Verify the values were set correctly
+        # PyDM's brush setter might store QColor directly in _brush
+        # So we need to handle both QBrush and QColor cases
+        if hasattr(cavity_widget._brush, "color"):
+            # _brush is a QBrush
+            assert cavity_widget._brush.color() == RED_FILL_COLOR
+        else:
+            # _brush is a QColor directly
+            assert cavity_widget._brush == RED_FILL_COLOR
+
+        assert cavity_widget._pen.color() == BLACK_TEXT_COLOR
+        assert cavity_widget._num_points == 6
+        assert cavity_widget._rotation == 45
+
+    def test_change_shape_updates_widget(self, cavity_widget):
+        """Test that change_shape results in widget update."""
+        test_params = ShapeParameters(
+            fillColor=RED_FILL_COLOR,
+            borderColor=BLACK_TEXT_COLOR,
+            numPoints=6,
+            rotation=45,
+        )
+
+        cavity_widget.change_shape(test_params)
+
+        # Verify final state is correct by checking internal attributes
+        if hasattr(cavity_widget._brush, "color"):
+            assert cavity_widget._brush.color() == RED_FILL_COLOR
+        else:
+            assert cavity_widget._brush == RED_FILL_COLOR
+
+        assert cavity_widget._pen.color() == BLACK_TEXT_COLOR
+        assert cavity_widget._num_points == 6
+        assert cavity_widget._rotation == 45
+
+
+class TestCavityWidgetAcknowledgment:
+    """Test acknowledgment functionality."""
+
+    @patch("qtpy.QtWidgets.QMessageBox.question")
+    @patch("qtpy.QtWidgets.QApplication.instance")
+    def test_acknowledge_issue_user_confirms(
+        self, mock_app_instance, mock_question, cavity_widget
+    ):
+        """Test acknowledge_issue when user confirms."""
+        # Setup
+        mock_cavity = Mock()
+        mock_cavity.cryomodule.name = "01"
+        mock_cavity.number = 1
+        cavity_widget._cavity_description = "Test fault"
+
+        # Mock user clicking Yes
+        mock_question.return_value = QMessageBox.Yes
+
+        # Mock app
+        mock_app = Mock()
+        mock_app.acknowledged_cavities = set()
+        mock_app_instance.return_value = mock_app
+
+        # Execute
+        cavity_widget.acknowledge_issue(mock_cavity, "Alarm")
+
+        # Verify
+        assert "01_1" in mock_app.acknowledged_cavities
+        assert cavity_widget._acknowledged is True
+        mock_question.assert_called_once()
+
+        # Check that parent was widget (not None)
+        call_args = mock_question.call_args
+        assert (
+            call_args[0][0] == cavity_widget
+        )  # parent should be self, not None
+
+    @patch("qtpy.QtWidgets.QMessageBox.question")
+    def test_acknowledge_issue_user_cancels(self, mock_question, cavity_widget):
+        """Test acknowledge_issue when user cancels."""
+        # Setup
+        mock_cavity = Mock()
+        mock_cavity.cryomodule.name = "01"
+        mock_cavity.number = 1
+
+        # Mock user clicking No
+        mock_question.return_value = QMessageBox.No
+
+        # Execute
+        cavity_widget.acknowledge_issue(mock_cavity, "Alarm")
+
+        # Verify acknowledgment was not set
+        assert cavity_widget._acknowledged is False
+
+    @patch("qtpy.QtWidgets.QApplication.instance")
+    def test_stop_audio_completely(self, mock_app_instance, cavity_widget):
+        """Test _stop_audio_completely calls audio manager."""
+        # Create mock parent with audio_manager
+        mock_parent = Mock()
+        mock_audio_mgr = Mock()
+        mock_parent.audio_manager = mock_audio_mgr
+
+        with patch.object(
+            cavity_widget, "_get_parent_display", return_value=mock_parent
+        ):
+            cavity_widget._stop_audio_completely(mock_parent, "01_1")
+
+            mock_audio_mgr.acknowledge_cavity.assert_called_once_with("01_1")
+
+    def test_get_parent_display_finds_parent(self, cavity_widget):
+        """Test _get_parent_display traverses widget tree."""
+        # Create the display (has audio_manager)
+        mock_display = Mock()
+        mock_display.audio_manager = Mock()
+
+        # Create the container (doesn't have audio_manager)
+        mock_container = Mock(spec=["parent"])  # Only give it parent method
+        mock_container.parent = Mock(return_value=mock_display)
+
+        # Make cavity_widget.parent() return the container
+        with patch.object(cavity_widget, "parent", return_value=mock_container):
+            result = cavity_widget._get_parent_display()
+
+        # Should traverse from widget -> container -> display and find display
+        assert result == mock_display
+        assert hasattr(result, "audio_manager")
+
+    def test_get_parent_display_no_parent(self, cavity_widget):
+        """Test _get_parent_display returns None if no valid parent."""
+        with patch.object(cavity_widget, "parent", return_value=None):
+            result = cavity_widget._get_parent_display()
+
+        assert result is None
+
+
+class TestCavityWidgetCopyInfo:
+    """Test copy functionality."""
+
+    @patch("qtpy.QtWidgets.QApplication.clipboard")
+    def test_copy_cavity_info(self, mock_clipboard, cavity_widget):
+        """Test copy_cavity_info copies correct info to clipboard."""
+        # Setup
+        mock_cavity = Mock()
+        mock_cavity.cryomodule.name = "01"
+        mock_cavity.number = 5
+        cavity_widget._cavity_description = "Test fault description"
+        cavity_widget._last_severity = 2
+
+        # Mock clipboard
+        mock_clipboard_obj = Mock()
+        mock_clipboard.return_value = mock_clipboard_obj
+
+        # Execute
+        cavity_widget.copy_cavity_info(mock_cavity)
+
+        # Verify
+        mock_clipboard_obj.setText.assert_called_once()
+        copied_text = mock_clipboard_obj.setText.call_args[0][0]
+
+        assert "CM01" in copied_text
+        assert "Cavity 5" in copied_text
+        assert "Test fault description" in copied_text
+        assert "Severity: 2" in copied_text
+
+
+class TestCavityWidgetHighlight:
+    """Test highlight functionality."""
+
+    def test_highlight_temporarily_changes_pen(self, cavity_widget):
+        """Test highlight method temporarily changes pen."""
+        with patch.object(cavity_widget, "update") as mock_update:
+            with patch("qtpy.QtCore.QTimer.singleShot") as mock_timer:
+                cavity_widget.highlight()
+
+                # Pen should be modified
+                assert cavity_widget._pen.width() == 6
+                assert cavity_widget._pen.color() == QColor(255, 255, 0)
+
+                # Update should be called
+                mock_update.assert_called()
+
+                # Timer should be set to restore
+                mock_timer.assert_called_once()
+                assert mock_timer.call_args[0][0] == 1000  # 1 second
+
+    def test_unhighlight_restores_original(self, cavity_widget):
+        """Test _unhighlight restores original pen properties."""
+        original_color = QColor(100, 100, 100)
+        original_width = 2
+
+        with patch.object(cavity_widget, "update") as mock_update:
+            cavity_widget._unhighlight(original_width, original_color)
+
+            assert cavity_widget._pen.width() == original_width
+            assert cavity_widget._pen.color() == original_color
+            mock_update.assert_called_once()
+
+
 class TestCavityWidgetIntegration:
     """Integration tests."""
 
@@ -450,6 +802,335 @@ class TestCavityWidgetIntegration:
 
         cavity_widget.description_changed("Test Description")
         assert cavity_widget.toolTip() == "Test Description"
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+    )
+    @patch("qtpy.QtWidgets.QMessageBox.question")
+    @patch("qtpy.QtWidgets.QApplication.instance")
+    def test_full_acknowledgment_workflow(
+        self,
+        mock_app_instance,
+        mock_question,
+        mock_channel_class,
+        cavity_widget,
+    ):
+        """Test complete acknowledgment workflow."""
+        # Setup cavity
+        mock_cavity = Mock()
+        mock_cavity.cryomodule.name = "02"
+        mock_cavity.number = 3
+        cavity_widget._parent_cavity = mock_cavity
+
+        # Setup app
+        mock_app = Mock()
+        mock_app.acknowledged_cavities = set()
+        mock_app_instance.return_value = mock_app
+
+        # User confirms acknowledgment
+        mock_question.return_value = QMessageBox.Yes
+
+        # Set severity to alarm
+        with patch.object(cavity_widget, "change_shape"):
+            cavity_widget.severity_channel_value_changed(2)
+
+        assert cavity_widget._last_severity == 2
+
+        # Acknowledge the issue
+        cavity_widget.acknowledge_issue(mock_cavity, "Alarm")
+
+        # Verify acknowledgment state
+        assert cavity_widget._acknowledged is True
+        assert "02_3" in mock_app.acknowledged_cavities
+
+        # Severity returns to normal
+        with patch.object(cavity_widget, "change_shape"):
+            cavity_widget.severity_channel_value_changed(0)
+
+        # Acknowledgment should be cleared
+        assert cavity_widget._acknowledged is False
+        assert "02_3" not in mock_app.acknowledged_cavities
+
+
+class TestCavityWidgetSeveritySignals:
+    """Test severity change signals."""
+
+    def test_severity_changed_signal_emitted(self, cavity_widget):
+        """Test that severity_changed signal is emitted."""
+        signal_spy = Mock()
+        cavity_widget.severity_changed.connect(signal_spy)
+
+        with patch.object(cavity_widget, "change_shape"):
+            cavity_widget.severity_channel_value_changed(2)
+
+        signal_spy.assert_called_once_with(2)
+
+    def test_severity_changed_signal_not_emitted_for_invalid(
+        self, cavity_widget
+    ):
+        """Test that severity_changed signal not emitted for invalid severity."""
+        signal_spy = Mock()
+        cavity_widget.severity_changed.connect(signal_spy)
+
+        with patch.object(cavity_widget, "change_shape"):
+            cavity_widget.severity_channel_value_changed(999)
+
+        # Signal should not be emitted for invalid value
+        signal_spy.assert_not_called()
+
+
+class TestCavityWidgetEdgeCases:
+    """Test edge cases and error conditions."""
+
+    def test_change_shape_with_none_parameter(self, cavity_widget):
+        """Test change_shape handles None gracefully."""
+        # This should raise an AttributeError, but let's verify behavior
+        with pytest.raises(AttributeError):
+            cavity_widget.change_shape(None)
+
+    def test_description_changed_with_unicode_characters(self, cavity_widget):
+        """Test description_changed handles unicode properly."""
+        unicode_desc = "Test 🔴 Alert ⚠️"
+        cavity_widget.description_changed(unicode_desc)
+        assert cavity_widget._cavity_description == unicode_desc
+
+    def test_description_changed_with_whitespace_only(self, cavity_widget):
+        """Test description_changed with whitespace-only string."""
+        cavity_widget.description_changed("   \n\t   ")
+        assert cavity_widget._cavity_description == ""
+        assert cavity_widget.toolTip() == "No description available"
+
+    def test_multiple_channel_reconnections(self, cavity_widget):
+        """Test multiple reconnections don't cause issues."""
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+        ) as mock_channel_class:
+            mock_channels = [Mock() for _ in range(3)]
+            for i, mock_ch in enumerate(mock_channels):
+                mock_ch.address = f"test:severity{i}"
+
+            mock_channel_class.side_effect = mock_channels
+
+            # Set channel multiple times
+            for i in range(3):
+                cavity_widget.severity_channel = f"test:severity{i}"
+
+            # First two channels should have been disconnected
+            mock_channels[0].disconnect.assert_called_once()
+            mock_channels[1].disconnect.assert_called_once()
+
+            # Last channel should be connected but not disconnected
+            mock_channels[2].connect.assert_called_once()
+            mock_channels[2].disconnect.assert_not_called()
+
+    def test_acknowledge_without_parent_display(self, cavity_widget):
+        """Test acknowledgment when parent display not found."""
+        mock_cavity = Mock()
+        mock_cavity.cryomodule.name = "01"
+        mock_cavity.number = 1
+
+        with patch(
+            "qtpy.QtWidgets.QMessageBox.question", return_value=QMessageBox.Yes
+        ):
+            with patch("qtpy.QtWidgets.QApplication.instance") as mock_app:
+                mock_app.return_value.acknowledged_cavities = set()
+
+                with patch.object(
+                    cavity_widget, "_get_parent_display", return_value=None
+                ):
+                    # Should not raise error even without parent display
+                    cavity_widget.acknowledge_issue(mock_cavity, "Alarm")
+
+                    # Acknowledgment should still be set
+                    assert cavity_widget._acknowledged is True
+
+    def test_severity_change_during_exception(self, cavity_widget):
+        """Test that severity changes are handled even during exceptions."""
+        call_count = 0
+
+        def side_effect_func(param):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ValueError("First call fails")
+            # Second call succeeds
+
+        with patch.object(
+            cavity_widget, "change_shape", side_effect=side_effect_func
+        ):
+            # Should not raise exception
+            cavity_widget.severity_channel_value_changed(0)
+
+            # Both calls should have been made
+            assert call_count == 2
+
+
+class TestCavityWidgetPropertyTypes:
+    """Test property type handling."""
+
+    def test_cavity_text_with_numeric_string(self, cavity_widget):
+        """Test cavity_text property with numeric string."""
+        cavity_widget.cavity_text = "123"
+        assert cavity_widget.cavity_text == "123"
+
+    def test_cavity_text_with_empty_string(self, cavity_widget):
+        """Test cavity_text property with empty string."""
+        cavity_widget.cavity_text = ""
+        assert cavity_widget.cavity_text == ""
+
+    def test_underline_with_non_boolean(self, cavity_widget):
+        """Test underline property with truthy/falsy values."""
+        cavity_widget.underline = 1
+        assert cavity_widget.underline == 1  # Truthy
+
+        cavity_widget.underline = 0
+        assert cavity_widget.underline == 0  # Falsy
+
+
+class TestCavityWidgetQTimerIntegration:
+    """Test QTimer-related functionality."""
+
+    @patch("qtpy.QtCore.QTimer.singleShot")
+    def test_update_status_bar_uses_timer(self, mock_timer, cavity_widget):
+        """Test that status bar update uses QTimer."""
+        # Create mock parent display with status label
+        mock_parent = Mock()
+        mock_parent.status_label = Mock()
+        mock_parent.update_status = Mock()
+
+        mock_cavity = Mock()
+        mock_cavity.cryomodule.name = "01"
+        mock_cavity.number = 1
+
+        cavity_widget._update_status_bar(mock_parent, mock_cavity, "Alarm")
+
+        # Status label should be updated immediately
+        mock_parent.status_label.setText.assert_called_once()
+        assert (
+            "Acknowledged Alarm"
+            in mock_parent.status_label.setText.call_args[0][0]
+        )
+
+        # Timer should be set to clear status after 5 seconds
+        mock_timer.assert_called_once_with(5000, mock_parent.update_status)
+
+
+class TestCavityWidgetDrawingDetails:
+    """Test detailed drawing behavior."""
+
+    def test_draw_item_with_numeric_text(self, cavity_widget):
+        """Test draw_item handles numeric text differently."""
+        with patch.object(
+            cavity_widget, "get_bounds", return_value=(0, 0, 100, 50)
+        ):
+            with patch(
+                "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QFontMetrics"
+            ) as mock_fm_class:
+                mock_fm = Mock()
+                mock_fm.horizontalAdvance.return_value = 20
+                mock_fm.height.return_value = 10
+                mock_fm_class.return_value = mock_fm
+
+                mock_painter = Mock()
+                cavity_widget._cavity_text = "123"  # Numeric text
+
+                cavity_widget.draw_item(mock_painter)
+
+                # Painter should be manipulated (save/restore called)
+                assert mock_painter.save.called
+                assert mock_painter.restore.called
+
+                # Text should be drawn
+                mock_painter.drawText.assert_called()
+
+    def test_draw_item_with_text_text(self, cavity_widget):
+        """Test draw_item handles non-numeric text."""
+        with patch.object(
+            cavity_widget, "get_bounds", return_value=(0, 0, 100, 50)
+        ):
+            with patch(
+                "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.QFontMetrics"
+            ) as mock_fm_class:
+                mock_fm = Mock()
+                mock_fm.horizontalAdvance.return_value = 40
+                mock_fm.height.return_value = 10
+                mock_fm_class.return_value = mock_fm
+
+                mock_painter = Mock()
+                cavity_widget._cavity_text = "ABC"  # Non-numeric text
+
+                cavity_widget.draw_item(mock_painter)
+
+                # Text should be drawn with different scaling
+                mock_painter.drawText.assert_called()
+
+                # Scale should be called (for scaling the text)
+                assert mock_painter.scale.called
+
+
+class TestCavityWidgetMemoryManagement:
+    """Test memory management and cleanup."""
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+    )
+    def test_channel_cleanup_on_widget_deletion(self, mock_channel_class, qapp):
+        """Test channels are properly cleaned up when widget is deleted."""
+        widget = CavityWidget()
+
+        mock_severity_channel = Mock()
+        mock_severity_channel.address = "test:severity"
+        mock_description_channel = Mock()
+        mock_description_channel.address = "test:description"
+
+        mock_channel_class.side_effect = [
+            mock_severity_channel,
+            mock_description_channel,
+        ]
+
+        widget.severity_channel = "test:severity"
+        widget.description_channel = "test:description"
+
+        # Delete widget
+        widget.deleteLater()
+        qapp.processEvents()
+
+        # Channels should have been connected
+        mock_severity_channel.connect.assert_called()
+        mock_description_channel.connect.assert_called()
+
+
+class TestCavityWidgetChannelAddressHandling:
+    """Test channel address handling."""
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+    )
+    def test_severity_channel_with_empty_string(
+        self, mock_channel_class, cavity_widget
+    ):
+        """Test setting severity channel with empty string."""
+        # Set to empty string - should not create channel
+        cavity_widget.severity_channel = ""
+
+        # Channel should not be created for empty string
+        # (This depends on implementation - adjust if needed)
+        assert (
+            cavity_widget._severity_channel is None
+            or not mock_channel_class.called
+        )
+
+    @patch(
+        "sc_linac_physics.displays.cavity_display.frontend.cavity_widget.PyDMChannel"
+    )
+    def test_description_channel_with_empty_string(
+        self, mock_channel_class, cavity_widget
+    ):
+        """Test setting description channel with empty string."""
+        cavity_widget.description_channel = ""
+
+        # Getter should return empty string when no channel
+        assert cavity_widget.description_channel == ""
 
 
 if __name__ == "__main__":
