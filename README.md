@@ -158,6 +158,31 @@ sc-sim --list-pvs      # List all available PVs
 sc-sim --interfaces=127.0.0.1  # Run on localhost only
 ```
 
+#### Tune Status Polling
+
+Persist `TUNE_CONFIG` and `DF_COLD` snapshots/version history to SQLite + JSON:
+
+```bash
+sc-tune-status-poll
+sc-tune-status-poll --base-dir /home/physics/srf
+sc-tune-status-poll --db-path /home/physics/srf/databases/tune_status.sqlite --json-path /home/physics/srf/tune_status.json
+```
+
+Query the generated SQLite database interactively or with inline SQL:
+
+```bash
+sc-tune-status-query
+sc-tune-status-query "select cavity_id, tune_config_label, df_cold from cavity_state limit 10;"
+sc-tune-status-query --db /home/physics/srf/databases/tune_status.sqlite "select count(*) as cavities from cavity_state;"
+```
+
+
+If you just pulled new CLI entries, reinstall in editable mode to refresh scripts:
+
+```bash
+pip install -e .
+```
+
 ### Python API
 
 Python import check:
@@ -238,6 +263,11 @@ xvfb-run -a sc-srf-home
 **Simulation:**
 
 - `sc-sim` - Simulated IOC service
+
+**Operations Polling:**
+
+- `sc-tune-status-poll` - Poll cavity tuning PVs and persist tune-status SQLite/JSON outputs
+- `sc-tune-status-query` - Query tune-status SQLite data (interactive or one-shot SQL)
 
 ### Setup Command Examples
 

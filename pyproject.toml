@@ -202,6 +202,12 @@ sc-cold-cav = "sc_linac_physics.applications.tuning.launcher.srf_cavity_cold_lau
 sc-cold-rack = "sc_linac_physics.applications.tuning.launcher.srf_rack_cold_launcher:main"
 sc-cold-cm = "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher:main"
 
+# ============================================================================
+# Pollers
+# ============================================================================
+sc-tune-status-poll = "sc_linac_physics.applications.tuning.state.tune_status_poll:main"
+sc-tune-status-query = "sc_linac_physics.applications.tuning.state.tune_status_query:main"
+
 [tool.check-manifest]
 ignore = [
     # Build artifacts

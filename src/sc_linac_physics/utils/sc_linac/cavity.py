@@ -12,13 +12,12 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 )
 
 if TYPE_CHECKING:
-    from linac import Linac
-    from cryomodule import Cryomodule
-
-    from piezo import Piezo
-    from rack import Rack
-    from ssa import SSA
-    from stepper import StepperTuner
+    from sc_linac_physics.utils.sc_linac.linac import Linac
+    from sc_linac_physics.utils.sc_linac.cryomodule import Cryomodule
+    from sc_linac_physics.utils.sc_linac.piezo import Piezo
+    from sc_linac_physics.utils.sc_linac.rack import Rack
+    from sc_linac_physics.utils.sc_linac.ssa import SSA
+    from sc_linac_physics.utils.sc_linac.stepper import StepperTuner
 
 
 class Cavity(linac_utils.SCLinacObject):
@@ -62,8 +61,10 @@ class Cavity(linac_utils.SCLinacObject):
             self.scale_factor_lower_limit = linac_utils.CAVITY_SCALE_LOWER_LIMIT
             self.scale_factor_upper_limit = linac_utils.CAVITY_SCALE_UPPER_LIMIT
 
-        self._pv_prefix = (
-            f"ACCL:{self.linac.name}:{self.cryomodule.name}{self.number}0:"
+        self._pv_prefix = linac_utils.build_cavity_pv_prefix(
+            linac_name=self.linac.name,
+            cryomodule_name=self.cryomodule.name,
+            cavity_num=self.number,
         )
 
         self.ctePrefix = f"CTE:CM{self.cryomodule.name}:1{self.number}"
