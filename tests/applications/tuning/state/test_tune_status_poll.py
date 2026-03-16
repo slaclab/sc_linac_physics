@@ -44,7 +44,7 @@ def test_main_writes_db_and_snapshot(monkeypatch, tmp_path):
     assert exit_code == 0
 
     db_path = tmp_path / "tune_status.sqlite"
-    json_path = tmp_path / "tune_status.json"
+    json_path = tmp_path / "json" / "tune_status.json"
     assert db_path.exists()
     assert json_path.exists()
 

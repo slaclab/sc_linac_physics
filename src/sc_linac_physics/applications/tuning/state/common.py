@@ -11,6 +11,7 @@ from sc_linac_physics.applications.tuning.tune_utils import TUNE_LOG_DIR
 from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.platform_paths import (
     get_database_dir,
+    get_json_dir,
     get_srf_base_dir,
     is_linux,
 )
@@ -29,10 +30,11 @@ def _platform_default_paths(
     """Return (base_dir, db_path, json_path) for the active platform."""
     base_dir = get_srf_base_dir(system_name=system_name, home_dir=home_dir)
     db_dir = get_database_dir(system_name=system_name, home_dir=home_dir)
+    json_dir = get_json_dir(system_name=system_name, home_dir=home_dir)
     return (
         base_dir,
         db_dir / DEFAULT_DB_FILENAME,
-        base_dir / DEFAULT_JSON_FILENAME,
+        json_dir / DEFAULT_JSON_FILENAME,
     )
 
 
@@ -106,7 +108,7 @@ def resolve_poll_paths(
         or (
             DEFAULT_JSON_PATH
             if base_dir == DEFAULT_BASE_DIR
-            else base_dir / DEFAULT_JSON_FILENAME
+            else base_dir / "json" / DEFAULT_JSON_FILENAME
         ),
         log_path or DEFAULT_LOG_PATH,
     )

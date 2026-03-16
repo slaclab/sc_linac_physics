@@ -44,6 +44,17 @@ def get_database_dir(
     return _current_home(home_dir) / "databases"
 
 
+def get_json_dir(
+    *,
+    system_name: str | None = None,
+    home_dir: Path | None = None,
+) -> Path:
+    """Return the default JSON directory for the current platform."""
+    if is_linux(system_name=system_name):
+        return Path("/home/physics/srf/json")
+    return _current_home(home_dir) / "json"
+
+
 def get_log_base_dir(
     *,
     system_name: str | None = None,
