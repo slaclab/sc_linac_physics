@@ -12,10 +12,9 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-if sys.platform == "darwin":  # macOS
-    BASE_LOG_DIR = Path.home() / "logfiles"
-else:  # Linux (production)
-    BASE_LOG_DIR = Path("/home/physics/srf/logfiles")
+from sc_linac_physics.utils.platform_paths import get_log_base_dir
+
+BASE_LOG_DIR = get_log_base_dir()
 
 # More readable format option
 READABLE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"

@@ -1,6 +1,5 @@
 import logging
 import os
-import platform
 from csv import DictReader
 from datetime import datetime, timedelta
 from typing import Dict, List
@@ -8,11 +7,12 @@ from typing import Dict, List
 from lcls_tools.common.data.archiver import ArchiveDataHandler
 
 from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
+from sc_linac_physics.utils.platform_paths import is_macos
 
 CAV_LOG_DIR = str(BASE_LOG_DIR / "cavity_display")
 
 # Basic OS detection
-DEBUG = platform.system() == "Darwin"  # True on macOS, False elsewhere
+DEBUG = is_macos()
 BACKEND_SLEEP_TIME = 10 if DEBUG else 0
 
 STATUS_SUFFIX = "CUDSTATUS"

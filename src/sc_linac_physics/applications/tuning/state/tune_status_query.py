@@ -1,6 +1,7 @@
 """Interactive SQLite query tool for tuning state database."""
 
 import argparse
+import logging
 import sqlite3
 import sys
 from pathlib import Path
@@ -8,9 +9,19 @@ from pathlib import Path
 from sc_linac_physics.applications.tuning.state.common import (
     DEFAULT_BASE_DIR,
     DEFAULT_DB_PATH,
+    DEFAULT_LOG_PATH,
+    build_state_logger,
     connect_db,
     resolve_db_path,
 )
+
+QUERY_LOG_PATH = DEFAULT_LOG_PATH.with_name("tune_status_query.log")
+logger = logging.getLogger(__name__)
+
+
+def configure_logging() -> logging.Logger:
+    """Configure module logging with the shared package logger utility."""
+    return build_state_logger(__name__, log_path=QUERY_LOG_PATH)
 
 
 def execute_query(db_path: Path, query: str, params=None) -> bool:
@@ -46,6 +57,7 @@ def execute_query(db_path: Path, query: str, params=None) -> bool:
 
         except sqlite3.Error as exc:
             print(f"Error: {exc}")
+            logger.exception("Query execution failed")
             return False
 
 
@@ -115,9 +127,14 @@ def interactive_mode(db_path: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point for tuning state database query CLI."""
+    global logger
+    logger = configure_logging()
+
     args = parse_args(argv)
     query = " ".join(args.query).strip()
     db_path = resolve_db_path(args.base_dir, args.db_path_override)
+
+    logger.info("Starting tune status query")
 
     if query:
         return 0 if execute_query(db_path, query) else 1

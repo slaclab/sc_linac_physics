@@ -1,7 +1,6 @@
 """Shared utilities for tuning state command-line tools."""
 
 import logging
-import platform
 import sqlite3
 from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
@@ -10,6 +9,11 @@ from typing import TypeVar
 
 from sc_linac_physics.applications.tuning.tune_utils import TUNE_LOG_DIR
 from sc_linac_physics.utils.logger import custom_logger
+from sc_linac_physics.utils.platform_paths import (
+    get_database_dir,
+    get_srf_base_dir,
+    is_linux,
+)
 
 DEFAULT_DB_FILENAME = "tune_status.sqlite"
 DEFAULT_JSON_FILENAME = "tune_status.json"
@@ -23,23 +27,18 @@ def _platform_default_paths(
     home_dir: Path,
 ) -> tuple[Path, Path, Path]:
     """Return (base_dir, db_path, json_path) for the active platform."""
-    if system_name == "Linux":
-        base_dir = Path("/home/physics/srf")
-        return (
-            base_dir,
-            base_dir / "databases" / DEFAULT_DB_FILENAME,
-            base_dir / DEFAULT_JSON_FILENAME,
-        )
-
+    base_dir = get_srf_base_dir(system_name=system_name, home_dir=home_dir)
+    db_dir = get_database_dir(system_name=system_name, home_dir=home_dir)
     return (
-        home_dir,
-        home_dir / "databases" / DEFAULT_DB_FILENAME,
-        home_dir / DEFAULT_JSON_FILENAME,
+        base_dir,
+        db_dir / DEFAULT_DB_FILENAME,
+        base_dir / DEFAULT_JSON_FILENAME,
     )
 
 
+_SYSTEM_NAME = "Linux" if is_linux() else "Darwin"
 DEFAULT_BASE_DIR, DEFAULT_DB_PATH, DEFAULT_JSON_PATH = _platform_default_paths(
-    platform.system(), Path.home()
+    _SYSTEM_NAME, Path.home()
 )
 DEFAULT_LOG_PATH = TUNE_LOG_DIR / DEFAULT_LOG_FILENAME
 
