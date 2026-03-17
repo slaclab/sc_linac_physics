@@ -1,0 +1,303 @@
+# Complete RF Commissioning Workflow Example
+
+This example demonstrates a full cavity commissioning workflow from start to finish, including the COMPLETE phase for final acceptance.
+
+## Scenario
+
+Commissioning cavity **CM02_CAV5** in cryomodule **CM02** with phase-by-phase execution and proper handoff to operations.
+
+## Full Workflow
+
+```python
+from datetime import datetime
+from sc_linac_physics.applications.rf_commissioning import (
+    CommissioningRecord,
+    CommissioningPhase,
+    PhaseStatus,
+    CommissioningDatabase,
+    PhaseCheckpoint,
+)
+
+# ============================================================================
+# SETUP: Initialize database and create record
+# ============================================================================
+
+db = CommissioningDatabase("commissioning.db")
+db.initialize()
+
+record = CommissioningRecord(
+    cavity_name="CM02_CAV5",
+    cryomodule="CM02",
+)
+
+# Save initial record
+record_id = db.save_record(record)
+print(f"Started commissioning: {record.cavity_name}")
+print(f"Record ID: {record_id}")
+print(f"Initial phase: {record.current_phase.value}")
+
+# ============================================================================
+# PHASE 1: PIEZO_PRE_RF - Piezo tuner checkout without RF
+# ============================================================================
+
+print("\n--- Phase 1: PIEZO_PRE_RF ---")
+
+# Run automated test (in actual code, this would call PiezoPreRFPhase.run())
+# ... test executes ...
+
+# Record results
+from sc_linac_physics.applications.rf_commissioning import PiezoPreRFCheck
+
+record.piezo_pre_rf = PiezoPreRFCheck(
+    capacitance_a=2.3e-9,
+    capacitance_b=2.4e-9,
+    channel_a_passed=True,
+    channel_b_passed=True,
+    timestamp=datetime.now(),
+    notes="Both channels passed within specs"
+)
+
+# Add checkpoint
+checkpoint = PhaseCheckpoint(
+    phase=CommissioningPhase.PIEZO_PRE_RF,
+    timestamp=datetime.now(),
+    operator="tech_user",
+    step_name="final_validation",
+    success=True,
+    notes="Piezo test completed successfully",
+    measurements={
+        "cap_a": 2.3e-9,
+        "cap_b": 2.4e-9
+    }
+)
+record.add_checkpoint(checkpoint)
+
+# Mark phase complete and advance
+record.set_phase_status(CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE)
+success, message = record.advance_to_next_phase()
+print(f"Advanced to: {record.current_phase.value}")
+
+# Save progress
+db.save_record(record, record_id)
+
+# ============================================================================
+# PHASE 2-6: Continue through remaining technical phases
+# ============================================================================
+
+# For brevity, showing abbreviated workflow for middle phases
+
+phases_workflow = [
+    (CommissioningPhase.COLD_LANDING, "Cold landing completed, detune = 5 Hz"),
+    (CommissioningPhase.SSA_CHAR, "SSA characterized, max drive = 0.85"),
+    (CommissioningPhase.CAVITY_CHAR, "Cavity Q measured, QL = 2.8e7"),
+    (CommissioningPhase.PIEZO_WITH_RF, "Piezo with RF tested, gains within spec"),
+    (CommissioningPhase.HIGH_POWER, "High power ramp complete, 1-hour run passed"),
+]
+
+for phase, notes in phases_workflow:
+    print(f"\n--- Phase: {phase.value.upper()} ---")
+
+    # ... actual phase execution would happen here ...
+
+    # Record completion
+    checkpoint = PhaseCheckpoint(
+        phase=phase,
+        timestamp=datetime.now(),
+        operator="tech_user",
+        step_name="phase_completion",
+        success=True,
+        notes=notes
+    )
+    record.add_checkpoint(checkpoint)
+
+    record.set_phase_status(phase, PhaseStatus.COMPLETE)
+
+    # Advance to next phase
+    success, message = record.advance_to_next_phase()
+    if success:
+        print(f"✓ {phase.value} complete, advanced to: {record.current_phase.value}")
+    else:
+        print(f"✗ Cannot advance: {message}")
+        break
+
+    # Save progress after each phase
+    db.save_record(record, record_id)
+
+# ============================================================================
+# PHASE 7: COMPLETE - Final acceptance and handoff
+# ============================================================================
+
+print("\n--- Phase 7: COMPLETE (Final Acceptance) ---")
+
+# Verify we're at COMPLETE phase
+if record.current_phase == CommissioningPhase.COMPLETE:
+
+    # Perform final acceptance activities
+    print("Performing final acceptance checks...")
+
+    # 1. Set end time
+    record.end_time = datetime.now()
+
+    # 2. Update overall status
+    record.overall_status = "operational"
+
+    # 3. Add final checkpoint
+    final_checkpoint = PhaseCheckpoint(
+        phase=CommissioningPhase.COMPLETE,
+        timestamp=datetime.now(),
+        operator="supervisor_user",  # Note: different operator for approval
+        step_name="final_acceptance",
+        success=True,
+        notes="Cavity accepted for operations. All tests passed.",
+        measurements={
+            "total_duration_hours": record.elapsed_time,
+            "final_status": "operational"
+        }
+    )
+    record.add_checkpoint(final_checkpoint)
+
+    # 4. Mark COMPLETE phase as done
+    record.set_phase_status(CommissioningPhase.COMPLETE, PhaseStatus.COMPLETE)
+
+    # 5. Save final state
+    db.save_record(record, record_id)
+
+    # 6. Generate summary
+    print("\n" + "="*60)
+    print("✓ COMMISSIONING COMPLETE")
+    print("="*60)
+    print(f"Cavity:          {record.cavity_name}")
+    print(f"Cryomodule:      {record.cryomodule}")
+    print(f"Started:         {record.start_time}")
+    print(f"Completed:       {record.end_time}")
+    print(f"Duration:        {record.elapsed_time:.1f} hours")
+    print(f"Status:          {record.overall_status}")
+    print(f"Total phases:    {len([p for p in CommissioningPhase if record.get_phase_status(p) == PhaseStatus.COMPLETE])}")
+    print(f"Record complete: {record.is_complete}")
+
+    # 7. Optional: Send notifications, update EPICS, etc.
+    # send_commissioning_notification(record)
+    # update_cavity_epics_status(record.cavity_name, "operational")
+    # generate_final_report(record_id)
+
+    print("\n✓ Cavity handed off to operations team")
+
+# ============================================================================
+# VERIFICATION: Check completion status
+# ============================================================================
+
+print("\n--- Verification ---")
+
+# Reload from database to verify persistence
+verified_record = db.load_record(record_id)
+
+print(f"Record is complete: {verified_record.is_complete}")
+print(f"Current phase: {verified_record.current_phase.value}")
+print(f"Overall status: {verified_record.overall_status}")
+
+# Show phase history
+print(f"\nTotal checkpoints: {len(verified_record.phase_history)}")
+for i, cp in enumerate(verified_record.get_checkpoints(), 1):
+    status = "✓" if cp.success else "✗"
+    print(f"  {i}. [{cp.phase.value}] {cp.step_name}: {status} - {cp.notes}")
+
+# Verify cannot advance past COMPLETE
+success, message = verified_record.advance_to_next_phase()
+print(f"\nCan advance further: {success} ({message})")
+
+print("\n" + "="*60)
+print("Workflow demonstration complete!")
+print("="*60)
+```
+
+## Expected Output
+
+```
+Started commissioning: CM02_CAV5
+Record ID: 1
+Initial phase: piezo_pre_rf
+
+--- Phase 1: PIEZO_PRE_RF ---
+Advanced to: cold_landing
+
+--- Phase: COLD_LANDING ---
+✓ cold_landing complete, advanced to: ssa_char
+
+--- Phase: SSA_CHAR ---
+✓ ssa_char complete, advanced to: cavity_char
+
+--- Phase: CAVITY_CHAR ---
+✓ cavity_char complete, advanced to: piezo_with_rf
+
+--- Phase: PIEZO_WITH_RF ---
+✓ piezo_with_rf complete, advanced to: high_power
+
+--- Phase: HIGH_POWER ---
+✓ high_power complete, advanced to: complete
+
+--- Phase 7: COMPLETE (Final Acceptance) ---
+Performing final acceptance checks...
+
+============================================================
+✓ COMMISSIONING COMPLETE
+============================================================
+Cavity:          CM02_CAV5
+Cryomodule:      CM02
+Started:         2026-02-25 10:00:00
+Completed:       2026-02-25 16:30:00
+Duration:        6.5 hours
+Status:          operational
+Total phases:    7
+Record complete: True
+
+✓ Cavity handed off to operations team
+
+--- Verification ---
+Record is complete: True
+Current phase: complete
+Overall status: operational
+
+Total checkpoints: 7
+  1. [piezo_pre_rf] final_validation: ✓ - Piezo test completed successfully
+  2. [cold_landing] phase_completion: ✓ - Cold landing completed, detune = 5 Hz
+  3. [ssa_char] phase_completion: ✓ - SSA characterized, max drive = 0.85
+  4. [cavity_char] phase_completion: ✓ - Cavity Q measured, QL = 2.8e7
+  5. [piezo_with_rf] phase_completion: ✓ - Piezo with RF tested, gains within spec
+  6. [high_power] phase_completion: ✓ - High power ramp complete, 1-hour run passed
+  7. [complete] final_acceptance: ✓ - Cavity accepted for operations. All tests passed.
+
+Can advance further: False (complete is the final phase)
+
+============================================================
+Workflow demonstration complete!
+============================================================
+```
+
+## Key Takeaways
+
+1. **COMPLETE phase separates technical work from administrative acceptance**
+   - Technical work ends at HIGH_POWER
+   - COMPLETE is for formal sign-off and handoff
+
+2. **Different operators for work vs. approval**
+   - Technician runs tests through HIGH_POWER
+   - Supervisor/physicist approves in COMPLETE phase
+
+3. **Final checkpoint records acceptance**
+   - Who approved it
+   - When it was accepted
+   - Final measurements/summary
+
+4. **Clean status checking**
+   - `record.is_complete` is unambiguous
+   - `record.current_phase == COMPLETE` means fully done
+   - `record.overall_status = "operational"` set during COMPLETE
+
+5. **Audit trail preserved**
+   - All phases tracked in `phase_history`
+   - Can review who did what and when
+   - Supports compliance/quality assurance
+
+6. **Cannot accidentally re-run**
+   - Once at COMPLETE, cannot advance further
+   - Clear terminal state for the workflow
