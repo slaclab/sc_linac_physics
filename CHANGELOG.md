@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.8.0 (2026-03-16)
+
+### Bug Fixes
+
+- **cavity display**: Fix channel management and acknowledgment lifecycle
+  ([#225](https://github.com/slaclab/sc_linac_physics/pull/225),
+  [`3fbf0ac`](https://github.com/slaclab/sc_linac_physics/commit/3fbf0ac16056b5c460082db3887dd7243e873f5f))
+
+### Features
+
+- **cavity-display**: Add alarm acknowledgment to cavity context menu
+  ([#225](https://github.com/slaclab/sc_linac_physics/pull/225),
+  [`3fbf0ac`](https://github.com/slaclab/sc_linac_physics/commit/3fbf0ac16056b5c460082db3887dd7243e873f5f))
+
+- **cavity-display**: Add audio alert manager and tests
+  ([#226](https://github.com/slaclab/sc_linac_physics/pull/226),
+  [`6e182d0`](https://github.com/slaclab/sc_linac_physics/commit/6e182d03b84fd5c1444e7b4129a90718e17d7036))
+
+
 ## v9.7.0 (2026-02-27)
 
 ### Bug Fixes
