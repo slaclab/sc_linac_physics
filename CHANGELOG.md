@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.9.0 (2026-03-23)
+
+### Bug Fixes
+
+- **cavity-display**: Resolve code review findings
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+### Features
+
+- **cavity-display**: Add screenshot and audio alert integration
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+- **cavity-display**: Integrate audio alert system into main display
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+
 ## v9.8.0 (2026-03-16)
 
 ### Bug Fixes
