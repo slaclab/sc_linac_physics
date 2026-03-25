@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.10.0 (2026-03-25)
+
+### Features
+
+- **cavity-display**: Add heatmap cavity and cryomodule widgets
+  ([#229](https://github.com/slaclab/sc_linac_physics/pull/229),
+  [`ec39368`](https://github.com/slaclab/sc_linac_physics/commit/ec393683f0dc58f7c548483666a49b19f053d5b3))
+
+
 ## v9.9.0 (2026-03-23)
 
 ### Bug Fixes
