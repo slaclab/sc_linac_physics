@@ -42,50 +42,65 @@ class GUICavity(BackendCavity):
         self._fault_display: Optional[Display] = None
         self.fault_display_grid_layout = make_header()
 
+        # Build the cavity widget layout
+        self._build_cavity_layout(cavity_num)
+
+        # Configure PV channels
+        self._setup_pv_channels()
+
+    def _build_cavity_layout(self, cavity_num):
+        """Build the complete layout for the cavity widget."""
+        # Main vertical layout
         self.vert_layout = QVBoxLayout()
+        self.vert_layout.setSpacing(0)
+        self.vert_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Cavity widget (diamond/shape)
         self.cavity_widget = CavityWidget()
-        self.cavity_widget.setMinimumSize(10, 10)
+        self.cavity_widget.setMinimumSize(40, 40)
+        self.cavity_widget.setMaximumSize(100, 100)
         self.cavity_widget.setAccessibleName("cavity_widget")
         self.cavity_widget.cavity_text = str(cavity_num)
-        self.cavity_widget.setSizePolicy(
-            QSizePolicy.Preferred, QSizePolicy.Preferred
-        )
+        self.cavity_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.cavity_widget.clicked.connect(self.show_fault_display)
+        self.cavity_widget._parent_cavity = self  # Link back for context menu
 
-        self.hor_layout = QHBoxLayout()
+        # Status indicator bars (SSA and RF state)
+        self.hor_layout = self._create_status_bars()
 
+        # Add to layout
+        self.vert_layout.addWidget(self.cavity_widget, alignment=Qt.AlignCenter)
+        self.vert_layout.addLayout(self.hor_layout)
+
+    def _create_status_bars(self):
+        """Create SSA and RF status indicator bars."""
+        hor_layout = QHBoxLayout()
+        hor_layout.setSpacing(0)
+        hor_layout.setContentsMargins(0, 0, 0, 0)
+
+        # SSA bar
         self.ssa_bar = PyDMByteIndicator()
         self.ssa_bar.setAccessibleName("SSA")
         self.ssa_bar.onColor = QColor(92, 255, 92)
         self.ssa_bar.offColor = QColor(40, 40, 40)
-        self.ssa_bar.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.ssa_bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ssa_bar.showLabels = False
         self.ssa_bar.channel = self.ssa.status_pv
-        self.ssa_bar.setFixedHeight(5)
+        self.ssa_bar.setFixedHeight(4)
+        self.ssa_bar.setMaximumWidth(50)
 
+        # RF bar
         self.rf_bar = PyDMByteIndicator()
         self.rf_bar.setAccessibleName("RFSTATE")
         self.rf_bar.onColor = QColor(14, 191, 255)
         self.rf_bar.offColor = QColor(40, 40, 40)
-        self.rf_bar.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.rf_bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.rf_bar.showLabels = False
         self.rf_bar.channel = self.rf_state_pv
-        self.rf_bar.setFixedHeight(5)
+        self.rf_bar.setFixedHeight(4)
+        self.rf_bar.setMaximumWidth(50)
 
-        self.hor_layout.addWidget(self.ssa_bar)
-        self.hor_layout.addWidget(self.rf_bar)
-
-        self.vert_layout.addWidget(self.cavity_widget)
-        self.vert_layout.addLayout(self.hor_layout)
-
-        severity_pv: str = self.pv_addr("CUDSEVR")
-        status_pv: str = self.pv_addr("CUDSTATUS")
-        description_pv: str = self.pv_addr("CUDDESC")
-
-        self.cavity_widget.channel = status_pv
-        self.cavity_widget.severity_channel = severity_pv
-        self.cavity_widget.description_channel = description_pv
-
+        # SSA visibility rule
         rule = [
             {
                 "channels": [
@@ -101,8 +116,22 @@ class GUICavity(BackendCavity):
                 "name": "show",
             }
         ]
-
         self.ssa_bar.rules = json.dumps(rule)
+
+        hor_layout.addWidget(self.ssa_bar)
+        hor_layout.addWidget(self.rf_bar)
+
+        return hor_layout
+
+    def _setup_pv_channels(self):
+        """Configure PV channels for the cavity widget."""
+        severity_pv = self.pv_addr("CUDSEVR")
+        status_pv = self.pv_addr("CUDSTATUS")
+        description_pv = self.pv_addr("CUDDESC")
+
+        self.cavity_widget.channel = status_pv
+        self.cavity_widget.severity_channel = severity_pv
+        self.cavity_widget.description_channel = description_pv
 
     def populate_fault_display(self):
         for idx, fault in enumerate(self.faults.values()):
