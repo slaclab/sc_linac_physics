@@ -22,6 +22,7 @@ class CommissioningPhase(Enum):
     PIEZO_PRE_RF = "piezo_pre_rf"
     COLD_LANDING = "cold_landing"
     SSA_CHAR = "ssa_char"
+    PI_MODE = "pi_mode"
     CAVITY_CHAR = "cavity_char"
     PIEZO_WITH_RF = "piezo_with_rf"
     HIGH_POWER = "high_power"
@@ -36,8 +37,9 @@ class CommissioningPhase(Enum):
         """
         return [
             cls.PIEZO_PRE_RF,
-            cls.COLD_LANDING,
             cls.SSA_CHAR,
+            cls.COLD_LANDING,
+            cls.PI_MODE,
             cls.CAVITY_CHAR,
             cls.PIEZO_WITH_RF,
             cls.HIGH_POWER,
@@ -215,6 +217,40 @@ class ColdLandingData:
 
 
 @dataclass
+class PiModeMeasurement:
+    """π-mode (8π/9 and 7π/9) measurement results."""
+
+    mode_8pi_9_frequency: Optional[float] = phase_display_field(
+        default=None,
+        label="8π/9 Frequency",
+        widget_name="pi_mode_8pi_9_freq",
+        format_spec=".3f",
+        unit="Hz",
+    )
+    mode_7pi_9_frequency: Optional[float] = phase_display_field(
+        default=None,
+        label="7π/9 Frequency",
+        widget_name="pi_mode_7pi_9_freq",
+        format_spec=".3f",
+        unit="Hz",
+    )
+    timestamp: datetime = field(default_factory=datetime.now)
+    notes: str = ""
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if both π-mode measurements are complete."""
+        return (
+            self.mode_8pi_9_frequency is not None
+            and self.mode_7pi_9_frequency is not None
+        )
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return serialize_model(self, computed_fields=("is_complete",))
+
+
+@dataclass
 class SSACharacterization:
     """SSA calibration results."""
 
@@ -365,6 +401,20 @@ class PiezoWithRFTest:
 class HighPowerRampData:
     """High power ramp and one-hour run results."""
 
+    field_emission_onset: Optional[float] = phase_display_field(
+        default=None,
+        label="Field Emission Onset",
+        widget_name="high_power_fe_onset",
+        format_spec=".3f",
+        unit="MV",
+    )  # MV, if observed
+    max_amplitude_reached: Optional[float] = phase_display_field(
+        default=None,
+        label="Max Amplitude Reached",
+        widget_name="high_power_max_amplitude_reached",
+        format_spec=".3f",
+        unit="MV",
+    )  # MV, even if 1-hour hold was not achieved
     final_amplitude: Optional[float] = phase_display_field(
         default=None,
         label="Final Amplitude",
@@ -378,6 +428,11 @@ class HighPowerRampData:
         widget_name="high_power_one_hour_complete",
         true_text="Yes",
         false_text="No",
+    )
+    amplitude_limitation_reason: str = phase_display_field(
+        default="",
+        label="Amplitude Limitation Reason",
+        widget_name="high_power_amplitude_limitation_reason",
     )
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
@@ -435,6 +490,7 @@ class CommissioningRecord:
     piezo_pre_rf: Optional[PiezoPreRFCheck] = None
     cold_landing: Optional[ColdLandingData] = None
     ssa_char: Optional[SSACharacterization] = None
+    pi_mode: Optional[PiModeMeasurement] = None
     cavity_char: Optional[CavityCharacterization] = None
     piezo_with_rf: Optional[PiezoWithRFTest] = None
     high_power: Optional[HighPowerRampData] = None
@@ -606,6 +662,7 @@ class CommissioningRecord:
             "ssa_characterization": (
                 self.ssa_char.to_dict() if self.ssa_char else None
             ),
+            "pi_mode": (self.pi_mode.to_dict() if self.pi_mode else None),
             "cavity_characterization": (
                 self.cavity_char.to_dict() if self.cavity_char else None
             ),

@@ -2,6 +2,7 @@
 Shared UI builder for RF commissioning displays.
 """
 
+import sys
 from collections.abc import Callable
 
 from PyQt5.QtCore import Qt
@@ -21,6 +22,22 @@ from PyQt5.QtWidgets import (
 )
 from pydm.widgets import PyDMLabel, PyDMEnumComboBox
 
+if sys.platform == "darwin":
+    MONO_FONT_STACK = (
+        "'Menlo', 'Monaco', 'Consolas', 'DejaVu Sans Mono', "
+        "'Liberation Mono', 'Noto Sans Mono'"
+    )
+elif sys.platform.startswith("linux"):
+    MONO_FONT_STACK = (
+        "'DejaVu Sans Mono', 'Liberation Mono', 'Noto Sans Mono', "
+        "'Consolas', 'Menlo', 'Monaco'"
+    )
+else:
+    MONO_FONT_STACK = (
+        "'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', "
+        "'Noto Sans Mono', 'Menlo', 'Monaco'"
+    )
+
 PV_LABEL_STYLE = """
     background: #1a2a3a;
     padding: 2px 6px;
@@ -34,9 +51,9 @@ PV_CAP_STYLE = """
     padding: 2px 6px;
     border: 1px solid #4a9eff;
     border-left: 3px solid #4a9eff;
-    font-family: monospace;
+    font-family: %s;
     font-size: 11px;
-"""
+""" % MONO_FONT_STACK
 
 LOCAL_LABEL_STYLE = """
     background: #2a2a1a;
@@ -51,9 +68,9 @@ LOCAL_CAP_STYLE = """
     padding: 2px 6px;
     border: 1px solid #ff9a4a;
     border-left: 3px solid #ff9a4a;
-    font-family: monospace;
+    font-family: %s;
     font-size: 11px;
-"""
+""" % MONO_FONT_STACK
 
 
 class PhaseUIBase:
@@ -244,9 +261,9 @@ class PhaseUIBase:
             QLabel {
                 color: #9ca3af;
                 font-size: 9pt;
-                font-family: monospace;
+                font-family: %s;
             }
-        """)
+        """ % MONO_FONT_STACK)
 
         status_section.addWidget(status_indicator)
         status_section.addWidget(timestamp_label)
@@ -348,7 +365,8 @@ class PhaseUIBase:
         history_text.setReadOnly(True)
         history_text.setStyleSheet(
             "QTextEdit { background-color: #1a1a1a; color: #00ff00; "
-            "font-family: 'Courier New', monospace; font-size: 10pt; }"
+            f"font-family: {MONO_FONT_STACK}; "
+            "font-size: 10pt; }"
         )
 
         history_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)

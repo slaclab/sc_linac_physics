@@ -7,10 +7,14 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QVBoxLayout,
     QWidget,
 )
 
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+from sc_linac_physics.applications.rf_commissioning.ui.magnet_status_badge import (
+    MagnetStatusBadge,
+)
 
 
 def build_header_panel(host) -> QWidget:
@@ -58,6 +62,21 @@ def build_header_panel(host) -> QWidget:
     cavity_group.setLayout(cavity_layout)
     layout.addWidget(cavity_group)
 
+    # Cavity completion counter
+    host.cavity_completion_label = QLabel("0/8 Complete")
+    host.cavity_completion_label.setStyleSheet("""
+            QLabel {
+                color: #aaa;
+                font-weight: bold;
+                padding: 5px 10px;
+                background-color: rgba(100, 100, 100, 0.2);
+                border-radius: 3px;
+                font-size: 9px;
+            }
+        """)
+    host.cavity_completion_label.setMaximumWidth(100)
+    layout.addWidget(host.cavity_completion_label)
+
     # Update PVs and load record when cavity selection changes
     host.cryomodule_combo.currentIndexChanged.connect(
         host._on_cavity_selection_changed
@@ -96,6 +115,28 @@ def build_header_panel(host) -> QWidget:
             }
         """)
     layout.addWidget(host.sync_status)
+
+    # Magnet checkout section (prominent status + open action)
+    magnet_group = QGroupBox("Magnet Checkout")
+    magnet_layout = QVBoxLayout()
+    magnet_layout.setSpacing(6)
+
+    host.magnet_status_badge = MagnetStatusBadge()
+    host.magnet_status_badge.setToolTip("Cryomodule magnet checkout status")
+    host.magnet_status_badge.setMinimumWidth(120)
+    magnet_layout.addWidget(host.magnet_status_badge)
+
+    host.open_magnet_checkout_btn = QPushButton("Open Magnet Checkout")
+    host.open_magnet_checkout_btn.setToolTip(
+        "Open the cryomodule magnet checkout screen"
+    )
+    host.open_magnet_checkout_btn.clicked.connect(
+        host._open_magnet_checkout_screen
+    )
+    magnet_layout.addWidget(host.open_magnet_checkout_btn)
+
+    magnet_group.setLayout(magnet_layout)
+    layout.addWidget(magnet_group)
 
     layout.addStretch()
 

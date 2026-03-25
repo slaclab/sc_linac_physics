@@ -15,7 +15,15 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     PhaseCheckpoint,
     PhaseStatus,
     PHASE_REGISTRY,
+)
+from sc_linac_physics.applications.rf_commissioning.models.serialization import (
     deserialize_model,
+)
+from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
+    CRYOMODULE_PHASE_REGISTRY,
+    CryomoduleCheckoutRecord,
+    CryomodulePhase,
+    CryomodulePhaseStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +84,14 @@ class CommissioningDatabase:
         if reg.record_attr and reg.data_model
     }
 
+    # Maps CM-level phase record attribute → data model class, derived from
+    # CRYOMODULE_PHASE_REGISTRY
+    CRYOMODULE_PHASE_DATA_MODELS: dict[str, type] = {
+        reg.record_attr: reg.data_model
+        for reg in CRYOMODULE_PHASE_REGISTRY.values()
+        if reg.record_attr and reg.data_model
+    }
+
     @contextmanager
     def _get_connection(self):
         """Context manager for database connections.
@@ -93,7 +109,7 @@ class CommissioningDatabase:
         finally:
             conn.close()
 
-    def initialize(self):
+    def initialize(self):  # noqa: C901
         """Create database schema if it doesn't exist.
 
         Creates the commissioning_records table with all necessary columns
@@ -236,6 +252,70 @@ class CommissioningDatabase:
                     name TEXT PRIMARY KEY,
                     created_at TEXT NOT NULL
                 )
+            """)
+
+            # ================================================================
+            # Cryomodule-scoped checkout records (magnet checkout, etc.)
+            # ================================================================
+            cm_phase_col_defs = "\n".join(
+                f"                    {col} TEXT,"
+                for col in self.CRYOMODULE_PHASE_DATA_MODELS
+            )
+
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS cryomodule_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    linac TEXT NOT NULL,
+                    cryomodule TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT,
+
+                    -- CM-level phase data (stored as JSON)
+{cm_phase_col_defs}
+
+                    -- Phase tracking (stored as JSON)
+                    phase_status TEXT NOT NULL,
+
+                    -- Metadata
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    notes TEXT NOT NULL DEFAULT ''
+                )
+            """)
+
+            # Migrations for cryomodule_records
+            cursor.execute("PRAGMA table_info(cryomodule_records)")
+            cm_existing_columns = {row[1] for row in cursor.fetchall()}
+
+            # Add version and notes if missing
+            for col_name, ddl in [
+                ("version", "INTEGER NOT NULL DEFAULT 1"),
+                ("notes", "TEXT NOT NULL DEFAULT ''"),
+            ]:
+                if col_name not in cm_existing_columns:
+                    cursor.execute(
+                        f"ALTER TABLE cryomodule_records "
+                        f"ADD COLUMN {col_name} {ddl}"
+                    )
+
+            # Add CM phase data columns if missing
+            for col_name in self.CRYOMODULE_PHASE_DATA_MODELS:
+                if col_name not in cm_existing_columns:
+                    cursor.execute(
+                        f"ALTER TABLE cryomodule_records "
+                        f"ADD COLUMN {col_name} TEXT"
+                    )
+
+            # Create indexes for CM records
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cm_linac_cryo
+                ON cryomodule_records(linac, cryomodule)
+            """)
+
+            cursor.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_cm_unique
+                ON cryomodule_records(linac, cryomodule)
             """)
 
     def _extract_linac_number(self, linac: str | None) -> str | None:
@@ -629,6 +709,26 @@ class CommissioningDatabase:
                 LIMIT 1
                 """,
                 (linac, cryomodule, cavity_number),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return row["id"]
+
+    def get_cryomodule_record_id(
+        self, linac: str, cryomodule: str
+    ) -> int | None:
+        """Get cryomodule checkout record ID, if it exists."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id FROM cryomodule_records
+                WHERE linac = ? AND cryomodule = ?
+                ORDER BY COALESCE(updated_at, start_time) DESC, id DESC
+                LIMIT 1
+                """,
+                (linac, cryomodule),
             )
             row = cursor.fetchone()
             if row is None:
@@ -1307,3 +1407,201 @@ class CommissioningDatabase:
                 (json.dumps(notes_list), entry_id),
             )
             return cursor.rowcount > 0
+
+    def save_cryomodule_record(
+        self,
+        record: "CryomoduleCheckoutRecord",
+        record_id: int | None = None,
+        expected_version: int | None = None,
+    ) -> int:
+        """Save or update a cryomodule checkout record.
+
+        Args:
+            record: CryomoduleCheckoutRecord to save
+            record_id: If provided, updates existing record. Otherwise creates new.
+            expected_version: For updates, the version expected (optimistic locking)
+
+        Returns:
+            Database ID of the saved record
+
+        Raises:
+            RecordConflictError: If expected_version doesn't match
+        """
+        now = datetime.now().isoformat()
+
+        # Convert phase_status dict to JSON
+        phase_status_json = json.dumps(
+            {
+                phase.value: status.value
+                for phase, status in record.phase_status.items()
+            }
+        )
+
+        # Serialize CM phase data
+        cm_phase_data_json = {
+            attr_name: self._serialize_phase_data(getattr(record, attr_name))
+            for attr_name in self.CRYOMODULE_PHASE_DATA_MODELS
+        }
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cm_col_names = list(self.CRYOMODULE_PHASE_DATA_MODELS.keys())
+            cm_values = [cm_phase_data_json[col] for col in cm_col_names]
+
+            if record_id is None:
+                # Insert new CM record
+                cm_col_list = ", ".join(cm_col_names)
+                cm_placeholders = ", ".join("?" * len(cm_col_names))
+                cursor.execute(
+                    f"""
+                    INSERT INTO cryomodule_records (
+                        linac, cryomodule, start_time, end_time,
+                        {cm_col_list},
+                        phase_status,
+                        created_at, updated_at, notes
+                    ) VALUES (?, ?, ?, ?, {cm_placeholders}, ?, ?, ?, ?)
+                """,
+                    (
+                        record.linac,
+                        record.cryomodule,
+                        record.start_time.isoformat(),
+                        (
+                            record.end_time.isoformat()
+                            if record.end_time
+                            else None
+                        ),
+                        *cm_values,
+                        phase_status_json,
+                        now,
+                        now,
+                        record.notes,
+                    ),
+                )
+                return cursor.lastrowid
+            else:
+                # Update with optimistic locking
+                if expected_version is not None:
+                    cursor.execute(
+                        "SELECT version FROM cryomodule_records WHERE id = ?",
+                        (record_id,),
+                    )
+                    row = cursor.fetchone()
+                    if row is None:
+                        raise ValueError(f"CM record {record_id} not found")
+                    current_version = row[0]
+                    if current_version != expected_version:
+                        raise RecordConflictError(
+                            record_id, expected_version, current_version
+                        )
+
+                cm_set_clauses = ", ".join(f"{col} = ?" for col in cm_col_names)
+                cursor.execute(
+                    f"""
+                    UPDATE cryomodule_records SET
+                        linac = ?, cryomodule = ?, start_time = ?, end_time = ?,
+                        {cm_set_clauses},
+                        phase_status = ?,
+                        updated_at = ?, notes = ?,
+                        version = version + 1
+                    WHERE id = ?
+                """,
+                    (
+                        record.linac,
+                        record.cryomodule,
+                        record.start_time.isoformat(),
+                        (
+                            record.end_time.isoformat()
+                            if record.end_time
+                            else None
+                        ),
+                        *cm_values,
+                        phase_status_json,
+                        now,
+                        record.notes,
+                        record_id,
+                    ),
+                )
+                return record_id
+
+    def get_cryomodule_record(
+        self, linac: str, cryomodule: str
+    ) -> "CryomoduleCheckoutRecord" | None:
+        """Get magnet checkout record for a cryomodule.
+
+        Args:
+            linac: Linac name (e.g., "L1B")
+            cryomodule: Cryomodule identifier (e.g., "02")
+
+        Returns:
+            CryomoduleCheckoutRecord if exists, None otherwise
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM cryomodule_records WHERE linac = ? AND cryomodule = ?",
+                (linac, cryomodule),
+            )
+            row = cursor.fetchone()
+
+            if row is None:
+                return None
+
+            return self._cm_row_to_record(row)
+
+    def get_cryomodule_record_with_version(
+        self, linac: str, cryomodule: str
+    ) -> tuple["CryomoduleCheckoutRecord", int] | None:
+        """Get CM record with version for optimistic locking.
+
+        Args:
+            linac: Linac name
+            cryomodule: Cryomodule identifier
+
+        Returns:
+            Tuple of (CryomoduleCheckoutRecord, version) or None
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM cryomodule_records WHERE linac = ? AND cryomodule = ?",
+                (linac, cryomodule),
+            )
+            row = cursor.fetchone()
+
+            if row is None:
+                return None
+
+            version = row["version"] if "version" in row.keys() else 1
+            return self._cm_row_to_record(row), version
+
+    def _cm_row_to_record(self, row: sqlite3.Row) -> "CryomoduleCheckoutRecord":
+        """Convert database row to CryomoduleCheckoutRecord."""
+        # Deserialize phase_status
+        phase_status_dict = json.loads(row["phase_status"])
+        phase_status = {
+            CryomodulePhase(phase): CryomodulePhaseStatus(status)
+            for phase, status in phase_status_dict.items()
+        }
+
+        # Build CM phase data kwargs
+        cm_phase_data = {
+            attr_name: self._deserialize_phase_data(row[attr_name], model_cls)
+            for attr_name, model_cls in self.CRYOMODULE_PHASE_DATA_MODELS.items()
+        }
+
+        # Create record
+        record = CryomoduleCheckoutRecord(
+            linac=row["linac"],
+            cryomodule=row["cryomodule"],
+            start_time=datetime.fromisoformat(row["start_time"]),
+            **cm_phase_data,
+            phase_status=phase_status,
+            end_time=(
+                datetime.fromisoformat(row["end_time"])
+                if row["end_time"]
+                else None
+            ),
+            notes=row["notes"] if "notes" in row.keys() else "",
+        )
+        return record

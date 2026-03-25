@@ -28,6 +28,8 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     PiezoPreRFCheck,
     PiezoWithRFTest,
     SSACharacterization,
+)
+from sc_linac_physics.applications.rf_commissioning.models.serialization import (
     get_phase_display_specs,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.ui_builder import (

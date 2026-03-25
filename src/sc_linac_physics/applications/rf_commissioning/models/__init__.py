@@ -13,6 +13,13 @@ from .data_models import (
     PiezoWithRFTest,
     HighPowerRampData,
 )
+from .cryomodule_models import (
+    CRYOMODULE_PHASE_REGISTRY,
+    CryomoduleCheckoutRecord,
+    CryomodulePhase,
+    CryomodulePhaseStatus,
+    MagnetCheckoutData,
+)
 from .database import CommissioningDatabase
 
 __all__ = [
@@ -26,6 +33,11 @@ __all__ = [
     "CavityCharacterization",
     "PiezoWithRFTest",
     "HighPowerRampData",
+    "CryomodulePhase",
+    "CryomodulePhaseStatus",
+    "MagnetCheckoutData",
+    "CryomoduleCheckoutRecord",
+    "CRYOMODULE_PHASE_REGISTRY",
     "CommissioningDatabase",
     "CommissioningPiezo",
 ]

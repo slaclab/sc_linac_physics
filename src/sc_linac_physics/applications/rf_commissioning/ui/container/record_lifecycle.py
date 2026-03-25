@@ -23,6 +23,11 @@ def start_new_record(host, cryomodule: str, cavity_number: str) -> bool:
 
     host.update_progress_indicator(record)
     host._update_tab_states()
+
+    # Keep CM-level tracker in sync for cavity-selection driven workflows
+    if hasattr(host, "_update_cm_status_panel"):
+        host._update_cm_status_panel(record)
+
     host._load_notes()
 
     for display in host._phase_displays:
@@ -52,6 +57,10 @@ def load_record(host, record_id: int) -> bool:
     host._update_tab_states()
     _select_tab_for_record_phase(host, record)
 
+    # Update CM status panel with current record
+    if hasattr(host, "_update_cm_status_panel"):
+        host._update_cm_status_panel(record)
+
     host._load_notes()
     host._update_sync_status(True, "Record loaded")
 
@@ -74,4 +83,8 @@ def on_phase_advanced(host, record) -> None:
     host.update_progress_indicator(record)
     host._update_tab_states()
     host._update_sync_status(True, "Phase completed")
+
+    # Update CM status panel to reflect changed cavity completion count
+    if hasattr(host, "_update_cm_status_panel"):
+        host._update_cm_status_panel(record)
     _select_tab_for_record_phase(host, record)

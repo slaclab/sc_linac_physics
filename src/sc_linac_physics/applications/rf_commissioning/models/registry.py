@@ -38,6 +38,7 @@ def create_phase_registry() -> dict:
         HighPowerRampData,
         PiezoPreRFCheck,
         PiezoWithRFTest,
+        PiModeMeasurement,
         SSACharacterization,
     )
 
@@ -46,37 +47,43 @@ def create_phase_registry() -> dict:
             record_attr="piezo_pre_rf",
             data_model=PiezoPreRFCheck,
             display_label="Piezo Pre-RF",
-            progress_label="Piezo\\nPre-RF",
+            progress_label="Piezo\nPre-RF",
         ),
         CommissioningPhase.COLD_LANDING: PhaseRegistration(
             record_attr="cold_landing",
             data_model=ColdLandingData,
             display_label="Cold Landing",
-            progress_label="Cold\\nLanding",
+            progress_label="Cold\nLanding",
         ),
         CommissioningPhase.SSA_CHAR: PhaseRegistration(
             record_attr="ssa_char",
             data_model=SSACharacterization,
             display_label="SSA Characterization",
-            progress_label="SSA\\nChar",
+            progress_label="SSA\nChar",
+        ),
+        CommissioningPhase.PI_MODE: PhaseRegistration(
+            record_attr="pi_mode",
+            data_model=PiModeMeasurement,
+            display_label="π-Mode Measurement",
+            progress_label="π-Mode\nMeas",
         ),
         CommissioningPhase.CAVITY_CHAR: PhaseRegistration(
             record_attr="cavity_char",
             data_model=CavityCharacterization,
             display_label="Cavity Characterization",
-            progress_label="Cavity\\nChar",
+            progress_label="Cavity\nChar",
         ),
         CommissioningPhase.PIEZO_WITH_RF: PhaseRegistration(
             record_attr="piezo_with_rf",
             data_model=PiezoWithRFTest,
             display_label="Piezo with RF",
-            progress_label="Piezo\\n@ RF",
+            progress_label="Piezo\n@ RF",
         ),
         CommissioningPhase.HIGH_POWER: PhaseRegistration(
             record_attr="high_power",
             data_model=HighPowerRampData,
             display_label="High Power",
-            progress_label="High\\nPower",
+            progress_label="High\nPower",
         ),
         # Terminal phase – no data model, no UI tab, only a progress node.
         CommissioningPhase.COMPLETE: PhaseRegistration(
