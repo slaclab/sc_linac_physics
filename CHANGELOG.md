@@ -2,6 +2,149 @@
 
 <!-- version list -->
 
+## v9.10.0 (2026-03-25)
+
+### Features
+
+- **cavity-display**: Add heatmap cavity and cryomodule widgets
+  ([#229](https://github.com/slaclab/sc_linac_physics/pull/229),
+  [`ec39368`](https://github.com/slaclab/sc_linac_physics/commit/ec393683f0dc58f7c548483666a49b19f053d5b3))
+
+
+## v9.9.0 (2026-03-23)
+
+### Bug Fixes
+
+- **cavity-display**: Resolve code review findings
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+### Features
+
+- **cavity-display**: Add screenshot and audio alert integration
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+- **cavity-display**: Integrate audio alert system into main display
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+
+## v9.8.0 (2026-03-16)
+
+### Bug Fixes
+
+- **cavity display**: Fix channel management and acknowledgment lifecycle
+  ([#225](https://github.com/slaclab/sc_linac_physics/pull/225),
+  [`3fbf0ac`](https://github.com/slaclab/sc_linac_physics/commit/3fbf0ac16056b5c460082db3887dd7243e873f5f))
+
+### Features
+
+- **cavity-display**: Add alarm acknowledgment to cavity context menu
+  ([#225](https://github.com/slaclab/sc_linac_physics/pull/225),
+  [`3fbf0ac`](https://github.com/slaclab/sc_linac_physics/commit/3fbf0ac16056b5c460082db3887dd7243e873f5f))
+
+- **cavity-display**: Add audio alert manager and tests
+  ([#226](https://github.com/slaclab/sc_linac_physics/pull/226),
+  [`6e182d0`](https://github.com/slaclab/sc_linac_physics/commit/6e182d03b84fd5c1444e7b4129a90718e17d7036))
+
+
+## v9.7.0 (2026-02-27)
+
+### Bug Fixes
+
+- Adding severity_changed signal ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- Patching right click not working ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- Putting accidentally deleted flag back
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Patch status bar
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Restore original SSA visibility rule
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+### Features
+
+- **cavity-display**: Add alarm sidebar with responsive design
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Add cryomodule status indicators
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Add search and filter functionality
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Enhance cavity widget with context menu and signals
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+### Testing
+
+- Patching failing tests ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+
+## v9.6.0 (2026-02-26)
+
+### Bug Fixes
+
+- Adding severity_changed signal ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- Patching right click not working ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- Putting accidentally deleted flag back
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Patch status bar
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Restore original SSA visibility rule
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+### Features
+
+- **cavity-display**: Add alarm sidebar with responsive design
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Add search and filter functionality
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Enhance cavity widget with context menu and signals
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+### Testing
+
+- Patching failing tests ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+
 ## v9.5.0 (2026-02-23)
 
 ### Bug Fixes
