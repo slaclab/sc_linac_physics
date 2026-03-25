@@ -77,9 +77,9 @@ def mock_piezo_pvs(mock_cavity):
 def commissioning_record(mock_cavity):
     """Create a commissioning record."""
     return CommissioningRecord(
-        linac="L1B",
+        linac=1,
         cryomodule="02",
-        cavity_number="1",
+        cavity_number=1,
     )
 
 
@@ -147,8 +147,8 @@ class TestPiezoPreRFPhase:
         steps = phase.get_phase_steps()
 
         assert len(steps) == 5
-        assert steps[0] == "setup_piezo"
-        assert steps[1] == "verify_initial_state"
+        assert steps[0] == "verify_initial_state"
+        assert steps[1] == "setup_piezo"
         assert steps[2] == "trigger_prerf_test"
         assert steps[3] == "wait_for_completion"
         assert steps[4] == "validate_results"
@@ -310,6 +310,10 @@ class TestPiezoPreRFPhase:
     def test_wait_for_completion_timeout(self, phase, mock_piezo_pvs):
         """Test wait_for_completion timeout."""
         phase.validate_prerequisites()
+
+        # Keep this timeout-path test fast while preserving behavior.
+        phase.limits.test_timeout = 0.02
+        phase.limits.poll_interval = 0.001
 
         # Test never completes
         mock_piezo_pvs.prerf_test_status_pv_obj.get.return_value = (
@@ -620,9 +624,7 @@ class TestPiezoPreRFPhase:
 
         # First run with first record
         setup_success()
-        record1 = CommissioningRecord(
-            linac="L1B", cryomodule="02", cavity_number="1"
-        )
+        record1 = CommissioningRecord(linac=1, cryomodule="02", cavity_number=1)
         context1 = PhaseContext(
             record=record1,
             operator="test_operator",
@@ -639,9 +641,7 @@ class TestPiezoPreRFPhase:
 
         # Second run with second record (simulating different cavity)
         setup_success()
-        record2 = CommissioningRecord(
-            linac="L1B", cryomodule="02", cavity_number="2"
-        )
+        record2 = CommissioningRecord(linac=1, cryomodule="02", cavity_number=2)
         context2 = PhaseContext(
             record=record2,
             operator="test_operator",

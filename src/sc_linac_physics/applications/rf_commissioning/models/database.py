@@ -318,19 +318,6 @@ class CommissioningDatabase:
                 ON cryomodule_records(linac, cryomodule)
             """)
 
-    def _extract_linac_number(self, linac: str | None) -> str | None:
-        """Extract numeric linac identifier from a linac string."""
-        import re
-
-        if not linac:
-            return None
-
-        digits = re.findall(r"\d+", linac)
-        if not digits:
-            return None
-
-        return "".join(digits)
-
     def save_record(
         self,
         record: "CommissioningRecord",
@@ -379,7 +366,7 @@ class CommissioningDatabase:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            linac_number = self._extract_linac_number(record.linac)
+            linac_number = str(record.linac)
 
             # Build phase-data portions of the query dynamically so that new
             # phases registered in PHASE_DATA_MODELS require no SQL changes here.
@@ -401,7 +388,7 @@ class CommissioningDatabase:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, {phase_placeholders}, ?, ?, ?, ?)
                 """,
                     (
-                        record.linac,
+                        str(record.linac),
                         linac_number,
                         record.cryomodule,
                         record.cavity_number,
@@ -454,7 +441,7 @@ class CommissioningDatabase:
                     WHERE id = ?
                 """,
                     (
-                        record.linac,
+                        str(record.linac),
                         linac_number,
                         record.cryomodule,
                         record.cavity_number,
@@ -555,9 +542,9 @@ class CommissioningDatabase:
 
         # Create record
         record = CommissioningRecord(
-            linac=row["linac"],
+            linac=int(row["linac"]),
             cryomodule=row["cryomodule"],
-            cavity_number=row["cavity_number"],
+            cavity_number=int(row["cavity_number"]),
             start_time=datetime.fromisoformat(row["start_time"]),
             current_phase=CommissioningPhase(row["current_phase"]),
             **phase_data,
@@ -588,7 +575,7 @@ class CommissioningDatabase:
 
     def get_record_by_cavity(
         self,
-        linac: str,
+        linac: int,
         cryomodule: str,
         cavity_number: str,
         active_only: bool = True,
@@ -596,7 +583,7 @@ class CommissioningDatabase:
         """Get most recent record for a cavity.
 
         Args:
-            linac: Linac name (e.g., "L1B")
+            linac: Linac number (0-4)
             cryomodule: Cryomodule identifier (e.g., "02")
             cavity_number: Cavity number (e.g., "1")
             active_only: If True, only return if status is "in_progress"
@@ -606,10 +593,10 @@ class CommissioningDatabase:
 
         Example:
             >>> # Get active session for cavity
-            >>> record = db.get_record_by_cavity("L1B", "02", "3")
+            >>> record = db.get_record_by_cavity(1, "02", "3")
             >>>
             >>> # Get most recent session (completed or active)
-            >>> record = db.get_record_by_cavity("L1B", "02", "3", active_only=False)
+            >>> record = db.get_record_by_cavity(1, "02", "3", active_only=False)
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -618,7 +605,7 @@ class CommissioningDatabase:
                 SELECT * FROM commissioning_records
                 WHERE linac = ? AND cryomodule = ? AND cavity_number = ?
             """
-            params = [linac, cryomodule, cavity_number]
+            params = [str(linac), cryomodule, cavity_number]
 
             if active_only:
                 query += " AND overall_status = ?"
@@ -678,12 +665,12 @@ class CommissioningDatabase:
         return self.get_record(record_id)
 
     def find_records_for_cavity(
-        self, linac: str, cryomodule: str, cavity_number: str
+        self, linac: int, cryomodule: str, cavity_number: str
     ) -> list[dict]:
         """Find all commissioning records for a specific cavity.
 
         Args:
-            linac: Linac name (e.g., "L1B")
+            linac: Linac number (0-4)
             cryomodule: Cryomodule identifier (e.g., "02")
             cavity_number: Cavity number (e.g., "1")
 
@@ -692,11 +679,11 @@ class CommissioningDatabase:
         """
         return self._get_record_summaries(
             where_clause="linac = ? AND cryomodule = ? AND cavity_number = ?",
-            params=[linac, cryomodule, cavity_number],
+            params=[str(linac), cryomodule, cavity_number],
         )
 
     def get_record_id_for_cavity(
-        self, linac: str, cryomodule: str, cavity_number: str
+        self, linac: int, cryomodule: str, cavity_number: str
     ) -> int | None:
         """Get the canonical record ID for a cavity, if it exists."""
         with self._get_connection() as conn:
@@ -708,7 +695,7 @@ class CommissioningDatabase:
                 ORDER BY COALESCE(updated_at, start_time) DESC, id DESC
                 LIMIT 1
                 """,
-                (linac, cryomodule, cavity_number),
+                (str(linac), cryomodule, cavity_number),
             )
             row = cursor.fetchone()
             if row is None:

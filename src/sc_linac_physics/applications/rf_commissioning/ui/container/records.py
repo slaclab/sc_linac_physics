@@ -51,10 +51,20 @@ def on_load_or_start(host) -> None:
 
     cavity_number = cavity
 
-    linac = get_linac_for_cryomodule(cryomodule)
-    if not linac:
+    linac_name = get_linac_for_cryomodule(cryomodule)
+    if not linac_name:
         QMessageBox.warning(
             host, "Invalid Cryomodule", f"Unknown cryomodule: {cryomodule}"
+        )
+        return
+
+    try:
+        linac = int(linac_name[1])
+    except (IndexError, ValueError):
+        QMessageBox.warning(
+            host,
+            "Invalid Linac",
+            f"Could not parse linac index from '{linac_name}'",
         )
         return
 

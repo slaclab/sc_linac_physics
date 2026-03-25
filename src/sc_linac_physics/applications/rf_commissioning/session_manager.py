@@ -95,14 +95,17 @@ class CommissioningSession:
         return self.db
 
     def start_new_record(
-        self, cryomodule: str, cavity_number: str, linac: str | None = None
+        self,
+        cryomodule: str,
+        cavity_number: str | int,
+        linac: int | None = None,
     ) -> tuple[CommissioningRecord, int, bool]:
         """Create a new commissioning record and save to database.
 
         Args:
             cryomodule: Cryomodule identifier (e.g., "02", "H1")
             cavity_number: Cavity number (e.g., "1", "3")
-            linac: Linac identifier (e.g., "L1B"). If None, will be derived from cryomodule.
+            linac: Linac index (0-4). If None, derived from cryomodule.
 
         Returns:
             Tuple of (record, record_id, created_new)
@@ -112,11 +115,17 @@ class CommissioningSession:
         )
 
         if linac is None:
-            linac = get_linac_for_cryomodule(cryomodule)
-            if not linac:
+            linac_name = get_linac_for_cryomodule(cryomodule)
+            if not linac_name:
                 raise ValueError(
                     f"Cannot determine linac for cryomodule '{cryomodule}'"
                 )
+            try:
+                linac = int(linac_name[1])
+            except (IndexError, ValueError) as exc:
+                raise ValueError(
+                    f"Cannot parse linac index from '{linac_name}'"
+                ) from exc
 
         existing_id = self.db.get_record_id_for_cavity(
             linac, cryomodule, cavity_number
@@ -129,7 +138,7 @@ class CommissioningSession:
         self._active_record = CommissioningRecord(
             linac=linac,
             cryomodule=cryomodule,
-            cavity_number=cavity_number,
+            cavity_number=int(cavity_number),
         )
 
         self._active_record_id = self.db.save_record(self._active_record)
@@ -303,7 +312,7 @@ class CommissioningSession:
         cavity_name = None
         if self._active_record:
             cavity_name = (
-                f"{self._active_record.linac}_CM{self._active_record.cryomodule}"
+                f"L{self._active_record.linac}B_CM{self._active_record.cryomodule}"
                 f"_CAV{self._active_record.cavity_number}"
             )
 

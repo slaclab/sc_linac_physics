@@ -126,7 +126,14 @@ def _deserialize_union_value(field_type: Any, value: Any) -> Any:
     ]
     for arg in non_none_args:
         try:
-            return _deserialize_value(arg, value)
+            deserialized = _deserialize_value(arg, value)
+
+            # For concrete runtime types, only accept a union branch if the
+            # deserialized value actually matches that type.
+            if isinstance(arg, type) and not isinstance(deserialized, arg):
+                continue
+
+            return deserialized
         except (TypeError, ValueError, KeyError):
             continue
     return value

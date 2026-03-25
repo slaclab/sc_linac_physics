@@ -49,17 +49,17 @@ def create_phase_registry() -> dict:
             display_label="Piezo Pre-RF",
             progress_label="Piezo\nPre-RF",
         ),
-        CommissioningPhase.COLD_LANDING: PhaseRegistration(
-            record_attr="cold_landing",
-            data_model=ColdLandingData,
-            display_label="Cold Landing",
-            progress_label="Cold\nLanding",
-        ),
         CommissioningPhase.SSA_CHAR: PhaseRegistration(
             record_attr="ssa_char",
             data_model=SSACharacterization,
             display_label="SSA Characterization",
             progress_label="SSA\nChar",
+        ),
+        CommissioningPhase.COLD_LANDING: PhaseRegistration(
+            record_attr="cold_landing",
+            data_model=ColdLandingData,
+            display_label="Cold Landing",
+            progress_label="Cold\nLanding",
         ),
         CommissioningPhase.PI_MODE: PhaseRegistration(
             record_attr="pi_mode",

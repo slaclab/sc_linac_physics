@@ -480,9 +480,9 @@ class PhaseCheckpoint:
 class CommissioningRecord:
     """Complete commissioning record for a cavity."""
 
-    linac: str
+    linac: int
     cryomodule: str
-    cavity_number: str
+    cavity_number: int
     start_time: datetime = field(default_factory=datetime.now)
     current_phase: CommissioningPhase = CommissioningPhase.PIEZO_PRE_RF
 
@@ -506,6 +506,11 @@ class CommissioningRecord:
 
     def __post_init__(self):
         """Initialize phase status tracking."""
+        if not 0 <= self.linac <= 4:
+            raise ValueError(
+                f"Invalid linac index {self.linac}. Expected integer in range 0..4"
+            )
+
         if not self.phase_status:
             for phase in CommissioningPhase:
                 self.phase_status[phase] = PhaseStatus.NOT_STARTED
@@ -519,7 +524,7 @@ class CommissioningRecord:
     @property
     def full_cavity_name(self) -> str:
         """Get the full formatted cavity name for display (e.g., L1B_CM02_CAV3)."""
-        return f"{self.linac}_CM{self.cryomodule}_CAV{self.cavity_number}"
+        return f"L{self.linac}B_CM{self.cryomodule}_CAV{self.cavity_number}"
 
     @property
     def short_cavity_name(self) -> str:
