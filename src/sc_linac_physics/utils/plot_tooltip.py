@@ -36,7 +36,7 @@ class PlotTooltip:
             self._container = plot
         else:
             self._plot_item = plot
-            self._container = plot
+            self._container = plot.getViewBox()
 
         self.formatter = formatter or format_default
         self.enabled = True
