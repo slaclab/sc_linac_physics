@@ -36,6 +36,8 @@ def create_phase_registry() -> dict:
         ColdLandingData,
         CommissioningPhase,
         HighPowerRampData,
+        MPProcessingData,
+        OneHourRunData,
         PiezoPreRFCheck,
         PiezoWithRFTest,
         PiModeMeasurement,
@@ -79,11 +81,23 @@ def create_phase_registry() -> dict:
             display_label="Piezo with RF",
             progress_label="Piezo\n@ RF",
         ),
-        CommissioningPhase.HIGH_POWER: PhaseRegistration(
-            record_attr="high_power",
+        CommissioningPhase.HIGH_POWER_RAMP: PhaseRegistration(
+            record_attr="high_power_ramp",
             data_model=HighPowerRampData,
-            display_label="High Power",
-            progress_label="High\nPower",
+            display_label="High Power Ramp",
+            progress_label="HP\nRamp",
+        ),
+        CommissioningPhase.MP_PROCESSING: PhaseRegistration(
+            record_attr="mp_processing",
+            data_model=MPProcessingData,
+            display_label="MP Processing",
+            progress_label="MP\nProc",
+        ),
+        CommissioningPhase.ONE_HOUR_RUN: PhaseRegistration(
+            record_attr="one_hour_run",
+            data_model=OneHourRunData,
+            display_label="One Hour Run",
+            progress_label="1-Hr\nRun",
         ),
         # Terminal phase – no data model, no UI tab, only a progress node.
         CommissioningPhase.COMPLETE: PhaseRegistration(

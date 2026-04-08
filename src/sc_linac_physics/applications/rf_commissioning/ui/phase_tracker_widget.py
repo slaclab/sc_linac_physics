@@ -152,9 +152,12 @@ class PhaseStepWidget(QWidget):
             CommissioningPhase.PIEZO_PRE_RF: "Piezo\nPre-RF",
             CommissioningPhase.COLD_LANDING: "Cold\nLanding",
             CommissioningPhase.SSA_CHAR: "SSA\nChar",
+            CommissioningPhase.PI_MODE: "Pi\nMode",
             CommissioningPhase.CAVITY_CHAR: "Cavity\nChar",
             CommissioningPhase.PIEZO_WITH_RF: "Piezo\nw/ RF",
-            CommissioningPhase.HIGH_POWER: "High\nPower",
+            CommissioningPhase.HIGH_POWER_RAMP: "HP\nRamp",
+            CommissioningPhase.MP_PROCESSING: "MP\nProc",
+            CommissioningPhase.ONE_HOUR_RUN: "1-Hr\nRun",
             CommissioningPhase.COMPLETE: "Complete",
         }
 

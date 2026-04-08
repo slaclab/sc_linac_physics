@@ -25,7 +25,9 @@ class CommissioningPhase(Enum):
     PI_MODE = "pi_mode"
     CAVITY_CHAR = "cavity_char"
     PIEZO_WITH_RF = "piezo_with_rf"
-    HIGH_POWER = "high_power"
+    HIGH_POWER_RAMP = "high_power_ramp"
+    MP_PROCESSING = "mp_processing"
+    ONE_HOUR_RUN = "one_hour_run"
     COMPLETE = "complete"
 
     @classmethod
@@ -42,7 +44,9 @@ class CommissioningPhase(Enum):
             cls.PI_MODE,
             cls.CAVITY_CHAR,
             cls.PIEZO_WITH_RF,
-            cls.HIGH_POWER,
+            cls.HIGH_POWER_RAMP,
+            cls.MP_PROCESSING,
+            cls.ONE_HOUR_RUN,
             cls.COMPLETE,
         ]
 
@@ -399,47 +403,147 @@ class PiezoWithRFTest:
 
 @dataclass
 class HighPowerRampData:
-    """High power ramp and one-hour run results."""
+    """High power initial ramp results."""
 
+    had_multipactor_event: bool = phase_display_field(
+        default=False,
+        label="Multipactor Event",
+        widget_name="hp_initial_had_multipactor_event",
+        true_text="Yes",
+        false_text="No",
+    )
     field_emission_onset: Optional[float] = phase_display_field(
         default=None,
         label="Field Emission Onset",
-        widget_name="high_power_fe_onset",
+        widget_name="hp_initial_field_emission_onset",
         format_spec=".3f",
         unit="MV",
     )  # MV, if observed
     max_amplitude_reached: Optional[float] = phase_display_field(
         default=None,
         label="Max Amplitude Reached",
-        widget_name="high_power_max_amplitude_reached",
+        widget_name="hp_initial_max_amplitude_reached",
         format_spec=".3f",
         unit="MV",
-    )  # MV, even if 1-hour hold was not achieved
+    )  # MV
+    timestamp: datetime = field(default_factory=datetime.now)
+    notes: str = ""
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if initial ramp captured required data."""
+        return self.max_amplitude_reached is not None
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return serialize_model(self, computed_fields=("is_complete",))
+
+
+@dataclass
+class MPProcessingQuenchEvent:
+    """Single quench event observed during MP processing."""
+
+    timestamp: datetime
+    session_id: str = ""
+    amplitude: float = phase_display_field(
+        default=0.0,
+        label="Quench Amplitude",
+        widget_name="hp_mp_quench_amplitude",
+        format_spec=".3f",
+        unit="MV",
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return serialize_model(self)
+
+
+@dataclass
+class MPProcessingData:
+    """High power MP processing session data and quench timing."""
+
+    session_id: str = field(
+        default_factory=lambda: datetime.now().strftime("mp_%Y%m%dT%H%M%S%f")
+    )
+    quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
+    notes: str = ""
+
+    @property
+    def quench_count(self) -> int:
+        """Total quenches recorded in this MP processing session."""
+        return len(self.quench_events)
+
+    @property
+    def quench_intervals_seconds(self) -> list[float]:
+        """Elapsed seconds between consecutive quench events."""
+        if len(self.quench_events) < 2:
+            return []
+        return [
+            (
+                self.quench_events[idx].timestamp
+                - self.quench_events[idx - 1].timestamp
+            ).total_seconds()
+            for idx in range(1, len(self.quench_events))
+        ]
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if session identifier exists."""
+        return bool(self.session_id)
+
+    def add_quench(
+        self, *, amplitude: float, timestamp: Optional[datetime] = None
+    ) -> None:
+        """Append a quench event to the current session."""
+        self.quench_events.append(
+            MPProcessingQuenchEvent(
+                session_id=self.session_id,
+                timestamp=timestamp or datetime.now(),
+                amplitude=amplitude,
+            )
+        )
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return serialize_model(
+            self,
+            computed_fields=(
+                "quench_count",
+                "quench_intervals_seconds",
+                "is_complete",
+            ),
+        )
+
+
+@dataclass
+class OneHourRunData:
+    """High power one-hour run results."""
+
     final_amplitude: Optional[float] = phase_display_field(
         default=None,
         label="Final Amplitude",
-        widget_name="high_power_final_amplitude",
+        widget_name="hp_one_hour_final_amplitude",
         format_spec=".3f",
         unit="MV",
     )  # MV
     one_hour_complete: bool = phase_display_field(
         default=False,
         label="One Hour Complete",
-        widget_name="high_power_one_hour_complete",
+        widget_name="hp_one_hour_complete",
         true_text="Yes",
         false_text="No",
     )
     amplitude_limitation_reason: str = phase_display_field(
         default="",
         label="Amplitude Limitation Reason",
-        widget_name="high_power_amplitude_limitation_reason",
+        widget_name="hp_one_hour_amplitude_limitation_reason",
     )
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
     @property
     def is_complete(self) -> bool:
-        """Check if ramp is complete."""
+        """Check if one-hour run is complete."""
         return self.final_amplitude is not None and self.one_hour_complete
 
     def to_dict(self) -> dict:
@@ -493,7 +597,9 @@ class CommissioningRecord:
     pi_mode: Optional[PiModeMeasurement] = None
     cavity_char: Optional[CavityCharacterization] = None
     piezo_with_rf: Optional[PiezoWithRFTest] = None
-    high_power: Optional[HighPowerRampData] = None
+    high_power_ramp: Optional[HighPowerRampData] = None
+    mp_processing: Optional[MPProcessingData] = None
+    one_hour_run: Optional[OneHourRunData] = None
 
     # Phase tracking
     phase_history: list[PhaseCheckpoint] = field(default_factory=list)
@@ -674,8 +780,14 @@ class CommissioningRecord:
             "piezo_with_rf": (
                 self.piezo_with_rf.to_dict() if self.piezo_with_rf else None
             ),
-            "high_power": (
-                self.high_power.to_dict() if self.high_power else None
+            "high_power_ramp": (
+                self.high_power_ramp.to_dict() if self.high_power_ramp else None
+            ),
+            "mp_processing": (
+                self.mp_processing.to_dict() if self.mp_processing else None
+            ),
+            "one_hour_run": (
+                self.one_hour_run.to_dict() if self.one_hour_run else None
             ),
             "phase_status": {
                 phase.value: status.value

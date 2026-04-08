@@ -221,6 +221,7 @@ class CommissioningDatabase:
                 CREATE TABLE IF NOT EXISTS measurement_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     record_id INTEGER NOT NULL,
+                    phase_instance_id INTEGER,
                     phase TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
                     operator TEXT,
@@ -228,14 +229,116 @@ class CommissioningDatabase:
                     notes TEXT,
                     created_at TEXT NOT NULL,
 
-                    FOREIGN KEY (record_id) REFERENCES commissioning_records(id)
+                    FOREIGN KEY (record_id) REFERENCES commissioning_records(id),
+                    FOREIGN KEY (phase_instance_id) REFERENCES commissioning_phase_instances_v2(id)
                 )
             """)
+
+            cursor.execute("PRAGMA table_info(measurement_history)")
+            mh_columns = {row[1] for row in cursor.fetchall()}
+            if "phase_instance_id" not in mh_columns:
+                cursor.execute(
+                    "ALTER TABLE measurement_history "
+                    "ADD COLUMN phase_instance_id INTEGER"
+                )
 
             # Create index for efficient history queries
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_measurement_history_record
                 ON measurement_history(record_id, phase)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_measurement_history_phase_instance
+                ON measurement_history(phase_instance_id)
+            """)
+
+            # ================================================================
+            # Normalized workflow v2 (prototype-first, no backward constraints)
+            # ================================================================
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS commissioning_runs_v2 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    record_id INTEGER NOT NULL UNIQUE,
+                    workflow_name TEXT NOT NULL,
+                    linac TEXT NOT NULL,
+                    cryomodule TEXT NOT NULL,
+                    cavity_number TEXT NOT NULL,
+                    operator TEXT,
+                    status TEXT NOT NULL,
+                    current_phase TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+
+                    FOREIGN KEY (record_id) REFERENCES commissioning_records(id)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_runs_v2_cavity
+                ON commissioning_runs_v2(linac, cryomodule, cavity_number)
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS commissioning_phase_instances_v2 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id INTEGER NOT NULL,
+                    phase TEXT NOT NULL,
+                    attempt_number INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    operator TEXT,
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT,
+                    error_message TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+
+                    FOREIGN KEY (run_id) REFERENCES commissioning_runs_v2(id),
+                    UNIQUE(run_id, phase, attempt_number)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_phase_instances_v2_run_phase
+                ON commissioning_phase_instances_v2(run_id, phase)
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS commissioning_phase_artifacts_v2 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    phase_instance_id INTEGER NOT NULL,
+                    artifact_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+
+                    FOREIGN KEY (phase_instance_id)
+                        REFERENCES commissioning_phase_instances_v2(id)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_phase_artifacts_v2_instance
+                ON commissioning_phase_artifacts_v2(phase_instance_id)
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS commissioning_workflow_events_v2 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id INTEGER NOT NULL,
+                    phase_instance_id INTEGER,
+                    event_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+
+                    FOREIGN KEY (run_id) REFERENCES commissioning_runs_v2(id),
+                    FOREIGN KEY (phase_instance_id)
+                        REFERENCES commissioning_phase_instances_v2(id)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_workflow_events_v2_run
+                ON commissioning_workflow_events_v2(run_id, created_at)
             """)
 
             try:
@@ -895,6 +998,7 @@ class CommissioningDatabase:
         measurement_data,
         operator: str | None = None,
         notes: str | None = None,
+        phase_instance_id: int | None = None,
     ) -> int:
         """Add a measurement attempt to history (append-only, no conflicts).
 
@@ -942,11 +1046,12 @@ class CommissioningDatabase:
             cursor.execute(
                 """
                 INSERT INTO measurement_history (
-                    record_id, phase, timestamp, operator, measurement_data, notes, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    record_id, phase_instance_id, phase, timestamp, operator, measurement_data, notes, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
+                    phase_instance_id,
                     phase.value,
                     now,
                     operator,
@@ -956,6 +1061,44 @@ class CommissioningDatabase:
                 ),
             )
             return cursor.lastrowid
+
+    def get_workflow_run_v2(self, record_id: int) -> dict | None:
+        """Get normalized workflow run metadata for a commissioning record."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, record_id, workflow_name, linac, cryomodule,
+                       cavity_number, operator, status, current_phase,
+                       created_at, updated_at
+                FROM commissioning_runs_v2
+                WHERE record_id = ?
+                """,
+                (record_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return dict(row)
+
+    def get_phase_instances_v2(self, record_id: int) -> list[dict]:
+        """Get all normalized phase instances for a commissioning record."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT pi.id, pi.run_id, pi.phase, pi.attempt_number,
+                       pi.status, pi.operator, pi.started_at, pi.ended_at,
+                       pi.error_message, pi.created_at, pi.updated_at
+                FROM commissioning_phase_instances_v2 pi
+                JOIN commissioning_runs_v2 r ON r.id = pi.run_id
+                WHERE r.record_id = ?
+                ORDER BY pi.created_at ASC, pi.id ASC
+                """,
+                (record_id,),
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
 
     def get_operators(self) -> list[str]:
         """Return the list of approved operators."""
@@ -1059,6 +1202,7 @@ class CommissioningDatabase:
 
                 entry = {
                     "id": row["id"],
+                    "phase_instance_id": row["phase_instance_id"],
                     "phase": row["phase"],
                     "timestamp": row["timestamp"],
                     "operator": row["operator"],

@@ -563,12 +563,17 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
 
     def update_progress_indicator(self, record) -> None:
         """Update the compact progress bar."""
+        projection = self.session.get_active_phase_projection() or {}
+        current_phase = projection.get("current_phase", record.current_phase)
+        phase_status = projection.get("phase_status", record.phase_status)
+
         phase_order = CommissioningPhase.get_phase_order()
-        current_idx = phase_order.index(record.current_phase)
+        current_idx = phase_order.index(current_phase)
 
         for phase, indicator in self.phase_indicators.items():
             idx = phase_order.index(phase)
-            if idx < current_idx:
+            status = phase_status.get(phase)
+            if status is not None and status.value in {"complete", "skipped"}:
                 # Completed - green checkmark (using more compatible character)
                 indicator.setText("✔")  # Alternative: "☑" or "●"
                 indicator.setStyleSheet("""
@@ -578,6 +583,16 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
                     background-color: rgba(76, 175, 80, 0.2);
                     border-radius: 16px;
                     border: 2px solid #4CAF50;
+                """)
+            elif status is not None and status.value == "failed":
+                indicator.setText("✖")
+                indicator.setStyleSheet("""
+                    font-size: 24px;
+                    color: #ef5350;
+                    font-weight: bold;
+                    background-color: rgba(239, 83, 80, 0.2);
+                    border-radius: 16px;
+                    border: 2px solid #ef5350;
                 """)
             elif idx == current_idx:
                 # Active - blue with pulse effect

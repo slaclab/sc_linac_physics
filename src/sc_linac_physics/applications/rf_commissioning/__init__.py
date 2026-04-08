@@ -16,6 +16,9 @@ from .models.data_models import (
     CavityCharacterization,
     PiezoWithRFTest,
     HighPowerRampData,
+    MPProcessingQuenchEvent,
+    MPProcessingData,
+    OneHourRunData,
 )
 from .models.database import CommissioningDatabase, RecordConflictError
 from .phases.phase_base import (
@@ -38,6 +41,9 @@ __all__ = [
     "CavityCharacterization",
     "PiezoWithRFTest",
     "HighPowerRampData",
+    "MPProcessingQuenchEvent",
+    "MPProcessingData",
+    "OneHourRunData",
     # Phase execution
     "PhaseBase",
     "PhaseContext",

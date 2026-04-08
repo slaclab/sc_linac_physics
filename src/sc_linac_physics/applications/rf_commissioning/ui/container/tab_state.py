@@ -36,18 +36,28 @@ def get_phase_icon(host, phase: CommissioningPhase | None) -> str:
         return "○"
 
     record = host.session.get_active_record()
+    projection = host.session.get_active_phase_projection() or {}
+    current_phase = projection.get("current_phase", record.current_phase)
+    phase_status = projection.get("phase_status", record.phase_status)
 
     if phase is None:
         return "●"
 
-    phase_order = CommissioningPhase.get_phase_order()
-    current_idx = phase_order.index(record.current_phase)
-    phase_idx = phase_order.index(phase)
+    status = phase_status.get(phase)
+    if status is not None:
+        if status.value == "complete":
+            return "✓"
+        if status.value == "failed":
+            return "✗"
 
+    if phase == current_phase:
+        return "▶"
+
+    phase_order = CommissioningPhase.get_phase_order()
+    current_idx = phase_order.index(current_phase)
+    phase_idx = phase_order.index(phase)
     if phase_idx < current_idx:
         return "✓"
-    if phase_idx == current_idx:
-        return "▶"
     return "○"
 
 
@@ -59,8 +69,11 @@ def update_tab_states(host) -> None:
         return
 
     record = host.session.get_active_record()
+    projection = host.session.get_active_phase_projection() or {}
+    current_phase = projection.get("current_phase", record.current_phase)
+    phase_status = projection.get("phase_status", record.phase_status)
     phase_order = CommissioningPhase.get_phase_order()
-    current_index = phase_order.index(record.current_phase)
+    current_index = phase_order.index(current_phase)
 
     for i, spec in enumerate(host.phase_specs):
         if spec.phase is None:
@@ -68,14 +81,18 @@ def update_tab_states(host) -> None:
             continue
 
         phase_index = phase_order.index(spec.phase)
-        is_accessible = phase_index <= current_index
+        status = phase_status.get(spec.phase)
+        is_done = status is not None and status.value in {"complete", "skipped"}
+        is_accessible = phase_index <= current_index or is_done
 
         host.tabs.setTabEnabled(i, is_accessible)
 
         icon = get_phase_icon(host, spec.phase)
         host.tabs.setTabText(i, f"{icon} {spec.title}")
 
-        if phase_index == current_index:
+        if status is not None and status.value == "failed":
+            host.tabs.tabBar().setTabTextColor(i, Qt.red)
+        elif phase_index == current_index:
             host.tabs.tabBar().setTabTextColor(i, Qt.blue)
         elif phase_index < current_index:
             host.tabs.tabBar().setTabTextColor(i, Qt.darkGreen)

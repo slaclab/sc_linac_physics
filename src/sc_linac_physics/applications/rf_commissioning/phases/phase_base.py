@@ -15,6 +15,7 @@ from typing import Any
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     CommissioningPhase,
+    PHASE_REGISTRY,
     PhaseCheckpoint,
     PhaseStatus,
 )
@@ -47,6 +48,8 @@ class PhaseContext:
     parameters: dict[str, Any] = field(default_factory=dict)
     abort_requested: bool = False
     progress_callback: Callable[[str, int], None] | None = None
+    phase_instance_id: int | None = None
+    run_intent: str = "commissioning"
 
     def request_abort(self) -> None:
         """Request graceful abort of current phase."""
@@ -285,8 +288,8 @@ class PhaseBase(ABC):
                         # Wait before retry (could use result.retry_delay_seconds)
                         continue
                     else:
-                        self.context.record.phase_status[self.phase_type] = (
-                            PhaseStatus.FAILED
+                        self.context.record.set_phase_status(
+                            self.phase_type, PhaseStatus.FAILED
                         )
                         self._create_checkpoint(
                             step_name=step_name,
@@ -297,8 +300,8 @@ class PhaseBase(ABC):
                         return False
 
                 else:  # PhaseResult.FAILED
-                    self.context.record.phase_status[self.phase_type] = (
-                        PhaseStatus.FAILED
+                    self.context.record.set_phase_status(
+                        self.phase_type, PhaseStatus.FAILED
                     )
                     self._create_checkpoint(
                         step_name=step_name,
@@ -341,6 +344,12 @@ class PhaseBase(ABC):
             measurements: Optional measurement data
             error_message: Optional error message
         """
+        checkpoint_measurements = dict(measurements or {})
+        if self.context.phase_instance_id is not None:
+            checkpoint_measurements.setdefault(
+                "phase_instance_id", self.context.phase_instance_id
+            )
+
         checkpoint = PhaseCheckpoint(
             phase=self.phase_type,
             timestamp=datetime.now(),
@@ -348,15 +357,15 @@ class PhaseBase(ABC):
             step_name=step_name,
             success=success,
             notes=notes,
-            measurements=measurements or {},
+            measurements=checkpoint_measurements,
             error_message=error_message,
         )
         self.context.record.phase_history.append(checkpoint)
 
     def _mark_phase_started(self) -> None:
         """Mark phase as started in the record."""
-        self.context.record.phase_status[self.phase_type] = (
-            PhaseStatus.IN_PROGRESS
+        self.context.record.set_phase_status(
+            self.phase_type, PhaseStatus.IN_PROGRESS
         )
         self.context.record.current_phase = self.phase_type
         self._create_checkpoint(
@@ -367,12 +376,36 @@ class PhaseBase(ABC):
 
     def _mark_phase_completed(self) -> None:
         """Mark phase as completed in the record."""
-        self.context.record.phase_status[self.phase_type] = PhaseStatus.COMPLETE
+        self.context.record.set_phase_status(
+            self.phase_type, PhaseStatus.COMPLETE
+        )
+        phase_snapshot = self._get_phase_data_snapshot()
         self._create_checkpoint(
             step_name="phase_complete",
             success=True,
             notes=f"Completed {self.phase_name}",
+            measurements=(
+                {"phase_data": phase_snapshot} if phase_snapshot else None
+            ),
         )
+
+    def _get_phase_data_snapshot(self) -> dict[str, Any] | None:
+        """Return serialized phase dataclass data for the current phase.
+
+        This is used to persist per-run phase results into phase history
+        checkpoints so reruns retain a historical snapshot.
+        """
+        registration = PHASE_REGISTRY.get(self.phase_type)
+        if not registration or not registration.record_attr:
+            return None
+
+        phase_data = getattr(
+            self.context.record, registration.record_attr, None
+        )
+        if phase_data is None or not hasattr(phase_data, "to_dict"):
+            return None
+
+        return phase_data.to_dict()
 
     def _handle_abort(self, current_step: str) -> None:
         """Handle abort request.
@@ -380,7 +413,9 @@ class PhaseBase(ABC):
         Args:
             current_step: The step that was running when abort was requested
         """
-        self.context.record.phase_status[self.phase_type] = PhaseStatus.FAILED
+        self.context.record.set_phase_status(
+            self.phase_type, PhaseStatus.FAILED
+        )
         self._create_checkpoint(
             step_name=current_step,
             success=False,
@@ -395,7 +430,9 @@ class PhaseBase(ABC):
             exception: The exception that was raised
         """
 
-        self.context.record.phase_status[self.phase_type] = PhaseStatus.FAILED
+        self.context.record.set_phase_status(
+            self.phase_type, PhaseStatus.FAILED
+        )
         self._create_checkpoint(
             step_name=f"step_{self._current_step_index}",
             success=False,

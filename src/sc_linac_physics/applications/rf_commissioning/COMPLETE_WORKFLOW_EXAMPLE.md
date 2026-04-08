@@ -26,13 +26,14 @@ db = CommissioningDatabase("commissioning.db")
 db.initialize()
 
 record = CommissioningRecord(
-    cavity_name="CM02_CAV5",
-    cryomodule="CM02",
+    linac=1,
+    cryomodule="02",
+    cavity_number=5,
 )
 
 # Save initial record
 record_id = db.save_record(record)
-print(f"Started commissioning: {record.cavity_name}")
+print(f"Started commissioning: {record.full_cavity_name}")
 print(f"Record ID: {record_id}")
 print(f"Initial phase: {record.current_phase.value}")
 
@@ -81,17 +82,20 @@ print(f"Advanced to: {record.current_phase.value}")
 db.save_record(record, record_id)
 
 # ============================================================================
-# PHASE 2-6: Continue through remaining technical phases
+# PHASE 2-9: Continue through remaining technical phases
 # ============================================================================
 
 # For brevity, showing abbreviated workflow for middle phases
 
 phases_workflow = [
-    (CommissioningPhase.COLD_LANDING, "Cold landing completed, detune = 5 Hz"),
     (CommissioningPhase.SSA_CHAR, "SSA characterized, max drive = 0.85"),
+    (CommissioningPhase.COLD_LANDING, "Cold landing completed, detune = 5 Hz"),
+    (CommissioningPhase.PI_MODE, "8pi/9 and 7pi/9 modes measured"),
     (CommissioningPhase.CAVITY_CHAR, "Cavity Q measured, QL = 2.8e7"),
     (CommissioningPhase.PIEZO_WITH_RF, "Piezo with RF tested, gains within spec"),
-    (CommissioningPhase.HIGH_POWER, "High power ramp complete, 1-hour run passed"),
+    (CommissioningPhase.HIGH_POWER_RAMP, "High power initial ramp complete"),
+    (CommissioningPhase.MP_PROCESSING, "MP processing complete with acceptable quench spacing"),
+    (CommissioningPhase.ONE_HOUR_RUN, "1-hour run complete at target amplitude"),
 ]
 
 for phase, notes in phases_workflow:
@@ -124,10 +128,10 @@ for phase, notes in phases_workflow:
     db.save_record(record, record_id)
 
 # ============================================================================
-# PHASE 7: COMPLETE - Final acceptance and handoff
+# PHASE 10: COMPLETE - Final acceptance and handoff
 # ============================================================================
 
-print("\n--- Phase 7: COMPLETE (Final Acceptance) ---")
+print("\n--- Phase 10: COMPLETE (Final Acceptance) ---")
 
 # Verify we're at COMPLETE phase
 if record.current_phase == CommissioningPhase.COMPLETE:
@@ -166,7 +170,7 @@ if record.current_phase == CommissioningPhase.COMPLETE:
     print("\n" + "="*60)
     print("✓ COMMISSIONING COMPLETE")
     print("="*60)
-    print(f"Cavity:          {record.cavity_name}")
+    print(f"Cavity:          {record.full_cavity_name}")
     print(f"Cryomodule:      {record.cryomodule}")
     print(f"Started:         {record.start_time}")
     print(f"Completed:       {record.end_time}")
@@ -177,7 +181,7 @@ if record.current_phase == CommissioningPhase.COMPLETE:
 
     # 7. Optional: Send notifications, update EPICS, etc.
     # send_commissioning_notification(record)
-    # update_cavity_epics_status(record.cavity_name, "operational")
+    # update_cavity_epics_status(record.full_cavity_name, "operational")
     # generate_final_report(record_id)
 
     print("\n✓ Cavity handed off to operations team")
@@ -213,41 +217,50 @@ print("="*60)
 ## Expected Output
 
 ```
-Started commissioning: CM02_CAV5
+Started commissioning: L1B_CM02_CAV5
 Record ID: 1
 Initial phase: piezo_pre_rf
 
 --- Phase 1: PIEZO_PRE_RF ---
-Advanced to: cold_landing
-
---- Phase: COLD_LANDING ---
-✓ cold_landing complete, advanced to: ssa_char
+Advanced to: ssa_char
 
 --- Phase: SSA_CHAR ---
-✓ ssa_char complete, advanced to: cavity_char
+✓ ssa_char complete, advanced to: cold_landing
+
+--- Phase: COLD_LANDING ---
+✓ cold_landing complete, advanced to: pi_mode
+
+--- Phase: PI_MODE ---
+✓ pi_mode complete, advanced to: cavity_char
 
 --- Phase: CAVITY_CHAR ---
 ✓ cavity_char complete, advanced to: piezo_with_rf
 
 --- Phase: PIEZO_WITH_RF ---
-✓ piezo_with_rf complete, advanced to: high_power
+✓ piezo_with_rf complete, advanced to: high_power_ramp
 
---- Phase: HIGH_POWER ---
-✓ high_power complete, advanced to: complete
+--- Phase: HIGH_POWER_RAMP ---
+✓ high_power_ramp complete, advanced to: mp_processing
 
---- Phase 7: COMPLETE (Final Acceptance) ---
+--- Phase: MP_PROCESSING ---
+✓ mp_processing complete, advanced to: one_hour_run
+
+--- Phase: ONE_HOUR_RUN ---
+✓ one_hour_run complete, advanced to: complete
+
+--- Phase 10: COMPLETE (Final Acceptance) ---
 Performing final acceptance checks...
 
 ============================================================
 ✓ COMMISSIONING COMPLETE
 ============================================================
-Cavity:          CM02_CAV5
-Cryomodule:      CM02
+Cavity:          L1B_CM02_CAV5
+Cryomodule:      02
 Started:         2026-02-25 10:00:00
 Completed:       2026-02-25 16:30:00
 Duration:        6.5 hours
 Status:          operational
-Total phases:    7
+Total phases:    10
 Record complete: True
 
 ✓ Cavity handed off to operations team
@@ -257,14 +270,17 @@ Record is complete: True
 Current phase: complete
 Overall status: operational
 
-Total checkpoints: 7
+Total checkpoints: 10
   1. [piezo_pre_rf] final_validation: ✓ - Piezo test completed successfully
-  2. [cold_landing] phase_completion: ✓ - Cold landing completed, detune = 5 Hz
-  3. [ssa_char] phase_completion: ✓ - SSA characterized, max drive = 0.85
-  4. [cavity_char] phase_completion: ✓ - Cavity Q measured, QL = 2.8e7
-  5. [piezo_with_rf] phase_completion: ✓ - Piezo with RF tested, gains within spec
-  6. [high_power] phase_completion: ✓ - High power ramp complete, 1-hour run passed
-  7. [complete] final_acceptance: ✓ - Cavity accepted for operations. All tests passed.
+    2. [ssa_char] phase_completion: ✓ - SSA characterized, max drive = 0.85
+    3. [cold_landing] phase_completion: ✓ - Cold landing completed, detune = 5 Hz
+    4. [pi_mode] phase_completion: ✓ - 8pi/9 and 7pi/9 modes measured
+    5. [cavity_char] phase_completion: ✓ - Cavity Q measured, QL = 2.8e7
+    6. [piezo_with_rf] phase_completion: ✓ - Piezo with RF tested, gains within spec
+    7. [high_power_ramp] phase_completion: ✓ - High power initial ramp complete
+    8. [mp_processing] phase_completion: ✓ - MP processing complete with acceptable quench spacing
+    9. [one_hour_run] phase_completion: ✓ - 1-hour run complete at target amplitude
+    10. [complete] final_acceptance: ✓ - Cavity accepted for operations. All tests passed.
 
 Can advance further: False (complete is the final phase)
 
@@ -276,11 +292,11 @@ Workflow demonstration complete!
 ## Key Takeaways
 
 1. **COMPLETE phase separates technical work from administrative acceptance**
-   - Technical work ends at HIGH_POWER
+    - Technical work ends at ONE_HOUR_RUN
    - COMPLETE is for formal sign-off and handoff
 
 2. **Different operators for work vs. approval**
-   - Technician runs tests through HIGH_POWER
+    - Technician runs tests through ONE_HOUR_RUN
    - Supervisor/physicist approves in COMPLETE phase
 
 3. **Final checkpoint records acceptance**

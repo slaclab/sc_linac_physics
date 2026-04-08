@@ -12,7 +12,9 @@ from .phase_displays import (
     SSACharDisplay,
     CavityCharDisplay,
     PiezoWithRFDisplay,
-    HighPowerDisplay,
+    HighPowerRampDisplay,
+    HighPowerMPProcessingDisplay,
+    HighPowerOneHourRunDisplay,
 )
 from .phase_display_base import PhaseDisplayBase
 from .multi_phase_screen import MultiPhaseCommissioningDisplay, PhaseTabSpec
@@ -27,7 +29,9 @@ __all__ = [
     "SSACharDisplay",
     "CavityCharDisplay",
     "PiezoWithRFDisplay",
-    "HighPowerDisplay",
+    "HighPowerRampDisplay",
+    "HighPowerMPProcessingDisplay",
+    "HighPowerOneHourRunDisplay",
     "PhaseDisplayBase",
     "MultiPhaseCommissioningDisplay",
     "PhaseTabSpec",

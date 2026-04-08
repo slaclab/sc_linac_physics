@@ -12,6 +12,9 @@ from .data_models import (
     CavityCharacterization,
     PiezoWithRFTest,
     HighPowerRampData,
+    MPProcessingQuenchEvent,
+    MPProcessingData,
+    OneHourRunData,
 )
 from .cryomodule_models import (
     CRYOMODULE_PHASE_REGISTRY,
@@ -33,6 +36,9 @@ __all__ = [
     "CavityCharacterization",
     "PiezoWithRFTest",
     "HighPowerRampData",
+    "MPProcessingQuenchEvent",
+    "MPProcessingData",
+    "OneHourRunData",
     "CryomodulePhase",
     "CryomodulePhaseStatus",
     "MagnetCheckoutData",

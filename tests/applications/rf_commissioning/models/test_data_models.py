@@ -10,6 +10,8 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
     HighPowerRampData,
+    MPProcessingData,
+    OneHourRunData,
     PHASE_REGISTRY,
     PhaseCheckpoint,
     PhaseStatus,
@@ -36,7 +38,9 @@ class TestCommissioningPhase:
             CommissioningPhase.PI_MODE,
             CommissioningPhase.CAVITY_CHAR,
             CommissioningPhase.PIEZO_WITH_RF,
-            CommissioningPhase.HIGH_POWER,
+            CommissioningPhase.HIGH_POWER_RAMP,
+            CommissioningPhase.MP_PROCESSING,
+            CommissioningPhase.ONE_HOUR_RUN,
             CommissioningPhase.COMPLETE,
         ]
 
@@ -112,14 +116,35 @@ class TestPhaseModels:
             amplifier_gain_b=1.2,
             detune_gain=0.9,
         )
-        high_power = HighPowerRampData(
+        high_power_initial = HighPowerRampData(
+            had_multipactor_event=True,
+            field_emission_onset=14.0,
+            max_amplitude_reached=16.0,
+        )
+        mp_processing = MPProcessingData()
+        mp_processing.add_quench(
+            amplitude=15.2,
+            timestamp=datetime(2026, 3, 20, 10, 0, 0),
+        )
+        mp_processing.add_quench(
+            amplitude=15.8,
+            timestamp=datetime(2026, 3, 20, 10, 6, 30),
+        )
+        high_power_one_hour = OneHourRunData(
             final_amplitude=16.0,
             one_hour_complete=True,
         )
 
         assert cavity.is_complete is True
         assert piezo_rf.is_complete is True
-        assert high_power.is_complete is True
+        assert high_power_initial.is_complete is True
+        assert mp_processing.quench_count == 2
+        assert mp_processing.quench_intervals_seconds == [390.0]
+        assert all(
+            event.session_id == mp_processing.session_id
+            for event in mp_processing.quench_events
+        )
+        assert high_power_one_hour.is_complete is True
 
 
 class TestCommissioningRecord:

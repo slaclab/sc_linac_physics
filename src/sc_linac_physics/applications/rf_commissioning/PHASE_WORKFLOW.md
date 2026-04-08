@@ -9,19 +9,22 @@ The RF commissioning system enforces **strict sequential phase execution** to en
 Phases must be executed in this exact order:
 
 1. **PIEZO_PRE_RF** - Piezo tuner validation without RF
-2. **COLD_LANDING** - Frequency measurement and tuning
-3. **SSA_CHAR** - Solid-state amplifier characterization
-4. **CAVITY_CHAR** - RF cavity characterization
-5. **PIEZO_WITH_RF** - Piezo tuner testing with RF power
-6. **HIGH_POWER** - High power ramp to operational levels
-7. **COMPLETE** - Final acceptance and handoff to operations
+2. **SSA_CHAR** - Solid-state amplifier characterization
+3. **COLD_LANDING** - Frequency measurement and tuning
+4. **PI_MODE** - 8pi/9 and 7pi/9 mode measurement
+5. **CAVITY_CHAR** - RF cavity characterization
+6. **PIEZO_WITH_RF** - Piezo tuner testing with RF power
+7. **HIGH_POWER_RAMP** - High power initial ramp
+8. **MP_PROCESSING** - Multipactor processing and quench tracking
+9. **ONE_HOUR_RUN** - One-hour stability run at high power
+10. **COMPLETE** - Final acceptance and handoff to operations
 
 The **COMPLETE** phase is an administrative step that:
 - Marks the cavity as fully commissioned and operational
 - Sets the final `end_time` and `overall_status`
 - Provides a clear handoff point from commissioning to operations
 - Can trigger automated reporting, notifications, or data archival
-- Separates technical work (HIGH_POWER) from formal acceptance
+- Separates technical work (ONE_HOUR_RUN) from formal acceptance
 
 ## Enforcement Mechanisms
 
@@ -50,8 +53,9 @@ from sc_linac_physics.applications.rf_commissioning import (
 
 # Create new commissioning record
 record = CommissioningRecord(
-    cavity_name="CM02_CAV3",
-    cryomodule="CM02"
+    linac=1,
+    cryomodule="02",
+    cavity_number=3,
 )
 
 # Complete current phase (PIEZO_PRE_RF is the first phase)
@@ -61,7 +65,7 @@ record.set_phase_status(CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE)
 success, message = record.advance_to_next_phase()
 if success:
     print(f"Now at: {record.current_phase.value}")
-    # Output: "Now at: cold_landing"
+    # Output: "Now at: ssa_char"
 else:
     print(f"Cannot advance: {message}")
 ```
@@ -121,7 +125,7 @@ for session in active_sessions:
 
 ```python
 # ===== Session 1: Start commissioning =====
-record = CommissioningRecord(cavity_name="CM02_CAV3", cryomodule="CM02")
+record = CommissioningRecord(linac=1, cryomodule="02", cavity_number=3)
 
 # Run PIEZO_PRE_RF phase
 # ... phase completes successfully ...
@@ -135,11 +139,11 @@ record_id = db.save_record(record)
 record = db.load_record(record_id)
 
 # Advance to next phase
-record.advance_to_next_phase()  # Now at COLD_LANDING
+record.advance_to_next_phase()  # Now at SSA_CHAR
 
-# Run COLD_LANDING phase
+# Run SSA_CHAR phase
 # ... phase completes ...
-record.set_phase_status(CommissioningPhase.COLD_LANDING, PhaseStatus.COMPLETE)
+record.set_phase_status(CommissioningPhase.SSA_CHAR, PhaseStatus.COMPLETE)
 
 # Save progress
 db.save_record(record, record_id)
@@ -147,12 +151,12 @@ db.save_record(record, record_id)
 
 # ===== Session 3: Continue =====
 record = db.load_record(record_id)
-record.advance_to_next_phase()  # Now at SSA_CHAR
+record.advance_to_next_phase()  # Now at COLD_LANDING
 # ... continue commissioning ...
 
 # ===== Final session: Complete commissioning =====
-# After HIGH_POWER phase completes successfully
-record.set_phase_status(CommissioningPhase.HIGH_POWER, PhaseStatus.COMPLETE)
+# After ONE_HOUR_RUN phase completes successfully
+record.set_phase_status(CommissioningPhase.ONE_HOUR_RUN, PhaseStatus.COMPLETE)
 record.advance_to_next_phase()  # Now at COMPLETE
 
 # Complete phase: final acceptance and handoff
@@ -267,8 +271,8 @@ The COMPLETE phase is typically handled manually as the final administrative ste
 
 ```python
 # After all technical phases finish
-if record.current_phase == CommissioningPhase.HIGH_POWER:
-    if record.get_phase_status(CommissioningPhase.HIGH_POWER) == PhaseStatus.COMPLETE:
+if record.current_phase == CommissioningPhase.ONE_HOUR_RUN:
+    if record.get_phase_status(CommissioningPhase.ONE_HOUR_RUN) == PhaseStatus.COMPLETE:
         # Advance to COMPLETE phase
         success, message = record.advance_to_next_phase()
 

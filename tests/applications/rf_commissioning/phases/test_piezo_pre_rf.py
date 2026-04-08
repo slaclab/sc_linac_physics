@@ -553,6 +553,15 @@ class TestPiezoPreRFPhase:
         assert "validate_results" in checkpoint_names
         assert "phase_complete" in checkpoint_names
 
+        completion_checkpoint = next(
+            cp for cp in checkpoints if cp.step_name == "phase_complete"
+        )
+        assert "phase_data" in completion_checkpoint.measurements
+        phase_data = completion_checkpoint.measurements["phase_data"]
+        assert phase_data["channel_a_passed"] is True
+        assert phase_data["channel_b_passed"] is True
+        assert phase_data["passed"] is True
+
         # Verify all successful
         for cp in checkpoints:
             assert cp.success

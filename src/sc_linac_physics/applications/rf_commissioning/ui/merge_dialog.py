@@ -1,7 +1,8 @@
 """Merge dialog for resolving record conflicts."""
 
-from typing import Optional
+import copy
 from datetime import datetime
+from typing import Optional
 
 from PyQt5.QtWidgets import (
     QDialog,
@@ -19,6 +20,7 @@ from PyQt5.QtCore import Qt
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
+    PHASE_REGISTRY,
 )
 
 
@@ -118,48 +120,25 @@ class MergeDialog(QDialog):
             self.db_record.overall_status,
         )
 
-        # Compare phase data
-        self._add_phase_data_comparison(
-            "Piezo Pre-RF Data",
-            "piezo_pre_rf",
-            self.local_record.piezo_pre_rf,
-            self.db_record.piezo_pre_rf,
+        # Compare phase status map (single pick keeps choices understandable)
+        self._add_field_comparison(
+            "Phase Status",
+            "phase_status",
+            self._phase_status_summary(self.local_record),
+            self._phase_status_summary(self.db_record),
         )
 
-        self._add_phase_data_comparison(
-            "Cold Landing Data",
-            "cold_landing",
-            self.local_record.cold_landing,
-            self.db_record.cold_landing,
-        )
-
-        self._add_phase_data_comparison(
-            "SSA Characterization",
-            "ssa_char",
-            self.local_record.ssa_char,
-            self.db_record.ssa_char,
-        )
-
-        self._add_phase_data_comparison(
-            "Cavity Characterization",
-            "cavity_char",
-            self.local_record.cavity_char,
-            self.db_record.cavity_char,
-        )
-
-        self._add_phase_data_comparison(
-            "Piezo with RF Test",
-            "piezo_with_rf",
-            self.local_record.piezo_with_rf,
-            self.db_record.piezo_with_rf,
-        )
-
-        self._add_phase_data_comparison(
-            "High Power Ramp",
-            "high_power",
-            self.local_record.high_power,
-            self.db_record.high_power,
-        )
+        # Compare phase data dynamically from registry so newly-added phases
+        # automatically appear in conflict UI.
+        for phase, registration in PHASE_REGISTRY.items():
+            if not registration.record_attr:
+                continue
+            self._add_phase_data_comparison(
+                registration.display_label,
+                registration.record_attr,
+                getattr(self.local_record, registration.record_attr),
+                getattr(self.db_record, registration.record_attr),
+            )
 
         # Phase history comparison
         self._add_field_comparison(
@@ -261,6 +240,14 @@ class MergeDialog(QDialog):
 
         return str(data)
 
+    def _phase_status_summary(self, record: CommissioningRecord) -> str:
+        """Create compact phase-status summary ordered by workflow."""
+        lines = [
+            f"{phase.value}: {record.get_phase_status(phase).value}"
+            for phase in record.current_phase.get_phase_order()
+        ]
+        return "\n".join(lines)
+
     def _on_field_choice(self, field_name: str, choice: str):
         """Record user's choice for a field."""
         self._field_choices[field_name] = choice
@@ -269,19 +256,17 @@ class MergeDialog(QDialog):
         """Set all fields to keep local version."""
         for field_name in self._field_choices.keys():
             self._field_choices[field_name] = "local"
-        self.accept()
+        self._apply_merge()
 
     def _keep_all_db(self):
         """Set all fields to keep database version."""
         for field_name in self._field_choices.keys():
             self._field_choices[field_name] = "db"
-        self.accept()
+        self._apply_merge()
 
     def _apply_merge(self):
         """Create merged record based on user's choices."""
         # Start with a copy of local record
-        import copy
-
         merged = copy.deepcopy(self.local_record)
 
         # Apply user's choices
@@ -291,8 +276,43 @@ class MergeDialog(QDialog):
                 db_value = getattr(self.db_record, field_name)
                 setattr(merged, field_name, db_value)
 
+        # Always preserve checkpoints from both versions.
+        merged.phase_history = self._merge_phase_history(
+            self.local_record.phase_history,
+            self.db_record.phase_history,
+        )
+
+        # Keep current phase/status in sync when phase_status field is chosen.
+        if self._field_choices.get("phase_status") == "db":
+            merged.current_phase = self.db_record.current_phase
+
         self.merged_record = merged
         self.accept()
+
+    def _merge_phase_history(self, local_history, db_history):
+        """Merge checkpoint history lists without losing entries.
+
+        Uses dataclass payloads as stable keys and returns chronologically
+        sorted unique checkpoints.
+        """
+        merged_by_key = {}
+        for checkpoint in [*local_history, *db_history]:
+            key = (
+                checkpoint.phase.value,
+                checkpoint.timestamp.isoformat(),
+                checkpoint.operator,
+                checkpoint.step_name,
+                checkpoint.success,
+                checkpoint.error_message,
+                repr(checkpoint.notes),
+                repr(sorted(checkpoint.measurements.items())),
+            )
+            merged_by_key[key] = checkpoint
+
+        return sorted(
+            merged_by_key.values(),
+            key=lambda checkpoint: checkpoint.timestamp,
+        )
 
     def get_merged_record(self) -> Optional[CommissioningRecord]:
         """Get the merged record after dialog is accepted.
