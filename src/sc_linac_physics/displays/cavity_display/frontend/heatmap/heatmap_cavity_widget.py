@@ -36,7 +36,6 @@ class HeatmapCavityWidget(QWidget):
         self.setMinimumSize(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setCursor(Qt.PointingHandCursor)
-        self.setMouseTracking(True)
         self.setToolTip(f"Cavity {cavity_num}\nNo data loaded")
 
     @property
