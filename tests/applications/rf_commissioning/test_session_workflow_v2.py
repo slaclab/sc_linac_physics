@@ -88,17 +88,15 @@ def test_session_phase_command_helper(tmp_path):
     record_id = session.db.save_record(record)
     session.load_record(record_id)
 
-    handle = session.begin_phase_command(
+    phase_instance_id = session.begin_phase_command(
         phase=CommissioningPhase.PIEZO_PRE_RF,
         operator="tester",
     )
-    assert handle is not None
-    assert handle.phase == CommissioningPhase.PIEZO_PRE_RF
-    assert handle.phase_instance_id is not None
+    assert phase_instance_id is not None
 
     completed = session.complete_phase_command(
-        handle=handle,
-        phase_data_snapshot={"result": "ok"},
+        phase=CommissioningPhase.PIEZO_PRE_RF,
+        phase_instance_id=phase_instance_id,
         artifact_payload={"result": "ok"},
     )
     assert completed is True

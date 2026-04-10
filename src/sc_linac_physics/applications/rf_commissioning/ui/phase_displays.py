@@ -22,7 +22,7 @@ from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_con
 )
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
-    ColdLandingData,
+    FrequencyTuningData,
     CavityCharacterization,
     HighPowerRampData,
     MPProcessingData,
@@ -35,7 +35,7 @@ from sc_linac_physics.applications.rf_commissioning.models.serialization import 
     get_phase_display_specs,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.ui_builder import (
-    ColdLandingUI,
+    FrequencyTuningUI,
     GenericPhaseUI,
     SSACharUI,
     CavityCharUI,
@@ -481,13 +481,13 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
         self.controller.on_next_step()
 
 
-class ColdLandingDisplay(BasePlaceholderDisplay):
-    """Display for Cold Landing phase."""
+class FrequencyTuningDisplay(BasePlaceholderDisplay):
+    """Display for Frequency Tuning phase (combines cold landing and π-mode)."""
 
-    UI_CLASS = ColdLandingUI
-    PHASE_NAME = "Cold Landing"
-    DATA_ATTR = "cold_landing"
-    DATA_MODEL = ColdLandingData
+    UI_CLASS = FrequencyTuningUI
+    PHASE_NAME = "Frequency Tuning"
+    DATA_ATTR = "frequency_tuning"
+    DATA_MODEL = FrequencyTuningData
 
 
 class SSACharDisplay(BasePlaceholderDisplay):
@@ -555,7 +555,7 @@ class HighPowerOneHourRunDisplay(BasePlaceholderDisplay):
 
 PHASE_DISPLAY_MAP: dict[CommissioningPhase, type[BasePlaceholderDisplay]] = {
     CommissioningPhase.PIEZO_PRE_RF: PiezoPreRFDisplay,
-    CommissioningPhase.COLD_LANDING: ColdLandingDisplay,
+    CommissioningPhase.FREQUENCY_TUNING: FrequencyTuningDisplay,
     CommissioningPhase.SSA_CHAR: SSACharDisplay,
     CommissioningPhase.CAVITY_CHAR: CavityCharDisplay,
     CommissioningPhase.PIEZO_WITH_RF: PiezoWithRFDisplay,

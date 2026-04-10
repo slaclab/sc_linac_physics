@@ -8,7 +8,7 @@ from .ui_builder import (
 )
 from .phase_displays import (
     PiezoPreRFDisplay,
-    ColdLandingDisplay,
+    FrequencyTuningDisplay,
     SSACharDisplay,
     CavityCharDisplay,
     PiezoWithRFDisplay,
@@ -25,7 +25,7 @@ __all__ = [
     "LOCAL_CAP_STYLE",
     "LOCAL_LABEL_STYLE",
     "PiezoPreRFDisplay",
-    "ColdLandingDisplay",
+    "FrequencyTuningDisplay",
     "SSACharDisplay",
     "CavityCharDisplay",
     "PiezoWithRFDisplay",

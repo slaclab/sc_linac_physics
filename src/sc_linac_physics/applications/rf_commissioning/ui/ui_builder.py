@@ -811,8 +811,8 @@ class PiezoPreRFUI(PhaseUIBase):
 # =============================================================================
 
 
-class ColdLandingUI(PhaseUIBase):
-    """UI builder for Cold Landing phase (placeholder)."""
+class FrequencyTuningUI(PhaseUIBase):
+    """UI builder for Frequency Tuning phase (cold landing + π-mode measurement)."""
 
     def build(self) -> QHBoxLayout:
         """Create the main UI layout."""
@@ -831,7 +831,7 @@ class ColdLandingUI(PhaseUIBase):
         right_panel = QVBoxLayout()
         right_panel.setSpacing(6)
         right_panel.addWidget(
-            self._build_basic_results_section("Cold Landing"), stretch=1
+            self._build_basic_results_section("Frequency Tuning"), stretch=1
         )
         right_panel.addWidget(
             self._build_stored_data_section(

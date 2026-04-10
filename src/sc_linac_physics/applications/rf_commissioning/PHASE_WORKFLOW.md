@@ -10,14 +10,13 @@ Phases must be executed in this exact order:
 
 1. **PIEZO_PRE_RF** - Piezo tuner validation without RF
 2. **SSA_CHAR** - Solid-state amplifier characterization
-3. **COLD_LANDING** - Frequency measurement and tuning
-4. **PI_MODE** - 8pi/9 and 7pi/9 mode measurement
-5. **CAVITY_CHAR** - RF cavity characterization
-6. **PIEZO_WITH_RF** - Piezo tuner testing with RF power
-7. **HIGH_POWER_RAMP** - High power initial ramp
-8. **MP_PROCESSING** - Multipactor processing and quench tracking
-9. **ONE_HOUR_RUN** - One-hour stability run at high power
-10. **COMPLETE** - Final acceptance and handoff to operations
+3. **FREQUENCY_TUNING** - Frequency measurement, tuning to resonance, and π-mode measurements
+4. **CAVITY_CHAR** - RF cavity characterization
+5. **PIEZO_WITH_RF** - Piezo tuner testing with RF power
+6. **HIGH_POWER_RAMP** - High power initial ramp
+7. **MP_PROCESSING** - Multipactor processing and quench tracking
+8. **ONE_HOUR_RUN** - One-hour stability run at high power
+9. **COMPLETE** - Final acceptance and handoff to operations
 
 The **COMPLETE** phase is an administrative step that:
 - Marks the cavity as fully commissioned and operational
@@ -75,14 +74,14 @@ else:
 Check if a specific phase can be started:
 
 ```python
-# Check if COLD_LANDING can start
-can_start, reason = record.can_start_phase(CommissioningPhase.COLD_LANDING)
+# Check if FREQUENCY_TUNING can start
+can_start, reason = record.can_start_phase(CommissioningPhase.FREQUENCY_TUNING)
 
 if can_start:
-    print(f"✓ Can start COLD_LANDING: {reason}")
+    print(f"✓ Can start FREQUENCY_TUNING: {reason}")
 else:
     print(f"✗ Blocked: {reason}")
-    # Example: "✗ Blocked: Previous phase piezo_pre_rf must complete first"
+    # Example: "✗ Blocked: Previous phase ssa_char must complete first"
 ```
 
 ## Resume Capability
@@ -151,7 +150,7 @@ db.save_record(record, record_id)
 
 # ===== Session 3: Continue =====
 record = db.load_record(record_id)
-record.advance_to_next_phase()  # Now at COLD_LANDING
+record.advance_to_next_phase()  # Now at FREQUENCY_TUNING
 # ... continue commissioning ...
 
 # ===== Final session: Complete commissioning =====

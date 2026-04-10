@@ -35,6 +35,54 @@ class WorkflowService:
     def __init__(self, db: CommissioningDatabase):
         self.db = db
 
+    def _validate_phase_prerequisites_v2(
+        self,
+        *,
+        cursor,
+        run_id: int,
+        phase: CommissioningPhase,
+    ) -> tuple[bool, str]:
+        """Validate phase can start based on v2 phase instances (not legacy record).
+
+        Args:
+            cursor: Database cursor
+            run_id: The workflow run ID
+            phase: Phase to validate
+
+        Returns:
+            Tuple of (can_start, reason)
+        """
+        # PIEZO_PRE_RF is the first phase and can always be started/restarted
+        if phase == CommissioningPhase.PIEZO_PRE_RF:
+            return True, "Piezo Pre-RF can be run at any time"
+
+        # Check if previous phase is complete
+        previous_phase = phase.get_previous_phase()
+        if previous_phase is None:
+            return True, "No previous phase required"
+
+        cursor.execute(
+            """
+            SELECT status FROM commissioning_phase_instances_v2
+            WHERE run_id = ? AND phase = ?
+            ORDER BY attempt_number DESC
+            LIMIT 1
+            """,
+            (run_id, previous_phase.value),
+        )
+        result = cursor.fetchone()
+        previous_status = result[0] if result else None
+
+        if previous_status != "complete":
+            status_str = previous_status or "not_started"
+            return (
+                False,
+                f"Previous phase {previous_phase.value} must complete first "
+                f"(status: {status_str})",
+            )
+
+        return True, f"Prerequisites met for {phase.value} (reruns allowed)"
+
     def start_phase_for_record(
         self,
         *,
@@ -44,11 +92,7 @@ class WorkflowService:
         operator: str,
         workflow_name: str = "rf_commissioning_v2",
     ) -> PhaseStartResult:
-        """Create or resume a run and start a new phase instance attempt."""
-        can_start, message = record.can_start_phase(phase)
-        if not can_start:
-            raise ValueError(message)
-
+        """Create or resume a run and start a new phase instance attempt (v2-only validation)."""
         now = datetime.now().isoformat()
         with self.db._get_connection() as conn:  # noqa: SLF001
             cursor = conn.cursor()
@@ -61,6 +105,15 @@ class WorkflowService:
                 workflow_name=workflow_name,
                 now=now,
             )
+
+            # Validate prerequisites using v2 data, not legacy record state
+            can_start, message = self._validate_phase_prerequisites_v2(
+                cursor=cursor,
+                run_id=run_id,
+                phase=phase,
+            )
+            if not can_start:
+                raise ValueError(message)
 
             cursor.execute(
                 """

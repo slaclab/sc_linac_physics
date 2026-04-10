@@ -20,9 +20,8 @@ class CommissioningPhase(Enum):
     """Phases of cavity commissioning workflow."""
 
     PIEZO_PRE_RF = "piezo_pre_rf"
-    COLD_LANDING = "cold_landing"
     SSA_CHAR = "ssa_char"
-    PI_MODE = "pi_mode"
+    FREQUENCY_TUNING = "frequency_tuning"
     CAVITY_CHAR = "cavity_char"
     PIEZO_WITH_RF = "piezo_with_rf"
     HIGH_POWER_RAMP = "high_power_ramp"
@@ -40,8 +39,7 @@ class CommissioningPhase(Enum):
         return [
             cls.PIEZO_PRE_RF,
             cls.SSA_CHAR,
-            cls.COLD_LANDING,
-            cls.PI_MODE,
+            cls.FREQUENCY_TUNING,
             cls.CAVITY_CHAR,
             cls.PIEZO_WITH_RF,
             cls.HIGH_POWER_RAMP,
@@ -159,13 +157,19 @@ class PiezoPreRFCheck:
 
 
 @dataclass
-class ColdLandingData:
-    """Cold landing frequency measurement and tuning data."""
+class FrequencyTuningData:
+    """Frequency tuning phase combining cold landing and π-mode measurements.
 
+    This phase includes:
+    1. Cold landing: Initial frequency measurement and tuning to resonance
+    2. π-mode measurement: Measurement of 8π/9 and 7π/9 modes
+    """
+
+    # Cold landing phase data
     initial_detune_hz: Optional[float] = phase_display_field(
         default=None,
         label="Initial Detune",
-        widget_name="cold_initial_detune",
+        widget_name="freq_tuning_initial_detune",
         format_spec=".3f",
         unit="Hz",
     )
@@ -173,16 +177,34 @@ class ColdLandingData:
     steps_to_resonance: Optional[int] = phase_display_field(
         default=None,
         label="Steps to Resonance",
-        widget_name="cold_steps_to_resonance",
+        widget_name="freq_tuning_steps_to_resonance",
     )
     final_detune_hz: Optional[float] = phase_display_field(
         default=None,
         label="Final Detune",
-        widget_name="cold_final_detune",
+        widget_name="freq_tuning_final_detune",
         format_spec=".3f",
         unit="Hz",
     )
     final_timestamp: Optional[datetime] = None
+
+    # π-mode measurement phase data
+    mode_8pi_9_frequency: Optional[float] = phase_display_field(
+        default=None,
+        label="8π/9 Frequency",
+        widget_name="freq_tuning_8pi_9_freq",
+        format_spec=".3f",
+        unit="Hz",
+    )
+    mode_7pi_9_frequency: Optional[float] = phase_display_field(
+        default=None,
+        label="7π/9 Frequency",
+        widget_name="freq_tuning_7pi_9_freq",
+        format_spec=".3f",
+        unit="Hz",
+    )
+
+    timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
     @property
@@ -200,13 +222,26 @@ class ColdLandingData:
         return self.final_detune_hz / 1000
 
     @property
-    def is_complete(self) -> bool:
-        """Check if tuning is complete."""
+    def cold_landing_complete(self) -> bool:
+        """Check if cold landing phase is complete."""
         return (
             self.initial_detune_hz is not None
             and self.steps_to_resonance is not None
             and self.final_detune_hz is not None
         )
+
+    @property
+    def pi_mode_complete(self) -> bool:
+        """Check if π-mode measurement phase is complete."""
+        return (
+            self.mode_8pi_9_frequency is not None
+            and self.mode_7pi_9_frequency is not None
+        )
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if entire frequency tuning phase is complete."""
+        return self.cold_landing_complete and self.pi_mode_complete
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -215,43 +250,11 @@ class ColdLandingData:
             computed_fields=(
                 "initial_detune_khz",
                 "final_detune_khz",
+                "cold_landing_complete",
+                "pi_mode_complete",
                 "is_complete",
             ),
         )
-
-
-@dataclass
-class PiModeMeasurement:
-    """π-mode (8π/9 and 7π/9) measurement results."""
-
-    mode_8pi_9_frequency: Optional[float] = phase_display_field(
-        default=None,
-        label="8π/9 Frequency",
-        widget_name="pi_mode_8pi_9_freq",
-        format_spec=".3f",
-        unit="Hz",
-    )
-    mode_7pi_9_frequency: Optional[float] = phase_display_field(
-        default=None,
-        label="7π/9 Frequency",
-        widget_name="pi_mode_7pi_9_freq",
-        format_spec=".3f",
-        unit="Hz",
-    )
-    timestamp: datetime = field(default_factory=datetime.now)
-    notes: str = ""
-
-    @property
-    def is_complete(self) -> bool:
-        """Check if both π-mode measurements are complete."""
-        return (
-            self.mode_8pi_9_frequency is not None
-            and self.mode_7pi_9_frequency is not None
-        )
-
-    def to_dict(self) -> dict:
-        """Serialize to dictionary."""
-        return serialize_model(self, computed_fields=("is_complete",))
 
 
 @dataclass
@@ -592,9 +595,8 @@ class CommissioningRecord:
 
     # Phase-specific data
     piezo_pre_rf: Optional[PiezoPreRFCheck] = None
-    cold_landing: Optional[ColdLandingData] = None
+    frequency_tuning: Optional[FrequencyTuningData] = None
     ssa_char: Optional[SSACharacterization] = None
-    pi_mode: Optional[PiModeMeasurement] = None
     cavity_char: Optional[CavityCharacterization] = None
     piezo_with_rf: Optional[PiezoWithRFTest] = None
     high_power_ramp: Optional[HighPowerRampData] = None
@@ -767,13 +769,14 @@ class CommissioningRecord:
             "piezo_pre_rf": (
                 self.piezo_pre_rf.to_dict() if self.piezo_pre_rf else None
             ),
-            "cold_landing": (
-                self.cold_landing.to_dict() if self.cold_landing else None
+            "frequency_tuning": (
+                self.frequency_tuning.to_dict()
+                if self.frequency_tuning
+                else None
             ),
             "ssa_characterization": (
                 self.ssa_char.to_dict() if self.ssa_char else None
             ),
-            "pi_mode": (self.pi_mode.to_dict() if self.pi_mode else None),
             "cavity_characterization": (
                 self.cavity_char.to_dict() if self.cavity_char else None
             ),

@@ -21,17 +21,12 @@ def save_active_record(host) -> bool:
     if not host.session.has_active_record():
         return False
 
-    old_phase = host.session.get_active_record().current_phase
-
     try:
         success = host.session.save_active_record()
         if success:
             host._update_sync_status(True, "Saved")
-
-            new_record = host.session.get_active_record()
-            if new_record and new_record.current_phase != old_phase:
-                host.update_progress_indicator(new_record)
-                host._update_tab_states()
+            host.update_progress_indicator(host.session.get_active_record())
+            host._update_tab_states()
 
         return success
     except RecordConflictError as error:

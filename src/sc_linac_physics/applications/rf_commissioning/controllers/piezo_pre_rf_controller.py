@@ -16,7 +16,6 @@ from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
 )
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
-    PhaseCommandHandle,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -43,7 +42,7 @@ class PiezoPreRFController(QObject):
         self._current_step_index = 0
         self._total_steps = 0
         self._steps: list[str] = []
-        self._active_phase_handle: Optional[PhaseCommandHandle] = None
+        self._active_phase_instance_id: Optional[int] = None
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
 
@@ -225,31 +224,21 @@ class PiezoPreRFController(QObject):
             return False
 
         if record_id is not None:
-            self._active_phase_handle = self.session.begin_phase_command(
+            self._active_phase_instance_id = self.session.begin_phase_command(
                 phase=CommissioningPhase.PIEZO_PRE_RF,
                 operator=operator,
-                run_mode="individual",
-                run_intent="commissioning",
             )
 
-        if (
-            self._active_phase_handle
-            and self._active_phase_handle.phase_instance_id is not None
-        ):
+        if self._active_phase_instance_id is not None:
             self.view.log_message(
-                "Tracking phase instance ID: "
-                f"{self._active_phase_handle.phase_instance_id}"
+                f"Tracking phase instance ID: {self._active_phase_instance_id}"
             )
 
         self.context = PhaseContext(
             record=record,
             operator=operator,
             parameters={"cavity": cavity},
-            phase_instance_id=(
-                self._active_phase_handle.phase_instance_id
-                if self._active_phase_handle
-                else None
-            ),
+            phase_instance_id=self._active_phase_instance_id,
             run_intent="commissioning",
         )
         self.phase = PiezoPreRFPhase(self.context)
@@ -697,10 +686,10 @@ class PiezoPreRFController(QObject):
 
         try:
             if self.context and self.context.record.piezo_pre_rf:
-                if self._active_phase_handle is not None:
+                if self._active_phase_instance_id is not None:
                     success = self.session.complete_phase_command(
-                        handle=self._active_phase_handle,
-                        phase_data_snapshot=self.context.record.piezo_pre_rf.to_dict(),
+                        phase=CommissioningPhase.PIEZO_PRE_RF,
+                        phase_instance_id=self._active_phase_instance_id,
                         artifact_payload=self.context.record.piezo_pre_rf.to_dict(),
                     )
                     if success and self.session.has_active_record():
@@ -742,13 +731,14 @@ class PiezoPreRFController(QObject):
 
             self.view.log_message(f"Warning: Failed to save results: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
-            if self._active_phase_handle is not None:
+            if self._active_phase_instance_id is not None:
                 self.session.fail_phase_command(
-                    handle=self._active_phase_handle,
+                    phase=CommissioningPhase.PIEZO_PRE_RF,
+                    phase_instance_id=self._active_phase_instance_id,
                     error_message=str(exc),
                 )
         finally:
-            self._active_phase_handle = None
+            self._active_phase_instance_id = None
 
         self.view.run_button.setEnabled(True)
         self.view.pause_button.setEnabled(False)
@@ -774,15 +764,15 @@ class PiezoPreRFController(QObject):
             if self.session.save_active_record():
                 self.view.log_message("Partial results saved to database")
 
-            if self._active_phase_handle is not None:
+            if self._active_phase_instance_id is not None:
                 snapshot = None
                 if self.context and self.context.record.piezo_pre_rf:
                     snapshot = self.context.record.piezo_pre_rf.to_dict()
 
                 self.session.fail_phase_command(
-                    handle=self._active_phase_handle,
+                    phase=CommissioningPhase.PIEZO_PRE_RF,
+                    phase_instance_id=self._active_phase_instance_id,
                     error_message=error_msg,
-                    phase_data_snapshot=snapshot,
                     artifact_payload=snapshot,
                 )
 
@@ -802,13 +792,14 @@ class PiezoPreRFController(QObject):
                 f"Warning: Failed to save partial results: {exc}"
             )
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
-            if self._active_phase_handle is not None:
+            if self._active_phase_instance_id is not None:
                 self.session.fail_phase_command(
-                    handle=self._active_phase_handle,
+                    phase=CommissioningPhase.PIEZO_PRE_RF,
+                    phase_instance_id=self._active_phase_instance_id,
                     error_message=str(exc),
                 )
         finally:
-            self._active_phase_handle = None
+            self._active_phase_instance_id = None
 
         self.view.run_button.setEnabled(True)
         self.view.pause_button.setEnabled(False)

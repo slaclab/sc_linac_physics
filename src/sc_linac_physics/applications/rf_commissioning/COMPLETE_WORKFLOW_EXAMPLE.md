@@ -89,8 +89,7 @@ db.save_record(record, record_id)
 
 phases_workflow = [
     (CommissioningPhase.SSA_CHAR, "SSA characterized, max drive = 0.85"),
-    (CommissioningPhase.COLD_LANDING, "Cold landing completed, detune = 5 Hz"),
-    (CommissioningPhase.PI_MODE, "8pi/9 and 7pi/9 modes measured"),
+    (CommissioningPhase.FREQUENCY_TUNING, "Frequency tuning completed with 8π/9 and 7π/9 modes measured"),
     (CommissioningPhase.CAVITY_CHAR, "Cavity Q measured, QL = 2.8e7"),
     (CommissioningPhase.PIEZO_WITH_RF, "Piezo with RF tested, gains within spec"),
     (CommissioningPhase.HIGH_POWER_RAMP, "High power initial ramp complete"),
@@ -225,13 +224,10 @@ Initial phase: piezo_pre_rf
 Advanced to: ssa_char
 
 --- Phase: SSA_CHAR ---
-✓ ssa_char complete, advanced to: cold_landing
+✓ ssa_char complete, advanced to: frequency_tuning
 
---- Phase: COLD_LANDING ---
-✓ cold_landing complete, advanced to: pi_mode
-
---- Phase: PI_MODE ---
-✓ pi_mode complete, advanced to: cavity_char
+--- Phase: FREQUENCY_TUNING ---
+✓ frequency_tuning complete, advanced to: cavity_char
 
 --- Phase: CAVITY_CHAR ---
 ✓ cavity_char complete, advanced to: piezo_with_rf
@@ -273,14 +269,13 @@ Overall status: operational
 Total checkpoints: 10
   1. [piezo_pre_rf] final_validation: ✓ - Piezo test completed successfully
     2. [ssa_char] phase_completion: ✓ - SSA characterized, max drive = 0.85
-    3. [cold_landing] phase_completion: ✓ - Cold landing completed, detune = 5 Hz
-    4. [pi_mode] phase_completion: ✓ - 8pi/9 and 7pi/9 modes measured
-    5. [cavity_char] phase_completion: ✓ - Cavity Q measured, QL = 2.8e7
-    6. [piezo_with_rf] phase_completion: ✓ - Piezo with RF tested, gains within spec
-    7. [high_power_ramp] phase_completion: ✓ - High power initial ramp complete
-    8. [mp_processing] phase_completion: ✓ - MP processing complete with acceptable quench spacing
-    9. [one_hour_run] phase_completion: ✓ - 1-hour run complete at target amplitude
-    10. [complete] final_acceptance: ✓ - Cavity accepted for operations. All tests passed.
+    3. [frequency_tuning] phase_completion: ✓ - Frequency tuning completed with cold landing detune = 5 Hz and 8π/9 and 7π/9 modes measured
+    4. [cavity_char] phase_completion: ✓ - Cavity Q measured, QL = 2.8e7
+    5. [piezo_with_rf] phase_completion: ✓ - Piezo with RF tested, gains within spec
+    6. [high_power_ramp] phase_completion: ✓ - High power initial ramp complete
+    7. [mp_processing] phase_completion: ✓ - MP processing complete with acceptable quench spacing
+    8. [one_hour_run] phase_completion: ✓ - 1-hour run complete at target amplitude
+    9. [complete] final_acceptance: ✓ - Cavity accepted for operations. All tests passed.
 
 Can advance further: False (complete is the final phase)
 

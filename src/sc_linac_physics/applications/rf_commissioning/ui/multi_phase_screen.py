@@ -563,9 +563,12 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
 
     def update_progress_indicator(self, record) -> None:
         """Update the compact progress bar."""
-        projection = self.session.get_active_phase_projection() or {}
-        current_phase = projection.get("current_phase", record.current_phase)
-        phase_status = projection.get("phase_status", record.phase_status)
+        projection = self.session.get_active_phase_projection()
+        if projection is None:
+            return
+
+        current_phase = projection.get("current_phase")
+        phase_status = projection.get("phase_status", {})
 
         phase_order = CommissioningPhase.get_phase_order()
         current_idx = phase_order.index(current_phase)

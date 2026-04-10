@@ -33,14 +33,13 @@ def create_phase_registry() -> dict:
     """Create phase registry entries from the commissioning model classes."""
     from .data_models import (
         CavityCharacterization,
-        ColdLandingData,
         CommissioningPhase,
+        FrequencyTuningData,
         HighPowerRampData,
         MPProcessingData,
         OneHourRunData,
         PiezoPreRFCheck,
         PiezoWithRFTest,
-        PiModeMeasurement,
         SSACharacterization,
     )
 
@@ -57,17 +56,11 @@ def create_phase_registry() -> dict:
             display_label="SSA Characterization",
             progress_label="SSA\nChar",
         ),
-        CommissioningPhase.COLD_LANDING: PhaseRegistration(
-            record_attr="cold_landing",
-            data_model=ColdLandingData,
-            display_label="Cold Landing",
-            progress_label="Cold\nLanding",
-        ),
-        CommissioningPhase.PI_MODE: PhaseRegistration(
-            record_attr="pi_mode",
-            data_model=PiModeMeasurement,
-            display_label="π-Mode Measurement",
-            progress_label="π-Mode\nMeas",
+        CommissioningPhase.FREQUENCY_TUNING: PhaseRegistration(
+            record_attr="frequency_tuning",
+            data_model=FrequencyTuningData,
+            display_label="Frequency Tuning",
+            progress_label="Frequency\nTuning",
         ),
         CommissioningPhase.CAVITY_CHAR: PhaseRegistration(
             record_attr="cavity_char",

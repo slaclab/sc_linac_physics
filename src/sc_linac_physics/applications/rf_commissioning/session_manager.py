@@ -5,8 +5,6 @@ Coordinates database access and record management across all commissioning phase
 
 import logging
 import platform
-from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from sc_linac_physics.applications.rf_commissioning import (
@@ -24,14 +22,6 @@ from sc_linac_physics.applications.rf_commissioning.services.workflow_service im
 )
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class PhaseCommandHandle:
-    """Tracks normalized lifecycle identity for one phase command."""
-
-    phase: CommissioningPhase
-    phase_instance_id: int | None
 
 
 def get_default_db_path() -> str:
@@ -73,7 +63,7 @@ class CommissioningSession:
 
         # Pass session to each phase controller
         piezo_controller = PiezoPreRFController(view, session)
-        cold_landing_controller = ColdLandingController(view, session)
+        frequency_tuning_controller = FrequencyTuningController(view, session)
         # ... etc.
 
         # Controllers use session methods:
@@ -132,7 +122,7 @@ class CommissioningSession:
         artifact_payload: dict | None = None,
         artifact_type: str = "phase_result",
     ) -> bool:
-        """Complete a normalized phase instance for the active record."""
+        """Complete a normalized phase instance (pure v2 lifecycle)."""
         if self._active_record_id is None:
             return False
 
@@ -144,19 +134,6 @@ class CommissioningSession:
                 artifact_payload=artifact_payload,
                 artifact_type=artifact_type,
             )
-
-            # Keep active legacy record projection in sync during migration.
-            if self._active_record is not None:
-                if (
-                    self._active_record.current_phase == phase
-                    and self._active_record.get_phase_status(phase)
-                    != PhaseStatus.COMPLETE
-                ):
-                    self._active_record.set_phase_status(
-                        phase, PhaseStatus.COMPLETE
-                    )
-                    self._active_record.advance_to_next_phase()
-
             return True
         except Exception as e:
             logger.exception("Failed to complete active phase instance: %s", e)
@@ -171,7 +148,7 @@ class CommissioningSession:
         artifact_payload: dict | None = None,
         artifact_type: str = "phase_failure_snapshot",
     ) -> bool:
-        """Fail a normalized phase instance for the active record."""
+        """Fail a normalized phase instance (pure v2 lifecycle)."""
         if self._active_record_id is None:
             return False
 
@@ -184,13 +161,6 @@ class CommissioningSession:
                 artifact_payload=artifact_payload,
                 artifact_type=artifact_type,
             )
-
-            # Keep active legacy record projection in sync during migration.
-            if self._active_record is not None:
-                self._active_record.set_phase_status(phase, PhaseStatus.FAILED)
-                self._active_record.overall_status = "failed"
-                self._active_record.end_time = datetime.now()
-
             return True
         except Exception as e:
             logger.exception("Failed to fail active phase instance: %s", e)
@@ -208,79 +178,53 @@ class CommissioningSession:
             return []
         return self.db.get_phase_instances_v2(self._active_record_id)
 
-    def _base_phase_status_projection(
-        self,
-    ) -> dict[CommissioningPhase, PhaseStatus]:
-        """Build phase status projection from the active record snapshot."""
-        assert self._active_record is not None
-        return {
-            phase: self._active_record.get_phase_status(phase)
-            for phase in CommissioningPhase.get_phase_order()
-        }
-
-    def _project_current_phase_from_run(
-        self,
-        run: dict | None,
-    ) -> CommissioningPhase:
-        """Resolve current phase, preferring normalized run data."""
-        assert self._active_record is not None
-        if not run:
-            return self._active_record.current_phase
-
-        try:
-            return CommissioningPhase(run["current_phase"])
-        except ValueError:
-            return self._active_record.current_phase
-
-    def _apply_instance_statuses(
-        self,
-        phase_status: dict[CommissioningPhase, PhaseStatus],
-        instances: list[dict],
-    ) -> None:
-        """Overlay latest normalized phase-instance statuses onto projection."""
-        if not instances:
-            return
-
-        latest_by_phase: dict[CommissioningPhase, dict] = {}
-        for instance in instances:
-            try:
-                phase = CommissioningPhase(instance["phase"])
-            except ValueError:
-                continue
-
-            prev = latest_by_phase.get(phase)
-            if prev is None or int(instance["attempt_number"]) >= int(
-                prev["attempt_number"]
-            ):
-                latest_by_phase[phase] = instance
-
-        status_map = {
-            "not_started": PhaseStatus.NOT_STARTED,
-            "in_progress": PhaseStatus.IN_PROGRESS,
-            "complete": PhaseStatus.COMPLETE,
-            "failed": PhaseStatus.FAILED,
-            "skipped": PhaseStatus.SKIPPED,
-        }
-        for phase, instance in latest_by_phase.items():
-            phase_status[phase] = status_map.get(
-                instance["status"], PhaseStatus.NOT_STARTED
-            )
-
     def get_active_phase_projection(self) -> dict | None:
         """Return phase projection used by UI state components.
 
-        During migration this prefers normalized v2 data when available and
-        falls back to the active legacy record representation otherwise.
+        Uses normalized v2 data exclusively.
         """
-        if self._active_record is None:
-            return None
-
-        phase_status = self._base_phase_status_projection()
-
         run = self.get_active_workflow_run_v2()
         instances = self.get_active_phase_instances_v2()
-        current_phase = self._project_current_phase_from_run(run)
-        self._apply_instance_statuses(phase_status, instances)
+
+        if run is None:
+            return None
+
+        # Build phase status from latest instances
+        phase_status: dict[CommissioningPhase, PhaseStatus] = {
+            phase: PhaseStatus.NOT_STARTED
+            for phase in CommissioningPhase.get_phase_order()
+        }
+
+        if instances:
+            latest_by_phase: dict[CommissioningPhase, dict] = {}
+            for instance in instances:
+                try:
+                    phase = CommissioningPhase(instance["phase"])
+                except ValueError:
+                    continue
+
+                prev = latest_by_phase.get(phase)
+                if prev is None or int(instance["attempt_number"]) >= int(
+                    prev["attempt_number"]
+                ):
+                    latest_by_phase[phase] = instance
+
+            status_map = {
+                "not_started": PhaseStatus.NOT_STARTED,
+                "in_progress": PhaseStatus.IN_PROGRESS,
+                "complete": PhaseStatus.COMPLETE,
+                "failed": PhaseStatus.FAILED,
+                "skipped": PhaseStatus.SKIPPED,
+            }
+            for phase, instance in latest_by_phase.items():
+                phase_status[phase] = status_map.get(
+                    instance["status"], PhaseStatus.NOT_STARTED
+                )
+
+        try:
+            current_phase = CommissioningPhase(run["current_phase"])
+        except ValueError:
+            current_phase = CommissioningPhase.PIEZO_PRE_RF
 
         return {
             "current_phase": current_phase,
@@ -297,11 +241,11 @@ class CommissioningSession:
         run_mode: str = "individual",
         run_intent: str = "commissioning",
         notes: str | None = None,
-    ) -> PhaseCommandHandle | None:
-        """Start a phase command and return linked lifecycle IDs.
+    ) -> int | None:
+        """Start a phase command and return the phase instance ID.
 
-        This is the preferred API for phase controllers: it encapsulates
-        normalized v2 phase-instance startup.
+        Returns None if unable to start the phase.
+        Pass the returned ID to complete_phase_command or fail_phase_command.
         """
         if self._active_record_id is None:
             return None
@@ -310,75 +254,58 @@ class CommissioningSession:
             phase=phase,
             operator=operator,
         )
-        phase_instance_id = (
+        return (
             phase_start.phase_instance_id if phase_start is not None else None
-        )
-
-        if phase_instance_id is None:
-            return None
-
-        return PhaseCommandHandle(
-            phase=phase,
-            phase_instance_id=phase_instance_id,
         )
 
     def complete_phase_command(
         self,
         *,
-        handle: PhaseCommandHandle,
-        phase_data_snapshot: dict | None = None,
+        phase: CommissioningPhase,
+        phase_instance_id: int,
         artifact_payload: dict | None = None,
         artifact_type: str = "phase_result",
     ) -> bool:
-        """Complete a phase command using normalized v2 lifecycle tracking."""
-        success = True
+        """Complete a phase using normalized v2 lifecycle.
 
-        if handle.phase_instance_id is not None:
-            success = (
-                self.complete_active_phase_instance(
-                    phase_instance_id=handle.phase_instance_id,
-                    phase=handle.phase,
-                    artifact_payload=artifact_payload,
-                    artifact_type=artifact_type,
-                )
-                and success
-            )
-
-        # Snapshot is retained for forward compatibility with callers.  The
-        # normalized v2 lifecycle persists the artifact payload.
-        _ = phase_data_snapshot
-
-        return success
+        Args:
+            phase: The phase being completed
+            phase_instance_id: ID returned by begin_phase_command
+            artifact_payload: Optional phase data to persist
+            artifact_type: Type label for the artifact
+        """
+        return self.complete_active_phase_instance(
+            phase_instance_id=phase_instance_id,
+            phase=phase,
+            artifact_payload=artifact_payload,
+            artifact_type=artifact_type,
+        )
 
     def fail_phase_command(
         self,
         *,
-        handle: PhaseCommandHandle,
+        phase: CommissioningPhase,
+        phase_instance_id: int,
         error_message: str,
-        phase_data_snapshot: dict | None = None,
         artifact_payload: dict | None = None,
         artifact_type: str = "phase_failure_snapshot",
     ) -> bool:
-        """Fail a phase command using normalized v2 lifecycle tracking."""
-        success = True
+        """Fail a phase using normalized v2 lifecycle.
 
-        if handle.phase_instance_id is not None:
-            success = (
-                self.fail_active_phase_instance(
-                    phase_instance_id=handle.phase_instance_id,
-                    phase=handle.phase,
-                    error_message=error_message,
-                    artifact_payload=artifact_payload,
-                    artifact_type=artifact_type,
-                )
-                and success
-            )
-
-        # Snapshot is retained for forward compatibility with callers.  The
-        # normalized v2 lifecycle persists the artifact payload.
-        _ = phase_data_snapshot
-
-        return success
+        Args:
+            phase: The phase that failed
+            phase_instance_id: ID returned by begin_phase_command
+            error_message: Description of the error
+            artifact_payload: Optional failure snapshot data
+            artifact_type: Type label for the artifact
+        """
+        return self.fail_active_phase_instance(
+            phase_instance_id=phase_instance_id,
+            phase=phase,
+            error_message=error_message,
+            artifact_payload=artifact_payload,
+            artifact_type=artifact_type,
+        )
 
     @property
     def database(self) -> CommissioningDatabase:
@@ -538,29 +465,6 @@ class CommissioningSession:
         # Check phase ordering
         can_start, reason = self._active_record.can_start_phase(phase)
         return can_start, reason
-
-    def get_active_phase(self) -> CommissioningPhase | None:
-        """Get the current phase of the active record.
-
-        Returns:
-            Current phase or None if no active record
-        """
-        if not self._active_record:
-            return None
-        return self._active_record.current_phase
-
-    def get_phase_status(self, phase: CommissioningPhase) -> PhaseStatus | None:
-        """Get the status of a specific phase.
-
-        Args:
-            phase: The phase to check
-
-        Returns:
-            Phase status or None if no active record
-        """
-        if not self._active_record:
-            return None
-        return self._active_record.get_phase_status(phase)
 
     def advance_to_next_phase(self) -> tuple[bool, str]:
         """Advance the active record to the next phase.

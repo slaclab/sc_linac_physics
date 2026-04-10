@@ -32,13 +32,12 @@ def init_tabs(host) -> None:
 
 def get_phase_icon(host, phase: CommissioningPhase | None) -> str:
     """Get status icon for a phase."""
-    if not host.session.has_active_record():
+    projection = host.session.get_active_phase_projection()
+    if projection is None:
         return "○"
 
-    record = host.session.get_active_record()
-    projection = host.session.get_active_phase_projection() or {}
-    current_phase = projection.get("current_phase", record.current_phase)
-    phase_status = projection.get("phase_status", record.phase_status)
+    current_phase = projection.get("current_phase")
+    phase_status = projection.get("phase_status", {})
 
     if phase is None:
         return "●"
@@ -63,15 +62,14 @@ def get_phase_icon(host, phase: CommissioningPhase | None) -> str:
 
 def update_tab_states(host) -> None:
     """Update tab states and icons."""
-    if not host.session.has_active_record():
+    projection = host.session.get_active_phase_projection()
+    if projection is None:
         for i in range(1, host.tabs.count()):
             host.tabs.setTabEnabled(i, False)
         return
 
-    record = host.session.get_active_record()
-    projection = host.session.get_active_phase_projection() or {}
-    current_phase = projection.get("current_phase", record.current_phase)
-    phase_status = projection.get("phase_status", record.phase_status)
+    current_phase = projection.get("current_phase")
+    phase_status = projection.get("phase_status", {})
     phase_order = CommissioningPhase.get_phase_order()
     current_index = phase_order.index(current_phase)
 

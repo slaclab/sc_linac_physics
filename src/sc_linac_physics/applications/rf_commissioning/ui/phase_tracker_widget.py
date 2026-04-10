@@ -150,9 +150,8 @@ class PhaseStepWidget(QWidget):
         # Phase name (shortened for display)
         phase_names = {
             CommissioningPhase.PIEZO_PRE_RF: "Piezo\nPre-RF",
-            CommissioningPhase.COLD_LANDING: "Cold\nLanding",
+            CommissioningPhase.FREQUENCY_TUNING: "Frequency\nTuning",
             CommissioningPhase.SSA_CHAR: "SSA\nChar",
-            CommissioningPhase.PI_MODE: "Pi\nMode",
             CommissioningPhase.CAVITY_CHAR: "Cavity\nChar",
             CommissioningPhase.PIEZO_WITH_RF: "Piezo\nw/ RF",
             CommissioningPhase.HIGH_POWER_RAMP: "HP\nRamp",
@@ -230,16 +229,36 @@ class PhaseTrackerWidget(QWidget):
             return
 
         # Update each phase widget
-        current_phase = record.current_phase
+        projection = (
+            self.session.get_active_phase_projection()
+            if hasattr(self, "session")
+            else None
+        )
+        current_phase = (
+            projection.get("current_phase")
+            if projection
+            else record.current_phase
+        )
 
         for phase, widget in self.phase_widgets.items():
-            status = record.get_phase_status(phase)
+            if projection:
+                status_dict = projection.get("phase_status", {})
+                status = PhaseStatus.from_value(
+                    status_dict.get(phase.value, "not_started")
+                )
+            else:
+                status = record.get_phase_status(phase)
             is_current = phase == current_phase
             widget.set_status(status, is_current)
 
         # Update info label
+        current_phase_name = (
+            current_phase.value.replace("_", " ").title()
+            if hasattr(current_phase, "value")
+            else str(current_phase)
+        )
         self.info_label.setText(
-            f"{record.short_cavity_name} - {current_phase.value.replace('_', ' ').title()}"
+            f"{record.short_cavity_name} - {current_phase_name}"
         )
 
     def sizeHint(self) -> QSize:

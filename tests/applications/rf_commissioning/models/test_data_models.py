@@ -6,9 +6,9 @@ import pytest
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CavityCharacterization,
-    ColdLandingData,
     CommissioningPhase,
     CommissioningRecord,
+    FrequencyTuningData,
     HighPowerRampData,
     MPProcessingData,
     OneHourRunData,
@@ -17,7 +17,6 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     PhaseStatus,
     PiezoPreRFCheck,
     PiezoWithRFTest,
-    PiModeMeasurement,
     SSACharacterization,
 )
 from sc_linac_physics.applications.rf_commissioning.models.serialization import (
@@ -34,8 +33,7 @@ class TestCommissioningPhase:
         expected_order = [
             CommissioningPhase.PIEZO_PRE_RF,
             CommissioningPhase.SSA_CHAR,
-            CommissioningPhase.COLD_LANDING,
-            CommissioningPhase.PI_MODE,
+            CommissioningPhase.FREQUENCY_TUNING,
             CommissioningPhase.CAVITY_CHAR,
             CommissioningPhase.PIEZO_WITH_RF,
             CommissioningPhase.HIGH_POWER_RAMP,
@@ -75,17 +73,6 @@ class TestPhaseModels:
         assert model.passed is True
         assert "PASS" in model.status_description
 
-    def test_cold_landing_computed_properties(self):
-        model = ColdLandingData(
-            initial_detune_hz=12_500.0,
-            steps_to_resonance=44,
-            final_detune_hz=300.0,
-        )
-
-        assert model.initial_detune_khz == pytest.approx(12.5)
-        assert model.final_detune_khz == pytest.approx(0.3)
-        assert model.is_complete is True
-
     def test_ssa_characterization_computed_properties(self):
         model = SSACharacterization(
             max_drive=0.60,
@@ -98,16 +85,6 @@ class TestPhaseModels:
         assert model.drive_reduction == pytest.approx(0.20)
         assert model.succeeded_first_try is True
         assert model.is_complete is True
-
-    def test_pi_mode_measurement_completion(self):
-        incomplete = PiModeMeasurement(mode_8pi_9_frequency=1.0e6)
-        complete = PiModeMeasurement(
-            mode_8pi_9_frequency=1.0e6,
-            mode_7pi_9_frequency=0.99e6,
-        )
-
-        assert incomplete.is_complete is False
-        assert complete.is_complete is True
 
     def test_other_phase_completion_flags(self):
         cavity = CavityCharacterization(loaded_q=3.0e7, scale_factor=2.5)
@@ -306,12 +283,14 @@ class TestSerializationAndRegistry:
         assert restored == original
 
     def test_display_specs_are_available_for_phase_models(self):
-        cold_specs = get_phase_display_specs(ColdLandingData)
+        freq_specs = get_phase_display_specs(FrequencyTuningData)
 
-        assert [spec.widget_name for spec in cold_specs] == [
-            "cold_initial_detune",
-            "cold_steps_to_resonance",
-            "cold_final_detune",
+        assert [spec.widget_name for spec in freq_specs] == [
+            "freq_tuning_initial_detune",
+            "freq_tuning_steps_to_resonance",
+            "freq_tuning_final_detune",
+            "freq_tuning_8pi_9_freq",
+            "freq_tuning_7pi_9_freq",
         ]
 
     def test_phase_registry_contains_all_phases(self):

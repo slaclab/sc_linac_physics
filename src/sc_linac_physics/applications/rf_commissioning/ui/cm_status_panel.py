@@ -93,9 +93,19 @@ class CMStatusPanel(QWidget):
         # Count how many cavities are complete
         completed = 0
         for record in cavity_records:
-            if (
-                record.current_phase.value == "complete"
-                or record.overall_status == "in_progress"
+            projection = self.session.get_active_phase_projection()
+            if projection and record.id == projection.get("cavity_id"):
+                phase_status = projection.get("phase_status", {})
+                if (
+                    phase_status.get(record.current_phase.value)
+                    if record.current_phase
+                    else False
+                ):
+                    # Phase is marked as complete
+                    completed += 1
+            elif (
+                record.overall_status == "in_progress"
+                and record.current_phase
                 and record.current_phase.get_next_phase() is None
             ):
                 completed += 1
