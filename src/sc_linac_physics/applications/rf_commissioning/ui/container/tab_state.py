@@ -3,7 +3,9 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QVBoxLayout, QWidget
 
-from sc_linac_physics.applications.rf_commissioning import CommissioningPhase
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
+)
 from sc_linac_physics.applications.rf_commissioning.models.database import (
     RecordConflictError,
 )

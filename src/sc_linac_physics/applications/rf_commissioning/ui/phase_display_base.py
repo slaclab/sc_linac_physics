@@ -5,7 +5,9 @@ from datetime import datetime
 from PyQt5.QtWidgets import QMessageBox
 from pydm import Display
 
-from sc_linac_physics.applications.rf_commissioning import CommissioningRecord
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningRecord,
+)
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )

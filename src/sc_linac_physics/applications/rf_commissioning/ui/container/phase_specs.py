@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from sc_linac_physics.applications.rf_commissioning import CommissioningPhase
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
     PHASE_REGISTRY,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (

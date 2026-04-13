@@ -170,7 +170,7 @@ class TestCommissioningRecord:
         )
 
         allowed, reason = record.can_start_phase(
-            CommissioningPhase.COLD_LANDING
+            CommissioningPhase.FREQUENCY_TUNING
         )
         assert allowed is False
         assert "must complete first" in reason
@@ -179,7 +179,7 @@ class TestCommissioningRecord:
             CommissioningPhase.SSA_CHAR, PhaseStatus.COMPLETE
         )
         allowed, reason = record.can_start_phase(
-            CommissioningPhase.COLD_LANDING
+            CommissioningPhase.FREQUENCY_TUNING
         )
         assert allowed is True
         assert "Prerequisites met" in reason

@@ -470,6 +470,7 @@ class MPProcessingData:
     )
     quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
     notes: str = ""
+    decarad: Optional[int] = None
 
     @property
     def quench_count(self) -> int:

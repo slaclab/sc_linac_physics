@@ -1,7 +1,7 @@
 """Progress indicator helpers for the multi-phase commissioning container."""
 
-from sc_linac_physics.applications.rf_commissioning import CommissioningPhase
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
     PHASE_REGISTRY,
 )
 

@@ -18,7 +18,9 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
-from sc_linac_physics.applications.rf_commissioning import CommissioningPhase
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
+)
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )

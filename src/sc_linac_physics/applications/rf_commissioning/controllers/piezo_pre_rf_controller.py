@@ -6,13 +6,24 @@ from typing import Optional
 
 from PyQt5.QtCore import QTimer, pyqtSignal, QObject
 
-from sc_linac_physics.applications.rf_commissioning import (
-    CommissioningPhase,
-    PhaseContext,
+from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
+)
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
+    PhaseContext,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
     PiezoPreRFPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_pv import (
+    apply_pv_mapping,
+    build_pv_mapping,
+    format_pv_update_message,
+    get_piezo_from_selection,
+    resolve_cavity_selection,
 )
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
@@ -59,40 +70,19 @@ class PiezoPreRFController(QObject):
         self, cryomodule: Optional[str], cavity_number: Optional[str]
     ) -> tuple[Optional[str], Optional[str]]:
         """Resolve cavity selection from arguments or parent dropdowns."""
-        if cryomodule is not None and cavity_number is not None:
-            return cryomodule, cavity_number
-
-        parent = self.view.parent()
-        while parent:
-            if hasattr(parent, "cryomodule_combo") and hasattr(
-                parent, "cavity_combo"
-            ):
-                selected_cm = parent.cryomodule_combo.currentText()
-                selected_cavity = parent.cavity_combo.currentText()
-                if (
-                    selected_cm == "Select CM..."
-                    or selected_cavity == "Select Cav..."
-                ):
-                    return None, None
-                return selected_cm, selected_cavity
-            parent = parent.parent()
-
-        return None, None
+        return resolve_cavity_selection(self.view, cryomodule, cavity_number)
 
     def _get_piezo_from_selection(
         self, cryomodule: str, cavity_number: str
     ) -> tuple[CommissioningPiezo, int, int]:
         """Return piezo object and parsed CM/CAV numbers from selection."""
-        cav = int(cavity_number)
-        cm = int(cryomodule)
-
-        if not self.machine:
-            self.machine = Machine(piezo_class=CommissioningPiezo)
-
-        cm_str = f"{cm:02d}"
-        cryomodule_obj = self.machine.cryomodules[cm_str]
-        cavity = cryomodule_obj.cavities[cav]
-        return cavity.piezo, cm, cav
+        piezo, cm, cav, machine = get_piezo_from_selection(
+            self.machine,
+            cryomodule,
+            cavity_number,
+        )
+        self.machine = machine
+        return piezo, cm, cav
 
     def update_pv_addresses(
         self,
@@ -133,48 +123,18 @@ class PiezoPreRFController(QObject):
 
     def _build_pv_mapping(self, piezo: CommissioningPiezo) -> dict:
         """Build PV mapping dictionary for widgets."""
-        pv_mapping = {
-            self.view.pv_overall: piezo.prerf_test_status_pv,
-            self.view.pv_cha_status: piezo.prerf_cha_status_pv,
-            self.view.pv_chb_status: piezo.prerf_chb_status_pv,
-            self.view.pv_cha_cap: piezo.capacitance_a_pv,
-            self.view.pv_chb_cap: piezo.capacitance_b_pv,
-        }
-
-        # Add optional PV mappings if widgets exist
-        optional_mappings = [
-            ("pydm_enable_ctrl", piezo.enable_pv),
-            ("pydm_enable_stat", piezo.enable_stat_pv),
-            ("pydm_mode_ctrl", piezo.feedback_control_pv),
-            ("pydm_mode_stat", piezo.feedback_stat_pv),
-        ]
-        for widget_name, pv_addr in optional_mappings:
-            if hasattr(self.view, widget_name):
-                pv_mapping[getattr(self.view, widget_name)] = pv_addr
-
-        return pv_mapping
+        return build_pv_mapping(self.view, piezo)
 
     def _apply_pv_mapping(self, pv_mapping: dict) -> None:
         """Apply PV addresses to widgets."""
-        for widget, pv_addr in pv_mapping.items():
-            widget.channel = f"ca://{pv_addr}"
+        apply_pv_mapping(pv_mapping)
 
     def _log_pv_update(
         self, cryomodule: str, cavity_number: str, cm: int, cav: int
     ) -> None:
         """Log PV update with formatted cavity name."""
-        from sc_linac_physics.utils.sc_linac.linac_utils import (
-            get_linac_for_cryomodule,
-        )
-
-        linac = get_linac_for_cryomodule(cryomodule)
-        cavity_display_name = (
-            f"{linac}_CM{cryomodule}_CAV{cavity_number}"
-            if linac
-            else f"CM{cryomodule}_CAV{cavity_number}"
-        )
         self.view.log_message(
-            f"PVs updated for {cavity_display_name} (CM{cm:02d} Cav{cav})"
+            format_pv_update_message(cryomodule, cavity_number, cm, cav)
         )
 
     def _sync_piezo_readbacks(

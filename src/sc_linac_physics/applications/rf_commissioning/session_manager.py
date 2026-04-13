@@ -7,13 +7,13 @@ import logging
 import platform
 from pathlib import Path
 
-from sc_linac_physics.applications.rf_commissioning import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
-    CommissioningDatabase,
     CommissioningPhase,
     PhaseStatus,
 )
 from sc_linac_physics.applications.rf_commissioning.models.database import (
+    CommissioningDatabase,
     RecordConflictError,
 )
 from sc_linac_physics.applications.rf_commissioning.services.workflow_service import (

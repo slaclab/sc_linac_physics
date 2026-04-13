@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
 )
 from pydm import Display as PyDMDisplay, PyDMApplication
 
-from sc_linac_physics.applications.rf_commissioning import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
 )
@@ -47,10 +47,10 @@ from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
     PhaseTabSpec,
     build_note_dialog,
+    build_compact_progress_bar,
     build_default_phase_specs,
     build_enhanced_notes_panel,
     build_header_panel,
-    build_progress_phases,
     check_for_external_changes,
     confirm_and_start_new,
     dismiss_banner,
@@ -77,6 +77,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     init_tabs,
     start_new_from_dialog,
     get_phase_icon,
+    update_progress_indicator,
     update_sync_status,
     update_tab_states,
 )
@@ -477,168 +478,10 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
     # =============================================================================
 
     def _build_compact_progress_bar(self) -> QWidget:
-        """Build a compact horizontal progress indicator."""
-        widget = QWidget()
-        widget.setMaximumHeight(100)
-        widget.setStyleSheet("""
-            QWidget {
-                background-color: #1e1e1e;
-                border-bottom: 1px solid #333;
-            }
-        """)
-
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 8, 10, 8)
-        main_layout.setSpacing(8)
-
-        title = QLabel("Commissioning Progress")
-        title.setStyleSheet("color: #aaa; font-size: 11px; font-weight: bold;")
-        main_layout.addWidget(title)
-
-        # Container for the progress tracker
-        progress_container = QWidget()
-        progress_layout = QHBoxLayout()
-        progress_layout.setSpacing(0)
-        progress_layout.setContentsMargins(20, 0, 20, 0)
-
-        phases = build_progress_phases()
-
-        self.phase_indicators = {}
-        self.phase_connectors = []
-
-        for i, (label, phase) in enumerate(phases):
-            # Create a container for each phase node
-            node_container = QWidget()
-            node_layout = QVBoxLayout()
-            node_layout.setSpacing(4)
-            node_layout.setContentsMargins(0, 0, 0, 0)
-            node_layout.setAlignment(Qt.AlignCenter)
-
-            # Phase circle - REMOVED setFixedSize, using minimumSize instead
-            circle = QLabel("●")
-            circle.setAlignment(Qt.AlignCenter)
-            circle.setMinimumSize(32, 32)  # Changed from setFixedSize
-            circle.setStyleSheet("""
-                font-size: 28px;
-                color: #444;
-                background-color: transparent;
-            """)
-            self.phase_indicators[phase] = circle
-
-            # Label
-            text = QLabel(label)
-            text.setAlignment(Qt.AlignCenter)
-            text.setStyleSheet(
-                "font-size: 9px; color: #888; background-color: transparent;"
-            )
-            text.setWordWrap(True)
-            text.setFixedWidth(60)
-
-            node_layout.addWidget(circle)
-            node_layout.addWidget(text)
-            node_container.setLayout(node_layout)
-
-            progress_layout.addWidget(node_container)
-
-            # Add connector line (skip after last phase)
-            if i < len(phases) - 1:
-                connector = QLabel("━━━━")
-                connector.setAlignment(Qt.AlignCenter)
-                connector.setStyleSheet("""
-                    color: #444;
-                    font-size: 16px;
-                    padding: 0px;
-                    margin: 0px 4px 24px 4px;
-                    background-color: transparent;
-                """)
-                connector.setFixedHeight(32)
-                self.phase_connectors.append(connector)
-                progress_layout.addWidget(connector)
-
-        progress_container.setLayout(progress_layout)
-        main_layout.addWidget(progress_container)
-
-        widget.setLayout(main_layout)
-        return widget
+        return build_compact_progress_bar(self)
 
     def update_progress_indicator(self, record) -> None:
-        """Update the compact progress bar."""
-        projection = self.session.get_active_phase_projection()
-        if projection is None:
-            return
-
-        current_phase = projection.get("current_phase")
-        phase_status = projection.get("phase_status", {})
-
-        phase_order = CommissioningPhase.get_phase_order()
-        current_idx = phase_order.index(current_phase)
-
-        for phase, indicator in self.phase_indicators.items():
-            idx = phase_order.index(phase)
-            status = phase_status.get(phase)
-            if status is not None and status.value in {"complete", "skipped"}:
-                # Completed - green checkmark (using more compatible character)
-                indicator.setText("✔")  # Alternative: "☑" or "●"
-                indicator.setStyleSheet("""
-                    font-size: 28px;
-                    color: #4CAF50;
-                    font-weight: bold;
-                    background-color: rgba(76, 175, 80, 0.2);
-                    border-radius: 16px;
-                    border: 2px solid #4CAF50;
-                """)
-            elif status is not None and status.value == "failed":
-                indicator.setText("✖")
-                indicator.setStyleSheet("""
-                    font-size: 24px;
-                    color: #ef5350;
-                    font-weight: bold;
-                    background-color: rgba(239, 83, 80, 0.2);
-                    border-radius: 16px;
-                    border: 2px solid #ef5350;
-                """)
-            elif idx == current_idx:
-                # Active - blue with pulse effect
-                indicator.setText("▶")
-                indicator.setStyleSheet("""
-                    font-size: 24px;
-                    color: #2196F3;
-                    font-weight: bold;
-                    background-color: rgba(33, 150, 243, 0.3);
-                    border-radius: 16px;
-                    border: 2px solid #2196F3;
-                """)
-            else:
-                # Pending - gray circle
-                indicator.setText("○")
-                indicator.setStyleSheet("""
-                    font-size: 28px;
-                    color: #444;
-                    background-color: transparent;
-                    border-radius: 16px;
-                """)
-
-        # Update connector lines
-        for i, connector in enumerate(self.phase_connectors):
-            if i < current_idx:
-                # Completed path - green
-                connector.setStyleSheet("""
-                    color: #4CAF50;
-                    font-size: 16px;
-                    font-weight: bold;
-                    padding: 0px;
-                    margin: 0px 4px 24px 4px;
-                    background-color: transparent;
-                """)
-            else:
-                # Pending path - gray
-                connector.setStyleSheet("""
-                    color: #444;
-                    font-size: 16px;
-                    padding: 0px;
-                    margin: 0px 4px 24px 4px;
-                    background-color: transparent;
-                """)
+        update_progress_indicator(self, record)
 
     def _on_load_or_start(self) -> None:
         """Intelligent load/start with validation and recent records."""

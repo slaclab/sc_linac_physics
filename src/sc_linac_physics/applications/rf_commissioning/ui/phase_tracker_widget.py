@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
 )
 
-from sc_linac_physics.applications.rf_commissioning import (
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PhaseStatus,
     CommissioningRecord,

@@ -14,7 +14,9 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from sc_linac_physics.applications.rf_commissioning import CommissioningPhase
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
+)
 
 
 def build_enhanced_notes_panel(host) -> QWidget:
