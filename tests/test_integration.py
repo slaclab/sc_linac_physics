@@ -14,6 +14,8 @@ import pytest
         "sc-setup-cav",
         "sc-watcher",
         "sc-sim",
+        "sc-tune-status-poll",
+        "sc-tune-status-query",
     ],
 )
 def test_command_help(script_runner, command):

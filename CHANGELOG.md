@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v9.10.1 (2026-04-04)
+
+### Refactoring
+
+- **tuning/state**: Finalize tune-status naming and remove cavityops aliases
+  ([#230](https://github.com/slaclab/sc_linac_physics/pull/230),
+  [`47a286c`](https://github.com/slaclab/sc_linac_physics/commit/47a286c194ae7c82883b6e32c52384e85176e94c))
+
+- **tuning/state**: Organize JSON output in dedicated directory
+  ([#230](https://github.com/slaclab/sc_linac_physics/pull/230),
+  [`47a286c`](https://github.com/slaclab/sc_linac_physics/commit/47a286c194ae7c82883b6e32c52384e85176e94c))
+
+- **tuning/state**: Rename cavityops modules to tune_status, simplify paths
+  ([#230](https://github.com/slaclab/sc_linac_physics/pull/230),
+  [`47a286c`](https://github.com/slaclab/sc_linac_physics/commit/47a286c194ae7c82883b6e32c52384e85176e94c))
+
+- **tuning/state**: Unify platform detection and centralize logging
+  ([#230](https://github.com/slaclab/sc_linac_physics/pull/230),
+  [`47a286c`](https://github.com/slaclab/sc_linac_physics/commit/47a286c194ae7c82883b6e32c52384e85176e94c))
+
+
 ## v9.10.0 (2026-03-25)
 
 ### Features
