@@ -405,6 +405,25 @@ class PiezoWithRFTest:
 
 
 @dataclass
+class MPProcessingQuenchEvent:
+    """Single quench event observed during MP processing."""
+
+    timestamp: datetime
+    session_id: str = ""
+    amplitude: float = phase_display_field(
+        default=0.0,
+        label="Quench Amplitude",
+        widget_name="hp_mp_quench_amplitude",
+        format_spec=".3f",
+        unit="MV",
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return serialize_model(self)
+
+
+@dataclass
 class HighPowerRampData:
     """High power initial ramp results."""
 
@@ -429,6 +448,8 @@ class HighPowerRampData:
         format_spec=".3f",
         unit="MV",
     )  # MV
+    quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
+    decarad: Optional[int] = None  # 1 or 2
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -440,25 +461,6 @@ class HighPowerRampData:
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
         return serialize_model(self, computed_fields=("is_complete",))
-
-
-@dataclass
-class MPProcessingQuenchEvent:
-    """Single quench event observed during MP processing."""
-
-    timestamp: datetime
-    session_id: str = ""
-    amplitude: float = phase_display_field(
-        default=0.0,
-        label="Quench Amplitude",
-        widget_name="hp_mp_quench_amplitude",
-        format_spec=".3f",
-        unit="MV",
-    )
-
-    def to_dict(self) -> dict:
-        """Serialize to dictionary."""
-        return serialize_model(self)
 
 
 @dataclass
@@ -542,6 +544,8 @@ class OneHourRunData:
         label="Amplitude Limitation Reason",
         widget_name="hp_one_hour_amplitude_limitation_reason",
     )
+    quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
+    decarad: Optional[int] = None  # 1 or 2
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
