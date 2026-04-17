@@ -33,12 +33,13 @@ def create_phase_registry() -> dict:
     """Create phase registry entries from the commissioning model classes."""
     from .data_models import (
         CavityCharacterization,
-        ColdLandingData,
         CommissioningPhase,
+        FrequencyTuningData,
         HighPowerRampData,
+        MPProcessingData,
+        OneHourRunData,
         PiezoPreRFCheck,
         PiezoWithRFTest,
-        PiModeMeasurement,
         SSACharacterization,
     )
 
@@ -55,17 +56,11 @@ def create_phase_registry() -> dict:
             display_label="SSA Characterization",
             progress_label="SSA\nChar",
         ),
-        CommissioningPhase.COLD_LANDING: PhaseRegistration(
-            record_attr="cold_landing",
-            data_model=ColdLandingData,
-            display_label="Cold Landing",
-            progress_label="Cold\nLanding",
-        ),
-        CommissioningPhase.PI_MODE: PhaseRegistration(
-            record_attr="pi_mode",
-            data_model=PiModeMeasurement,
-            display_label="π-Mode Measurement",
-            progress_label="π-Mode\nMeas",
+        CommissioningPhase.FREQUENCY_TUNING: PhaseRegistration(
+            record_attr="frequency_tuning",
+            data_model=FrequencyTuningData,
+            display_label="Frequency Tuning",
+            progress_label="Frequency\nTuning",
         ),
         CommissioningPhase.CAVITY_CHAR: PhaseRegistration(
             record_attr="cavity_char",
@@ -79,11 +74,23 @@ def create_phase_registry() -> dict:
             display_label="Piezo with RF",
             progress_label="Piezo\n@ RF",
         ),
-        CommissioningPhase.HIGH_POWER: PhaseRegistration(
-            record_attr="high_power",
+        CommissioningPhase.HIGH_POWER_RAMP: PhaseRegistration(
+            record_attr="high_power_ramp",
             data_model=HighPowerRampData,
-            display_label="High Power",
-            progress_label="High\nPower",
+            display_label="High Power Ramp",
+            progress_label="HP\nRamp",
+        ),
+        CommissioningPhase.MP_PROCESSING: PhaseRegistration(
+            record_attr="mp_processing",
+            data_model=MPProcessingData,
+            display_label="MP Processing",
+            progress_label="MP\nProc",
+        ),
+        CommissioningPhase.ONE_HOUR_RUN: PhaseRegistration(
+            record_attr="one_hour_run",
+            data_model=OneHourRunData,
+            display_label="One Hour Run",
+            progress_label="1-Hr\nRun",
         ),
         # Terminal phase – no data model, no UI tab, only a progress node.
         CommissioningPhase.COMPLETE: PhaseRegistration(
