@@ -70,7 +70,7 @@ class TestValidatePhaseRegistryConsistency:
         phase_order = [
             phase
             for phase in CommissioningPhase.get_phase_order()
-            if phase != CommissioningPhase.PI_MODE
+            if phase != CommissioningPhase.FREQUENCY_TUNING
         ]
 
         with pytest.raises(ValueError, match="is missing phases"):
@@ -82,7 +82,7 @@ class TestValidatePhaseRegistryConsistency:
 
     def test_missing_phase_from_registry_raises(self):
         registry = create_phase_registry()
-        registry.pop(CommissioningPhase.HIGH_POWER)
+        registry.pop(CommissioningPhase.ONE_HOUR_RUN)
 
         with pytest.raises(ValueError, match="missing phase registrations"):
             validate_phase_registry_consistency(

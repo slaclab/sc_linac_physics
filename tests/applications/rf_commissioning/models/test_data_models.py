@@ -6,16 +6,17 @@ import pytest
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CavityCharacterization,
-    ColdLandingData,
     CommissioningPhase,
     CommissioningRecord,
+    FrequencyTuningData,
     HighPowerRampData,
+    MPProcessingData,
+    OneHourRunData,
     PHASE_REGISTRY,
     PhaseCheckpoint,
     PhaseStatus,
     PiezoPreRFCheck,
     PiezoWithRFTest,
-    PiModeMeasurement,
     SSACharacterization,
 )
 from sc_linac_physics.applications.rf_commissioning.models.serialization import (
@@ -32,11 +33,12 @@ class TestCommissioningPhase:
         expected_order = [
             CommissioningPhase.PIEZO_PRE_RF,
             CommissioningPhase.SSA_CHAR,
-            CommissioningPhase.COLD_LANDING,
-            CommissioningPhase.PI_MODE,
+            CommissioningPhase.FREQUENCY_TUNING,
             CommissioningPhase.CAVITY_CHAR,
             CommissioningPhase.PIEZO_WITH_RF,
-            CommissioningPhase.HIGH_POWER,
+            CommissioningPhase.HIGH_POWER_RAMP,
+            CommissioningPhase.MP_PROCESSING,
+            CommissioningPhase.ONE_HOUR_RUN,
             CommissioningPhase.COMPLETE,
         ]
 
@@ -71,17 +73,6 @@ class TestPhaseModels:
         assert model.passed is True
         assert "PASS" in model.status_description
 
-    def test_cold_landing_computed_properties(self):
-        model = ColdLandingData(
-            initial_detune_hz=12_500.0,
-            steps_to_resonance=44,
-            final_detune_hz=300.0,
-        )
-
-        assert model.initial_detune_khz == pytest.approx(12.5)
-        assert model.final_detune_khz == pytest.approx(0.3)
-        assert model.is_complete is True
-
     def test_ssa_characterization_computed_properties(self):
         model = SSACharacterization(
             max_drive=0.60,
@@ -95,16 +86,6 @@ class TestPhaseModels:
         assert model.succeeded_first_try is True
         assert model.is_complete is True
 
-    def test_pi_mode_measurement_completion(self):
-        incomplete = PiModeMeasurement(mode_8pi_9_frequency=1.0e6)
-        complete = PiModeMeasurement(
-            mode_8pi_9_frequency=1.0e6,
-            mode_7pi_9_frequency=0.99e6,
-        )
-
-        assert incomplete.is_complete is False
-        assert complete.is_complete is True
-
     def test_other_phase_completion_flags(self):
         cavity = CavityCharacterization(loaded_q=3.0e7, scale_factor=2.5)
         piezo_rf = PiezoWithRFTest(
@@ -112,14 +93,35 @@ class TestPhaseModels:
             amplifier_gain_b=1.2,
             detune_gain=0.9,
         )
-        high_power = HighPowerRampData(
+        high_power_initial = HighPowerRampData(
+            had_multipactor_event=True,
+            field_emission_onset=14.0,
+            max_amplitude_reached=16.0,
+        )
+        mp_processing = MPProcessingData()
+        mp_processing.add_quench(
+            amplitude=15.2,
+            timestamp=datetime(2026, 3, 20, 10, 0, 0),
+        )
+        mp_processing.add_quench(
+            amplitude=15.8,
+            timestamp=datetime(2026, 3, 20, 10, 6, 30),
+        )
+        high_power_one_hour = OneHourRunData(
             final_amplitude=16.0,
             one_hour_complete=True,
         )
 
         assert cavity.is_complete is True
         assert piezo_rf.is_complete is True
-        assert high_power.is_complete is True
+        assert high_power_initial.is_complete is True
+        assert mp_processing.quench_count == 2
+        assert mp_processing.quench_intervals_seconds == [390.0]
+        assert all(
+            event.session_id == mp_processing.session_id
+            for event in mp_processing.quench_events
+        )
+        assert high_power_one_hour.is_complete is True
 
 
 class TestCommissioningRecord:
@@ -168,7 +170,7 @@ class TestCommissioningRecord:
         )
 
         allowed, reason = record.can_start_phase(
-            CommissioningPhase.COLD_LANDING
+            CommissioningPhase.FREQUENCY_TUNING
         )
         assert allowed is False
         assert "must complete first" in reason
@@ -177,7 +179,7 @@ class TestCommissioningRecord:
             CommissioningPhase.SSA_CHAR, PhaseStatus.COMPLETE
         )
         allowed, reason = record.can_start_phase(
-            CommissioningPhase.COLD_LANDING
+            CommissioningPhase.FREQUENCY_TUNING
         )
         assert allowed is True
         assert "Prerequisites met" in reason
@@ -281,12 +283,14 @@ class TestSerializationAndRegistry:
         assert restored == original
 
     def test_display_specs_are_available_for_phase_models(self):
-        cold_specs = get_phase_display_specs(ColdLandingData)
+        freq_specs = get_phase_display_specs(FrequencyTuningData)
 
-        assert [spec.widget_name for spec in cold_specs] == [
-            "cold_initial_detune",
-            "cold_steps_to_resonance",
-            "cold_final_detune",
+        assert [spec.widget_name for spec in freq_specs] == [
+            "freq_tuning_initial_detune",
+            "freq_tuning_steps_to_resonance",
+            "freq_tuning_final_detune",
+            "freq_tuning_8pi_9_freq",
+            "freq_tuning_7pi_9_freq",
         ]
 
     def test_phase_registry_contains_all_phases(self):

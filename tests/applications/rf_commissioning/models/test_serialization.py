@@ -110,11 +110,11 @@ class TestSerializeModel:
 
     def test_serialize_model_serializes_nested_enums_and_maps(self):
         model = RoundTripModel(
-            phase=CommissioningPhase.COLD_LANDING,
+            phase=CommissioningPhase.FREQUENCY_TUNING,
             mode=LocalMode.AUTO,
             created_at=datetime(2026, 3, 25, 10, 0, 0),
             nested=NestedModel(observed_at=datetime(2026, 3, 25, 10, 1, 0)),
-            by_phase={CommissioningPhase.COLD_LANDING: 1},
+            by_phase={CommissioningPhase.FREQUENCY_TUNING: 1},
             values=[1, 2, 3],
             union_value=datetime(2026, 3, 25, 10, 2, 0),
             optional_note=None,
@@ -122,11 +122,11 @@ class TestSerializeModel:
 
         payload = serialize_model(model)
 
-        assert payload["phase"] == "cold_landing"
+        assert payload["phase"] == "frequency_tuning"
         assert payload["mode"] == "auto"
         assert payload["created_at"] == "2026-03-25T10:00:00"
         assert payload["nested"]["observed_at"] == "2026-03-25T10:01:00"
-        assert payload["by_phase"] == {"cold_landing": 1}
+        assert payload["by_phase"] == {"frequency_tuning": 1}
         assert payload["union_value"] == "2026-03-25T10:02:00"
 
     def test_serialize_model_includes_computed_fields(self):
