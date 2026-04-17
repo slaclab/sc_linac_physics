@@ -191,6 +191,36 @@ class SCLinacObject(ABC, object):
         return self.pv_addr(f"AUTO:{suffix}")
 
 
+def build_cavity_pv_base(
+    linac_name: str,
+    cryomodule_name: str,
+    cavity_num: int,
+) -> str:
+    """Build the base cavity PV without a trailing field suffix."""
+    return f"ACCL:{linac_name}:{cryomodule_name}{cavity_num}0"
+
+
+def build_cavity_pv_prefix(
+    linac_name: str,
+    cryomodule_name: str,
+    cavity_num: int,
+) -> str:
+    """Build the cavity PV prefix including the trailing separator."""
+    return f"{build_cavity_pv_base(linac_name, cryomodule_name, cavity_num)}:"
+
+
+def build_cavity_pv(
+    linac_name: str,
+    cryomodule_name: str,
+    cavity_num: int,
+    suffix: str,
+) -> str:
+    """Build a full cavity PV for the given suffix."""
+    return (
+        build_cavity_pv_prefix(linac_name, cryomodule_name, cavity_num) + suffix
+    )
+
+
 def stepper_tol_factor(num_steps) -> float:
     """
     First attempt at making the stepper mover tolerance dependent on the

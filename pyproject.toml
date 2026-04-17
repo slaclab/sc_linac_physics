@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sc_linac_physics"
-version = "9.10.0"
+version = "9.10.1"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -202,6 +202,12 @@ sc-sim = "sc_linac_physics.utils.simulation.sc_linac_physics_service:main"
 sc-cold-cav = "sc_linac_physics.applications.tuning.launcher.srf_cavity_cold_launcher:main"
 sc-cold-rack = "sc_linac_physics.applications.tuning.launcher.srf_rack_cold_launcher:main"
 sc-cold-cm = "sc_linac_physics.applications.tuning.launcher.srf_cm_cold_launcher:main"
+
+# ============================================================================
+# Pollers
+# ============================================================================
+sc-tune-status-poll = "sc_linac_physics.applications.tuning.state.tune_status_poll:main"
+sc-tune-status-query = "sc_linac_physics.applications.tuning.state.tune_status_query:main"
 
 [tool.check-manifest]
 ignore = [
