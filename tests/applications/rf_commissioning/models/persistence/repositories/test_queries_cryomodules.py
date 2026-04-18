@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
@@ -166,3 +168,27 @@ def test_cryomodule_repository_round_trips_records_and_detects_conflicts(
         assert exc.record_id == record_id
     else:
         raise AssertionError("Expected stale cryomodule save to raise conflict")
+
+
+@pytest.mark.parametrize("legacy_payload", [["legacy"], "legacy", 123])
+def test_get_record_summaries_ignores_non_object_piezo_payloads(
+    tmp_path,
+    legacy_payload,
+):
+    db = _new_db(tmp_path)
+    record_id = db.save_record(_new_record(1))
+
+    with db.connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE commissioning_records
+            SET piezo_pre_rf = ?
+            WHERE id = ?
+            """,
+            (json.dumps(legacy_payload), record_id),
+        )
+
+    summaries = db.find_records_for_cavity(1, "02", "1")
+    assert len(summaries) == 1
+    assert "piezo_pre_rf" not in summaries[0]

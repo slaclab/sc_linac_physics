@@ -161,12 +161,13 @@ class QueryRepository(BaseRepository):
             if row["piezo_pre_rf"]:
                 try:
                     data = json.loads(row["piezo_pre_rf"])
-                    record["piezo_pre_rf"] = {
-                        "channel_a_passed": data.get("channel_a_passed"),
-                        "channel_b_passed": data.get("channel_b_passed"),
-                        "capacitance_a": data.get("capacitance_a"),
-                        "capacitance_b": data.get("capacitance_b"),
-                    }
+                    if isinstance(data, dict):
+                        record["piezo_pre_rf"] = {
+                            "channel_a_passed": data.get("channel_a_passed"),
+                            "channel_b_passed": data.get("channel_b_passed"),
+                            "capacitance_a": data.get("capacitance_a"),
+                            "capacitance_b": data.get("capacitance_b"),
+                        }
                 except json.JSONDecodeError:
                     pass
             records.append(record)
