@@ -12,9 +12,12 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PhaseStatus,
 )
-from sc_linac_physics.applications.rf_commissioning.models.database import (
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     CommissioningDatabase,
     RecordConflictError,
+)
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database_helpers import (
+    build_workflow_state,
 )
 from sc_linac_physics.applications.rf_commissioning.services.workflow_service import (
     PhaseStartResult,
@@ -106,7 +109,6 @@ class CommissioningSession:
         try:
             return self.workflow.start_phase_for_record(
                 record_id=self._active_record_id,
-                record=self._active_record,
                 phase=phase,
                 operator=operator,
             )
@@ -166,65 +168,29 @@ class CommissioningSession:
             logger.exception("Failed to fail active phase instance: %s", e)
             return False
 
-    def get_active_workflow_run_v2(self) -> dict | None:
+    def get_active_workflow_run(self) -> dict | None:
         """Return normalized workflow run metadata for the active record."""
         if self._active_record_id is None:
             return None
-        return self.db.get_workflow_run_v2(self._active_record_id)
+        return self.db.get_workflow_run(self._active_record_id)
 
-    def get_active_phase_instances_v2(self) -> list[dict]:
+    def get_active_phase_instances(self) -> list[dict]:
         """Return normalized phase instances for the active record."""
         if self._active_record_id is None:
             return []
-        return self.db.get_phase_instances_v2(self._active_record_id)
+        return self.db.get_phase_instances(self._active_record_id)
 
     def get_active_phase_projection(self) -> dict | None:
         """Return phase projection used by UI state components.
 
         Uses normalized v2 data exclusively.
         """
-        run = self.get_active_workflow_run_v2()
-        instances = self.get_active_phase_instances_v2()
+        run = self.get_active_workflow_run()
+        instances = self.get_active_phase_instances()
 
         if run is None:
             return None
-
-        # Build phase status from latest instances
-        phase_status: dict[CommissioningPhase, PhaseStatus] = {
-            phase: PhaseStatus.NOT_STARTED
-            for phase in CommissioningPhase.get_phase_order()
-        }
-
-        if instances:
-            latest_by_phase: dict[CommissioningPhase, dict] = {}
-            for instance in instances:
-                try:
-                    phase = CommissioningPhase(instance["phase"])
-                except ValueError:
-                    continue
-
-                prev = latest_by_phase.get(phase)
-                if prev is None or int(instance["attempt_number"]) >= int(
-                    prev["attempt_number"]
-                ):
-                    latest_by_phase[phase] = instance
-
-            status_map = {
-                "not_started": PhaseStatus.NOT_STARTED,
-                "in_progress": PhaseStatus.IN_PROGRESS,
-                "complete": PhaseStatus.COMPLETE,
-                "failed": PhaseStatus.FAILED,
-                "skipped": PhaseStatus.SKIPPED,
-            }
-            for phase, instance in latest_by_phase.items():
-                phase_status[phase] = status_map.get(
-                    instance["status"], PhaseStatus.NOT_STARTED
-                )
-
-        try:
-            current_phase = CommissioningPhase(run["current_phase"])
-        except ValueError:
-            current_phase = CommissioningPhase.PIEZO_PRE_RF
+        current_phase, _, phase_status = build_workflow_state(run, instances)
 
         return {
             "current_phase": current_phase,
@@ -232,80 +198,6 @@ class CommissioningSession:
             "run": run,
             "instances": instances,
         }
-
-    def begin_phase_command(
-        self,
-        *,
-        phase: CommissioningPhase,
-        operator: str,
-        run_mode: str = "individual",
-        run_intent: str = "commissioning",
-        notes: str | None = None,
-    ) -> int | None:
-        """Start a phase command and return the phase instance ID.
-
-        Returns None if unable to start the phase.
-        Pass the returned ID to complete_phase_command or fail_phase_command.
-        """
-        if self._active_record_id is None:
-            return None
-
-        phase_start = self.start_active_phase_instance(
-            phase=phase,
-            operator=operator,
-        )
-        return (
-            phase_start.phase_instance_id if phase_start is not None else None
-        )
-
-    def complete_phase_command(
-        self,
-        *,
-        phase: CommissioningPhase,
-        phase_instance_id: int,
-        artifact_payload: dict | None = None,
-        artifact_type: str = "phase_result",
-    ) -> bool:
-        """Complete a phase using normalized v2 lifecycle.
-
-        Args:
-            phase: The phase being completed
-            phase_instance_id: ID returned by begin_phase_command
-            artifact_payload: Optional phase data to persist
-            artifact_type: Type label for the artifact
-        """
-        return self.complete_active_phase_instance(
-            phase_instance_id=phase_instance_id,
-            phase=phase,
-            artifact_payload=artifact_payload,
-            artifact_type=artifact_type,
-        )
-
-    def fail_phase_command(
-        self,
-        *,
-        phase: CommissioningPhase,
-        phase_instance_id: int,
-        error_message: str,
-        artifact_payload: dict | None = None,
-        artifact_type: str = "phase_failure_snapshot",
-    ) -> bool:
-        """Fail a phase using normalized v2 lifecycle.
-
-        Args:
-            phase: The phase that failed
-            phase_instance_id: ID returned by begin_phase_command
-            error_message: Description of the error
-            artifact_payload: Optional failure snapshot data
-            artifact_type: Type label for the artifact
-        """
-        return self.fail_active_phase_instance(
-            phase_instance_id=phase_instance_id,
-            phase=phase,
-            error_message=error_message,
-            artifact_payload=artifact_payload,
-            artifact_type=artifact_type,
-        )
 
     @property
     def database(self) -> CommissioningDatabase:
@@ -433,7 +325,7 @@ class CommissioningSession:
         Returns:
             Loaded record or None if not found
         """
-        result = self.db.load_record_with_version(record_id)
+        result = self.db.get_record_with_version(record_id)
 
         if result:
             record, version = result
@@ -459,28 +351,40 @@ class CommissioningSession:
         Returns:
             Tuple of (can_run, reason)
         """
-        if not self._active_record:
+        if self._active_record_id is None:
             return False, "No active commissioning record"
 
-        # Check phase ordering
-        can_start, reason = self._active_record.can_start_phase(phase)
-        return can_start, reason
+        projection = self.get_active_phase_projection()
+        if projection is None:
+            if phase == CommissioningPhase.PIEZO_PRE_RF:
+                return True, "Piezo Pre-RF can be run at any time"
+            return (
+                False,
+                "No normalized workflow run exists yet; start with piezo_pre_rf",
+            )
 
-    def advance_to_next_phase(self) -> tuple[bool, str]:
-        """Advance the active record to the next phase.
+        # PIEZO_PRE_RF is always restartable.
+        if phase == CommissioningPhase.PIEZO_PRE_RF:
+            return True, "Piezo Pre-RF can be run at any time"
 
-        Returns:
-            Tuple of (success, message)
-        """
-        if not self._active_record:
-            return False, "No active record"
+        previous_phase = phase.get_previous_phase()
+        if previous_phase is None:
+            return True, "No previous phase required"
 
-        success, message = self._active_record.advance_to_next_phase()
+        previous_status = projection["phase_status"].get(previous_phase)
+        if previous_status != PhaseStatus.COMPLETE:
+            status_value = (
+                previous_status.value
+                if previous_status is not None
+                else PhaseStatus.NOT_STARTED.value
+            )
+            return (
+                False,
+                f"Previous phase {previous_phase.value} must complete first "
+                f"(status: {status_value})",
+            )
 
-        if success:
-            self.save_active_record()
-
-        return success, message
+        return True, f"Prerequisites met for {phase.value}"
 
     def get_all_records_summary(self) -> list[dict]:
         """Get summary of all commissioning records.

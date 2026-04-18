@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from sc_linac_physics.applications.rf_commissioning.models.database import (
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     RecordConflictError,
 )
 

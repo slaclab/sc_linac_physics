@@ -13,9 +13,8 @@ from datetime import datetime
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
-    CommissioningRecord,
 )
-from sc_linac_physics.applications.rf_commissioning.models.database import (
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     CommissioningDatabase,
 )
 
@@ -35,14 +34,14 @@ class WorkflowService:
     def __init__(self, db: CommissioningDatabase):
         self.db = db
 
-    def _validate_phase_prerequisites_v2(
+    def _validate_phase_prerequisites(
         self,
         *,
         cursor,
         run_id: int,
         phase: CommissioningPhase,
     ) -> tuple[bool, str]:
-        """Validate phase can start based on v2 phase instances (not legacy record).
+        """Validate phase can start from normalized phase instances.
 
         Args:
             cursor: Database cursor
@@ -63,7 +62,7 @@ class WorkflowService:
 
         cursor.execute(
             """
-            SELECT status FROM commissioning_phase_instances_v2
+            SELECT status FROM commissioning_phase_instances
             WHERE run_id = ? AND phase = ?
             ORDER BY attempt_number DESC
             LIMIT 1
@@ -87,27 +86,26 @@ class WorkflowService:
         self,
         *,
         record_id: int,
-        record: CommissioningRecord,
         phase: CommissioningPhase,
         operator: str,
-        workflow_name: str = "rf_commissioning_v2",
+        workflow_name: str = "rf_commissioning",
     ) -> PhaseStartResult:
-        """Create or resume a run and start a new phase instance attempt (v2-only validation)."""
+        """Create or resume a run and start a new phase instance attempt."""
         now = datetime.now().isoformat()
-        with self.db._get_connection() as conn:  # noqa: SLF001
+        with self.db.connection() as conn:
             cursor = conn.cursor()
 
             run_id = self._get_or_create_run(
                 cursor=cursor,
                 record_id=record_id,
-                record=record,
+                phase=phase,
                 operator=operator,
                 workflow_name=workflow_name,
                 now=now,
             )
 
-            # Validate prerequisites using v2 data, not legacy record state
-            can_start, message = self._validate_phase_prerequisites_v2(
+            # Validate prerequisites from normalized phase-instance state.
+            can_start, message = self._validate_phase_prerequisites(
                 cursor=cursor,
                 run_id=run_id,
                 phase=phase,
@@ -118,7 +116,7 @@ class WorkflowService:
             cursor.execute(
                 """
                 SELECT COALESCE(MAX(attempt_number), 0)
-                FROM commissioning_phase_instances_v2
+                FROM commissioning_phase_instances
                 WHERE run_id = ? AND phase = ?
                 """,
                 (run_id, phase.value),
@@ -127,7 +125,7 @@ class WorkflowService:
 
             cursor.execute(
                 """
-                INSERT INTO commissioning_phase_instances_v2 (
+                INSERT INTO commissioning_phase_instances (
                     run_id, phase, attempt_number, status, operator,
                     started_at, ended_at, error_message, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -162,7 +160,7 @@ class WorkflowService:
 
             cursor.execute(
                 """
-                UPDATE commissioning_runs_v2
+                UPDATE commissioning_runs
                 SET current_phase = ?, status = ?, operator = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -186,17 +184,24 @@ class WorkflowService:
     ) -> None:
         """Mark a phase instance complete and persist structured artifact."""
         now = datetime.now().isoformat()
-        with self.db._get_connection() as conn:  # noqa: SLF001
+        with self.db.connection() as conn:
             cursor = conn.cursor()
             run_id = self._get_run_id_for_record(cursor, record_id)
 
+            self._validate_phase_instance_for_run(
+                cursor=cursor,
+                run_id=run_id,
+                phase_instance_id=phase_instance_id,
+                phase=phase,
+            )
+
             cursor.execute(
                 """
-                UPDATE commissioning_phase_instances_v2
+                UPDATE commissioning_phase_instances
                 SET status = ?, ended_at = ?, error_message = NULL, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND run_id = ?
                 """,
-                ("complete", now, now, phase_instance_id),
+                ("complete", now, now, phase_instance_id, run_id),
             )
 
             if artifact_payload is not None:
@@ -216,7 +221,7 @@ class WorkflowService:
 
             cursor.execute(
                 """
-                UPDATE commissioning_runs_v2
+                UPDATE commissioning_runs
                 SET current_phase = ?, status = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -248,17 +253,24 @@ class WorkflowService:
     ) -> None:
         """Mark a phase instance failed, optionally with failure artifact."""
         now = datetime.now().isoformat()
-        with self.db._get_connection() as conn:  # noqa: SLF001
+        with self.db.connection() as conn:
             cursor = conn.cursor()
             run_id = self._get_run_id_for_record(cursor, record_id)
 
+            self._validate_phase_instance_for_run(
+                cursor=cursor,
+                run_id=run_id,
+                phase_instance_id=phase_instance_id,
+                phase=phase,
+            )
+
             cursor.execute(
                 """
-                UPDATE commissioning_phase_instances_v2
+                UPDATE commissioning_phase_instances
                 SET status = ?, ended_at = ?, error_message = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND run_id = ?
                 """,
-                ("failed", now, error_message, now, phase_instance_id),
+                ("failed", now, error_message, now, phase_instance_id, run_id),
             )
 
             if artifact_payload is not None:
@@ -272,7 +284,7 @@ class WorkflowService:
 
             cursor.execute(
                 """
-                UPDATE commissioning_runs_v2
+                UPDATE commissioning_runs
                 SET current_phase = ?, status = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -293,22 +305,26 @@ class WorkflowService:
         *,
         cursor,
         record_id: int,
-        record: CommissioningRecord,
+        phase: CommissioningPhase,
         operator: str,
         workflow_name: str,
         now: str,
     ) -> int:
         cursor.execute(
-            "SELECT id FROM commissioning_runs_v2 WHERE record_id = ?",
+            "SELECT id FROM commissioning_runs WHERE record_id = ?",
             (record_id,),
         )
         row = cursor.fetchone()
         if row is not None:
             return int(row["id"])
 
+        linac, cryomodule, cavity_number = self._get_record_coordinates(
+            cursor, record_id
+        )
+
         cursor.execute(
             """
-            INSERT INTO commissioning_runs_v2 (
+            INSERT INTO commissioning_runs (
                 record_id, workflow_name, linac, cryomodule, cavity_number,
                 operator, status, current_phase, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -316,17 +332,38 @@ class WorkflowService:
             (
                 record_id,
                 workflow_name,
-                str(record.linac),
-                record.cryomodule,
-                str(record.cavity_number),
+                linac,
+                cryomodule,
+                cavity_number,
                 operator,
                 "in_progress",
-                record.current_phase.value,
+                phase.value,
                 now,
                 now,
             ),
         )
         return int(cursor.lastrowid)
+
+    @staticmethod
+    def _get_record_coordinates(cursor, record_id: int) -> tuple[str, str, str]:
+        cursor.execute(
+            """
+            SELECT linac, cryomodule, cavity_number
+            FROM commissioning_records
+            WHERE id = ?
+            """,
+            (record_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise ValueError(
+                f"No commissioning record exists for id={record_id}"
+            )
+        return (
+            str(row["linac"]),
+            str(row["cryomodule"]),
+            str(row["cavity_number"]),
+        )
 
     @staticmethod
     def _insert_artifact(
@@ -339,7 +376,7 @@ class WorkflowService:
     ) -> None:
         cursor.execute(
             """
-            INSERT INTO commissioning_phase_artifacts_v2 (
+            INSERT INTO commissioning_phase_artifacts (
                 phase_instance_id, artifact_type, payload_json, created_at
             ) VALUES (?, ?, ?, ?)
             """,
@@ -358,7 +395,7 @@ class WorkflowService:
     ) -> None:
         cursor.execute(
             """
-            INSERT INTO commissioning_workflow_events_v2 (
+            INSERT INTO commissioning_workflow_events (
                 run_id, phase_instance_id, event_type, payload_json, created_at
             ) VALUES (?, ?, ?, ?, ?)
             """,
@@ -368,7 +405,7 @@ class WorkflowService:
     @staticmethod
     def _get_run_id_for_record(cursor, record_id: int) -> int:
         cursor.execute(
-            "SELECT id FROM commissioning_runs_v2 WHERE record_id = ?",
+            "SELECT id FROM commissioning_runs WHERE record_id = ?",
             (record_id,),
         )
         row = cursor.fetchone()
@@ -377,3 +414,32 @@ class WorkflowService:
                 f"No workflow run exists for record_id={record_id}"
             )
         return int(row["id"])
+
+    @staticmethod
+    def _validate_phase_instance_for_run(
+        *,
+        cursor,
+        run_id: int,
+        phase_instance_id: int,
+        phase: CommissioningPhase,
+    ) -> None:
+        cursor.execute(
+            """
+            SELECT phase
+            FROM commissioning_phase_instances
+            WHERE id = ? AND run_id = ?
+            """,
+            (phase_instance_id, run_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise ValueError(
+                "Phase instance does not belong to the target workflow run: "
+                f"run_id={run_id}, phase_instance_id={phase_instance_id}"
+            )
+
+        if row["phase"] != phase.value:
+            raise ValueError(
+                "Phase instance/phase mismatch: "
+                f"expected {phase.value}, found {row['phase']}"
+            )

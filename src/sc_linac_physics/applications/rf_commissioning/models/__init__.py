@@ -23,7 +23,7 @@ from .cryomodule_models import (
     CryomodulePhaseStatus,
     MagnetCheckoutData,
 )
-from .database import CommissioningDatabase
+from .persistence.database import CommissioningDatabase
 
 __all__ = [
     "CommissioningPhase",

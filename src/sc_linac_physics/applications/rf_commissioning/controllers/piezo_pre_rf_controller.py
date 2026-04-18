@@ -184,9 +184,14 @@ class PiezoPreRFController(QObject):
             return False
 
         if record_id is not None:
-            self._active_phase_instance_id = self.session.begin_phase_command(
-                phase=CommissioningPhase.PIEZO_PRE_RF,
+            phase_start = self.session.start_active_phase_instance(
+                CommissioningPhase.PIEZO_PRE_RF,
                 operator=operator,
+            )
+            self._active_phase_instance_id = (
+                phase_start.phase_instance_id
+                if phase_start is not None
+                else None
             )
 
         if self._active_phase_instance_id is not None:
@@ -243,7 +248,7 @@ class PiezoPreRFController(QObject):
     def _get_machine_cavity(self, cm: int, cav: int):
         """Resolve and return machine cavity object."""
         if not self.machine:
-            self.machine = Machine(linac_section="L1B")
+            self.machine = Machine(piezo_class=CommissioningPiezo)
         return self.machine.cryomodules[f"{cm:02d}"].cavities[cav]
 
     def on_run_automated_test(self) -> None:
@@ -647,9 +652,9 @@ class PiezoPreRFController(QObject):
         try:
             if self.context and self.context.record.piezo_pre_rf:
                 if self._active_phase_instance_id is not None:
-                    success = self.session.complete_phase_command(
-                        phase=CommissioningPhase.PIEZO_PRE_RF,
+                    success = self.session.complete_active_phase_instance(
                         phase_instance_id=self._active_phase_instance_id,
+                        phase=CommissioningPhase.PIEZO_PRE_RF,
                         artifact_payload=self.context.record.piezo_pre_rf.to_dict(),
                     )
                     if success and self.session.has_active_record():
@@ -692,9 +697,9 @@ class PiezoPreRFController(QObject):
             self.view.log_message(f"Warning: Failed to save results: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
             if self._active_phase_instance_id is not None:
-                self.session.fail_phase_command(
-                    phase=CommissioningPhase.PIEZO_PRE_RF,
+                self.session.fail_active_phase_instance(
                     phase_instance_id=self._active_phase_instance_id,
+                    phase=CommissioningPhase.PIEZO_PRE_RF,
                     error_message=str(exc),
                 )
         finally:
@@ -729,9 +734,9 @@ class PiezoPreRFController(QObject):
                 if self.context and self.context.record.piezo_pre_rf:
                     snapshot = self.context.record.piezo_pre_rf.to_dict()
 
-                self.session.fail_phase_command(
-                    phase=CommissioningPhase.PIEZO_PRE_RF,
+                self.session.fail_active_phase_instance(
                     phase_instance_id=self._active_phase_instance_id,
+                    phase=CommissioningPhase.PIEZO_PRE_RF,
                     error_message=error_msg,
                     artifact_payload=snapshot,
                 )
@@ -753,9 +758,9 @@ class PiezoPreRFController(QObject):
             )
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
             if self._active_phase_instance_id is not None:
-                self.session.fail_phase_command(
-                    phase=CommissioningPhase.PIEZO_PRE_RF,
+                self.session.fail_active_phase_instance(
                     phase_instance_id=self._active_phase_instance_id,
+                    phase=CommissioningPhase.PIEZO_PRE_RF,
                     error_message=str(exc),
                 )
         finally:
@@ -802,7 +807,7 @@ class PiezoPreRFController(QObject):
             self.context.record.piezo_pre_rf,
             operator=self._get_operator(),
             notes=notes,
-            phase_instance_id=None,
+            phase_instance_id=self._active_phase_instance_id,
         )
 
     def on_abort(self) -> None:

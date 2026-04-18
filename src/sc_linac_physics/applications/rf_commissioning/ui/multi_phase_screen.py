@@ -25,7 +25,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
 )
-from sc_linac_physics.applications.rf_commissioning.models.database import (
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     RecordConflictError,
 )
 from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (

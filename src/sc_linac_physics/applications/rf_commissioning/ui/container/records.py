@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from sc_linac_physics.applications.rf_commissioning.models.database import (
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     RecordConflictError,
 )
 from sc_linac_physics.utils.sc_linac.linac_utils import get_linac_for_cryomodule
