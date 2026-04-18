@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
     CryomoduleCheckoutRecord,
     CryomodulePhase,
@@ -17,6 +19,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     CommissioningDatabase,
     RecordConflictError,
+    RecordDeletionDisabledError,
 )
 from sc_linac_physics.applications.rf_commissioning.services.workflow_service import (
     WorkflowService,
@@ -107,9 +110,9 @@ def test_query_repository_filters_active_records_and_exposes_workflow_metadata(
     assert phase_instances[0]["phase"] == CommissioningPhase.PIEZO_PRE_RF.value
     assert phase_instances[0]["status"] == "complete"
 
-    assert db.delete_record(inactive_record_id) is True
-    assert db.get_record(inactive_record_id) is None
-    assert db.delete_record(inactive_record_id) is False
+    with pytest.raises(RecordDeletionDisabledError):
+        db.delete_record(inactive_record_id)
+    assert db.get_record(inactive_record_id) is not None
 
 
 def test_cryomodule_repository_round_trips_records_and_detects_conflicts(

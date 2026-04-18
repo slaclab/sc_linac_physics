@@ -76,8 +76,12 @@ def initialize_database_schema(
             notes TEXT,
             created_at TEXT NOT NULL,
 
-            FOREIGN KEY (record_id) REFERENCES commissioning_records(id),
-            FOREIGN KEY (phase_instance_id) REFERENCES commissioning_phase_instances(id)
+            FOREIGN KEY (record_id)
+                REFERENCES commissioning_records(id)
+                ON DELETE CASCADE,
+            FOREIGN KEY (phase_instance_id)
+                REFERENCES commissioning_phase_instances(id)
+                ON DELETE SET NULL
         )
         """)
     cursor.execute("""
@@ -103,7 +107,9 @@ def initialize_database_schema(
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
 
-            FOREIGN KEY (record_id) REFERENCES commissioning_records(id)
+            FOREIGN KEY (record_id)
+                REFERENCES commissioning_records(id)
+                ON DELETE CASCADE
         )
         """)
     cursor.execute("""
@@ -130,7 +136,9 @@ def initialize_database_schema(
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
 
-            FOREIGN KEY (run_id) REFERENCES commissioning_runs(id),
+            FOREIGN KEY (run_id)
+                REFERENCES commissioning_runs(id)
+                ON DELETE CASCADE,
             UNIQUE(run_id, phase, attempt_number)
         )
         """)
@@ -149,6 +157,7 @@ def initialize_database_schema(
 
             FOREIGN KEY (phase_instance_id)
                 REFERENCES commissioning_phase_instances(id)
+                ON DELETE CASCADE
         )
         """)
     cursor.execute("""
@@ -165,9 +174,12 @@ def initialize_database_schema(
             payload_json TEXT NOT NULL,
             created_at TEXT NOT NULL,
 
-            FOREIGN KEY (run_id) REFERENCES commissioning_runs(id),
+            FOREIGN KEY (run_id)
+                REFERENCES commissioning_runs(id)
+                ON DELETE CASCADE,
             FOREIGN KEY (phase_instance_id)
                 REFERENCES commissioning_phase_instances(id)
+                ON DELETE SET NULL
         )
         """)
     cursor.execute("""

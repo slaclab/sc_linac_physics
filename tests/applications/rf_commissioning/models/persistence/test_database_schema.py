@@ -95,3 +95,50 @@ def test_initialize_database_schema_is_idempotent_on_same_connection():
             "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'commissioning_runs'"
         )
         assert cursor.fetchone()["count"] == 1
+
+
+def test_initialize_database_schema_sets_expected_on_delete_actions():
+    with closing(sqlite3.connect(":memory:")) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        initialize_database_schema(
+            cursor,
+            phase_column_names=["phase_alpha"],
+            cryomodule_phase_column_names=["cm_phase_alpha"],
+        )
+
+        cursor.execute("PRAGMA foreign_key_list('measurement_history')")
+        measurement_fks = {
+            row["from"]: row["on_delete"] for row in cursor.fetchall()
+        }
+        assert measurement_fks["record_id"] == "CASCADE"
+        assert measurement_fks["phase_instance_id"] == "SET NULL"
+
+        cursor.execute("PRAGMA foreign_key_list('commissioning_runs')")
+        run_fks = {row["from"]: row["on_delete"] for row in cursor.fetchall()}
+        assert run_fks["record_id"] == "CASCADE"
+
+        cursor.execute(
+            "PRAGMA foreign_key_list('commissioning_phase_instances')"
+        )
+        instance_fks = {
+            row["from"]: row["on_delete"] for row in cursor.fetchall()
+        }
+        assert instance_fks["run_id"] == "CASCADE"
+
+        cursor.execute(
+            "PRAGMA foreign_key_list('commissioning_phase_artifacts')"
+        )
+        artifact_fks = {
+            row["from"]: row["on_delete"] for row in cursor.fetchall()
+        }
+        assert artifact_fks["phase_instance_id"] == "CASCADE"
+
+        cursor.execute(
+            "PRAGMA foreign_key_list('commissioning_workflow_events')"
+        )
+        workflow_event_fks = {
+            row["from"]: row["on_delete"] for row in cursor.fetchall()
+        }
+        assert workflow_event_fks["run_id"] == "CASCADE"
+        assert workflow_event_fks["phase_instance_id"] == "SET NULL"
