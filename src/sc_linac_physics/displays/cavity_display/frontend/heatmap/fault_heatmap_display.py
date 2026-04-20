@@ -900,9 +900,9 @@ class FaultHeatmapDisplay(Display):
     def closeEvent(self, event) -> None:
         if self._fetcher and self._fetcher.isRunning():
             self._fetcher.abort()
-            if not self._fetcher.wait(timeout=5000):
+            if not self._fetcher.wait(5000):
                 self._fetcher.terminate()
-                self._fetcher.wait(timeout=2000)
+                self._fetcher.wait(2000)
         super().closeEvent(event)
 
 

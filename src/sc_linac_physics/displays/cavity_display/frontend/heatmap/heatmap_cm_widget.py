@@ -98,7 +98,7 @@ class HeatmapCMWidget(QWidget):
         self._select_all_btn = QPushButton("\u25a3")  # ▣
         self._select_all_btn.setFixedSize(16, 16)
         self._select_all_btn.setToolTip(
-            f"Select all cavities in "
+            f"Select/deselect all cavities in "
             f"{format_cm_display_name(self._cm_name)}"
         )
         self._select_all_btn.setStyleSheet(

@@ -132,6 +132,8 @@ class FaultDataFetcher(QThread):
                 )
                 futures[future] = (cm_name, cav_num)
 
+            total = len(futures)
+
             for future in as_completed(futures):
                 result = future.result()
                 all_results.append(result)
