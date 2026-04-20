@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.12.0 (2026-04-20)
+
+### Features
+
+- **rf-commissioning**: Add SQLite persistence module with repository architecture
+  ([#232](https://github.com/slaclab/sc_linac_physics/pull/232),
+  [`7bb7188`](https://github.com/slaclab/sc_linac_physics/commit/7bb71887ae6ed28654784c7afbc758439bb362aa))
+
+
 ## v9.11.0 (2026-04-17)
 
 ### Features
