@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+import time
 from typing import Any
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -103,7 +104,11 @@ class PhaseBase(ABC):
     - finalize_phase: Clean up and save final data
     """
 
-    def __init__(self, context: PhaseContext):
+    def __init__(
+        self,
+        context: PhaseContext,
+        sleep_fn: Callable[[float], None] | None = None,
+    ):
         """Initialize phase with execution context.
 
         Args:
@@ -113,6 +118,8 @@ class PhaseBase(ABC):
         self._current_step_index: int = 0
         self._max_retries_per_step: int = 3
         self._retry_count: int = 0
+        self._sleep_fn = sleep_fn or time.sleep
+        self._default_retry_delay_seconds = 5.0
 
     @property
     @abstractmethod
@@ -285,7 +292,9 @@ class PhaseBase(ABC):
                             notes=f"Retry {self._retry_count}/{self._max_retries_per_step}: {result.message}",
                             measurements=result.data,
                         )
-                        # Wait before retry (could use result.retry_delay_seconds)
+                        self._sleep_before_retry(
+                            delay_seconds=result.retry_delay_seconds
+                        )
                         continue
                     else:
                         self.context.record.set_phase_status(
@@ -321,11 +330,20 @@ class PhaseBase(ABC):
                         notes=f"Exception on retry {self._retry_count}: {str(e)}",
                         error_message=str(e),
                     )
+                    self._sleep_before_retry(
+                        delay_seconds=self._default_retry_delay_seconds
+                    )
                     continue
                 else:
                     raise
 
         return False
+
+    def _sleep_before_retry(self, delay_seconds: float) -> None:
+        """Pause between retry attempts; no-op for zero/negative delays."""
+        if delay_seconds <= 0:
+            return
+        self._sleep_fn(delay_seconds)
 
     def _create_checkpoint(
         self,
