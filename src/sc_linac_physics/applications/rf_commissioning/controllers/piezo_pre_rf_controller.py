@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from threading import Thread
-from typing import Optional
+
 
 from PyQt5.QtCore import QTimer, pyqtSignal, QObject
 
@@ -42,9 +42,9 @@ class PiezoPreRFController(QObject):
         self.view = view
         self.session = session
 
-        self.context: Optional[PhaseContext] = None
-        self.phase: Optional[PiezoPreRFPhase] = None
-        self.machine: Optional[Machine] = None
+        self.context: PhaseContext | None = None
+        self.phase: PiezoPreRFPhase | None = None
+        self.machine: Machine | None = None
 
         # Pause and step mode state
         self._paused = False
@@ -53,7 +53,7 @@ class PiezoPreRFController(QObject):
         self._current_step_index = 0
         self._total_steps = 0
         self._steps: list[str] = []
-        self._active_phase_instance_id: Optional[int] = None
+        self._active_phase_instance_id: int | None = None
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
 
@@ -67,8 +67,8 @@ class PiezoPreRFController(QObject):
             self.update_pv_addresses()
 
     def _resolve_cavity_selection(
-        self, cryomodule: Optional[str], cavity_number: Optional[str]
-    ) -> tuple[Optional[str], Optional[str]]:
+        self, cryomodule: str | None, cavity_number: str | None
+    ) -> tuple[str | None, str | None]:
         """Resolve cavity selection from arguments or parent dropdowns."""
         return resolve_cavity_selection(self.view, cryomodule, cavity_number)
 
@@ -86,8 +86,8 @@ class PiezoPreRFController(QObject):
 
     def update_pv_addresses(
         self,
-        cryomodule: Optional[str] = None,
-        cavity_number: Optional[str] = None,
+        cryomodule: str | None = None,
+        cavity_number: str | None = None,
     ) -> None:
         """Update PV addresses based on selected cavity from dropdowns.
 
@@ -138,7 +138,7 @@ class PiezoPreRFController(QObject):
         )
 
     def _sync_piezo_readbacks(
-        self, piezo: Optional[CommissioningPiezo] = None
+        self, piezo: CommissioningPiezo | None = None
     ) -> None:
         """Sync piezo enable/manual UI from actual readback values."""
         if not hasattr(self.view, "update_piezo_readbacks"):
@@ -223,7 +223,7 @@ class PiezoPreRFController(QObject):
         self.view.abort_button.setEnabled(True)
         self.view.local_phase_status.setText("RUNNING")
 
-    def _get_selected_cavity_info(self) -> Optional[tuple[str, int, int]]:
+    def _get_selected_cavity_info(self) -> tuple[str, int, int] | None:
         """Get and validate selected cavity information.
 
         Returns:
@@ -346,7 +346,7 @@ class PiezoPreRFController(QObject):
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
             return False
 
-    def _get_cavity_from_parent(self) -> tuple[Optional[str], Optional[str]]:
+    def _get_cavity_from_parent(self) -> tuple[str | None, str | None]:
         """Get cavity selection from parent container.
 
         Returns:
@@ -788,9 +788,7 @@ class PiezoPreRFController(QObject):
 
         return ""
 
-    def _append_measurement_history(
-        self, error_msg: Optional[str] = None
-    ) -> None:
+    def _append_measurement_history(self, error_msg: str | None = None) -> None:
         """Add measurement to history.
 
         Notes are added manually by users via the UI, not automatically.

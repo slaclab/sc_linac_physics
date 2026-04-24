@@ -3,8 +3,6 @@
 Displays overall progress across all commissioning phases with visual indicators.
 """
 
-from typing import Optional
-
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont
 from PyQt5.QtWidgets import (
@@ -175,7 +173,7 @@ class PhaseTrackerWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.record: Optional[CommissioningRecord] = None
+        self.record: CommissioningRecord | None = None
         self.phase_widgets: dict[CommissioningPhase, PhaseStepWidget] = {}
 
         self._init_ui()
@@ -217,7 +215,7 @@ class PhaseTrackerWidget(QWidget):
 
         self.setStyleSheet("background-color: #2b2b2b; border-radius: 5px;")
 
-    def update_from_record(self, record: Optional[CommissioningRecord]):
+    def update_from_record(self, record: CommissioningRecord | None):
         """Update the tracker based on a commissioning record."""
         self.record = record
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
 
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
@@ -13,9 +12,9 @@ from sc_linac_physics.utils.sc_linac.linac_utils import get_linac_for_cryomodule
 
 def resolve_cavity_selection(
     view,
-    cryomodule: Optional[str],
-    cavity_number: Optional[str],
-) -> tuple[Optional[str], Optional[str]]:
+    cryomodule: str | None,
+    cavity_number: str | None,
+) -> tuple[str | None, str | None]:
     """Resolve cavity selection from explicit args or parent dropdowns."""
     if cryomodule is not None and cavity_number is not None:
         return cryomodule, cavity_number
@@ -39,7 +38,7 @@ def resolve_cavity_selection(
 
 
 def get_piezo_from_selection(
-    machine: Optional[Machine],
+    machine: Machine | None,
     cryomodule: str,
     cavity_number: str,
 ) -> tuple[CommissioningPiezo, int, int, Machine]:

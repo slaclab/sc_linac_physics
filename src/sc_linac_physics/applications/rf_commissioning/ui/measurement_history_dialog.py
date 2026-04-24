@@ -1,7 +1,5 @@
 """Dialog for viewing measurement history."""
 
-from typing import Optional
-
 from PyQt5.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -37,7 +35,7 @@ class MeasurementHistoryDialog(QDialog):
     def __init__(
         self,
         session: CommissioningSession,
-        phase: Optional[CommissioningPhase] = None,
+        phase: CommissioningPhase | None = None,
         parent=None,
     ):
         super().__init__(parent)

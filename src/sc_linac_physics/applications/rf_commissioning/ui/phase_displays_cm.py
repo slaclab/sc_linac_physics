@@ -1,7 +1,5 @@
 """Magnet checkout display for use as a phase tab in the commissioning UI."""
 
-from typing import Optional
-
 from pydm.display import PyDMDisplay
 
 from sc_linac_physics.applications.rf_commissioning.models import (
@@ -24,10 +22,10 @@ class CMCheckoutDisplay(PyDMDisplay):
     def __init__(self, parent=None):
         """Initialize CM checkout display."""
         super().__init__(parent)
-        self.db: Optional[CommissioningDatabase] = None
-        self.record: Optional[CommissioningRecord] = None
-        self.cm_record: Optional[CryomoduleCheckoutRecord] = None
-        self.cm_widget: Optional[MagnetCheckoutWidget] = None
+        self.db: CommissioningDatabase | None = None
+        self.record: CommissioningRecord | None = None
+        self.cm_record: CryomoduleCheckoutRecord | None = None
+        self.cm_widget: MagnetCheckoutWidget | None = None
 
     def on_record_loaded(
         self, record: CommissioningRecord, record_id: int

@@ -7,7 +7,6 @@ and frequency response of both piezo channels.
 
 import time
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
 
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
@@ -54,7 +53,7 @@ class PiezoPreRFPhase(PhaseBase):
     """
 
     def __init__(
-        self, context: PhaseContext, limits: Optional[PiezoTestLimits] = None
+        self, context: PhaseContext, limits: PiezoTestLimits | None = None
     ):
         super().__init__(context)
         self.limits = limits or PiezoTestLimits()
@@ -67,7 +66,7 @@ class PiezoPreRFPhase(PhaseBase):
         """Return the phase type."""
         return CommissioningPhase.PIEZO_PRE_RF
 
-    def validate_prerequisites(self) -> Tuple[bool, str]:
+    def validate_prerequisites(self) -> tuple[bool, str]:
         """
         Validate that prerequisites are met before starting phase.
 
@@ -89,7 +88,7 @@ class PiezoPreRFPhase(PhaseBase):
         self.cavity = cavity
         return True, "Prerequisites validated"
 
-    def get_phase_steps(self) -> List[str]:
+    def get_phase_steps(self) -> list[str]:
         """Return list of step names in execution order."""
         return [
             "verify_initial_state",

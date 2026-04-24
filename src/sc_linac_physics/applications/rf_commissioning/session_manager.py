@@ -4,8 +4,6 @@ Coordinates database access and record management across all commissioning phase
 """
 
 import logging
-import platform
-from pathlib import Path
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
@@ -23,6 +21,11 @@ from sc_linac_physics.applications.rf_commissioning.services.workflow_service im
     PhaseStartResult,
     WorkflowService,
 )
+from sc_linac_physics.utils.platform_paths import (
+    get_database_dir,
+    get_srf_base_dir,
+    is_linux,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +38,7 @@ def get_default_db_path() -> str:
             - Production (Rocky Linux): /home/physics/srf/commissioning.db
             - macOS: ~/databases/commissioning.db
     """
-    # Detect OS - Rocky Linux will report as 'Linux'
-    if platform.system() == "Linux":
-        # Production environment
-        db_dir = Path("/home/physics/srf")
-    else:
-        # Development (macOS) or other OS
-        db_dir = Path.home() / "databases"
-
-    # Create directory if it doesn't exist
+    db_dir = get_srf_base_dir() if is_linux() else get_database_dir()
     db_dir.mkdir(parents=True, exist_ok=True)
 
     return str(db_dir / "commissioning.db")

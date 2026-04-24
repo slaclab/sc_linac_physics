@@ -2,7 +2,7 @@
 
 import copy
 from datetime import datetime
-from typing import Optional
+
 
 from PyQt5.QtWidgets import (
     QDialog,
@@ -44,7 +44,7 @@ class MergeDialog(QDialog):
 
         self.local_record = local_record
         self.db_record = db_record
-        self.merged_record: Optional[CommissioningRecord] = None
+        self.merged_record: CommissioningRecord | None = None
 
         # Track user's choices for each field
         self._field_choices: dict[str, str] = (
@@ -314,7 +314,7 @@ class MergeDialog(QDialog):
             key=lambda checkpoint: checkpoint.timestamp,
         )
 
-    def get_merged_record(self) -> Optional[CommissioningRecord]:
+    def get_merged_record(self) -> CommissioningRecord | None:
         """Get the merged record after dialog is accepted.
 
         Returns:
