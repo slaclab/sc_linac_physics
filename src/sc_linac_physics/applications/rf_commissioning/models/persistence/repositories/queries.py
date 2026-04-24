@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 import logging
 
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database_errors import (
+    RecordDeletionDisabledError,
+)
+
 from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -157,12 +161,13 @@ class QueryRepository(BaseRepository):
             if row["piezo_pre_rf"]:
                 try:
                     data = json.loads(row["piezo_pre_rf"])
-                    record["piezo_pre_rf"] = {
-                        "channel_a_passed": data.get("channel_a_passed"),
-                        "channel_b_passed": data.get("channel_b_passed"),
-                        "capacitance_a": data.get("capacitance_a"),
-                        "capacitance_b": data.get("capacitance_b"),
-                    }
+                    if isinstance(data, dict):
+                        record["piezo_pre_rf"] = {
+                            "channel_a_passed": data.get("channel_a_passed"),
+                            "channel_b_passed": data.get("channel_b_passed"),
+                            "capacitance_a": data.get("capacitance_a"),
+                            "capacitance_b": data.get("capacitance_b"),
+                        }
                 except json.JSONDecodeError:
                     pass
             records.append(record)
@@ -191,13 +196,7 @@ class QueryRepository(BaseRepository):
             ]
 
     def delete_record(self, record_id: int) -> bool:
-        with self.db.connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM commissioning_records WHERE id = ?",
-                (record_id,),
-            )
-            return cursor.rowcount > 0
+        raise RecordDeletionDisabledError(record_id)
 
     def get_database_stats(self) -> dict:
         with self.db.connection() as conn:

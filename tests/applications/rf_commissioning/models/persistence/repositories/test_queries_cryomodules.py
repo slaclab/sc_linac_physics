@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
     CryomoduleCheckoutRecord,
     CryomodulePhase,
@@ -17,6 +21,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     CommissioningDatabase,
     RecordConflictError,
+    RecordDeletionDisabledError,
 )
 from sc_linac_physics.applications.rf_commissioning.services.workflow_service import (
     WorkflowService,
@@ -107,9 +112,9 @@ def test_query_repository_filters_active_records_and_exposes_workflow_metadata(
     assert phase_instances[0]["phase"] == CommissioningPhase.PIEZO_PRE_RF.value
     assert phase_instances[0]["status"] == "complete"
 
-    assert db.delete_record(inactive_record_id) is True
-    assert db.get_record(inactive_record_id) is None
-    assert db.delete_record(inactive_record_id) is False
+    with pytest.raises(RecordDeletionDisabledError):
+        db.delete_record(inactive_record_id)
+    assert db.get_record(inactive_record_id) is not None
 
 
 def test_cryomodule_repository_round_trips_records_and_detects_conflicts(
@@ -163,3 +168,27 @@ def test_cryomodule_repository_round_trips_records_and_detects_conflicts(
         assert exc.record_id == record_id
     else:
         raise AssertionError("Expected stale cryomodule save to raise conflict")
+
+
+@pytest.mark.parametrize("legacy_payload", [["legacy"], "legacy", 123])
+def test_get_record_summaries_ignores_non_object_piezo_payloads(
+    tmp_path,
+    legacy_payload,
+):
+    db = _new_db(tmp_path)
+    record_id = db.save_record(_new_record(1))
+
+    with db.connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE commissioning_records
+            SET piezo_pre_rf = ?
+            WHERE id = ?
+            """,
+            (json.dumps(legacy_payload), record_id),
+        )
+
+    summaries = db.find_records_for_cavity(1, "02", "1")
+    assert len(summaries) == 1
+    assert "piezo_pre_rf" not in summaries[0]

@@ -13,6 +13,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     CommissioningDatabase,
     RecordConflictError,
+    RecordDeletionDisabledError,
 )
 from sc_linac_physics.applications.rf_commissioning.services.workflow_service import (
     WorkflowService,
@@ -228,6 +229,40 @@ def test_measurement_notes_expect_list_json(tmp_path):
     assert len(history[0]["notes"]) == 1
     assert history[0]["notes"][0]["operator"] == "tester"
     assert history[0]["notes"][0]["note"] == "new-note"
+
+
+def test_delete_record_is_disabled_and_keeps_normalized_rows(tmp_path):
+    db = CommissioningDatabase(str(tmp_path / "commissioning.db"))
+    db.initialize()
+    svc = WorkflowService(db)
+
+    record_id = db.save_record(_new_record())
+    started = svc.start_phase_for_record(
+        record_id=record_id,
+        phase=CommissioningPhase.PIEZO_PRE_RF,
+        operator="tester",
+    )
+    phase_instance_id = started.phase_instance_id
+    db.add_measurement_history(
+        record_id,
+        CommissioningPhase.PIEZO_PRE_RF,
+        {"value": 1},
+        phase_instance_id=phase_instance_id,
+    )
+
+    with pytest.raises(RecordDeletionDisabledError):
+        db.delete_record(record_id)
+
+    with db.connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM commissioning_records")
+        assert cursor.fetchone()[0] == 1
+        cursor.execute("SELECT COUNT(*) FROM commissioning_runs")
+        assert cursor.fetchone()[0] == 1
+        cursor.execute("SELECT COUNT(*) FROM commissioning_phase_instances")
+        assert cursor.fetchone()[0] == 1
+        cursor.execute("SELECT COUNT(*) FROM measurement_history")
+        assert cursor.fetchone()[0] == 1
 
 
 def test_save_record_keeps_workflow_state_derived_from_runs(tmp_path):

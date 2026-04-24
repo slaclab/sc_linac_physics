@@ -14,3 +14,14 @@ class RecordConflictError(Exception):
             f"Record {record_id} was modified by another user. "
             f"Expected version {expected_version}, found {actual_version}."
         )
+
+
+class RecordDeletionDisabledError(Exception):
+    """Raised when record deletion is blocked by data-retention policy."""
+
+    def __init__(self, record_id: int):
+        self.record_id = record_id
+        super().__init__(
+            f"Deletion is disabled for commissioning record {record_id}. "
+            "Archive or mark the workflow state instead."
+        )

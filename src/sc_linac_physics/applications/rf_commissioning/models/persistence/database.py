@@ -19,6 +19,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     PhaseStatus,
 )
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database_errors import (
+    RecordDeletionDisabledError,
     RecordConflictError,
 )
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database_schema import (
@@ -39,7 +40,11 @@ from sc_linac_physics.applications.rf_commissioning.models.persistence.repositor
     BaseRepository,
 )
 
-__all__ = ["CommissioningDatabase", "RecordConflictError"]
+__all__ = [
+    "CommissioningDatabase",
+    "RecordConflictError",
+    "RecordDeletionDisabledError",
+]
 
 
 class CommissioningDatabase:
@@ -243,7 +248,7 @@ class CommissioningDatabase:
         return self._queries.get_active_records()
 
     def delete_record(self, record_id: int) -> bool:
-        return self._queries.delete_record(record_id)
+        raise RecordDeletionDisabledError(record_id)
 
     def get_database_stats(self) -> dict:
         return self._queries.get_database_stats()

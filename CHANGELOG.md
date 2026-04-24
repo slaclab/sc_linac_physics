@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v9.12.0 (2026-04-20)
+
+### Features
+
+- **rf-commissioning**: Add SQLite persistence module with repository architecture
+  ([#232](https://github.com/slaclab/sc_linac_physics/pull/232),
+  [`7bb7188`](https://github.com/slaclab/sc_linac_physics/commit/7bb71887ae6ed28654784c7afbc758439bb362aa))
+
+
+## v9.11.0 (2026-04-17)
+
+### Features
+
+- **rf-commissioning**: Add data models and phase registry for cavity commissioning workflow
+  ([#221](https://github.com/slaclab/sc_linac_physics/pull/221),
+  [`f380f8b`](https://github.com/slaclab/sc_linac_physics/commit/f380f8b13f40eff603dcbdd856119d4224adca8c))
+
+- **rf-commissioning**: Add RF commissioning data models and phase tracking
+  ([#221](https://github.com/slaclab/sc_linac_physics/pull/221),
+  [`f380f8b`](https://github.com/slaclab/sc_linac_physics/commit/f380f8b13f40eff603dcbdd856119d4224adca8c))
+
+
 ## v9.10.1 (2026-04-04)
 
 ### Refactoring
