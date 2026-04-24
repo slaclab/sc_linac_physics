@@ -49,6 +49,23 @@ CHARACTERIZATION_CRASHED_VALUE = 0
 CHARACTERIZATION_RUNNING_VALUE = 2
 CALIBRATION_COMPLETE_VALUE = 1
 
+
+def get_linac_for_cryomodule(cryomodule: str) -> Optional[str]:
+    """Get the linac identifier for a given cryomodule.
+
+    Args:
+        cryomodule: Cryomodule identifier (e.g., "01", "02", "H1")
+
+    Returns:
+        Linac identifier (e.g., "L0B", "L1B") or None if not found
+    """
+    linac_names = ["L0B", "L1B", "L2B", "L3B", "L4B"]
+    for i, cm_list in enumerate(LINAC_CM_MAP):
+        if cryomodule in cm_list:
+            return linac_names[i]
+    return None
+
+
 SSA_STATUS_ON_VALUE = 3
 SSA_STATUS_FAULTED_VALUE = 1
 SSA_STATUS_OFF_VALUE = 2
@@ -119,6 +136,7 @@ PIEZO_MANUAL_VALUE = 0
 PIEZO_FEEDBACK_VALUE = 1
 PIEZO_SCRIPT_RUNNING_VALUE = 2
 PIEZO_SCRIPT_COMPLETE_VALUE = 1
+PIEZO_SCRIPT_CRASH_VALUE = 0
 PIEZO_PRE_RF_CHECKOUT_PASS_VALUE = 0
 PIEZO_WITH_RF_GRAD = 6.5
 PIEZO_CENTER_VOLTAGE = 25
