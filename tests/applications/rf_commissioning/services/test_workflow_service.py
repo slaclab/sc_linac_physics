@@ -167,3 +167,43 @@ def test_complete_phase_rejects_phase_instance_from_another_run(tmp_path):
         )
         row = cursor.fetchone()
         assert row["status"] == "in_progress"
+
+
+def test_start_phase_allows_previous_phase_skipped(tmp_path):
+    db = CommissioningDatabase(str(tmp_path / "workflow.db"))
+    db.initialize()
+    svc = WorkflowService(db)
+
+    record = _new_record()
+    record_id = db.save_record(record)
+
+    start = svc.start_phase_for_record(
+        record_id=record_id,
+        phase=CommissioningPhase.PIEZO_PRE_RF,
+        operator="tester",
+    )
+
+    with db.connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE commissioning_phase_instances
+            SET status = ?, ended_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                "skipped",
+                "2026-01-01T00:00:00",
+                "2026-01-01T00:00:00",
+                start.phase_instance_id,
+            ),
+        )
+
+    next_start = svc.start_phase_for_record(
+        record_id=record_id,
+        phase=CommissioningPhase.SSA_CHAR,
+        operator="tester",
+    )
+
+    assert next_start.phase_instance_id > 0
+    assert next_start.attempt_number == 1

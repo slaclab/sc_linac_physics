@@ -634,7 +634,10 @@ class CommissioningRecord:
     @property
     def is_complete(self) -> bool:
         """Check if all commissioning is complete."""
-        return self.current_phase == CommissioningPhase.COMPLETE
+        return (
+            self.get_phase_status(CommissioningPhase.COMPLETE)
+            == PhaseStatus.COMPLETE
+        )
 
     @property
     def full_cavity_name(self) -> str:
@@ -678,16 +681,17 @@ class CommissioningRecord:
         if phase == CommissioningPhase.PIEZO_PRE_RF:
             return True, "Piezo Pre-RF can be run at any time"
 
-        # Check if previous phase is complete
+        # Check if previous phase is complete or explicitly skipped
         previous_phase = phase.get_previous_phase()
         if previous_phase is None:
             return True, "No previous phase required"
 
         previous_status = self.get_phase_status(previous_phase)
-        if previous_status != PhaseStatus.COMPLETE:
+        if previous_status not in {PhaseStatus.COMPLETE, PhaseStatus.SKIPPED}:
             return (
                 False,
-                f"Previous phase {previous_phase.value} must complete first (status: {previous_status.value})",
+                f"Previous phase {previous_phase.value} must be complete or "
+                f"skipped first (status: {previous_status.value})",
             )
 
         return True, f"Prerequisites met for {phase.value} (reruns allowed)"

@@ -82,7 +82,7 @@ print(f"Advanced to: {record.current_phase.value}")
 db.save_record(record, record_id)
 
 # ============================================================================
-# PHASE 2-9: Continue through remaining technical phases
+# PHASE 2-8: Continue through remaining technical phases
 # ============================================================================
 
 # For brevity, showing abbreviated workflow for middle phases
@@ -127,10 +127,10 @@ for phase, notes in phases_workflow:
     db.save_record(record, record_id)
 
 # ============================================================================
-# PHASE 10: COMPLETE - Final acceptance and handoff
+# PHASE 9: COMPLETE - Final acceptance and handoff
 # ============================================================================
 
-print("\n--- Phase 10: COMPLETE (Final Acceptance) ---")
+print("\n--- Phase 9: COMPLETE (Final Acceptance) ---")
 
 # Verify we're at COMPLETE phase
 if record.current_phase == CommissioningPhase.COMPLETE:
@@ -244,7 +244,7 @@ Advanced to: ssa_char
 --- Phase: ONE_HOUR_RUN ---
 ✓ one_hour_run complete, advanced to: complete
 
---- Phase 10: COMPLETE (Final Acceptance) ---
+--- Phase 9: COMPLETE (Final Acceptance) ---
 Performing final acceptance checks...
 
 ============================================================
@@ -256,7 +256,7 @@ Started:         2026-02-25 10:00:00
 Completed:       2026-02-25 16:30:00
 Duration:        6.5 hours
 Status:          operational
-Total phases:    10
+Total phases:    9
 Record complete: True
 
 ✓ Cavity handed off to operations team
@@ -266,7 +266,7 @@ Record is complete: True
 Current phase: complete
 Overall status: operational
 
-Total checkpoints: 10
+Total checkpoints: 9
   1. [piezo_pre_rf] final_validation: ✓ - Piezo test completed successfully
     2. [ssa_char] phase_completion: ✓ - SSA characterized, max drive = 0.85
     3. [frequency_tuning] phase_completion: ✓ - Frequency tuning completed with cold landing detune = 5 Hz and 8π/9 and 7π/9 modes measured
@@ -300,9 +300,9 @@ Workflow demonstration complete!
    - Final measurements/summary
 
 4. **Clean status checking**
-   - `record.is_complete` is unambiguous
-   - `record.current_phase == COMPLETE` means fully done
-   - `record.overall_status = "operational"` set during COMPLETE
+   - `record.is_complete` means COMPLETE has status `PhaseStatus.COMPLETE`
+   - `record.current_phase == COMPLETE` only means final acceptance has started
+   - `record.overall_status = "operational"` is set during COMPLETE
 
 5. **Audit trail preserved**
    - All phases tracked in `phase_history`

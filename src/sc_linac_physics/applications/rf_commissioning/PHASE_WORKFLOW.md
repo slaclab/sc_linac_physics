@@ -288,7 +288,7 @@ if record.current_phase == CommissioningPhase.ONE_HOUR_RUN:
             record.set_phase_status(CommissioningPhase.COMPLETE, PhaseStatus.COMPLETE)
             db.save_record(record, record_id)
 
-            print(f"✓ Cavity {record.cavity_name} commissioned successfully!")
+            print(f"✓ Cavity {record.full_cavity_name} commissioned successfully!")
             print(f"  Duration: {record.elapsed_time:.1f} hours")
 ```
 
@@ -336,4 +336,4 @@ db.get_active_records() -> List[CommissioningRecord]
 
 ## Example: Complete Workflow
 
-See `examples/rf_commissioning_workflow.py` for a complete working example of commissioning a cavity with proper phase ordering and error handling.
+See `src/sc_linac_physics/applications/rf_commissioning/COMPLETE_WORKFLOW_EXAMPLE.md` for a complete end-to-end commissioning example with proper phase ordering and final acceptance.
