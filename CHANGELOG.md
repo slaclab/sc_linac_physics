@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.13.0 (2026-04-27)
+
+### Features
+
+- **rf-commissioning**: Add session workflow manager and phase framework
+  ([#233](https://github.com/slaclab/sc_linac_physics/pull/233),
+  [`64de999`](https://github.com/slaclab/sc_linac_physics/commit/64de999f8d495a5873a323108a0058ecf17fb115))
+
+
 ## v9.12.0 (2026-04-20)
 
 ### Features
