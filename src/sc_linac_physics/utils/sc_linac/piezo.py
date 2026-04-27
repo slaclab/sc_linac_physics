@@ -1,7 +1,7 @@
 import time
 from typing import Optional, TYPE_CHECKING
 
-from sc_linac_physics.utils.epics import PV, PVGetError
+from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
@@ -145,29 +145,10 @@ class Piezo(linac_utils.SCLinacObject):
     def is_enabled(self) -> bool:
         if not self._enable_stat_pv_obj:
             self._enable_stat_pv_obj = PV(self.enable_stat_pv)
-
-        try:
-            return (
-                self._enable_stat_pv_obj.get(use_monitor=False)
-                == linac_utils.PIEZO_ENABLE_VALUE
-            )
-        except PVGetError as exc:
-            self.cavity.logger.warning(
-                "Failed to read ENABLESTAT, falling back to ENABLE command PV",
-                extra={
-                    "extra_data": {
-                        "error": str(exc),
-                        "piezo": str(self),
-                    }
-                },
-            )
-            try:
-                return (
-                    self.enable_pv_obj.get(use_monitor=False)
-                    == linac_utils.PIEZO_ENABLE_VALUE
-                )
-            except Exception:
-                return False
+        return (
+            self._enable_stat_pv_obj.get(use_monitor=False)
+            == linac_utils.PIEZO_ENABLE_VALUE
+        )
 
     @property
     def feedback_control_pv_obj(self) -> PV:
@@ -179,20 +160,7 @@ class Piezo(linac_utils.SCLinacObject):
     def feedback_stat(self):
         if not self._feedback_stat_pv_obj:
             self._feedback_stat_pv_obj = PV(self.feedback_stat_pv)
-
-        try:
-            return self._feedback_stat_pv_obj.get(use_monitor=False)
-        except PVGetError as exc:
-            self.cavity.logger.warning(
-                "Failed to read MODESTAT, falling back to MODECTRL command PV",
-                extra={
-                    "extra_data": {
-                        "error": str(exc),
-                        "piezo": str(self),
-                    }
-                },
-            )
-            return self.feedback_control_pv_obj.get(use_monitor=False)
+        return self._feedback_stat_pv_obj.get(use_monitor=False)
 
     @property
     def in_manual(self) -> bool:

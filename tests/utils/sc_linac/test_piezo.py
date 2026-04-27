@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
+from sc_linac_physics.utils.epics import PVGetError
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     PIEZO_ENABLE_VALUE,
@@ -66,10 +67,26 @@ def test_is_not_enabled(piezo):
     assert not piezo.is_enabled
 
 
+def test_is_enabled_propagates_status_get_error(piezo):
+    piezo._enable_stat_pv_obj = make_mock_pv()
+    piezo._enable_stat_pv_obj.get = Mock(side_effect=PVGetError("boom"))
+
+    with pytest.raises(PVGetError, match="boom"):
+        _ = piezo.is_enabled
+
+
 def test_feedback_stat(piezo):
     stat = randint(0, 1)
     piezo._feedback_stat_pv_obj = make_mock_pv(get_val=stat)
     assert piezo.feedback_stat == stat
+
+
+def test_feedback_stat_propagates_status_get_error(piezo):
+    piezo._feedback_stat_pv_obj = make_mock_pv()
+    piezo._feedback_stat_pv_obj.get = Mock(side_effect=PVGetError("boom"))
+
+    with pytest.raises(PVGetError, match="boom"):
+        _ = piezo.feedback_stat
 
 
 def test_in_manual(piezo):
