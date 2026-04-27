@@ -72,11 +72,11 @@ class WorkflowService:
         result = cursor.fetchone()
         previous_status = result[0] if result else None
 
-        if previous_status != "complete":
+        if previous_status not in {"complete", "skipped"}:
             status_str = previous_status or "not_started"
             return (
                 False,
-                f"Previous phase {previous_phase.value} must complete first "
+                f"Previous phase {previous_phase.value} must be complete or skipped first "
                 f"(status: {status_str})",
             )
 
