@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
     QFrame,
     QLabel,
     QSizePolicy,
+    QHBoxLayout,
+    QPushButton,
 )
 
 from sc_linac_physics.displays.cavity_display.frontend.heatmap.heatmap_cavity_widget import (  # noqa: E501
@@ -76,14 +78,36 @@ class HeatmapCMWidget(QWidget):
         self.setLayout(main_layout)
 
         # Top: label + status bar
+        label_row = QHBoxLayout()
+        label_row.setContentsMargins(0, 0, 0, 0)
+        label_row.setSpacing(2)
+
         self._label = ClickableLabel(format_cm_display_name(self._cm_name))
         self._label.setAlignment(Qt.AlignCenter)
         label_font = QFont()
         label_font.setPointSize(self.LABEL_FONT_SIZE)
         label_font.setBold(True)
         self._label.setFont(label_font)
+        self._label.setToolTip("Click to select/deselect all 8 cavities")
+        self._label.setStyleSheet(
+            "QLabel:hover { text-decoration: underline; }"
+        )
         self._label.clicked.connect(self._on_cm_label_clicked)
-        main_layout.addWidget(self._label)
+        label_row.addWidget(self._label, stretch=1)
+
+        self._select_all_btn = QPushButton("\u25a3")  # ▣
+        self._select_all_btn.setFixedSize(16, 16)
+        self._select_all_btn.setToolTip(
+            f"Select/deselect all cavities in "
+            f"{format_cm_display_name(self._cm_name)}"
+        )
+        self._select_all_btn.setStyleSheet(
+            "QPushButton { padding: 0px; font-size: 9pt; }"
+        )
+        self._select_all_btn.clicked.connect(self._on_cm_label_clicked)
+        label_row.addWidget(self._select_all_btn)
+
+        main_layout.addLayout(label_row)
 
         self._status_bar = QFrame()
         self._status_bar.setFixedHeight(self.BAR_HEIGHT)
