@@ -1,12 +1,12 @@
 """UI components for RF commissioning screens."""
 
 from .database_browser_dialog import DatabaseBrowserDialog
-from .ui_builder import (
+from .builders import (
     PiezoPreRFUI,
     LOCAL_CAP_STYLE,
     LOCAL_LABEL_STYLE,
 )
-from .phase_displays import (
+from .displays import (
     PiezoPreRFDisplay,
     FrequencyTuningDisplay,
     SSACharDisplay,
@@ -17,7 +17,8 @@ from .phase_displays import (
     HighPowerOneHourRunDisplay,
 )
 from .phase_display_base import PhaseDisplayBase
-from .multi_phase_screen import MultiPhaseCommissioningDisplay, PhaseTabSpec
+from .multi_phase_screen import MultiPhaseCommissioningDisplay
+from .container.phase_specs import PhaseTabSpec
 
 __all__ = [
     "DatabaseBrowserDialog",

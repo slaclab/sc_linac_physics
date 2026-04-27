@@ -823,7 +823,7 @@ class CommissioningRecord:
 #   4. Add the corresponding optional field to ``CommissioningRecord``
 #      (e.g. ``my_phase: Optional[MyPhaseData] = None``).
 #   5. Optionally register a custom display class in
-#      ``ui/phase_displays.py::PHASE_DISPLAY_MAP`` – if omitted, a
+#      ``ui/displays/registry.py::PHASE_DISPLAY_MAP`` – if omitted, a
 #      generic placeholder screen is generated automatically.
 #
 # Everything else (DB schema migration, INSERT/UPDATE SQL, UI tabs, and

@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont, QFontDatabase
 
-from sc_linac_physics.applications.rf_commissioning.models import (
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     CommissioningDatabase,
 )
 
@@ -90,20 +90,14 @@ class CMStatusPanel(QWidget):
             self.cryomodule, active_only=False
         )
 
-        # Count how many cavities are complete
+        # Count how many cavities are complete.
+        # Keep this logic aligned with the header completion indicator.
         completed = 0
         for record in cavity_records:
-            projection = self.session.get_active_phase_projection()
-            if projection and record.id == projection.get("cavity_id"):
-                phase_status = projection.get("phase_status", {})
-                if (
-                    phase_status.get(record.current_phase.value)
-                    if record.current_phase
-                    else False
-                ):
-                    # Phase is marked as complete
-                    completed += 1
-            elif (
+            if (
+                record.current_phase
+                and record.current_phase.value == "complete"
+            ) or (
                 record.overall_status == "in_progress"
                 and record.current_phase
                 and record.current_phase.get_next_phase() is None

@@ -9,7 +9,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
     PhaseDisplayBase,
 )
-from sc_linac_physics.applications.rf_commissioning.ui.phase_displays import (
+from sc_linac_physics.applications.rf_commissioning.ui.displays import (
     get_phase_display_class,
 )
 
