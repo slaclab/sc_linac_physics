@@ -250,7 +250,11 @@ class Piezo(linac_utils.SCLinacObject):
                     extra={
                         "extra_data": {
                             "attempt": attempt - 1,
-                            "feedback_stat": self.feedback_stat,
+                            "feedback_stat": (
+                                self._feedback_stat_pv_obj.value_or_none
+                                if self._feedback_stat_pv_obj
+                                else None
+                            ),
                             "piezo": str(self),
                         }
                     },
@@ -301,7 +305,11 @@ class Piezo(linac_utils.SCLinacObject):
                     extra={
                         "extra_data": {
                             "attempt": attempt - 1,
-                            "feedback_stat": self.feedback_stat,
+                            "feedback_stat": (
+                                self._feedback_stat_pv_obj.value_or_none
+                                if self._feedback_stat_pv_obj
+                                else None
+                            ),
                             "piezo": str(self),
                         }
                     },

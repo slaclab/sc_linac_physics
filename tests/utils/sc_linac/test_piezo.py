@@ -163,6 +163,28 @@ def test_enable_feedback(piezo):
     piezo.set_to_feedback.assert_called()
 
 
+def test_enable_feedback_max_attempts_raises_runtime_error_without_masking(
+    piezo,
+):
+    piezo.enable = MagicMock()
+    piezo.FEEDBACK_MAX_ATTEMPTS = 1
+    piezo.cavity.check_abort = Mock()
+    piezo.set_to_manual = MagicMock()
+    piezo.set_to_feedback = MagicMock()
+    piezo._feedback_stat_pv_obj = make_mock_pv()
+    piezo._feedback_stat_pv_obj.get = Mock(
+        side_effect=[
+            PIEZO_MANUAL_VALUE,
+            PIEZO_MANUAL_VALUE,
+            PIEZO_MANUAL_VALUE,
+            PVGetError("should_not_mask_runtime_error"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="failed to enable"):
+        piezo.enable_feedback()
+
+
 def test_disable_feedback(piezo):
     piezo.enable = MagicMock()
     piezo._feedback_stat_pv_obj = make_mock_pv(get_val=PIEZO_FEEDBACK_VALUE)
@@ -176,6 +198,28 @@ def test_disable_feedback(piezo):
     piezo.disable_feedback()
     piezo.enable.assert_called()
     piezo.set_to_manual.assert_called()
+
+
+def test_disable_feedback_max_attempts_raises_runtime_error_without_masking(
+    piezo,
+):
+    piezo.enable = MagicMock()
+    piezo.FEEDBACK_MAX_ATTEMPTS = 1
+    piezo.cavity.check_abort = Mock()
+    piezo.set_to_manual = MagicMock()
+    piezo.set_to_feedback = MagicMock()
+    piezo._feedback_stat_pv_obj = make_mock_pv()
+    piezo._feedback_stat_pv_obj.get = Mock(
+        side_effect=[
+            PIEZO_FEEDBACK_VALUE,
+            PIEZO_FEEDBACK_VALUE,
+            PIEZO_FEEDBACK_VALUE,
+            PVGetError("should_not_mask_runtime_error"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="failed to disable"):
+        piezo.disable_feedback()
 
 
 def test_hz_per_v(piezo):
