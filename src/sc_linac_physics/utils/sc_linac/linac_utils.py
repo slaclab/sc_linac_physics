@@ -261,17 +261,13 @@ def stepper_tol_factor(num_steps) -> float:
 
 
 class PulseError(Exception):
-    """
-    Exception thrown during cavity SSA calibration
-    """
+    """Exception thrown during pulsed cavity operation."""
 
     pass
 
 
 class StepperError(Exception):
-    """
-    Exception thrown during cavity SSA calibration
-    """
+    """Exception thrown when the stepper tuner motor fails or times out."""
 
     pass
 
@@ -325,9 +321,7 @@ class SSAPowerError(Exception):
 
 
 class SSAFaultError(Exception):
-    """
-    Exception thrown while trying to turn an SSA on or off
-    """
+    """Exception thrown when an SSA fault is detected and cannot be cleared."""
 
     pass
 
@@ -365,6 +359,13 @@ class CavityHWModeError(Exception):
 
 
 class LauncherLinacObject(SCLinacObject):
+    """Mixin for objects that can be started, stopped, and aborted via AUTO: PVs.
+
+    Provides trigger_start/trigger_stop/trigger_abort/clear_abort methods backed
+    by EPICS PVs at ``{pv_prefix}AUTO:{name}STRT``, ``{name}STOP``, and ``ABORT``.
+    Used by all setup/commissioning hierarchy classes.
+    """
+
     @property
     def pv_prefix(self):
         return super().pv_prefix
