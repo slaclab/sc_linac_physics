@@ -107,8 +107,9 @@ class SetupCavity(Cavity, SetupLinacObject):
           4. RF ramp to ACON   (rf_ramp_requested)
 
         Always turns RF off first regardless of which steps are requested, to
-        clear any latched interlocks. Skips silently if already running or
-        offline. Sets status to ERROR on any unhandled exception.
+        clear any latched interlocks. Logs a warning and returns without
+        changing status if already running or offline. Sets status to ERROR on
+        any unhandled exception.
         """
         try:
             if self.script_is_running:
@@ -119,9 +120,8 @@ class SetupCavity(Cavity, SetupLinacObject):
 
             if not self.is_online:
                 self.set_status_message(
-                    f"{self} not online, not setting up", logging.ERROR
+                    f"{self} not online, skipping setup", logging.WARNING
                 )
-                self.status = STATUS_ERROR_VALUE
                 return
 
             self.clear_abort()

@@ -51,10 +51,12 @@ Use for bulk reads/writes. Internally calls `epics.caget_many()` to fetch many P
 ```python
 from sc_linac_physics.utils.epics.batch import PVBatch
 
-values = PVBatch.get_values(["ACCL:L0B:0110:ADES", "ACCL:L0B:0120:ADES"])
-# returns {pv_name: value, ...}
+pv_names = ["ACCL:L0B:0110:ADES", "ACCL:L0B:0120:ADES"]
+values = PVBatch.get_values(pv_names)
+# returns [val_for_pv1, val_for_pv2] — same order as input; None for disconnected PVs
 
-PVBatch.put_values({"ACCL:L0B:0110:ADES": 5.0, "ACCL:L0B:0120:ADES": 5.0})
+PVBatch.put_values(pv_names, [5.0, 5.0])
+# returns [True, True] — per-PV success flags
 ```
 
 Prefer `PVBatch` when touching more than ~5 PVs at once (e.g., reading all 296 cavity amplitudes).

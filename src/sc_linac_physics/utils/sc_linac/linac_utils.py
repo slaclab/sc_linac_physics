@@ -362,7 +362,8 @@ class LauncherLinacObject(SCLinacObject):
     """Mixin for objects that can be started, stopped, and aborted via AUTO: PVs.
 
     Provides trigger_start/trigger_stop/trigger_abort/clear_abort methods backed
-    by EPICS PVs at ``{pv_prefix}AUTO:{name}STRT``, ``{name}STOP``, and ``ABORT``.
+    by EPICS PVs at ``{pv_prefix}AUTO:{name}STRT``, ``{pv_prefix}AUTO:{name}STOP``,
+    and ``{pv_prefix}AUTO:ABORT``.
     Used by all setup/commissioning hierarchy classes.
     """
 

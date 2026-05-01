@@ -63,9 +63,9 @@ sc-setup-cav -cm 01 -cav 3 -off
 ```
 
 **Valid identifiers:**
-- Linacs: `0`–`4` (L0B, L1B, L2B, L3B, L4B)
-- Cryomodules: `01` (L0B) · `02`–`03` (L1B) · `H1`–`H2` (HL) · `04`–`15` (L2B) · `16`–`35` (L3B) · `37`–`59` (L4B)
-- Cavities: `1`–`8` — use the bare number (`01`, not `CM01`)
+- Linacs (`sc-setup-linac -l`): `0`–`3` (L0B–L3B; L4B is not yet supported at this level)
+- Cryomodules (`-cm`): `01` (L0B) · `02`–`03` (L1B) · `H1`–`H2` (HL) · `04`–`15` (L2B) · `16`–`35` (L3B) · `37`–`59` (L4B) — use the bare number (`01` or `H1`, not `CM01`)
+- Cavities (`-cav`): `1`–`8`
 
 ## Operations Polling
 
