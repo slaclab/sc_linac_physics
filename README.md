@@ -12,6 +12,8 @@ CI: [![CI](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-
 
 Release: [![Release](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml)
 
+For architecture documentation and per-application guides, see [`docs/`](docs/index.md).
+
 ## Features
 
 - PyDM-based operator displays for SC Linac
@@ -296,9 +298,9 @@ sc-setup-cav -cm 01 -cav 1 -off
 
 ### Cryomodule and Cavity Numbers
 
-- Cryomodules: `01`, `02`, `03`, `H1`, `H2`, `04`-`35`
+- Linacs: `0` through `4` (L0B, L1B, L2B, L3B, L4B)
+- Cryomodules: `01` (L0B), `02`–`03` (L1B), `H1`–`H2` (HL), `04`–`15` (L2B), `16`–`35` (L3B), `37`–`59` (L4B — note: no `36`)
 - Cavities: `1` through `8`
-- Linacs: `0` through `3`
 
 Examples:
 
@@ -350,26 +352,23 @@ coverage html -d htmlcov
 
 ### Adding New Displays
 
-1. Create your display file in `src/sc_linac_physics/displays/`
-2. Add a launcher function in `launchers.py`:
+1. Create your display class in `src/sc_linac_physics/displays/`, inheriting from `pydm.Display`
+2. Register it with the `@display` decorator in `src/sc_linac_physics/cli/launchers.py`:
 
 ```python
-def launch_my_display():
-    """Launch my custom display."""
-    from pydm import PyDMApplication
-    from pathlib import Path
+from sc_linac_physics.cli.launchers import display, launch_python_display
 
-    app = PyDMApplication()
-    display_path = Path(__file__).parent / "displays" / "my_display.ui"
-    app.make_main_window(str(display_path))
-    app.exec_()
+@display
+def launch_my_display():
+    from sc_linac_physics.displays.my_module.my_display import MyDisplay
+    return launch_python_display(MyDisplay)
 ```
 
 3. Add a script entry in `pyproject.toml`:
 
 ```toml
 [project.scripts]
-sc-my-display = "sc_linac_physics.launchers:launch_my_display"
+sc-my-display = "sc_linac_physics.cli.launchers:launch_my_display"
 ```
 
 4. Add tests in `tests/test_launchers.py`
