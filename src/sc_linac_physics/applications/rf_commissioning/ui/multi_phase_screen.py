@@ -662,6 +662,19 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
     def _show_database_browser(self) -> None:
         show_database_browser(self)
 
+    def _open_batch_pre_rf_window(self) -> None:
+        """Open (or raise) the floating batch Piezo Pre-RF window."""
+        from sc_linac_physics.applications.rf_commissioning.ui.displays.batch_piezo_pre_rf import (
+            BatchPiezoPreRFWindow,
+        )
+
+        if not hasattr(self, "_batch_window") or self._batch_window is None:
+            self._batch_window = BatchPiezoPreRFWindow(
+                parent=self, session=self.session
+            )
+        self._batch_window.show()
+        self._batch_window.raise_()
+
 
 def main() -> int:
     """Run the multi-phase commissioning display standalone via PyDM."""

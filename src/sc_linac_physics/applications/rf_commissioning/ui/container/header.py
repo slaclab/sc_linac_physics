@@ -141,6 +141,11 @@ def build_header_panel(host) -> QWidget:
     layout.addStretch()
 
     # Quick actions
+    batch_btn = QPushButton("Batch Pre-RF")
+    batch_btn.setToolTip("Run Piezo Pre-RF test on multiple cavities at once")
+    batch_btn.clicked.connect(host._open_batch_pre_rf_window)
+    layout.addWidget(batch_btn)
+
     history_btn = QPushButton("📊 Measurements")
     history_btn.setToolTip("View all measurement attempts and filter by phase")
     history_btn.clicked.connect(host._show_measurement_history)
