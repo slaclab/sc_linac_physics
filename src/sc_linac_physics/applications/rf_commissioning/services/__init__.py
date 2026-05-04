@@ -1,5 +1,5 @@
-"""Service layer for RF commissioning workflows."""
+"""Workflow service exports for RF commissioning."""
 
-from .workflow_service import WorkflowService
+from .workflow_service import PhaseStartResult, WorkflowService
 
-__all__ = ["WorkflowService"]
+__all__ = ["PhaseStartResult", "WorkflowService"]
