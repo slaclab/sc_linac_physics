@@ -63,7 +63,7 @@ def test_complete_phase_writes_artifact_and_advances(tmp_path):
         artifact_payload={"result": "ok", "capacitance_a_nf": 2.4},
     )
 
-    with db._get_connection() as conn:  # noqa: SLF001
+    with db.connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute(
@@ -111,7 +111,7 @@ def test_fail_phase_marks_run_failed(tmp_path):
         artifact_payload={"partial": True},
     )
 
-    with db._get_connection() as conn:  # noqa: SLF001
+    with db.connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute(

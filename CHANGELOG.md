@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v9.13.1 (2026-05-04)
+
+### Bug Fixes
+
+- Patching init to fix import error ([#234](https://github.com/slaclab/sc_linac_physics/pull/234),
+  [`8a75739`](https://github.com/slaclab/sc_linac_physics/commit/8a75739939dc7908872ccc2facc6003cf19df77d))
+
+### Refactoring
+
+- **rf-commissioning**: Align workflow semantics and persistence helpers
+  ([#234](https://github.com/slaclab/sc_linac_physics/pull/234),
+  [`8a75739`](https://github.com/slaclab/sc_linac_physics/commit/8a75739939dc7908872ccc2facc6003cf19df77d))
+
+
 ## v9.13.0 (2026-04-27)
 
 ### Features

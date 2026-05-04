@@ -822,9 +822,9 @@ class CommissioningRecord:
 #   3. Add a ``PhaseRegistration`` entry below.
 #   4. Add the corresponding optional field to ``CommissioningRecord``
 #      (e.g. ``my_phase: Optional[MyPhaseData] = None``).
-#   5. Optionally register a custom display class in
-#      ``ui/displays/registry.py::PHASE_DISPLAY_MAP`` – if omitted, a
-#      generic placeholder screen is generated automatically.
+#   5. Add ``phase_display_field(...)`` metadata on dataclass fields that
+#      should be surfaced in the UI (see
+#      ``applications/rf_commissioning/models/serialization.py``).
 #
 # Everything else (DB schema migration, INSERT/UPDATE SQL, UI tabs, and
 # the progress indicator) is derived from this registry automatically.
