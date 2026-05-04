@@ -1,8 +1,8 @@
 """Phase registry definitions for RF commissioning models."""
 
 from dataclasses import dataclass
+from collections.abc import Mapping
 from enum import Enum
-from typing import Mapping, Optional
 
 
 @dataclass(frozen=True)
@@ -23,8 +23,8 @@ class PhaseRegistration:
                          (may contain ``\\n`` for line breaks).
     """
 
-    record_attr: Optional[str]
-    data_model: Optional[type]
+    record_attr: str | None
+    data_model: type | None
     display_label: str
     progress_label: str
 
