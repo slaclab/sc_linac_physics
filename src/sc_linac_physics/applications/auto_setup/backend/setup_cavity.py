@@ -18,6 +18,14 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 
 
 class SetupCavity(Cavity, SetupLinacObject):
+    """RF cavity with automated setup logic.
+
+    Inherits hardware control from Cavity and setup request flags from
+    SetupLinacObject. The main entry point is setup(), which sequences
+    SSA calibration → auto-tune → cavity characterization → RF ramp based
+    on which request flags are set.
+    """
+
     def __init__(
         self,
         cavity_num,
@@ -36,12 +44,15 @@ class SetupCavity(Cavity, SetupLinacObject):
         )
 
     def capture_acon(self):
+        """Copy the current ADES value into ACON, locking in the operating amplitude."""
         self.acon = self.ades
 
     def clear_abort(self):
+        """Clear the abort PV so a subsequent setup() call is not immediately aborted."""
         self.abort_pv_obj.put(0)
 
     def trigger_abort(self):
+        """Request a safe mid-sequence abort if a script is running; no-op otherwise."""
         if self.script_is_running:
             self.set_status_message(
                 f"Requesting safe abort for {self}", logging.WARNING
@@ -53,6 +64,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             )
 
     def check_abort(self):
+        """Raise CavityAbortError if the abort PV is set; clear the PV first so it doesn't re-trigger."""
         if self.abort_requested:
             self.clear_abort()
             err_msg = f"Abort requested for {self}"
@@ -60,6 +72,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             raise linac_utils.CavityAbortError(err_msg)
 
     def shut_down(self):
+        """Turn RF and SSA off. Simpler than setup(); no abort polling needed."""
         if self.script_is_running:
             self.set_status_message(
                 f"{self} script already running", logging.WARNING
@@ -85,6 +98,19 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.set_status_message(str(e), logging.ERROR)
 
     def setup(self):
+        """Run the full cavity setup sequence based on active request flags.
+
+        Steps (each gated by its request flag):
+          1. SSA calibration   (ssa_cal_requested)
+          2. Auto-tune         (auto_tune_requested)
+          3. Characterization  (cav_char_requested)
+          4. RF ramp to ACON   (rf_ramp_requested)
+
+        Always turns RF off first regardless of which steps are requested, to
+        clear any latched interlocks. Logs a warning and skips if already
+        running. Sets status to ERROR if the cavity is not online or on any
+        unhandled exception.
+        """
         try:
             if self.script_is_running:
                 self.set_status_message(
@@ -94,7 +120,7 @@ class SetupCavity(Cavity, SetupLinacObject):
 
             if not self.is_online:
                 self.set_status_message(
-                    f"{self} not online, not setting up", logging.ERROR
+                    f"{self} not online, skipping setup", logging.WARNING
                 )
                 self.status = STATUS_ERROR_VALUE
                 return
@@ -137,6 +163,12 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.set_status_message(str(e), logging.ERROR)
 
     def request_ramp(self):
+        """Ramp RF amplitude to ACON if rf_ramp_requested.
+
+        Enables piezo feedback, turns RF on in SELA mode, walks amplitude up
+        to ACON in 0.1 MV steps, centers piezo, then switches to SELAP for
+        closed-loop operation. Raises CavityFaultError if ACON <= 0.
+        """
         try:
             # Always check for abort first
             self.check_abort()
@@ -201,6 +233,7 @@ class SetupCavity(Cavity, SetupLinacObject):
             raise
 
     def request_characterization(self):
+        """Run cavity characterization (Q-loaded, scale factor) if cav_char_requested."""
         self.check_abort()
         if self.cav_char_requested:
             self.set_status_message(
@@ -214,6 +247,7 @@ class SetupCavity(Cavity, SetupLinacObject):
         self.progress = 75
 
     def request_auto_tune(self):
+        """Move cavity to resonance using stepper if auto_tune_requested."""
         self.check_abort()
         if self.auto_tune_requested:
             self.set_status_message(f"Tuning {self} to Resonance", logging.INFO)
@@ -222,6 +256,11 @@ class SetupCavity(Cavity, SetupLinacObject):
         self.progress = 50
 
     def request_ssa_cal(self):
+        """Run SSA calibration if ssa_cal_requested.
+
+        Resets RF DAC amplitudes to 0 before calibrating (required by the
+        calibration procedure). Uses drive_max from the SSA object.
+        """
         try:
             if self.ssa_cal_requested:
                 self.set_status_message(
