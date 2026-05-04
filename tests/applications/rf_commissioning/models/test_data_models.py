@@ -173,7 +173,7 @@ class TestCommissioningRecord:
             CommissioningPhase.FREQUENCY_TUNING
         )
         assert allowed is False
-        assert "must complete first" in reason
+        assert "must be complete or skipped first" in reason
 
         record.set_phase_status(
             CommissioningPhase.SSA_CHAR, PhaseStatus.COMPLETE
@@ -183,6 +183,43 @@ class TestCommissioningRecord:
         )
         assert allowed is True
         assert "Prerequisites met" in reason
+
+    def test_can_start_phase_accepts_previous_phase_skipped(self):
+        record = CommissioningRecord(
+            linac=1,
+            cryomodule="02",
+            cavity_number=3,
+        )
+
+        record.set_phase_status(
+            CommissioningPhase.SSA_CHAR, PhaseStatus.SKIPPED
+        )
+        allowed, reason = record.can_start_phase(
+            CommissioningPhase.FREQUENCY_TUNING
+        )
+
+        assert allowed is True
+        assert "Prerequisites met" in reason
+
+    def test_is_complete_requires_complete_phase_status_complete(self):
+        record = CommissioningRecord(
+            linac=1,
+            cryomodule="02",
+            cavity_number=3,
+        )
+
+        record.current_phase = CommissioningPhase.COMPLETE
+        record.set_phase_status(
+            CommissioningPhase.COMPLETE,
+            PhaseStatus.IN_PROGRESS,
+        )
+        assert record.is_complete is False
+
+        record.set_phase_status(
+            CommissioningPhase.COMPLETE,
+            PhaseStatus.COMPLETE,
+        )
+        assert record.is_complete is True
 
     def test_advance_to_next_phase_requires_current_complete(self):
         record = CommissioningRecord(

@@ -7,7 +7,6 @@ from typing import (
     Any,
     Dict,
     List,
-    Optional,
     TypeVar,
     Union,
     get_args,
@@ -27,7 +26,7 @@ class PhaseDisplaySpec:
     label: str
     widget_name: str
     source_attr: str
-    format_spec: Optional[str] = None
+    format_spec: str | None = None
     unit: str = ""
     true_text: str = "Yes"
     false_text: str = "No"
@@ -37,8 +36,8 @@ def phase_display_field(
     *,
     label: str,
     widget_name: str,
-    source_attr: Optional[str] = None,
-    format_spec: Optional[str] = None,
+    source_attr: str | None = None,
+    format_spec: str | None = None,
     unit: str = "",
     true_text: str = "Yes",
     false_text: str = "No",

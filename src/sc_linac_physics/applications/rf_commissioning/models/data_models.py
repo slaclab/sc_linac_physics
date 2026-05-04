@@ -1,9 +1,11 @@
 """Data models for RF commissioning workflow."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from sc_linac_physics.applications.rf_commissioning.models.registry import (
     PhaseRegistration,
@@ -48,7 +50,7 @@ class CommissioningPhase(Enum):
             cls.COMPLETE,
         ]
 
-    def get_next_phase(self) -> Optional["CommissioningPhase"]:
+    def get_next_phase(self) -> CommissioningPhase | None:
         """Get the next phase in the sequence.
 
         Returns:
@@ -63,7 +65,7 @@ class CommissioningPhase(Enum):
             pass
         return None
 
-    def get_previous_phase(self) -> Optional["CommissioningPhase"]:
+    def get_previous_phase(self) -> CommissioningPhase | None:
         """Get the previous phase in the sequence.
 
         Returns:
@@ -93,7 +95,7 @@ class PhaseStatus(Enum):
 class PiezoPreRFCheck:
     """Piezo tuner pre-RF checkout results."""
 
-    capacitance_a: Optional[float] = phase_display_field(
+    capacitance_a: float | None = phase_display_field(
         default=None,
         label="Ch A Cap",
         widget_name="local_stored_cap_a",
@@ -101,7 +103,7 @@ class PiezoPreRFCheck:
         format_spec=".1f",
         unit="nF",
     )  # Farads
-    capacitance_b: Optional[float] = phase_display_field(
+    capacitance_b: float | None = phase_display_field(
         default=None,
         label="Ch B Cap",
         widget_name="local_stored_cap_b",
@@ -115,14 +117,14 @@ class PiezoPreRFCheck:
     notes: str = ""
 
     @property
-    def capacitance_a_nf(self) -> Optional[float]:
+    def capacitance_a_nf(self) -> float | None:
         """Channel A capacitance in nF."""
         if self.capacitance_a is None:
             return None
         return self.capacitance_a * 1e9
 
     @property
-    def capacitance_b_nf(self) -> Optional[float]:
+    def capacitance_b_nf(self) -> float | None:
         """Channel B capacitance in nF."""
         if self.capacitance_b is None:
             return None
@@ -166,37 +168,37 @@ class FrequencyTuningData:
     """
 
     # Cold landing phase data
-    initial_detune_hz: Optional[float] = phase_display_field(
+    initial_detune_hz: float | None = phase_display_field(
         default=None,
         label="Initial Detune",
         widget_name="freq_tuning_initial_detune",
         format_spec=".3f",
         unit="Hz",
     )
-    initial_timestamp: Optional[datetime] = None
-    steps_to_resonance: Optional[int] = phase_display_field(
+    initial_timestamp: datetime | None = None
+    steps_to_resonance: int | None = phase_display_field(
         default=None,
         label="Steps to Resonance",
         widget_name="freq_tuning_steps_to_resonance",
     )
-    final_detune_hz: Optional[float] = phase_display_field(
+    final_detune_hz: float | None = phase_display_field(
         default=None,
         label="Final Detune",
         widget_name="freq_tuning_final_detune",
         format_spec=".3f",
         unit="Hz",
     )
-    final_timestamp: Optional[datetime] = None
+    final_timestamp: datetime | None = None
 
     # π-mode measurement phase data
-    mode_8pi_9_frequency: Optional[float] = phase_display_field(
+    mode_8pi_9_frequency: float | None = phase_display_field(
         default=None,
         label="8π/9 Frequency",
         widget_name="freq_tuning_8pi_9_freq",
         format_spec=".3f",
         unit="Hz",
     )
-    mode_7pi_9_frequency: Optional[float] = phase_display_field(
+    mode_7pi_9_frequency: float | None = phase_display_field(
         default=None,
         label="7π/9 Frequency",
         widget_name="freq_tuning_7pi_9_freq",
@@ -208,14 +210,14 @@ class FrequencyTuningData:
     notes: str = ""
 
     @property
-    def initial_detune_khz(self) -> Optional[float]:
+    def initial_detune_khz(self) -> float | None:
         """Initial detune in kHz."""
         if self.initial_detune_hz is None:
             return None
         return self.initial_detune_hz / 1000
 
     @property
-    def final_detune_khz(self) -> Optional[float]:
+    def final_detune_khz(self) -> float | None:
         """Final detune in kHz."""
         if self.final_detune_hz is None:
             return None
@@ -261,7 +263,7 @@ class FrequencyTuningData:
 class SSACharacterization:
     """SSA calibration results."""
 
-    max_drive: Optional[float] = phase_display_field(
+    max_drive: float | None = phase_display_field(
         default=None,
         label="Max Drive",
         widget_name="ssa_max_drive",
@@ -269,7 +271,7 @@ class SSACharacterization:
         format_spec=".2f",
         unit="%",
     )  # 0.0-1.0
-    initial_drive: Optional[float] = phase_display_field(
+    initial_drive: float | None = phase_display_field(
         default=None,
         label="Initial Drive",
         widget_name="ssa_initial_drive",
@@ -286,21 +288,21 @@ class SSACharacterization:
     notes: str = ""
 
     @property
-    def max_drive_percent(self) -> Optional[float]:
+    def max_drive_percent(self) -> float | None:
         """Maximum drive as percentage (0-100)."""
         if self.max_drive is None:
             return None
         return self.max_drive * 100
 
     @property
-    def initial_drive_percent(self) -> Optional[float]:
+    def initial_drive_percent(self) -> float | None:
         """Initial drive as percentage (0-100)."""
         if self.initial_drive is None:
             return None
         return self.initial_drive * 100
 
     @property
-    def drive_reduction(self) -> Optional[float]:
+    def drive_reduction(self) -> float | None:
         """Total reduction in drive level."""
         if self.initial_drive is None or self.max_drive is None:
             return None
@@ -334,19 +336,19 @@ class SSACharacterization:
 class CavityCharacterization:
     """Cavity RF characterization results."""
 
-    loaded_q: Optional[float] = phase_display_field(
+    loaded_q: float | None = phase_display_field(
         default=None,
         label="Loaded Q",
         widget_name="cavity_loaded_q",
         format_spec=".3e",
     )
-    probe_q: Optional[float] = phase_display_field(
+    probe_q: float | None = phase_display_field(
         default=None,
         label="Probe Q",
         widget_name="cavity_probe_q",
         format_spec=".3e",
     )
-    scale_factor: Optional[float] = phase_display_field(
+    scale_factor: float | None = phase_display_field(
         default=None,
         label="Scale Factor",
         widget_name="cavity_scale_factor",
@@ -369,19 +371,19 @@ class CavityCharacterization:
 class PiezoWithRFTest:
     """Piezo tuner with-RF test results."""
 
-    amplifier_gain_a: Optional[float] = phase_display_field(
+    amplifier_gain_a: float | None = phase_display_field(
         default=None,
         label="Amplifier Gain A",
         widget_name="piezo_rf_gain_a",
         format_spec=".6f",
     )
-    amplifier_gain_b: Optional[float] = phase_display_field(
+    amplifier_gain_b: float | None = phase_display_field(
         default=None,
         label="Amplifier Gain B",
         widget_name="piezo_rf_gain_b",
         format_spec=".6f",
     )
-    detune_gain: Optional[float] = phase_display_field(
+    detune_gain: float | None = phase_display_field(
         default=None,
         label="Detune Gain",
         widget_name="piezo_rf_detune_gain",
@@ -434,14 +436,14 @@ class HighPowerRampData:
         true_text="Yes",
         false_text="No",
     )
-    field_emission_onset: Optional[float] = phase_display_field(
+    field_emission_onset: float | None = phase_display_field(
         default=None,
         label="Field Emission Onset",
         widget_name="hp_initial_field_emission_onset",
         format_spec=".3f",
         unit="MV",
     )  # MV, if observed
-    max_amplitude_reached: Optional[float] = phase_display_field(
+    max_amplitude_reached: float | None = phase_display_field(
         default=None,
         label="Max Amplitude Reached",
         widget_name="hp_initial_max_amplitude_reached",
@@ -449,7 +451,7 @@ class HighPowerRampData:
         unit="MV",
     )  # MV
     quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
-    decarad: Optional[int] = None  # 1 or 2
+    decarad: int | None = None  # 1 or 2
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -472,7 +474,7 @@ class MPProcessingData:
     )
     quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
     notes: str = ""
-    decarad: Optional[int] = None
+    decarad: int | None = None
 
     @property
     def quench_count(self) -> int:
@@ -498,7 +500,7 @@ class MPProcessingData:
         return bool(self.session_id)
 
     def add_quench(
-        self, *, amplitude: float, timestamp: Optional[datetime] = None
+        self, *, amplitude: float, timestamp: datetime | None = None
     ) -> None:
         """Append a quench event to the current session."""
         self.quench_events.append(
@@ -525,7 +527,7 @@ class MPProcessingData:
 class OneHourRunData:
     """High power one-hour run results."""
 
-    final_amplitude: Optional[float] = phase_display_field(
+    final_amplitude: float | None = phase_display_field(
         default=None,
         label="Final Amplitude",
         widget_name="hp_one_hour_final_amplitude",
@@ -545,7 +547,7 @@ class OneHourRunData:
         widget_name="hp_one_hour_amplitude_limitation_reason",
     )
     quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
-    decarad: Optional[int] = None  # 1 or 2
+    decarad: int | None = None  # 1 or 2
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -599,14 +601,14 @@ class CommissioningRecord:
     current_phase: CommissioningPhase = CommissioningPhase.PIEZO_PRE_RF
 
     # Phase-specific data
-    piezo_pre_rf: Optional[PiezoPreRFCheck] = None
-    frequency_tuning: Optional[FrequencyTuningData] = None
-    ssa_char: Optional[SSACharacterization] = None
-    cavity_char: Optional[CavityCharacterization] = None
-    piezo_with_rf: Optional[PiezoWithRFTest] = None
-    high_power_ramp: Optional[HighPowerRampData] = None
-    mp_processing: Optional[MPProcessingData] = None
-    one_hour_run: Optional[OneHourRunData] = None
+    piezo_pre_rf: PiezoPreRFCheck | None = None
+    frequency_tuning: FrequencyTuningData | None = None
+    ssa_char: SSACharacterization | None = None
+    cavity_char: CavityCharacterization | None = None
+    piezo_with_rf: PiezoWithRFTest | None = None
+    high_power_ramp: HighPowerRampData | None = None
+    mp_processing: MPProcessingData | None = None
+    one_hour_run: OneHourRunData | None = None
 
     # Phase tracking
     phase_history: list[PhaseCheckpoint] = field(default_factory=list)
@@ -632,7 +634,10 @@ class CommissioningRecord:
     @property
     def is_complete(self) -> bool:
         """Check if all commissioning is complete."""
-        return self.current_phase == CommissioningPhase.COMPLETE
+        return (
+            self.get_phase_status(CommissioningPhase.COMPLETE)
+            == PhaseStatus.COMPLETE
+        )
 
     @property
     def full_cavity_name(self) -> str:
@@ -676,16 +681,17 @@ class CommissioningRecord:
         if phase == CommissioningPhase.PIEZO_PRE_RF:
             return True, "Piezo Pre-RF can be run at any time"
 
-        # Check if previous phase is complete
+        # Check if previous phase is complete or explicitly skipped
         previous_phase = phase.get_previous_phase()
         if previous_phase is None:
             return True, "No previous phase required"
 
         previous_status = self.get_phase_status(previous_phase)
-        if previous_status != PhaseStatus.COMPLETE:
+        if previous_status not in {PhaseStatus.COMPLETE, PhaseStatus.SKIPPED}:
             return (
                 False,
-                f"Previous phase {previous_phase.value} must complete first (status: {previous_status.value})",
+                f"Previous phase {previous_phase.value} must be complete or "
+                f"skipped first (status: {previous_status.value})",
             )
 
         return True, f"Prerequisites met for {phase.value} (reruns allowed)"
@@ -816,9 +822,9 @@ class CommissioningRecord:
 #   3. Add a ``PhaseRegistration`` entry below.
 #   4. Add the corresponding optional field to ``CommissioningRecord``
 #      (e.g. ``my_phase: Optional[MyPhaseData] = None``).
-#   5. Optionally register a custom display class in
-#      ``ui/phase_displays.py::PHASE_DISPLAY_MAP`` – if omitted, a
-#      generic placeholder screen is generated automatically.
+#   5. Add ``phase_display_field(...)`` metadata on dataclass fields that
+#      should be surfaced in the UI (see
+#      ``applications/rf_commissioning/models/serialization.py``).
 #
 # Everything else (DB schema migration, INSERT/UPDATE SQL, UI tabs, and
 # the progress indicator) is derived from this registry automatically.
