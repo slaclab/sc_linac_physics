@@ -6,12 +6,12 @@
 
 Each cavity has a `tune_config` PV with four possible states:
 
-| Value | Constant | Meaning |
-|-------|----------|---------|
-| 0 | `TUNE_CONFIG_RESONANCE_VALUE` | On resonance, ready for beam |
-| 1 | `TUNE_CONFIG_COLD_VALUE` | Landed at cold/parked frequency |
+| Value | Constant | Meaning                               |
+|-------|----------|---------------------------------------|
+| 0 | `TUNE_CONFIG_RESONANCE_VALUE` | On resonance, ready for beam          |
+| 1 | `TUNE_CONFIG_COLD_VALUE` | At cold landing frequency             |
 | 2 | `TUNE_CONFIG_PARKED_VALUE` | Stepper parked at a defined reference |
-| 3 | `TUNE_CONFIG_OTHER_VALUE` | Transitioning or unknown |
+| 3 | `TUNE_CONFIG_OTHER_VALUE` | Transitioning or unknown              |
 
 ## `TuningGUI` (`tuning_gui.py`)
 

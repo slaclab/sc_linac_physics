@@ -152,11 +152,15 @@ Mixin added by all setup/commissioning classes. Provides:
 ### RF modes
 
 ```python
-RF_MODE_SELAP  = 0  # Self-Excited Loop Amplitude+Phase (closed-loop)
-RF_MODE_SELA   = 1  # Self-Excited Loop Amplitude (piezo + coarse)
-RF_MODE_SEL    = 2  # Self-Excited Loop (open-loop coarse)
-RF_MODE_PULSE  = 4  # Pulsed operation
-RF_MODE_CHIRP  = 5  # Frequency sweep
+RF_MODE_SEL    = 2  # Self-Excited Loop: tracks cavity frequency in open loop, no phase or
+                    # amplitude regulation.
+RF_MODE_SELA   = 1  # Self-Excited Loop Amplitude: RF tracks cavity frequency while maintaining
+                    # cavity amplitude with feedback-like parameters.
+RF_MODE_SELAP  = 0  # Self-Excited Loop Amplitude+Phase: maintains cavity
+                    # amplitude and phase. Temporarily enters SELA if detuning exceeds regulation limits.
+RF_MODE_CHIRP  = 5  # Frequency sweep within one waveform to quickly measure detune
+                    # over wide range. Used only during characterization.
+RF_MODE_PULSE  = 4  # Pulsed RF operation
 ```
 
 ### Hardware mode
