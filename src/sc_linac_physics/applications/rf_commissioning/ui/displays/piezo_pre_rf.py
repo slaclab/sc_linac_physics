@@ -2,7 +2,7 @@
 
 from PyQt5.QtCore import pyqtSlot
 
-from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_controller import (
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_controller import (
     PiezoPreRFController,
 )
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (

@@ -5,8 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
-import sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_controller as controller_module
-from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_controller import (
+import sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_controller as controller_module
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_controller import (
     PiezoPreRFController,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (

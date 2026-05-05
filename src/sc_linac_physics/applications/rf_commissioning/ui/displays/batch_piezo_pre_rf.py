@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from sc_linac_physics.applications.rf_commissioning.controllers.batch_piezo_pre_rf_controller import (
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.batch_piezo_pre_rf_controller import (
     BatchPiezoPreRFController,
     CavitySpec,
 )

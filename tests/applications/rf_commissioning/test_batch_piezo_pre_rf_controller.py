@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-import sc_linac_physics.applications.rf_commissioning.controllers.batch_piezo_pre_rf_controller as ctrl_module
-from sc_linac_physics.applications.rf_commissioning.controllers.batch_piezo_pre_rf_controller import (
+import sc_linac_physics.applications.rf_commissioning.ui.controllers.batch_piezo_pre_rf_controller as ctrl_module
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.batch_piezo_pre_rf_controller import (
     BatchPiezoPreRFController,
     CavityRunState,
     CavitySpec,
@@ -678,8 +678,6 @@ class TestInitRecordWorkflowException:
 
 class TestPrerequisitesNotMet:
     def test_raises_when_prerequisites_fail(self, monkeypatch):
-        import sc_linac_physics.applications.rf_commissioning.controllers.batch_piezo_pre_rf_controller as ctrl_module
-
         class _BadPhase:
             def __init__(self, ctx):
                 pass

@@ -18,7 +18,7 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
 from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
     PiezoPreRFPhase,
 )
-from sc_linac_physics.applications.rf_commissioning.controllers.piezo_pre_rf_pv import (
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
     build_pv_mapping,
     format_pv_update_message,
