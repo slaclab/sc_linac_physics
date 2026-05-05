@@ -86,6 +86,11 @@ class TestPiezoPVGroup:
                 assert hasattr(prop, "value")
                 assert hasattr(prop, "pvname")
 
+    def test_prerf_channel_statuses_default_to_not_tested(self, piezo_group):
+        """Pre-RF channel statuses should start in Not Tested state."""
+        assert piezo_group.prerf_cha_status.value == 2
+        assert piezo_group.prerf_chb_status.value == 2
+
     # In test_tuner_service.py, fix line 89:
     @pytest.mark.asyncio
     async def test_piezo_voltage_change(

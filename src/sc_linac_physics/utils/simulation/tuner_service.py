@@ -196,7 +196,7 @@ class PiezoPVGroup(PVGroup):
     prerf_cha_status = pvproperty(
         name="CHA_TESTSTAT",
         dtype=ChannelType.ENUM,
-        value=0,
+        value=2,
         enum_strings=(
             "Pass",
             "Fail",
@@ -207,7 +207,7 @@ class PiezoPVGroup(PVGroup):
     prerf_chb_status = pvproperty(
         name="CHB_TESTSTAT",
         dtype=ChannelType.ENUM,
-        value=0,
+        value=2,
         enum_strings=("Pass", "Fail", "Not Tested"),
     )
     prerf_cha_testmsg = pvproperty(
