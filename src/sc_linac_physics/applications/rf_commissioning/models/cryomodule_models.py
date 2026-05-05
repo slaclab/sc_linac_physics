@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+
 
 from sc_linac_physics.applications.rf_commissioning.models.registry import (
     PhaseRegistration,
@@ -70,7 +70,7 @@ class CryomoduleCheckoutRecord:
     cryomodule: str
     start_time: datetime = field(default_factory=datetime.now)
 
-    magnet_checkout: Optional[MagnetCheckoutData] = None
+    magnet_checkout: MagnetCheckoutData | None = None
 
     phase_status: dict[CryomodulePhase, CryomodulePhaseStatus] = field(
         default_factory=dict

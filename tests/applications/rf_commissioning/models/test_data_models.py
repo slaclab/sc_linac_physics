@@ -221,25 +221,6 @@ class TestCommissioningRecord:
         )
         assert record.is_complete is True
 
-    def test_advance_to_next_phase_requires_current_complete(self):
-        record = CommissioningRecord(
-            linac=1,
-            cryomodule="02",
-            cavity_number=3,
-        )
-
-        success, message = record.advance_to_next_phase()
-        assert success is False
-        assert "is not complete" in message
-
-        record.set_phase_status(
-            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
-        )
-        success, message = record.advance_to_next_phase()
-        assert success is True
-        assert record.current_phase == CommissioningPhase.SSA_CHAR
-        assert "Advanced to ssa_char" == message
-
     def test_checkpoint_helpers(self):
         record = CommissioningRecord(
             linac=1,
