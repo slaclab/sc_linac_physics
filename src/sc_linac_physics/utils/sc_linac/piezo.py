@@ -1,7 +1,7 @@
 import time
 from typing import Optional, TYPE_CHECKING
 
-from sc_linac_physics.utils.epics import PV
+from sc_linac_physics.utils.epics import PV, PVGetError
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
@@ -14,6 +14,9 @@ class Piezo(linac_utils.SCLinacObject):
     functions for toggling feedback mode and changing bias voltage and DC offset
 
     """
+
+    ENABLE_MAX_ATTEMPTS = 10
+    FEEDBACK_MAX_ATTEMPTS = 10
 
     def __init__(self, cavity: "Cavity"):
         """
@@ -142,7 +145,29 @@ class Piezo(linac_utils.SCLinacObject):
     def is_enabled(self) -> bool:
         if not self._enable_stat_pv_obj:
             self._enable_stat_pv_obj = PV(self.enable_stat_pv)
-        return self._enable_stat_pv_obj.get() == linac_utils.PIEZO_ENABLE_VALUE
+
+        try:
+            return (
+                self._enable_stat_pv_obj.get(use_monitor=False)
+                == linac_utils.PIEZO_ENABLE_VALUE
+            )
+        except PVGetError as exc:
+            self.cavity.logger.warning(
+                "Failed to read ENABLESTAT, falling back to ENABLE command PV",
+                extra={
+                    "extra_data": {
+                        "error": str(exc),
+                        "piezo": str(self),
+                    }
+                },
+            )
+            try:
+                return (
+                    self.enable_pv_obj.get(use_monitor=False)
+                    == linac_utils.PIEZO_ENABLE_VALUE
+                )
+            except Exception:
+                return False
 
     @property
     def feedback_control_pv_obj(self) -> PV:
@@ -154,7 +179,20 @@ class Piezo(linac_utils.SCLinacObject):
     def feedback_stat(self):
         if not self._feedback_stat_pv_obj:
             self._feedback_stat_pv_obj = PV(self.feedback_stat_pv)
-        return self._feedback_stat_pv_obj.get()
+
+        try:
+            return self._feedback_stat_pv_obj.get(use_monitor=False)
+        except PVGetError as exc:
+            self.cavity.logger.warning(
+                "Failed to read MODESTAT, falling back to MODECTRL command PV",
+                extra={
+                    "extra_data": {
+                        "error": str(exc),
+                        "piezo": str(self),
+                    }
+                },
+            )
+            return self.feedback_control_pv_obj.get(use_monitor=False)
 
     @property
     def in_manual(self) -> bool:
@@ -179,6 +217,26 @@ class Piezo(linac_utils.SCLinacObject):
         while not self.is_enabled:
             self.cavity.check_abort()
             attempt += 1
+            if attempt > self.ENABLE_MAX_ATTEMPTS:
+                message = (
+                    f"Piezo failed to enable after {self.ENABLE_MAX_ATTEMPTS} "
+                    "attempts"
+                )
+                self.cavity.logger.error(
+                    message,
+                    extra={
+                        "extra_data": {
+                            "attempt": attempt - 1,
+                            "enable_status": (
+                                self._enable_stat_pv_obj.value_or_none
+                                if self._enable_stat_pv_obj
+                                else None
+                            ),
+                            "piezo": str(self),
+                        }
+                    },
+                )
+                raise RuntimeError(message)
             self.cavity.logger.debug(
                 "Piezo not enabled, attempting to enable (attempt %d)",
                 attempt,
@@ -186,7 +244,7 @@ class Piezo(linac_utils.SCLinacObject):
                     "extra_data": {
                         "attempt": attempt,
                         "enable_status": (
-                            self._enable_stat_pv_obj.get()
+                            self._enable_stat_pv_obj.value_or_none
                             if self._enable_stat_pv_obj
                             else None
                         ),
@@ -214,6 +272,22 @@ class Piezo(linac_utils.SCLinacObject):
         while self.in_manual:
             self.cavity.check_abort()
             attempt += 1
+            if attempt > self.FEEDBACK_MAX_ATTEMPTS:
+                message = (
+                    "Piezo feedback failed to enable after "
+                    f"{self.FEEDBACK_MAX_ATTEMPTS} attempts"
+                )
+                self.cavity.logger.error(
+                    message,
+                    extra={
+                        "extra_data": {
+                            "attempt": attempt - 1,
+                            "feedback_stat": self.feedback_stat,
+                            "piezo": str(self),
+                        }
+                    },
+                )
+                raise RuntimeError(message)
             self.cavity.logger.debug(
                 "Piezo feedback not enabled, attempting to enable (attempt %d)",
                 attempt,
@@ -249,6 +323,22 @@ class Piezo(linac_utils.SCLinacObject):
         while not self.in_manual:
             self.cavity.check_abort()
             attempt += 1
+            if attempt > self.FEEDBACK_MAX_ATTEMPTS:
+                message = (
+                    "Piezo feedback failed to disable after "
+                    f"{self.FEEDBACK_MAX_ATTEMPTS} attempts"
+                )
+                self.cavity.logger.error(
+                    message,
+                    extra={
+                        "extra_data": {
+                            "attempt": attempt - 1,
+                            "feedback_stat": self.feedback_stat,
+                            "piezo": str(self),
+                        }
+                    },
+                )
+                raise RuntimeError(message)
             self.cavity.logger.debug(
                 "Piezo feedback still enabled, attempting to disable (attempt %d)",
                 attempt,

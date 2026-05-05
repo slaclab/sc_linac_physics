@@ -9,8 +9,10 @@ This document defines package boundaries for
 - `phases`: phase execution logic and result contracts
 - `services`: orchestration and workflow lifecycle
 - `session_manager`: application-facing session facade
-- `controllers`: UI behavior and phase execution wiring
 - `ui`: widgets, dialogs, screens, and presentation helpers
+  - `ui/controllers`: UI behavior and phase execution wiring
+  - `ui/container`: multi-phase shell orchestration helpers
+  - `ui/displays`: per-phase display implementations
 
 ## Dependency Direction
 
@@ -20,13 +22,13 @@ Allowed direction:
 2. `phases` -> `models`
 3. `services` -> `models`
 4. `session_manager` -> `models`, `services`
-5. `controllers` -> `models`, `phases`, `session_manager`
-6. `ui` -> `models`, `controllers`, `session_manager`
+5. `ui/controllers` -> `models`, `phases`, `session_manager`
+6. `ui` -> `models`, `ui/controllers`, `session_manager`
 
 Disallowed direction examples:
 
-- `models` importing from `ui` or `controllers`
-- `services` importing from `ui` or `controllers`
+- `models` importing from `ui`
+- `services` importing from `ui`
 - internal modules importing symbols from package root
   `sc_linac_physics.applications.rf_commissioning`
 
@@ -54,7 +56,7 @@ the chance of circular import regressions.
 Recent refactors extracted cohesive UI/controller responsibilities into helper
 modules while preserving existing method entry points:
 
-- `controllers/piezo_pre_rf_pv.py`: cavity selection and PV wiring helpers
+- `ui/controllers/piezo_pre_rf_pv.py`: cavity selection and PV wiring helpers
 - `ui/container/progress_panel.py`: compact progress panel build/update logic
 
 This keeps large orchestration classes readable while preserving runtime
@@ -68,7 +70,7 @@ flowchart LR
     P[phases]
     S[services]
     SM[session_manager]
-    C[controllers]
+    C[ui/controllers]
     U[ui]
 
     P --> M

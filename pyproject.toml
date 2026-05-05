@@ -155,6 +155,7 @@ sc-linac = "sc_linac_physics.cli.cli:main"
 
 # ============================================================================
 # Display Launchers
+sc-rf-comm = "sc_linac_physics.cli.launchers:launch_rf_commissioning"
 # ============================================================================
 sc-srf-home = "sc_linac_physics.cli.launchers:launch_srf_home"
 sc-cavity = "sc_linac_physics.cli.launchers:launch_cavity_display"

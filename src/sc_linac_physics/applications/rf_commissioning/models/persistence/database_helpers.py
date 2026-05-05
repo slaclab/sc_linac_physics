@@ -39,7 +39,7 @@ def serialize_measurement_data(measurement_data: Any) -> str:
 
 
 def parse_json_list(payload: str | None) -> list[dict]:
-    """Return a JSON list payload, tolerating missing or legacy values."""
+    """Return a JSON list payload, tolerating missing or invalid values."""
     if not payload:
         return []
 
