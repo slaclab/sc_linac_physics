@@ -336,8 +336,8 @@ class BatchPiezoPreRFController(QObject):
     def _run_step(self, state: CavityRunState, step: str) -> bool:
         """Run one step via _execute_step_with_retry so checkpoints are created.
 
-        _retry_count must be reset before each call, matching the reset that
-        PhaseBase.run() does at the top of its step loop.
+        _retry_count must be reset before each call so retries are scoped to
+        the current step.
         """
         state.phase._retry_count = 0
         return state.phase._execute_step_with_retry(step)

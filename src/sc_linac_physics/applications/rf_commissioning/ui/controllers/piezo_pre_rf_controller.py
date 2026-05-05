@@ -394,7 +394,7 @@ class PiezoPreRFController(QObject):
             parent = parent.parent()
 
     def execute_phase_steps(self) -> None:
-        """Execute the phase through PhaseBase.run()."""
+        """Execute phase steps using the controller-managed step loop."""
         if not self.context or not self.phase:
             self.view.show_error("No phase context available to run")
             return
@@ -774,15 +774,8 @@ class PiezoPreRFController(QObject):
 
     def _get_operator(self) -> str:
         """Get the currently selected operator from the view or parent."""
-        # Try new method first (gets from parent container)
         if hasattr(self.view, "get_current_operator"):
             operator = self.view.get_current_operator()
-            if operator:
-                return operator
-
-        # Fallback to old method for backward compatibility
-        if hasattr(self.view, "get_selected_operator"):
-            operator = self.view.get_selected_operator()
             if operator:
                 return operator
 

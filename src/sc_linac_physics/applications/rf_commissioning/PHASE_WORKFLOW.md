@@ -2,338 +2,208 @@
 
 ## Overview
 
-The RF commissioning system enforces **strict sequential phase execution** to ensure proper cavity commissioning. Each phase must complete successfully before the next phase can begin.
+RF commissioning uses a **normalized phase-instance lifecycle**.
+
+- A cavity has one canonical `commissioning_records` row.
+- Workflow state lives in `commissioning_runs` and
+  `commissioning_phase_instances`.
+- Each phase attempt is explicit and append-only.
+- Progression happens by completing phase instances, not by mutating
+  `CommissioningRecord.current_phase` directly.
 
 ## Phase Order
 
-Phases must be executed in this exact order:
+Phases execute in fixed order:
 
-1. **PIEZO_PRE_RF** - Piezo tuner validation without RF
-2. **SSA_CHAR** - Solid-state amplifier characterization
-3. **FREQUENCY_TUNING** - Frequency measurement, tuning to resonance, and π-mode measurements
-4. **CAVITY_CHAR** - RF cavity characterization
-5. **PIEZO_WITH_RF** - Piezo tuner testing with RF power
-6. **HIGH_POWER_RAMP** - High power initial ramp
-7. **MP_PROCESSING** - Multipactor processing and quench tracking
-8. **ONE_HOUR_RUN** - One-hour stability run at high power
-9. **COMPLETE** - Final acceptance and handoff to operations
+1. `PIEZO_PRE_RF`
+2. `SSA_CHAR`
+3. `FREQUENCY_TUNING`
+4. `CAVITY_CHAR`
+5. `PIEZO_WITH_RF`
+6. `HIGH_POWER_RAMP`
+7. `MP_PROCESSING`
+8. `ONE_HOUR_RUN`
+9. `COMPLETE`
 
-The **COMPLETE** phase is an administrative step that:
-- Marks the cavity as fully commissioned and operational
-- Sets the final `end_time` and `overall_status`
-- Provides a clear handoff point from commissioning to operations
-- Can trigger automated reporting, notifications, or data archival
-- Separates technical work (ONE_HOUR_RUN) from formal acceptance
+`COMPLETE` is administrative sign-off after technical work is done.
 
-## Enforcement Mechanisms
+## Lifecycle API (Session-First)
 
-### 1. Automatic Phase Ordering Validation
-
-When starting any phase, the system automatically checks:
+Use `CommissioningSession` as the primary interface from GUI/CLI layers.
 
 ```python
-# PhaseBase.run() checks ordering BEFORE phase-specific prerequisites
-can_start, message = self.context.record.can_start_phase(self.phase_type)
-if not can_start:
-    # Phase is blocked - previous phase must complete first
-    return False
-```
-
-### 2. Manual Phase Advancement
-
-Use `advance_to_next_phase()` to safely move between phases:
-
-```python
-from sc_linac_physics.applications.rf_commissioning import (
-    CommissioningRecord,
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
-    PhaseStatus,
+)
+from sc_linac_physics.applications.rf_commissioning.session_manager import (
+    CommissioningSession,
 )
 
-# Create new commissioning record
-record = CommissioningRecord(
-    linac=1,
+session = CommissioningSession()
+
+# Create or load canonical record for cavity
+record, record_id, created = session.start_new_record(
     cryomodule="02",
     cavity_number=3,
 )
 
-# Complete current phase (PIEZO_PRE_RF is the first phase)
-record.set_phase_status(CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE)
+# Validate prerequisites for target phase
+can_run, reason = session.can_run_phase(CommissioningPhase.PIEZO_PRE_RF)
+if not can_run:
+    raise RuntimeError(reason)
 
-# Advance to next phase (with validation)
-success, message = record.advance_to_next_phase()
-if success:
-    print(f"Now at: {record.current_phase.value}")
-    # Output: "Now at: ssa_char"
-else:
-    print(f"Cannot advance: {message}")
+# Start phase attempt
+start = session.start_active_phase_instance(
+    phase=CommissioningPhase.PIEZO_PRE_RF,
+    operator="jdoe",
+)
+if start is None:
+    raise RuntimeError("No active record")
+
+# Persist measurements as append-only history (optional during run)
+session.add_measurement_to_history(
+    phase=CommissioningPhase.PIEZO_PRE_RF,
+    measurement_data={"capacitance_a": 2.3e-9, "capacitance_b": 2.4e-9},
+    operator="jdoe",
+    phase_instance_id=start.phase_instance_id,
+)
+
+# Complete attempt and advance workflow
+session.complete_active_phase_instance(
+    phase_instance_id=start.phase_instance_id,
+    phase=CommissioningPhase.PIEZO_PRE_RF,
+    artifact_payload={"summary": "piezo pre-rf pass"},
+)
+
+# Save wide record fields (notes, phase payload dataclass fields, etc.)
+session.save_active_record()
 ```
 
-### 3. Phase Start Validation
+## Enforcement Rules
 
-Check if a specific phase can be started:
+### Prerequisite enforcement
 
-```python
-# Check if FREQUENCY_TUNING can start
-can_start, reason = record.can_start_phase(CommissioningPhase.FREQUENCY_TUNING)
+`WorkflowService` checks the latest attempt of the previous phase.
 
-if can_start:
-    print(f"✓ Can start FREQUENCY_TUNING: {reason}")
-else:
-    print(f"✗ Blocked: {reason}")
-    # Example: "✗ Blocked: Previous phase ssa_char must complete first"
-```
+- Allowed previous statuses: `complete`, `skipped`
+- Blocked previous statuses: `not_started`, `in_progress`, `failed`
+- `PIEZO_PRE_RF` is always restartable
+
+`CommissioningSession.can_run_phase(...)` currently enforces a stricter
+check (`complete` prerequisite) for non-`PIEZO_PRE_RF` phases.
+
+### Advancement model
+
+Advancement is automatic on completion:
+
+- `complete_phase_instance(...)` updates the attempt status
+- Workflow run moves to the next phase (`commissioning_runs.current_phase`)
+- If current phase is `COMPLETE`, run status becomes `complete`
 
 ## Resume Capability
 
-### Saving State
-
-The database automatically persists all phase progress:
+Resume by loading the record into an active session and inspecting projection.
 
 ```python
-from sc_linac_physics.applications.rf_commissioning import CommissioningDatabase
+session = CommissioningSession(db_path="commissioning.db")
 
-db = CommissioningDatabase("commissioning.db")
-db.initialize()
+loaded = session.load_record(record_id)
+if loaded is None:
+    raise ValueError("Record not found")
 
-# Save record (includes current_phase, phase_status, phase_history)
-record_id = db.save_record(record)
+projection = session.get_active_phase_projection()
+if projection is not None:
+    print("Current phase:", projection["current_phase"].value)
+    print("Run status:", projection["run"]["status"])
+    for phase, status in projection["phase_status"].items():
+        print(phase.value, status.value)
 ```
 
-### Resuming Sessions
+## Failure and Retry
 
-Load interrupted sessions and continue from where you left off:
-
-```python
-# Option 1: Load specific record
-record = db.load_record(record_id)
-print(f"Resume at: {record.current_phase.value}")
-
-# Option 2: Find all interrupted sessions
-active_sessions = db.get_active_records()
-for session in active_sessions:
-    print(f"Resume {session.cavity_name} at {session.current_phase.value}")
-
-    # Check what phases are complete
-    for phase in CommissioningPhase.get_phase_order():
-        status = session.get_phase_status(phase)
-        print(f"  {phase.value}: {status.value}")
-```
-
-### Example: Multi-Session Workflow
+Retry means starting another attempt for the same phase.
 
 ```python
-# ===== Session 1: Start commissioning =====
-record = CommissioningRecord(linac=1, cryomodule="02", cavity_number=3)
-
-# Run PIEZO_PRE_RF phase
-# ... phase completes successfully ...
-record.set_phase_status(CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE)
-
-# Save and close
-record_id = db.save_record(record)
-# Session ends
-
-# ===== Session 2: Resume next day =====
-record = db.load_record(record_id)
-
-# Advance to next phase
-record.advance_to_next_phase()  # Now at SSA_CHAR
-
-# Run SSA_CHAR phase
-# ... phase completes ...
-record.set_phase_status(CommissioningPhase.SSA_CHAR, PhaseStatus.COMPLETE)
-
-# Save progress
-db.save_record(record, record_id)
-# Session ends
-
-# ===== Session 3: Continue =====
-record = db.load_record(record_id)
-record.advance_to_next_phase()  # Now at FREQUENCY_TUNING
-# ... continue commissioning ...
-
-# ===== Final session: Complete commissioning =====
-# After ONE_HOUR_RUN phase completes successfully
-record.set_phase_status(CommissioningPhase.ONE_HOUR_RUN, PhaseStatus.COMPLETE)
-record.advance_to_next_phase()  # Now at COMPLETE
-
-# Complete phase: final acceptance and handoff
-record.set_phase_status(CommissioningPhase.COMPLETE, PhaseStatus.COMPLETE)
-record.end_time = datetime.now()
-record.overall_status = "operational"
-db.save_record(record, record_id)
-
-# Cavity is now officially operational
-print(f"Commissioning complete! Total time: {record.elapsed_time:.1f} hours")
-```
-
-## Phase History & Checkpoints
-
-Every step of every phase is recorded in an append-only audit log:
-
-```python
-from sc_linac_physics.applications.rf_commissioning import PhaseCheckpoint
-from datetime import datetime
-
-# Phases automatically create checkpoints
-checkpoint = PhaseCheckpoint(
-    phase=CommissioningPhase.PIEZO_PRE_RF,
-    timestamp=datetime.now(),
-    operator="operator_name",
-    step_name="trigger_test",
-    success=True,
-    measurements={"capacitance_a": 2.3e-9, "capacitance_b": 2.4e-9}
-)
-record.add_checkpoint(checkpoint)
-
-# Query checkpoints later
-piezo_checkpoints = record.get_checkpoints(CommissioningPhase.PIEZO_PRE_RF)
-for cp in piezo_checkpoints:
-    print(f"{cp.step_name}: {'✓' if cp.success else '✗'} - {cp.notes}")
-
-# Get latest checkpoint for debugging
-latest = record.get_latest_checkpoint(CommissioningPhase.PIEZO_PRE_RF)
-if not latest.success:
-    print(f"Last failure: {latest.error_message}")
-```
-
-## Error Recovery
-
-### Failed Phase
-
-If a phase fails, it must be retried before advancing:
-
-```python
-# Phase fails
-record.set_phase_status(CommissioningPhase.SSA_CHAR, PhaseStatus.FAILED)
-
-# Cannot advance past failed phase
-success, message = record.advance_to_next_phase()
-# success = False
-# message = "Cannot advance: ssa_char is not complete (status: failed)"
-
-# Fix issue and retry the same phase
-record.set_phase_status(CommissioningPhase.SSA_CHAR, PhaseStatus.IN_PROGRESS)
-# ... re-run phase ...
-record.set_phase_status(CommissioningPhase.SSA_CHAR, PhaseStatus.COMPLETE)
-
-# Now can advance
-record.advance_to_next_phase()  # ✓ Success
-```
-
-### Skipped Phase
-
-Phases can be marked as skipped (counts as complete for ordering):
-
-```python
-# Skip a phase (still allows advancement to next phase)
-record.set_phase_status(CommissioningPhase.CAVITY_CHAR, PhaseStatus.SKIPPED)
-
-# Can still advance (SKIPPED is treated as complete for ordering)
-record.advance_to_next_phase()  # Can advance to PIEZO_WITH_RF
-```
-
-## Integration with PhaseBase
-
-The `PhaseBase` class automatically enforces ordering:
-
-```python
-from sc_linac_physics.applications.rf_commissioning.phases import (
-    PhaseBase,
-    PhaseContext,
-    PiezoPreRFPhase
+start = session.start_active_phase_instance(
+    phase=CommissioningPhase.SSA_CHAR,
+    operator="jdoe",
 )
 
-# Create context
-context = PhaseContext(
-    record=record,
-    operator="operator_name",
-    parameters={"cavity": cavity_obj}
+if start is None:
+    raise RuntimeError("Failed to start phase")
+
+session.fail_active_phase_instance(
+    phase_instance_id=start.phase_instance_id,
+    phase=CommissioningPhase.SSA_CHAR,
+    error_message="Drive limit interlock",
+    artifact_payload={"fault": "interlock"},
 )
 
-# Create phase instance
-phase = PiezoPreRFPhase(context)
-
-# Run phase (automatically checks ordering + prerequisites)
-success = phase.run()
-
-# If previous phase not complete:
-# - Creates checkpoint: "phase_ordering_check" with success=False
-# - Returns False
-# - Record unchanged
+# Later retry creates attempt_number + 1
+retry = session.start_active_phase_instance(
+    phase=CommissioningPhase.SSA_CHAR,
+    operator="jdoe",
+)
 ```
 
-## COMPLETE Phase Workflow
+## COMPLETE Phase Pattern
 
-The COMPLETE phase is typically handled manually as the final administrative step:
+`COMPLETE` is handled like any other phase attempt, but typically by an
+approver/operator role distinct from technical execution.
 
 ```python
-# After all technical phases finish
-if record.current_phase == CommissioningPhase.ONE_HOUR_RUN:
-    if record.get_phase_status(CommissioningPhase.ONE_HOUR_RUN) == PhaseStatus.COMPLETE:
-        # Advance to COMPLETE phase
-        success, message = record.advance_to_next_phase()
+start = session.start_active_phase_instance(
+    phase=CommissioningPhase.COMPLETE,
+    operator="supervisor",
+)
 
-        if success:
-            # Perform final acceptance activities
-            record.end_time = datetime.now()
-            record.overall_status = "operational"
+session.complete_active_phase_instance(
+    phase_instance_id=start.phase_instance_id,
+    phase=CommissioningPhase.COMPLETE,
+    artifact_payload={"handoff": "operations", "approved_by": "supervisor"},
+)
 
-            # Optional: Generate final report
-            # Optional: Update cavity EPICS status
-            # Optional: Send notification to operations team
-
-            # Mark as complete
-            record.set_phase_status(CommissioningPhase.COMPLETE, PhaseStatus.COMPLETE)
-            db.save_record(record, record_id)
-
-            print(f"✓ Cavity {record.full_cavity_name} commissioned successfully!")
-            print(f"  Duration: {record.elapsed_time:.1f} hours")
+session.append_general_note("supervisor", "Commissioning accepted")
+session.save_active_record()
 ```
 
 ## Best Practices
 
-### ✅ DO:
-- Always use `advance_to_next_phase()` to move between phases
-- Check `can_start_phase()` before allowing user to start a phase
-- Save record to database after each phase completes
-- Use `get_active_records()` to find interrupted sessions
-- Create checkpoints with detailed measurements and notes
+### Do
 
-### ❌ DON'T:
-- Manually set `record.current_phase` without validation
-- Skip phase ordering checks
-- Forget to mark phases complete before advancing
-- Lose the database file (contains all history)
+- Use `CommissioningSession` for controller/UI interactions.
+- Start/complete/fail explicit phase instances for all phase transitions.
+- Store technical outputs as `measurement_history` and/or artifacts.
+- Save active record after modifying wide-record fields.
+- Use `get_active_phase_projection()` for UI state.
+
+### Do Not
+
+- Do not manually force phase progression by editing `current_phase`.
+- Do not infer readiness from checkpoint text alone.
+- Do not skip prerequisite checks in custom tooling.
 
 ## API Quick Reference
 
 ```python
-# Phase navigation
-CommissioningPhase.get_phase_order() -> List[CommissioningPhase]
-phase.get_next_phase() -> Optional[CommissioningPhase]
-phase.get_previous_phase() -> Optional[CommissioningPhase]
+# Session lifecycle
+session.start_new_record(cryomodule, cavity_number, linac=None)
+session.load_record(record_id)
+session.save_active_record()
 
-# Phase validation
-record.can_start_phase(phase) -> (bool, str)
-record.advance_to_next_phase() -> (bool, str)
+# Phase lifecycle
+session.can_run_phase(phase)
+session.start_active_phase_instance(phase, operator)
+session.complete_active_phase_instance(phase_instance_id=..., phase=...)
+session.fail_active_phase_instance(phase_instance_id=..., phase=..., error_message=...)
 
-# Phase status
-record.get_phase_status(phase) -> PhaseStatus
-record.set_phase_status(phase, status) -> None
-
-# Checkpoints
-record.add_checkpoint(checkpoint) -> None
-record.get_checkpoints(phase=None) -> List[PhaseCheckpoint]
-record.get_latest_checkpoint(phase=None) -> Optional[PhaseCheckpoint]
-
-# Database
-db.save_record(record, record_id=None) -> int
-db.load_record(record_id) -> Optional[CommissioningRecord]
-db.get_active_records() -> List[CommissioningRecord]
+# Projection / history
+session.get_active_phase_projection()
+session.get_active_phase_instances()
+session.add_measurement_to_history(phase, measurement_data, ...)
+session.get_measurement_history(phase=None)
 ```
 
-## Example: Complete Workflow
+## See Also
 
-See `src/sc_linac_physics/applications/rf_commissioning/COMPLETE_WORKFLOW_EXAMPLE.md` for a complete end-to-end commissioning example with proper phase ordering and final acceptance.
+See `src/sc_linac_physics/applications/rf_commissioning/COMPLETE_WORKFLOW_EXAMPLE.md` for an end-to-end example aligned to this lifecycle.

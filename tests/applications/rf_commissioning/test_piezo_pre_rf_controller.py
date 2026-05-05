@@ -160,11 +160,11 @@ def test_get_machine_cavity_builds_machine_with_commissioning_piezo(
     assert controller.machine.piezo_class is CommissioningPiezo
 
 
-def test_get_operator_falls_back_to_legacy_selector() -> None:
+def test_get_operator_does_not_use_legacy_selector() -> None:
     view = _ViewStub(current_operator="", selected_operator="Legacy Operator")
     controller = _make_controller(view=view)
 
-    assert controller._get_operator() == "Legacy Operator"
+    assert controller._get_operator() == ""
 
 
 def test_update_pv_addresses_no_selection_logs_message() -> None:
