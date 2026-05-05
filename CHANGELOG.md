@@ -2,6 +2,54 @@
 
 <!-- version list -->
 
+## v9.14.0 (2026-05-05)
+
+### Bug Fixes
+
+- Patching init to fix import error ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+- Removing piezo status fallbacks ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+### Chores
+
+- Addressing copilot feedback ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+### Documentation
+
+- Add codebase documentation for onboarding
+  ([#236](https://github.com/slaclab/sc_linac_physics/pull/236),
+  [`874269e`](https://github.com/slaclab/sc_linac_physics/commit/874269eb08b11e564e8aac8f669086fb58539870))
+
+- **readme**: Fix factual errors and link to docs/
+  ([#236](https://github.com/slaclab/sc_linac_physics/pull/236),
+  [`874269e`](https://github.com/slaclab/sc_linac_physics/commit/874269eb08b11e564e8aac8f669086fb58539870))
+
+- **readme**: Rewrite for clarity and onboarding
+  ([#236](https://github.com/slaclab/sc_linac_physics/pull/236),
+  [`874269e`](https://github.com/slaclab/sc_linac_physics/commit/874269eb08b11e564e8aac8f669086fb58539870))
+
+### Features
+
+- **rf-commissioning**: Add commissioning piezo and simulator support
+  ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+### Refactoring
+
+- **rf-commissioning**: Align workflow semantics and persistence helpers
+  ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+### Testing
+
+- Adding commissioning piezo test coverage
+  ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+
 ## v9.13.1 (2026-05-04)
 
 ### Bug Fixes
