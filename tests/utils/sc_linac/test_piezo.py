@@ -111,11 +111,12 @@ def test_enable(piezo):
     piezo._bias_voltage_pv_obj = make_mock_pv()
     piezo._enable_stat_pv_obj = make_mock_pv()
 
-    # For 1 loop iteration: 2 calls (condition + logging) + 1 final check = 3 total
+    # With robust status logging, only condition checks consume get side effects.
+    # This sequence yields 2 loop iterations then exit.
     piezo._enable_stat_pv_obj.get = Mock(
         side_effect=[
             PIEZO_DISABLE_VALUE,  # while loop check
-            PIEZO_DISABLE_VALUE,  # logging in loop body
+            PIEZO_DISABLE_VALUE,  # second while loop check
             PIEZO_ENABLE_VALUE,  # final while loop check - exits
         ]
     )
@@ -126,8 +127,8 @@ def test_enable(piezo):
     piezo.enable()
 
     piezo._bias_voltage_pv_obj.put.assert_called_with(25)
-    assert piezo.cavity.check_abort.call_count == 1
-    assert piezo._enable_pv_obj.put.call_count == 2  # 1 disable + 1 enable
+    assert piezo.cavity.check_abort.call_count == 2
+    assert piezo._enable_pv_obj.put.call_count == 4  # 2x (disable + enable)
 
 
 def test_enable_feedback(piezo):

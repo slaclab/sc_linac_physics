@@ -1,8 +1,8 @@
 """Normalized workflow orchestration service.
 
-This service introduces a phase-instance model independent from the legacy
-wide commissioning record schema. It is intentionally write-focused so the UI
-can adopt it incrementally while prototype workflows evolve rapidly.
+This service orchestrates a phase-instance model that is independent from the
+wide commissioning record shape. It is intentionally write-focused so the UI
+can adopt workflow features incrementally.
 """
 
 from __future__ import annotations
