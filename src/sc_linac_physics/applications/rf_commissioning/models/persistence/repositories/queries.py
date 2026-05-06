@@ -46,7 +46,7 @@ class QueryRepository(BaseRepository):
             return self.db._records.row_to_record(row, cursor)
 
     def get_records_by_cryomodule(
-        self, cryomodule: str, active_only: bool = False
+        self, linac: int, cryomodule: str, active_only: bool = False
     ) -> list:
         with self.db.connection() as conn:
             cursor = conn.cursor()
@@ -54,9 +54,9 @@ class QueryRepository(BaseRepository):
                 SELECT r.*
                 FROM commissioning_records r
                 LEFT JOIN commissioning_runs w ON w.record_id = r.id
-                WHERE r.cryomodule = ?
+                WHERE r.linac = ? AND r.cryomodule = ?
             """
-            params = [cryomodule]
+            params = [str(linac), cryomodule]
             if active_only:
                 query += " AND w.status = 'in_progress'"
             query += (

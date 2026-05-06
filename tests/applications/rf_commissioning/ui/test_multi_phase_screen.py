@@ -114,20 +114,13 @@ def test_refresh_magnet_badge_maps_statuses(display_stub):
 
 
 def test_refresh_cavity_completion_label_counts_complete_records(display_stub):
-    class _TerminalPhase:
-        value = "terminal"
-
-        @staticmethod
-        def get_next_phase():
-            return None
-
     display_stub.session.db.get_records_by_cryomodule.return_value = [
         SimpleNamespace(
             current_phase=CommissioningPhase.COMPLETE,
             overall_status="in_progress",
         ),
         SimpleNamespace(
-            current_phase=_TerminalPhase(),
+            current_phase=CommissioningPhase.PIEZO_PRE_RF,
             overall_status="in_progress",
         ),
         SimpleNamespace(
@@ -137,10 +130,10 @@ def test_refresh_cavity_completion_label_counts_complete_records(display_stub):
     ]
 
     MultiPhaseCommissioningDisplay._refresh_cavity_completion_label(
-        display_stub, "01"
+        display_stub, "01", "L1B"
     )
 
-    assert display_stub.cavity_completion_label.text() == "2/8 Complete"
+    assert display_stub.cavity_completion_label.text() == "1/8 Complete"
 
 
 def test_populate_operator_combo_adds_placeholder_and_restore(display_stub):
@@ -278,11 +271,15 @@ def test_open_magnet_checkout_screen_saves_and_updates_header(
 def test_update_cm_status_panel_ignores_none_and_updates_valid_record(
     display_stub,
 ):
+    display_stub._linac_str = MultiPhaseCommissioningDisplay._linac_str
+
     MultiPhaseCommissioningDisplay._update_cm_status_panel(display_stub, None)
     display_stub._refresh_magnet_badge.assert_not_called()
 
-    record = SimpleNamespace(cryomodule="01", linac="L1B")
+    record = SimpleNamespace(cryomodule="01", linac=1)
     MultiPhaseCommissioningDisplay._update_cm_status_panel(display_stub, record)
 
     display_stub._refresh_magnet_badge.assert_called_once_with("01", "L1B")
-    display_stub._refresh_cavity_completion_label.assert_called_once_with("01")
+    display_stub._refresh_cavity_completion_label.assert_called_once_with(
+        "01", "L1B"
+    )

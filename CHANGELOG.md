@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v9.15.0 (2026-05-06)
+
+### Bug Fixes
+
+- **rf-commissioning**: Pass tmp_path db to CommissioningSession in display tests
+  ([#238](https://github.com/slaclab/sc_linac_physics/pull/238),
+  [`1e02157`](https://github.com/slaclab/sc_linac_physics/commit/1e02157570b2e0f04afc9a2e02bee190ed7b2f70))
+
+- **rf-commissioning**: Remove PiezoPreRFDisplay from ui/__init__ on foundation branch
+  ([#238](https://github.com/slaclab/sc_linac_physics/pull/238),
+  [`1e02157`](https://github.com/slaclab/sc_linac_physics/commit/1e02157570b2e0f04afc9a2e02bee190ed7b2f70))
+
+### Features
+
+- **rf-commissioning**: Add UI builder infrastructure and phase display components
+  ([#238](https://github.com/slaclab/sc_linac_physics/pull/238),
+  [`1e02157`](https://github.com/slaclab/sc_linac_physics/commit/1e02157570b2e0f04afc9a2e02bee190ed7b2f70))
+
+### Testing
+
+- **rf-commissioning**: Add display and phase_display_base coverage tests
+  ([#238](https://github.com/slaclab/sc_linac_physics/pull/238),
+  [`1e02157`](https://github.com/slaclab/sc_linac_physics/commit/1e02157570b2e0f04afc9a2e02bee190ed7b2f70))
+
+
 ## v9.14.0 (2026-05-05)
 
 ### Bug Fixes

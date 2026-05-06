@@ -32,13 +32,24 @@ class MagnetStatusBadge(QWidget):
         self.setLayout(layout)
         self.update_display()
 
+    VALID_STATUSES = frozenset({"PASS", "FAIL", "PENDING"})
+
     def set_status(self, status: str):
         """Update badge status.
 
         Args:
-            status: One of "PASS", "FAIL", or "PENDING"
+            status: One of "PASS", "FAIL", or "PENDING" (case-insensitive).
+
+        Raises:
+            ValueError: If status is not one of the accepted values.
         """
-        self.status = status.upper()
+        normalized = status.upper()
+        if normalized not in self.VALID_STATUSES:
+            raise ValueError(
+                f"Invalid status {status!r}. Must be one of: "
+                + ", ".join(sorted(self.VALID_STATUSES))
+            )
+        self.status = normalized
         self.update_display()
 
     def update_display(self):

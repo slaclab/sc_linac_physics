@@ -236,6 +236,12 @@ class PhaseUIBase:
         abort_btn = self.widgets.get("abort_button")
         status_ind = self.widgets.get("status_indicator")
 
+        if any(w is None for w in (run_btn, pause_btn, abort_btn, status_ind)):
+            raise RuntimeError(
+                "update_toolbar_state() called before _build_main_toolbar() "
+                "completed; one or more toolbar widgets are not registered."
+            )
+
         if state == "idle":
             run_btn.setEnabled(True)
             run_btn.setText("▶ Start Test")
@@ -350,10 +356,10 @@ class PhaseUIBase:
         return label
 
     def _build_stored_data_section(
-        self, fields: list[tuple[str, str]] = None
+        self, fields: list[tuple[str, str]] | None = None
     ) -> QGroupBox:
         """Build a generalized 'Stored Data' section with standard fields."""
-        fields = fields or []
+        fields = fields if fields is not None else []
         group = QGroupBox("Stored Data")
         layout = QVBoxLayout()
         layout.setSpacing(5)

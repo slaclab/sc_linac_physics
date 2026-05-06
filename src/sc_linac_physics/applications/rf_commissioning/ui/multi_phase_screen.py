@@ -108,7 +108,7 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
         self.setMinimumSize(1200, 800)
 
         self.session = session or CommissioningSession()
-        self.phase_specs = phase_specs or self._default_phase_specs()
+        self.phase_specs = phase_specs or build_default_phase_specs()
 
         # Track update banner state
         self._update_banner = None
@@ -166,10 +166,6 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
         # REMOVED: self._restore_last_session()
         # Operator must explicitly select operator and cavity each time
 
-    def _default_phase_specs(self) -> list[PhaseTabSpec]:
-        """Build default phase tabs for the container display."""
-        return build_default_phase_specs()
-
     # =============================================================================
     # HEADER PANEL - Always visible operator/cavity selection
     # =============================================================================
@@ -187,7 +183,7 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
             linac = get_linac_for_cryomodule(cryomodule)
             if linac:
                 self._refresh_magnet_badge(cryomodule, linac)
-                self._refresh_cavity_completion_label(cryomodule)
+                self._refresh_cavity_completion_label(cryomodule, linac)
         else:
             self._refresh_magnet_badge("Select CM...")
             self._refresh_cavity_completion_label("Select CM...")
@@ -229,23 +225,27 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
         else:
             self.magnet_status_badge.set_status("FAIL")
 
-    def _refresh_cavity_completion_label(self, cryomodule: str) -> None:
+    def _refresh_cavity_completion_label(
+        self, cryomodule: str, linac: str | None = None
+    ) -> None:
         """Update header cavity completion counter for the selected cryomodule."""
         if not cryomodule or cryomodule == "Select CM...":
             self.cavity_completion_label.setText("0/8 Complete")
             return
 
+        effective_linac = linac or get_linac_for_cryomodule(cryomodule)
+        if not effective_linac:
+            self.cavity_completion_label.setText("0/8 Complete")
+            return
+
+        linac_index = int(effective_linac[1])
         cavity_records = self.session.db.get_records_by_cryomodule(
-            cryomodule, active_only=False
+            linac_index, cryomodule, active_only=False
         )
         completed = sum(
             1
             for record in cavity_records
-            if (
-                record.current_phase.value == "complete"
-                or record.overall_status == "in_progress"
-                and record.current_phase.get_next_phase() is None
-            )
+            if record.current_phase and record.current_phase.value == "complete"
         )
         self.cavity_completion_label.setText(f"{completed}/8 Complete")
 
@@ -630,13 +630,18 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
     def load_record(self, record_id: int) -> bool:
         return load_record(self, record_id)
 
+    @staticmethod
+    def _linac_str(linac: int) -> str:
+        return f"L{linac}B"
+
     def _update_cm_status_panel(self, record: CommissioningRecord) -> None:
         """Update CM-level header info when record is loaded or changed."""
         if record is None:
             return
 
-        self._refresh_magnet_badge(record.cryomodule, record.linac)
-        self._refresh_cavity_completion_label(record.cryomodule)
+        linac_str = self._linac_str(record.linac)
+        self._refresh_magnet_badge(record.cryomodule, linac_str)
+        self._refresh_cavity_completion_label(record.cryomodule, linac_str)
 
     def _sync_cavity_selection_from_record(
         self, record: CommissioningRecord
