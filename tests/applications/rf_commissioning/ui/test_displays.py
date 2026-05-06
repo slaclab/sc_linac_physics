@@ -37,8 +37,8 @@ def record():
 
 
 @pytest.fixture
-def session(record):
-    s = CommissioningSession()
+def session(record, tmp_path):
+    s = CommissioningSession(db_path=str(tmp_path / "test.db"))
     s._active_record = record
     s._active_record_id = 1
     return s
@@ -50,8 +50,8 @@ def session(record):
 
 
 class TestPhaseDisplayBase:
-    def test_init_stores_session(self, qtbot):
-        s = CommissioningSession()
+    def test_init_stores_session(self, qtbot, tmp_path):
+        s = CommissioningSession(db_path=str(tmp_path / "test.db"))
         w = PhaseDisplayBase(session=s)
         qtbot.addWidget(w)
         assert w.session is s
@@ -61,10 +61,10 @@ class TestPhaseDisplayBase:
         qtbot.addWidget(w)
         assert w.session is None
 
-    def test_set_session(self, qtbot):
+    def test_set_session(self, qtbot, tmp_path):
         w = PhaseDisplayBase()
         qtbot.addWidget(w)
-        s = CommissioningSession()
+        s = CommissioningSession(db_path=str(tmp_path / "test.db"))
         w.set_session(s)
         assert w.session is s
 
@@ -91,8 +91,9 @@ class TestPhaseDisplayBase:
         qtbot.addWidget(w)
         assert w.get_current_cavity() is None
 
-    def test_get_current_cavity_empty_session(self, qtbot):
-        w = PhaseDisplayBase(session=CommissioningSession())
+    def test_get_current_cavity_empty_session(self, qtbot, tmp_path):
+        s = CommissioningSession(db_path=str(tmp_path / "test.db"))
+        w = PhaseDisplayBase(session=s)
         qtbot.addWidget(w)
         assert w.get_current_cavity() is None
 
@@ -187,17 +188,19 @@ class TestPhaseDisplayBase:
 
 
 @pytest.fixture
-def freq_display(qtbot):
+def freq_display(qtbot, tmp_path):
+    s = CommissioningSession(db_path=str(tmp_path / "freq.db"))
     with patch("PyQt5.QtCore.QTimer.singleShot"):
-        d = FrequencyTuningDisplay()
+        d = FrequencyTuningDisplay(session=s)
         qtbot.addWidget(d)
         return d
 
 
 @pytest.fixture
-def ssa_display(qtbot):
+def ssa_display(qtbot, tmp_path):
+    s = CommissioningSession(db_path=str(tmp_path / "ssa.db"))
     with patch("PyQt5.QtCore.QTimer.singleShot"):
-        d = SSACharDisplay()
+        d = SSACharDisplay(session=s)
         qtbot.addWidget(d)
         return d
 
@@ -206,7 +209,7 @@ class TestBasePlaceholderDisplay:
     def test_init_sets_window_title(self, freq_display):
         assert "Frequency Tuning" in freq_display.windowTitle()
 
-    def test_init_creates_default_session(self, freq_display):
+    def test_init_uses_provided_session(self, freq_display):
         assert isinstance(freq_display.session, CommissioningSession)
 
     def test_refresh_from_record_no_data(self, freq_display, record):
