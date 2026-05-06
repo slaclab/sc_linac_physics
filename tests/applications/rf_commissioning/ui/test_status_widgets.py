@@ -28,21 +28,14 @@ def test_magnet_status_badge_updates_text_and_status(qtbot):
 
 
 def test_cm_status_panel_counts_complete_cavities(qtbot):
-    class _TerminalPhase:
-        value = "terminal"
-
-        @staticmethod
-        def get_next_phase():
-            return None
-
     db = SimpleNamespace(
-        get_records_by_cryomodule=lambda _cm, active_only=False: [
+        get_records_by_cryomodule=lambda _linac, _cm, active_only=False: [
             SimpleNamespace(
                 current_phase=CommissioningPhase.COMPLETE,
                 overall_status="in_progress",
             ),
             SimpleNamespace(
-                current_phase=_TerminalPhase(),
+                current_phase=CommissioningPhase.PIEZO_PRE_RF,
                 overall_status="in_progress",
             ),
             SimpleNamespace(
@@ -55,7 +48,7 @@ def test_cm_status_panel_counts_complete_cavities(qtbot):
     panel = CMStatusPanel("L1B", "01", db)
     qtbot.addWidget(panel)
 
-    assert panel.cavity_count_label.text() == "2/8 Complete"
+    assert panel.cavity_count_label.text() == "1/8 Complete"
 
     panel.cryomodule = ""
     panel.refresh()

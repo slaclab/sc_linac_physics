@@ -52,11 +52,15 @@ class PhaseDisplayBase(Display):
             record: The updated record to display
             message: Status message for sync indicator
         """
+        _CONTAINER_METHODS = (
+            "update_progress_indicator",
+            "_update_tab_states",
+            "_load_notes",
+            "_update_sync_status",
+        )
         parent = self.parent()
         while parent:
-            # Check if this is the multi-phase container
-            if parent.__class__.__name__ == "MultiPhaseCommissioningDisplay":
-                # Batch UI updates to avoid repeated redraws
+            if any(hasattr(parent, m) for m in _CONTAINER_METHODS):
                 if hasattr(parent, "update_progress_indicator"):
                     parent.update_progress_indicator(record)
                 if hasattr(parent, "_update_tab_states"):

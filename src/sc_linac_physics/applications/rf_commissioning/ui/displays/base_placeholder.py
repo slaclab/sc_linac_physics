@@ -36,7 +36,7 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
     ):
         super().__init__(parent, session=session)
         self.setWindowTitle(f"{self.PHASE_NAME} - RF Commissioning")
-        self.session = session or CommissioningSession()
+        self.session = session
         self.step_progress_signal.connect(self._on_step_progress)
         self.setup_ui()
 
@@ -68,7 +68,6 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
             self._clear_phase_specific_readouts()
             if hasattr(self, "local_phase_status"):
                 self.local_phase_status.setText("No stored data")
-            self._clear_generic_stored_data()
             return
 
         if hasattr(self, "local_phase_status"):
@@ -99,6 +98,7 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
         """Reset shared Stored Data fields."""
         if hasattr(self, "local_stored_status"):
             self.local_stored_status.setText("-")
+            self.local_stored_status.setStyleSheet(LOCAL_LABEL_STYLE)
         if hasattr(self, "local_stored_timestamp"):
             self.local_stored_timestamp.setText("-")
         if hasattr(self, "local_stored_notes"):

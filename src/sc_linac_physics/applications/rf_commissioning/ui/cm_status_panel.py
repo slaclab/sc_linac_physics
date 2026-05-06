@@ -85,24 +85,16 @@ class CMStatusPanel(QWidget):
             self.cavity_count_label.setText("0/8 Complete")
             return
 
-        # Get all records for this CM
+        linac_index = int(self.linac[1])
         cavity_records = self.db.get_records_by_cryomodule(
-            self.cryomodule, active_only=False
+            linac_index, self.cryomodule, active_only=False
         )
 
-        # Count how many cavities are complete.
-        # Keep this logic aligned with the header completion indicator.
-        completed = 0
-        for record in cavity_records:
-            if (
-                record.current_phase
-                and record.current_phase.value == "complete"
-            ) or (
-                record.overall_status == "in_progress"
-                and record.current_phase
-                and record.current_phase.get_next_phase() is None
-            ):
-                completed += 1
+        completed = sum(
+            1
+            for record in cavity_records
+            if record.current_phase and record.current_phase.value == "complete"
+        )
 
         self.cavity_count_label.setText(f"{completed}/8 Complete")
 

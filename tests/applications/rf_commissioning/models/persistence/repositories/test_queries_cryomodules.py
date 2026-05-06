@@ -83,10 +83,10 @@ def test_query_repository_filters_active_records_and_exposes_workflow_metadata(
         artifact_payload={"result": "ok"},
     )
 
-    records = db.get_records_by_cryomodule("02")
+    records = db.get_records_by_cryomodule(1, "02")
     assert [record.cavity_number for record in records] == [2, 1]
 
-    active_records = db.get_records_by_cryomodule("02", active_only=True)
+    active_records = db.get_records_by_cryomodule(1, "02", active_only=True)
     assert [record.cavity_number for record in active_records] == [2]
 
     summary = db.find_records_for_cavity(1, "02", "2")

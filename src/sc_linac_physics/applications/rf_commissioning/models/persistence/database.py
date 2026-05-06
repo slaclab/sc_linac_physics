@@ -197,9 +197,10 @@ class CommissioningDatabase:
         )
 
     def get_records_by_cryomodule(
-        self, cryomodule: str, active_only: bool = False
+        self, linac: int, cryomodule: str, active_only: bool = False
     ) -> list[CommissioningRecord]:
         return self._queries.get_records_by_cryomodule(
+            linac,
             cryomodule,
             active_only,
         )
