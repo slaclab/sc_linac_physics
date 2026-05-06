@@ -547,6 +547,11 @@ def test_persistence_merge_success_failure_and_dialogs(host_stub, monkeypatch):
         )
         is True
     )
+    assert host_stub.session.db.save_record.call_count == 1
+    assert (
+        host_stub.session.db.save_record.call_args.kwargs["expected_version"]
+        == 7
+    )
 
     host_stub.session.db.save_record = Mock(
         side_effect=RuntimeError("save failed")
@@ -562,7 +567,85 @@ def test_persistence_merge_success_failure_and_dialogs(host_stub, monkeypatch):
     )
     assert critical.called
 
-    # Measurement history dialog branches.
+
+def test_persistence_merge_retries_on_second_conflict(host_stub, monkeypatch):
+    host_stub.session.has_active_record.return_value = True
+    host_stub.session.get_active_record_id = Mock(return_value=5)
+    host_stub.session.get_active_record = Mock(return_value=SimpleNamespace())
+    host_stub.load_record = Mock(return_value=True)
+
+    info = Mock()
+    critical = Mock()
+    monkeypatch.setattr(QMessageBox, "information", info)
+    monkeypatch.setattr(QMessageBox, "critical", critical)
+
+    dialog_calls = {"count": 0}
+
+    class _MergeAccepted:
+        def __init__(self, *_a, **_k):
+            dialog_calls["count"] += 1
+
+        def exec_(self):
+            return QDialog.Accepted
+
+        def get_merged_record(self):
+            return SimpleNamespace()
+
+    save_attempts = {"count": 0}
+
+    def _save_record(_record, _record_id, expected_version):
+        save_attempts["count"] += 1
+        if save_attempts["count"] == 1:
+            raise RecordConflictError(
+                record_id=5,
+                expected_version=7,
+                actual_version=8,
+            )
+
+    host_stub.session.db = SimpleNamespace(
+        get_record_with_version=Mock(
+            side_effect=[
+                (SimpleNamespace(name="v7"), 7),
+                (SimpleNamespace(name="v8"), 8),
+            ]
+        ),
+        save_record=Mock(side_effect=_save_record),
+    )
+
+    monkeypatch.setattr(persistence, "MergeDialog", _MergeAccepted)
+
+    assert (
+        persistence.handle_save_conflict(
+            host_stub,
+            RecordConflictError(
+                record_id=5,
+                expected_version=1,
+                actual_version=2,
+            ),
+        )
+        is True
+    )
+
+    assert dialog_calls["count"] == 2
+    assert host_stub.session.db.save_record.call_count == 2
+    assert (
+        host_stub.session.db.save_record.call_args_list[0].kwargs[
+            "expected_version"
+        ]
+        == 7
+    )
+    assert (
+        host_stub.session.db.save_record.call_args_list[1].kwargs[
+            "expected_version"
+        ]
+        == 8
+    )
+    assert info.called
+
+
+def test_show_measurement_history_modeless_reuses_visible_dialog(
+    host_stub, monkeypatch
+):
     host_stub.session.has_active_record.return_value = False
     info_no_record = Mock()
     monkeypatch.setattr(QMessageBox, "information", info_no_record)
@@ -576,15 +659,48 @@ def test_persistence_merge_success_failure_and_dialogs(host_stub, monkeypatch):
     class _HistoryDialog:
         def __init__(self, _session, parent=None):
             called["parent"] = parent
+            called["init_count"] = called.get("init_count", 0) + 1
+            called["visible"] = True
 
-        def exec_(self):
-            called["exec"] = True
+        def isVisible(self):
+            return called["visible"]
+
+        def show(self):
+            called["show"] = called.get("show", 0) + 1
+
+        def raise_(self):
+            called["raised"] = called.get("raised", 0) + 1
+
+        def activateWindow(self):
+            called["activated"] = called.get("activated", 0) + 1
+
+        def setAttribute(self, *_args, **_kwargs):
+            called["set_attribute"] = True
+
+        @property
+        def destroyed(self):
+            return SimpleNamespace(connect=lambda _cb: None)
 
     monkeypatch.setattr(persistence, "MeasurementHistoryDialog", _HistoryDialog)
     persistence.show_measurement_history(host_stub)
-    assert called["exec"] is True
+    assert called["show"] == 1
+    assert called["set_attribute"] is True
+    assert host_stub._measurement_history_dialog is not None
 
-    # Database browser branches.
+    # Second open should reuse existing visible modeless dialog.
+    persistence.show_measurement_history(host_stub)
+    assert called["init_count"] == 1
+    assert called["show"] == 1
+    assert called["raised"] >= 2
+    assert called["activated"] >= 2
+
+
+def test_show_database_browser_load_failure_shows_critical(
+    host_stub, monkeypatch
+):
+    critical = Mock()
+    monkeypatch.setattr(QMessageBox, "critical", critical)
+
     host_stub.cryomodule_combo.setCurrentIndex(1)
     host_stub.cavity_combo.setCurrentIndex(1)
 

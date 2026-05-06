@@ -3,6 +3,7 @@ Database browser dialog for selecting and loading commissioning records.
 """
 
 from datetime import datetime
+import re
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
@@ -278,14 +279,40 @@ class DatabaseBrowserDialog(QDialog):
         self.cavity_combo.setCurrentIndex(0)
         self._apply_filters()
 
+    def _normalize_linac_value(self, value) -> str | None:
+        """Normalize linac identifiers so variants like 'L1B' and '1' compare equally."""
+        if value is None:
+            return None
+
+        text = str(value).strip().upper()
+        if not text:
+            return None
+
+        if text.isdigit():
+            return str(int(text))
+
+        match = re.fullmatch(r"L?(\d+)[A-Z]?", text)
+        if match:
+            return str(int(match.group(1)))
+
+        return text
+
     def _apply_filters(self) -> None:
         """Apply cavity filters to the record list."""
         cryo = self.cryomodule_combo.currentText()
         cav = self.cavity_combo.currentText()
+        normalized_linac_filter = self._normalize_linac_value(
+            self._linac_filter
+        )
 
         filtered = []
         for record in self._all_records:
-            if self._linac_filter and record.get("linac") != self._linac_filter:
+            record_linac = record.get("linac_number") or record.get("linac")
+            normalized_record_linac = self._normalize_linac_value(record_linac)
+            if (
+                normalized_linac_filter
+                and normalized_record_linac != normalized_linac_filter
+            ):
                 continue
             if cryo != "All CM" and record.get("cryomodule") != cryo:
                 continue

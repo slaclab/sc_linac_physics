@@ -123,6 +123,21 @@ def test_db_browser_linac_filter_excludes_other_linacs(qtbot):
     assert dlg.table.rowCount() == 1
 
 
+def test_db_browser_linac_filter_matches_numeric_record_values(qtbot):
+    rec_1 = _record_dict(id=1, linac="1")
+    rec_2 = _record_dict(id=2, linac="2")
+    dlg = DatabaseBrowserDialog(_db([rec_1, rec_2]), linac_filter="L1B")
+    qtbot.addWidget(dlg)
+    assert dlg.table.rowCount() == 1
+
+
+def test_db_browser_numeric_linac_filter_matches_formatted_values(qtbot):
+    records = [_record_dict(id=1, linac="L1B"), _record_dict(id=2, linac="L2B")]
+    dlg = DatabaseBrowserDialog(_db(records), linac_filter="1")
+    qtbot.addWidget(dlg)
+    assert dlg.table.rowCount() == 1
+
+
 def test_db_browser_format_timestamp_valid_iso(qtbot):
     dlg = DatabaseBrowserDialog(_db())
     qtbot.addWidget(dlg)
@@ -338,7 +353,15 @@ def test_mhd_summarize_data_numeric_and_bool(qtbot):
     qtbot.addWidget(dlg)
     data = {"a": 1.5, "b": True, "c": "short"}
     result = dlg._summarize_measurement_data(data)
-    assert "a=" in result and "b=" in result
+    assert "a=1.5" in result
+    assert "b=True" in result
+
+
+def test_mhd_summarize_data_bool_false_not_numeric(qtbot):
+    dlg = MeasurementHistoryDialog(_session())
+    qtbot.addWidget(dlg)
+    result = dlg._summarize_measurement_data({"flag": False})
+    assert result == "flag=False"
 
 
 def test_mhd_summarize_data_truncates_with_field_count(qtbot):

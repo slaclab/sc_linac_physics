@@ -244,10 +244,10 @@ class MeasurementHistoryDialog(QDialog):
         # Show first few key-value pairs
         summary_parts = []
         for key, value in list(data.items())[:3]:
-            if isinstance(value, (int, float)):
-                summary_parts.append(f"{key}={value:.3g}")
-            elif isinstance(value, bool):
+            if isinstance(value, bool):
                 summary_parts.append(f"{key}={value}")
+            elif isinstance(value, (int, float)):
+                summary_parts.append(f"{key}={value:.3g}")
             elif isinstance(value, str) and len(value) < 20:
                 summary_parts.append(f"{key}={value}")
 

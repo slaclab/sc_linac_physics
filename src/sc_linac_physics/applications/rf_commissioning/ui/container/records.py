@@ -132,7 +132,7 @@ def show_record_selector(
         # Status with color
         status = record_data.get("overall_status", "in_progress")
         status_item = QTableWidgetItem(status.replace("_", " ").title())
-        if status == "completed":
+        if status == "complete":
             status_item.setForeground(Qt.darkGreen)
         elif status == "in_progress":
             status_item.setForeground(Qt.blue)
@@ -156,8 +156,7 @@ def show_record_selector(
     # Instructions
     info = QLabel(
         "💡 <i>Double-click a record to load it.<br>"
-        "You can view records without selecting an operator. "
-        "An operator is only required when running tests or making changes.</i>"
+        "Select an operator before loading or starting a record.</i>"
     )
     info.setStyleSheet("color: #888; padding: 5px;")
     info.setWordWrap(True)
