@@ -696,38 +696,6 @@ class CommissioningRecord:
 
         return True, f"Prerequisites met for {phase.value} (reruns allowed)"
 
-    def advance_to_next_phase(self) -> tuple[bool, str]:
-        """Advance to the next phase in the sequence.
-
-        Returns:
-            Tuple of (success, message)
-            - success: True if phase was advanced
-            - message: Explanation of outcome
-        """
-        # Check if current phase is complete
-        current_status = self.get_phase_status(self.current_phase)
-        if current_status != PhaseStatus.COMPLETE:
-            return (
-                False,
-                f"Cannot advance: {self.current_phase.value} is not complete (status: {current_status.value})",
-            )
-
-        # Get next phase
-        next_phase = self.current_phase.get_next_phase()
-        if next_phase is None:
-            return False, f"{self.current_phase.value} is the final phase"
-
-        # Validate can start next phase
-        can_start, reason = self.can_start_phase(next_phase)
-        if not can_start:
-            return False, f"Cannot start {next_phase.value}: {reason}"
-
-        # Update current phase
-        self.current_phase = next_phase
-        self.phase_status[next_phase] = PhaseStatus.IN_PROGRESS
-
-        return True, f"Advanced to {next_phase.value}"
-
     def add_checkpoint(self, checkpoint: PhaseCheckpoint) -> None:
         """Add a checkpoint to the history.
 

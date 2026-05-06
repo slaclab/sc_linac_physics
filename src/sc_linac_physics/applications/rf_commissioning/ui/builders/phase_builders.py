@@ -310,36 +310,6 @@ class _StandardPlaceholderUI(PhaseUIBase):
         return main_layout
 
 
-class FrequencyTuningUI(_StandardPlaceholderUI):
-    """UI builder for Frequency Tuning phase (cold landing + pi-mode)."""
-
-    PHASE_TITLE = "Frequency Tuning"
-
-
-class SSACharUI(_StandardPlaceholderUI):
-    """UI builder for SSA Characterization phase (placeholder)."""
-
-    PHASE_TITLE = "SSA Characterization"
-
-
-class CavityCharUI(_StandardPlaceholderUI):
-    """UI builder for Cavity Characterization phase (placeholder)."""
-
-    PHASE_TITLE = "Cavity Characterization"
-
-
-class PiezoWithRFUI(_StandardPlaceholderUI):
-    """UI builder for Piezo with RF phase (placeholder)."""
-
-    PHASE_TITLE = "Piezo with RF"
-
-
-class HighPowerUI(_StandardPlaceholderUI):
-    """UI builder for High Power Ramp phase (placeholder)."""
-
-    PHASE_TITLE = "High Power Ramp"
-
-
 class GenericPhaseUI(_StandardPlaceholderUI):
     """Generic UI builder for phases without a specialised UI class."""
 
