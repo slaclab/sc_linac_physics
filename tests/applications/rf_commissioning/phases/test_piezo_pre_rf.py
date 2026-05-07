@@ -560,6 +560,7 @@ class TestPiezoPreRFPhase:
         phase_data = completion_checkpoint.measurements["phase_data"]
         assert phase_data["channel_a_passed"] is True
         assert phase_data["channel_b_passed"] is True
+        assert phase_data["is_complete"] is True
         assert phase_data["passed"] is True
 
         # Verify all successful
@@ -702,7 +703,7 @@ class TestPiezoPreRFPhase:
 
         # Verify final state
         assert record.piezo_pre_rf is not None
-        assert record.piezo_pre_rf.passed
+        assert record.piezo_pre_rf.is_complete
         assert (
             record.phase_status[CommissioningPhase.PIEZO_PRE_RF]
             == PhaseStatus.COMPLETE
@@ -720,4 +721,4 @@ class TestPiezoPreRFPhase:
         # Verify can serialize record
         record_dict = record.to_dict()
         assert "piezo_pre_rf" in record_dict
-        assert record_dict["piezo_pre_rf"]["passed"]
+        assert record_dict["piezo_pre_rf"]["is_complete"]

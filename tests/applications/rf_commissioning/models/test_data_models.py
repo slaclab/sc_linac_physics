@@ -70,8 +70,27 @@ class TestPhaseModels:
 
         assert model.capacitance_a_nf == pytest.approx(1.5)
         assert model.capacitance_b_nf == pytest.approx(1.6)
+        assert model.is_complete is True
         assert model.passed is True
         assert "PASS" in model.status_description
+
+    def test_piezo_pre_rf_complete_but_not_passed(self):
+        model = PiezoPreRFCheck(
+            capacitance_a=1.5e-9,
+            capacitance_b=1.6e-9,
+            channel_a_passed=False,
+            channel_b_passed=True,
+        )
+
+        assert model.is_complete is True
+        assert model.passed is False
+        assert "FAIL" in model.status_description
+
+    def test_piezo_pre_rf_not_complete(self):
+        model = PiezoPreRFCheck()
+
+        assert model.is_complete is False
+        assert model.passed is False
 
     def test_ssa_characterization_computed_properties(self):
         model = SSACharacterization(
@@ -122,6 +141,26 @@ class TestPhaseModels:
             for event in mp_processing.quench_events
         )
         assert high_power_one_hour.is_complete is True
+        assert high_power_one_hour.passed is True
+
+    def test_one_hour_run_complete_but_not_passed(self):
+        model = OneHourRunData(final_amplitude=16.0, one_hour_complete=False)
+        assert model.is_complete is True
+        assert model.passed is False
+
+    def test_stub_phases_passed_equals_is_complete(self):
+        assert SSACharacterization(max_drive=0.6).passed is True
+        assert SSACharacterization().passed is False
+        assert (
+            CavityCharacterization(loaded_q=3e7, scale_factor=2.5).passed
+            is True
+        )
+        assert (
+            PiezoWithRFTest(
+                amplifier_gain_a=1.1, amplifier_gain_b=1.2, detune_gain=0.9
+            ).passed
+            is True
+        )
 
 
 class TestCommissioningRecord:
