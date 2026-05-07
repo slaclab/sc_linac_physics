@@ -131,8 +131,13 @@ class PiezoPreRFCheck:
         return self.capacitance_b * 1e9
 
     @property
+    def is_complete(self) -> bool:
+        """Check if both channel measurements were taken."""
+        return self.capacitance_a is not None and self.capacitance_b is not None
+
+    @property
     def passed(self) -> bool:
-        """Check if both channels passed."""
+        """Check if both channels met acceptance criteria."""
         return self.channel_a_passed and self.channel_b_passed
 
     @property
@@ -154,7 +159,8 @@ class PiezoPreRFCheck:
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
         return serialize_model(
-            self, computed_fields=("passed", "status_description")
+            self,
+            computed_fields=("is_complete", "passed", "status_description"),
         )
 
 
@@ -245,6 +251,10 @@ class FrequencyTuningData:
         """Check if entire frequency tuning phase is complete."""
         return self.cold_landing_complete and self.pi_mode_complete
 
+    @property
+    def passed(self) -> bool:
+        return self.is_complete
+
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
         return serialize_model(
@@ -255,6 +265,7 @@ class FrequencyTuningData:
                 "cold_landing_complete",
                 "pi_mode_complete",
                 "is_complete",
+                "passed",
             ),
         )
 
@@ -318,6 +329,10 @@ class SSACharacterization:
         """Check if calibration completed successfully."""
         return self.max_drive is not None
 
+    @property
+    def passed(self) -> bool:
+        return self.is_complete
+
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
         return serialize_model(
@@ -328,6 +343,7 @@ class SSACharacterization:
                 "drive_reduction",
                 "succeeded_first_try",
                 "is_complete",
+                "passed",
             ),
         )
 
@@ -362,9 +378,13 @@ class CavityCharacterization:
         """Check if characterization is complete."""
         return self.loaded_q is not None and self.scale_factor is not None
 
+    @property
+    def passed(self) -> bool:
+        return self.is_complete
+
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return serialize_model(self, computed_fields=("is_complete",))
+        return serialize_model(self, computed_fields=("is_complete", "passed"))
 
 
 @dataclass
@@ -401,9 +421,13 @@ class PiezoWithRFTest:
             and self.detune_gain is not None
         )
 
+    @property
+    def passed(self) -> bool:
+        return self.is_complete
+
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return serialize_model(self, computed_fields=("is_complete",))
+        return serialize_model(self, computed_fields=("is_complete", "passed"))
 
 
 @dataclass
@@ -460,9 +484,13 @@ class HighPowerRampData:
         """Check if initial ramp captured required data."""
         return self.max_amplitude_reached is not None
 
+    @property
+    def passed(self) -> bool:
+        return self.is_complete
+
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return serialize_model(self, computed_fields=("is_complete",))
+        return serialize_model(self, computed_fields=("is_complete", "passed"))
 
 
 @dataclass
@@ -499,6 +527,10 @@ class MPProcessingData:
         """Check if session identifier exists."""
         return bool(self.session_id)
 
+    @property
+    def passed(self) -> bool:
+        return self.is_complete
+
     def add_quench(
         self, *, amplitude: float, timestamp: datetime | None = None
     ) -> None:
@@ -519,6 +551,7 @@ class MPProcessingData:
                 "quench_count",
                 "quench_intervals_seconds",
                 "is_complete",
+                "passed",
             ),
         )
 
@@ -553,12 +586,17 @@ class OneHourRunData:
 
     @property
     def is_complete(self) -> bool:
-        """Check if one-hour run is complete."""
-        return self.final_amplitude is not None and self.one_hour_complete
+        """Check if run data was recorded."""
+        return self.final_amplitude is not None
+
+    @property
+    def passed(self) -> bool:
+        """Check if the cavity ran for the full hour."""
+        return self.one_hour_complete
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
-        return serialize_model(self, computed_fields=("is_complete",))
+        return serialize_model(self, computed_fields=("is_complete", "passed"))
 
 
 @dataclass

@@ -18,6 +18,24 @@ from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 
+def _enum_to_int(value, enum_strings):
+    """Best-effort conversion for caproto enum values to integer index."""
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, bytes):
+        value = value.decode(errors="ignore")
+
+    if isinstance(value, str):
+        value = value.strip()
+        if value.isdigit():
+            return int(value)
+        if value in enum_strings:
+            return enum_strings.index(value)
+
+    return -1
+
+
 class StepperPVGroup(PVGroup):
     move_pos = pvproperty(name="MOV_REQ_POS")
     move_neg = pvproperty(name="MOV_REQ_NEG")
@@ -322,8 +340,11 @@ class PiezoPVGroup(PVGroup):
 
         await sleep(1)
 
-        # Get failure mode - it's already an integer!
-        fail_mode = self.simulate_failure.value  # Already 0, 1, 2, 3, 4, or 5
+        # caproto enum values can be ints, bytes, or enum strings.
+        fail_mode = _enum_to_int(
+            self.simulate_failure.value,
+            self.simulate_failure.enum_strings,
+        )
 
         if fail_mode == 0:  # No failure
             await self.prerf_cha_status.write(0)  # Pass
@@ -382,10 +403,18 @@ class PiezoPVGroup(PVGroup):
         # Set test status to Complete
         await self.prerf_test_status.write(1)  # Complete
 
-        # Determine overall result - compare to strings!
+        # Evaluate pass/fail using enum index (0 == Pass), not display text.
         overall_pass = (
-            self.prerf_cha_status.value == "Pass"
-            and self.prerf_chb_status.value == "Pass"
+            _enum_to_int(
+                self.prerf_cha_status.value,
+                self.prerf_cha_status.enum_strings,
+            )
+            == 0
+            and _enum_to_int(
+                self.prerf_chb_status.value,
+                self.prerf_chb_status.enum_strings,
+            )
+            == 0
         )
 
         if overall_pass:
