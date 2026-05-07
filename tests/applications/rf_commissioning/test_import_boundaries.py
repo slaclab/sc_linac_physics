@@ -9,7 +9,22 @@ _PACKAGE_ROOT_IMPORT = "sc_linac_physics.applications.rf_commissioning"
 
 
 def _iter_python_files(root: Path) -> list[Path]:
-    return [path for path in root.rglob("*.py") if path.name != "__init__.py"]
+    return list(root.rglob("*.py"))
+
+
+def _is_forbidden_importfrom(node: ast.ImportFrom) -> bool:
+    if node.module == _PACKAGE_ROOT_IMPORT:
+        return True
+
+    # Catches: from sc_linac_physics.applications import rf_commissioning
+    if node.module == "sc_linac_physics.applications":
+        return any(alias.name == "rf_commissioning" for alias in node.names)
+
+    return False
+
+
+def _is_forbidden_import(node: ast.Import) -> bool:
+    return any(alias.name == _PACKAGE_ROOT_IMPORT for alias in node.names)
 
 
 def test_rf_commissioning_internals_do_not_import_package_root() -> None:
@@ -27,9 +42,18 @@ def test_rf_commissioning_internals_do_not_import_package_root() -> None:
     for file_path in _iter_python_files(package_root):
         module = ast.parse(file_path.read_text(encoding="utf-8"))
         for node in ast.walk(module):
-            if not isinstance(node, ast.ImportFrom):
+            if isinstance(node, ast.ImportFrom) and _is_forbidden_importfrom(
+                node
+            ):
+                rel_path = file_path.relative_to(src_root)
+                violating_imports.append(
+                    f"{rel_path}:{node.lineno} imports from package root"
+                )
                 continue
-            if node.module != _PACKAGE_ROOT_IMPORT:
+
+            if not isinstance(node, ast.Import):
+                continue
+            if not _is_forbidden_import(node):
                 continue
 
             rel_path = file_path.relative_to(src_root)
