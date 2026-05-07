@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v9.16.1 (2026-05-07)
+
+### Bug Fixes
+
+- **simulation**: Fix VPN/beacon compat and piezo enum handling
+  ([#241](https://github.com/slaclab/sc_linac_physics/pull/241),
+  [`16eda9b`](https://github.com/slaclab/sc_linac_physics/commit/16eda9bd556aab97091afa01872e6aad1d819fcc))
+
+### Chores
+
+- Addressing PR comments ([#241](https://github.com/slaclab/sc_linac_physics/pull/241),
+  [`16eda9b`](https://github.com/slaclab/sc_linac_physics/commit/16eda9bd556aab97091afa01872e6aad1d819fcc))
+
+
 ## v9.16.0 (2026-05-07)
 
 ### Chores
