@@ -166,38 +166,24 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
 
     def _get_stored_status_presentation(self, phase_data) -> tuple[str, str]:
         """Choose the stored-data status text and styling."""
-        if hasattr(phase_data, "passed"):
-            passed = bool(getattr(phase_data, "passed"))
-            return (
-                "PASS" if passed else "FAIL",
-                (
-                    (
-                        LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
-                        + "color: #90ee90;"
-                    )
-                    if passed
-                    else (
-                        LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
-                        + "color: #ff6b6b;"
-                    )
-                ),
-            )
-
         if hasattr(phase_data, "is_complete"):
-            complete = bool(getattr(phase_data, "is_complete"))
+            if not phase_data.is_complete:
+                return (
+                    "INCOMPLETE",
+                    LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c4b1a")
+                    + "color: #ffd166;",
+                )
+            passed = getattr(phase_data, "passed", True)
+            if passed:
+                return (
+                    "PASS",
+                    LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
+                    + "color: #90ee90;",
+                )
             return (
-                "COMPLETE" if complete else "INCOMPLETE",
-                (
-                    (
-                        LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
-                        + "color: #90ee90;"
-                    )
-                    if complete
-                    else (
-                        LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c4b1a")
-                        + "color: #ffd166;"
-                    )
-                ),
+                "FAIL",
+                LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
+                + "color: #ff6b6b;",
             )
 
         return "AVAILABLE", LOCAL_LABEL_STYLE

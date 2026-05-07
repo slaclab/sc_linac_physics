@@ -308,7 +308,7 @@ def test_mhd_missing_operator_shows_unknown(qtbot):
     history = [_history_entry(operator=None)]
     dlg = MeasurementHistoryDialog(_session(history=history))
     qtbot.addWidget(dlg)
-    assert dlg.table.item(0, 2).text() == "Unknown"
+    assert dlg.table.item(0, 3).text() == "Unknown"
 
 
 def test_mhd_phase_filter_change_reloads(qtbot):
@@ -387,7 +387,7 @@ def test_mhd_history_notes_shown_in_table(qtbot):
     history = [_history_entry(notes=notes, data={"val": 1.0})]
     dlg = MeasurementHistoryDialog(_session(history=history))
     qtbot.addWidget(dlg)
-    assert "test note" in dlg.table.item(0, 3).text()
+    assert "test note" in dlg.table.item(0, 4).text()
 
 
 # ── MergeDialog ────────────────────────────────────────────────────────────
