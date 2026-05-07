@@ -1,5 +1,7 @@
 """Dialog for viewing measurement history."""
 
+from collections.abc import Mapping
+
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QDialog,
@@ -239,12 +241,17 @@ class MeasurementHistoryDialog(QDialog):
         if self.session.append_measurement_note(entry_id, operator, note):
             self._load_history()
 
-    def _result_for(self, data: dict) -> tuple[str, QColor]:
+    def _result_for(self, data: object | None) -> tuple[str, QColor]:
         """Return (label, color) indicating whether a measurement succeeded."""
+        if not isinstance(data, Mapping):
+            return "—", QColor("#888888")
+
         if not data.get("is_complete"):
             return "—", QColor("#888888")
-        if data.get("passed"):
+
+        if data.get("passed", True):
             return "Pass", QColor("#2e7d32")
+
         return "Fail", QColor("#c62828")
 
     def _format_notes(self, notes_list: list[dict]) -> str:
@@ -263,10 +270,14 @@ class MeasurementHistoryDialog(QDialog):
 
         return "\n".join(lines)
 
-    def _summarize_measurement_data(self, data: dict) -> str:
+    def _summarize_measurement_data(self, data: object | None) -> str:
         """Create a brief summary of measurement data."""
         if not data:
             return "No data"
+
+        if not isinstance(data, Mapping):
+            rendered = str(data)
+            return rendered if len(rendered) < 40 else f"{rendered[:37]}..."
 
         # Show first few key-value pairs
         summary_parts = []
