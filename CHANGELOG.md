@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v9.16.0 (2026-05-07)
+
+### Chores
+
+- Addressing copilot PR comments ([#240](https://github.com/slaclab/sc_linac_physics/pull/240),
+  [`cc43c04`](https://github.com/slaclab/sc_linac_physics/commit/cc43c04e2837507cfb6240bcf0e487007974657e))
+
+### Features
+
+- **rf-commissioning**: Add UI container state layer and remove legacy display components
+  ([#240](https://github.com/slaclab/sc_linac_physics/pull/240),
+  [`cc43c04`](https://github.com/slaclab/sc_linac_physics/commit/cc43c04e2837507cfb6240bcf0e487007974657e))
+
+- **rf-commissioning**: Add UI container state layer, dialog widgets, and tests
+  ([#240](https://github.com/slaclab/sc_linac_physics/pull/240),
+  [`cc43c04`](https://github.com/slaclab/sc_linac_physics/commit/cc43c04e2837507cfb6240bcf0e487007974657e))
+
+
 ## v9.15.0 (2026-05-06)
 
 ### Bug Fixes
