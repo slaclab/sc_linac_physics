@@ -57,6 +57,7 @@ class PiezoPreRFPhase(PhaseBase):
     ):
         super().__init__(context)
         self.limits = limits or PiezoTestLimits()
+        self._history_start = len(context.record.phase_history)
 
         # Get cavity from context
         self.cavity = None  # Will be set during prerequisite validation
@@ -139,7 +140,9 @@ class PiezoPreRFPhase(PhaseBase):
         validation_checkpoint = next(
             (
                 cp
-                for cp in reversed(self.context.record.phase_history)
+                for cp in reversed(
+                    self.context.record.phase_history[self._history_start :]
+                )
                 if cp.phase == self.phase_type
                 and cp.step_name == "validate_results"
             ),
