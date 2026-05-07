@@ -10,11 +10,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     SSACharacterization,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.builders import (
-    CavityCharUI,
-    FrequencyTuningUI,
-    HighPowerUI,
-    PiezoWithRFUI,
-    SSACharUI,
+    GenericPhaseUI,
 )
 
 from .base_placeholder import BasePlaceholderDisplay
@@ -23,7 +19,7 @@ from .base_placeholder import BasePlaceholderDisplay
 class FrequencyTuningDisplay(BasePlaceholderDisplay):
     """Display for Frequency Tuning phase (combines cold landing and pi-mode)."""
 
-    UI_CLASS = FrequencyTuningUI
+    UI_CLASS = GenericPhaseUI
     PHASE_NAME = "Frequency Tuning"
     DATA_ATTR = "frequency_tuning"
     DATA_MODEL = FrequencyTuningData
@@ -32,7 +28,7 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
 class SSACharDisplay(BasePlaceholderDisplay):
     """Display for SSA Characterization phase."""
 
-    UI_CLASS = SSACharUI
+    UI_CLASS = GenericPhaseUI
     PHASE_NAME = "SSA Characterization"
     DATA_ATTR = "ssa_char"
     DATA_MODEL = SSACharacterization
@@ -41,7 +37,7 @@ class SSACharDisplay(BasePlaceholderDisplay):
 class CavityCharDisplay(BasePlaceholderDisplay):
     """Display for Cavity Characterization phase."""
 
-    UI_CLASS = CavityCharUI
+    UI_CLASS = GenericPhaseUI
     PHASE_NAME = "Cavity Characterization"
     DATA_ATTR = "cavity_char"
     DATA_MODEL = CavityCharacterization
@@ -50,7 +46,7 @@ class CavityCharDisplay(BasePlaceholderDisplay):
 class PiezoWithRFDisplay(BasePlaceholderDisplay):
     """Display for Piezo with RF phase."""
 
-    UI_CLASS = PiezoWithRFUI
+    UI_CLASS = GenericPhaseUI
     PHASE_NAME = "Piezo with RF"
     DATA_ATTR = "piezo_with_rf"
     DATA_MODEL = PiezoWithRFTest
@@ -59,7 +55,7 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
 class HighPowerRampDisplay(BasePlaceholderDisplay):
     """Display for High Power Ramp phase."""
 
-    UI_CLASS = HighPowerUI
+    UI_CLASS = GenericPhaseUI
     PHASE_NAME = "High Power Ramp"
     DATA_ATTR = "high_power_ramp"
     DATA_MODEL = HighPowerRampData
@@ -68,7 +64,7 @@ class HighPowerRampDisplay(BasePlaceholderDisplay):
 class HighPowerMPProcessingDisplay(BasePlaceholderDisplay):
     """Display for High Power MP Processing phase."""
 
-    UI_CLASS = HighPowerUI
+    UI_CLASS = GenericPhaseUI
     PHASE_NAME = "MP Processing"
     DATA_ATTR = "mp_processing"
     DATA_MODEL = MPProcessingData
@@ -77,7 +73,7 @@ class HighPowerMPProcessingDisplay(BasePlaceholderDisplay):
 class HighPowerOneHourRunDisplay(BasePlaceholderDisplay):
     """Display for High Power One Hour Run phase."""
 
-    UI_CLASS = HighPowerUI
+    UI_CLASS = GenericPhaseUI
     PHASE_NAME = "One Hour Run"
     DATA_ATTR = "one_hour_run"
     DATA_MODEL = OneHourRunData

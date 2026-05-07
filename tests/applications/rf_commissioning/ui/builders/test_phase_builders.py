@@ -6,13 +6,8 @@ import pytest
 from PyQt5.QtWidgets import QGroupBox, QHBoxLayout, QWidget
 
 from sc_linac_physics.applications.rf_commissioning.ui.builders.phase_builders import (
-    CavityCharUI,
-    FrequencyTuningUI,
     GenericPhaseUI,
-    HighPowerUI,
     PiezoPreRFUI,
-    PiezoWithRFUI,
-    SSACharUI,
 )
 
 
@@ -104,22 +99,14 @@ def test_piezo_build_registers_stored_fields_from_parent_specs():
 
 
 @pytest.mark.parametrize(
-    "ui_cls,phase_title",
-    [
-        (FrequencyTuningUI, "Frequency Tuning"),
-        (SSACharUI, "SSA Characterization"),
-        (CavityCharUI, "Cavity Characterization"),
-        (PiezoWithRFUI, "Piezo with RF"),
-        (HighPowerUI, "High Power Ramp"),
-    ],
+    "phase_title", ["Frequency Tuning", "SSA Characterization"]
 )
-def test_placeholder_builders_use_standard_layout_and_phase_title(
-    ui_cls, phase_title
-):
+def test_generic_phase_ui_builds_standard_layout(phase_title):
     parent = _ParentWidget(
-        specs=[SimpleNamespace(label="Tag", widget_name="stored_tag")]
+        specs=[SimpleNamespace(label="Tag", widget_name="stored_tag")],
+        phase_name=phase_title,
     )
-    ui = ui_cls(parent=parent)
+    ui = GenericPhaseUI(parent=parent)
 
     layout = ui.build()
     host = _mount(layout)

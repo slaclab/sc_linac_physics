@@ -108,16 +108,6 @@ class PhaseDisplayBase(Display):
         """Show error message dialog."""
         QMessageBox.critical(self, "Error", message)
 
-    def show_info(self, title: str, message: str) -> None:
-        """Show info message dialog."""
-        QMessageBox.information(self, title, message)
-
-    def update_timestamp(self):
-        """Update the timestamp label."""
-        if hasattr(self, "timestamp_label"):
-            time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.timestamp_label.setText(f"Last Updated: {time_str}")
-
     def _bind_ui_widgets(self) -> None:
         """Bind UI widgets to self for easy access."""
         if hasattr(self, "ui") and hasattr(self.ui, "widgets"):

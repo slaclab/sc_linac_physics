@@ -135,7 +135,7 @@ class TestCommissioningRecord:
         )
 
         assert record.linac == 2
-        assert record.full_cavity_name == "L2B_CM02_CAV3"
+        assert record.full_cavity_name == "L2B_CM02-3"
 
     def test_linac_rejects_out_of_range_integer(self):
         with pytest.raises(ValueError, match="range 0..4"):
@@ -221,25 +221,6 @@ class TestCommissioningRecord:
         )
         assert record.is_complete is True
 
-    def test_advance_to_next_phase_requires_current_complete(self):
-        record = CommissioningRecord(
-            linac=1,
-            cryomodule="02",
-            cavity_number=3,
-        )
-
-        success, message = record.advance_to_next_phase()
-        assert success is False
-        assert "is not complete" in message
-
-        record.set_phase_status(
-            CommissioningPhase.PIEZO_PRE_RF, PhaseStatus.COMPLETE
-        )
-        success, message = record.advance_to_next_phase()
-        assert success is True
-        assert record.current_phase == CommissioningPhase.SSA_CHAR
-        assert "Advanced to ssa_char" == message
-
     def test_checkpoint_helpers(self):
         record = CommissioningRecord(
             linac=1,
@@ -284,8 +265,8 @@ class TestCommissioningRecord:
 
         payload = record.to_dict()
 
-        assert record.full_cavity_name == "L1B_CM02_CAV3"
-        assert record.short_cavity_name == "02_CAV3"
+        assert record.full_cavity_name == "L1B_CM02-3"
+        assert record.short_cavity_name == "02-3"
         assert payload["phase_status"]["piezo_pre_rf"] == "complete"
         assert payload["elapsed_time_hours"] == pytest.approx(1.5)
 

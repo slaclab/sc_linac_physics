@@ -111,18 +111,6 @@ class TestPhaseDisplayBase:
         qtbot.addWidget(w)
         w.log_message("should not raise")
 
-    def test_update_timestamp_with_label(self, qtbot):
-        w = PhaseDisplayBase()
-        qtbot.addWidget(w)
-        w.timestamp_label = QLabel()
-        w.update_timestamp()
-        assert "Last Updated:" in w.timestamp_label.text()
-
-    def test_update_timestamp_without_label(self, qtbot):
-        w = PhaseDisplayBase()
-        qtbot.addWidget(w)
-        w.update_timestamp()
-
     def test_bind_ui_widgets(self, qtbot):
         w = PhaseDisplayBase()
         qtbot.addWidget(w)
@@ -160,15 +148,6 @@ class TestPhaseDisplayBase:
         qtbot.addWidget(w)
         w.show_error("oops")
         mock_crit.assert_called_once()
-
-    @patch(
-        "sc_linac_physics.applications.rf_commissioning.ui.phase_display_base.QMessageBox.information"
-    )
-    def test_show_info(self, mock_info, qtbot):
-        w = PhaseDisplayBase()
-        qtbot.addWidget(w)
-        w.show_info("Title", "body")
-        mock_info.assert_called_once()
 
     def test_notify_parent_walks_hierarchy(self, qtbot):
         w = PhaseDisplayBase()
@@ -340,7 +319,7 @@ class TestBasePlaceholderDisplay:
 
     def test_on_run_automated_test_with_operator_and_cavity(self, freq_display):
         freq_display.get_current_operator = lambda: "op1"
-        freq_display.get_current_cavity = lambda: ("01_CAV1", "01")
+        freq_display.get_current_cavity = lambda: ("01-1", "01")
         freq_display.on_run_automated_test()
 
 

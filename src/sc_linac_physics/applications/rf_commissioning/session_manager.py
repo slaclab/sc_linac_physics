@@ -119,7 +119,7 @@ class CommissioningSession:
         artifact_payload: dict | None = None,
         artifact_type: str = "phase_result",
     ) -> bool:
-        """Complete a normalized phase instance (pure v2 lifecycle)."""
+        """Complete a normalized phase instance."""
         if self._active_record_id is None:
             return False
 
@@ -145,7 +145,7 @@ class CommissioningSession:
         artifact_payload: dict | None = None,
         artifact_type: str = "phase_failure_snapshot",
     ) -> bool:
-        """Fail a normalized phase instance (pure v2 lifecycle)."""
+        """Fail a normalized phase instance."""
         if self._active_record_id is None:
             return False
 
@@ -178,7 +178,7 @@ class CommissioningSession:
     def get_active_phase_projection(self) -> dict | None:
         """Return phase projection used by UI state components.
 
-        Uses normalized v2 data exclusively.
+        Uses normalized workflow data exclusively.
         """
         run = self.get_active_workflow_run()
         instances = self.get_active_phase_instances()
@@ -405,10 +405,7 @@ class CommissioningSession:
         """
         cavity_name = None
         if self._active_record:
-            cavity_name = (
-                f"L{self._active_record.linac}B_CM{self._active_record.cryomodule}"
-                f"_CAV{self._active_record.cavity_number}"
-            )
+            cavity_name = self._active_record.full_cavity_name
 
         return {
             "has_active_record": self.has_active_record(),
