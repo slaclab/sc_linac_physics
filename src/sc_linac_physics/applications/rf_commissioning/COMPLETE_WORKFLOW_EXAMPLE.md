@@ -9,7 +9,7 @@ This example demonstrates the current session-first lifecycle:
 
 ## Scenario
 
-Commission cavity `02_CAV5` in cryomodule `02` and hand it off to operations.
+Commission cavity 5 in cryomodule `02` and hand it off to operations.
 
 ## End-to-End Example
 
