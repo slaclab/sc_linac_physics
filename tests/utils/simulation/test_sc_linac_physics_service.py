@@ -1,3 +1,4 @@
+import subprocess
 from unittest.mock import Mock, patch
 
 import pytest
@@ -409,6 +410,12 @@ class TestSCLinacPhysicsService:
 class TestMainFunction:
     """Test the main entry point."""
 
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service._stop_caproto_repeater"
+    )
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service._start_caproto_repeater"
+    )
     @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.run")
     @patch(
         "sc_linac_physics.utils.simulation.sc_linac_physics_service.ioc_arg_parser"
@@ -416,7 +423,14 @@ class TestMainFunction:
     @patch(
         "sc_linac_physics.utils.simulation.sc_linac_physics_service.SCLinacPhysicsService"
     )
-    def test_main_function(self, mock_service_class, mock_parser, mock_run):
+    def test_main_function(
+        self,
+        mock_service_class,
+        mock_parser,
+        mock_run,
+        mock_start_repeater,
+        mock_stop_repeater,
+    ):
         """Test that main() sets up and runs the service."""
         from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
             main,
@@ -425,6 +439,8 @@ class TestMainFunction:
         mock_parser.return_value = (None, {"option": "value"})
         mock_service = Mock()
         mock_service_class.return_value = mock_service
+        mock_repeater = Mock()
+        mock_start_repeater.return_value = mock_repeater
 
         main()
 
@@ -438,6 +454,107 @@ class TestMainFunction:
 
         # Verify run was called with service and options
         mock_run.assert_called_once_with(mock_service, option="value")
+        mock_start_repeater.assert_called_once()
+        mock_stop_repeater.assert_called_once_with(mock_repeater)
+
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service._stop_caproto_repeater"
+    )
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service._start_caproto_repeater"
+    )
+    @patch("sc_linac_physics.utils.simulation.sc_linac_physics_service.run")
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.ioc_arg_parser"
+    )
+    @patch(
+        "sc_linac_physics.utils.simulation.sc_linac_physics_service.SCLinacPhysicsService"
+    )
+    def test_main_stops_repeater_if_run_raises(
+        self,
+        mock_service_class,
+        mock_parser,
+        mock_run,
+        mock_start_repeater,
+        mock_stop_repeater,
+    ):
+        """Test repeater cleanup still runs when run() raises."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            main,
+        )
+
+        mock_parser.return_value = (None, {"option": "value"})
+        mock_service_class.return_value = Mock()
+        mock_repeater = Mock()
+        mock_start_repeater.return_value = mock_repeater
+        mock_run.side_effect = RuntimeError("boom")
+
+        with pytest.raises(RuntimeError, match="boom"):
+            main()
+
+        mock_stop_repeater.assert_called_once_with(mock_repeater)
+
+    def test_start_caproto_repeater_missing_binary(self):
+        """Test startup continues when caproto-repeater is not on PATH."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            _start_caproto_repeater,
+        )
+
+        with patch(
+            "sc_linac_physics.utils.simulation.sc_linac_physics_service.shutil.which",
+            return_value=None,
+        ):
+            with pytest.warns(RuntimeWarning, match="not found"):
+                assert _start_caproto_repeater() is None
+
+    def test_start_caproto_repeater_launch_failure(self):
+        """Test startup continues if popen fails."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            _start_caproto_repeater,
+        )
+
+        with (
+            patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.shutil.which",
+                return_value="/usr/local/bin/caproto-repeater",
+            ),
+            patch(
+                "sc_linac_physics.utils.simulation.sc_linac_physics_service.subprocess.Popen",
+                side_effect=OSError("exec failed"),
+            ),
+        ):
+            with pytest.warns(RuntimeWarning, match="Failed to start"):
+                assert _start_caproto_repeater() is None
+
+    def test_stop_caproto_repeater_terminates(self):
+        """Test repeater shutdown terminates a running process."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            _stop_caproto_repeater,
+        )
+
+        process = Mock()
+        process.poll.return_value = None
+
+        _stop_caproto_repeater(process)
+
+        process.terminate.assert_called_once()
+        process.wait.assert_called_once_with(timeout=2)
+
+    def test_stop_caproto_repeater_kills_after_timeout(self):
+        """Test repeater shutdown force-kills when terminate times out."""
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            _stop_caproto_repeater,
+        )
+
+        process = Mock()
+        process.poll.return_value = None
+        process.wait.side_effect = [subprocess.TimeoutExpired("cmd", 2), None]
+
+        _stop_caproto_repeater(process)
+
+        process.terminate.assert_called_once()
+        process.kill.assert_called_once()
+        assert process.wait.call_count == 2
 
 
 class TestIntegration:
