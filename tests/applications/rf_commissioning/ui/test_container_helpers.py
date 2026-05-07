@@ -3,9 +3,11 @@ from unittest.mock import Mock
 
 import pytest
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
+    QInputDialog,
     QLabel,
     QMessageBox,
     QTableWidget,
@@ -458,11 +460,11 @@ def test_confirm_and_start_new_conflict_and_error(host_stub, monkeypatch):
     )
     host_stub.operator_combo.setCurrentIndex(1)
 
-    records.confirm_and_start_new(host_stub, "01_CAV1", "L1B", "01", "1")
+    records.confirm_and_start_new(host_stub, "01-1", "L1B", "01", "1")
     host_stub._handle_note_conflict.assert_called_once()
 
     host_stub.start_new_record = Mock(side_effect=RuntimeError("boom"))
-    records.confirm_and_start_new(host_stub, "01_CAV1", "L1B", "01", "1")
+    records.confirm_and_start_new(host_stub, "01-1", "L1B", "01", "1")
 
 
 def test_note_actions_operator_required_and_dialog_paths(
@@ -545,6 +547,11 @@ def test_persistence_merge_success_failure_and_dialogs(host_stub, monkeypatch):
         )
         is True
     )
+    assert host_stub.session.db.save_record.call_count == 1
+    assert (
+        host_stub.session.db.save_record.call_args.kwargs["expected_version"]
+        == 7
+    )
 
     host_stub.session.db.save_record = Mock(
         side_effect=RuntimeError("save failed")
@@ -560,7 +567,85 @@ def test_persistence_merge_success_failure_and_dialogs(host_stub, monkeypatch):
     )
     assert critical.called
 
-    # Measurement history dialog branches.
+
+def test_persistence_merge_retries_on_second_conflict(host_stub, monkeypatch):
+    host_stub.session.has_active_record.return_value = True
+    host_stub.session.get_active_record_id = Mock(return_value=5)
+    host_stub.session.get_active_record = Mock(return_value=SimpleNamespace())
+    host_stub.load_record = Mock(return_value=True)
+
+    info = Mock()
+    critical = Mock()
+    monkeypatch.setattr(QMessageBox, "information", info)
+    monkeypatch.setattr(QMessageBox, "critical", critical)
+
+    dialog_calls = {"count": 0}
+
+    class _MergeAccepted:
+        def __init__(self, *_a, **_k):
+            dialog_calls["count"] += 1
+
+        def exec_(self):
+            return QDialog.Accepted
+
+        def get_merged_record(self):
+            return SimpleNamespace()
+
+    save_attempts = {"count": 0}
+
+    def _save_record(_record, _record_id, expected_version):
+        save_attempts["count"] += 1
+        if save_attempts["count"] == 1:
+            raise RecordConflictError(
+                record_id=5,
+                expected_version=7,
+                actual_version=8,
+            )
+
+    host_stub.session.db = SimpleNamespace(
+        get_record_with_version=Mock(
+            side_effect=[
+                (SimpleNamespace(name="v7"), 7),
+                (SimpleNamespace(name="v8"), 8),
+            ]
+        ),
+        save_record=Mock(side_effect=_save_record),
+    )
+
+    monkeypatch.setattr(persistence, "MergeDialog", _MergeAccepted)
+
+    assert (
+        persistence.handle_save_conflict(
+            host_stub,
+            RecordConflictError(
+                record_id=5,
+                expected_version=1,
+                actual_version=2,
+            ),
+        )
+        is True
+    )
+
+    assert dialog_calls["count"] == 2
+    assert host_stub.session.db.save_record.call_count == 2
+    assert (
+        host_stub.session.db.save_record.call_args_list[0].kwargs[
+            "expected_version"
+        ]
+        == 7
+    )
+    assert (
+        host_stub.session.db.save_record.call_args_list[1].kwargs[
+            "expected_version"
+        ]
+        == 8
+    )
+    assert info.called
+
+
+def test_show_measurement_history_modeless_reuses_visible_dialog(
+    host_stub, monkeypatch
+):
     host_stub.session.has_active_record.return_value = False
     info_no_record = Mock()
     monkeypatch.setattr(QMessageBox, "information", info_no_record)
@@ -574,15 +659,48 @@ def test_persistence_merge_success_failure_and_dialogs(host_stub, monkeypatch):
     class _HistoryDialog:
         def __init__(self, _session, parent=None):
             called["parent"] = parent
+            called["init_count"] = called.get("init_count", 0) + 1
+            called["visible"] = True
 
-        def exec_(self):
-            called["exec"] = True
+        def isVisible(self):
+            return called["visible"]
+
+        def show(self):
+            called["show"] = called.get("show", 0) + 1
+
+        def raise_(self):
+            called["raised"] = called.get("raised", 0) + 1
+
+        def activateWindow(self):
+            called["activated"] = called.get("activated", 0) + 1
+
+        def setAttribute(self, *_args, **_kwargs):
+            called["set_attribute"] = True
+
+        @property
+        def destroyed(self):
+            return SimpleNamespace(connect=lambda _cb: None)
 
     monkeypatch.setattr(persistence, "MeasurementHistoryDialog", _HistoryDialog)
     persistence.show_measurement_history(host_stub)
-    assert called["exec"] is True
+    assert called["show"] == 1
+    assert called["set_attribute"] is True
+    assert host_stub._measurement_history_dialog is not None
 
-    # Database browser branches.
+    # Second open should reuse existing visible modeless dialog.
+    persistence.show_measurement_history(host_stub)
+    assert called["init_count"] == 1
+    assert called["show"] == 1
+    assert called["raised"] >= 2
+    assert called["activated"] >= 2
+
+
+def test_show_database_browser_load_failure_shows_critical(
+    host_stub, monkeypatch
+):
+    critical = Mock()
+    monkeypatch.setattr(QMessageBox, "critical", critical)
+
     host_stub.cryomodule_combo.setCurrentIndex(1)
     host_stub.cavity_combo.setCurrentIndex(1)
 
@@ -647,3 +765,106 @@ def test_tab_state_init_and_phase_icon_fallback_branches(host_stub):
         tab_state.get_phase_icon(host_stub, CommissioningPhase.FREQUENCY_TUNING)
         == "○"
     )
+
+
+def test_quick_add_note_conflict_calls_handler(host_stub, monkeypatch):
+    host_stub.session.has_active_record.return_value = True
+    host_stub.operator_combo.setCurrentIndex(1)  # "Alice"
+
+    monkeypatch.setattr(
+        QInputDialog, "getMultiLineText", lambda *a, **kw: ("my note", True)
+    )
+    host_stub.session.append_general_note = Mock(
+        side_effect=RecordConflictError(
+            record_id=1, expected_version=1, actual_version=2
+        )
+    )
+    note_actions.quick_add_note(host_stub)
+    host_stub._handle_note_conflict.assert_called_once()
+
+
+def test_quick_add_note_no_operator_shows_warning(host_stub, monkeypatch):
+    host_stub.session.has_active_record.return_value = True
+    host_stub.operator_combo.setCurrentIndex(0)  # "Select" → data ""
+    warning = Mock()
+    monkeypatch.setattr(QMessageBox, "warning", warning)
+    note_actions.quick_add_note(host_stub)
+    warning.assert_called_once()
+
+
+def test_show_notes_context_menu_empty_table_exits_early(host_stub):
+    host_stub.notes_table.setRowCount(0)
+    note_actions.show_notes_context_menu(host_stub, QPoint(0, 0))
+
+
+def test_show_notes_context_menu_with_rows_shows_menu(host_stub, monkeypatch):
+    host_stub.notes_table.setRowCount(1)
+    mock_action = Mock()
+    mock_menu = Mock()
+    mock_menu.addAction.return_value = mock_action
+    mock_menu.exec_.return_value = None  # No action selected
+    monkeypatch.setattr(note_actions, "QMenu", lambda _parent: mock_menu)
+    note_actions.show_notes_context_menu(host_stub, QPoint(0, 0))
+
+
+def test_show_notes_context_menu_edit_action_calls_handler(
+    host_stub, monkeypatch
+):
+    host_stub.notes_table.setRowCount(1)
+    mock_action = Mock()
+    mock_menu = Mock()
+    mock_menu.addAction.return_value = mock_action
+    mock_menu.exec_.return_value = (
+        mock_action  # Return same object → triggers edit
+    )
+    monkeypatch.setattr(note_actions, "QMenu", lambda _parent: mock_menu)
+    host_stub._on_edit_note = Mock()
+    note_actions.show_notes_context_menu(host_stub, QPoint(0, 0))
+    host_stub._on_edit_note.assert_called_once()
+
+
+def test_on_edit_note_no_selection_returns_early(host_stub):
+    host_stub.notes_table.setColumnCount(4)
+    host_stub.notes_table.setRowCount(0)
+    note_actions.on_edit_note(host_stub)  # Should not raise
+
+
+def test_on_edit_note_dialog_cancelled_returns_early(host_stub, monkeypatch):
+    host_stub.notes_table.setColumnCount(4)
+    host_stub.notes_table.setRowCount(1)
+    ref_item = QTableWidgetItem("t")
+    ref_item.setData(Qt.UserRole, ("general", 0))
+    host_stub.notes_table.setItem(0, 0, ref_item)
+    host_stub.notes_table.setItem(0, 2, QTableWidgetItem("Alice"))
+    host_stub.notes_table.setItem(0, 3, QTableWidgetItem("hello"))
+    host_stub.notes_table.selectRow(0)
+
+    monkeypatch.setattr(
+        note_actions, "build_note_dialog", Mock(return_value=(None, None))
+    )
+    host_stub.session.update_general_note = Mock()
+    note_actions.on_edit_note(host_stub)
+    host_stub.session.update_general_note.assert_not_called()
+
+
+def test_on_edit_note_measurement_type_calls_update(host_stub, monkeypatch):
+    host_stub.notes_table.setColumnCount(4)
+    host_stub.notes_table.setRowCount(1)
+    ref_item = QTableWidgetItem("t")
+    ref_item.setData(Qt.UserRole, ("measurement", (42, 0)))
+    host_stub.notes_table.setItem(0, 0, ref_item)
+    host_stub.notes_table.setItem(0, 2, QTableWidgetItem("Alice"))
+    host_stub.notes_table.setItem(0, 3, QTableWidgetItem("old note"))
+    host_stub.notes_table.selectRow(0)
+
+    monkeypatch.setattr(
+        note_actions,
+        "build_note_dialog",
+        Mock(return_value=("Alice", "new note")),
+    )
+    host_stub.session.update_measurement_note = Mock(return_value=True)
+    note_actions.on_edit_note(host_stub)
+    host_stub.session.update_measurement_note.assert_called_once_with(
+        42, 0, "Alice", "new note"
+    )
+    host_stub._load_notes.assert_called()

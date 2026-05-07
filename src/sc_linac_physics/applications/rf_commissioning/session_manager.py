@@ -405,10 +405,7 @@ class CommissioningSession:
         """
         cavity_name = None
         if self._active_record:
-            cavity_name = (
-                f"L{self._active_record.linac}B_CM{self._active_record.cryomodule}"
-                f"_CAV{self._active_record.cavity_number}"
-            )
+            cavity_name = self._active_record.full_cavity_name
 
         return {
             "has_active_record": self.has_active_record(),

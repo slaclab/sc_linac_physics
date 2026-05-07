@@ -1,8 +1,11 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QDialog,
+    QLabel,
     QTableWidget,
     QWidget,
 )
@@ -87,7 +90,7 @@ def test_show_record_selector_renders_table_and_hooks_actions(
         {
             "id": 42,
             "start_time": "2026-01-01T01:02:03",
-            "overall_status": "in_progress",
+            "overall_status": "complete",
             "current_phase": "piezo_pre_rf",
             "updated_at": "2026-01-01T04:05:06",
         }
@@ -107,6 +110,14 @@ def test_show_record_selector_renders_table_and_hooks_actions(
             table = self.findChild(QTableWidget)
             assert table is not None
             assert table.rowCount() == 1
+            assert table.item(0, 2).text() == "Complete"
+            assert table.item(0, 2).foreground().color() == QColor(Qt.darkGreen)
+
+            labels = [label.text() for label in self.findChildren(QLabel)]
+            assert any(
+                "Select an operator before loading or starting a record" in text
+                for text in labels
+            )
             table.selectRow(0)
             table.cellDoubleClicked.emit(0, 0)
             return QDialog.Rejected
@@ -115,7 +126,7 @@ def test_show_record_selector_renders_table_and_hooks_actions(
 
     records.show_record_selector(
         host,
-        cavity_display_name="01_CAV1",
+        cavity_display_name="01-1",
         linac="L1B",
         cryomodule="01",
         cavity_number="1",

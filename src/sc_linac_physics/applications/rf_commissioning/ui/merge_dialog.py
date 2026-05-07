@@ -60,7 +60,7 @@ class MergeDialog(QDialog):
         header = QLabel(
             "This record was modified by another user.\n"
             "Choose which version to keep for each field:\n\n"
-            "<b>Note:</b> All measurement history from both users is automatically preserved."
+            "<b>Note:</b> All measurement history from both versions is automatically preserved."
         )
         header.setWordWrap(True)
         layout.addWidget(header)
@@ -81,11 +81,11 @@ class MergeDialog(QDialog):
         # Buttons
         button_layout = QHBoxLayout()
 
-        keep_all_local = QPushButton("Keep All My Changes")
+        keep_all_local = QPushButton("Keep All Local Changes")
         keep_all_local.clicked.connect(self._keep_all_local)
         button_layout.addWidget(keep_all_local)
 
-        keep_all_db = QPushButton("Keep All Their Changes")
+        keep_all_db = QPushButton("Keep All Database Changes")
         keep_all_db.clicked.connect(self._keep_all_db)
         button_layout.addWidget(keep_all_db)
 
@@ -175,7 +175,7 @@ class MergeDialog(QDialog):
 
         # Local version
         local_layout = QVBoxLayout()
-        local_radio = QRadioButton("My version:")
+        local_radio = QRadioButton("Local version:")
         local_radio.setChecked(True)  # Default to local
         button_group.addButton(local_radio, 0)
         local_layout.addWidget(local_radio)
@@ -189,7 +189,7 @@ class MergeDialog(QDialog):
 
         # Database version
         db_layout = QVBoxLayout()
-        db_radio = QRadioButton("Their version:")
+        db_radio = QRadioButton("Database version:")
         button_group.addButton(db_radio, 1)
         db_layout.addWidget(db_radio)
 
