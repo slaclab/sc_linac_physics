@@ -1,3 +1,6 @@
+import os
+import subprocess
+
 from caproto import ChannelEnum, ChannelFloat, ChannelInteger
 from caproto.server import ioc_arg_parser, run
 
@@ -461,6 +464,14 @@ class SCLinacPhysicsService(Service):
 
 
 def main():
+    os.environ.setdefault("EPICS_CAS_AUTO_BEACON_ADDR_LIST", "no")
+    os.environ.setdefault("EPICS_CAS_BEACON_ADDR_LIST", "127.0.0.1")
+    subprocess.Popen(
+        ["caproto-repeater"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
     service = SCLinacPhysicsService()
     _, run_options = ioc_arg_parser(
         default_prefix="", desc="Simulated CM Cavity Service"

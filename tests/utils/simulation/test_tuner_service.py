@@ -121,6 +121,48 @@ class TestPiezoPVGroup:
                 # Test completed without error
                 assert True
 
+    @pytest.mark.asyncio
+    async def test_prerf_no_failure_with_numeric_fail_mode(
+        self, piezo_group, mock_pvproperty_instance
+    ):
+        """SIM_FAIL=0 should produce pass statuses and nominal capacitance."""
+        piezo_group.simulate_failure._data["value"] = 0
+
+        with patch(
+            "sc_linac_physics.utils.simulation.tuner_service.sleep",
+            new_callable=AsyncMock,
+        ):
+            await piezo_group.prerf_test_start.putter(
+                mock_pvproperty_instance,
+                1,
+            )
+
+        assert piezo_group.prerf_cha_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.prerf_chb_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.capacitance_a.value == pytest.approx(25.3)
+        assert piezo_group.capacitance_b.value == pytest.approx(24.8)
+
+    @pytest.mark.asyncio
+    async def test_prerf_no_failure_with_enum_string_fail_mode(
+        self, piezo_group, mock_pvproperty_instance
+    ):
+        """SIM_FAIL enum text should map to no-failure branch."""
+        piezo_group.simulate_failure._data["value"] = b"No Failure"
+
+        with patch(
+            "sc_linac_physics.utils.simulation.tuner_service.sleep",
+            new_callable=AsyncMock,
+        ):
+            await piezo_group.prerf_test_start.putter(
+                mock_pvproperty_instance,
+                1,
+            )
+
+        assert piezo_group.prerf_cha_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.prerf_chb_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.capacitance_a.value == pytest.approx(25.3)
+        assert piezo_group.capacitance_b.value == pytest.approx(24.8)
+
     def test_piezo_properties_values(self, piezo_group):
         """Test piezo property values and types."""
         if hasattr(piezo_group, "voltage"):
