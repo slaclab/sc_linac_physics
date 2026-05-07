@@ -44,10 +44,9 @@ class MockGUIMachine:
 
 
 @pytest.fixture(scope="module")
-def display():
+def display(qapp):
     """Create one CavityDisplayGUI for the whole module — avoids rebuilding it
     for every test, which is expensive due to heavy PyDM/EPICS imports."""
-    from PyQt5.QtWidgets import QApplication
     from sc_linac_physics.displays.cavity_display.cavity_display import (
         CavityDisplayGUI,
     )
@@ -72,12 +71,13 @@ def display():
         patch.object(CavityDisplayGUI, "show"),
         patch.object(CavityDisplayGUI, "showMaximized"),
     ):
+        qapp.processEvents()
         d = CavityDisplayGUI()
-        QApplication.processEvents()
+        qapp.processEvents()
         yield d
         d.close()
         d.deleteLater()
-        QApplication.processEvents()
+        qapp.processEvents()
 
 
 @pytest.fixture

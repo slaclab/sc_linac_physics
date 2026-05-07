@@ -1,5 +1,7 @@
 import os
+import shutil
 import subprocess
+import warnings
 
 from caproto import ChannelEnum, ChannelFloat, ChannelInteger
 from caproto.server import ioc_arg_parser, run
@@ -466,17 +468,65 @@ class SCLinacPhysicsService(Service):
 def main():
     os.environ.setdefault("EPICS_CAS_AUTO_BEACON_ADDR_LIST", "no")
     os.environ.setdefault("EPICS_CAS_BEACON_ADDR_LIST", "127.0.0.1")
-    subprocess.Popen(
-        ["caproto-repeater"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
     service = SCLinacPhysicsService()
     _, run_options = ioc_arg_parser(
         default_prefix="", desc="Simulated CM Cavity Service"
     )
-    run(service, **run_options)
+    repeater_process = _start_caproto_repeater()
+
+    try:
+        run(service, **run_options)
+    finally:
+        _stop_caproto_repeater(repeater_process)
+
+
+def _start_caproto_repeater():
+    """Start caproto-repeater if available, warning and continuing on failure."""
+    repeater_path = shutil.which("caproto-repeater")
+    if repeater_path is None:
+        warnings.warn(
+            "caproto-repeater not found on PATH; continuing without it",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
+
+    try:
+        process = subprocess.Popen(
+            [repeater_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        warnings.warn(
+            f"Failed to start caproto-repeater ({exc}); continuing without it",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
+
+    if process.poll() not in (None, 0):
+        warnings.warn(
+            "caproto-repeater exited immediately; continuing without it",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
+
+    return process
+
+
+def _stop_caproto_repeater(process):
+    """Stop a repeater process started by this module."""
+    if process is None or process.poll() is not None:
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=2)
 
 
 if __name__ == "__main__":
