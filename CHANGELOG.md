@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.17.0 (2026-05-07)
+
+### Features
+
+- **rf-commissioning**: Add passed property to phase data models and fix history-start bug
+  ([#242](https://github.com/slaclab/sc_linac_physics/pull/242),
+  [`7856d43`](https://github.com/slaclab/sc_linac_physics/commit/7856d43474ddf82e7599a9e44d8d3bc1b76c0490))
+
+### Testing
+
+- **rf_commissioning**: Strengthen import boundary checks for package-root imports
+  ([#242](https://github.com/slaclab/sc_linac_physics/pull/242),
+  [`7856d43`](https://github.com/slaclab/sc_linac_physics/commit/7856d43474ddf82e7599a9e44d8d3bc1b76c0490))
+
+
 ## v9.16.1 (2026-05-07)
 
 ### Bug Fixes
