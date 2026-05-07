@@ -126,7 +126,7 @@ def test_show_record_selector_renders_table_and_hooks_actions(
 
     records.show_record_selector(
         host,
-        cavity_display_name="01_CAV1",
+        cavity_display_name="01-1",
         linac="L1B",
         cryomodule="01",
         cavity_number="1",

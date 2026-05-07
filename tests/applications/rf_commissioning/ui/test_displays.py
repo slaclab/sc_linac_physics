@@ -319,7 +319,7 @@ class TestBasePlaceholderDisplay:
 
     def test_on_run_automated_test_with_operator_and_cavity(self, freq_display):
         freq_display.get_current_operator = lambda: "op1"
-        freq_display.get_current_cavity = lambda: ("01_CAV1", "01")
+        freq_display.get_current_cavity = lambda: ("01-1", "01")
         freq_display.on_run_automated_test()
 
 

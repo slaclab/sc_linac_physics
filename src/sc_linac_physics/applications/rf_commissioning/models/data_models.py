@@ -641,13 +641,13 @@ class CommissioningRecord:
 
     @property
     def full_cavity_name(self) -> str:
-        """Get the full formatted cavity name for display (e.g., L1B_CM02_CAV3)."""
-        return f"L{self.linac}B_CM{self.cryomodule}_CAV{self.cavity_number}"
+        """Get the full formatted cavity name for display (e.g., L1B_CM02-3)."""
+        return f"L{self.linac}B_CM{self.cryomodule}-{self.cavity_number}"
 
     @property
     def short_cavity_name(self) -> str:
-        """Get the short formatted cavity name (e.g., 02_CAV3)."""
-        return f"{self.cryomodule}_CAV{self.cavity_number}"
+        """Get the short formatted cavity name (e.g., 02-3)."""
+        return f"{self.cryomodule}-{self.cavity_number}"
 
     @property
     def elapsed_time(self) -> float | None:

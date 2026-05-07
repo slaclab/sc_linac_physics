@@ -72,7 +72,7 @@ def on_load_or_start(host) -> None:
         linac, cryomodule, cavity_number
     )
 
-    cavity_display_name = f"{cryomodule}_CAV{cavity}"
+    cavity_display_name = f"{cryomodule}-{cavity}"
 
     if existing_records:
         show_record_selector(

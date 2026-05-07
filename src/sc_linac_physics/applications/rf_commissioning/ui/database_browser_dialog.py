@@ -214,10 +214,10 @@ class DatabaseBrowserDialog(QDialog):
         linac = record.get("linac", "?")
         linac_number = record.get("linac_number")
         linac_display = linac_number or linac
-        cryo = record.get("cryomodule", "?")
+        cm = record.get("cryomodule", "?")
         cavity = record.get("cavity_number", "?")
         self.table.setItem(row, 1, QTableWidgetItem(str(linac_display)))
-        self.table.setItem(row, 2, QTableWidgetItem(cryo))
+        self.table.setItem(row, 2, QTableWidgetItem(cm))
         self.table.setItem(row, 3, QTableWidgetItem(str(cavity)))
 
         # Start Time
@@ -299,7 +299,7 @@ class DatabaseBrowserDialog(QDialog):
 
     def _apply_filters(self) -> None:
         """Apply cavity filters to the record list."""
-        cryo = self.cryomodule_combo.currentText()
+        cm = self.cryomodule_combo.currentText()
         cav = self.cavity_combo.currentText()
         normalized_linac_filter = self._normalize_linac_value(
             self._linac_filter
@@ -314,7 +314,7 @@ class DatabaseBrowserDialog(QDialog):
                 and normalized_record_linac != normalized_linac_filter
             ):
                 continue
-            if cryo != "All CM" and record.get("cryomodule") != cryo:
+            if cm != "All CM" and record.get("cryomodule") != cm:
                 continue
             if cav != "All Cav" and record.get("cavity_number") != cav:
                 continue
@@ -351,12 +351,12 @@ class DatabaseBrowserDialog(QDialog):
 
             # Update info label
             linac = self.table.item(row, 1).text()
-            cryo = self.table.item(row, 2).text()
+            cm = self.table.item(row, 2).text()
             cavity = self.table.item(row, 3).text()
             phase = self.table.item(row, 6).text()
             status = self.table.item(row, 7).text()
             self.info_label.setText(
-                f"Selected: {linac}_CM{cryo}_CAV{cavity} - {phase} - {status}"
+                f"Selected: {linac}_CM{cm}-{cavity} - {phase} - {status}"
             )
             self.info_label.setStyleSheet("color: #4a9eff; padding: 5px;")
         else:

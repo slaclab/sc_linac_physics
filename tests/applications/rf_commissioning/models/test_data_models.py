@@ -135,7 +135,7 @@ class TestCommissioningRecord:
         )
 
         assert record.linac == 2
-        assert record.full_cavity_name == "L2B_CM02_CAV3"
+        assert record.full_cavity_name == "L2B_CM02-3"
 
     def test_linac_rejects_out_of_range_integer(self):
         with pytest.raises(ValueError, match="range 0..4"):
@@ -265,8 +265,8 @@ class TestCommissioningRecord:
 
         payload = record.to_dict()
 
-        assert record.full_cavity_name == "L1B_CM02_CAV3"
-        assert record.short_cavity_name == "02_CAV3"
+        assert record.full_cavity_name == "L1B_CM02-3"
+        assert record.short_cavity_name == "02-3"
         assert payload["phase_status"]["piezo_pre_rf"] == "complete"
         assert payload["elapsed_time_hours"] == pytest.approx(1.5)
 
