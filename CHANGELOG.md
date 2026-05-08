@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.19.0 (2026-05-08)
+
+### Features
+
+- **rf-commissioning**: Add Piezo Pre-RF single-cavity display and controller
+  ([#244](https://github.com/slaclab/sc_linac_physics/pull/244),
+  [`5caaedc`](https://github.com/slaclab/sc_linac_physics/commit/5caaedc19506b2421a5517fe6888e87172b080d0))
+
+
 ## v9.18.0 (2026-05-08)
 
 ### Features
