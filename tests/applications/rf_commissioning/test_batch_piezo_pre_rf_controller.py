@@ -618,14 +618,24 @@ class TestRunBatchPublicAPI:
     def test_run_batch_clears_abort_event(self):
         ctrl = _make_controller()
         ctrl._abort_event.set()
-        ctrl._run_batch = lambda cavities, op: None  # no-op
+
+        # Capture the abort_event state at the moment _run_batch is called
+        abort_event_state_when_called = []
+
+        def _track_abort_state(cavities, op):
+            abort_event_state_when_called.append(ctrl._abort_event.is_set())
+
+        ctrl._run_batch = _track_abort_state
         ctrl.run_batch([CavitySpec("01", 1)], "op")
-        # The event is cleared before the thread starts
-        # Give thread a moment to clear
+
+        # Wait for the background thread to complete
         import time
 
-        time.sleep(0.05)
-        assert not ctrl._abort_event.is_set()
+        time.sleep(0.1)
+
+        # Verify that abort_event was False when _run_batch was called
+        # (i.e., run_batch() itself cleared it before calling _run_batch)
+        assert abort_event_state_when_called == [False]
 
     def test_run_batch_starts_background_thread(self):
         ctrl = _make_controller()

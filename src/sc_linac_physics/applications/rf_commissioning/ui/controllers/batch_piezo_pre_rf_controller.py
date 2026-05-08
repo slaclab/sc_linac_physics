@@ -321,7 +321,7 @@ class BatchPiezoPreRFController(QObject):
             return
 
         if self._abort_event.is_set():
-            self._mark_remaining_skipped(states)
+            self._mark_remaining_skipped(states, only_triggered=True)
             return
 
         self._ensure_pool()
@@ -409,12 +409,13 @@ class BatchPiezoPreRFController(QObject):
                 f"[{spec.key}] PASSED (Cap A={result_data.capacitance_a * 1e9:.1f} nF, "
                 f"Cap B={result_data.capacitance_b * 1e9:.1f} nF)"
             )
+            self._complete_phase_instance(state, result_data)
         else:
             self.cavity_status_changed.emit(spec.key, self.STATUS_FAILED)
             notes = result_data.notes if result_data else "No data"
             self.log_message.emit(f"[{spec.key}] FAILED: {notes}")
+            self._fail_phase_instance(state, notes)
 
-        self._complete_phase_instance(state, result_data)
         self._persist_record(state)
         self.cavity_result_ready.emit(spec.key, result_data)
 

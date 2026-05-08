@@ -439,15 +439,17 @@ class BatchPiezoPreRFWindow(QWidget):
     # ------------------------------------------------------------------
 
     def _get_operator(self) -> str:
-        """Read the operator from the parent commissioning window."""
+        """Read the operator from the parent commissioning window.
+
+        Only accepts operator values from currentData() if truthy and not "__add__".
+        Returns empty string if no valid operator is found, preventing invalid
+        operator names from being recorded when placeholder text is selected.
+        """
         parent = self.parent()
         while parent:
             if hasattr(parent, "operator_combo"):
-                data = parent.operator_combo.currentData()
-                if data and data != "__add__":
-                    return data
-                text = parent.operator_combo.currentText()
-                if text and not text.startswith("👤 Select"):
-                    return text.replace("👤 ", "").strip()
-            parent = parent.parent() if hasattr(parent, "parent") else None
+                operator = parent.operator_combo.currentData()
+                if operator and operator != "__add__":
+                    return operator
+            parent = parent.parent()
         return ""

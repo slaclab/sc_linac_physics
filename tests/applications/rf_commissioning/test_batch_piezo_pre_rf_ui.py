@@ -162,8 +162,13 @@ class TestSelectAll:
 
     def test_select_all_updates_count_label(self, win):
         win._select_all()
+        selected = win._get_selected_cavities()
+        # Verify actual cavities are selected
+        assert len(selected) > 0
+        # Verify label contains the non-zero count and doesn't start with "0"
         label = win._selection_count_label.text()
-        assert "0" not in label or "cavities" in label  # non-zero count
+        assert not label.startswith("0 ")
+        assert str(len(selected)) in label
 
     def test_deselect_all_resets_count_label(self, win):
         win._select_all()
