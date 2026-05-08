@@ -10,6 +10,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
 )
 
 from .base_placeholder import BasePlaceholderDisplay
+from .piezo_pre_rf import PiezoPreRFDisplay
 from .standard import (
     CavityCharDisplay,
     FrequencyTuningDisplay,
@@ -21,6 +22,7 @@ from .standard import (
 )
 
 PHASE_DISPLAY_MAP: dict[CommissioningPhase, type[BasePlaceholderDisplay]] = {
+    CommissioningPhase.PIEZO_PRE_RF: PiezoPreRFDisplay,
     CommissioningPhase.FREQUENCY_TUNING: FrequencyTuningDisplay,
     CommissioningPhase.SSA_CHAR: SSACharDisplay,
     CommissioningPhase.CAVITY_CHAR: CavityCharDisplay,

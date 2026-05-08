@@ -6,6 +6,7 @@ from .builders import (
     LOCAL_LABEL_STYLE,
 )
 from .displays import (
+    PiezoPreRFDisplay,
     FrequencyTuningDisplay,
     SSACharDisplay,
     CavityCharDisplay,
@@ -17,6 +18,7 @@ from .displays import (
 from .phase_display_base import PhaseDisplayBase
 
 __all__ = [
+    "PiezoPreRFDisplay",
     "PiezoPreRFUI",
     "LOCAL_CAP_STYLE",
     "LOCAL_LABEL_STYLE",
