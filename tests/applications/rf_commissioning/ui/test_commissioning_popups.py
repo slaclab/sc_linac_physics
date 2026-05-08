@@ -73,7 +73,11 @@ def _session(has_record=True, history=None):
 
 
 def _history_entry(
-    id=1, phase="piezo_pre_rf", operator="Alice", notes=None, data=None
+    id=1,
+    phase="piezo_pre_rf",
+    operator: str | None = "Alice",
+    notes=None,
+    data=None,
 ):
     return {
         "id": id,
@@ -304,8 +308,51 @@ def test_mhd_history_entries_populate_table(qtbot):
     assert "2 measurement" in dlg.count_label.text()
 
 
+def test_mhd_null_measurement_data_shows_neutral_status(qtbot):
+    history = [
+        {
+            "id": 1,
+            "timestamp": "2025-01-01T10:00:00",
+            "phase": "piezo_pre_rf",
+            "operator": "Alice",
+            "notes": [],
+            "measurement_data": None,
+        }
+    ]
+    dlg = MeasurementHistoryDialog(_session(history=history))
+    qtbot.addWidget(dlg)
+    assert dlg.table.item(0, 2).text() == "—"
+    assert dlg.table.item(0, 5).text() == "No data"
+
+
+def test_mhd_non_mapping_measurement_data_shows_neutral_status(qtbot):
+    history = [
+        {
+            "id": 1,
+            "timestamp": "2025-01-01T10:00:00",
+            "phase": "piezo_pre_rf",
+            "operator": "Alice",
+            "notes": [],
+            "measurement_data": ["legacy", "payload"],
+        }
+    ]
+    dlg = MeasurementHistoryDialog(_session(history=history))
+    qtbot.addWidget(dlg)
+    assert dlg.table.item(0, 2).text() == "—"
+    assert dlg.table.item(0, 5).text() == "['legacy', 'payload']"
+
+
 def test_mhd_missing_operator_shows_unknown(qtbot):
-    history = [_history_entry(operator=None)]
+    history = [
+        {
+            "id": 1,
+            "timestamp": "2025-01-01T10:00:00",
+            "phase": "piezo_pre_rf",
+            "operator": None,
+            "notes": [],
+            "measurement_data": {},
+        }
+    ]
     dlg = MeasurementHistoryDialog(_session(history=history))
     qtbot.addWidget(dlg)
     assert dlg.table.item(0, 3).text() == "Unknown"
@@ -378,6 +425,27 @@ def test_mhd_summarize_data_complex_only(qtbot):
         dlg._summarize_measurement_data({"a": {"nested": True}})
         == "Complex data"
     )
+
+
+def test_mhd_result_for_complete_payload_without_passed_defaults_to_pass(qtbot):
+    dlg = MeasurementHistoryDialog(_session())
+    qtbot.addWidget(dlg)
+    label, _ = dlg._result_for({"is_complete": True})
+    assert label == "Pass"
+
+
+def test_mhd_result_for_complete_failed_payload(qtbot):
+    dlg = MeasurementHistoryDialog(_session())
+    qtbot.addWidget(dlg)
+    label, _ = dlg._result_for({"is_complete": True, "passed": False})
+    assert label == "Fail"
+
+
+def test_mhd_result_for_non_mapping_payload_is_neutral(qtbot):
+    dlg = MeasurementHistoryDialog(_session())
+    qtbot.addWidget(dlg)
+    label, _ = dlg._result_for(["legacy"])
+    assert label == "—"
 
 
 def test_mhd_history_notes_shown_in_table(qtbot):
