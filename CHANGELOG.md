@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.17.1 (2026-05-08)
+
+### Bug Fixes
+
+- **rf-commissioning**: Fix status presentation logic and add Result column to history
+  ([#243](https://github.com/slaclab/sc_linac_physics/pull/243),
+  [`bc8e762`](https://github.com/slaclab/sc_linac_physics/commit/bc8e7628e252e519b9bb52706e9485f381b50a33))
+
+
 ## v9.17.0 (2026-05-07)
 
 ### Features
