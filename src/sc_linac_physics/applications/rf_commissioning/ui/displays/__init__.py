@@ -1,6 +1,7 @@
 """Public exports for RF commissioning phase displays."""
 
 from .base_placeholder import BasePlaceholderDisplay
+from .piezo_pre_rf import PiezoPreRFDisplay
 from .registry import PHASE_DISPLAY_MAP, get_phase_display_class
 from .standard import (
     CavityCharDisplay,
@@ -14,6 +15,7 @@ from .standard import (
 
 __all__ = [
     "BasePlaceholderDisplay",
+    "PiezoPreRFDisplay",
     "FrequencyTuningDisplay",
     "SSACharDisplay",
     "CavityCharDisplay",
