@@ -18,6 +18,9 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 from sc_linac_physics.applications.rf_commissioning.ui.displays.base_placeholder import (
     BasePlaceholderDisplay,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.displays.piezo_pre_rf import (
+    PiezoPreRFDisplay,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.displays.registry import (
     PHASE_DISPLAY_MAP,
     get_phase_display_class,
@@ -323,6 +326,23 @@ class TestBasePlaceholderDisplay:
         freq_display.get_current_operator = lambda: "op1"
         freq_display.get_current_cavity = lambda: ("01-1", "01")
         freq_display.on_run_automated_test()
+
+    def test_piezo_update_local_results_does_not_touch_run_status(self):
+        display = PiezoPreRFDisplay.__new__(PiezoPreRFDisplay)
+        display.local_cha_result = MagicMock()
+        display.local_chb_result = MagicMock()
+        display.local_overall_result = MagicMock()
+        display.local_phase_status = MagicMock()
+
+        result = SimpleNamespace(
+            channel_a_passed=True,
+            channel_b_passed=False,
+            passed=False,
+        )
+
+        PiezoPreRFDisplay._update_local_results(display, result)
+
+        display.local_phase_status.setText.assert_not_called()
 
 
 # =============================================================================
