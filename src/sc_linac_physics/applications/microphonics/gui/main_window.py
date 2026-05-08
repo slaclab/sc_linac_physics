@@ -59,7 +59,7 @@ class MicrophonicsGUI(Display):
 
         # Main Layout
         main_layout = QHBoxLayout()
-        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setContentsMargins(5, 2, 5, 5)
         main_layout.setSpacing(5)
         # Setting layout on display widget
         self.setLayout(main_layout)
@@ -68,7 +68,7 @@ class MicrophonicsGUI(Display):
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(2, 2, 2, 2)
-        left_layout.setSpacing(5)
+        left_layout.setSpacing(2)
 
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
@@ -222,7 +222,16 @@ class MicrophonicsGUI(Display):
                     is_modal=False,
                 )
                 return
-            self.plot_panel.clear_plots()  # Clear old plots before starting new measurement
+            selected_cm_count = self.config_panel.get_selected_cm_count()
+            if selected_cm_count > 1:
+                QMessageBox.warning(
+                    self,
+                    "Feature Not Implemented",
+                    "Multi-CM measurement visualization is not yet implemented. "
+                    "Please select one cryomodule at a time.",
+                )
+                return
+            self.plot_panel.clear_plots()
 
             # Check for cross CM cavity selection
             low_cm = any(c <= 4 for c in selected_cavities)
