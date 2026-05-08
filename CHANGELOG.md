@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.18.0 (2026-05-08)
+
+### Features
+
+- **microphonics**: Add Select All CMs button with multi-CM guard
+  ([#191](https://github.com/slaclab/sc_linac_physics/pull/191),
+  [`ff9d2a5`](https://github.com/slaclab/sc_linac_physics/commit/ff9d2a5df8ce6fb03514850d8c43932ce0bed72b))
+
+
 ## v9.17.1 (2026-05-08)
 
 ### Bug Fixes
