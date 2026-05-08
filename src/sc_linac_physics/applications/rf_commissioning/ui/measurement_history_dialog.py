@@ -1,5 +1,8 @@
 """Dialog for viewing measurement history."""
 
+from collections.abc import Mapping
+
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -81,9 +84,16 @@ class MeasurementHistoryDialog(QDialog):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
+        self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
-            ["Timestamp", "Phase", "Operator", "Notes", "Data Summary"]
+            [
+                "Timestamp",
+                "Phase",
+                "Result",
+                "Operator",
+                "Notes",
+                "Data Summary",
+            ]
         )
 
         # Make columns resize appropriately
@@ -91,8 +101,9 @@ class MeasurementHistoryDialog(QDialog):
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.Stretch)
 
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -149,17 +160,27 @@ class MeasurementHistoryDialog(QDialog):
             phase_item.setFlags(phase_item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row, 1, phase_item)
 
+            # Result
+            result_label, result_color = self._result_for(
+                entry["measurement_data"]
+            )
+            result_item = QTableWidgetItem(result_label)
+            result_item.setFlags(result_item.flags() & ~Qt.ItemIsEditable)
+            result_item.setForeground(result_color)
+            result_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 2, result_item)
+
             # Operator
             operator = entry.get("operator") or "Unknown"
             operator_item = QTableWidgetItem(operator)
             operator_item.setFlags(operator_item.flags() & ~Qt.ItemIsEditable)
-            self.table.setItem(row, 2, operator_item)
+            self.table.setItem(row, 3, operator_item)
 
             # Notes
             notes_list = entry.get("notes") or []
             notes_item = QTableWidgetItem(self._format_notes(notes_list))
             notes_item.setFlags(notes_item.flags() & ~Qt.ItemIsEditable)
-            self.table.setItem(row, 3, notes_item)
+            self.table.setItem(row, 4, notes_item)
 
             # Data summary
             data_summary = self._summarize_measurement_data(
@@ -167,7 +188,7 @@ class MeasurementHistoryDialog(QDialog):
             )
             data_item = QTableWidgetItem(data_summary)
             data_item.setFlags(data_item.flags() & ~Qt.ItemIsEditable)
-            self.table.setItem(row, 4, data_item)
+            self.table.setItem(row, 5, data_item)
 
         # Update count
         phase_name = (
@@ -185,7 +206,7 @@ class MeasurementHistoryDialog(QDialog):
 
         row = selected[0].row()
         entry_id = self.table.item(row, 0).data(Qt.UserRole)
-        current_operator = self.table.item(row, 2).text()
+        current_operator = self.table.item(row, 3).text()
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Add Measurement Note")
@@ -220,6 +241,19 @@ class MeasurementHistoryDialog(QDialog):
         if self.session.append_measurement_note(entry_id, operator, note):
             self._load_history()
 
+    def _result_for(self, data: object | None) -> tuple[str, QColor]:
+        """Return (label, color) indicating whether a measurement succeeded."""
+        if not isinstance(data, Mapping):
+            return "—", QColor("#888888")
+
+        if not data.get("is_complete"):
+            return "—", QColor("#888888")
+
+        if data.get("passed", True):
+            return "Pass", QColor("#2e7d32")
+
+        return "Fail", QColor("#c62828")
+
     def _format_notes(self, notes_list: list[dict]) -> str:
         if not notes_list:
             return ""
@@ -236,10 +270,14 @@ class MeasurementHistoryDialog(QDialog):
 
         return "\n".join(lines)
 
-    def _summarize_measurement_data(self, data: dict) -> str:
+    def _summarize_measurement_data(self, data: object | None) -> str:
         """Create a brief summary of measurement data."""
         if not data:
             return "No data"
+
+        if not isinstance(data, Mapping):
+            rendered = str(data)
+            return rendered if len(rendered) < 40 else f"{rendered[:37]}..."
 
         # Show first few key-value pairs
         summary_parts = []

@@ -256,25 +256,27 @@ class TestBasePlaceholderDisplay:
         spec = SimpleNamespace(format_spec=None, unit=None)
         assert freq_display._format_spec_value("hello", spec) == "hello"
 
-    def test_stored_status_presentation_passed(self, freq_display):
-        data = SimpleNamespace(passed=True)
+    def test_stored_status_presentation_pass(self, freq_display):
+        data = SimpleNamespace(is_complete=True, passed=True)
         text, style = freq_display._get_stored_status_presentation(data)
         assert text == "PASS"
 
-    def test_stored_status_presentation_failed(self, freq_display):
-        data = SimpleNamespace(passed=False)
+    def test_stored_status_presentation_fail(self, freq_display):
+        data = SimpleNamespace(is_complete=True, passed=False)
         text, style = freq_display._get_stored_status_presentation(data)
         assert text == "FAIL"
-
-    def test_stored_status_presentation_complete(self, freq_display):
-        data = SimpleNamespace(is_complete=True)
-        text, style = freq_display._get_stored_status_presentation(data)
-        assert text == "COMPLETE"
 
     def test_stored_status_presentation_incomplete(self, freq_display):
         data = SimpleNamespace(is_complete=False)
         text, style = freq_display._get_stored_status_presentation(data)
         assert text == "INCOMPLETE"
+
+    def test_stored_status_presentation_complete_no_passed_attr(
+        self, freq_display
+    ):
+        data = SimpleNamespace(is_complete=True)
+        text, style = freq_display._get_stored_status_presentation(data)
+        assert text == "PASS"
 
     def test_stored_status_presentation_available(self, freq_display):
         data = SimpleNamespace()
@@ -351,9 +353,9 @@ class TestDisplayRegistry:
 
     def test_unknown_phase_class_name_is_camel_case(self):
         cls = get_phase_display_class(
-            CommissioningPhase.PIEZO_PRE_RF, "label", "attr", None
+            CommissioningPhase.COMPLETE, "label", "attr", None
         )
-        assert cls.__name__ == "PiezoPreRfDisplay"
+        assert cls.__name__ == "CompleteDisplay"
 
     def test_all_standard_phases_in_map(self):
         standard_phases = [
