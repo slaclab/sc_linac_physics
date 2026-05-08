@@ -4,7 +4,7 @@ from datetime import datetime
 from threading import Thread
 
 
-from PyQt5.QtCore import QTimer, pyqtSignal, QObject
+from PyQt5.QtCore import QEventLoop, QObject, QTimer, pyqtSignal
 
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
@@ -500,7 +500,6 @@ class PiezoPreRFController(QObject):
         Returns:
             True if step succeeded, False otherwise
         """
-        # Check for pause/abort before executing
         if not self._wait_for_unpause():
             return False
 
@@ -514,17 +513,23 @@ class PiezoPreRFController(QObject):
         return self._execute_step_with_retries(step_name, max_retries=3)
 
     def _wait_for_unpause(self) -> bool:
-        """Wait while paused. Returns False if should abort."""
+        """Wait for pause to clear and stop early if abort is requested."""
         import time
 
         while self._paused:
-            QTimer.singleShot(100, lambda: None)  # Process events while paused
+            if self.context and self.context.is_abort_requested():
+                return False
+
+            QTimer.singleShot(100, lambda: None)
             time.sleep(0.1)
-        return True
+
+        return not (
+            self.context is not None and self.context.is_abort_requested()
+        )
 
     def _notify_step_progress(self, step_name: str) -> None:
         """Notify progress callback of current step."""
-        if self.context.progress_callback:
+        if self.context and self.context.progress_callback:
             idx = (
                 self._steps.index(step_name) if step_name in self._steps else 0
             )
@@ -552,9 +557,17 @@ class PiezoPreRFController(QObject):
                 if result.result == PhaseResult.RETRY:
                     retry_count += 1
                     if retry_count < max_retries:
-                        self.view.log_message(
-                            f"Retrying {retry_count}/{max_retries}: {result.message}"
+                        retry_delay = max(
+                            0.0, float(result.retry_delay_seconds)
                         )
+                        self.view.log_message(
+                            f"Retrying {retry_count}/{max_retries} in {retry_delay:.1f}s: {result.message}"
+                        )
+                        if not self._wait_for_retry_delay(retry_delay):
+                            self.view.log_message(
+                                f"Abort during retry backoff: {step_name}"
+                            )
+                            return False
                         continue
                     self.view.log_message(f"Failed after {max_retries} retries")
                     return False
@@ -577,6 +590,40 @@ class PiezoPreRFController(QObject):
 
         return False
 
+    def _wait_for_retry_delay(self, delay_seconds: float) -> bool:
+        """Wait for retry delay while keeping UI responsive.
+
+        Returns False if abort is requested during the delay.
+        """
+        if delay_seconds <= 0:
+            return not (
+                self.context is not None and self.context.is_abort_requested()
+            )
+
+        if self.context and self.context.is_abort_requested():
+            return False
+
+        event_loop = QEventLoop()
+        aborted = False
+
+        def check_abort() -> None:
+            nonlocal aborted
+            if self.context and self.context.is_abort_requested():
+                aborted = True
+                event_loop.quit()
+
+        abort_timer = QTimer()
+        abort_timer.setInterval(100)
+        abort_timer.timeout.connect(check_abort)
+        abort_timer.start()
+
+        QTimer.singleShot(int(delay_seconds * 1000), event_loop.quit)
+        event_loop.exec_()
+
+        abort_timer.stop()
+        abort_timer.deleteLater()
+        return not aborted
+
     def _create_step_checkpoint(self, step_name: str, result) -> None:
         """Create checkpoint for step execution."""
         from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
@@ -586,6 +633,12 @@ class PiezoPreRFController(QObject):
             PhaseCheckpoint,
         )
 
+        checkpoint_measurements = dict(result.data or {})
+        if self.context.phase_instance_id is not None:
+            checkpoint_measurements.setdefault(
+                "phase_instance_id", self.context.phase_instance_id
+            )
+
         checkpoint = PhaseCheckpoint(
             phase=self.phase.phase_type,
             timestamp=datetime.now(),
@@ -593,7 +646,7 @@ class PiezoPreRFController(QObject):
             step_name=step_name,
             success=result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP),
             notes=result.message,
-            measurements=result.data,
+            measurements=checkpoint_measurements,
         )
         self.context.record.phase_history.append(checkpoint)
 
@@ -657,10 +710,19 @@ class PiezoPreRFController(QObject):
                         phase=CommissioningPhase.PIEZO_PRE_RF,
                         artifact_payload=self.context.record.piezo_pre_rf.to_dict(),
                     )
-                    if success and self.session.has_active_record():
-                        self.view.log_message(
-                            f"✓ Advanced to {self.session.get_active_record().current_phase.value}"
+                    if success:
+                        projection = self.session.get_active_phase_projection()
+                        current_phase = (
+                            projection.get("current_phase")
+                            if projection
+                            else CommissioningPhase.PIEZO_PRE_RF.get_next_phase()
                         )
+                        phase_label = (
+                            current_phase.value
+                            if hasattr(current_phase, "value")
+                            else str(current_phase)
+                        )
+                        self.view.log_message(f"✓ Advanced to {phase_label}")
                     elif not success:
                         self.view.log_message(
                             "Warning: Failed to advance phase lifecycle"
@@ -792,11 +854,12 @@ class PiezoPreRFController(QObject):
 
         # Only auto-add notes for errors
         notes = f"Phase failed: {error_msg}" if error_msg else None
+        operator = self.context.operator or self._get_operator()
 
         self.session.add_measurement_to_history(
             CommissioningPhase.PIEZO_PRE_RF,
             self.context.record.piezo_pre_rf,
-            operator=self._get_operator(),
+            operator=operator,
             notes=notes,
             phase_instance_id=self._active_phase_instance_id,
         )
@@ -860,35 +923,50 @@ class PiezoPreRFController(QObject):
         step_name = self._steps[self._current_step_index]
         self._step_executing = True
         self._set_next_button_enabled(False)
+        self._execute_step_when_resumed(step_name)
 
-        def execute_step():
-            try:
-                success = self._execute_single_step(step_name)
-                self._current_step_index += 1
+    def _execute_step_when_resumed(self, step_name: str) -> None:
+        """Run a step once pause clears; keep polling abort while paused."""
+        if self.context and self.context.is_abort_requested():
+            self._step_executing = False
+            self.on_phase_failed("Aborted")
+            return
 
-                if success and self._current_step_index < len(self._steps):
-                    # More steps to execute
-                    next_step = self._steps[self._current_step_index]
-                    self.view.log_message(
-                        f"Ready for step {self._current_step_index + 1}/{len(self._steps)}: {next_step}"
-                    )
-                    self._set_next_button_enabled(True)
-                elif success:
-                    # All steps done
-                    self.view.log_message("All steps completed. Finalizing...")
-                    self._finalize_phase_execution()
-                else:
-                    # Step failed
-                    self.on_phase_failed("Step execution failed")
-            except Exception as exc:
-                import traceback
+        if self._paused:
+            QTimer.singleShot(
+                100, lambda: self._execute_step_when_resumed(step_name)
+            )
+            return
 
-                self.view.log_message(f"Error: {exc}\n{traceback.format_exc()}")
-                self.on_phase_failed(str(exc))
-            finally:
-                self._step_executing = False
+        QTimer.singleShot(100, lambda: self._execute_step(step_name))
 
-        QTimer.singleShot(100, execute_step)
+    def _execute_step(self, step_name: str) -> None:
+        """Execute one step and advance state machine."""
+        try:
+            success = self._execute_single_step(step_name)
+            self._current_step_index += 1
+
+            if success and self._current_step_index < len(self._steps):
+                # More steps to execute
+                next_step = self._steps[self._current_step_index]
+                self.view.log_message(
+                    f"Ready for step {self._current_step_index + 1}/{len(self._steps)}: {next_step}"
+                )
+                self._set_next_button_enabled(True)
+            elif success:
+                # All steps done
+                self.view.log_message("All steps completed. Finalizing...")
+                self._finalize_phase_execution()
+            else:
+                # Step failed
+                self.on_phase_failed("Step execution failed")
+        except Exception as exc:
+            import traceback
+
+            self.view.log_message(f"Error: {exc}\n{traceback.format_exc()}")
+            self.on_phase_failed(str(exc))
+        finally:
+            self._step_executing = False
 
     def _notify_parent_record_created(self, record, record_id: int) -> None:
         """Notify parent container that a record was created."""

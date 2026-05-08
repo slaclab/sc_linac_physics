@@ -125,10 +125,8 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
             ) + "font-weight: bold;"
             self.local_overall_result.setStyleSheet(overall_style)
 
-        if hasattr(self, "local_phase_status"):
-            self.local_phase_status.setText(
-                "Complete" if result.passed else "Incomplete"
-            )
+        # local_phase_status is owned by the controller (RUNNING/COMPLETED/FAILED)
+        # and should not be overwritten by pass/fail result rendering.
 
     def _update_stored_readout(self, result: PiezoPreRFCheck | None) -> None:
         """Update stored-data labels from the record dataclass."""
