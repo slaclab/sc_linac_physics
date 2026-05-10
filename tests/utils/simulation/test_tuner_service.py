@@ -86,6 +86,11 @@ class TestPiezoPVGroup:
                 assert hasattr(prop, "value")
                 assert hasattr(prop, "pvname")
 
+    def test_prerf_channel_statuses_default_to_not_tested(self, piezo_group):
+        """Pre-RF channel statuses should start in Not Tested state."""
+        assert piezo_group.prerf_cha_status.value == 2
+        assert piezo_group.prerf_chb_status.value == 2
+
     # In test_tuner_service.py, fix line 89:
     @pytest.mark.asyncio
     async def test_piezo_voltage_change(
@@ -115,6 +120,48 @@ class TestPiezoPVGroup:
                 await piezo_group.voltage.write(75.0)
                 # Test completed without error
                 assert True
+
+    @pytest.mark.asyncio
+    async def test_prerf_no_failure_with_numeric_fail_mode(
+        self, piezo_group, mock_pvproperty_instance
+    ):
+        """SIM_FAIL=0 should produce pass statuses and nominal capacitance."""
+        piezo_group.simulate_failure._data["value"] = 0
+
+        with patch(
+            "sc_linac_physics.utils.simulation.tuner_service.sleep",
+            new_callable=AsyncMock,
+        ):
+            await piezo_group.prerf_test_start.putter(
+                mock_pvproperty_instance,
+                1,
+            )
+
+        assert piezo_group.prerf_cha_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.prerf_chb_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.capacitance_a.value == pytest.approx(25.3)
+        assert piezo_group.capacitance_b.value == pytest.approx(24.8)
+
+    @pytest.mark.asyncio
+    async def test_prerf_no_failure_with_enum_string_fail_mode(
+        self, piezo_group, mock_pvproperty_instance
+    ):
+        """SIM_FAIL enum text should map to no-failure branch."""
+        piezo_group.simulate_failure._data["value"] = b"No Failure"
+
+        with patch(
+            "sc_linac_physics.utils.simulation.tuner_service.sleep",
+            new_callable=AsyncMock,
+        ):
+            await piezo_group.prerf_test_start.putter(
+                mock_pvproperty_instance,
+                1,
+            )
+
+        assert piezo_group.prerf_cha_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.prerf_chb_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.capacitance_a.value == pytest.approx(25.3)
+        assert piezo_group.capacitance_b.value == pytest.approx(24.8)
 
     def test_piezo_properties_values(self, piezo_group):
         """Test piezo property values and types."""

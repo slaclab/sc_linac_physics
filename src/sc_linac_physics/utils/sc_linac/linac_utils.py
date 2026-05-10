@@ -5,57 +5,66 @@ from numpy import polyfit
 
 from sc_linac_physics.utils.epics import PV
 
-# Global list of superconducting linac objects
+# Cryomodule definitions
 L0B = ["01"]
 L1B = ["02", "03"]
 L1BHL = ["H1", "H2"]
-L2B = ["04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15"]
-L3B = [
-    "16",
-    "17",
-    "18",
-    "19",
-    "20",
-    "21",
-    "22",
-    "23",
-    "24",
-    "25",
-    "26",
-    "27",
-    "28",
-    "29",
-    "30",
-    "31",
-    "32",
-    "33",
-    "34",
-    "35",
+L2B = [f"{i:02d}" for i in range(4, 16)]
+L3B = [f"{i:02d}" for i in range(16, 36)]
+L4B = [f"{i:02d}" for i in range(37, 60)]
+
+# Derived collections
+ALL_CRYOMODULES = L0B + L1B + L1BHL + L2B + L3B + L4B
+ALL_CRYOMODULES_NO_HL = L0B + L1B + L2B + L3B + L4B
+
+# Linac groupings
+LINAC_TUPLES = [
+    ("L0B", L0B),
+    ("L1B", L1B),
+    ("L2B", L2B),
+    ("L3B", L3B),
+    ("L4B", L4B),
 ]
+LINAC_CM_DICT = dict(enumerate([L0B, L1B + L1BHL, L2B, L3B, L4B]))
+LINAC_CM_MAP = [L0B, L1B + L1BHL, L2B, L3B, L4B]
 
-LINAC_TUPLES = [("L0B", L0B), ("L1B", L1B), ("L2B", L2B), ("L3B", L3B)]
-LINAC_CM_DICT = {0: L0B, 1: L1B, 2: L2B, 3: L3B}
-LINAC_CM_MAP = [L0B, L1B + L1BHL, L2B, L3B]
-
+# Vacuum systems
 BEAMLINE_VACUUM_INFIXES = [
     ["0198"],
     ["0202", "H292"],
     ["0402", "1592"],
     ["1602", "2594", "2598", "3592"],
+    [],  # L4B - update with actual values when known
 ]
+
 INSULATING_VACUUM_CRYOMODULES = [
     ["01"],
     ["02", "H1"],
-    ["04", "06", "08", "10", "12", "14"],
+    [f"{i:02d}" for i in range(4, 16, 2)],  # Even numbers 04-14
     ["16", "18", "20", "22", "24", "27", "29", "31", "33", "34"],
+    [],  # L4B - update with actual values when known
 ]
-
-ALL_CRYOMODULES = L0B + L1B + L1BHL + L2B + L3B
-ALL_CRYOMODULES_NO_HL = L0B + L1B + L2B + L3B
 
 CHARACTERIZATION_CRASHED_VALUE = 0
 CHARACTERIZATION_RUNNING_VALUE = 2
 CALIBRATION_COMPLETE_VALUE = 1
+
+
+def get_linac_for_cryomodule(cryomodule: str) -> Optional[str]:
+    """Get the linac identifier for a given cryomodule.
+
+    Args:
+        cryomodule: Cryomodule identifier (e.g., "01", "02", "H1")
+
+    Returns:
+        Linac identifier (e.g., "L0B", "L1B") or None if not found
+    """
+    linac_names = ["L0B", "L1B", "L2B", "L3B", "L4B"]
+    for i, cm_list in enumerate(LINAC_CM_MAP):
+        if cryomodule in cm_list:
+            return linac_names[i]
+    return None
+
 
 SSA_STATUS_ON_VALUE = 3
 SSA_STATUS_FAULTED_VALUE = 1
@@ -127,6 +136,7 @@ PIEZO_MANUAL_VALUE = 0
 PIEZO_FEEDBACK_VALUE = 1
 PIEZO_SCRIPT_RUNNING_VALUE = 2
 PIEZO_SCRIPT_COMPLETE_VALUE = 1
+PIEZO_SCRIPT_CRASH_VALUE = 0
 PIEZO_PRE_RF_CHECKOUT_PASS_VALUE = 0
 PIEZO_WITH_RF_GRAD = 6.5
 PIEZO_CENTER_VOLTAGE = 25
@@ -181,6 +191,36 @@ class SCLinacObject(ABC, object):
         return self.pv_addr(f"AUTO:{suffix}")
 
 
+def build_cavity_pv_base(
+    linac_name: str,
+    cryomodule_name: str,
+    cavity_num: int,
+) -> str:
+    """Build the base cavity PV without a trailing field suffix."""
+    return f"ACCL:{linac_name}:{cryomodule_name}{cavity_num}0"
+
+
+def build_cavity_pv_prefix(
+    linac_name: str,
+    cryomodule_name: str,
+    cavity_num: int,
+) -> str:
+    """Build the cavity PV prefix including the trailing separator."""
+    return f"{build_cavity_pv_base(linac_name, cryomodule_name, cavity_num)}:"
+
+
+def build_cavity_pv(
+    linac_name: str,
+    cryomodule_name: str,
+    cavity_num: int,
+    suffix: str,
+) -> str:
+    """Build a full cavity PV for the given suffix."""
+    return (
+        build_cavity_pv_prefix(linac_name, cryomodule_name, cavity_num) + suffix
+    )
+
+
 def stepper_tol_factor(num_steps) -> float:
     """
     First attempt at making the stepper mover tolerance dependent on the
@@ -221,17 +261,13 @@ def stepper_tol_factor(num_steps) -> float:
 
 
 class PulseError(Exception):
-    """
-    Exception thrown during cavity SSA calibration
-    """
+    """Exception thrown during pulsed cavity operation."""
 
     pass
 
 
 class StepperError(Exception):
-    """
-    Exception thrown during cavity SSA calibration
-    """
+    """Exception thrown when the stepper tuner motor fails or times out."""
 
     pass
 
@@ -285,9 +321,7 @@ class SSAPowerError(Exception):
 
 
 class SSAFaultError(Exception):
-    """
-    Exception thrown while trying to turn an SSA on or off
-    """
+    """Exception thrown when an SSA fault is detected and cannot be cleared."""
 
     pass
 
@@ -325,6 +359,14 @@ class CavityHWModeError(Exception):
 
 
 class LauncherLinacObject(SCLinacObject):
+    """Mixin for objects that can be started, stopped, and aborted via AUTO: PVs.
+
+    Provides trigger_start/trigger_stop/trigger_abort/clear_abort methods backed
+    by EPICS PVs at ``{pv_prefix}AUTO:{name}STRT``, ``{pv_prefix}AUTO:{name}STOP``,
+    and ``{pv_prefix}AUTO:ABORT``.
+    Used by all setup/commissioning hierarchy classes.
+    """
+
     @property
     def pv_prefix(self):
         return super().pv_prefix

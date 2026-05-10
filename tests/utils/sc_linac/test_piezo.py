@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
+from sc_linac_physics.utils.epics import PVGetError
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     PIEZO_ENABLE_VALUE,
@@ -66,10 +67,26 @@ def test_is_not_enabled(piezo):
     assert not piezo.is_enabled
 
 
+def test_is_enabled_propagates_status_get_error(piezo):
+    piezo._enable_stat_pv_obj = make_mock_pv()
+    piezo._enable_stat_pv_obj.get = Mock(side_effect=PVGetError("boom"))
+
+    with pytest.raises(PVGetError, match="boom"):
+        _ = piezo.is_enabled
+
+
 def test_feedback_stat(piezo):
     stat = randint(0, 1)
     piezo._feedback_stat_pv_obj = make_mock_pv(get_val=stat)
     assert piezo.feedback_stat == stat
+
+
+def test_feedback_stat_propagates_status_get_error(piezo):
+    piezo._feedback_stat_pv_obj = make_mock_pv()
+    piezo._feedback_stat_pv_obj.get = Mock(side_effect=PVGetError("boom"))
+
+    with pytest.raises(PVGetError, match="boom"):
+        _ = piezo.feedback_stat
 
 
 def test_in_manual(piezo):
@@ -111,11 +128,12 @@ def test_enable(piezo):
     piezo._bias_voltage_pv_obj = make_mock_pv()
     piezo._enable_stat_pv_obj = make_mock_pv()
 
-    # For 1 loop iteration: 2 calls (condition + logging) + 1 final check = 3 total
+    # With robust status logging, only condition checks consume get side effects.
+    # This sequence yields 2 loop iterations then exit.
     piezo._enable_stat_pv_obj.get = Mock(
         side_effect=[
             PIEZO_DISABLE_VALUE,  # while loop check
-            PIEZO_DISABLE_VALUE,  # logging in loop body
+            PIEZO_DISABLE_VALUE,  # second while loop check
             PIEZO_ENABLE_VALUE,  # final while loop check - exits
         ]
     )
@@ -126,8 +144,8 @@ def test_enable(piezo):
     piezo.enable()
 
     piezo._bias_voltage_pv_obj.put.assert_called_with(25)
-    assert piezo.cavity.check_abort.call_count == 1
-    assert piezo._enable_pv_obj.put.call_count == 2  # 1 disable + 1 enable
+    assert piezo.cavity.check_abort.call_count == 2
+    assert piezo._enable_pv_obj.put.call_count == 4  # 2x (disable + enable)
 
 
 def test_enable_feedback(piezo):
@@ -145,6 +163,28 @@ def test_enable_feedback(piezo):
     piezo.set_to_feedback.assert_called()
 
 
+def test_enable_feedback_max_attempts_raises_runtime_error_without_masking(
+    piezo,
+):
+    piezo.enable = MagicMock()
+    piezo.FEEDBACK_MAX_ATTEMPTS = 1
+    piezo.cavity.check_abort = Mock()
+    piezo.set_to_manual = MagicMock()
+    piezo.set_to_feedback = MagicMock()
+    piezo._feedback_stat_pv_obj = make_mock_pv()
+    piezo._feedback_stat_pv_obj.get = Mock(
+        side_effect=[
+            PIEZO_MANUAL_VALUE,
+            PIEZO_MANUAL_VALUE,
+            PIEZO_MANUAL_VALUE,
+            PVGetError("should_not_mask_runtime_error"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="failed to enable"):
+        piezo.enable_feedback()
+
+
 def test_disable_feedback(piezo):
     piezo.enable = MagicMock()
     piezo._feedback_stat_pv_obj = make_mock_pv(get_val=PIEZO_FEEDBACK_VALUE)
@@ -158,6 +198,28 @@ def test_disable_feedback(piezo):
     piezo.disable_feedback()
     piezo.enable.assert_called()
     piezo.set_to_manual.assert_called()
+
+
+def test_disable_feedback_max_attempts_raises_runtime_error_without_masking(
+    piezo,
+):
+    piezo.enable = MagicMock()
+    piezo.FEEDBACK_MAX_ATTEMPTS = 1
+    piezo.cavity.check_abort = Mock()
+    piezo.set_to_manual = MagicMock()
+    piezo.set_to_feedback = MagicMock()
+    piezo._feedback_stat_pv_obj = make_mock_pv()
+    piezo._feedback_stat_pv_obj.get = Mock(
+        side_effect=[
+            PIEZO_FEEDBACK_VALUE,
+            PIEZO_FEEDBACK_VALUE,
+            PIEZO_FEEDBACK_VALUE,
+            PVGetError("should_not_mask_runtime_error"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="failed to disable"):
+        piezo.disable_feedback()
 
 
 def test_hz_per_v(piezo):

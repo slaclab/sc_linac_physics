@@ -10,7 +10,7 @@ def machine():
 
 
 def test_num_linacs(machine):
-    assert len(machine.linacs) == 4
+    assert len(machine.linacs) == 5
 
 
 def test_linac_names(machine):

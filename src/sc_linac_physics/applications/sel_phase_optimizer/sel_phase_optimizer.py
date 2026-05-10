@@ -4,6 +4,7 @@
 Script to optimize SEL phase offsets
 Originally by J. Nelson, refactored by L. Zacarias
 """
+
 import argparse
 import time
 from typing import List, Optional

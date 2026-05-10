@@ -19,6 +19,18 @@ from sc_linac_physics.utils.epics import (
 FakeEPICS_PV = sys.modules["epics"].PV
 
 
+@pytest.fixture(autouse=True)
+def no_retry_sleep(monkeypatch):
+    """Suppress all sleep() calls in the EPICS core module.
+
+    Retry backoff sleeps (up to 1.5 s per PV) make error-path tests very slow.
+    The retry *logic* is still exercised; only the wall-clock wait is removed.
+    """
+    monkeypatch.setattr(
+        "sc_linac_physics.utils.epics.core.sleep", lambda _: None
+    )
+
+
 @pytest.fixture
 def connected_pv():
     """Create a PV instance with mocked EPICS_PV that's connected"""

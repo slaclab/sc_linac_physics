@@ -134,10 +134,19 @@ def test_run_through_faults_not_faulted(cavity):
 
 
 def test_run_through_faults_faulted(cavity):
+    """Test that faulted cavity updates status correctly."""
+    from unittest.mock import patch
+
     faulted_fault: Fault = choice(list(cavity.faults.values()))
     print(f"Fault mocked as faulted: {faulted_fault.pv}")
     faulted_fault.is_currently_faulted = MagicMock(return_value=True)
-    cavity.run_through_faults()
+
+    # Force batch read to fail so it uses sequential fallback
+    with patch(
+        "sc_linac_physics.utils.epics.batch.PVBatch.get_values",
+        side_effect=Exception("Mocked failure"),
+    ):
+        cavity.run_through_faults()
 
     cavity._status_pv_obj.put.assert_called_with(faulted_fault.tlc)
     cavity._severity_pv_obj.put.assert_called_with(faulted_fault.severity)

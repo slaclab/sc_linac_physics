@@ -1,5 +1,6 @@
 # tests/test_tuning_gui/test_cavity_section.py
 """Tests for CavitySection component."""
+
 import pytest
 
 

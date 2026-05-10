@@ -2,6 +2,532 @@
 
 <!-- version list -->
 
+## v9.19.1 (2026-05-10)
+
+### Bug Fixes
+
+- Address Copilot review feedback
+  ([`b5507f8`](https://github.com/slaclab/sc_linac_physics/commit/b5507f8285639a9700e190646e1b76ed42b482fe))
+
+
+## v9.19.0 (2026-05-08)
+
+### Features
+
+- **rf-commissioning**: Add Piezo Pre-RF single-cavity display and controller
+  ([#244](https://github.com/slaclab/sc_linac_physics/pull/244),
+  [`5caaedc`](https://github.com/slaclab/sc_linac_physics/commit/5caaedc19506b2421a5517fe6888e87172b080d0))
+
+
+## v9.18.0 (2026-05-08)
+
+### Features
+
+- **microphonics**: Add Select All CMs button with multi-CM guard
+  ([#191](https://github.com/slaclab/sc_linac_physics/pull/191),
+  [`ff9d2a5`](https://github.com/slaclab/sc_linac_physics/commit/ff9d2a5df8ce6fb03514850d8c43932ce0bed72b))
+
+
+## v9.17.1 (2026-05-08)
+
+### Bug Fixes
+
+- **rf-commissioning**: Fix status presentation logic and add Result column to history
+  ([#243](https://github.com/slaclab/sc_linac_physics/pull/243),
+  [`bc8e762`](https://github.com/slaclab/sc_linac_physics/commit/bc8e7628e252e519b9bb52706e9485f381b50a33))
+
+
+## v9.17.0 (2026-05-07)
+
+### Features
+
+- **rf-commissioning**: Add passed property to phase data models and fix history-start bug
+  ([#242](https://github.com/slaclab/sc_linac_physics/pull/242),
+  [`7856d43`](https://github.com/slaclab/sc_linac_physics/commit/7856d43474ddf82e7599a9e44d8d3bc1b76c0490))
+
+### Testing
+
+- **rf_commissioning**: Strengthen import boundary checks for package-root imports
+  ([#242](https://github.com/slaclab/sc_linac_physics/pull/242),
+  [`7856d43`](https://github.com/slaclab/sc_linac_physics/commit/7856d43474ddf82e7599a9e44d8d3bc1b76c0490))
+
+
+## v9.16.1 (2026-05-07)
+
+### Bug Fixes
+
+- **simulation**: Fix VPN/beacon compat and piezo enum handling
+  ([#241](https://github.com/slaclab/sc_linac_physics/pull/241),
+  [`16eda9b`](https://github.com/slaclab/sc_linac_physics/commit/16eda9bd556aab97091afa01872e6aad1d819fcc))
+
+### Chores
+
+- Addressing PR comments ([#241](https://github.com/slaclab/sc_linac_physics/pull/241),
+  [`16eda9b`](https://github.com/slaclab/sc_linac_physics/commit/16eda9bd556aab97091afa01872e6aad1d819fcc))
+
+
+## v9.16.0 (2026-05-07)
+
+### Chores
+
+- Addressing copilot PR comments ([#240](https://github.com/slaclab/sc_linac_physics/pull/240),
+  [`cc43c04`](https://github.com/slaclab/sc_linac_physics/commit/cc43c04e2837507cfb6240bcf0e487007974657e))
+
+### Features
+
+- **rf-commissioning**: Add UI container state layer and remove legacy display components
+  ([#240](https://github.com/slaclab/sc_linac_physics/pull/240),
+  [`cc43c04`](https://github.com/slaclab/sc_linac_physics/commit/cc43c04e2837507cfb6240bcf0e487007974657e))
+
+- **rf-commissioning**: Add UI container state layer, dialog widgets, and tests
+  ([#240](https://github.com/slaclab/sc_linac_physics/pull/240),
+  [`cc43c04`](https://github.com/slaclab/sc_linac_physics/commit/cc43c04e2837507cfb6240bcf0e487007974657e))
+
+
+## v9.15.0 (2026-05-06)
+
+### Bug Fixes
+
+- **rf-commissioning**: Pass tmp_path db to CommissioningSession in display tests
+  ([#238](https://github.com/slaclab/sc_linac_physics/pull/238),
+  [`1e02157`](https://github.com/slaclab/sc_linac_physics/commit/1e02157570b2e0f04afc9a2e02bee190ed7b2f70))
+
+- **rf-commissioning**: Remove PiezoPreRFDisplay from ui/__init__ on foundation branch
+  ([#238](https://github.com/slaclab/sc_linac_physics/pull/238),
+  [`1e02157`](https://github.com/slaclab/sc_linac_physics/commit/1e02157570b2e0f04afc9a2e02bee190ed7b2f70))
+
+### Features
+
+- **rf-commissioning**: Add UI builder infrastructure and phase display components
+  ([#238](https://github.com/slaclab/sc_linac_physics/pull/238),
+  [`1e02157`](https://github.com/slaclab/sc_linac_physics/commit/1e02157570b2e0f04afc9a2e02bee190ed7b2f70))
+
+### Testing
+
+- **rf-commissioning**: Add display and phase_display_base coverage tests
+  ([#238](https://github.com/slaclab/sc_linac_physics/pull/238),
+  [`1e02157`](https://github.com/slaclab/sc_linac_physics/commit/1e02157570b2e0f04afc9a2e02bee190ed7b2f70))
+
+
+## v9.14.0 (2026-05-05)
+
+### Bug Fixes
+
+- Patching init to fix import error ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+- Removing piezo status fallbacks ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+### Chores
+
+- Addressing copilot feedback ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+### Documentation
+
+- Add codebase documentation for onboarding
+  ([#236](https://github.com/slaclab/sc_linac_physics/pull/236),
+  [`874269e`](https://github.com/slaclab/sc_linac_physics/commit/874269eb08b11e564e8aac8f669086fb58539870))
+
+- **readme**: Fix factual errors and link to docs/
+  ([#236](https://github.com/slaclab/sc_linac_physics/pull/236),
+  [`874269e`](https://github.com/slaclab/sc_linac_physics/commit/874269eb08b11e564e8aac8f669086fb58539870))
+
+- **readme**: Rewrite for clarity and onboarding
+  ([#236](https://github.com/slaclab/sc_linac_physics/pull/236),
+  [`874269e`](https://github.com/slaclab/sc_linac_physics/commit/874269eb08b11e564e8aac8f669086fb58539870))
+
+### Features
+
+- **rf-commissioning**: Add commissioning piezo and simulator support
+  ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+### Refactoring
+
+- **rf-commissioning**: Align workflow semantics and persistence helpers
+  ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+### Testing
+
+- Adding commissioning piezo test coverage
+  ([#235](https://github.com/slaclab/sc_linac_physics/pull/235),
+  [`baa9bba`](https://github.com/slaclab/sc_linac_physics/commit/baa9bba943153643f992b7007cb9c22284405a0f))
+
+
+## v9.13.1 (2026-05-04)
+
+### Bug Fixes
+
+- Patching init to fix import error ([#234](https://github.com/slaclab/sc_linac_physics/pull/234),
+  [`8a75739`](https://github.com/slaclab/sc_linac_physics/commit/8a75739939dc7908872ccc2facc6003cf19df77d))
+
+### Refactoring
+
+- **rf-commissioning**: Align workflow semantics and persistence helpers
+  ([#234](https://github.com/slaclab/sc_linac_physics/pull/234),
+  [`8a75739`](https://github.com/slaclab/sc_linac_physics/commit/8a75739939dc7908872ccc2facc6003cf19df77d))
+
+
+## v9.13.0 (2026-04-27)
+
+### Features
+
+- **rf-commissioning**: Add session workflow manager and phase framework
+  ([#233](https://github.com/slaclab/sc_linac_physics/pull/233),
+  [`64de999`](https://github.com/slaclab/sc_linac_physics/commit/64de999f8d495a5873a323108a0058ecf17fb115))
+
+
+## v9.12.0 (2026-04-20)
+
+### Features
+
+- **rf-commissioning**: Add SQLite persistence module with repository architecture
+  ([#232](https://github.com/slaclab/sc_linac_physics/pull/232),
+  [`7bb7188`](https://github.com/slaclab/sc_linac_physics/commit/7bb71887ae6ed28654784c7afbc758439bb362aa))
+
+
+## v9.11.0 (2026-04-17)
+
+### Features
+
+- **rf-commissioning**: Add data models and phase registry for cavity commissioning workflow
+  ([#221](https://github.com/slaclab/sc_linac_physics/pull/221),
+  [`f380f8b`](https://github.com/slaclab/sc_linac_physics/commit/f380f8b13f40eff603dcbdd856119d4224adca8c))
+
+- **rf-commissioning**: Add RF commissioning data models and phase tracking
+  ([#221](https://github.com/slaclab/sc_linac_physics/pull/221),
+  [`f380f8b`](https://github.com/slaclab/sc_linac_physics/commit/f380f8b13f40eff603dcbdd856119d4224adca8c))
+
+
+## v9.10.1 (2026-04-04)
+
+### Refactoring
+
+- **tuning/state**: Finalize tune-status naming and remove cavityops aliases
+  ([#230](https://github.com/slaclab/sc_linac_physics/pull/230),
+  [`47a286c`](https://github.com/slaclab/sc_linac_physics/commit/47a286c194ae7c82883b6e32c52384e85176e94c))
+
+- **tuning/state**: Organize JSON output in dedicated directory
+  ([#230](https://github.com/slaclab/sc_linac_physics/pull/230),
+  [`47a286c`](https://github.com/slaclab/sc_linac_physics/commit/47a286c194ae7c82883b6e32c52384e85176e94c))
+
+- **tuning/state**: Rename cavityops modules to tune_status, simplify paths
+  ([#230](https://github.com/slaclab/sc_linac_physics/pull/230),
+  [`47a286c`](https://github.com/slaclab/sc_linac_physics/commit/47a286c194ae7c82883b6e32c52384e85176e94c))
+
+- **tuning/state**: Unify platform detection and centralize logging
+  ([#230](https://github.com/slaclab/sc_linac_physics/pull/230),
+  [`47a286c`](https://github.com/slaclab/sc_linac_physics/commit/47a286c194ae7c82883b6e32c52384e85176e94c))
+
+
+## v9.10.0 (2026-03-25)
+
+### Features
+
+- **cavity-display**: Add heatmap cavity and cryomodule widgets
+  ([#229](https://github.com/slaclab/sc_linac_physics/pull/229),
+  [`ec39368`](https://github.com/slaclab/sc_linac_physics/commit/ec393683f0dc58f7c548483666a49b19f053d5b3))
+
+
+## v9.9.0 (2026-03-23)
+
+### Bug Fixes
+
+- **cavity-display**: Resolve code review findings
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+### Features
+
+- **cavity-display**: Add screenshot and audio alert integration
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+- **cavity-display**: Integrate audio alert system into main display
+  ([#227](https://github.com/slaclab/sc_linac_physics/pull/227),
+  [`3514a00`](https://github.com/slaclab/sc_linac_physics/commit/3514a00f5a4b086cba89fec10ab7e2f15adcf518))
+
+
+## v9.8.0 (2026-03-16)
+
+### Bug Fixes
+
+- **cavity display**: Fix channel management and acknowledgment lifecycle
+  ([#225](https://github.com/slaclab/sc_linac_physics/pull/225),
+  [`3fbf0ac`](https://github.com/slaclab/sc_linac_physics/commit/3fbf0ac16056b5c460082db3887dd7243e873f5f))
+
+### Features
+
+- **cavity-display**: Add alarm acknowledgment to cavity context menu
+  ([#225](https://github.com/slaclab/sc_linac_physics/pull/225),
+  [`3fbf0ac`](https://github.com/slaclab/sc_linac_physics/commit/3fbf0ac16056b5c460082db3887dd7243e873f5f))
+
+- **cavity-display**: Add audio alert manager and tests
+  ([#226](https://github.com/slaclab/sc_linac_physics/pull/226),
+  [`6e182d0`](https://github.com/slaclab/sc_linac_physics/commit/6e182d03b84fd5c1444e7b4129a90718e17d7036))
+
+
+## v9.7.0 (2026-02-27)
+
+### Bug Fixes
+
+- Adding severity_changed signal ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- Patching right click not working ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- Putting accidentally deleted flag back
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Patch status bar
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Restore original SSA visibility rule
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+### Features
+
+- **cavity-display**: Add alarm sidebar with responsive design
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Add cryomodule status indicators
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Add search and filter functionality
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+- **cavity-display**: Enhance cavity widget with context menu and signals
+  ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+### Testing
+
+- Patching failing tests ([#213](https://github.com/slaclab/sc_linac_physics/pull/213),
+  [`8172167`](https://github.com/slaclab/sc_linac_physics/commit/81721671117d0adcd813408c1b3d94596ab79f38))
+
+
+## v9.6.0 (2026-02-26)
+
+### Bug Fixes
+
+- Adding severity_changed signal ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- Patching right click not working ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- Putting accidentally deleted flag back
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Patch status bar
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Restore original SSA visibility rule
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+### Features
+
+- **cavity-display**: Add alarm sidebar with responsive design
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Add search and filter functionality
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+- **cavity-display**: Enhance cavity widget with context menu and signals
+  ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+### Testing
+
+- Patching failing tests ([#212](https://github.com/slaclab/sc_linac_physics/pull/212),
+  [`17e168b`](https://github.com/slaclab/sc_linac_physics/commit/17e168b5d3d24c87a646a28d204e8d13d89786bb))
+
+
+## v9.5.0 (2026-02-23)
+
+### Bug Fixes
+
+- **cavity-display**: Patch status bar
+  ([#210](https://github.com/slaclab/sc_linac_physics/pull/210),
+  [`2f84421`](https://github.com/slaclab/sc_linac_physics/commit/2f84421dc59d67240c4a8d83b9d61172fd9d267b))
+
+### Features
+
+- **cavity-display**: Add search and filter functionality
+  ([#210](https://github.com/slaclab/sc_linac_physics/pull/210),
+  [`2f84421`](https://github.com/slaclab/sc_linac_physics/commit/2f84421dc59d67240c4a8d83b9d61172fd9d267b))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#210](https://github.com/slaclab/sc_linac_physics/pull/210),
+  [`2f84421`](https://github.com/slaclab/sc_linac_physics/commit/2f84421dc59d67240c4a8d83b9d61172fd9d267b))
+
+
+## v9.4.0 (2026-02-23)
+
+### Bug Fixes
+
+- **cavity-display**: Patch status bar
+  ([#209](https://github.com/slaclab/sc_linac_physics/pull/209),
+  [`cbd9e1b`](https://github.com/slaclab/sc_linac_physics/commit/cbd9e1bd9cff39b62c34028b4842d5f2d3095ca6))
+
+### Features
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#209](https://github.com/slaclab/sc_linac_physics/pull/209),
+  [`cbd9e1b`](https://github.com/slaclab/sc_linac_physics/commit/cbd9e1bd9cff39b62c34028b4842d5f2d3095ca6))
+
+
+## v9.3.0 (2026-02-19)
+
+### Bug Fixes
+
+- **cavity-display**: Patch status bar
+  ([#211](https://github.com/slaclab/sc_linac_physics/pull/211),
+  [`4ad97df`](https://github.com/slaclab/sc_linac_physics/commit/4ad97df7c7ac13a7b47622a0bba37dd6c0d379fe))
+
+### Features
+
+- **cavity-display**: Add alarm sidebar with responsive design
+  ([#211](https://github.com/slaclab/sc_linac_physics/pull/211),
+  [`4ad97df`](https://github.com/slaclab/sc_linac_physics/commit/4ad97df7c7ac13a7b47622a0bba37dd6c0d379fe))
+
+- **cavity-display**: Add search and filter functionality
+  ([#211](https://github.com/slaclab/sc_linac_physics/pull/211),
+  [`4ad97df`](https://github.com/slaclab/sc_linac_physics/commit/4ad97df7c7ac13a7b47622a0bba37dd6c0d379fe))
+
+- **cavity-display**: Add settings persistence and status bar
+  ([#211](https://github.com/slaclab/sc_linac_physics/pull/211),
+  [`4ad97df`](https://github.com/slaclab/sc_linac_physics/commit/4ad97df7c7ac13a7b47622a0bba37dd6c0d379fe))
+
+### Testing
+
+- **cavity-display**: Add tests and improve fault heatmap utilities
+  ([#200](https://github.com/slaclab/sc_linac_physics/pull/200),
+  [`29288c8`](https://github.com/slaclab/sc_linac_physics/commit/29288c89e8f8c33c1977df99c737ec435ecd6de1))
+
+
+## v9.2.1 (2026-02-13)
+
+### Refactoring
+
+- **cavity-display**: Restructure machine layout with linac sections
+  ([#204](https://github.com/slaclab/sc_linac_physics/pull/204),
+  [`a678f75`](https://github.com/slaclab/sc_linac_physics/commit/a678f754b0725e6f3f9ca2b1deaba93e77b4b055))
+
+
+## v9.2.0 (2026-02-13)
+
+### Chores
+
+- Patching test ([#203](https://github.com/slaclab/sc_linac_physics/pull/203),
+  [`8d14dc8`](https://github.com/slaclab/sc_linac_physics/commit/8d14dc84a2b3e9db3fb5d53e08f01e73e6b1c3f3))
+
+- Patching tests ([#203](https://github.com/slaclab/sc_linac_physics/pull/203),
+  [`8d14dc8`](https://github.com/slaclab/sc_linac_physics/commit/8d14dc84a2b3e9db3fb5d53e08f01e73e6b1c3f3))
+
+### Features
+
+- **cavity-display**: Add zoom and scaling system
+  ([#203](https://github.com/slaclab/sc_linac_physics/pull/203),
+  [`8d14dc8`](https://github.com/slaclab/sc_linac_physics/commit/8d14dc84a2b3e9db3fb5d53e08f01e73e6b1c3f3))
+
+
+## v9.1.0 (2026-02-12)
+
+### Chores
+
+- Patching tests ([#201](https://github.com/slaclab/sc_linac_physics/pull/201),
+  [`029b946`](https://github.com/slaclab/sc_linac_physics/commit/029b946c2dd3a87ece6fc6cc2fa6b4d9f72609aa))
+
+- Rerunning black ([#202](https://github.com/slaclab/sc_linac_physics/pull/202),
+  [`9b3cde7`](https://github.com/slaclab/sc_linac_physics/commit/9b3cde7017f06c541b3b71ac56bb2520899a251c))
+
+- Rerunning black ([#201](https://github.com/slaclab/sc_linac_physics/pull/201),
+  [`029b946`](https://github.com/slaclab/sc_linac_physics/commit/029b946c2dd3a87ece6fc6cc2fa6b4d9f72609aa))
+
+### Features
+
+- Add is_currently_faulted() method to Fault class
+  ([#202](https://github.com/slaclab/sc_linac_physics/pull/202),
+  [`9b3cde7`](https://github.com/slaclab/sc_linac_physics/commit/9b3cde7017f06c541b3b71ac56bb2520899a251c))
+
+- L4B Support ([#201](https://github.com/slaclab/sc_linac_physics/pull/201),
+  [`029b946`](https://github.com/slaclab/sc_linac_physics/commit/029b946c2dd3a87ece6fc6cc2fa6b4d9f72609aa))
+
+### Testing
+
+- Add unit tests for cryomodule service components
+  ([#197](https://github.com/slaclab/sc_linac_physics/pull/197),
+  [`df12c01`](https://github.com/slaclab/sc_linac_physics/commit/df12c01742cb6fad48fb629689fc39b80808dfcc))
+
+
+## v9.0.0 (2026-01-23)
+
+### Chores
+
+- Patching failing tests ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- Patching mock pv ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- Reduce cyclomatic complexity ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+### Features
+
+- **cavity-display**: Add logging, error handling, and graceful shutdown
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- **cavity-display**: Auto-enable debug mode on macOS
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- **cavity-display**: Optimize cavity fault monitoring with batch PV initialization and improved
+  logging ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+### Performance Improvements
+
+- **cavity_display**: Optimize fault checking with batch PV reads
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+### Refactoring
+
+- Restructure EPICS utils into modular package
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+- **cavity_display**: Remove redundant fault PV initialization
+  ([#171](https://github.com/slaclab/sc_linac_physics/pull/171),
+  [`f802dbc`](https://github.com/slaclab/sc_linac_physics/commit/f802dbc401de1eaf368b1e73296eb41bfc00ce80))
+
+
 ## v8.7.0 (2026-01-05)
 
 ### Features

@@ -1,0 +1,147 @@
+"""Interactive SQLite query tool for tuning state database."""
+
+import argparse
+import logging
+import sqlite3
+import sys
+from pathlib import Path
+
+from sc_linac_physics.applications.tuning.state.common import (
+    DEFAULT_BASE_DIR,
+    DEFAULT_DB_PATH,
+    DEFAULT_LOG_PATH,
+    build_state_logger,
+    connect_db,
+    resolve_db_path,
+)
+
+QUERY_LOG_PATH = DEFAULT_LOG_PATH.with_name("tune_status_query.log")
+logger = logging.getLogger(__name__)
+
+
+def configure_logging() -> logging.Logger:
+    """Configure module logging with the shared package logger utility."""
+    return build_state_logger(__name__, log_path=QUERY_LOG_PATH)
+
+
+def execute_query(db_path: Path, query: str, params=None) -> bool:
+    """Execute a query and print results."""
+    with connect_db(db_path, row_factory=sqlite3.Row) as conn:
+        try:
+            if params:
+                cursor = conn.execute(query, params)
+            else:
+                cursor = conn.execute(query)
+
+            rows = cursor.fetchall()
+
+            if not rows:
+                print("No results")
+                return True
+
+            headers = rows[0].keys()
+            print(" | ".join(headers))
+            print(
+                "-"
+                * (
+                    sum(len(header) for header in headers)
+                    + 3 * (len(headers) - 1)
+                )
+            )
+
+            for row in rows:
+                print(" | ".join(str(row[header]) for header in headers))
+
+            print(f"\n{len(rows)} rows returned")
+            return True
+
+        except sqlite3.Error as exc:
+            print(f"Error: {exc}")
+            logger.exception("Query execution failed")
+            return False
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for the query tool."""
+    parser = argparse.ArgumentParser(
+        description="Query tuning state SQLite database interactively or with inline SQL.",
+    )
+    parser.add_argument(
+        "query",
+        nargs="*",
+        help="SQL query to execute. If omitted, enters interactive mode.",
+    )
+    parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=DEFAULT_BASE_DIR,
+        help=f"Base directory for tuning state database (default: {DEFAULT_BASE_DIR})",
+    )
+    parser.add_argument(
+        "--db",
+        "--db-path",
+        dest="db_path_override",
+        type=Path,
+        default=None,
+        help=f"Path to SQLite database (default: {DEFAULT_DB_PATH})",
+    )
+    return parser.parse_args(argv)
+
+
+def interactive_mode(db_path: Path) -> None:
+    """Run a REPL-like interactive SQL prompt."""
+    print("SQLite Query Tool")
+    print(f"Database: {db_path}")
+    print("Enter SQL queries (end with ; then press Enter)")
+    print("Type 'quit' to exit\n")
+
+    query_buffer = []
+
+    while True:
+        try:
+            if query_buffer:
+                line = input("   ...> ").strip()
+            else:
+                line = input("sqlite> ").strip()
+
+            if line.lower() in ("quit", "exit", "q"):
+                break
+
+            if not line:
+                continue
+
+            query_buffer.append(line)
+
+            if line.endswith(";"):
+                full_query = " ".join(query_buffer)
+                execute_query(db_path, full_query)
+                print()
+                query_buffer = []
+
+        except EOFError:
+            break
+        except KeyboardInterrupt:
+            print("\nInterrupted")
+            query_buffer = []
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Entry point for tuning state database query CLI."""
+    global logger
+    logger = configure_logging()
+
+    args = parse_args(argv)
+    query = " ".join(args.query).strip()
+    db_path = resolve_db_path(args.base_dir, args.db_path_override)
+
+    logger.info("Starting tune status query")
+
+    if query:
+        return 0 if execute_query(db_path, query) else 1
+
+    interactive_mode(db_path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

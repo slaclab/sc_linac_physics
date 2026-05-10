@@ -1,5 +1,6 @@
 # tests/applications/tuning/test_tuner.py
 """Tests for Tuner main display."""
+
 from unittest.mock import patch, Mock
 
 import pytest

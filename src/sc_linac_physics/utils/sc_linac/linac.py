@@ -117,7 +117,7 @@ class Machine:
 
         self.linacs: List[Linac] = []
 
-        for section in range(4):
+        for section in range(len(linac_utils.LINAC_CM_MAP)):
             self.linacs.append(
                 linac_class(
                     linac_section=section,
