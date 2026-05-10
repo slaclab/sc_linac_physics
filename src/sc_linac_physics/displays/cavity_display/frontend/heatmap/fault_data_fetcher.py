@@ -162,6 +162,12 @@ class FaultDataFetcher(QThread):
                 self._start_time, self._end_time
             )
         except Exception as e:
+            if self._abort_event.is_set():
+                return CavityFaultResult(
+                    cm_name=cm_name,
+                    cavity_num=cavity_num,
+                    error="Aborted",
+                )
             return CavityFaultResult(
                 cm_name=cm_name,
                 cavity_num=cavity_num,

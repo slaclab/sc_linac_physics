@@ -9,7 +9,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QSizePolicy,
     QHBoxLayout,
-    QPushButton,
 )
 
 from sc_linac_physics.displays.cavity_display.frontend.heatmap.heatmap_cavity_widget import (  # noqa: E501
@@ -94,18 +93,6 @@ class HeatmapCMWidget(QWidget):
         )
         self._label.clicked.connect(self._on_cm_label_clicked)
         label_row.addWidget(self._label, stretch=1)
-
-        self._select_all_btn = QPushButton("\u25a3")  # ▣
-        self._select_all_btn.setFixedSize(16, 16)
-        self._select_all_btn.setToolTip(
-            f"Select/deselect all cavities in "
-            f"{format_cm_display_name(self._cm_name)}"
-        )
-        self._select_all_btn.setStyleSheet(
-            "QPushButton { padding: 0px; font-size: 9pt; }"
-        )
-        self._select_all_btn.clicked.connect(self._on_cm_label_clicked)
-        label_row.addWidget(self._select_all_btn)
 
         main_layout.addLayout(label_row)
 
