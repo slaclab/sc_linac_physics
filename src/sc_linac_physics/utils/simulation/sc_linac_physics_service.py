@@ -520,22 +520,55 @@ def _start_caproto_repeater():
         )
         return None
 
-    _wait_for_repeater()
+    if not _wait_for_repeater(process):
+        _stop_caproto_repeater(process)
+        return None
+
     return process
 
 
-def _wait_for_repeater(timeout: float = _REPEATER_WAIT_S) -> None:
-    """Block until the repeater has bound to its UDP port, or timeout expires."""
+def _wait_for_repeater(
+    process: subprocess.Popen,
+    timeout: float = _REPEATER_WAIT_S,
+) -> bool:
+    """Wait until repeater binds its UDP port.
+
+    Returns True when the expected port is in use, False if the process exits
+    or the timeout elapses without the port being claimed.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        returncode = process.poll()
+        if returncode is not None:
+            warnings.warn(
+                (
+                    "caproto-repeater exited during startup "
+                    f"(code {returncode}); continuing without it"
+                ),
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return False
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             sock.bind(("127.0.0.1", _REPEATER_PORT))
         except OSError:
-            return  # port in use → repeater is ready
+            return True  # port in use -> repeater is ready
         finally:
             sock.close()
         time.sleep(_REPEATER_POLL_S)
+
+    if process.poll() is None:
+        warnings.warn(
+            (
+                "Timed out waiting for caproto-repeater to claim "
+                f"UDP port {_REPEATER_PORT}; continuing without it"
+            ),
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return False
 
 
 def _stop_caproto_repeater(process):

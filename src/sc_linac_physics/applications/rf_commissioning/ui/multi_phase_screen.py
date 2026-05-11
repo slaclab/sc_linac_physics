@@ -448,12 +448,6 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
         name_input.setPlaceholderText("First Last")
         layout.addWidget(name_input)
 
-        layout.addWidget(QLabel("Initials (optional):"))
-        initials_input = QLineEdit()
-        initials_input.setPlaceholderText("FL")
-        initials_input.setMaxLength(4)
-        layout.addWidget(initials_input)
-
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
@@ -545,9 +539,9 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
             cavity_number,
         )
 
-        # =============================================================================
-        # TABS - Phase navigation with visual feedback
-        # =============================================================================
+    # =============================================================================
+    # TABS - Phase navigation with visual feedback
+    # =============================================================================
 
     def _init_tabs(self) -> None:
         init_tabs(self)
@@ -598,9 +592,9 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
             note_default,
         )
 
-        # =============================================================================
-        # SYNC STATUS - External change detection and notification
-        # =============================================================================
+    # =============================================================================
+    # SYNC STATUS - External change detection and notification
+    # =============================================================================
 
     def _update_sync_status(self, is_synced: bool, message: str = "") -> None:
         update_sync_status(self, is_synced, message)
@@ -620,9 +614,9 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
     def _handle_note_conflict(self, conflict: RecordConflictError) -> None:
         handle_note_conflict(self, conflict)
 
-        # =============================================================================
-        # RECORD MANAGEMENT
-        # =============================================================================
+    # =============================================================================
+    # RECORD MANAGEMENT
+    # =============================================================================
 
     def start_new_record(self, cryomodule: str, cavity_number: str) -> bool:
         return start_new_record(self, cryomodule, cavity_number)
@@ -699,9 +693,6 @@ class Display(MultiPhaseCommissioningDisplay):
     When launching this file directly via `pydm path/to/multi_phase_screen.py`,
     PyDM expects a class named `Display` in the module.
     """
-
-
-intelclass = MultiPhaseCommissioningDisplay
 
 
 if __name__ == "__main__":

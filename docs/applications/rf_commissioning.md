@@ -37,39 +37,39 @@ Phases are sequential. In normalized workflow validation, the previous phase mus
 
 ```python
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
-	CommissioningPhase,
+    CommissioningPhase,
 )
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
-	CommissioningSession,
+    CommissioningSession,
 )
 
 session = CommissioningSession()
 
 # Load or create the cavity record and make it active
 record, record_id, created_new = session.start_new_record(
-	cryomodule="02",
-	cavity_number=3,
+    cryomodule="02",
+    cavity_number=3,
 )
 
 # Start a normalized phase-attempt instance
 result = session.start_active_phase_instance(
-	phase=CommissioningPhase.SSA_CHAR,
-	operator="jdoe",
+    phase=CommissioningPhase.SSA_CHAR,
+    operator="jdoe",
 )
 
 if result is not None:
-	session.add_measurement_to_history(
-		phase=CommissioningPhase.SSA_CHAR,
-		measurement_data={"max_drive": 0.82},
-		operator="jdoe",
-		phase_instance_id=result.phase_instance_id,
-	)
+    session.add_measurement_to_history(
+        phase=CommissioningPhase.SSA_CHAR,
+        measurement_data={"max_drive": 0.82},
+        operator="jdoe",
+        phase_instance_id=result.phase_instance_id,
+    )
 
-	session.complete_active_phase_instance(
-		phase_instance_id=result.phase_instance_id,
-		phase=CommissioningPhase.SSA_CHAR,
-		artifact_payload={"summary": "SSA characterization completed"},
-	)
+    session.complete_active_phase_instance(
+        phase_instance_id=result.phase_instance_id,
+        phase=CommissioningPhase.SSA_CHAR,
+        artifact_payload={"summary": "SSA characterization completed"},
+    )
 ```
 
 ## Core components
