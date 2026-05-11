@@ -101,7 +101,10 @@ class PlotTooltip:
 
     @staticmethod
     def make_formatter(
-        x_label: str, y_label: str
+        x_label: str,
+        y_label: str,
+        x_fmt: str = ".2f",
+        y_fmt: str = ".2f",
     ) -> Callable[[float, float], str]:
-        """Create a formatter from axis labels."""
-        return lambda x, y: f"{x_label}: {x:.2f}\n{y_label}: {y:.2f}"
+        """Create a formatter from axis labels and optional format specs."""
+        return lambda x, y: f"{x_label}: {x:{x_fmt}}\n{y_label}: {y:{y_fmt}}"

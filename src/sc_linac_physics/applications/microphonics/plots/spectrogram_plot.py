@@ -9,7 +9,6 @@ from sc_linac_physics.applications.microphonics.utils.constants import (
 from sc_linac_physics.applications.microphonics.utils.data_processing import (
     calculate_spectrogram,
 )
-from sc_linac_physics.utils.plot_tooltip import PlotTooltip
 
 
 class SpectrogramPlot(BasePlot):
@@ -156,10 +155,6 @@ class SpectrogramPlot(BasePlot):
         # Add colorbar
         if visible_cavities:
             self._add_colorbar(num_rows)
-
-    def get_formatter(self):
-        """Tooltip formatter for spectrogram plot."""
-        return PlotTooltip.make_formatter("Time (s)", "Frequency (Hz)")
 
     def update_plot(self, cavity_num, cavity_channel_data):
         df_data, is_valid = self._preprocess_data(

@@ -116,13 +116,13 @@ class BasePlot(QWidget):
         if "y_range" in config:
             widget.setYRange(*config["y_range"])
 
-        self.tooltip = PlotTooltip(self.plot_widget, self.get_formatter())
+        self.tooltip = PlotTooltip(widget, self.get_formatter())
 
         return widget
 
     def get_formatter(self):
         """Override in subclasses for custom tooltip formatting."""
-        return lambda x, y: f"X: {x:.2f}, Y: {y:.2f}"
+        return None
 
     def _get_cavity_pen(self, cavity_num):
         """
