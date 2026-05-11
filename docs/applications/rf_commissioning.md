@@ -23,7 +23,7 @@ For UI-only development without live EPICS, set `PYDM_DEFAULT_PROTOCOL=fake`.
 | 2 | `SSA_CHAR` | `ssa_char` | Solid-state amplifier characterization |
 | 3 | `FREQUENCY_TUNING` | `frequency_tuning` | Frequency measurement and pi-mode map |
 | 4 | `CAVITY_CHAR` | `cavity_char` | RF cavity characterization (loaded Q, scale factor) |
-| 5 | `PIEZO_WITH_RF` | `piezo_with_rf` | Piezo testing under RF load |
+| 5 | `PIEZO_WITH_RF` | `piezo_with_rf` | Piezo testing with RF |
 | 6 | `HIGH_POWER_RAMP` | `high_power_ramp` | Initial high-power RF ramp |
 | 7 | `MP_PROCESSING` | `mp_processing` | Multipactor processing and quench tracking |
 | 8 | `ONE_HOUR_RUN` | `one_hour_run` | One-hour RF stability run |
