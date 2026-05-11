@@ -111,6 +111,10 @@ class TestClickableCMLabel:
     def test_label_has_pointing_hand_cursor(self, cm_widget):
         assert cm_widget._label.cursor().shape() == Qt.PointingHandCursor
 
+    def test_label_has_select_all_tooltip(self, cm_widget):
+        assert "select" in cm_widget._label.toolTip().lower()
+        assert "deselect" in cm_widget._label.toolTip().lower()
+
 
 class TestSelectionMethods:
     def test_set_cavity_selected(self, cm_widget):
