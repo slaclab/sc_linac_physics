@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v9.21.0 (2026-05-11)
+
+### Bug Fixes
+
+- **simulation**: Wait for caproto-repeater to bind before continuing
+  ([#246](https://github.com/slaclab/sc_linac_physics/pull/246),
+  [`65c39fc`](https://github.com/slaclab/sc_linac_physics/commit/65c39fc36e3d7b069188c7d6aaa7160b999f092b))
+
+### Documentation
+
+- **rf-commissioning**: Update architecture and usage documentation
+  ([#246](https://github.com/slaclab/sc_linac_physics/pull/246),
+  [`65c39fc`](https://github.com/slaclab/sc_linac_physics/commit/65c39fc36e3d7b069188c7d6aaa7160b999f092b))
+
+### Features
+
+- **rf-commissioning**: Add multi-phase commissioning screen with CLI launcher
+  ([#246](https://github.com/slaclab/sc_linac_physics/pull/246),
+  [`65c39fc`](https://github.com/slaclab/sc_linac_physics/commit/65c39fc36e3d7b069188c7d6aaa7160b999f092b))
+
+
 ## v9.20.0 (2026-05-11)
 
 ### Features
