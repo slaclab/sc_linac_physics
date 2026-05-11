@@ -43,7 +43,7 @@ COLLECT_STEPS = ("wait_for_completion", "validate_results")
 
 @dataclass
 class CavitySpec:
-    """Identifies a single cavity for batch execution."""
+    """Identifies a single cavity specification for batch execution."""
 
     cryomodule: str
     cavity_number: int
@@ -66,7 +66,7 @@ class CavitySpec:
 class CavityRunState:
     """Mutable runtime state for a single cavity during a batch run."""
 
-    spec: CavitySpec
+    cavity_spec: CavitySpec
     record: CommissioningRecord | None = None
     record_id: int | None = None
     record_version: int | None = None
@@ -192,33 +192,37 @@ class BatchPiezoPreRFController(QObject):
         self, cavities: list[CavitySpec], operator: str
     ) -> list[CavityRunState]:
         states = []
-        for spec in cavities:
-            state = CavityRunState(spec=spec)
+        for cavity_spec in cavities:
+            state = CavityRunState(cavity_spec=cavity_spec)
             try:
                 self._init_record_and_context(state, operator)
             except Exception as exc:
                 logger.exception(
-                    "Failed to init record for %s: %s", spec.key, exc
+                    "Failed to init record for %s: %s", cavity_spec.key, exc
                 )
                 state.error = str(exc)
-                self.cavity_status_changed.emit(spec.key, self.STATUS_ERROR)
-                self.log_message.emit(f"[{spec.key}] Init failed: {exc}")
+                self.cavity_status_changed.emit(
+                    cavity_spec.key, self.STATUS_ERROR
+                )
+                self.log_message.emit(f"[{cavity_spec.key}] Init failed: {exc}")
             states.append(state)
         return states
 
     def _init_record_and_context(
         self, state: CavityRunState, operator: str
     ) -> None:
-        spec = state.spec
-        linac_idx = spec.linac_idx
+        cavity_spec = state.cavity_spec
+        linac_idx = cavity_spec.linac_idx
         if linac_idx is None:
             raise ValueError(
-                f"Cannot determine linac for CM {spec.cryomodule!r}"
+                f"Cannot determine linac for CM {cavity_spec.cryomodule!r}"
             )
 
         # Load or create the commissioning record for this cavity
         record_id = self.session.db.get_record_id_for_cavity(
-            linac_idx, spec.cryomodule, str(spec.cavity_number)
+            linac_idx,
+            cavity_spec.cryomodule,
+            str(cavity_spec.cavity_number),
         )
         if record_id is not None:
             loaded = self.session.db.get_record_with_version(record_id)
@@ -229,8 +233,8 @@ class BatchPiezoPreRFController(QObject):
         else:
             record = CommissioningRecord(
                 linac=linac_idx,
-                cryomodule=spec.cryomodule,
-                cavity_number=spec.cavity_number,
+                cryomodule=cavity_spec.cryomodule,
+                cavity_number=cavity_spec.cavity_number,
             )
             record_id = self.session.db.save_record(record)
             state.record_version = 1
@@ -250,11 +254,13 @@ class BatchPiezoPreRFController(QObject):
             )
         except Exception as exc:
             logger.warning(
-                "Could not start phase instance for %s: %s", spec.key, exc
+                "Could not start phase instance for %s: %s",
+                cavity_spec.key,
+                exc,
             )
             state.phase_instance_id = None
 
-        machine_cavity = self._get_machine_cavity(spec)
+        machine_cavity = self._get_machine_cavity(cavity_spec)
         state.context = PhaseContext(
             record=record,
             operator=operator,
@@ -268,7 +274,7 @@ class BatchPiezoPreRFController(QObject):
         if not is_valid:
             raise ValueError(f"Prerequisites not met: {msg}")
 
-        self.cavity_status_changed.emit(spec.key, self.STATUS_PENDING)
+        self.cavity_status_changed.emit(cavity_spec.key, self.STATUS_PENDING)
 
     def _ensure_pool(self) -> None:
         """Lazily start the persistent trigger worker pool.
@@ -301,10 +307,10 @@ class BatchPiezoPreRFController(QObject):
             except Exception as exc:
                 state.error = str(exc)
                 self.cavity_status_changed.emit(
-                    state.spec.key, self.STATUS_ERROR
+                    state.cavity_spec.key, self.STATUS_ERROR
                 )
                 self.log_message.emit(
-                    f"[{state.spec.key}] Trigger exception: {exc}"
+                    f"[{state.cavity_spec.key}] Trigger exception: {exc}"
                 )
             finally:
                 self._trigger_queue.task_done()
@@ -346,14 +352,16 @@ class BatchPiezoPreRFController(QObject):
         if state.error or state.phase is None:
             return
 
-        spec = state.spec
-        self.cavity_status_changed.emit(spec.key, self.STATUS_TRIGGERING)
-        self.log_message.emit(f"[{spec.key}] Triggering...")
+        cavity_spec = state.cavity_spec
+        self.cavity_status_changed.emit(cavity_spec.key, self.STATUS_TRIGGERING)
+        self.log_message.emit(f"[{cavity_spec.key}] Triggering...")
 
         for step in TRIGGER_STEPS:
             if self._abort_event.is_set():
                 state.error = "Aborted"
-                self.cavity_status_changed.emit(spec.key, self.STATUS_ERROR)
+                self.cavity_status_changed.emit(
+                    cavity_spec.key, self.STATUS_ERROR
+                )
                 return
 
             if state.context:
@@ -361,19 +369,21 @@ class BatchPiezoPreRFController(QObject):
 
             if not self._run_step(state, step):
                 state.error = f"{step} failed"
-                self.cavity_status_changed.emit(spec.key, self.STATUS_ERROR)
-                self.log_message.emit(f"[{spec.key}] {step} failed")
+                self.cavity_status_changed.emit(
+                    cavity_spec.key, self.STATUS_ERROR
+                )
+                self.log_message.emit(f"[{cavity_spec.key}] {step} failed")
                 self._fail_phase_instance(state, state.error)
                 return
 
         state.triggered = True
-        self.cavity_status_changed.emit(spec.key, self.STATUS_TRIGGERED)
-        self.log_message.emit(f"[{spec.key}] Test triggered")
+        self.cavity_status_changed.emit(cavity_spec.key, self.STATUS_TRIGGERED)
+        self.log_message.emit(f"[{cavity_spec.key}] Test triggered")
 
     def _collect_cavity(self, state: CavityRunState) -> None:
-        spec = state.spec
-        self.cavity_status_changed.emit(spec.key, self.STATUS_COLLECTING)
-        self.log_message.emit(f"[{spec.key}] Collecting results...")
+        cavity_spec = state.cavity_spec
+        self.cavity_status_changed.emit(cavity_spec.key, self.STATUS_COLLECTING)
+        self.log_message.emit(f"[{cavity_spec.key}] Collecting results...")
 
         if state.context:
             state.context.abort_requested = self._abort_event.is_set()
@@ -381,14 +391,18 @@ class BatchPiezoPreRFController(QObject):
         for step in COLLECT_STEPS:
             if self._abort_event.is_set():
                 state.error = "Aborted"
-                self.cavity_status_changed.emit(spec.key, self.STATUS_ERROR)
+                self.cavity_status_changed.emit(
+                    cavity_spec.key, self.STATUS_ERROR
+                )
                 self._fail_phase_instance(state, "Aborted")
                 return
 
             if not self._run_step(state, step):
                 state.error = f"{step} failed"
-                self.cavity_status_changed.emit(spec.key, self.STATUS_FAILED)
-                self.log_message.emit(f"[{spec.key}] {step} failed")
+                self.cavity_status_changed.emit(
+                    cavity_spec.key, self.STATUS_FAILED
+                )
+                self.log_message.emit(f"[{cavity_spec.key}] {step} failed")
                 self._fail_phase_instance(state, state.error)
                 self._persist_record(state)
                 return
@@ -397,27 +411,29 @@ class BatchPiezoPreRFController(QObject):
         try:
             state.phase.finalize_phase()
         except Exception as exc:
-            logger.exception("finalize_phase failed for %s: %s", spec.key, exc)
+            logger.exception(
+                "finalize_phase failed for %s: %s", cavity_spec.key, exc
+            )
 
         result_data: PiezoPreRFCheck | None = (
             state.record.piezo_pre_rf if state.record else None
         )
 
         if result_data and result_data.passed:
-            self.cavity_status_changed.emit(spec.key, self.STATUS_PASSED)
+            self.cavity_status_changed.emit(cavity_spec.key, self.STATUS_PASSED)
             self.log_message.emit(
-                f"[{spec.key}] PASSED (Cap A={result_data.capacitance_a * 1e9:.1f} nF, "
+                f"[{cavity_spec.key}] PASSED (Cap A={result_data.capacitance_a * 1e9:.1f} nF, "
                 f"Cap B={result_data.capacitance_b * 1e9:.1f} nF)"
             )
             self._complete_phase_instance(state, result_data)
         else:
-            self.cavity_status_changed.emit(spec.key, self.STATUS_FAILED)
+            self.cavity_status_changed.emit(cavity_spec.key, self.STATUS_FAILED)
             notes = result_data.notes if result_data else "No data"
-            self.log_message.emit(f"[{spec.key}] FAILED: {notes}")
+            self.log_message.emit(f"[{cavity_spec.key}] FAILED: {notes}")
             self._fail_phase_instance(state, notes)
 
         self._persist_record(state)
-        self.cavity_result_ready.emit(spec.key, result_data)
+        self.cavity_result_ready.emit(cavity_spec.key, result_data)
 
     def _complete_phase_instance(
         self, state: CavityRunState, result_data: Optional[PiezoPreRFCheck]
@@ -434,7 +450,9 @@ class BatchPiezoPreRFController(QObject):
             )
         except Exception as exc:
             logger.warning(
-                "complete_phase_instance failed for %s: %s", state.spec.key, exc
+                "complete_phase_instance failed for %s: %s",
+                state.cavity_spec.key,
+                exc,
             )
 
     def _fail_phase_instance(
@@ -455,7 +473,9 @@ class BatchPiezoPreRFController(QObject):
             )
         except Exception as exc:
             logger.warning(
-                "fail_phase_instance failed for %s: %s", state.spec.key, exc
+                "fail_phase_instance failed for %s: %s",
+                state.cavity_spec.key,
+                exc,
             )
 
     def _persist_record(self, state: CavityRunState) -> None:
@@ -470,7 +490,11 @@ class BatchPiezoPreRFController(QObject):
             if state.record_version is not None:
                 state.record_version += 1
         except Exception as exc:
-            logger.warning("save_record failed for %s: %s", state.spec.key, exc)
+            logger.warning(
+                "save_record failed for %s: %s",
+                state.cavity_spec.key,
+                exc,
+            )
 
     def _mark_remaining_skipped(
         self, states: list[CavityRunState], only_triggered: bool = False
@@ -478,7 +502,9 @@ class BatchPiezoPreRFController(QObject):
         for state in states:
             if state.error or state.triggered == only_triggered:
                 continue
-            self.cavity_status_changed.emit(state.spec.key, self.STATUS_SKIPPED)
+            self.cavity_status_changed.emit(
+                state.cavity_spec.key, self.STATUS_SKIPPED
+            )
 
     # ------------------------------------------------------------------
     # Machine / cavity resolution
@@ -489,11 +515,11 @@ class BatchPiezoPreRFController(QObject):
             self._machine = Machine(piezo_class=CommissioningPiezo)
         return self._machine
 
-    def _get_machine_cavity(self, spec: CavitySpec):
+    def _get_machine_cavity(self, cavity_spec: CavitySpec):
         machine = self._get_machine()
         cm_key = (
-            f"{int(spec.cryomodule):02d}"
-            if spec.cryomodule.isdigit()
-            else spec.cryomodule
+            f"{int(cavity_spec.cryomodule):02d}"
+            if cavity_spec.cryomodule.isdigit()
+            else cavity_spec.cryomodule
         )
-        return machine.cryomodules[cm_key].cavities[spec.cavity_number]
+        return machine.cryomodules[cm_key].cavities[cavity_spec.cavity_number]
