@@ -395,7 +395,9 @@ class TestCollectCavity:
 
         assert BatchPiezoPreRFController.STATUS_FAILED in statuses
         assert results == [None]
-        call_kwargs = ctrl.session.workflow.complete_phase_instance.call_args[1]
+        ctrl.session.workflow.complete_phase_instance.assert_not_called()
+        call_kwargs = ctrl.session.workflow.fail_phase_instance.call_args[1]
+        assert call_kwargs["error_message"] == "No data"
         assert call_kwargs["artifact_payload"] is None
 
 
@@ -618,14 +620,24 @@ class TestRunBatchPublicAPI:
     def test_run_batch_clears_abort_event(self):
         ctrl = _make_controller()
         ctrl._abort_event.set()
-        ctrl._run_batch = lambda cavities, op: None  # no-op
+
+        # Capture the abort_event state at the moment _run_batch is called
+        abort_event_state_when_called = []
+
+        def _track_abort_state(cavities, op):
+            abort_event_state_when_called.append(ctrl._abort_event.is_set())
+
+        ctrl._run_batch = _track_abort_state
         ctrl.run_batch([CavitySpec("01", 1)], "op")
-        # The event is cleared before the thread starts
-        # Give thread a moment to clear
+
+        # Wait for the background thread to complete
         import time
 
-        time.sleep(0.05)
-        assert not ctrl._abort_event.is_set()
+        time.sleep(0.1)
+
+        # Verify that abort_event was False when _run_batch was called
+        # (i.e., run_batch() itself cleared it before calling _run_batch)
+        assert abort_event_state_when_called == [False]
 
     def test_run_batch_starts_background_thread(self):
         ctrl = _make_controller()
@@ -792,7 +804,21 @@ class TestTriggerCavitiesParallel:
         # Pool should not have been started since abort happened first
         assert not ctrl._pool_ready
 
-    def test_abort_before_dispatch_marks_triggered_as_skipped(self):
+    def test_abort_before_dispatch_marks_untriggered_as_skipped(self):
+        ctrl = _make_controller()
+        ctrl._abort_event.set()
+
+        state = CavityRunState(spec=CavitySpec("01", 1))
+        state.triggered = False
+        state.error = None
+
+        statuses = []
+        ctrl.cavity_status_changed.connect(lambda k, s: statuses.append(s))
+        ctrl._trigger_cavities_parallel([state])
+
+        assert BatchPiezoPreRFController.STATUS_SKIPPED in statuses
+
+    def test_abort_before_dispatch_does_not_mark_triggered_as_skipped(self):
         ctrl = _make_controller()
         ctrl._abort_event.set()
 
@@ -804,7 +830,7 @@ class TestTriggerCavitiesParallel:
         ctrl.cavity_status_changed.connect(lambda k, s: statuses.append(s))
         ctrl._trigger_cavities_parallel([state])
 
-        assert BatchPiezoPreRFController.STATUS_SKIPPED in statuses
+        assert BatchPiezoPreRFController.STATUS_SKIPPED not in statuses
 
     def test_dispatches_to_pool_and_waits(self):
         ctrl = _make_controller()

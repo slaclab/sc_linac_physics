@@ -162,8 +162,13 @@ class TestSelectAll:
 
     def test_select_all_updates_count_label(self, win):
         win._select_all()
+        selected = win._get_selected_cavities()
+        # Verify actual cavities are selected
+        assert len(selected) > 0
+        # Verify label contains the non-zero count and doesn't start with "0"
         label = win._selection_count_label.text()
-        assert "0" not in label or "cavities" in label  # non-zero count
+        assert not label.startswith("0 ")
+        assert str(len(selected)) in label
 
     def test_deselect_all_resets_count_label(self, win):
         win._select_all()
@@ -456,16 +461,16 @@ class TestGetOperator:
             child.deleteLater()
             parent.deleteLater()
 
-    def test_strips_person_emoji_from_operator_text(self, win):
+    def test_rejects_text_only_operator_without_current_data(self, win):
         parent = QWidget()
         parent.operator_combo = QComboBox()
-        parent.operator_combo.addItem("👤 Bob", None)  # data is None, text used
+        parent.operator_combo.addItem("👤 Bob", None)
         parent.operator_combo.setCurrentIndex(0)
 
         child = BatchPiezoPreRFWindow(parent=parent, session=Mock())
         try:
             result = child._get_operator()
-            assert result == "Bob"
+            assert result == ""
         finally:
             child.deleteLater()
             parent.deleteLater()
