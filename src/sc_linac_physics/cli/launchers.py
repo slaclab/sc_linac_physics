@@ -153,6 +153,18 @@ def launch_tuning(standalone=True):
 
 
 @application
+def launch_rf_commissioning(standalone=True):
+    """Launch the RF commissioning multi-phase GUI."""
+    from sc_linac_physics.applications.rf_commissioning.ui.multi_phase_screen import (
+        MultiPhaseCommissioningDisplay,
+    )
+
+    return launch_python_display(
+        MultiPhaseCommissioningDisplay, *sys.argv[1:], standalone=standalone
+    )
+
+
+@application
 def launch_microphonics(standalone=True):
     """Launch the microphonics GUI."""
     from sc_linac_physics.applications.microphonics.gui.main_window import (
