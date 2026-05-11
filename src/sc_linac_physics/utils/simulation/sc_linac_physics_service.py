@@ -1,6 +1,8 @@
 import os
 import shutil
+import socket
 import subprocess
+import time
 import warnings
 
 from caproto import ChannelEnum, ChannelFloat, ChannelInteger
@@ -465,6 +467,11 @@ class SCLinacPhysicsService(Service):
         return cavity_launchers
 
 
+_REPEATER_PORT = 5065
+_REPEATER_WAIT_S = 2.0
+_REPEATER_POLL_S = 0.05
+
+
 def main():
     os.environ.setdefault("EPICS_CAS_AUTO_BEACON_ADDR_LIST", "no")
     os.environ.setdefault("EPICS_CAS_BEACON_ADDR_LIST", "127.0.0.1")
@@ -481,7 +488,7 @@ def main():
 
 
 def _start_caproto_repeater():
-    """Start caproto-repeater if available, warning and continuing on failure."""
+    """Start caproto-repeater if available and wait for it to bind, warning on failure."""
     repeater_path = shutil.which("caproto-repeater")
     if repeater_path is None:
         warnings.warn(
@@ -513,7 +520,22 @@ def _start_caproto_repeater():
         )
         return None
 
+    _wait_for_repeater()
     return process
+
+
+def _wait_for_repeater(timeout: float = _REPEATER_WAIT_S) -> None:
+    """Block until the repeater has bound to its UDP port, or timeout expires."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.bind(("127.0.0.1", _REPEATER_PORT))
+        except OSError:
+            return  # port in use → repeater is ready
+        finally:
+            sock.close()
+        time.sleep(_REPEATER_POLL_S)
 
 
 def _stop_caproto_repeater(process):
