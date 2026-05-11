@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.20.0 (2026-05-11)
+
+### Features
+
+- **rf-commissioning**: Add batch Piezo Pre-RF runner for multi-cavity execution
+  ([#245](https://github.com/slaclab/sc_linac_physics/pull/245),
+  [`9655288`](https://github.com/slaclab/sc_linac_physics/commit/96552883f54abe5595bc8bf11073701c229c044a))
+
+- **rf-commissioning**: Add Piezo Pre-RF single-cavity display and controller
+  ([#245](https://github.com/slaclab/sc_linac_physics/pull/245),
+  [`9655288`](https://github.com/slaclab/sc_linac_physics/commit/96552883f54abe5595bc8bf11073701c229c044a))
+
+
 ## v9.19.1 (2026-05-10)
 
 ### Bug Fixes
