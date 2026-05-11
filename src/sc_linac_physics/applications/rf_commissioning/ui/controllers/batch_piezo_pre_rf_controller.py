@@ -66,7 +66,7 @@ class CavitySpec:
 class CavityRunState:
     """Mutable runtime state for a single cavity during a batch run."""
 
-    cavity_spec: CavitySpec
+    spec: CavitySpec
     record: CommissioningRecord | None = None
     record_id: int | None = None
     record_version: int | None = None
@@ -75,6 +75,15 @@ class CavityRunState:
     phase: PiezoPreRFPhase | None = None
     triggered: bool = False
     error: str | None = field(default=None)
+
+    @property
+    def cavity_spec(self) -> CavitySpec:
+        """Readable alias for legacy `spec` field used by existing callers."""
+        return self.spec
+
+    @cavity_spec.setter
+    def cavity_spec(self, value: CavitySpec) -> None:
+        self.spec = value
 
 
 class BatchPiezoPreRFController(QObject):
@@ -193,7 +202,7 @@ class BatchPiezoPreRFController(QObject):
     ) -> list[CavityRunState]:
         states = []
         for cavity_spec in cavities:
-            state = CavityRunState(cavity_spec=cavity_spec)
+            state = CavityRunState(spec=cavity_spec)
             try:
                 self._init_record_and_context(state, operator)
             except Exception as exc:
