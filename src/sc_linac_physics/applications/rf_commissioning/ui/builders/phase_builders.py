@@ -427,7 +427,7 @@ class SSACharUI(PhaseUIBase):
         grid.addWidget(QLabel("Drive Max:"), 2, 0)
 
         pv_drv_req = self._register(
-            "pydm_drive_max_req", PyDMLabel(parent=self.parent)
+            "pydm_drive_max_new", PyDMLabel(parent=self.parent)
         )
         pv_drv_req.setStyleSheet(PV_CAP_STYLE)
         pv_drv_req.setAlignment(Qt.AlignCenter)

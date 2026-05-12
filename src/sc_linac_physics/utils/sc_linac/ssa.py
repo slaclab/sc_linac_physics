@@ -71,6 +71,7 @@ class SSA(linac_utils.SCLinacObject):
         self._cal_result_status_pv_obj: Optional[PV] = None
 
         self.current_slope_pv: str = self.pv_addr("SLOPE")
+        self._current_slope_pv_obj: Optional[PV] = None
         self.measured_slope_pv: str = self.pv_addr("SLOPE_NEW")
         self._measured_slope_pv_obj: Optional[PV] = None
         self.saved_slope_pv: str = self.pv_addr("SLOPE_SAVE")
@@ -548,6 +549,13 @@ class SSA(linac_utils.SCLinacObject):
                 }
             },
         )
+
+    @property
+    def current_slope(self):
+        """Currently active SSA slope (SLOPE PV), i.e. the value in use by the cavity."""
+        if not self._current_slope_pv_obj:
+            self._current_slope_pv_obj = PV(self.current_slope_pv)
+        return self._current_slope_pv_obj.get()
 
     @property
     def measured_slope(self):

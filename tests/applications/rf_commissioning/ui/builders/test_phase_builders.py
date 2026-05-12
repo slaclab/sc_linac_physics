@@ -172,7 +172,7 @@ def test_ssa_char_build_registers_result_widgets():
     for name in (
         "pydm_slope_new",
         "pydm_slope_current",
-        "pydm_drive_max_req",
+        "pydm_drive_max_new",
         "pydm_drive_max_current",
         "pydm_max_fwd_pwr",
         "pydm_cal_status",

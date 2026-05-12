@@ -29,15 +29,18 @@ from sc_linac_physics.utils.sc_linac.linac import Machine
 
 
 class SSACharController(QObject):
-    """Owns phase execution and PV wiring for the SSA Characterisation display."""
+    """Owns phase execution and PV wiring for the SSA Calibration display."""
 
     phase_completed = pyqtSignal(object)
     phase_run_finished = pyqtSignal(bool, str)
+    # Thread-safe logging: emit from any thread; slot runs on the GUI thread.
+    _log_signal = pyqtSignal(str)
 
     def __init__(self, view, session: CommissioningSession) -> None:
         super().__init__()
         self.view = view
         self.session = session
+        self._log_signal.connect(self.view.log_message)
 
         self.context: PhaseContext | None = None
         self.phase: SSACharPhase | None = None
@@ -102,7 +105,7 @@ class SSACharController(QObject):
             ("pydm_max_fwd_pwr", ssa.max_fwd_pwr_pv),
             ("pydm_slope_new", ssa.measured_slope_pv),
             ("pydm_slope_current", ssa.current_slope_pv),
-            ("pydm_drive_max_req", ssa.drive_max_new_pv),
+            ("pydm_drive_max_new", ssa.drive_max_new_pv),
             ("pydm_drive_max_current", ssa.drive_max_current_pv),
         ]
         for widget_name, pv_addr in optional:
@@ -288,35 +291,35 @@ class SSACharController(QObject):
                 self._create_step_checkpoint(step_name, result)
 
                 if result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP):
-                    self.view.log_message(f"✓ {step_name}")
+                    self._log_signal.emit(f"✓ {step_name}")
                     return True
 
                 if result.result == PhaseResult.RETRY:
                     retry_count += 1
                     if retry_count < max_retries:
                         delay = max(0.0, float(result.retry_delay_seconds))
-                        self.view.log_message(
+                        self._log_signal.emit(
                             f"Retrying {retry_count}/{max_retries} in {delay:.1f}s: "
                             f"{result.message}"
                         )
                         time.sleep(delay)
                         continue
-                    self.view.log_message(
+                    self._log_signal.emit(
                         f"Failed after {max_retries} retries: {result.message}"
                     )
                     return False
 
-                self.view.log_message(f"✗ {step_name}: {result.message}")
+                self._log_signal.emit(f"✗ {step_name}: {result.message}")
                 return False
 
             except Exception as exc:
                 retry_count += 1
                 if retry_count < max_retries:
-                    self.view.log_message(
+                    self._log_signal.emit(
                         f"Exception on retry {retry_count}: {exc}"
                     )
                     continue
-                self.view.log_message(
+                self._log_signal.emit(
                     f"Exception after {max_retries} retries: {exc}"
                 )
                 return False
@@ -485,9 +488,9 @@ class SSACharController(QObject):
         def _push():
             try:
                 cavity.push_ssa_slope()
-                self.view.log_message("✓ SSA slope pushed to cavity register")
+                self._log_signal.emit("✓ SSA slope pushed to cavity register")
             except Exception as exc:
-                self.view.log_message(f"Push failed: {exc}")
+                self._log_signal.emit(f"Push failed: {exc}")
 
         Thread(target=_push, daemon=True).start()
 

@@ -19,8 +19,14 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from pydm import Display as PyDMDisplay, PyDMApplication
+from pydm import Display, PyDMApplication
 
+from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
+    CryomoduleCheckoutRecord,
+    CryomodulePhase,
+    CryomodulePhaseStatus,
+    MagnetCheckoutData,
+)
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
@@ -28,17 +34,8 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     RecordConflictError,
 )
-from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
-    CryomoduleCheckoutRecord,
-    CryomodulePhase,
-    CryomodulePhaseStatus,
-    MagnetCheckoutData,
-)
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
-)
-from sc_linac_physics.utils.sc_linac.linac_utils import (
-    get_linac_for_cryomodule,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
     PhaseTabSpec,
@@ -77,9 +74,12 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     update_sync_status,
     update_tab_states,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    get_linac_for_cryomodule,
+)
 
 
-class MultiPhaseCommissioningDisplay(PyDMDisplay):
+class MultiPhaseCommissioningDisplay(Display):
     """Container window that hosts multiple phase displays.
 
     This redesigned display keeps critical information always visible:

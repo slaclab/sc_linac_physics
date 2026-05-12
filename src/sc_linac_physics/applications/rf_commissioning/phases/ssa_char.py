@@ -129,7 +129,7 @@ class SSACharPhase(PhaseBase):
             )
 
         try:
-            current_slope = ssa.measured_slope
+            current_slope = ssa.current_slope
             current_drive = ssa.drive_max
         except Exception as exc:
             return PhaseStepResult(
@@ -142,7 +142,7 @@ class SSACharPhase(PhaseBase):
             result=PhaseResult.SUCCESS,
             message="Initial state verified",
             data={
-                "initial_slope": current_slope,
+                "initial_current_slope": current_slope,
                 "initial_drive_max": current_drive,
             },
         )
@@ -323,7 +323,7 @@ class SSACharPhase(PhaseBase):
         time.sleep(0.5)
 
         try:
-            slope_current = ssa.measured_slope
+            slope_current = ssa.current_slope
         except Exception:
             slope_current = slope_new
 
