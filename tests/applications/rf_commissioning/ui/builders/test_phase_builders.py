@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QGroupBox, QHBoxLayout, QWidget
 from sc_linac_physics.applications.rf_commissioning.ui.builders.phase_builders import (
     GenericPhaseUI,
     PiezoPreRFUI,
+    SSACharUI,
 )
 
 
@@ -127,3 +128,83 @@ def test_generic_phase_title_falls_back_to_default():
     ui = GenericPhaseUI(parent=_ParentWidget())
 
     assert ui.PHASE_TITLE == "Phase"
+
+
+# ------------------------------------------------------------------
+# SSACharUI
+# ------------------------------------------------------------------
+
+
+def test_ssa_char_build_creates_two_panel_layout():
+    parent = _ParentWidget(
+        specs=[SimpleNamespace(label="Operator", widget_name="stored_operator")]
+    )
+    ui = SSACharUI(parent=parent)
+
+    layout = ui.build()
+    host = _mount(layout)
+
+    assert layout.count() == 2
+    titles = {group.title() for group in host.findChildren(QGroupBox)}
+    assert "SSA Calibration Inputs" in titles
+    assert "Phase History" in titles
+    assert "SSA Calibration — Status && Results" in titles
+    assert "Stored Data" in titles
+
+
+def test_ssa_char_build_registers_input_widgets():
+    ui = SSACharUI(parent=_ParentWidget())
+
+    group = ui._build_ssa_inputs()  # noqa: F841
+
+    spinbox = ui.widgets["drive_max_spinbox"]
+    assert spinbox.minimum() == pytest.approx(0.01)
+    assert spinbox.maximum() == pytest.approx(1.0)
+    assert spinbox.value() == pytest.approx(0.670)
+    assert "plot_btn" in ui.widgets
+
+
+def test_ssa_char_build_registers_result_widgets():
+    ui = SSACharUI(parent=_ParentWidget())
+
+    group = ui._build_ssa_results()  # noqa: F841
+
+    for name in (
+        "pydm_slope_new",
+        "pydm_slope_current",
+        "pydm_drive_max_req",
+        "pydm_drive_max_current",
+        "pydm_max_fwd_pwr",
+        "pydm_cal_status",
+        "local_phase_status",
+        "local_current_step",
+        "push_btn",
+    ):
+        assert name in ui.widgets, f"Missing widget: {name}"
+
+
+def test_ssa_char_push_button_label():
+    ui = SSACharUI(parent=_ParentWidget())
+    group = ui._build_ssa_results()  # noqa: F841
+    assert "Push New Slope to Cavity" in ui.widgets["push_btn"].text()
+
+
+def test_ssa_char_pv_labels_default_text():
+    ui = SSACharUI(parent=_ParentWidget())
+    group = ui._build_ssa_results()  # noqa: F841
+    assert ui.widgets["local_phase_status"].text() == "-"
+    assert ui.widgets["local_current_step"].text() == "-"
+
+
+def test_ssa_char_build_registers_stored_fields_from_parent():
+    parent = _ParentWidget(
+        specs=[
+            SimpleNamespace(label="Operator", widget_name="stored_operator"),
+            SimpleNamespace(label="Slope", widget_name="stored_slope"),
+        ]
+    )
+    ui = SSACharUI(parent=parent)
+    _mount(ui.build())
+
+    assert "stored_operator" in ui.widgets
+    assert "stored_slope" in ui.widgets
