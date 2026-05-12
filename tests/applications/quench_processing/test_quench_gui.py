@@ -42,16 +42,34 @@ def gui(monkeypatch):
         def removeChannel(self, *a, **k):
             pass
 
+    class DummyRFControls:
+        def __init__(self):
+            from PyQt5.QtWidgets import QGroupBox
+
+            self.ssa_on_button = MagicMock()
+            self.ssa_off_button = MagicMock()
+            self.ssa_readback_label = MagicMock()
+            self.rf_mode_combobox = MagicMock()
+            self.rf_mode_readback_label = MagicMock()
+            self.rf_on_button = MagicMock()
+            self.rf_off_button = MagicMock()
+            self.rf_status_readback_label = MagicMock()
+            self.ades_spinbox = MagicMock()
+            self.aact_readback_label = MagicMock()
+            self.srf_max_spinbox = MagicMock()
+            self.srf_max_readback_label = MagicMock()
+            self.rf_control_groupbox = QGroupBox("RF Controls")
+
     # Patch the symbol actually used by QuenchGUI.__init__
     import sc_linac_physics.applications.quench_processing.quench_gui as gui_mod
 
     monkeypatch.setattr(
         gui_mod, "PyDMWaveformPlot", DummyWaveformPlot, raising=False
     )
+    monkeypatch.setattr(gui_mod, "RFControls", DummyRFControls)
 
     # Now construct the GUI safely
     g = QuenchGUI()
-    g.rf_controls = MagicMock()
     g.status_label.setText = MagicMock()
     g.status_label.setStyleSheet = MagicMock()
     g.start_button.setEnabled = MagicMock()
