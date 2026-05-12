@@ -17,7 +17,7 @@ def test_default_phase_specs_hide_placeholder_tabs_for_beta() -> None:
     ]
     assert [spec.title for spec in specs] == [
         "Piezo Pre-RF",
-        "SSA Characterization",
+        "SSA Calibration",
     ]
 
 

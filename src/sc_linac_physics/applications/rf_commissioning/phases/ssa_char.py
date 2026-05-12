@@ -1,5 +1,5 @@
 """
-SSA Characterization Phase
+SSA Calibration Phase
 
 Runs SSA calibration: resets the SSA, powers it on, triggers the calibration
 scan, validates results, and auto-pushes the new slope to the active cavity
@@ -34,7 +34,7 @@ class SSACalLimits:
 
 class SSACharPhase(PhaseBase):
     """
-    SSA Characterization Phase.
+    SSA Calibration Phase.
 
     Sequence:
     1. verify_initial_state  – confirm SSA is accessible and not mid-run

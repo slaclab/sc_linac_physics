@@ -321,7 +321,7 @@ class GenericPhaseUI(_StandardPlaceholderUI):
 
 
 class SSACharUI(PhaseUIBase):
-    """Builds the SSA Characterization display UI and exposes widget references."""
+    """Builds the SSA Calibration display UI and exposes widget references."""
 
     def build(self) -> QHBoxLayout:
         main_layout = QHBoxLayout()
@@ -482,7 +482,9 @@ class SSACharUI(PhaseUIBase):
         btn_row.setSpacing(8)
         btn_row.setContentsMargins(0, 6, 0, 0)
 
-        push_btn = self._register("push_btn", QPushButton("Push →"))
+        push_btn = self._register(
+            "push_btn", QPushButton("Push New Slope to Cavity")
+        )
         push_btn.setStyleSheet(
             "QPushButton { background-color: #1d6a3a; color: white; "
             "font-weight: bold; padding: 6px 18px; border-radius: 4px; } "
@@ -491,16 +493,6 @@ class SSACharUI(PhaseUIBase):
         )
         self._connect(push_btn, "on_push_slope")
         btn_row.addWidget(push_btn)
-
-        save_btn = self._register("save_btn", QPushButton("Save"))
-        save_btn.setStyleSheet(
-            "QPushButton { background-color: #7c3aed; color: white; "
-            "font-weight: bold; padding: 6px 18px; border-radius: 4px; } "
-            "QPushButton:hover { background-color: #9d4edd; } "
-            "QPushButton:disabled { background-color: #374151; color: #6b7280; }"
-        )
-        self._connect(save_btn, "on_save_slope")
-        btn_row.addWidget(save_btn)
 
         btn_row.addStretch()
         outer.addLayout(btn_row)

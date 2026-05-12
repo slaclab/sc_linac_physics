@@ -1,4 +1,4 @@
-"""SSA Characterization commissioning display."""
+"""SSA Calibration commissioning display."""
 
 from PyQt5.QtCore import pyqtSlot
 
@@ -21,10 +21,10 @@ from .base_placeholder import BasePlaceholderDisplay
 
 
 class SSACharDisplay(BasePlaceholderDisplay):
-    """Display for SSA Characterization phase (fully implemented)."""
+    """Display for SSA Calibration phase (fully implemented)."""
 
     UI_CLASS = SSACharUI
-    PHASE_NAME = "SSA Characterization"
+    PHASE_NAME = "SSA Calibration"
     DATA_ATTR = "ssa_char"
     DATA_MODEL = SSACharacterization
 
@@ -32,7 +32,7 @@ class SSACharDisplay(BasePlaceholderDisplay):
         self, parent=None, session: CommissioningSession | None = None
     ):
         super().__init__(parent, session=session)
-        self.setWindowTitle("SSA Characterization - PyDM")
+        self.setWindowTitle("SSA Calibration - PyDM")
 
         self.controller = SSACharController(self, self.session)
         if hasattr(self.controller, "phase_completed"):
@@ -48,7 +48,6 @@ class SSACharDisplay(BasePlaceholderDisplay):
             "on_pause_test": self.on_pause_test,
             "on_abort_test": self.on_abort,
             "on_push_slope": self.on_push_slope,
-            "on_save_slope": self.on_save_slope,
             "on_plot": self.on_plot,
         }
         self.ui = self.UI_CLASS(self, callbacks)
@@ -136,9 +135,5 @@ class SSACharDisplay(BasePlaceholderDisplay):
         self.controller.on_push_slope()
 
     @pyqtSlot()
-    def on_save_slope(self):
-        self.controller.on_save_slope()
-
-    @pyqtSlot()
     def on_plot(self):
-        self.log_message("Plot not yet implemented")
+        self.controller.on_plot()

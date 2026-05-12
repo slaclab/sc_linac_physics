@@ -78,6 +78,9 @@ class SSA(linac_utils.SCLinacObject):
         self.drive_max_setpoint_pv: str = self.pv_addr("DRV_MAX_REQ")
         self._drive_max_setpoint_pv_obj: Optional[PV] = None
 
+        self.drive_max_new_pv: str = self.pv_addr("DRV_MAX_NEW")
+        self.drive_max_current_pv: str = self.pv_addr("DRV_MAX")
+
         self.saved_drive_max_pv: str = self.pv_addr("DRV_MAX_SAVE")
         self._saved_drive_max_pv_obj: Optional[PV] = None
 

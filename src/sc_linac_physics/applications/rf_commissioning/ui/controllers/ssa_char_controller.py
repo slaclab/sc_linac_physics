@@ -1,4 +1,4 @@
-"""Controller for SSA Characterization display logic."""
+"""Controller for SSA Calibration display logic."""
 
 from datetime import datetime
 from threading import Thread
@@ -24,6 +24,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
     format_pv_update_message,
     resolve_cavity_selection,
 )
+from sc_linac_physics.utils.platform_paths import get_ssa_cal_base_dir
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 
@@ -101,8 +102,8 @@ class SSACharController(QObject):
             ("pydm_max_fwd_pwr", ssa.max_fwd_pwr_pv),
             ("pydm_slope_new", ssa.measured_slope_pv),
             ("pydm_slope_current", ssa.current_slope_pv),
-            ("pydm_drive_max_req", ssa.drive_max_setpoint_pv),
-            ("pydm_drive_max_current", ssa.drive_max_setpoint_pv),
+            ("pydm_drive_max_req", ssa.drive_max_new_pv),
+            ("pydm_drive_max_current", ssa.drive_max_current_pv),
         ]
         for widget_name, pv_addr in optional:
             if hasattr(self.view, widget_name):
@@ -490,19 +491,48 @@ class SSACharController(QObject):
 
         Thread(target=_push, daemon=True).start()
 
-    def on_save_slope(self) -> None:
+    def on_plot(self) -> None:
         cavity = self._resolve_cavity()
         if cavity is None:
             return
 
-        def _save():
-            try:
-                cavity.save_ssa_slope()
-                self.view.log_message("✓ SSA slope saved to persistent storage")
-            except Exception as exc:
-                self.view.log_message(f"Save failed: {exc}")
+        pv_base = cavity.pv_prefix.rstrip(":")
+        cavity_dir_name = pv_base.replace(":", "_")
+        base = get_ssa_cal_base_dir() / cavity_dir_name
 
-        Thread(target=_save, daemon=True).start()
+        if not base.is_dir():
+            self.view.log_message(f"No SSA cal directory found: {base}")
+            return
+
+        for subdir in sorted(base.iterdir(), reverse=True):
+            if not subdir.is_dir():
+                continue
+            png = subdir / "ssa_cal.png"
+            if png.exists():
+                self._show_plot(png)
+                return
+
+        self.view.log_message(f"No ssa_cal.png found under {base}")
+
+    def _show_plot(self, png_path) -> None:
+        from PyQt5.QtGui import QPixmap
+        from PyQt5.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout
+
+        dlg = QDialog(self.view)
+        dlg.setWindowTitle(f"SSA Cal Plot — {png_path.parent.name}")
+
+        label = QLabel()
+        label.setPixmap(QPixmap(str(png_path)))
+
+        scroll = QScrollArea()
+        scroll.setWidget(label)
+        scroll.setWidgetResizable(True)
+
+        layout = QVBoxLayout()
+        layout.addWidget(scroll)
+        dlg.setLayout(layout)
+        dlg.resize(800, 600)
+        dlg.show()
 
     def _resolve_cavity(self):
         if self._cavity is not None:

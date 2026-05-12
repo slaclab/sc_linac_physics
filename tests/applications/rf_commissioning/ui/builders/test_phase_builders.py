@@ -98,9 +98,7 @@ def test_piezo_build_registers_stored_fields_from_parent_specs():
     assert "stored_amp" in ui.widgets
 
 
-@pytest.mark.parametrize(
-    "phase_title", ["Frequency Tuning", "SSA Characterization"]
-)
+@pytest.mark.parametrize("phase_title", ["Frequency Tuning", "SSA Calibration"])
 def test_generic_phase_ui_builds_standard_layout(phase_title):
     parent = _ParentWidget(
         specs=[SimpleNamespace(label="Tag", widget_name="stored_tag")],

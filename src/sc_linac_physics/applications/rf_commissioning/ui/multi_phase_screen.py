@@ -40,10 +40,6 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     get_linac_for_cryomodule,
 )
-from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
-    PhaseDisplayBase,
-)
-
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
     PhaseTabSpec,
     build_note_dialog,
@@ -152,7 +148,7 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
 
         self.setLayout(main_layout)
 
-        self._phase_displays: list[PhaseDisplayBase] = []
+        self._phase_displays: list = []
         self._init_tabs()
         self._update_tab_states()
         self._load_notes()
@@ -685,14 +681,6 @@ def main() -> int:
     window = MultiPhaseCommissioningDisplay()
     window.show()
     return app.exec_()
-
-
-class Display(MultiPhaseCommissioningDisplay):
-    """PyDM compatibility entrypoint class.
-
-    When launching this file directly via `pydm path/to/multi_phase_screen.py`,
-    PyDM expects a class named `Display` in the module.
-    """
 
 
 if __name__ == "__main__":
