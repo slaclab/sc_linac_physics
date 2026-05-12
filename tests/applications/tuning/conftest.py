@@ -214,6 +214,10 @@ def cavity_section_patches():
             "sc_linac_physics.applications.tuning.tuning_gui.CollapsibleGroupBox",
             MockCollapsibleGroupBox,
         ),
+        patch(
+            "sc_linac_physics.applications.tuning.tuning_gui.PyDMSpinbox",
+            MockPyDMSpinbox,
+        ),
     ):
         yield
 

@@ -40,7 +40,8 @@ class SSACharController(QObject):
         super().__init__()
         self.view = view
         self.session = session
-        self._log_signal.connect(self.view.log_message)
+        if hasattr(self.view, "log_message"):
+            self._log_signal.connect(self.view.log_message)
 
         self.context: PhaseContext | None = None
         self.phase: SSACharPhase | None = None

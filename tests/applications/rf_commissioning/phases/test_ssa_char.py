@@ -178,7 +178,7 @@ def test_verify_initial_state_calibration_already_running(phase, mock_ssa):
 def test_verify_initial_state_read_exception_retries(phase, mock_ssa):
     phase.validate_prerequisites()
     mock_ssa.calibration_running = False
-    type(mock_ssa).measured_slope = PropertyMock(
+    type(mock_ssa).current_slope = PropertyMock(
         side_effect=RuntimeError("read fail")
     )
     result = phase._verify_initial_state()
@@ -189,7 +189,7 @@ def test_verify_initial_state_success(phase):
     phase.validate_prerequisites()
     result = phase._verify_initial_state()
     assert result.result == PhaseResult.SUCCESS
-    assert "initial_slope" in result.data
+    assert "initial_current_slope" in result.data
 
 
 # ------------------------------------------------------------------
