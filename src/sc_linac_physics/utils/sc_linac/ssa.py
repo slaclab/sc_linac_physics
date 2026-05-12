@@ -71,9 +71,9 @@ class SSA(linac_utils.SCLinacObject):
         self._cal_result_status_pv_obj: Optional[PV] = None
 
         self.current_slope_pv: str = self.pv_addr("SLOPE")
-
         self.measured_slope_pv: str = self.pv_addr("SLOPE_NEW")
         self._measured_slope_pv_obj: Optional[PV] = None
+        self.saved_slope_pv: str = self.pv_addr("SLOPE_SAVE")
 
         self.drive_max_setpoint_pv: str = self.pv_addr("DRV_MAX_REQ")
         self._drive_max_setpoint_pv_obj: Optional[PV] = None

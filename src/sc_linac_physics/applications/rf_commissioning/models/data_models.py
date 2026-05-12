@@ -282,18 +282,28 @@ class SSACharacterization:
         format_spec=".2f",
         unit="%",
     )  # 0.0-1.0
-    initial_drive: float | None = phase_display_field(
+    slope_new: float | None = phase_display_field(
         default=None,
-        label="Initial Drive",
-        widget_name="ssa_initial_drive",
-        source_attr="initial_drive_percent",
-        format_spec=".2f",
-        unit="%",
+        label="Slope",
+        widget_name="ssa_slope_new",
+        source_attr="slope_new",
+        format_spec=".5f",
     )
-    num_attempts: int = phase_display_field(
-        default=0,
-        label="Attempts",
-        widget_name="ssa_num_attempts",
+    max_fwd_pwr_w: float | None = phase_display_field(
+        default=None,
+        label="Max Fwd Pwr",
+        widget_name="ssa_max_fwd_pwr",
+        source_attr="max_fwd_pwr_w",
+        format_spec=".1f",
+        unit="W",
+    )
+    calibration_passed: bool = phase_display_field(
+        default=False,
+        label="Calibration",
+        widget_name="ssa_cal_passed",
+        source_attr="calibration_passed",
+        true_text="PASS",
+        false_text="FAIL",
     )
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
@@ -306,32 +316,13 @@ class SSACharacterization:
         return self.max_drive * 100
 
     @property
-    def initial_drive_percent(self) -> float | None:
-        """Initial drive as percentage (0-100)."""
-        if self.initial_drive is None:
-            return None
-        return self.initial_drive * 100
-
-    @property
-    def drive_reduction(self) -> float | None:
-        """Total reduction in drive level."""
-        if self.initial_drive is None or self.max_drive is None:
-            return None
-        return self.initial_drive - self.max_drive
-
-    @property
-    def succeeded_first_try(self) -> bool:
-        """Check if calibration succeeded on first attempt."""
-        return self.num_attempts == 1
-
-    @property
     def is_complete(self) -> bool:
         """Check if calibration completed successfully."""
-        return self.max_drive is not None
+        return self.slope_new is not None
 
     @property
     def passed(self) -> bool:
-        return self.is_complete
+        return self.calibration_passed
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -339,9 +330,6 @@ class SSACharacterization:
             self,
             computed_fields=(
                 "max_drive_percent",
-                "initial_drive_percent",
-                "drive_reduction",
-                "succeeded_first_try",
                 "is_complete",
                 "passed",
             ),

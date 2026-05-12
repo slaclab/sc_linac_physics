@@ -367,6 +367,8 @@ class PhaseUIBase:
 
         grid = QGridLayout()
         grid.setSpacing(5)
+        grid.setColumnMinimumWidth(0, 110)
+        grid.setColumnStretch(1, 1)
 
         row = 0
 
