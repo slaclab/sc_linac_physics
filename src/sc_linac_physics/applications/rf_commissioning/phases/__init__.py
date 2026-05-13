@@ -11,6 +11,7 @@ from .phase_base import (
     PhaseExecutionError,
 )
 from .piezo_pre_rf import PiezoPreRFPhase
+from .ssa_char import SSACharPhase
 
 __all__ = [
     "PhaseBase",
@@ -19,4 +20,5 @@ __all__ = [
     "PhaseStepResult",
     "PhaseExecutionError",
     "PiezoPreRFPhase",
+    "SSACharPhase",
 ]

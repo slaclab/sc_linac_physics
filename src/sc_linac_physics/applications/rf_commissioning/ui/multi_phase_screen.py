@@ -19,8 +19,14 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from pydm import Display as PyDMDisplay, PyDMApplication
+from pydm import Display, PyDMApplication
 
+from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
+    CryomoduleCheckoutRecord,
+    CryomodulePhase,
+    CryomodulePhaseStatus,
+    MagnetCheckoutData,
+)
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
@@ -28,22 +34,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     RecordConflictError,
 )
-from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
-    CryomoduleCheckoutRecord,
-    CryomodulePhase,
-    CryomodulePhaseStatus,
-    MagnetCheckoutData,
-)
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
-from sc_linac_physics.utils.sc_linac.linac_utils import (
-    get_linac_for_cryomodule,
-)
-from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
-    PhaseDisplayBase,
-)
-
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
     PhaseTabSpec,
     build_note_dialog,
@@ -81,9 +74,12 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     update_sync_status,
     update_tab_states,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    get_linac_for_cryomodule,
+)
 
 
-class MultiPhaseCommissioningDisplay(PyDMDisplay):
+class MultiPhaseCommissioningDisplay(Display):
     """Container window that hosts multiple phase displays.
 
     This redesigned display keeps critical information always visible:
@@ -152,7 +148,7 @@ class MultiPhaseCommissioningDisplay(PyDMDisplay):
 
         self.setLayout(main_layout)
 
-        self._phase_displays: list[PhaseDisplayBase] = []
+        self._phase_displays: list = []
         self._init_tabs()
         self._update_tab_states()
         self._load_notes()
@@ -685,14 +681,6 @@ def main() -> int:
     window = MultiPhaseCommissioningDisplay()
     window.show()
     return app.exec_()
-
-
-class Display(MultiPhaseCommissioningDisplay):
-    """PyDM compatibility entrypoint class.
-
-    When launching this file directly via `pydm path/to/multi_phase_screen.py`,
-    PyDM expects a class named `Display` in the module.
-    """
 
 
 if __name__ == "__main__":

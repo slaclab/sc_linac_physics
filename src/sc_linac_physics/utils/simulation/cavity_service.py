@@ -218,6 +218,14 @@ class CavityPVGroup(PVGroup):
     push_ssa_slope: PvpropertyInteger = pvproperty(
         value=0, name="PUSH_SSA_SLOPE.PROC", dtype=ChannelType.INT
     )
+
+    @push_ssa_slope.putter
+    async def push_ssa_slope(self, instance, value):
+        ssa = getattr(self, "ssa_group", None)
+        if ssa is not None:
+            await ssa.slope_old.write(ssa.slope_new.value)
+            await ssa.drive_max_current.write(ssa.drive_max_new.value)
+
     push_loaded_q: PvpropertyInteger = pvproperty(
         value=0, name="PUSH_QLOADED.PROC", dtype=ChannelType.INT
     )

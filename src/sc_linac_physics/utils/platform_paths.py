@@ -64,3 +64,14 @@ def get_log_base_dir(
     if is_linux(system_name=system_name):
         return Path("/home/physics/srf/logfiles")
     return _current_home(home_dir) / "logfiles"
+
+
+def get_ssa_cal_base_dir(
+    *,
+    system_name: str | None = None,
+    home_dir: Path | None = None,
+) -> Path:
+    """Return the root directory where SSA calibration plots are stored."""
+    if is_linux(system_name=system_name):
+        return Path("/u1/lcls/physics/rf_lcls2/ssa_cal")
+    return _current_home(home_dir) / "ssa_cal"

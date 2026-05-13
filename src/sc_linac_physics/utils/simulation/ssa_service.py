@@ -88,6 +88,12 @@ class SSAPVGroup(PVGroup):
     drive_max: PvpropertyFloat = pvproperty(
         name="DRV_MAX_REQ", value=0.8, dtype=ChannelType.FLOAT
     )
+    drive_max_new: PvpropertyFloat = pvproperty(
+        name="DRV_MAX_NEW", value=0.8, dtype=ChannelType.FLOAT
+    )
+    drive_max_current: PvpropertyFloat = pvproperty(
+        name="DRV_MAX", value=0.8, dtype=ChannelType.FLOAT
+    )
     drive_max_save: PvpropertyFloat = pvproperty(
         name="DRV_MAX_SAVE", value=0.8, dtype=ChannelType.FLOAT
     )
@@ -123,6 +129,8 @@ class SSAPVGroup(PVGroup):
         print("Calibration Status: ", self.cal_status.value)
         await self.slope_new.write(uniform(0.5, 1.5))
         print("New Slope: ", self.slope_new.value)
+        await self.drive_max_new.write(self.drive_max.value)
+        print("New Drive Max: ", self.drive_max_new.value)
         if random() < 0.2:
             await self.cal_stat.write("Crash")
             print("Calibration Crashed")

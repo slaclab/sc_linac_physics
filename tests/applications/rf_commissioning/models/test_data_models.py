@@ -95,14 +95,11 @@ class TestPhaseModels:
     def test_ssa_characterization_computed_properties(self):
         model = SSACharacterization(
             max_drive=0.60,
-            initial_drive=0.80,
-            num_attempts=1,
+            slope_new=1.02345,
+            calibration_passed=True,
         )
 
         assert model.max_drive_percent == pytest.approx(60.0)
-        assert model.initial_drive_percent == pytest.approx(80.0)
-        assert model.drive_reduction == pytest.approx(0.20)
-        assert model.succeeded_first_try is True
         assert model.is_complete is True
 
     def test_other_phase_completion_flags(self):
@@ -149,7 +146,12 @@ class TestPhaseModels:
         assert model.passed is False
 
     def test_stub_phases_passed_equals_is_complete(self):
-        assert SSACharacterization(max_drive=0.6).passed is True
+        assert (
+            SSACharacterization(
+                max_drive=0.6, slope_new=1.0, calibration_passed=True
+            ).passed
+            is True
+        )
         assert SSACharacterization().passed is False
         assert (
             CavityCharacterization(loaded_q=3e7, scale_factor=2.5).passed
@@ -316,21 +318,15 @@ class TestSerializationAndRegistry:
     def test_serialize_deserialize_round_trip_for_phase_model(self):
         original = SSACharacterization(
             max_drive=0.65,
-            initial_drive=0.85,
-            num_attempts=2,
+            slope_new=1.02345,
+            calibration_passed=True,
             timestamp=datetime(2026, 3, 21, 9, 0, 0),
             notes="round trip",
         )
 
         serialized = serialize_model(
             original,
-            computed_fields=(
-                "max_drive_percent",
-                "initial_drive_percent",
-                "drive_reduction",
-                "succeeded_first_try",
-                "is_complete",
-            ),
+            computed_fields=("max_drive_percent", "is_complete"),
         )
 
         restored = deserialize_model(SSACharacterization, serialized)
