@@ -289,11 +289,10 @@ class SSACharacterization:
         source_attr="slope_new",
         format_spec=".5f",
     )
-    max_fwd_pwr_w: float | None = phase_display_field(
+    max_fwd_pwr: float | None = phase_display_field(
         default=None,
         label="Max Fwd Pwr",
         widget_name="ssa_max_fwd_pwr",
-        source_attr="max_fwd_pwr_w",
         format_spec=".1f",
         unit="W",
     )

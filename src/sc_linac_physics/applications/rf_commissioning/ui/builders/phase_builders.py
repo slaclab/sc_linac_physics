@@ -3,7 +3,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QComboBox,
-    QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QGroupBox,
@@ -13,7 +12,7 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
 )
-from pydm.widgets import PyDMEnumComboBox, PyDMLabel
+from pydm.widgets import PyDMEnumComboBox, PyDMLabel, PyDMSpinbox
 
 from .base import PhaseUIBase
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
@@ -356,11 +355,21 @@ class SSACharUI(PhaseUIBase):
         layout.setContentsMargins(8, 8, 8, 8)
 
         layout.addWidget(QLabel("Calibration Drive Max:"), 0, 0)
-        spinbox = self._register("drive_max_spinbox", QDoubleSpinBox())
+        spinbox = self._register(
+            "drive_max_spinbox", PyDMSpinbox(parent=self.parent)
+        )
         spinbox.setRange(0.01, 1.0)
+        spinbox.userDefinedLimits = True
+        spinbox.userMinimum = 0.01
+        spinbox.userMaximum = 1.0
         spinbox.setSingleStep(0.01)
         spinbox.setDecimals(3)
-        spinbox.setValue(0.670)
+        spinbox.setValue(0.5)
+        spinbox.precisionFromPV = False
+        spinbox.precision = 3
+        spinbox.showStepExponent = False
+        spinbox.writeOnPress = True
+        spinbox.editingFinished.connect(spinbox.send_value)
         spinbox.setFixedWidth(90)
         layout.addWidget(spinbox, 0, 1)
         layout.addWidget(QLabel("(range 0–1)"), 0, 2)

@@ -301,8 +301,8 @@ class SSACharPhase(PhaseBase):
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
                 message=(
-                    f"Forward power {max_fwd_pwr:.0f} W below limit "
-                    f"{ssa.fwd_power_lower_limit} W"
+                    f"Measured forward power {max_fwd_pwr:.0f} W is below "
+                    f"the minimum limit of {ssa.fwd_power_lower_limit} W"
                 ),
             )
 
@@ -361,6 +361,6 @@ class SSACharPhase(PhaseBase):
         self.context.record.ssa_char = SSACharacterization(
             max_drive=data.get("max_drive"),
             slope_new=data.get("slope_new"),
-            max_fwd_pwr_w=data.get("max_fwd_pwr"),
+            max_fwd_pwr=data.get("max_fwd_pwr"),
             calibration_passed=data.get("calibration_passed", False),
         )

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller as controller_module
+from pydm.widgets import PyDMSpinbox
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     SSACharacterization,
@@ -49,7 +50,10 @@ class _ViewStub:
         self.local_progress_bar = Mock()
         self.ui = SimpleNamespace(update_toolbar_state=Mock())
         self.step_progress_signal = SimpleNamespace(emit=Mock())
-        self.drive_max_spinbox = SimpleNamespace(value=Mock(return_value=0.670))
+        self.drive_max_spinbox = PyDMSpinbox()
+        self.drive_max_spinbox.setRange(0.01, 1.0)
+        self.drive_max_spinbox.setDecimals(3)
+        self.drive_max_spinbox.setValue(0.82)
         self._update_local_results = Mock()
         self._update_stored_readout = Mock()
 
@@ -84,7 +88,7 @@ def _record_with_result() -> CommissioningRecord:
     record.ssa_char = SSACharacterization(
         max_drive=0.670,
         slope_new=1.02345,
-        max_fwd_pwr_w=4500.0,
+        max_fwd_pwr=4500.0,
         calibration_passed=True,
     )
     return record
@@ -191,6 +195,32 @@ def test_update_pv_addresses_exception_logs_error() -> None:
     controller.update_pv_addresses("02", "1")
 
     assert any("Error setting PVs" in msg for msg in view.logs)
+
+
+def test_update_pv_addresses_binds_drive_max_spinbox_to_request_pv() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    ssa = SimpleNamespace(
+        calibration_status_pv="PV:CALSTAT",
+        max_fwd_pwr_pv="PV:CALPWR",
+        measured_slope_pv="PV:SLOPE_NEW",
+        current_slope_pv="PV:SLOPE",
+        drive_max_setpoint_pv="PV:DRV_MAX_REQ",
+        drive_max_new_pv="PV:DRV_MAX_NEW",
+        drive_max_current_pv="PV:DRV_MAX",
+    )
+    controller._get_machine_cavity = Mock(return_value=SimpleNamespace(ssa=ssa))
+
+    controller.update_pv_addresses("02", "1")
+
+    assert view.drive_max_spinbox.channel == "ca://PV:DRV_MAX_REQ"
+
+
+def test_get_drive_max_reads_pydm_spinbox_value() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+
+    assert controller._get_drive_max() == 0.82
 
 
 # ------------------------------------------------------------------

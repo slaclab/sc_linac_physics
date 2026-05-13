@@ -4,6 +4,7 @@ from datetime import datetime
 from threading import Thread
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
+from PyQt5.QtWidgets import QDoubleSpinBox
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
@@ -106,6 +107,7 @@ class SSACharController(QObject):
             ("pydm_max_fwd_pwr", ssa.max_fwd_pwr_pv),
             ("pydm_slope_new", ssa.measured_slope_pv),
             ("pydm_slope_current", ssa.current_slope_pv),
+            ("drive_max_spinbox", ssa.drive_max_setpoint_pv),
             ("pydm_drive_max_new", ssa.drive_max_new_pv),
             ("pydm_drive_max_current", ssa.drive_max_current_pv),
         ]
@@ -125,56 +127,90 @@ class SSACharController(QObject):
     # ------------------------------------------------------------------
 
     def on_run_calibration(self) -> None:
-        operator = self._get_operator()
-        if not operator:
-            self.view.show_error(
-                "Please select an operator in the header before running."
-            )
+        operator = self._validate_operator_for_run()
+        if operator is None:
             return
 
-        if not self.session.has_active_record():
-            if not self._auto_create_record():
-                return
-
-        cavity_info = self.view.get_current_cavity()
-        if not cavity_info:
-            self.view.show_error(
-                "Unable to determine cavity. Select a cavity and try again."
-            )
+        if not self._ensure_active_record_for_run():
             return
 
-        cavity_name, cryomodule = cavity_info
-        try:
-            cm, cav = self._parse_cavity_from_record(cavity_name, cryomodule)
-        except (ValueError, IndexError):
-            self.view.show_error(f"Invalid cavity name format: {cavity_name}")
+        run_target = self._resolve_run_target()
+        if run_target is None:
             return
 
+        cavity_name, cm, cav = run_target
         self.view.log_message(f"Starting SSA calibration for {cavity_name}")
         self.view.clear_results()
 
         try:
-            self.update_pv_addresses(f"{cm:02d}", str(cav))
-            cavity = self._get_machine_cavity(cm, cav)
-            self._cavity = cavity
-
-            drive_max = self._get_drive_max()
-            if not self._prepare_phase_context(cavity, operator, drive_max):
-                return
-
-            self._set_running_ui_state()
-            self._execute_phase_async()
-
+            self._start_run_for_target(cm=cm, cav=cav, operator=operator)
         except Exception as exc:
             import traceback
 
             self.view.show_error(f"Failed to start calibration: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
 
-    def _get_drive_max(self) -> float:
-        if hasattr(self.view, "drive_max_spinbox"):
-            return self.view.drive_max_spinbox.value()
-        return 0.670
+    def _validate_operator_for_run(self) -> str | None:
+        operator = self._get_operator()
+        if operator:
+            return operator
+        self.view.show_error(
+            "Please select an operator in the header before running."
+        )
+        return None
+
+    def _ensure_active_record_for_run(self) -> bool:
+        if self.session.has_active_record():
+            return True
+        return self._auto_create_record()
+
+    def _resolve_run_target(self) -> tuple[str, int, int] | None:
+        cavity_info = self.view.get_current_cavity()
+        if not cavity_info:
+            self.view.show_error(
+                "Unable to determine cavity. Select a cavity and try again."
+            )
+            return None
+
+        cavity_name, cryomodule = cavity_info
+        try:
+            cm, cav = self._parse_cavity_from_record(cavity_name, cryomodule)
+        except (ValueError, IndexError):
+            self.view.show_error(f"Invalid cavity name format: {cavity_name}")
+            return None
+
+        return cavity_name, cm, cav
+
+    def _start_run_for_target(self, cm: int, cav: int, operator: str) -> None:
+        self.update_pv_addresses(f"{cm:02d}", str(cav))
+        cavity = self._get_machine_cavity(cm, cav)
+        self._cavity = cavity
+
+        drive_max = self._get_drive_max()
+        if drive_max is None:
+            self.view.show_error(
+                "Unable to read the SSA drive max from the PV."
+            )
+            return
+
+        if not self._prepare_phase_context(cavity, operator, drive_max):
+            return
+
+        self._set_running_ui_state()
+        self._execute_phase_async()
+
+    def _get_drive_max(self) -> float | None:
+        spinbox = getattr(self.view, "drive_max_spinbox", None)
+        if spinbox is None:
+            return None
+
+        try:
+            if isinstance(spinbox, QDoubleSpinBox):
+                return float(QDoubleSpinBox.value(spinbox))
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+        return None
 
     def _prepare_phase_context(
         self, cavity, operator: str, drive_max: float

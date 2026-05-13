@@ -3,7 +3,8 @@
 from types import SimpleNamespace
 
 import pytest
-from PyQt5.QtWidgets import QGroupBox, QHBoxLayout, QWidget
+from PyQt5.QtWidgets import QDoubleSpinBox, QGroupBox, QHBoxLayout, QWidget
+from pydm.widgets import PyDMSpinbox
 
 from sc_linac_physics.applications.rf_commissioning.ui.builders.phase_builders import (
     GenericPhaseUI,
@@ -158,9 +159,17 @@ def test_ssa_char_build_registers_input_widgets():
     group = ui._build_ssa_inputs()  # noqa: F841
 
     spinbox = ui.widgets["drive_max_spinbox"]
+    assert isinstance(spinbox, PyDMSpinbox)
     assert spinbox.minimum() == pytest.approx(0.01)
     assert spinbox.maximum() == pytest.approx(1.0)
-    assert spinbox.value() == pytest.approx(0.670)
+    assert spinbox.userDefinedLimits is True
+    assert spinbox.userMinimum == pytest.approx(0.01)
+    assert spinbox.userMaximum == pytest.approx(1.0)
+    assert spinbox.precisionFromPV is False
+    assert spinbox.precision == 3
+    assert spinbox.writeOnPress is True
+    spinbox.setValue(0.8)
+    assert QDoubleSpinBox.value(spinbox) == pytest.approx(0.8)
     assert "plot_btn" in ui.widgets
 
 
