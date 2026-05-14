@@ -196,6 +196,32 @@ class FrequencyTuningData:
     )
     final_timestamp: datetime | None = None
 
+    # Stepper characterization data
+    positive_step_increases_frequency: bool | None = phase_display_field(
+        default=None,
+        label="Pos Step → Freq Up",
+        widget_name="freq_tuning_pos_step_dir",
+    )
+    hz_per_microstep: float | None = phase_display_field(
+        default=None,
+        label="Hz/Microstep",
+        widget_name="freq_tuning_hz_per_step",
+        format_spec=".4f",
+        unit="Hz",
+    )
+    cold_landing_steps: int | None = phase_display_field(
+        default=None,
+        label="Cold Landing Steps",
+        widget_name="freq_tuning_cold_steps",
+    )
+    peak_stepper_temp_c: float | None = phase_display_field(
+        default=None,
+        label="Peak Motor Temp",
+        widget_name="freq_tuning_peak_temp",
+        format_spec=".1f",
+        unit="°C",
+    )
+
     # π-mode measurement phase data
     mode_8pi_9_frequency: float | None = phase_display_field(
         default=None,
