@@ -2,8 +2,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QPoint
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
@@ -23,6 +23,15 @@ from sc_linac_physics.applications.rf_commissioning.models.persistence.database 
     RecordConflictError,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
+    _HeaderMixin,
+    _NoteActionsMixin,
+    _NotesPanelMixin,
+    _PersistenceMixin,
+    _ProgressMixin,
+    _RecordLifecycleMixin,
+    _RecordSelectorMixin,
+    _SyncMixin,
+    _TabsMixin,
     note_actions,
     notes,
     persistence,
@@ -31,6 +40,21 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     sync,
     tab_state,
 )
+
+
+class _Stub(
+    _TabsMixin,
+    _SyncMixin,
+    _PersistenceMixin,
+    _RecordLifecycleMixin,
+    _RecordSelectorMixin,
+    _NotesPanelMixin,
+    _NoteActionsMixin,
+    _ProgressMixin,
+    _HeaderMixin,
+    QWidget,
+):
+    """Minimal QWidget stub that carries all mixin methods for unit testing."""
 
 
 class _Signal:
@@ -80,7 +104,7 @@ class _Tabs:
 
 @pytest.fixture
 def host_stub(qtbot):
-    host = QWidget()
+    host = _Stub()
     qtbot.addWidget(host)
     host.setLayout(QVBoxLayout())
 
@@ -88,10 +112,10 @@ def host_stub(qtbot):
         get_active_phase_projection=Mock(return_value=None),
         has_active_record=Mock(return_value=False),
         get_active_record_id=Mock(return_value=None),
+        get_active_record_version=Mock(return_value=1),
+        get_record_with_version=Mock(return_value=None),
         get_operators=Mock(return_value=["Alice", "Bob"]),
         add_operator=Mock(),
-        _active_record_version=1,
-        db=SimpleNamespace(get_record_with_version=Mock(return_value=None)),
         database=object(),
     )
     host.tabs = _Tabs()
@@ -104,6 +128,13 @@ def host_stub(qtbot):
     host._update_cm_status_panel = Mock()
     host.save_active_record = Mock()
     host._on_tab_changed = Mock()
+    # Delegate to module-level aliases so monkeypatch on the alias still works.
+    host._build_note_dialog = lambda *a, **kw: note_actions.build_note_dialog(
+        host, *a, **kw
+    )
+    host._confirm_and_start_new = (
+        lambda *a, **kw: records.confirm_and_start_new(host, *a, **kw)
+    )
 
     host.linac_combo = QComboBox()
     host.linac_combo.addItem("All")
@@ -217,7 +248,7 @@ def test_record_lifecycle_start_load_and_advance(host_stub):
     )
     host_stub.session.start_new_record = Mock(return_value=(record, 10, False))
 
-    created = record_lifecycle.start_new_record(host_stub, "01", "1")
+    created = record_lifecycle.start_new_record(host_stub, "01", 1)
     assert created is False
     assert host_stub.tabs.current == 1
     display_with_controller.controller.update_pv_addresses.assert_called_once_with(
@@ -245,11 +276,11 @@ def test_sync_helpers_cover_change_and_reload_paths(host_stub, monkeypatch):
 
     host_stub.session.has_active_record.return_value = True
     host_stub.session.get_active_record_id.return_value = 7
-    host_stub.session.db.get_record_with_version.return_value = (
+    host_stub.session.get_record_with_version.return_value = (
         object(),
         5,
     )
-    host_stub.session._active_record_version = 3
+    host_stub.session.get_active_record_version.return_value = 3
 
     sync.check_for_external_changes(host_stub)
     assert host_stub._update_banner is not None
@@ -321,7 +352,7 @@ def test_persistence_save_and_merge_paths(host_stub, monkeypatch):
             return 0
 
     monkeypatch.setattr(persistence, "MergeDialog", _CancelMerge)
-    host_stub.session.db.get_record_with_version.return_value = (
+    host_stub.session.get_record_with_version.return_value = (
         SimpleNamespace(),
         2,
     )
@@ -427,7 +458,7 @@ def test_records_load_and_start_paths(host_stub, monkeypatch):
     host_stub.operator_combo.setCurrentIndex(1)
     host_stub.cryomodule_combo.setCurrentIndex(1)
     host_stub.cavity_combo.setCurrentIndex(1)
-    host_stub.session.db.find_records_for_cavity = Mock(return_value=[])
+    host_stub.session.find_records_for_cavity = Mock(return_value=[])
 
     monkeypatch.setattr(records, "get_linac_for_cryomodule", lambda _cm: "L1B")
     called = Mock()
@@ -465,11 +496,11 @@ def test_confirm_and_start_new_conflict_and_error(host_stub, monkeypatch):
     )
     host_stub.operator_combo.setCurrentIndex(1)
 
-    records.confirm_and_start_new(host_stub, "01-1", "L1B", "01", "1")
+    records.confirm_and_start_new(host_stub, "01-1", 1, "01", 1)
     host_stub._handle_note_conflict.assert_called_once()
 
     host_stub.start_new_record = Mock(side_effect=RuntimeError("boom"))
-    records.confirm_and_start_new(host_stub, "01-1", "L1B", "01", "1")
+    records.confirm_and_start_new(host_stub, "01-1", 1, "01", 1)
 
 
 def test_note_actions_operator_required_and_dialog_paths(
@@ -538,10 +569,10 @@ def test_persistence_merge_success_failure_and_dialogs(host_stub, monkeypatch):
         def get_merged_record(self):
             return SimpleNamespace()
 
-    host_stub.session.db = SimpleNamespace(
-        get_record_with_version=Mock(return_value=(SimpleNamespace(), 7)),
-        save_record=Mock(),
+    host_stub.session.get_record_with_version = Mock(
+        return_value=(SimpleNamespace(), 7)
     )
+    host_stub.session.save_record = Mock()
     monkeypatch.setattr(persistence, "MergeDialog", _MergeAccepted)
     assert (
         persistence.handle_save_conflict(
@@ -552,13 +583,12 @@ def test_persistence_merge_success_failure_and_dialogs(host_stub, monkeypatch):
         )
         is True
     )
-    assert host_stub.session.db.save_record.call_count == 1
+    assert host_stub.session.save_record.call_count == 1
     assert (
-        host_stub.session.db.save_record.call_args.kwargs["expected_version"]
-        == 7
+        host_stub.session.save_record.call_args.kwargs["expected_version"] == 7
     )
 
-    host_stub.session.db.save_record = Mock(
+    host_stub.session.save_record = Mock(
         side_effect=RuntimeError("save failed")
     )
     assert (
@@ -607,15 +637,13 @@ def test_persistence_merge_retries_on_second_conflict(host_stub, monkeypatch):
                 actual_version=8,
             )
 
-    host_stub.session.db = SimpleNamespace(
-        get_record_with_version=Mock(
-            side_effect=[
-                (SimpleNamespace(name="v7"), 7),
-                (SimpleNamespace(name="v8"), 8),
-            ]
-        ),
-        save_record=Mock(side_effect=_save_record),
+    host_stub.session.get_record_with_version = Mock(
+        side_effect=[
+            (SimpleNamespace(name="v7"), 7),
+            (SimpleNamespace(name="v8"), 8),
+        ]
     )
+    host_stub.session.save_record = Mock(side_effect=_save_record)
 
     monkeypatch.setattr(persistence, "MergeDialog", _MergeAccepted)
 
@@ -632,15 +660,15 @@ def test_persistence_merge_retries_on_second_conflict(host_stub, monkeypatch):
     )
 
     assert dialog_calls["count"] == 2
-    assert host_stub.session.db.save_record.call_count == 2
+    assert host_stub.session.save_record.call_count == 2
     assert (
-        host_stub.session.db.save_record.call_args_list[0].kwargs[
+        host_stub.session.save_record.call_args_list[0].kwargs[
             "expected_version"
         ]
         == 7
     )
     assert (
-        host_stub.session.db.save_record.call_args_list[1].kwargs[
+        host_stub.session.save_record.call_args_list[1].kwargs[
             "expected_version"
         ]
         == 8

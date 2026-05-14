@@ -46,7 +46,7 @@ def test_build_header_panel_wires_controls_and_actions(qtbot):
 
     buttons = panel.findChildren(type(host.open_magnet_checkout_btn))
     labels = {b.text() for b in buttons}
-    assert "Open Magnet Checkout" in labels
+    assert "Open" in labels
     assert "Batch Pre-RF" in labels
     assert "📊 Measurements" in labels
     assert "🗄️ Database" in labels
@@ -85,6 +85,9 @@ def test_show_record_selector_renders_table_and_hooks_actions(
     host = QWidget()
     host.load_record = Mock(return_value=True)
     host._update_sync_status = Mock()
+    host._load_selected_record = (
+        lambda table, dialog: records.load_selected_record(host, table, dialog)
+    )
     qtbot.addWidget(host)
 
     records_data = [
