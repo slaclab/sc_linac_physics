@@ -5,6 +5,9 @@ Coordinates database access and record management across all commissioning phase
 
 import logging
 
+from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
+    CryomoduleCheckoutRecord,
+)
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     CommissioningPhase,
@@ -600,3 +603,65 @@ class CommissioningSession:
         except Exception as e:
             logger.exception("Failed to update general note: %s", e)
             return False
+
+    # ==================== RECORD QUERY METHODS ====================
+
+    def get_record_with_version(
+        self, record_id: int
+    ) -> tuple[CommissioningRecord, int] | None:
+        return self.db.get_record_with_version(record_id)
+
+    def save_record(
+        self,
+        record: CommissioningRecord,
+        record_id: int | None = None,
+        expected_version: int | None = None,
+    ) -> int:
+        return self.db.save_record(record, record_id, expected_version)
+
+    def find_records_for_cavity(
+        self, linac: int, cryomodule: str, cavity_number: str
+    ) -> list[dict]:
+        return self.db.find_records_for_cavity(linac, cryomodule, cavity_number)
+
+    def get_record_id_for_cavity(
+        self, linac: int, cryomodule: str, cavity_number: str
+    ) -> int | None:
+        return self.db.get_record_id_for_cavity(
+            linac, cryomodule, cavity_number
+        )
+
+    def get_active_record_version(self) -> int | None:
+        return self._active_record_version
+
+    # ==================== CRYOMODULE METHODS ====================
+
+    def get_cryomodule_record(
+        self, linac: str, cryomodule: str
+    ) -> CryomoduleCheckoutRecord | None:
+        return self.db.get_cryomodule_record(linac, cryomodule)
+
+    def get_cryomodule_record_with_version(
+        self, linac: str, cryomodule: str
+    ) -> tuple[CryomoduleCheckoutRecord, int] | None:
+        return self.db.get_cryomodule_record_with_version(linac, cryomodule)
+
+    def get_cryomodule_record_id(
+        self, linac: str, cryomodule: str
+    ) -> int | None:
+        return self.db.get_cryomodule_record_id(linac, cryomodule)
+
+    def save_cryomodule_record(
+        self,
+        record: CryomoduleCheckoutRecord,
+        record_id: int | None = None,
+        expected_version: int | None = None,
+    ) -> int:
+        return self.db.save_cryomodule_record(
+            record, record_id, expected_version
+        )
+
+    def get_records_by_cryomodule(
+        self, linac: int, cryomodule: str, active_only: bool = False
+    ) -> list[CommissioningRecord]:
+        return self.db.get_records_by_cryomodule(linac, cryomodule, active_only)
