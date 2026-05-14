@@ -4,14 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, call
 
 import pytest
-from PyQt5.QtWidgets import QComboBox, QDialog, QLabel, QTextEdit
+from PyQt5.QtWidgets import QComboBox, QDialog, QLabel
 
 import sc_linac_physics.applications.rf_commissioning.ui.multi_phase_screen as multi_phase_screen
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
-)
-from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
-    CryomoduleCheckoutRecord,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.multi_phase_screen import (
     MultiPhaseCommissioningDisplay,
@@ -28,11 +25,14 @@ class _StaticCombo:
 
 @pytest.fixture
 def display_stub():
-    db = Mock()
     session = SimpleNamespace(
-        db=db,
         get_operators=Mock(return_value=["Alice", "Bob"]),
         add_operator=Mock(),
+        get_cryomodule_record=Mock(return_value=None),
+        get_records_by_cryomodule=Mock(return_value=[]),
+        get_cryomodule_record_with_version=Mock(return_value=None),
+        get_cryomodule_record_id=Mock(return_value=None),
+        save_cryomodule_record=Mock(),
     )
     return SimpleNamespace(
         session=session,
@@ -79,27 +79,27 @@ def test_on_cavity_selection_changed_starts_or_loads(display_stub, monkeypatch):
 def test_refresh_magnet_badge_maps_statuses(display_stub):
     linac = "L1B"
 
-    display_stub.session.db.get_cryomodule_record.return_value = None
+    display_stub.session.get_cryomodule_record.return_value = None
     MultiPhaseCommissioningDisplay._refresh_magnet_badge(
         display_stub, "01", linac
     )
 
-    display_stub.session.db.get_cryomodule_record.return_value = (
-        SimpleNamespace(magnet_checkout=None)
-    )
-    MultiPhaseCommissioningDisplay._refresh_magnet_badge(
-        display_stub, "01", linac
-    )
-
-    display_stub.session.db.get_cryomodule_record.return_value = (
-        SimpleNamespace(magnet_checkout=SimpleNamespace(passed=True))
+    display_stub.session.get_cryomodule_record.return_value = SimpleNamespace(
+        magnet_checkout=None
     )
     MultiPhaseCommissioningDisplay._refresh_magnet_badge(
         display_stub, "01", linac
     )
 
-    display_stub.session.db.get_cryomodule_record.return_value = (
-        SimpleNamespace(magnet_checkout=SimpleNamespace(passed=False))
+    display_stub.session.get_cryomodule_record.return_value = SimpleNamespace(
+        magnet_checkout=SimpleNamespace(passed=True)
+    )
+    MultiPhaseCommissioningDisplay._refresh_magnet_badge(
+        display_stub, "01", linac
+    )
+
+    display_stub.session.get_cryomodule_record.return_value = SimpleNamespace(
+        magnet_checkout=SimpleNamespace(passed=False)
     )
     MultiPhaseCommissioningDisplay._refresh_magnet_badge(
         display_stub, "01", linac
@@ -114,7 +114,7 @@ def test_refresh_magnet_badge_maps_statuses(display_stub):
 
 
 def test_refresh_cavity_completion_label_counts_complete_records(display_stub):
-    display_stub.session.db.get_records_by_cryomodule.return_value = [
+    display_stub.session.get_records_by_cryomodule.return_value = [
         SimpleNamespace(
             current_phase=CommissioningPhase.COMPLETE,
             overall_status="in_progress",
@@ -193,7 +193,7 @@ def test_open_magnet_checkout_screen_requires_cryomodule(
     info.assert_called_once()
 
 
-def test_open_magnet_checkout_screen_requires_operator_for_pass(
+def test_open_magnet_checkout_screen_cancelled_does_nothing(
     display_stub, monkeypatch
 ):
     monkeypatch.setattr(
@@ -201,30 +201,17 @@ def test_open_magnet_checkout_screen_requires_operator_for_pass(
         "get_linac_for_cryomodule",
         lambda _cm: "L1B",
     )
-    display_stub.session.db.get_cryomodule_record_with_version.return_value = (
-        CryomoduleCheckoutRecord(linac="L1B", cryomodule="01"),
-        3,
+    dialog_mock = Mock()
+    dialog_mock.exec_.return_value = QDialog.Rejected
+    monkeypatch.setattr(
+        multi_phase_screen, "MagnetCheckoutDialog", lambda *a, **kw: dialog_mock
     )
-    display_stub.session.db.get_cryomodule_record_id.return_value = 9
-
-    class _Dialog(QDialog):
-        def __init__(self, parent=None):
-            super().__init__(None)
-
-        def exec_(self):
-            combos = self.findChildren(QComboBox)
-            combos[0].setCurrentText("PASS")
-            combos[1].setCurrentIndex(0)
-            return QDialog.Accepted
-
-    warn = Mock()
-    monkeypatch.setattr(multi_phase_screen, "QDialog", _Dialog)
-    monkeypatch.setattr(multi_phase_screen.QMessageBox, "warning", warn)
+    display_stub._refresh_magnet_badge = Mock()
 
     MultiPhaseCommissioningDisplay._open_magnet_checkout_screen(display_stub)
 
-    assert "Operator Required" in warn.call_args.args[1]
-    display_stub.session.db.save_cryomodule_record.assert_not_called()
+    dialog_mock.save.assert_not_called()
+    display_stub._refresh_magnet_badge.assert_not_called()
 
 
 def test_open_magnet_checkout_screen_saves_and_updates_header(
@@ -235,37 +222,42 @@ def test_open_magnet_checkout_screen_saves_and_updates_header(
         "get_linac_for_cryomodule",
         lambda _cm: "L1B",
     )
-    display_stub.session.db.get_cryomodule_record_with_version.return_value = (
-        CryomoduleCheckoutRecord(linac="L1B", cryomodule="01"),
-        3,
+    dialog_mock = Mock()
+    dialog_mock.exec_.return_value = QDialog.Accepted
+    dialog_mock.save.return_value = True
+    monkeypatch.setattr(
+        multi_phase_screen, "MagnetCheckoutDialog", lambda *a, **kw: dialog_mock
     )
-    display_stub.session.db.get_cryomodule_record_id.return_value = 9
     display_stub._refresh_magnet_badge = Mock()
     display_stub._refresh_cavity_completion_label = Mock()
 
-    class _Dialog(QDialog):
-        def __init__(self, parent=None):
-            super().__init__(None)
-
-        def exec_(self):
-            combos = self.findChildren(QComboBox)
-            combos[0].setCurrentText("PASS")
-            combos[1].setCurrentIndex(1)
-            self.findChildren(QTextEdit)[0].setPlainText(" done ")
-            return QDialog.Accepted
-
-    monkeypatch.setattr(multi_phase_screen, "QDialog", _Dialog)
-
     MultiPhaseCommissioningDisplay._open_magnet_checkout_screen(display_stub)
 
-    save_call = display_stub.session.db.save_cryomodule_record.call_args
-    saved_record = save_call.args[0]
-    assert saved_record.magnet_checkout.passed is True
-    assert saved_record.magnet_checkout.operator == "Alice"
-    assert saved_record.magnet_checkout.notes == "done"
+    dialog_mock.save.assert_called_once()
     display_stub._refresh_magnet_badge.assert_called_once_with("01", "L1B")
     display_stub._refresh_cavity_completion_label.assert_called_once_with("01")
     display_stub._update_sync_status.assert_called_once()
+
+
+def test_open_magnet_checkout_screen_save_failure_skips_refresh(
+    display_stub, monkeypatch
+):
+    monkeypatch.setattr(
+        multi_phase_screen,
+        "get_linac_for_cryomodule",
+        lambda _cm: "L1B",
+    )
+    dialog_mock = Mock()
+    dialog_mock.exec_.return_value = QDialog.Accepted
+    dialog_mock.save.return_value = False
+    monkeypatch.setattr(
+        multi_phase_screen, "MagnetCheckoutDialog", lambda *a, **kw: dialog_mock
+    )
+    display_stub._refresh_magnet_badge = Mock()
+
+    MultiPhaseCommissioningDisplay._open_magnet_checkout_screen(display_stub)
+
+    display_stub._refresh_magnet_badge.assert_not_called()
 
 
 def test_update_cm_status_panel_ignores_none_and_updates_valid_record(
