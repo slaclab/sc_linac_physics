@@ -3,12 +3,14 @@
 from .phase_specs import PhaseTabSpec, build_default_phase_specs
 from .progress import build_progress_phases
 from .progress_panel import (
+    _ProgressMixin,
     build_compact_progress_bar,
     update_progress_indicator,
 )
-from .header import build_header_panel
-from .notes import build_enhanced_notes_panel, load_notes
+from .header import _HeaderMixin, build_header_panel
+from .notes import _NotesPanelMixin, build_enhanced_notes_panel, load_notes
 from .note_actions import (
+    _NoteActionsMixin,
     build_note_dialog,
     get_selected_note_ref,
     on_edit_note,
@@ -16,6 +18,7 @@ from .note_actions import (
     show_notes_context_menu,
 )
 from .records import (
+    _RecordSelectorMixin,
     confirm_and_start_new,
     load_selected_record,
     on_load_or_start,
@@ -23,6 +26,7 @@ from .records import (
     start_new_from_dialog,
 )
 from .sync import (
+    _SyncMixin,
     check_for_external_changes,
     dismiss_banner,
     handle_note_conflict,
@@ -31,18 +35,21 @@ from .sync import (
     update_sync_status,
 )
 from .persistence import (
+    _PersistenceMixin,
     handle_save_conflict,
     save_active_record,
     show_database_browser,
     show_measurement_history,
 )
 from .record_lifecycle import (
+    _RecordLifecycleMixin,
     load_record,
     on_phase_advanced,
     start_new_record,
     sync_cavity_selection_from_record,
 )
 from .tab_state import (
+    _TabsMixin,
     get_phase_icon,
     init_tabs,
     on_tab_changed,
@@ -53,6 +60,17 @@ __all__ = [
     "PhaseTabSpec",
     "build_default_phase_specs",
     "build_progress_phases",
+    # Mixin classes
+    "_HeaderMixin",
+    "_ProgressMixin",
+    "_NotesPanelMixin",
+    "_NoteActionsMixin",
+    "_RecordSelectorMixin",
+    "_SyncMixin",
+    "_PersistenceMixin",
+    "_RecordLifecycleMixin",
+    "_TabsMixin",
+    # Backward-compat function aliases
     "build_compact_progress_bar",
     "update_progress_indicator",
     "build_header_panel",
