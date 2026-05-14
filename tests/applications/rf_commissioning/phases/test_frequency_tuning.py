@@ -93,13 +93,13 @@ def phase(context, fast_limits):
     return p
 
 
-def _setup_phase(phase, temp_c=25.0, cold_landing_steps=500):
+def _setup_phase(phase, temp_c=25.0):
     """Call validate_prerequisites and inject pre-built PV mocks."""
     phase.validate_prerequisites()
     phase._stepper_temp_pv_obj = Mock()
     phase._stepper_temp_pv_obj.get.return_value = temp_c
-    phase._cold_landing_pv_obj = Mock()
-    phase._cold_landing_pv_obj.get.return_value = cold_landing_steps
+    phase._df_cold_pv_obj = Mock()
+    phase._nsteps_cold_pv_obj = Mock()
     phase._hz_per_microstep = 2.0
     return phase
 
@@ -237,22 +237,36 @@ def test_record_cold_landing_dry_run(context, fast_limits):
     assert result.data["dry_run"] is True
 
 
-def test_record_cold_landing_success(phase, mock_stepper, mock_cavity):
-    _setup_phase(phase, cold_landing_steps=1234)
-    mock_stepper.hz_per_microstep = 3.5
+def test_record_cold_landing_success(phase, mock_cavity):
+    _setup_phase(phase)
     mock_cavity.detune_chirp = 8000.0
     result = phase._record_cold_landing()
     assert result.result == PhaseResult.SUCCESS
-    assert result.data["hz_per_microstep"] == 3.5
-    assert result.data["cold_landing_steps"] == 1234
+    assert "hz_per_microstep" not in result.data
+    assert "cold_landing_steps" not in result.data
     assert result.data["initial_detune_hz"] == 8000.0
     assert "initial_timestamp" in result.data
-    assert phase._hz_per_microstep == 3.5
+    phase._df_cold_pv_obj.put.assert_called_once_with(8000.0)
 
 
-def test_record_cold_landing_read_error_retries(phase):
+def test_record_cold_landing_df_cold_write_error(phase, mock_cavity):
     _setup_phase(phase)
-    phase._cold_landing_pv_obj.get.side_effect = RuntimeError("PV timeout")
+    mock_cavity.detune_chirp = 8000.0
+    phase._df_cold_pv_obj.put.side_effect = RuntimeError("PV timeout")
+    result = phase._record_cold_landing()
+    assert result.result == PhaseResult.RETRY
+    assert "DF_COLD" in result.message
+
+
+def test_record_cold_landing_detune_read_error_retries(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = property(
+        Mock(side_effect=RuntimeError("PV timeout"))
+    )
+    # Simulate detune_chirp raising on access
+    type(phase.cavity).detune_chirp = property(
+        Mock(side_effect=RuntimeError("PV timeout"))
+    )
     result = phase._record_cold_landing()
     assert result.result == PhaseResult.RETRY
 
@@ -291,6 +305,12 @@ def test_probe_stepper_direction_positive_increases_frequency(
 
     assert result.result == PhaseResult.SUCCESS
     assert result.data["positive_step_increases_frequency"] is True
+    # delta=500, probe_steps=10 (fast_limits) → 50 Hz/step
+    assert result.data["hz_per_microstep"] == pytest.approx(50.0)
+    assert phase._hz_per_microstep == pytest.approx(50.0)
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_called_once_with(
+        pytest.approx(50.0)
+    )
     assert mock_stepper.move.call_count == 2
     assert mock_stepper.move.call_args_list[0][0][0] > 0
     assert mock_stepper.move.call_args_list[1][0][0] < 0
@@ -316,6 +336,30 @@ def test_probe_stepper_direction_positive_decreases_frequency(
 
     assert result.result == PhaseResult.SUCCESS
     assert result.data["positive_step_increases_frequency"] is False
+    # delta=-200, probe_steps=10 → abs = 20 Hz/step; signed written to PV is -20
+    assert result.data["hz_per_microstep"] == pytest.approx(20.0)
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_called_once_with(
+        pytest.approx(-20.0)
+    )
+
+
+def test_probe_stepper_direction_delta_too_small(
+    phase, mock_cavity, mock_stepper
+):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 1000.0
+
+    def after_move(steps, *args, **kwargs):
+        if steps > 0:
+            mock_cavity.detune_chirp = 1001.0  # barely any change
+
+    mock_stepper.move.side_effect = after_move
+
+    result = phase._probe_stepper_direction()
+
+    assert result.result == PhaseResult.FAILED
+    assert "minimum" in result.message.lower()
+    assert mock_stepper.hz_per_microstep_pv_obj.put.call_count == 0
 
 
 def test_probe_stepper_direction_stepper_error(phase, mock_stepper):
@@ -484,7 +528,7 @@ def test_tune_to_resonance_missing_hz_per_microstep(phase, mock_cavity):
     phase._hz_per_microstep = None
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
-    assert "hz_per_microstep" in result.message
+    assert "probe_stepper_direction" in result.message
 
 
 def test_tune_to_resonance_tracks_peak_temp(phase, mock_cavity, mock_stepper):
@@ -508,7 +552,44 @@ def test_tune_to_resonance_tracks_peak_temp(phase, mock_cavity, mock_stepper):
 
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.SUCCESS
-    assert result.data["peak_temp_c"] == 55.0
+    assert "total_steps" in result.data
+
+
+def test_tune_to_resonance_writes_nsteps_cold(phase, mock_cavity, mock_stepper):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 1000.0
+
+    def after_move(*args, **kwargs):
+        mock_cavity.detune_chirp = 0.0
+
+    mock_stepper.move.side_effect = after_move
+
+    result = phase._tune_to_resonance()
+
+    assert result.result == PhaseResult.SUCCESS
+    # cold_landing_steps in data should be the negated signed total
+    assert "cold_landing_steps" in result.data
+    assert result.data["cold_landing_steps"] == -result.data["total_steps"]
+    phase._nsteps_cold_pv_obj.put.assert_called_once_with(
+        result.data["cold_landing_steps"]
+    )
+
+
+def test_tune_to_resonance_nsteps_cold_write_error(
+    phase, mock_cavity, mock_stepper
+):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 1000.0
+
+    def after_move(*args, **kwargs):
+        mock_cavity.detune_chirp = 0.0
+
+    mock_stepper.move.side_effect = after_move
+    phase._nsteps_cold_pv_obj.put.side_effect = RuntimeError("PV timeout")
+
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.RETRY
+    assert "NSTEPS_COLD" in result.message
 
 
 # ---------------------------------------------------------------------------
@@ -548,8 +629,6 @@ def test_finalize_phase_populates_frequency_tuning_data(phase, record):
                 CommissioningPhase.FREQUENCY_TUNING,
                 "record_cold_landing",
                 {
-                    "hz_per_microstep": 2.0,
-                    "cold_landing_steps": 500,
                     "initial_detune_hz": 8000.0,
                     "initial_timestamp": datetime.now().isoformat(),
                 },
@@ -562,6 +641,7 @@ def test_finalize_phase_populates_frequency_tuning_data(phase, record):
                     "d1_hz": 8200.0,
                     "delta_hz": 200.0,
                     "positive_step_increases_frequency": True,
+                    "hz_per_microstep": 2.0,
                 },
             ),
             _make_checkpoint(
@@ -569,8 +649,7 @@ def test_finalize_phase_populates_frequency_tuning_data(phase, record):
                 "tune_to_resonance",
                 {
                     "total_steps": 4000,
-                    "final_detune_hz": 200.0,
-                    "peak_temp_c": 45.0,
+                    "cold_landing_steps": -4000,
                     "final_timestamp": datetime.now().isoformat(),
                 },
             ),
@@ -583,11 +662,9 @@ def test_finalize_phase_populates_frequency_tuning_data(phase, record):
     assert ft is not None
     assert ft.initial_detune_hz == 8000.0
     assert ft.steps_to_resonance == 4000
-    assert ft.final_detune_hz == 200.0
     assert ft.positive_step_increases_frequency is True
     assert ft.hz_per_microstep == 2.0
-    assert ft.cold_landing_steps == 500
-    assert ft.peak_stepper_temp_c == 45.0
+    assert ft.cold_landing_steps == -4000
     assert ft.initial_timestamp is not None
     assert ft.final_timestamp is not None
 

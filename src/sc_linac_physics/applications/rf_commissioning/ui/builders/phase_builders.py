@@ -1,5 +1,6 @@
 """Phase-specific UI builder classes for RF commissioning displays."""
 
+import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QComboBox,
@@ -508,4 +509,68 @@ class SSACharUI(PhaseUIBase):
         outer.addStretch()
 
         group.setLayout(outer)
+        return group
+
+
+class FrequencyTuningUI(PhaseUIBase):
+    """Builds the Frequency Tuning display UI with a live detune plot."""
+
+    def build(self) -> QVBoxLayout:
+        outer = QVBoxLayout()
+        outer.setContentsMargins(5, 5, 5, 5)
+        outer.setSpacing(6)
+
+        # Full-width toolbar across the top
+        outer.addLayout(self._build_main_toolbar())
+
+        # Middle row: plot (left, dominant) + stored data (right, compact)
+        middle = QHBoxLayout()
+        middle.setSpacing(8)
+        middle.addWidget(self._build_tuning_plot(), stretch=3)
+        middle.addWidget(
+            self._build_stored_data_section(
+                self._get_parent_stored_data_fields()
+            ),
+            stretch=2,
+        )
+        outer.addLayout(middle, stretch=1)
+
+        # Short history bar at the bottom
+        outer.addWidget(self._build_compact_history())
+
+        return outer
+
+    def _build_compact_history(self) -> QGroupBox:
+        group = self._build_history()
+        history = self.widgets.get("history_text")
+        if history:
+            history.setMinimumHeight(50)
+            history.setMaximumHeight(90)
+        return group
+
+    def _build_tuning_plot(self) -> QGroupBox:
+        group = QGroupBox("Detune vs. Steps")
+        layout = QVBoxLayout()
+        layout.setContentsMargins(4, 4, 4, 4)
+
+        pw = pg.PlotWidget()
+        pw.setBackground("#1a1a2e")
+        pw.showGrid(x=True, y=True, alpha=0.3)
+        pw.setLabel("left", "Detune", units="Hz")
+        pw.setLabel("bottom", "Steps (cumulative)")
+        pw.addLegend(offset=(10, 10))
+        pw.setMinimumHeight(180)
+
+        # Horizontal zero line
+        pw.addItem(
+            pg.InfiniteLine(
+                pos=0,
+                angle=0,
+                pen=pg.mkPen(color="#555555", width=1, style=Qt.DashLine),
+            )
+        )
+
+        self._register("tuning_plot", pw)
+        layout.addWidget(pw)
+        group.setLayout(layout)
         return group

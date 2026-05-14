@@ -187,13 +187,6 @@ class FrequencyTuningData:
         label="Steps to Resonance",
         widget_name="freq_tuning_steps_to_resonance",
     )
-    final_detune_hz: float | None = phase_display_field(
-        default=None,
-        label="Final Detune",
-        widget_name="freq_tuning_final_detune",
-        format_spec=".3f",
-        unit="Hz",
-    )
     final_timestamp: datetime | None = None
 
     # Stepper characterization data
@@ -213,13 +206,6 @@ class FrequencyTuningData:
         default=None,
         label="Cold Landing Steps",
         widget_name="freq_tuning_cold_steps",
-    )
-    peak_stepper_temp_c: float | None = phase_display_field(
-        default=None,
-        label="Peak Motor Temp",
-        widget_name="freq_tuning_peak_temp",
-        format_spec=".1f",
-        unit="°C",
     )
 
     # π-mode measurement phase data
@@ -249,19 +235,11 @@ class FrequencyTuningData:
         return self.initial_detune_hz / 1000
 
     @property
-    def final_detune_khz(self) -> float | None:
-        """Final detune in kHz."""
-        if self.final_detune_hz is None:
-            return None
-        return self.final_detune_hz / 1000
-
-    @property
     def cold_landing_complete(self) -> bool:
         """Check if cold landing phase is complete."""
         return (
             self.initial_detune_hz is not None
             and self.steps_to_resonance is not None
-            and self.final_detune_hz is not None
         )
 
     @property
@@ -287,7 +265,6 @@ class FrequencyTuningData:
             self,
             computed_fields=(
                 "initial_detune_khz",
-                "final_detune_khz",
                 "cold_landing_complete",
                 "pi_mode_complete",
                 "is_complete",

@@ -4,12 +4,13 @@ Frequency Tuning Phase
 Tunes the cavity stepper to resonance after initial cool-down.  Before moving
 the stepper this phase:
   1. Checks that the stepper is idle and chirp detune is valid.
-  2. Snapshots the cold-landing reference data (hz/step, NSTEPS_COLD, initial
-     detune).
-  3. Runs a small probe move to record whether stepper.move(+N) increases or
-     decreases cavity frequency.
+  2. Records the cold-landing detune and writes it to the DF_COLD PV so that
+     future warm-up operations can find cold landing by frequency.
+  3. Runs a probe move to measure Hz/step and write it to the SCALE PV, and
+     to record whether stepper.move(+N) increases or decreases cavity frequency.
   4. Moves to resonance in small chunks, checking motor temperature before each
-     chunk and pausing if the temperature exceeds the limit.
+     chunk and pausing if the temperature exceeds the limit.  After converging,
+     writes the (signed) return-trip step count to the NSTEPS_COLD PV.
   5. Writes a FrequencyTuningData record.
 """
 
@@ -46,6 +47,7 @@ class FrequencyTuningLimits:
     cool_down_interval: float = 5.0
     motor_start_wait: float = 5.0
     motor_poll_interval: float = 2.0
+    min_probe_delta_hz: float = 10.0
 
 
 class FrequencyTuningPhase(PhaseBase):
@@ -54,9 +56,9 @@ class FrequencyTuningPhase(PhaseBase):
 
     Sequence:
     1. verify_initial_state    – stepper idle, not on limit switch, chirp valid
-    2. record_cold_landing     – snapshot hz/step, NSTEPS_COLD, initial detune
-    3. probe_stepper_direction – small move to characterise wiring direction
-    4. tune_to_resonance       – chunked loop with temperature guard
+    2. record_cold_landing     – record initial detune; write to DF_COLD PV
+    3. probe_stepper_direction – measure Hz/step; write to SCALE PV
+    4. tune_to_resonance       – chunked loop with temperature guard; write NSTEPS_COLD
     5. record_results          – write FrequencyTuningData to commissioning record
     """
 
@@ -68,7 +70,8 @@ class FrequencyTuningPhase(PhaseBase):
         self._history_start = len(context.record.phase_history)
         self.cavity = None
         self._stepper_temp_pv_obj: PV | None = None
-        self._cold_landing_pv_obj: PV | None = None
+        self._df_cold_pv_obj: PV | None = None
+        self._nsteps_cold_pv_obj: PV | None = None
         self._hz_per_microstep: float | None = None
 
     @property
@@ -129,12 +132,17 @@ class FrequencyTuningPhase(PhaseBase):
             self._stepper_temp_pv_obj = PV(self.cavity.stepper_temp_pv)
         return self._stepper_temp_pv_obj.get()
 
-    def _read_cold_landing_steps(self) -> int:
-        if self._cold_landing_pv_obj is None:
-            self._cold_landing_pv_obj = PV(
+    def _write_df_cold(self, detune_hz: float) -> None:
+        if self._df_cold_pv_obj is None:
+            self._df_cold_pv_obj = PV(self.cavity.pv_addr("DF_COLD"))
+        self._df_cold_pv_obj.put(detune_hz)
+
+    def _write_nsteps_cold(self, steps: int) -> None:
+        if self._nsteps_cold_pv_obj is None:
+            self._nsteps_cold_pv_obj = PV(
                 self.cavity.stepper_tuner.steps_cold_landing_pv
             )
-        return int(self._cold_landing_pv_obj.get())
+        self._nsteps_cold_pv_obj.put(steps)
 
     def _wait_for_motor(self) -> None:
         """Block until motor_moving is False, checking abort each poll."""
@@ -224,8 +232,6 @@ class FrequencyTuningPhase(PhaseBase):
                 result=PhaseResult.SUCCESS,
                 message="Dry run: cold landing snapshot simulated",
                 data={
-                    "hz_per_microstep": 1.0,
-                    "cold_landing_steps": 0,
                     "initial_detune_hz": 0.0,
                     "initial_timestamp": datetime.now().isoformat(),
                     "dry_run": True,
@@ -233,28 +239,27 @@ class FrequencyTuningPhase(PhaseBase):
             )
 
         try:
-            hz_per_microstep = self.cavity.stepper_tuner.hz_per_microstep
-            cold_landing_steps = self._read_cold_landing_steps()
             initial_detune_hz = self.cavity.detune_chirp
         except Exception as exc:
             return PhaseStepResult(
                 result=PhaseResult.RETRY,
-                message=f"Could not read cold landing state: {exc}",
+                message=f"Could not read cold landing detune: {exc}",
                 retry_delay_seconds=3.0,
             )
 
-        self._hz_per_microstep = hz_per_microstep
+        try:
+            self._write_df_cold(initial_detune_hz)
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not write cold landing frequency to DF_COLD: {exc}",
+                retry_delay_seconds=3.0,
+            )
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message=(
-                f"Cold landing snapshot: {hz_per_microstep:.4f} Hz/step, "
-                f"NSTEPS_COLD={cold_landing_steps}, "
-                f"detune={initial_detune_hz:.0f} Hz"
-            ),
+            message=f"Cold landing frequency recorded: detune={initial_detune_hz:.0f} Hz written to DF_COLD",
             data={
-                "hz_per_microstep": hz_per_microstep,
-                "cold_landing_steps": cold_landing_steps,
                 "initial_detune_hz": initial_detune_hz,
                 "initial_timestamp": datetime.now().isoformat(),
             },
@@ -262,6 +267,7 @@ class FrequencyTuningPhase(PhaseBase):
 
     def _probe_stepper_direction(self) -> PhaseStepResult:
         if self.context.dry_run:
+            self._hz_per_microstep = 1.0
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
                 message="Dry run: direction probe simulated",
@@ -270,6 +276,7 @@ class FrequencyTuningPhase(PhaseBase):
                     "d1_hz": 0.0,
                     "delta_hz": 0.0,
                     "positive_step_increases_frequency": False,
+                    "hz_per_microstep": 1.0,
                     "dry_run": True,
                 },
             )
@@ -300,17 +307,44 @@ class FrequencyTuningPhase(PhaseBase):
         delta = d1 - d0
         positive_step_increases_frequency = delta > 0
 
+        if abs(delta) < self.limits.min_probe_delta_hz:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    f"Probe move of {probe} steps produced only {abs(delta):.1f} Hz change "
+                    f"(minimum {self.limits.min_probe_delta_hz:.1f} Hz required). "
+                    "Check that the stepper is mechanically connected and the cavity is at 2 K."
+                ),
+            )
+
+        # Signed value preserves direction; abs value is used in tuning calculations.
+        signed_hz_per_step = delta / probe
+        self._hz_per_microstep = abs(signed_hz_per_step)
+
+        try:
+            self.cavity.stepper_tuner.hz_per_microstep_pv_obj.put(
+                signed_hz_per_step
+            )
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not write measured Hz/step to SCALE PV: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
                 f"Direction probe: Δdetune={delta:+.0f} Hz for +{probe} steps. "
-                f"move(+N) {'increases' if positive_step_increases_frequency else 'decreases'} frequency"
+                f"Measured {self._hz_per_microstep:.4f} Hz/step written to SCALE PV. "
+                f"move(+N) {'increases' if positive_step_increases_frequency else 'decreases'} frequency."
             ),
             data={
                 "d0_hz": d0,
                 "d1_hz": d1,
                 "delta_hz": delta,
                 "positive_step_increases_frequency": positive_step_increases_frequency,
+                "hz_per_microstep": self._hz_per_microstep,
             },
         )
 
@@ -349,19 +383,73 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=3.0,
             )
 
+    def _tuning_dry_run_result(self) -> PhaseStepResult:
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message="Dry run: tuning to resonance simulated",
+            data={
+                "total_steps": 0,
+                "final_timestamp": datetime.now().isoformat(),
+                "dry_run": True,
+            },
+        )
+
+    def _initialize_tuning_state(self, tuning_cb) -> tuple[int, int, float]:
+        total_steps = 0
+        signed_total = 0
+        peak_temp = 0.0
+
+        try:
+            peak_temp = self._read_temp()
+        except Exception:
+            pass
+
+        try:
+            if tuning_cb:
+                tuning_cb(0, self.cavity.detune_chirp)
+        except Exception:
+            pass
+
+        return total_steps, signed_total, peak_temp
+
+    def _emit_tuning_update(self, tuning_cb, total_steps: int) -> None:
+        try:
+            if tuning_cb:
+                tuning_cb(total_steps, self.cavity.detune_chirp)
+        except Exception:
+            pass
+
+    def _write_cold_landing_steps(
+        self, signed_total: int
+    ) -> PhaseStepResult | None:
+        # NSTEPS_COLD stores the return-trip step count (from resonance to cold
+        # landing), which is the negation of the steps we just took.
+        try:
+            self._write_nsteps_cold(-signed_total)
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not write NSTEPS_COLD after tuning: {exc}",
+                retry_delay_seconds=3.0,
+            )
+        return None
+
     def _one_tuning_iteration(
         self,
         total_steps: int,
+        signed_total: int,
         peak_temp: float,
         hz_per_step: float,
-    ) -> tuple[int, float, bool, PhaseStepResult | None]:
+    ) -> tuple[int, int, float, bool, PhaseStepResult | None]:
         """Execute one iteration of the tuning loop.
 
-        Returns (new_total_steps, new_peak_temp, converged, error_or_None).
+        Returns (new_total_steps, new_signed_total, new_peak_temp, converged, error_or_None).
+        signed_total accumulates the signed step count for writing to NSTEPS_COLD.
         """
         if self.context.is_abort_requested():
             return (
                 total_steps,
+                signed_total,
                 peak_temp,
                 False,
                 PhaseStepResult(
@@ -372,18 +460,19 @@ class FrequencyTuningPhase(PhaseBase):
 
         peak_temp, err = self._guard_temp(total_steps, peak_temp)
         if err is not None:
-            return total_steps, peak_temp, False, err
+            return total_steps, signed_total, peak_temp, False, err
 
         detune, err = self._guard_detune()
         if err is not None:
-            return total_steps, peak_temp, False, err
+            return total_steps, signed_total, peak_temp, False, err
 
         if abs(detune) <= self.limits.tolerance_hz:
-            return total_steps, peak_temp, True, None
+            return total_steps, signed_total, peak_temp, True, None
 
         if total_steps >= self.limits.max_total_steps:
             return (
                 total_steps,
+                signed_total,
                 peak_temp,
                 False,
                 PhaseStepResult(
@@ -411,6 +500,7 @@ class FrequencyTuningPhase(PhaseBase):
         except (linac_utils.StepperError, linac_utils.StepperAbortError) as exc:
             return (
                 total_steps,
+                signed_total,
                 peak_temp,
                 False,
                 PhaseStepResult(
@@ -420,58 +510,56 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
 
-        return total_steps + magnitude, peak_temp, False, None
+        return (
+            total_steps + magnitude,
+            signed_total + steps_this_move,
+            peak_temp,
+            False,
+            None,
+        )
 
     def _tune_to_resonance(self) -> PhaseStepResult:
         if self.context.dry_run:
-            return PhaseStepResult(
-                result=PhaseResult.SUCCESS,
-                message="Dry run: tuning to resonance simulated",
-                data={
-                    "total_steps": 0,
-                    "final_detune_hz": 0.0,
-                    "peak_temp_c": 25.0,
-                    "final_timestamp": datetime.now().isoformat(),
-                    "dry_run": True,
-                },
-            )
+            return self._tuning_dry_run_result()
 
         hz_per_step = self._hz_per_microstep
         if not hz_per_step:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
-                message="hz_per_microstep not set — record_cold_landing must run first",
+                message="hz_per_microstep not set — probe_stepper_direction must run first",
             )
 
-        total_steps = 0
-        peak_temp = 0.0
-        try:
-            peak_temp = self._read_temp()
-        except Exception:
-            pass
+        tuning_cb = self.context.parameters.get("tuning_update_callback")
+
+        total_steps, signed_total, peak_temp = self._initialize_tuning_state(
+            tuning_cb
+        )
 
         while True:
-            total_steps, peak_temp, converged, err = self._one_tuning_iteration(
-                total_steps, peak_temp, hz_per_step
+            total_steps, signed_total, peak_temp, converged, err = (
+                self._one_tuning_iteration(
+                    total_steps, signed_total, peak_temp, hz_per_step
+                )
             )
             if err is not None:
                 return err
+            self._emit_tuning_update(tuning_cb, total_steps)
             if converged:
                 break
 
-        final_detune = self.cavity.detune_chirp
+        err = self._write_cold_landing_steps(signed_total)
+        if err is not None:
+            return err
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
-                f"Reached resonance in {total_steps} steps; "
-                f"final detune {final_detune:.0f} Hz, "
-                f"peak motor temp {peak_temp:.1f} °C"
+                f"Reached resonance in {total_steps} steps. "
+                f"NSTEPS_COLD set to {-signed_total}."
             ),
             data={
                 "total_steps": total_steps,
-                "final_detune_hz": final_detune,
-                "peak_temp_c": peak_temp,
+                "cold_landing_steps": -signed_total,
                 "final_timestamp": datetime.now().isoformat(),
             },
         )
@@ -518,12 +606,10 @@ class FrequencyTuningPhase(PhaseBase):
             initial_detune_hz=cold.get("initial_detune_hz"),
             initial_timestamp=initial_ts,
             steps_to_resonance=tune.get("total_steps"),
-            final_detune_hz=tune.get("final_detune_hz"),
             final_timestamp=final_ts,
             positive_step_increases_frequency=probe.get(
                 "positive_step_increases_frequency"
             ),
-            hz_per_microstep=cold.get("hz_per_microstep"),
-            cold_landing_steps=cold.get("cold_landing_steps"),
-            peak_stepper_temp_c=tune.get("peak_temp_c"),
+            hz_per_microstep=probe.get("hz_per_microstep"),
+            cold_landing_steps=tune.get("cold_landing_steps"),
         )
