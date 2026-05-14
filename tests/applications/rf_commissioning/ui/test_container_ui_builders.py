@@ -22,6 +22,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
 
 def _make_header_host():
     return SimpleNamespace(
+        _on_linac_selection_changed=Mock(),
         _on_cavity_selection_changed=Mock(),
         _on_operator_changed=Mock(),
         _populate_operator_combo=Mock(),

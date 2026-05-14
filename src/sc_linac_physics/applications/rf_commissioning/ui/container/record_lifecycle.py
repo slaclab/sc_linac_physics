@@ -69,6 +69,12 @@ def load_record(host, record_id: int) -> bool:
 
 def sync_cavity_selection_from_record(host, record) -> None:
     """Sync header cavity selection to a loaded record."""
+    linac_str = f"L{record.linac}B"
+    linac_index = host.linac_combo.findText(linac_str)
+    if linac_index >= 0:
+        # Triggers _on_linac_selection_changed, which repopulates cryomodule_combo
+        host.linac_combo.setCurrentIndex(linac_index)
+
     cm_index = host.cryomodule_combo.findText(record.cryomodule)
     if cm_index >= 0:
         host.cryomodule_combo.setCurrentIndex(cm_index)

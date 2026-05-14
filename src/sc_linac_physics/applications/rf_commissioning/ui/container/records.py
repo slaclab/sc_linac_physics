@@ -35,14 +35,14 @@ def on_load_or_start(host) -> None:
     cavity = host.cavity_combo.currentText()
 
     # Validate selections (check if placeholder still selected)
-    if cryomodule == "Select CM..." or not cryomodule:
+    if cryomodule == "CM..." or not cryomodule:
         QMessageBox.warning(
             host, "Cryomodule Required", "Please select a cryomodule."
         )
         host.cryomodule_combo.setFocus()
         return
 
-    if cavity == "Select Cav..." or not cavity:
+    if cavity == "Cav..." or not cavity:
         QMessageBox.warning(
             host, "Cavity Required", "Please select a cavity number."
         )

@@ -31,6 +31,11 @@ from sc_linac_physics.applications.rf_commissioning.models.persistence.database 
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    ALL_CRYOMODULES,
+    get_linac_for_cryomodule,
+    LINAC_CM_MAP,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
     PhaseTabSpec,
     build_note_dialog,
@@ -68,9 +73,6 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     update_sync_status,
     update_tab_states,
 )
-from sc_linac_physics.utils.sc_linac.linac_utils import (
-    get_linac_for_cryomodule,
-)
 
 
 class MultiPhaseCommissioningDisplay(Display):
@@ -95,7 +97,7 @@ class MultiPhaseCommissioningDisplay(Display):
     ):
         super().__init__(parent)
         self.setWindowTitle("RF Commissioning")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1300, 750)
 
         self.session = session or CommissioningSession()
         self.phase_specs = phase_specs or build_default_phase_specs()
@@ -163,25 +165,40 @@ class MultiPhaseCommissioningDisplay(Display):
         """Build persistent header with operator and cavity selection."""
         return build_header_panel(self)
 
+    def _on_linac_selection_changed(self) -> None:
+        """Filter the cryomodule combo to show only CMs for the selected linac."""
+        linac = self.linac_combo.currentText()
+        self.cryomodule_combo.blockSignals(True)
+        self.cryomodule_combo.clear()
+        self.cryomodule_combo.addItem("CM...", "")
+        if linac == "All":
+            self.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
+        else:
+            linac_idx = ["L0B", "L1B", "L2B", "L3B", "L4B"].index(linac)
+            self.cryomodule_combo.addItems(LINAC_CM_MAP[linac_idx])
+        self.cryomodule_combo.blockSignals(False)
+        self._refresh_magnet_badge("CM...")
+        self._refresh_cavity_completion_label("CM...")
+
     def _on_cavity_selection_changed(self) -> None:
         """Update CM status on CM change; load cavity record only when cavity is selected."""
         cryomodule = self.cryomodule_combo.currentText()
         cavity = self.cavity_combo.currentText()
 
         # CM-level status is independent of cavity selection
-        if cryomodule and cryomodule != "Select CM...":
+        if cryomodule and cryomodule != "CM...":
             linac = get_linac_for_cryomodule(cryomodule)
             if linac:
                 self._refresh_magnet_badge(cryomodule, linac)
                 self._refresh_cavity_completion_label(cryomodule, linac)
         else:
-            self._refresh_magnet_badge("Select CM...")
-            self._refresh_cavity_completion_label("Select CM...")
+            self._refresh_magnet_badge("CM...")
+            self._refresh_cavity_completion_label("CM...")
 
         # Skip if no valid selection
         if (
-            cryomodule == "Select CM..."
-            or cavity == "Select Cav..."
+            cryomodule == "CM..."
+            or cavity == "Cav..."
             or not cryomodule
             or not cavity
         ):
@@ -196,7 +213,7 @@ class MultiPhaseCommissioningDisplay(Display):
         self, cryomodule: str, linac: str | None = None
     ) -> None:
         """Refresh header magnet badge for the selected cryomodule."""
-        if not cryomodule or cryomodule == "Select CM...":
+        if not cryomodule or cryomodule == "CM...":
             self.magnet_status_badge.set_status("PENDING")
             return
 
@@ -219,7 +236,7 @@ class MultiPhaseCommissioningDisplay(Display):
         self, cryomodule: str, linac: str | None = None
     ) -> None:
         """Update header cavity completion counter for the selected cryomodule."""
-        if not cryomodule or cryomodule == "Select CM...":
+        if not cryomodule or cryomodule == "CM...":
             self.cavity_completion_label.setText("0/8 Complete")
             return
 
@@ -242,7 +259,7 @@ class MultiPhaseCommissioningDisplay(Display):
     def _open_magnet_checkout_screen(self) -> None:
         """Open modal dialog for CM magnet checkout status and notes."""
         cryomodule = self.cryomodule_combo.currentText()
-        if not cryomodule or cryomodule == "Select CM...":
+        if not cryomodule or cryomodule == "CM...":
             QMessageBox.information(
                 self,
                 "Select Cryomodule",
