@@ -49,7 +49,15 @@ class _RecordSelectorMixin:
             self.cavity_combo.setFocus()
             return
 
-        cavity_number = cavity
+        try:
+            cavity_number = int(cavity)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Cavity",
+                f"Could not parse cavity number from '{cavity}'",
+            )
+            return
 
         linac_name = get_linac_for_cryomodule(cryomodule)
         if not linac_name:
@@ -90,9 +98,9 @@ class _RecordSelectorMixin:
     def _show_record_selector(
         self,
         cavity_display_name: str,
-        linac: str,
+        linac: int,
         cryomodule: str,
-        cavity_number: str,
+        cavity_number: int,
         records: list,
     ) -> None:
         """Show dialog to select existing record or start new."""
@@ -225,9 +233,9 @@ class _RecordSelectorMixin:
     def _start_new_from_dialog(
         self,
         cavity_display_name: str,
-        linac: str,
+        linac: int,
         cryomodule: str,
-        cavity_number: str,
+        cavity_number: int,
         dialog: QDialog,
     ) -> None:
         """Start new record from the selection dialog."""
@@ -239,9 +247,9 @@ class _RecordSelectorMixin:
     def _confirm_and_start_new(
         self,
         cavity_display_name: str,
-        linac: str,
+        linac: int,
         cryomodule: str,
-        cavity_number: str,
+        cavity_number: int,
     ) -> None:
         """Confirm and start a new commissioning record."""
         reply = QMessageBox.question(

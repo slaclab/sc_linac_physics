@@ -2,8 +2,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QPoint
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
@@ -243,7 +243,7 @@ def test_record_lifecycle_start_load_and_advance(host_stub):
     )
     host_stub.session.start_new_record = Mock(return_value=(record, 10, False))
 
-    created = record_lifecycle.start_new_record(host_stub, "01", "1")
+    created = record_lifecycle.start_new_record(host_stub, "01", 1)
     assert created is False
     assert host_stub.tabs.current == 1
     display_with_controller.controller.update_pv_addresses.assert_called_once_with(
@@ -491,11 +491,11 @@ def test_confirm_and_start_new_conflict_and_error(host_stub, monkeypatch):
     )
     host_stub.operator_combo.setCurrentIndex(1)
 
-    records.confirm_and_start_new(host_stub, "01-1", "L1B", "01", "1")
+    records.confirm_and_start_new(host_stub, "01-1", 1, "01", 1)
     host_stub._handle_note_conflict.assert_called_once()
 
     host_stub.start_new_record = Mock(side_effect=RuntimeError("boom"))
-    records.confirm_and_start_new(host_stub, "01-1", "L1B", "01", "1")
+    records.confirm_and_start_new(host_stub, "01-1", 1, "01", 1)
 
 
 def test_note_actions_operator_required_and_dialog_paths(

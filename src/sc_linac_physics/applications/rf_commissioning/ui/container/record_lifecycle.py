@@ -2,7 +2,7 @@
 
 
 class _RecordLifecycleMixin:
-    def start_new_record(self, cryomodule: str, cavity_number: str) -> bool:
+    def start_new_record(self, cryomodule: str, cavity_number: int) -> bool:
         """Start a new commissioning record."""
         record, _record_id, created = self.session.start_new_record(
             cryomodule, cavity_number
@@ -13,7 +13,7 @@ class _RecordLifecycleMixin:
                 display.controller, "update_pv_addresses"
             ):
                 display.controller.update_pv_addresses(
-                    cryomodule, cavity_number
+                    cryomodule, str(cavity_number)
                 )
 
         self.update_progress_indicator(record)
