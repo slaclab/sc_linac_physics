@@ -7,25 +7,19 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
-    QComboBox,
     QSplitter,
     QTabWidget,
     QTableWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 from pydm import Display, PyDMApplication
 
-from sc_linac_physics.applications.rf_commissioning.models.cryomodule_models import (
-    CryomoduleCheckoutRecord,
-    CryomodulePhase,
-    CryomodulePhaseStatus,
-    MagnetCheckoutData,
+from sc_linac_physics.applications.rf_commissioning.ui.magnet_checkout_dialog import (
+    MagnetCheckoutDialog,
 )
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
@@ -211,7 +205,7 @@ class MultiPhaseCommissioningDisplay(Display):
             self.magnet_status_badge.set_status("PENDING")
             return
 
-        cm_record = self.session.db.get_cryomodule_record(
+        cm_record = self.session.get_cryomodule_record(
             effective_linac, cryomodule
         )
         if cm_record is None or cm_record.magnet_checkout is None:
@@ -235,7 +229,7 @@ class MultiPhaseCommissioningDisplay(Display):
             return
 
         linac_index = int(effective_linac[1])
-        cavity_records = self.session.db.get_records_by_cryomodule(
+        cavity_records = self.session.get_records_by_cryomodule(
             linac_index, cryomodule, active_only=False
         )
         completed = sum(
@@ -245,8 +239,8 @@ class MultiPhaseCommissioningDisplay(Display):
         )
         self.cavity_completion_label.setText(f"{completed}/8 Complete")
 
-    def _open_magnet_checkout_screen(self) -> None:  # noqa: C901
-        """Open modal screen for CM magnet checkout status and notes."""
+    def _open_magnet_checkout_screen(self) -> None:
+        """Open modal dialog for CM magnet checkout status and notes."""
         cryomodule = self.cryomodule_combo.currentText()
         if not cryomodule or cryomodule == "Select CM...":
             QMessageBox.information(
@@ -265,137 +259,17 @@ class MultiPhaseCommissioningDisplay(Display):
             )
             return
 
-        loaded = self.session.db.get_cryomodule_record_with_version(
-            linac, cryomodule
+        dialog = MagnetCheckoutDialog(
+            self.session, linac, cryomodule, parent=self
         )
-        if loaded is None:
-            cm_record = CryomoduleCheckoutRecord(
-                linac=linac, cryomodule=cryomodule
-            )
-            cm_record_id = None
-            cm_record_version = None
-        else:
-            cm_record, cm_record_version = loaded
-            cm_record_id = self.session.db.get_cryomodule_record_id(
-                linac, cryomodule
-            )
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Magnet Checkout - {linac}_CM{cryomodule}")
-        dialog_layout = QVBoxLayout()
-
-        status_row = QHBoxLayout()
-        status_row.addWidget(QLabel("Status:"))
-        status_combo = QComboBox()
-        status_combo.addItems(["PENDING", "PASS", "FAIL"])
-        status_row.addWidget(status_combo)
-        dialog_layout.addLayout(status_row)
-
-        # Operator selection (required for PASS/FAIL)
-        operator_row = QHBoxLayout()
-        operator_row.addWidget(QLabel("Operator:"))
-        operator_combo = QComboBox()
-        operator_combo.addItem("👤 Select operator...", "")
-        for op in self.session.get_operators():
-            operator_combo.addItem(f"👤 {op}", op)
-        operator_combo.setMinimumWidth(200)
-        operator_row.addWidget(operator_combo)
-        dialog_layout.addLayout(operator_row)
-
-        dialog_layout.addWidget(QLabel("Notes:"))
-        notes_input = QTextEdit()
-        notes_input.setPlaceholderText(
-            "Optional notes for magnet checkout result"
-        )
-        notes_input.setMinimumHeight(120)
-        dialog_layout.addWidget(notes_input)
-
-        if cm_record.magnet_checkout is None:
-            status_combo.setCurrentText("PENDING")
-            notes_input.setPlainText(cm_record.notes or "")
-        else:
-            status_combo.setCurrentText(
-                "PASS" if cm_record.magnet_checkout.passed else "FAIL"
-            )
-            notes_input.setPlainText(cm_record.magnet_checkout.notes or "")
-            # Pre-populate operator if exists
-            if cm_record.magnet_checkout.operator:
-                idx = operator_combo.findData(
-                    cm_record.magnet_checkout.operator
-                )
-                if idx >= 0:
-                    operator_combo.setCurrentIndex(idx)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Save | QDialogButtonBox.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        dialog_layout.addWidget(buttons)
-
-        dialog.setLayout(dialog_layout)
-
         if dialog.exec_() != QDialog.Accepted:
             return
 
-        selected_status = status_combo.currentText().upper()
-        selected_operator = operator_combo.currentData() or ""
-
-        # Validate operator is selected for PASS/FAIL
-        if selected_status != "PENDING" and not selected_operator:
-            QMessageBox.warning(
-                self,
-                "Operator Required",
-                "An operator must be selected for PASS/FAIL checkout results.",
-            )
-            return
-
-        notes = notes_input.toPlainText().strip()
-
-        if selected_status == "PENDING":
-            cm_record.magnet_checkout = None
-            cm_record.set_phase_status(
-                CryomodulePhase.MAGNET_CHECKOUT,
-                CryomodulePhaseStatus.NOT_STARTED,
-            )
-        else:
-            cm_record.magnet_checkout = MagnetCheckoutData(
-                passed=(selected_status == "PASS"),
-                operator=selected_operator,
-                notes=notes,
-            )
-            cm_record.set_phase_status(
-                CryomodulePhase.MAGNET_CHECKOUT,
-                (
-                    CryomodulePhaseStatus.COMPLETE
-                    if selected_status == "PASS"
-                    else CryomodulePhaseStatus.FAILED
-                ),
-            )
-
-        cm_record.notes = notes
-
-        try:
-            self.session.db.save_cryomodule_record(
-                cm_record,
-                record_id=cm_record_id,
-                expected_version=cm_record_version,
-            )
-        except RecordConflictError as conflict:
-            QMessageBox.warning(
-                self,
-                "Save Conflict",
-                (
-                    "Magnet checkout was updated by another user. "
-                    f"Expected version {conflict.expected_version}, "
-                    f"database has version {conflict.current_version}."
-                ),
-            )
+        if not dialog.save():
             return
 
         self._refresh_magnet_badge(cryomodule, linac)
         self._refresh_cavity_completion_label(cryomodule)
-
         self._update_sync_status(True, "Magnet checkout updated")
 
     def _populate_operator_combo(self, restore_selection: str = None) -> None:

@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.22.1 (2026-05-14)
+
+### Refactoring
+
+- **rf-commissioning**: Add session facade methods and extract MagnetCheckoutDialog
+  ([#250](https://github.com/slaclab/sc_linac_physics/pull/250),
+  [`61edff7`](https://github.com/slaclab/sc_linac_physics/commit/61edff77857c087c91502d7019fff671c87d00cf))
+
+
 ## v9.22.0 (2026-05-13)
 
 ### Features
