@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v9.22.1 (2026-05-14)
+
+### Refactoring
+
+- **rf-commissioning**: Add session facade methods and extract MagnetCheckoutDialog
+  ([#250](https://github.com/slaclab/sc_linac_physics/pull/250),
+  [`61edff7`](https://github.com/slaclab/sc_linac_physics/commit/61edff77857c087c91502d7019fff671c87d00cf))
+
+
+## v9.22.0 (2026-05-13)
+
+### Features
+
+- **rf-commissioning**: Implement SSA Calibration Phase
+  ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+- **rf-commissioning**: Introducing SSA Calibration phase
+  ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+- **rf-commissioning**: Polish SSA Calibration phase UI and simulation
+  ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+### Testing
+
+- Patching failing tests ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+- **rf-commissioning**: Add test coverage for SSA Calibration phase
+  ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+
 ## v9.21.0 (2026-05-11)
 
 ### Bug Fixes

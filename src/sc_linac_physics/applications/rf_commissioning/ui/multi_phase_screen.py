@@ -19,9 +19,6 @@ from pydm import Display, PyDMApplication
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
 )
-from sc_linac_physics.applications.rf_commissioning.ui.magnet_checkout_dialog import (
-    MagnetCheckoutDialog,
-)
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
@@ -37,6 +34,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     _SyncMixin,
     _PersistenceMixin,
     _RecordLifecycleMixin,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.magnet_checkout_dialog import (
+    MagnetCheckoutDialog,
 )
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     get_linac_for_cryomodule,
