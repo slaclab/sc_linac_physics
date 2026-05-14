@@ -84,6 +84,9 @@ def test_show_record_selector_renders_table_and_hooks_actions(
     host = QWidget()
     host.load_record = Mock(return_value=True)
     host._update_sync_status = Mock()
+    host._load_selected_record = (
+        lambda table, dialog: records.load_selected_record(host, table, dialog)
+    )
     qtbot.addWidget(host)
 
     records_data = [
