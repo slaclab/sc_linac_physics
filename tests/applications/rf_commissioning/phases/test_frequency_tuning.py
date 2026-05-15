@@ -44,6 +44,7 @@ def mock_stepper():
     stepper.motor_moving = False
     stepper.on_limit_switch = False
     stepper.hz_per_microstep = 2.0
+    stepper.max_steps = 50
     stepper.steps_cold_landing_pv = "ACCL:L1B:0210:STEP:NSTEPS_COLD"
     return stepper
 
@@ -77,7 +78,6 @@ def fast_limits():
     return FrequencyTuningLimits(
         tolerance_hz=500.0,
         probe_steps=10,
-        max_steps_per_move=50,
         temp_limit_c=70.0,
         max_total_steps=10_000,
         cool_down_retries=2,
@@ -101,6 +101,7 @@ def _setup_phase(phase, temp_c=25.0):
     phase._df_cold_pv_obj = Mock()
     phase._nsteps_cold_pv_obj = Mock()
     phase._hz_per_microstep = 2.0
+    phase._signed_hz_per_microstep = 2.0
     return phase
 
 
@@ -118,6 +119,7 @@ def test_get_phase_steps(phase):
         "verify_initial_state",
         "record_cold_landing",
         "probe_stepper_direction",
+        "apply_hz_per_step",
         "tune_to_resonance",
         "record_results",
     ]
@@ -308,9 +310,9 @@ def test_probe_stepper_direction_positive_increases_frequency(
     # delta=500, probe_steps=10 (fast_limits) → 50 Hz/step
     assert result.data["hz_per_microstep"] == pytest.approx(50.0)
     assert phase._hz_per_microstep == pytest.approx(50.0)
-    mock_stepper.hz_per_microstep_pv_obj.put.assert_called_once_with(
-        pytest.approx(50.0)
-    )
+    assert phase._signed_hz_per_microstep == pytest.approx(50.0)
+    # SCALE PV is NOT written by the probe step — operator confirms via apply_hz_per_step
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
     assert mock_stepper.move.call_count == 2
     assert mock_stepper.move.call_args_list[0][0][0] > 0
     assert mock_stepper.move.call_args_list[1][0][0] < 0
@@ -336,11 +338,10 @@ def test_probe_stepper_direction_positive_decreases_frequency(
 
     assert result.result == PhaseResult.SUCCESS
     assert result.data["positive_step_increases_frequency"] is False
-    # delta=-200, probe_steps=10 → abs = 20 Hz/step; signed written to PV is -20
+    # delta=-200, probe_steps=10 → abs = 20 Hz/step; signed stored for later apply
     assert result.data["hz_per_microstep"] == pytest.approx(20.0)
-    mock_stepper.hz_per_microstep_pv_obj.put.assert_called_once_with(
-        pytest.approx(-20.0)
-    )
+    assert phase._signed_hz_per_microstep == pytest.approx(-20.0)
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
 
 
 def test_probe_stepper_direction_delta_too_small(
@@ -359,7 +360,7 @@ def test_probe_stepper_direction_delta_too_small(
 
     assert result.result == PhaseResult.FAILED
     assert "minimum" in result.message.lower()
-    assert mock_stepper.hz_per_microstep_pv_obj.put.call_count == 0
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
 
 
 def test_probe_stepper_direction_stepper_error(phase, mock_stepper):
@@ -375,6 +376,47 @@ def test_probe_stepper_direction_transient_error_retries(phase, mock_stepper):
     mock_stepper.move.side_effect = RuntimeError("transient")
     result = phase._probe_stepper_direction()
     assert result.result == PhaseResult.RETRY
+
+
+# ---------------------------------------------------------------------------
+# apply_hz_per_step
+# ---------------------------------------------------------------------------
+
+
+def test_apply_hz_per_step_dry_run(context, fast_limits):
+    context.dry_run = True
+    p = FrequencyTuningPhase(context, limits=fast_limits)
+    p.validate_prerequisites()
+    result = p._apply_hz_per_step()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["dry_run"] is True
+
+
+def test_apply_hz_per_step_not_measured(phase):
+    phase.validate_prerequisites()
+    # _signed_hz_per_microstep is None by default
+    result = phase._apply_hz_per_step()
+    assert result.result == PhaseResult.FAILED
+    assert "probe_stepper_direction" in result.message
+
+
+def test_apply_hz_per_step_writes_scale_pv(phase, mock_stepper):
+    _setup_phase(phase)
+    phase._signed_hz_per_microstep = 42.5
+    result = phase._apply_hz_per_step()
+    assert result.result == PhaseResult.SUCCESS
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_called_once_with(42.5)
+
+
+def test_apply_hz_per_step_pv_error_retries(phase, mock_stepper):
+    _setup_phase(phase)
+    phase._signed_hz_per_microstep = 10.0
+    mock_stepper.hz_per_microstep_pv_obj.put.side_effect = RuntimeError(
+        "timeout"
+    )
+    result = phase._apply_hz_per_step()
+    assert result.result == PhaseResult.RETRY
+    assert "SCALE PV" in result.message
 
 
 # ---------------------------------------------------------------------------

@@ -39,8 +39,7 @@ class FrequencyTuningLimits:
     """Configurable limits for the frequency tuning phase."""
 
     tolerance_hz: float = 500.0
-    probe_steps: int = 100
-    max_steps_per_move: int = 200
+    probe_steps: int = 50_000
     temp_limit_c: float = linac_utils.STEPPER_TEMP_LIMIT
     max_total_steps: int = 100_000
     cool_down_retries: int = 6
@@ -73,6 +72,7 @@ class FrequencyTuningPhase(PhaseBase):
         self._df_cold_pv_obj: PV | None = None
         self._nsteps_cold_pv_obj: PV | None = None
         self._hz_per_microstep: float | None = None
+        self._signed_hz_per_microstep: float | None = None
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -97,6 +97,7 @@ class FrequencyTuningPhase(PhaseBase):
             "verify_initial_state",
             "record_cold_landing",
             "probe_stepper_direction",
+            "apply_hz_per_step",
             "tune_to_resonance",
             "record_results",
         ]
@@ -111,6 +112,7 @@ class FrequencyTuningPhase(PhaseBase):
             "verify_initial_state": self._verify_initial_state,
             "record_cold_landing": self._record_cold_landing,
             "probe_stepper_direction": self._probe_stepper_direction,
+            "apply_hz_per_step": self._apply_hz_per_step,
             "tune_to_resonance": self._tune_to_resonance,
             "record_results": self._record_results,
         }
@@ -265,9 +267,41 @@ class FrequencyTuningPhase(PhaseBase):
             },
         )
 
+    def _apply_hz_per_step(self) -> PhaseStepResult:
+        """Write the measured Hz/step to the SCALE PV after operator confirmation."""
+        if self.context.dry_run:
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message="Dry run: skipping SCALE PV write",
+                data={"dry_run": True},
+            )
+
+        if self._signed_hz_per_microstep is None:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Hz/step not measured — probe_stepper_direction must run first",
+            )
+
+        try:
+            self.cavity.stepper_tuner.hz_per_microstep_pv_obj.put(
+                self._signed_hz_per_microstep
+            )
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not write Hz/step to SCALE PV: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=f"Wrote {self._signed_hz_per_microstep:.4f} Hz/step to SCALE PV",
+        )
+
     def _probe_stepper_direction(self) -> PhaseStepResult:
         if self.context.dry_run:
             self._hz_per_microstep = 1.0
+            self._signed_hz_per_microstep = 1.0
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
                 message="Dry run: direction probe simulated",
@@ -285,13 +319,9 @@ class FrequencyTuningPhase(PhaseBase):
 
         try:
             d0 = self.cavity.detune_chirp
-            self.cavity.stepper_tuner.move(
-                probe, max_steps=probe, check_detune=False
-            )
+            self.cavity.stepper_tuner.move(probe, check_detune=False)
             d1 = self.cavity.detune_chirp
-            self.cavity.stepper_tuner.move(
-                -probe, max_steps=probe, check_detune=False
-            )
+            self.cavity.stepper_tuner.move(-probe, check_detune=False)
         except (linac_utils.StepperError, linac_utils.StepperAbortError) as exc:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
@@ -320,17 +350,7 @@ class FrequencyTuningPhase(PhaseBase):
         # Signed value preserves direction; abs value is used in tuning calculations.
         signed_hz_per_step = delta / probe
         self._hz_per_microstep = abs(signed_hz_per_step)
-
-        try:
-            self.cavity.stepper_tuner.hz_per_microstep_pv_obj.put(
-                signed_hz_per_step
-            )
-        except Exception as exc:
-            return PhaseStepResult(
-                result=PhaseResult.RETRY,
-                message=f"Could not write measured Hz/step to SCALE PV: {exc}",
-                retry_delay_seconds=3.0,
-            )
+        self._signed_hz_per_microstep = signed_hz_per_step
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
@@ -489,13 +509,14 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
 
+        hardware_max = self.cavity.stepper_tuner.max_steps
         estimated = max(1, round(abs(detune) / hz_per_step))
-        magnitude = min(self.limits.max_steps_per_move, estimated)
+        magnitude = min(hardware_max, estimated)
         steps_this_move = int(math.copysign(magnitude, detune))
 
         try:
             self.cavity.stepper_tuner.move(
-                steps_this_move, max_steps=magnitude, check_detune=False
+                steps_this_move, max_steps=hardware_max, check_detune=False
             )
         except (linac_utils.StepperError, linac_utils.StepperAbortError) as exc:
             return (

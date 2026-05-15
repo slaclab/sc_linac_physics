@@ -181,13 +181,15 @@ class CommissioningSession:
     def get_active_phase_projection(self) -> dict | None:
         """Return phase projection used by UI state components.
 
-        Uses normalized workflow data exclusively.
+        Returns None only when no record is loaded. When a record exists but no
+        workflow run has started yet, returns the default not-started projection so
+        the UI can clear stale state from a previously-selected cavity.
         """
+        if self._active_record_id is None:
+            return None
+
         run = self.get_active_workflow_run()
         instances = self.get_active_phase_instances()
-
-        if run is None:
-            return None
         current_phase, _, phase_status = build_workflow_state(run, instances)
 
         return {
@@ -354,12 +356,7 @@ class CommissioningSession:
 
         projection = self.get_active_phase_projection()
         if projection is None:
-            if phase == CommissioningPhase.PIEZO_PRE_RF:
-                return True, "Piezo Pre-RF can be run at any time"
-            return (
-                False,
-                "No normalized workflow run exists yet; start with piezo_pre_rf",
-            )
+            return False, "No active commissioning record"
 
         # PIEZO_PRE_RF is always restartable.
         if phase == CommissioningPhase.PIEZO_PRE_RF:

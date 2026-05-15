@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 from pydm.widgets import PyDMEnumComboBox, PyDMLabel, PyDMSpinbox
+from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
@@ -523,22 +524,64 @@ class FrequencyTuningUI(PhaseUIBase):
         # Full-width toolbar across the top
         outer.addLayout(self._build_main_toolbar())
 
-        # Middle row: plot (left, dominant) + stored data (right, compact)
+        # Probe result confirmation bar
+        outer.addLayout(self._build_probe_action_bar())
+
+        # Middle row: plot (left, dominant) + right panel (stepper controls + stored data)
         middle = QHBoxLayout()
         middle.setSpacing(8)
         middle.addWidget(self._build_tuning_plot(), stretch=3)
-        middle.addWidget(
+
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(self._build_stepper_controls())
+        right_panel.addWidget(
             self._build_stored_data_section(
                 self._get_parent_stored_data_fields()
             ),
-            stretch=2,
+            stretch=1,
         )
+        middle.addLayout(right_panel, stretch=2)
+
         outer.addLayout(middle, stretch=1)
 
         # Short history bar at the bottom
         outer.addWidget(self._build_compact_history())
 
         return outer
+
+    def _build_probe_action_bar(self) -> QHBoxLayout:
+        """Probe result readout and confirmation button, shown between toolbar and plot."""
+        bar = QHBoxLayout()
+        bar.setSpacing(12)
+        bar.setContentsMargins(4, 0, 4, 0)
+
+        bar.addWidget(QLabel("Measured Hz/step:"))
+
+        hz_label = self._register("hz_per_step_label", QLabel("—"))
+        hz_label.setStyleSheet(
+            "QLabel { color: #4a9eff; font-weight: bold; font-size: 11pt; "
+            "font-family: monospace; min-width: 140px; }"
+        )
+        bar.addWidget(hz_label)
+
+        confirm_btn = self._register(
+            "confirm_tune_button",
+            QPushButton("Apply Hz/step & Tune →"),
+        )
+        confirm_btn.setStyleSheet(
+            "QPushButton { background-color: #059669; color: white; "
+            "font-weight: bold; padding: 8px 18px; border-radius: 4px; border: none; } "
+            "QPushButton:hover { background-color: #047857; } "
+            "QPushButton:disabled { background-color: #374151; color: #6b7280; }"
+        )
+        confirm_btn.setFixedHeight(36)
+        confirm_btn.setEnabled(False)
+        self._connect(confirm_btn, "on_confirm_and_tune")
+        bar.addWidget(confirm_btn)
+
+        bar.addStretch()
+        return bar
 
     def _build_compact_history(self) -> QGroupBox:
         group = self._build_history()
@@ -548,8 +591,117 @@ class FrequencyTuningUI(PhaseUIBase):
             history.setMaximumHeight(90)
         return group
 
+    def _build_stepper_controls(self) -> QGroupBox:
+        """Build manual stepper movement and settings controls."""
+        group = QGroupBox("Manual Stepper Controls")
+        layout = QGridLayout()
+        layout.setSpacing(5)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setColumnStretch(1, 1)
+
+        _btn_style = (
+            "QPushButton { background-color: #374151; color: #d1d5db; "
+            "padding: 5px 10px; border-radius: 4px; border: 1px solid #4b5563; } "
+            "QPushButton:hover { background-color: #4b5563; } "
+            "QPushButton:disabled { background-color: #1f2937; color: #4b5563; }"
+        )
+
+        # Row 0: Steps + move buttons
+        layout.addWidget(QLabel("Steps:"), 0, 0)
+        steps_spinbox = self._register(
+            "steps_spinbox", PyDMSpinbox(parent=self.parent)
+        )
+        steps_spinbox.setRange(1, linac_utils.DEFAULT_STEPPER_MAX_STEPS)
+        steps_spinbox.userDefinedLimits = True
+        steps_spinbox.userMinimum = 1
+        steps_spinbox.userMaximum = linac_utils.DEFAULT_STEPPER_MAX_STEPS
+        steps_spinbox.setSingleStep(1)
+        steps_spinbox.setDecimals(0)
+        steps_spinbox.setValue(100)
+        steps_spinbox.precisionFromPV = False
+        steps_spinbox.precision = 0
+        steps_spinbox.showStepExponent = False
+        steps_spinbox.writeOnPress = True
+        steps_spinbox.editingFinished.connect(steps_spinbox.send_value)
+        layout.addWidget(steps_spinbox, 0, 1)
+
+        move_row = QHBoxLayout()
+        move_row.setSpacing(4)
+        move_left_btn = self._register("move_left_btn", QPushButton("← Left"))
+        move_left_btn.setStyleSheet(_btn_style)
+        self._connect(move_left_btn, "on_move_left")
+        move_row.addWidget(move_left_btn)
+
+        move_right_btn = self._register(
+            "move_right_btn", QPushButton("Right →")
+        )
+        move_right_btn.setStyleSheet(_btn_style)
+        self._connect(move_right_btn, "on_move_right")
+        move_row.addWidget(move_right_btn)
+        layout.addLayout(move_row, 0, 2)
+
+        # Row 1: Motor speed
+        layout.addWidget(QLabel("Speed (steps/s):"), 1, 0)
+        speed_spinbox = self._register(
+            "speed_spinbox", PyDMSpinbox(parent=self.parent)
+        )
+        speed_spinbox.setRange(1, linac_utils.MAX_STEPPER_SPEED)
+        speed_spinbox.userDefinedLimits = True
+        speed_spinbox.userMinimum = 1
+        speed_spinbox.userMaximum = linac_utils.MAX_STEPPER_SPEED
+        speed_spinbox.setSingleStep(1000)
+        speed_spinbox.setDecimals(0)
+        speed_spinbox.setValue(linac_utils.DEFAULT_STEPPER_SPEED)
+        speed_spinbox.precisionFromPV = False
+        speed_spinbox.precision = 0
+        speed_spinbox.showStepExponent = False
+        speed_spinbox.writeOnPress = True
+        speed_spinbox.editingFinished.connect(speed_spinbox.send_value)
+        layout.addWidget(speed_spinbox, 1, 1, 1, 2)
+
+        # Row 2: Max steps
+        layout.addWidget(QLabel("Max Steps:"), 2, 0)
+        max_steps_spinbox = self._register(
+            "max_steps_spinbox", PyDMSpinbox(parent=self.parent)
+        )
+        max_steps_spinbox.setRange(1, linac_utils.DEFAULT_STEPPER_MAX_STEPS)
+        max_steps_spinbox.userDefinedLimits = True
+        max_steps_spinbox.userMinimum = 1
+        max_steps_spinbox.userMaximum = linac_utils.DEFAULT_STEPPER_MAX_STEPS
+        max_steps_spinbox.setSingleStep(1000)
+        max_steps_spinbox.setDecimals(0)
+        max_steps_spinbox.setValue(linac_utils.DEFAULT_STEPPER_MAX_STEPS)
+        max_steps_spinbox.precisionFromPV = False
+        max_steps_spinbox.precision = 0
+        max_steps_spinbox.showStepExponent = False
+        max_steps_spinbox.writeOnPress = True
+        max_steps_spinbox.editingFinished.connect(max_steps_spinbox.send_value)
+        layout.addWidget(max_steps_spinbox, 2, 1, 1, 2)
+
+        # Row 3: Phase status readouts
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        sep.setStyleSheet("QFrame { color: #3a3a3a; }")
+        layout.addWidget(sep, 3, 0, 1, 3)
+
+        layout.addWidget(QLabel("Step:"), 4, 0)
+        current_step = self._register(
+            "local_current_step", self._make_local_label("-")
+        )
+        layout.addWidget(current_step, 4, 1, 1, 2)
+
+        layout.addWidget(QLabel("Status:"), 5, 0)
+        phase_status = self._register(
+            "local_phase_status", self._make_local_label("-")
+        )
+        layout.addWidget(phase_status, 5, 1, 1, 2)
+
+        group.setLayout(layout)
+        return group
+
     def _build_tuning_plot(self) -> QGroupBox:
-        group = QGroupBox("Detune vs. Steps")
+        group = QGroupBox("Detune vs. Time")
         layout = QVBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
 
@@ -557,7 +709,7 @@ class FrequencyTuningUI(PhaseUIBase):
         pw.setBackground("#1a1a2e")
         pw.showGrid(x=True, y=True, alpha=0.3)
         pw.setLabel("left", "Detune", units="Hz")
-        pw.setLabel("bottom", "Steps (cumulative)")
+        pw.setLabel("bottom", "Elapsed Time", units="s")
         pw.addLegend(offset=(10, 10))
         pw.setMinimumHeight(180)
 

@@ -1,5 +1,6 @@
 """Controller for the Frequency Tuning display."""
 
+import time
 from datetime import datetime
 from threading import Thread
 
@@ -26,6 +27,17 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
+_PROBE_STEPS = [
+    "verify_initial_state",
+    "record_cold_landing",
+    "probe_stepper_direction",
+]
+_TUNING_STEPS = [
+    "apply_hz_per_step",
+    "tune_to_resonance",
+    "record_results",
+]
+
 
 class FrequencyTuningController(QObject):
     """Owns phase execution and plot wiring for the Frequency Tuning display."""
@@ -33,6 +45,7 @@ class FrequencyTuningController(QObject):
     phase_completed = pyqtSignal(object)
     phase_run_finished = pyqtSignal(bool, str)
     _log_signal = pyqtSignal(str)
+    _probe_stage_done = pyqtSignal(float)  # measured hz_per_step
 
     def __init__(self, view, session: CommissioningSession) -> None:
         super().__init__()
@@ -48,10 +61,13 @@ class FrequencyTuningController(QObject):
 
         self._paused = False
         self._steps: list[str] = []
+        self._finalize_after_run: bool = False
+        self._phase_started: bool = False
         self._initial_detune_hz: float | None = None
         self._active_phase_instance_id: int | None = None
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
+        self._probe_stage_done.connect(self._on_probe_stage_done)
 
     # ------------------------------------------------------------------
     # PV wiring
@@ -76,12 +92,24 @@ class FrequencyTuningController(QObject):
             cm, cav = int(cryomodule), int(cavity_number)
             cavity = self._get_machine_cavity(cm, cav)
             self._cavity = cavity
-            apply_pv_mapping({})
+            self._apply_stepper_pv_mapping(cavity)
             self.view.log_message(
                 format_pv_update_message(cryomodule, cavity_number, cm, cav)
             )
         except Exception as exc:
             self.view.log_message(f"Error setting PVs: {exc}")
+
+    def _apply_stepper_pv_mapping(self, cavity) -> None:
+        stepper = cavity.stepper_tuner
+        pv_map = {}
+        for widget_name, pv_addr in (
+            ("steps_spinbox", stepper.step_des_pv),
+            ("speed_spinbox", stepper.speed_pv),
+            ("max_steps_spinbox", stepper.max_steps_pv),
+        ):
+            if hasattr(self.view, widget_name):
+                pv_map[getattr(self.view, widget_name)] = pv_addr
+        apply_pv_mapping(pv_map)
 
     def _get_machine_cavity(self, cm: int, cav: int):
         if not self.machine:
@@ -93,6 +121,7 @@ class FrequencyTuningController(QObject):
     # ------------------------------------------------------------------
 
     def on_run_automated_test(self) -> None:
+        """Run the probe steps (verify → cold landing → measure Hz/step)."""
         operator = self._get_operator()
         if not operator:
             self.view.show_error(
@@ -100,16 +129,35 @@ class FrequencyTuningController(QObject):
             )
             return
 
-        if not self.session.has_active_record():
-            if not self._auto_create_record():
-                return
+        target = self._resolve_probe_target()
+        if target is None:
+            return
+
+        cavity_name, cm, cav = target
+        self._prepare_probe_ui(cavity_name)
+
+        try:
+            self._start_run(cm=cm, cav=cav, operator=operator)
+        except Exception as exc:
+            import traceback
+
+            self.view.show_error(f"Failed to start probe: {exc}")
+            self.view.log_message(f"Traceback: {traceback.format_exc()}")
+
+    def _resolve_probe_target(self) -> tuple[str, int, int] | None:
+        """Ensure record/cavity context exists and return cavity name + CM/CAV ints."""
+        if (
+            not self.session.has_active_record()
+            and not self._auto_create_record()
+        ):
+            return None
 
         cavity_info = self.view.get_current_cavity()
         if not cavity_info:
             self.view.show_error(
                 "Unable to determine cavity. Select a cavity and try again."
             )
-            return
+            return None
 
         cavity_name, cryomodule = cavity_info
         try:
@@ -118,22 +166,39 @@ class FrequencyTuningController(QObject):
             cm = int(cryomodule)
         except (ValueError, IndexError):
             self.view.show_error(f"Invalid cavity name format: {cavity_name}")
-            return
+            return None
 
-        self.view.log_message(f"Starting frequency tuning for {cavity_name}")
+        return cavity_name, cm, cav
+
+    def _prepare_probe_ui(self, cavity_name: str) -> None:
+        self.view.log_message(f"Running probe for {cavity_name}")
         self.view.clear_results()
         self.view.reset_plot()
         self._initial_detune_hz = None
+        if hasattr(self.view, "confirm_tune_button"):
+            self.view.confirm_tune_button.setEnabled(False)
+        if hasattr(self.view, "hz_per_step_label"):
+            self.view.hz_per_step_label.setText("—")
 
-        try:
-            self._start_run(cm=cm, cav=cav, operator=operator)
-        except Exception as exc:
-            import traceback
+    def on_confirm_and_tune(self) -> None:
+        """Write Hz/step to SCALE PV and run the tuning loop."""
+        if not self.phase or not self.context:
+            self.view.show_error("Run the probe first before tuning.")
+            return
 
-            self.view.show_error(f"Failed to start frequency tuning: {exc}")
-            self.view.log_message(f"Traceback: {traceback.format_exc()}")
+        if hasattr(self.view, "confirm_tune_button"):
+            self.view.confirm_tune_button.setEnabled(False)
+        self.view.run_button.setEnabled(False)
+        self.view.pause_button.setEnabled(True)
+        self.view.abort_button.setEnabled(True)
+        self.view.local_phase_status.setText("TUNING")
+
+        self._steps = _TUNING_STEPS
+        self._finalize_after_run = True
+        QTimer.singleShot(100, self._run_phase_in_background)
 
     def _start_run(self, cm: int, cav: int, operator: str) -> None:
+        """Set up the phase context and start the probe steps in a background thread."""
         self.update_pv_addresses(f"{cm:02d}", str(cav))
         cavity = self._get_machine_cavity(cm, cav)
         self._cavity = cavity
@@ -165,12 +230,15 @@ class FrequencyTuningController(QObject):
             run_intent="commissioning",
         )
         self.phase = FrequencyTuningPhase(self.context)
+        self._phase_started = False
 
         is_valid, message = self.phase.validate_prerequisites()
         if not is_valid:
             self.view.show_error(f"Prerequisites not met: {message}")
             return
 
+        self._steps = _PROBE_STEPS
+        self._finalize_after_run = False
         self._set_running_ui_state()
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -189,15 +257,19 @@ class FrequencyTuningController(QObject):
         )
         self.context.parameters["tuning_update_callback"] = (
             lambda steps, detune: self.view.tuning_data_signal.emit(
-                steps, detune
+                time.time(), detune
             )
         )
-        self._steps = self.phase.get_phase_steps()
+        finalize = self._finalize_after_run
+        steps = list(self._steps)
 
         def worker() -> None:
             try:
-                self.phase._mark_phase_started()
-                for step_name in self._steps:
+                if not self._phase_started:
+                    self.phase._mark_phase_started()
+                    self._phase_started = True
+
+                for step_name in steps:
                     if not self._check_pause_and_abort():
                         return
 
@@ -208,11 +280,29 @@ class FrequencyTuningController(QObject):
                         )
                         return
 
-                self._finalize_background_phase()
+                if finalize:
+                    self._finalize_background_phase()
+                else:
+                    hz = self.phase._hz_per_microstep or 0.0
+                    self._probe_stage_done.emit(hz)
             except Exception as exc:
                 self.phase_run_finished.emit(False, str(exc))
 
         Thread(target=worker, daemon=True).start()
+
+    def _on_probe_stage_done(self, hz_per_step: float) -> None:
+        self.view.run_button.setEnabled(True)
+        self.view.pause_button.setEnabled(False)
+        self.view.abort_button.setEnabled(False)
+        self.view.local_phase_status.setText("PROBE DONE")
+        if hasattr(self.view, "confirm_tune_button"):
+            self.view.confirm_tune_button.setEnabled(True)
+        if hasattr(self.view, "hz_per_step_label"):
+            self.view.hz_per_step_label.setText(f"{hz_per_step:.4f} Hz/step")
+        self._log_signal.emit(
+            f"Probe complete: {hz_per_step:.4f} Hz/step. "
+            "Review the value, then click 'Apply & Tune' to proceed."
+        )
 
     def _execute_single_step(self, step_name: str) -> bool:
         import time
@@ -435,6 +525,48 @@ class FrequencyTuningController(QObject):
             self.context.request_abort()
             self.view.log_message("Abort requested...")
             self.view.abort_button.setEnabled(False)
+
+    # ------------------------------------------------------------------
+    # Manual stepper controls
+    # ------------------------------------------------------------------
+
+    def get_live_detune(self) -> float | None:
+        if self._cavity is None:
+            return None
+        try:
+            return float(self._cavity.detune_chirp)
+        except Exception:
+            return None
+
+    def on_move_left(self) -> None:
+        if self._cavity is None:
+            self.view.log_message("No cavity selected — cannot move stepper.")
+            return
+        cavity = self._cavity
+        Thread(
+            target=self._do_stepper_move, args=(cavity, False), daemon=True
+        ).start()
+
+    def on_move_right(self) -> None:
+        if self._cavity is None:
+            self.view.log_message("No cavity selected — cannot move stepper.")
+            return
+        cavity = self._cavity
+        Thread(
+            target=self._do_stepper_move, args=(cavity, True), daemon=True
+        ).start()
+
+    def _do_stepper_move(self, cavity, positive: bool) -> None:
+        try:
+            stepper = cavity.stepper_tuner
+            if positive:
+                stepper.move_positive()
+                self._log_signal.emit("Stepper: issuing move right (positive)")
+            else:
+                stepper.move_negative()
+                self._log_signal.emit("Stepper: issuing move left (negative)")
+        except Exception as exc:
+            self._log_signal.emit(f"Stepper move error: {exc}")
 
     def on_pause_test(self) -> None:
         if self._paused:
