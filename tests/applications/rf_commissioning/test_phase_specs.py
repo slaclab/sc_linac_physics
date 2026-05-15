@@ -8,21 +8,8 @@ from sc_linac_physics.applications.rf_commissioning.ui.container.phase_specs imp
 )
 
 
-def test_default_phase_specs_hide_placeholder_tabs_for_beta() -> None:
+def test_default_phase_specs_includes_all_phases() -> None:
     specs = build_default_phase_specs()
-
-    assert [spec.phase for spec in specs] == [
-        CommissioningPhase.PIEZO_PRE_RF,
-        CommissioningPhase.SSA_CHAR,
-    ]
-    assert [spec.title for spec in specs] == [
-        "Piezo Pre-RF",
-        "SSA Calibration",
-    ]
-
-
-def test_default_phase_specs_can_include_all_placeholder_tabs() -> None:
-    specs = build_default_phase_specs(include_placeholder_phases=True)
 
     assert [spec.phase for spec in specs] == [
         CommissioningPhase.PIEZO_PRE_RF,
