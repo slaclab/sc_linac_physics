@@ -153,10 +153,10 @@ class _PersistenceMixin:
         cryomodule = self.cryomodule_combo.currentText()
         cavity = self.cavity_combo.currentText()
 
-        if cryomodule == "Select CM..." or not cryomodule:
+        if cryomodule == "CM..." or not cryomodule:
             cryomodule = None
 
-        if cavity == "Select Cav..." or not cavity:
+        if cavity == "Cav..." or not cavity:
             cavity = None
 
         linac = None

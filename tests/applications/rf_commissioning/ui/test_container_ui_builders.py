@@ -22,6 +22,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
 
 def _make_header_host():
     return SimpleNamespace(
+        _on_linac_selection_changed=Mock(),
         _on_cavity_selection_changed=Mock(),
         _on_operator_changed=Mock(),
         _populate_operator_combo=Mock(),
@@ -45,7 +46,7 @@ def test_build_header_panel_wires_controls_and_actions(qtbot):
 
     buttons = panel.findChildren(type(host.open_magnet_checkout_btn))
     labels = {b.text() for b in buttons}
-    assert "Open Magnet Checkout" in labels
+    assert "Open" in labels
     assert "Batch Pre-RF" in labels
     assert "📊 Measurements" in labels
     assert "🗄️ Database" in labels

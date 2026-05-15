@@ -2,7 +2,7 @@
 
 
 class _RecordLifecycleMixin:
-    def start_new_record(self, cryomodule: str, cavity_number: int) -> bool:
+    def start_new_record(self, cryomodule: str, cavity_number: str) -> bool:
         """Start a new commissioning record."""
         record, _record_id, created = self.session.start_new_record(
             cryomodule, cavity_number
@@ -53,6 +53,12 @@ class _RecordLifecycleMixin:
 
     def _sync_cavity_selection_from_record(self, record) -> None:
         """Sync header cavity selection to a loaded record."""
+        linac_str = f"L{record.linac}B"
+        linac_index = self.linac_combo.findText(linac_str)
+        if linac_index >= 0:
+            # Triggers _on_linac_selection_changed, repopulating cryomodule_combo
+            self.linac_combo.setCurrentIndex(linac_index)
+
         cm_index = self.cryomodule_combo.findText(record.cryomodule)
         if cm_index >= 0:
             self.cryomodule_combo.setCurrentIndex(cm_index)

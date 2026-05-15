@@ -136,6 +136,10 @@ def host_stub(qtbot):
         lambda *a, **kw: records.confirm_and_start_new(host, *a, **kw)
     )
 
+    host.linac_combo = QComboBox()
+    host.linac_combo.addItem("All")
+    host.linac_combo.addItem("L0B")
+    host.linac_combo.addItem("L1B")
     host.cryomodule_combo = QComboBox()
     host.cryomodule_combo.addItem("Select CM...")
     host.cryomodule_combo.addItem("01")
@@ -240,6 +244,7 @@ def test_record_lifecycle_start_load_and_advance(host_stub):
         current_phase=CommissioningPhase.SSA_CHAR,
         cryomodule="01",
         cavity_number=1,
+        linac=0,
     )
     host_stub.session.start_new_record = Mock(return_value=(record, 10, False))
 
