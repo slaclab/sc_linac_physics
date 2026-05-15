@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.23.0 (2026-05-15)
+
+### Features
+
+- **rf-commissioning-ui**: Add linac-based CM filtering and sync header selections
+  ([#253](https://github.com/slaclab/sc_linac_physics/pull/253),
+  [`d3460a8`](https://github.com/slaclab/sc_linac_physics/commit/d3460a8fc6cad2f8b98b58bfb603b49a06b2b246))
+
+
 ## v9.22.2 (2026-05-14)
 
 ### Refactoring
