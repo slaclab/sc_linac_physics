@@ -1,0 +1,61 @@
+name: Package Verification
+
+on:
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install build tools
+        run: |
+          python -m pip install -U pip
+          pip install build twine check-manifest
+
+      - name: Check manifest
+        run: check-manifest -v
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package with twine
+        run: twine check dist/*
+
+      - name: Verify critical files in package
+        run: |
+          TARBALL=$(ls dist/*.tar.gz)
+          tar -tzf "$TARBALL" | grep -q "faults.csv" || (echo "ERROR: faults.csv missing from package!" && exit 1)
+          echo "Data files in package:"
+          tar -tzf "$TARBALL" | grep -E '\.(csv|yaml|yml|json|ui|mat)$' || true
+
+      - name: Test installation from wheel
+        run: |
+          python -m venv /tmp/test_env
+          source /tmp/test_env/bin/activate
+          pip install "$(ls dist/*.whl)"
+          python -c "import sc_linac_physics; print('Import OK:', sc_linac_physics.__version__)"
+          python -c "
+          from pathlib import Path
+          import sc_linac_physics
+          p = Path(sc_linac_physics.__file__).parent / 'displays/cavity_display/utils/faults.csv'
+          assert p.exists(), f'faults.csv not found at {p}'
+          print('faults.csv OK')
+          "
+          sc-linac --help > /dev/null 2>&1 && echo "CLI OK" || echo "CLI skipped (may require display)"
+          deactivate
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-dist
+          path: dist/*
+          retention-days: 7

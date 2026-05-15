@@ -33,7 +33,7 @@ Each iteration (~every N seconds):
 1. Batch-reads all 296 cavity `tune_config` and `df_cold` PVs via `PVBatch.get_values()`
 2. Upserts current values into SQLite `cavity_state` table
 3. Appends a versioned snapshot to `df_cold_version` table (append-only, never updated)
-4. Writes a JSON summary to `{json_dir}/tune_status.json` for low-latency GUI consumption
+4. Writes a JSON summary to `tune_status.json` in the platform JSON directory (`/home/physics/srf/json` on Linux, `~/json` on macOS) for low-latency GUI consumption
 
 The dual-persistence approach (SQLite for historical queries + JSON file for live reads) avoids database overhead on every GUI refresh.
 

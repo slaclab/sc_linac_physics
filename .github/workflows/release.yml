@@ -1,7 +1,8 @@
 name: Release
+
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -13,236 +14,46 @@ permissions:
   pull-requests: write
 
 jobs:
+  get-versions:
+    uses: ./.github/workflows/_get-versions.yml
+    with:
+      production-python: ${{ vars.PRODUCTION_PYTHON }}
+
   test:
-    name: Test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    needs: [get-versions]
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12', '3.13']
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: |
-            pyproject.toml
-            **/requirements*.txt
-      - name: Install system packages (for headless Qt)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-      - name: Install project and test deps
-        run: |
-          python -m pip install -U pip
-          pip install -e .[test]
-      - name: Configure test environment
-        run: |
-          echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
-          echo "QT_OPENGL=software" >> $GITHUB_ENV
-          echo "PYDM_DEFAULT_PROTOCOL=fake" >> $GITHUB_ENV
-          echo "MPLBACKEND=Agg" >> $GITHUB_ENV
-      - name: Run tests (with coverage)
-        run: |
-          xvfb-run -a pytest --cov=sc_linac_physics --cov-report=xml
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.python-version }}
-          path: coverage.xml
-          if-no-files-found: warn
+        python-version: ${{ fromJSON(needs.get-versions.outputs.required) }}
+    uses: ./.github/workflows/_test.yml
+    with:
+      python-version: ${{ matrix.python-version }}
 
   test-experimental:
-    name: Test (Python ${{ matrix.python-version }}) [Experimental]
-    runs-on: ubuntu-latest
+    needs: [get-versions]
     continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.14']
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: |
-            pyproject.toml
-            **/requirements*.txt
-      - name: Install system packages (for headless Qt)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-      - name: Install project and test deps
-        run: |
-          python -m pip install -U pip
-          pip install -e .[test]
-      - name: Configure test environment
-        run: |
-          echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
-          echo "QT_OPENGL=software" >> $GITHUB_ENV
-          echo "PYDM_DEFAULT_PROTOCOL=fake" >> $GITHUB_ENV
-          echo "MPLBACKEND=Agg" >> $GITHUB_ENV
-      - name: Run tests (with coverage)
-        run: |
-          xvfb-run -a pytest --cov=sc_linac_physics --cov-report=xml
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.python-version }}
-          path: coverage.xml
-          if-no-files-found: warn
+        python-version: ${{ fromJSON(needs.get-versions.outputs.experimental) }}
+    uses: ./.github/workflows/_test.yml
+    with:
+      python-version: ${{ matrix.python-version }}
 
-  package-verification:
-    name: Verify Package
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-
-      - name: Install build tools
-        run: |
-          python -m pip install -U pip
-          pip install build twine check-manifest
-
-      - name: Run check-manifest
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Running check-manifest..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          check-manifest -v
-
-      - name: Build package
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Building package..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          python -m build
-
-      - name: Check package with twine
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Checking package with twine..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          twine check dist/*
-
-      - name: Verify critical files in package
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Verifying critical files in package..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          TARBALL=$(ls dist/*.tar.gz)
-          
-          # Check for faults.csv
-          if tar -tzf "$TARBALL" | grep -q "faults.csv"; then
-            echo "✓ Found faults.csv"
-          else
-            echo "✗ ERROR: faults.csv is missing from package!"
-            exit 1
-          fi
-          
-          # List all data files
-          echo ""
-          echo "Data files in package:"
-          tar -tzf "$TARBALL" | grep -E '\.(csv|yaml|yml|json|ui|mat)$' || echo "No data files found"
-          
-          # File count summary
-          echo ""
-          echo "Package contents summary:"
-          echo "  Total files: $(tar -tzf "$TARBALL" | wc -l)"
-          echo "  Python files: $(tar -tzf "$TARBALL" | grep -c '\.py$')"
-          echo "  CSV files: $(tar -tzf "$TARBALL" | grep -c '\.csv$' || echo 0)"
-          echo "  YAML files: $(tar -tzf "$TARBALL" | grep -c '\.yaml$\|\.yml$' || echo 0)"
-          echo "  JSON files: $(tar -tzf "$TARBALL" | grep -c '\.json$' || echo 0)"
-          echo "  UI files: $(tar -tzf "$TARBALL" | grep -c '\.ui$' || echo 0)"
-          echo "  MAT files: $(tar -tzf "$TARBALL" | grep -c '\.mat$' || echo 0)"
-
-      - name: Test installation from wheel
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Testing installation from built wheel..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          # Create fresh virtual environment
-          python -m venv /tmp/test_install_env
-          source /tmp/test_install_env/bin/activate
-          
-          # Install from wheel
-          WHEEL=$(ls dist/*.whl)
-          pip install "$WHEEL"
-          
-          # Test import
-          python -c "import sc_linac_physics; print(f'✓ Import successful - version: {sc_linac_physics.__version__}')"
-          
-          # Verify faults.csv is accessible
-          python << 'EOF'
-          from pathlib import Path
-          import sc_linac_physics
-          
-          package_path = Path(sc_linac_physics.__file__).parent
-          faults_csv = package_path / "displays/cavity_display/utils/faults.csv"
-          
-          if not faults_csv.exists():
-              print(f"✗ ERROR: faults.csv not found at {faults_csv}")
-              exit(1)
-          
-          print(f"✓ faults.csv found at {faults_csv}")
-          with open(faults_csv, 'r') as f:
-              lines = f.readlines()
-              print(f"✓ Contains {len(lines)} lines")
-              if len(lines) < 1:
-                  print("✗ ERROR: faults.csv is empty!")
-                  exit(1)
-          EOF
-          
-          # Test CLI (basic check)
-          if sc-linac --help > /dev/null 2>&1; then
-            echo "✓ CLI executable"
-          else
-            echo "⚠ CLI test skipped (may require display)"
-          fi
-          
-          deactivate
-          echo "✓ Installation test passed"
-
-      - name: Upload build artifacts for release
-        uses: actions/upload-artifact@v4
-        with:
-          name: package-dist
-          path: dist/*
-          retention-days: 7
+  package:
+    uses: ./.github/workflows/_package.yml
 
   release:
-    needs: [test, package-verification]
+    needs: [test, package]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
           token: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
@@ -250,67 +61,37 @@ jobs:
       - name: Install tooling
         run: |
           python -m pip install -U pip
-          pip install -U python-semantic-release build
+          pip install python-semantic-release build
 
-      - name: Ensure tags are available
+      - name: Fetch tags
         run: git fetch --tags --force
 
-      - name: Configure git credentials
+      - name: Configure git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global url."https://x-access-token:${{ secrets.SEMANTIC_RELEASE_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Run semantic-release version
-        id: release_version
+      - name: Run semantic-release
+        id: release
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
           GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
         run: |
-          echo "=== Git Status ==="
           git log --oneline -5
-          git tag -l | tail -5 || echo "No tags found"
-          echo ""
-          echo "=== Creating new version ==="
           semantic-release version
 
-      - name: Build verified package
-        if: steps.release_version.outputs.released == 'true'
-        run: |
-          echo "=== Building package from tagged version ==="
-          python -m build
-          ls -lh dist/
-
-      - name: Download package verification artifacts
-        if: steps.release_version.outputs.released == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: package-dist
-          path: dist-verified/
-
-      - name: Run semantic-release publish
-        if: steps.release_version.outputs.released == 'true'
+      - name: Build and publish
+        if: steps.release.outputs.released == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
           GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
         run: |
-          echo "=== Publishing to GitHub ==="
+          python -m build
           semantic-release publish
-
-      - name: Upload release assets
-        if: steps.release_version.outputs.released == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-        run: |
           TAG=$(git describe --tags --abbrev=0)
-          echo "Uploading assets for release: $TAG"
           gh release upload "$TAG" dist/*.whl dist/*.tar.gz --clobber
-      
+
       - name: No release needed
-        if: steps.release_version.outputs.released == 'false'
-        run: |
-          echo "ℹ️ No new release needed - version ${{ steps.release_version.outputs.version }} already exists"
-          echo "To trigger a release, ensure commits follow conventional commit format:"
-          echo "  - feat: for new features (minor version bump)"
-          echo "  - fix: for bug fixes (patch version bump)"
-          echo "  - BREAKING CHANGE: for breaking changes (major version bump)"
+        if: steps.release.outputs.released == 'false'
+        run: echo "No new release — no qualifying commits since ${{ steps.release.outputs.version }}"

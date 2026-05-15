@@ -1,11 +1,8 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
 name: CI
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,211 +12,47 @@ permissions:
   contents: read
 
 jobs:
+  get-versions:
+    uses: ./.github/workflows/_get-versions.yml
+    with:
+      production-python: ${{ vars.PRODUCTION_PYTHON }}
+
   test:
-    runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.experimental == true }}
+    needs: [get-versions]
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.12' , '3.13']
-        experimental: [false]
-        include:
-          - python-version: '3.14'
-            experimental: true
-    env:
-      QT_QPA_PLATFORM: offscreen
-      PIP_DISABLE_PIP_VERSION_CHECK: 1
-      PIP_NO_PYTHON_VERSION_WARNING: 1
-      PYDM_DEFAULT_PROTOCOL: fake
-      PYTEST_ADDOPTS: -vv -ra --durations=10 --tb=long -l
+        python-version: ${{ fromJSON(needs.get-versions.outputs.required) }}
+    uses: ./.github/workflows/_test.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+
+  test-experimental:
+    needs: [get-versions]
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(needs.get-versions.outputs.experimental) }}
+    uses: ./.github/workflows/_test.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+
+  lint:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.12'
           cache: pip
-          cache-dependency-path: |
-            pyproject.toml
-            requirements.txt
-        continue-on-error: ${{ matrix.experimental == true }}
-
-      - name: Install system packages (Xvfb for Qt tests)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libxkbcommon-x11-0 libglu1-mesa libxcb-xinerama0
-
-      - name: Upgrade pip tooling
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install project (pyproject)
-        if: ${{ hashFiles('pyproject.toml') != '' }}
-        run: |
-          pip install -e ".[test]" || pip install -e .
-
-      - name: Install requirements.txt (fallback)
-        if: ${{ hashFiles('pyproject.toml') == '' && hashFiles('requirements.txt') != '' }}
-        run: pip install -r requirements.txt
-
-      - name: Ensure package importable (fallback to src on PYTHONPATH)
-        shell: bash
-        run: |
-          python - <<'PY'
-          try:
-              import sc_linac_physics  # noqa: F401
-              print("Package import OK.")
-          except ModuleNotFoundError:
-              print("Package not importable; adding src to PYTHONPATH for this job.")
-              import os
-              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-                  f.write(f"PYTHONPATH={os.getcwd()}/src\n")
-          PY
-
-      - name: Ensure dev tooling present
-        run: pip install -U pytest pytest-qt pytest-cov flake8 black pytest-asyncio
-
+          cache-dependency-path: pyproject.toml
+      - name: Install lint tools
+        run: pip install flake8 black
       - name: Lint
         run: |
           flake8 . --count --max-complexity=10 --max-line-length=120 --show-source --statistics
           black --check .
 
-      - name: Run tests with coverage (headless Qt)
-        env:
-          COVERAGE_FILE: .coverage.${{ matrix.python-version }}
-        run: |
-          xvfb-run -a pytest \
-            --cov=sc_linac_physics \
-            --cov-branch \
-            --cov-report=term-missing \
-            --cov-fail-under=80
-
-      - name: Download coverage from matrix
-        uses: actions/download-artifact@v4
-        with:
-          pattern: coverage-*
-          merge-multiple: true
-        continue-on-error: true
-
-      - name: Combine and generate reports
-        run: |
-          python -m pip install --upgrade coverage
-          coverage combine
-          coverage report -m
-          coverage xml -o coverage.xml
-          coverage html -d htmlcov
-        continue-on-error: true
-
-      - name: Upload combined coverage artifacts
-        if: ${{ matrix.python-version == '3.12' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-merged
-          path: |
-            .coverage
-            coverage.xml
-            htmlcov/**
-          retention-days: 7
-
-      - name: Check package manifest
-        if: ${{ matrix.python-version == '3.12' }}
-        run: |
-          pip install check-manifest
-          check-manifest
-
-      - name: Build sdist and wheel
-        if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
-        run: |
-          pip install build twine
-          python -m build
-          twine check dist/*
-
-      - name: Verify package contents
-        if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Verifying critical files in package..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          TARBALL=$(ls dist/*.tar.gz)
-          
-          # Check for faults.csv
-          if tar -tzf "$TARBALL" | grep -q "faults.csv"; then
-            echo "✓ Found faults.csv"
-          else
-            echo "✗ ERROR: faults.csv is missing from package!"
-            exit 1
-          fi
-          
-          # List all data files
-          echo ""
-          echo "Data files in package:"
-          tar -tzf "$TARBALL" | grep -E '\.(csv|yaml|yml|json|ui|mat)$' || echo "No data files found"
-          
-          # File count summary
-          echo ""
-          echo "Package contents summary:"
-          echo "  Total files: $(tar -tzf "$TARBALL" | wc -l)"
-          echo "  Python files: $(tar -tzf "$TARBALL" | grep -c '\.py$')"
-          echo "  CSV files: $(tar -tzf "$TARBALL" | grep -c '\.csv$' || echo 0)"
-          echo "  YAML files: $(tar -tzf "$TARBALL" | grep -c '\.yaml$\|\.yml$' || echo 0)"
-          echo "  JSON files: $(tar -tzf "$TARBALL" | grep -c '\.json$' || echo 0)"
-          echo "  UI files: $(tar -tzf "$TARBALL" | grep -c '\.ui$' || echo 0)"
-          echo "  MAT files: $(tar -tzf "$TARBALL" | grep -c '\.mat$' || echo 0)"
-
-      - name: Test installation from wheel
-        if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Testing installation from built wheel..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          # Create fresh virtual environment
-          python -m venv /tmp/test_install_env
-          source /tmp/test_install_env/bin/activate
-          
-          # Install from wheel
-          WHEEL=$(ls dist/*.whl)
-          pip install "$WHEEL"
-          
-          # Test import
-          python -c "import sc_linac_physics; print(f'✓ Import successful - version: {sc_linac_physics.__version__}')"
-          
-          # Verify faults.csv is accessible
-          python << 'EOF'
-          from pathlib import Path
-          import sc_linac_physics
-          
-          package_path = Path(sc_linac_physics.__file__).parent
-          faults_csv = package_path / "displays/cavity_display/utils/faults.csv"
-          
-          if not faults_csv.exists():
-              print(f"✗ ERROR: faults.csv not found at {faults_csv}")
-              exit(1)
-          
-          print(f"✓ faults.csv found at {faults_csv}")
-          with open(faults_csv, 'r') as f:
-              lines = f.readlines()
-              print(f"✓ Contains {len(lines)} lines")
-              if len(lines) < 1:
-                  print("✗ ERROR: faults.csv is empty!")
-                  exit(1)
-          EOF
-          
-          # Test CLI (basic check)
-          if sc-linac --help > /dev/null 2>&1; then
-            echo "✓ CLI executable"
-          else
-            echo "⚠ CLI test skipped (may require display)"
-          fi
-          
-          deactivate
-          echo "✓ Installation test passed"
-
-      - name: Upload build artifacts
-        if: ${{ matrix.python-version == '3.12' && (hashFiles('pyproject.toml') != '' || hashFiles('setup.py') != '') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/*
+  package:
+    uses: ./.github/workflows/_package.yml

@@ -1,0 +1,76 @@
+name: Get Python Versions
+
+on:
+  workflow_call:
+    inputs:
+      production-python:
+        required: true
+        type: string
+        description: The production Python version (e.g. '3.12')
+    outputs:
+      required:
+        description: JSON array of required Python versions [production, next]
+        value: ${{ jobs.compute.outputs.required }}
+      experimental:
+        description: JSON array of experimental Python versions (beyond required)
+        value: ${{ jobs.compute.outputs.experimental }}
+
+jobs:
+  compute:
+    runs-on: ubuntu-latest
+    outputs:
+      required: ${{ steps.versions.outputs.required }}
+      experimental: ${{ steps.versions.outputs.experimental }}
+    steps:
+      - name: Compute Python version matrix
+        id: versions
+        env:
+          PRODUCTION: ${{ inputs.production-python }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.request
+          from datetime import date
+
+          production = os.environ['PRODUCTION']
+          prod_minor = int(production.split('.')[1])
+          today = date.today().isoformat()
+
+          try:
+              url = 'https://endoflife.date/api/python.json'
+              with urllib.request.urlopen(url, timeout=10) as r:
+                  data = json.load(r)
+
+              versions = []
+              for v in data:
+                  cycle = v['cycle']
+                  parts = cycle.split('.')
+                  if len(parts) < 2:
+                      continue
+                  major, minor = int(parts[0]), int(parts[1])
+                  if major != 3 or minor < prod_minor:
+                      continue
+                  # Skip unreleased versions
+                  if v.get('releaseDate', '9999-99-99') > today:
+                      continue
+                  # Skip EOL versions
+                  eol = v.get('eol', '9999-99-99')
+                  if isinstance(eol, str) and eol < today:
+                      continue
+                  versions.append(cycle)
+
+              versions = sorted(versions, key=lambda v: int(v.split('.')[1]))
+              required = versions[:2]
+              experimental = versions[2:]
+
+          except Exception as e:
+              print(f"Warning: could not fetch version data: {e}", file=sys.stderr)
+              required = [production]
+              experimental = []
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"required={json.dumps(required)}\n")
+              f.write(f"experimental={json.dumps(experimental)}\n")
+
+          print(f"Required:     {required}")
+          print(f"Experimental: {experimental}")
+          PY
