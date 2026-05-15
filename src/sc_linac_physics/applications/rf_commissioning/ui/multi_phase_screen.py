@@ -26,6 +26,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     ALL_CRYOMODULES,
     get_linac_for_cryomodule,
     LINAC_CM_MAP,
+    LINAC_TUPLES,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
     PhaseTabSpec,
@@ -43,6 +44,10 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
 from sc_linac_physics.applications.rf_commissioning.ui.magnet_checkout_dialog import (
     MagnetCheckoutDialog,
 )
+
+_LINAC_INDEX_BY_NAME = {
+    name: idx for idx, (name, _cryomodules) in enumerate(LINAC_TUPLES)
+}
 
 
 class MultiPhaseCommissioningDisplay(
@@ -148,8 +153,9 @@ class MultiPhaseCommissioningDisplay(
         if linac == "All":
             self.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
         else:
-            linac_idx = ["L0B", "L1B", "L2B", "L3B", "L4B"].index(linac)
-            self.cryomodule_combo.addItems(LINAC_CM_MAP[linac_idx])
+            linac_idx = _LINAC_INDEX_BY_NAME.get(linac)
+            if linac_idx is not None:
+                self.cryomodule_combo.addItems(LINAC_CM_MAP[linac_idx])
         self.cryomodule_combo.blockSignals(False)
         self._refresh_magnet_badge("CM...")
         self._refresh_cavity_completion_label("CM...")

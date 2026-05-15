@@ -13,6 +13,10 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.ui.multi_phase_screen import (
     MultiPhaseCommissioningDisplay,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    ALL_CRYOMODULES,
+    LINAC_CM_MAP,
+)
 
 
 class _StaticCombo:
@@ -74,6 +78,34 @@ def test_on_cavity_selection_changed_starts_or_loads(display_stub, monkeypatch):
         True,
         "New record started",
     )
+
+
+def test_on_linac_selection_changed_all_populates_all_cryomodules(display_stub):
+    display_stub.linac_combo = _StaticCombo("All")
+    display_stub.cryomodule_combo = QComboBox()
+
+    MultiPhaseCommissioningDisplay._on_linac_selection_changed(display_stub)
+
+    combo_items = [
+        display_stub.cryomodule_combo.itemText(i)
+        for i in range(display_stub.cryomodule_combo.count())
+    ]
+    assert combo_items[0] == "CM..."
+    assert combo_items[1:] == sorted(ALL_CRYOMODULES)
+
+
+def test_on_linac_selection_changed_linac_uses_shared_mapping(display_stub):
+    display_stub.linac_combo = _StaticCombo("L1B")
+    display_stub.cryomodule_combo = QComboBox()
+
+    MultiPhaseCommissioningDisplay._on_linac_selection_changed(display_stub)
+
+    combo_items = [
+        display_stub.cryomodule_combo.itemText(i)
+        for i in range(display_stub.cryomodule_combo.count())
+    ]
+    assert combo_items[0] == "CM..."
+    assert combo_items[1:] == LINAC_CM_MAP[1]
 
 
 def test_refresh_magnet_badge_maps_statuses(display_stub):
