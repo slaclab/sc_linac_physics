@@ -31,11 +31,11 @@ jobs:
           import json, os, sys, urllib.request
           from datetime import date
 
-          production = os.environ['PRODUCTION']
-          prod_minor = int(production.split('.')[1])
           today = date.today().isoformat()
 
           try:
+              production = os.environ['PRODUCTION']
+              prod_minor = int(production.split('.')[1])
               url = 'https://endoflife.date/api/python.json'
               with urllib.request.urlopen(url, timeout=10) as r:
                   data = json.load(r)
@@ -59,11 +59,12 @@ jobs:
                   versions.append(cycle)
 
               versions = sorted(versions, key=lambda v: int(v.split('.')[1]))
-              required = versions[:2]
+              required = versions[:2] or [production]
               experimental = versions[2:]
 
           except Exception as e:
               print(f"Warning: could not fetch version data: {e}", file=sys.stderr)
+              production = os.environ.get('PRODUCTION', '3.12')
               required = [production]
               experimental = []
 

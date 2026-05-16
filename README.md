@@ -14,7 +14,7 @@ For architecture documentation and per-application guides, see [`docs/`](docs/in
 Requires Python 3.12+. If you don't have a Python environment, [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/) is a convenient option:
 
 ```bash
-conda create -n sclp python && conda activate sclp
+conda create -n sclp "python>=3.12" && conda activate sclp
 ```
 
 Install from source (not published to PyPI):

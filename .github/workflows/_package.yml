@@ -44,13 +44,13 @@ jobs:
           source /tmp/test_env/bin/activate
           pip install "$(ls dist/*.whl)"
           python -c "import sc_linac_physics; print('Import OK:', sc_linac_physics.__version__)"
-          python -c "
-          from pathlib import Path
-          import sc_linac_physics
-          p = Path(sc_linac_physics.__file__).parent / 'displays/cavity_display/utils/faults.csv'
-          assert p.exists(), f'faults.csv not found at {p}'
-          print('faults.csv OK')
-          "
+          python3 - <<'PY'
+from pathlib import Path
+import sc_linac_physics
+p = Path(sc_linac_physics.__file__).parent / 'displays/cavity_display/utils/faults.csv'
+assert p.exists(), f'faults.csv not found at {p}'
+print('faults.csv OK')
+PY
           sc-linac --help > /dev/null 2>&1 && echo "CLI OK" || echo "CLI skipped (may require display)"
           deactivate
 
