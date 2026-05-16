@@ -19,24 +19,16 @@ jobs:
 
   test:
     needs: [get-versions]
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ${{ fromJSON(needs.get-versions.outputs.required) }}
     uses: ./.github/workflows/_test.yml
     with:
-      python-version: ${{ matrix.python-version }}
+      python-versions: ${{ needs.get-versions.outputs.required }}
 
   test-experimental:
     needs: [get-versions]
     continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ${{ fromJSON(needs.get-versions.outputs.experimental) }}
     uses: ./.github/workflows/_test.yml
     with:
-      python-version: ${{ matrix.python-version }}
+      python-versions: ${{ needs.get-versions.outputs.experimental }}
 
   lint:
     runs-on: ubuntu-latest

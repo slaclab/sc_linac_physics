@@ -3,13 +3,19 @@ name: Test
 on:
   workflow_call:
     inputs:
-      python-version:
+      python-versions:
         required: true
         type: string
+        description: JSON array of Python versions to test (e.g. '["3.12","3.13"]')
 
 jobs:
   test:
+    if: ${{ inputs.python-versions != '[]' }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(inputs.python-versions) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,7 +23,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ inputs.python-version }}
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: pyproject.toml
 
@@ -39,7 +45,7 @@ jobs:
           MPLBACKEND: Agg
           PIP_DISABLE_PIP_VERSION_CHECK: 1
           PYTEST_ADDOPTS: -vv -ra --durations=10 --tb=long -l
-          COVERAGE_FILE: .coverage.${{ inputs.python-version }}
+          COVERAGE_FILE: .coverage.${{ matrix.python-version }}
         run: |
           xvfb-run -a pytest \
             --cov=sc_linac_physics \
@@ -49,7 +55,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ inputs.python-version }}
+          name: coverage-${{ matrix.python-version }}
           path: coverage.xml
           if-no-files-found: warn
           retention-days: 7
