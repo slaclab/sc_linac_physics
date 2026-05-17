@@ -428,11 +428,12 @@ class TestTimeSeriesPlot:
 
     def test_format_tooltip(self, plot_widget):
         """Test tooltip formatting"""
-        tooltip = plot_widget._format_tooltip("time_series", x=5.123, y=123.456)
+        formatter = plot_widget.get_formatter()
+        tooltip = formatter(5.123, 123.456)
 
-        assert "Time:" in tooltip
-        assert "5.123" in tooltip
-        assert "Detuning:" in tooltip
+        assert "Time" in tooltip
+        assert "5.12" in tooltip
+        assert "Detuning" in tooltip
         assert "123.46" in tooltip
 
     # ===== Clear Plot Tests =====
