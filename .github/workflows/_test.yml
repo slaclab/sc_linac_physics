@@ -7,11 +7,17 @@ on:
         required: true
         type: string
         description: JSON array of Python versions to test (e.g. '["3.12","3.13"]')
+      continue-on-error:
+        required: false
+        type: boolean
+        default: false
+        description: Whether test failures should be allowed (for experimental versions)
 
 jobs:
   test:
     if: ${{ inputs.python-versions != '[]' }}
     runs-on: ubuntu-latest
+    continue-on-error: ${{ inputs.continue-on-error }}
     strategy:
       fail-fast: false
       matrix:
