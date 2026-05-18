@@ -196,8 +196,10 @@ class CavityStatusDisplay(Display):
 if __name__ == "__main__":
     # PyDMApplication owns the event loop and initializes PyDM data plugins.
     # Using plain QApplication here would leave PyDMLabel unable to connect to PVs.
-    app = PyDMApplication()
+    # use_main_window=False prevents PyDM from opening an extra empty window.
+    app = PyDMApplication(use_main_window=False)
     window = CavityStatusDisplay()
+    window.resize(380, 160)
     window.show()
     # exec_() blocks here until the window is closed.
     sys.exit(app.exec_())
@@ -309,8 +311,9 @@ class CryomoduleOverview(Display):
 
 
 if __name__ == "__main__":
-    app = PyDMApplication()
+    app = PyDMApplication(use_main_window=False)
     window = CryomoduleOverview()
+    window.resize(600, 400)
     window.show()
     sys.exit(app.exec_())
 ```
@@ -348,53 +351,91 @@ python cryomodule_overview.py
   sc-sim initializes all cavities to MINOR alarm — labels will appear yellow.
 ```
 
-### Hints
+Before writing any code, skim the **Object hierarchy** and **Instantiation pattern** sections of
+[`docs/utils/linac_model.md`](utils/linac_model.md) — it explains how `Machine`, `Linac`,
+`Cryomodule`, and `Cavity` relate, and shows the `pv_addr` / `pv_prefix` API you will use below.
 
-**Getting the list of cryomodule names for L1B:**
+### Starter code
 
-```python
-from sc_linac_physics.utils.sc_linac.linac_utils import L1B, L1BHL
-
-# L1B = ["02", "03"]
-# L1BHL = ["H1", "H2"]
-all_cms = L1B + L1BHL
-```
-
-**An alarm-sensitive `PyDMLabel` changes color automatically based on EPICS alarm severity:**
+Create `linac_summary.py` and fill in the `TODO` section:
 
 ```python
+import sys
+
+from PyQt5.QtWidgets import (
+    QGridLayout,
+    QLabel,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+from pydm import Display, PyDMApplication
 from pydm.widgets import PyDMLabel
 
-# alarmSensitiveContent changes the text color; alarmSensitiveBorder adds a colored border.
-# EPICS severity 0 = no alarm (green), 1 = minor (yellow), 2 = major (red), 3 = invalid (magenta).
-# This correctly handles all severity levels — no manual bit manipulation needed.
-fault_label = PyDMLabel(init_channel=prefix + "CUDSTATUS")
-fault_label.alarmSensitiveBorder = True
-fault_label.alarmSensitiveContent = True
-fault_label.setFixedWidth(50)
+from sc_linac_physics.utils.sc_linac.linac import Machine
+
+# Build the full hardware object tree.  No EPICS connections are made yet —
+# PVs are only opened when a widget first accesses them.
+MACHINE = Machine()
+LINAC = MACHINE.linacs[1]  # machine.linacs is ordered [L0B, L1B, L2B, L3B, L4B]
+
+
+class LinacSummary(Display):
+    def __init__(self, parent=None, args=None, macros=None):
+        super().__init__(parent=parent, args=args, macros=macros)
+        self.setWindowTitle(f"{LINAC.name} Fault Summary")
+
+        outer = QVBoxLayout()
+        self.setLayout(outer)
+
+        # Wrap the grid in a scroll area so the window stays a manageable size.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        grid = QGridLayout()
+        container.setLayout(grid)
+        scroll.setWidget(container)
+        outer.addWidget(scroll)
+
+        # Header row: one column label per cavity number.
+        grid.addWidget(QLabel("CM"), 0, 0)
+        for col, cav_num in enumerate(range(1, 9), start=1):
+            grid.addWidget(QLabel(f"CAV{cav_num}"), 0, col)
+
+        # Data rows: one row per cryomodule, one cell per cavity.
+        # linac.cryomodules is a dict keyed by name string ("02", "H1", …).
+        # cm.cavities is a dict keyed by cavity number int (1–8).
+        for row, (cm_name, cm) in enumerate(LINAC.cryomodules.items(), start=1):
+            grid.addWidget(QLabel(cm_name), row, 0)
+            for col, cavity in enumerate(cm.cavities.values(), start=1):
+                # TODO: create a PyDMLabel connected to cavity.pv_addr("CUDSTATUS")
+                #       set alarmSensitiveBorder and alarmSensitiveContent to True
+                #       set a fixed width of 50 and add it to the grid
+                pass
+
+
+if __name__ == "__main__":
+    app = PyDMApplication(use_main_window=False)
+    window = LinacSummary()
+    window.resize(600, 250)
+    window.show()
+    sys.exit(app.exec_())
 ```
 
-**Using a `QGridLayout` for the table:**
+### Run it
 
-```python
-from PyQt5.QtWidgets import QGridLayout
-
-grid = QGridLayout()
-grid.addWidget(QLabel("CM"), 0, 0)           # row 0, col 0
-grid.addWidget(QLabel("CAV1"), 0, 1)         # row 0, col 1
-# ... add LED widgets at (row, col) positions ...
+```bash
+python linac_summary.py
 ```
 
-**Structure to aim for:**
+### Things to try
 
-```python
-for row_idx, cm_name in enumerate(all_cms, start=1):
-    grid.addWidget(QLabel(cm_name), row_idx, 0)
-    for col_idx, cav_num in enumerate(range(1, 9), start=1):
-        prefix = build_cavity_pv_prefix("L1B", cm_name, cav_num)
-        led = ...  # create the LED for this cavity
-        grid.addWidget(led, row_idx, col_idx)
-```
+- `cavity.pv_addr(suffix)` is equivalent to `cavity.pv_prefix + suffix`. Print
+  `cavity.pv_prefix` for a few cavities to see the full PV naming scheme in action.
+- Try iterating over `MACHINE.linacs` instead of a single linac to show all five sections.
+  What layout changes are needed to keep it readable?
+- `cm.cavities` is a `Dict[int, Cavity]`. What other attributes does `Cavity` expose?
+  Browse `utils/sc_linac/cavity.py` and add a second grid showing a different PV.
 
 ---
 
