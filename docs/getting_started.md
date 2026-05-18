@@ -441,7 +441,7 @@ python linac_summary.py
 
 ## Next Steps
 
-Once you're comfortable with these exercises:
+Once you're comfortable with the exercises above, you can find more detailed documentation and information in the following files:
 
 - **`docs/utils/linac_model.md`** — complete PV naming reference and hardware constants.
 - **`docs/utils/shared_utilities.md`** — the `PV` wrapper, `PVBatch`, logging.
