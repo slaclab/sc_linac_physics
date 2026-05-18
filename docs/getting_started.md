@@ -8,8 +8,8 @@ By the end you will have written three working displays from scratch, each build
 Follow the installation steps in [README.md](../README.md):
 
 ```bash
-conda create -n sc_linac python=3.12
-conda activate sc_linac
+conda create -n sclp python=3.12
+conda activate sclp
 pip install -e ".[dev,test]"
 ```
 
@@ -98,7 +98,7 @@ The exercises below connect to a simulated EPICS IOC so you can see live (fake) 
 real hardware. Open a **separate terminal** and run:
 
 ```bash
-conda activate sc_linac
+conda activate sclp
 sc-sim
 ```
 
@@ -123,10 +123,10 @@ Values will be zero or empty, but the display will still open.
 
 ```
 ┌─ Cavity L1B:CM02:CAV1 ─────────────────┐
-│  Gradient actual (MV/m):      16.60     │
-│  Drive level (%):              50.00    │
-│  SSA status:                   On       │
-│  Fault code:                   OK       │
+│  Gradient actual (MV/m):      16.0      │
+│  Drive level (%):              0.0      │
+│  SSA status:                  SSA On    │
+│  Fault code:                  TLC       │
 └─────────────────────────────────────────┘
 ```
 
@@ -141,13 +141,12 @@ import sys
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QApplication,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QVBoxLayout,
 )
-from pydm import Display
+from pydm import Display, PyDMApplication
 from pydm.widgets import PyDMLabel
 
 LINAC = "L1B"
@@ -195,8 +194,9 @@ class CavityStatusDisplay(Display):
 
 
 if __name__ == "__main__":
-    # QApplication owns the event loop. There must be exactly one per process.
-    app = QApplication(sys.argv)
+    # PyDMApplication owns the event loop and initializes PyDM data plugins.
+    # Using plain QApplication here would leave PyDMLabel unable to connect to PVs.
+    app = PyDMApplication()
     window = CavityStatusDisplay()
     window.show()
     # exec_() blocks here until the window is closed.
@@ -229,10 +229,10 @@ python cavity_status.py
 
 ```
 ┌─ Cryomodule L1B:CM02 ─────────────────────────────────────────┐
-│  CAV1   Gradient: 16.60 MV/m   SSA: On    Fault: OK           │
-│  CAV2   Gradient: 16.60 MV/m   SSA: On    Fault: OK           │
+│  CAV1   Gradient: 16.0 MV/m   SSA: SSA On   Fault: TLC        │
+│  CAV2   Gradient: 16.0 MV/m   SSA: SSA On   Fault: TLC        │
 │  ...                                                           │
-│  CAV8   Gradient: 16.60 MV/m   SSA: On    Fault: OK           │
+│  CAV8   Gradient: 16.0 MV/m   SSA: SSA On   Fault: TLC        │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -245,7 +245,6 @@ import sys
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QApplication,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -253,7 +252,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QWidget,
 )
-from pydm import Display
+from pydm import Display, PyDMApplication
 from pydm.widgets import PyDMLabel
 
 from sc_linac_physics.utils.sc_linac.linac_utils import build_cavity_pv_prefix
@@ -310,7 +309,7 @@ class CryomoduleOverview(Display):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    app = PyDMApplication()
     window = CryomoduleOverview()
     window.show()
     sys.exit(app.exec_())
@@ -333,20 +332,20 @@ python cryomodule_overview.py
 
 ## Exercise 3: A Linac-Wide Summary
 
-**Goal:** One row per cryomodule, showing a fault LED for each of its 8 cavities.
-**Concepts:** iterating the hardware model, `PyDMByteIndicator`, larger layouts.
+**Goal:** One row per cryomodule, showing a fault indicator for each of its 8 cavities.
+**Concepts:** iterating the hardware model, alarm-sensitive widgets, `QGridLayout`.
 
 ### What you will build
 
 ```
-┌─ L1B Status ───────────────────────────────────────────────────┐
-│           CAV1  CAV2  CAV3  CAV4  CAV5  CAV6  CAV7  CAV8      │
-│  CM02     ●     ●     ●     ○     ●     ●     ●     ●          │
-│  CM03     ●     ●     ●     ●     ●     ●     ●     ●          │
-│  H1       ●     ●     ●     ●     ●     ●     ●     ●          │
-│  H2       ●     ●     ●     ●     ●     ●     ●     ●          │
-└────────────────────────────────────────────────────────────────┘
-  ● = no fault   ○ = fault
+┌─ L1B Status ──────────────────────────────────────────────────────────────────┐
+│        CAV1   CAV2   CAV3   CAV4   CAV5   CAV6   CAV7   CAV8                 │
+│  CM02   TLC    TLC    TLC    TLC    TLC    TLC    TLC    TLC                  │
+│  CM03   TLC    TLC    TLC    TLC    TLC    TLC    TLC    TLC                  │
+│  H1     TLC    TLC    TLC    TLC    TLC    TLC    TLC    TLC                  │
+│  H2     TLC    TLC    TLC    TLC    TLC    TLC    TLC    TLC                  │
+└───────────────────────────────────────────────────────────────────────────────┘
+  sc-sim initializes all cavities to MINOR alarm — labels will appear yellow.
 ```
 
 ### Hints
@@ -361,16 +360,18 @@ from sc_linac_physics.utils.sc_linac.linac_utils import L1B, L1BHL
 all_cms = L1B + L1BHL
 ```
 
-**A `PyDMByteIndicator` shows a colored LED based on a numeric PV value:**
+**An alarm-sensitive `PyDMLabel` changes color automatically based on EPICS alarm severity:**
 
 ```python
-from pydm.widgets import PyDMByteIndicator
+from pydm.widgets import PyDMLabel
 
-led = PyDMByteIndicator(init_channel=prefix + "CUDSEVR")
-led.onColor = led.greenColor    # 0 = no alarm → green
-led.offColor = led.redColor     # non-zero → red
-led.numBits = 1
-led.setFixedSize(20, 20)
+# alarmSensitiveContent changes the text color; alarmSensitiveBorder adds a colored border.
+# EPICS severity 0 = no alarm (green), 1 = minor (yellow), 2 = major (red), 3 = invalid (magenta).
+# This correctly handles all severity levels — no manual bit manipulation needed.
+fault_label = PyDMLabel(init_channel=prefix + "CUDSTATUS")
+fault_label.alarmSensitiveBorder = True
+fault_label.alarmSensitiveContent = True
+fault_label.setFixedWidth(50)
 ```
 
 **Using a `QGridLayout` for the table:**
