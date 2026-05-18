@@ -25,10 +25,10 @@ jobs:
 
   test-experimental:
     needs: [get-versions]
-    continue-on-error: true
     uses: ./.github/workflows/_test.yml
     with:
       python-versions: ${{ needs.get-versions.outputs.experimental }}
+      continue-on-error: true
 
   lint:
     runs-on: ubuntu-latest
