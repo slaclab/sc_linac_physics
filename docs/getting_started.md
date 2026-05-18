@@ -329,7 +329,7 @@ python cryomodule_overview.py
 - The `alarmSensitiveBorder` and `alarmSensitiveContent` properties on `PyDMLabel` make the
   widget change color when the PV goes into alarm. Try setting both to `True` on the fault label.
 - Add a column showing `AACTMEAN` (mean amplitude). How does the layout look with five columns?
-- Try `CM = "H1"` (a high-loaded-Q cryomodule). Does it still run?
+- Try `CM = "H1"` (a third-harmonic cryomodule). Does it still run?
 
 ---
 
