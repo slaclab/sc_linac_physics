@@ -8,7 +8,7 @@ By the end you will have written three working displays from scratch, each build
 Follow the installation steps in [README.md](../README.md):
 
 ```bash
-conda create -n sclp python=3.12
+conda create -n sclp python
 conda activate sclp
 pip install -e ".[dev,test]"
 ```
