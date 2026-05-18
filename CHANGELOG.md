@@ -2,6 +2,83 @@
 
 <!-- version list -->
 
+## v9.23.1 (2026-05-18)
+
+### Bug Fixes
+
+- **ci**: Address Copilot review comments
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Address Copilot review comments
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Fall back to 3.12 when PRODUCTION_PYTHON var is not set
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Fall back to 3.12 when PRODUCTION_PYTHON var is not set
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Move continue-on-error inside reusable workflow
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Move continue-on-error inside reusable workflow
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Move matrix inside reusable workflow to fix dynamic matrix limitation
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Move matrix inside reusable workflow to fix dynamic matrix limitation
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Replace heredoc with single-line python3 -c in _package.yml
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Replace heredoc with single-line python3 -c in _package.yml
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Resolve workflow file validation errors
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Resolve workflow file validation errors
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+### Continuous Integration
+
+- Move version-matrix Python script to .github/scripts/
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- Move version-matrix Python script to .github/scripts/
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+### Documentation
+
+- **ci**: Update README, docs, and refactor workflows
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Update README, docs, and refactor workflows
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Update README, docs, and refactor workflows
+  ([#255](https://github.com/slaclab/sc_linac_physics/pull/255),
+  [`15363ca`](https://github.com/slaclab/sc_linac_physics/commit/15363ca94708c5514d64c0ac703db9a7ecfe836e))
+
+
 ## v9.23.0 (2026-05-15)
 
 ### Features
