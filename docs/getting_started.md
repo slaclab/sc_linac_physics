@@ -5,21 +5,7 @@ By the end you will have written three working displays from scratch, each build
 
 ## Prerequisites
 
-Follow the installation steps in [README.md](../README.md):
-
-```bash
-conda create -n sclp python
-conda activate sclp
-pip install -e ".[dev,test]"
-```
-
-Verify your install:
-
-```bash
-pytest
-```
-
----
+Follow the installation steps in [README.md](../README.md)
 
 ## Background
 
