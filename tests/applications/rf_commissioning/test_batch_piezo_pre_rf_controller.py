@@ -30,14 +30,14 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 
 def _mock_session(*, existing_record_id=None, existing_record=None):
     session = Mock()
-    session.db.get_record_id_for_cavity.return_value = existing_record_id
+    session.get_record_id_for_cavity.return_value = existing_record_id
     if existing_record_id is not None:
         record = existing_record or CommissioningRecord(
             linac=0, cryomodule="01", cavity_number=1
         )
-        session.db.get_record_with_version.return_value = (record, 1)
+        session.get_record_with_version.return_value = (record, 1)
     else:
-        session.db.save_record.return_value = 99
+        session.save_record.return_value = 99
     session.workflow.start_phase_for_record.return_value = SimpleNamespace(
         phase_instance_id=42, run_id=7, attempt_number=1
     )
@@ -136,7 +136,7 @@ class TestInitRecordAndContext:
 
         ctrl._init_record_and_context(state, "op")
 
-        session.db.save_record.assert_called_once()
+        session.save_record.assert_called_once()
         assert state.record is not None
         assert state.record_id == 99
         assert state.record_version == 1
@@ -153,7 +153,7 @@ class TestInitRecordAndContext:
 
         ctrl._init_record_and_context(state, "op")
 
-        session.db.save_record.assert_not_called()
+        session.save_record.assert_not_called()
         assert state.record is existing
         assert state.record_id == 5
         assert state.record_version == 1
@@ -169,7 +169,7 @@ class TestInitRecordAndContext:
 
     def test_raises_when_record_missing_after_id_lookup(self):
         session = _mock_session(existing_record_id=5)
-        session.db.get_record_with_version.return_value = None
+        session.get_record_with_version.return_value = None
         ctrl = _make_controller(session)
         state = CavityRunState(
             spec=CavitySpec(cryomodule="01", cavity_number=1)
@@ -380,7 +380,7 @@ class TestCollectCavity:
     def test_calls_save_record_on_success(self):
         ctrl, state = self._state_with_mock_phase()
         ctrl._collect_cavity(state)
-        ctrl.session.db.save_record.assert_called()
+        ctrl.session.save_record.assert_called()
 
     def test_missing_result_data_emits_failed_and_none_payload(self):
         ctrl, state = self._state_with_mock_phase()
@@ -589,13 +589,13 @@ class TestPersistRecord:
         ctrl, state = _make_state()
         state.record_version = 2
         ctrl._persist_record(state)
-        ctrl.session.db.save_record.assert_called_with(
+        ctrl.session.save_record.assert_called_with(
             state.record, state.record_id, expected_version=2
         )
 
     def test_save_record_exception_does_not_propagate(self):
         ctrl, state = _make_state()
-        ctrl.session.db.save_record.side_effect = RuntimeError("db down")
+        ctrl.session.save_record.side_effect = RuntimeError("db down")
         ctrl._persist_record(state)  # should not raise
 
 

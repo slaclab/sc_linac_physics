@@ -5,14 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Run all tests (headless Qt required)
-QT_QPA_PLATFORM=offscreen pytest
+# Run all tests
+pytest
 
 # Run a single test file
-QT_QPA_PLATFORM=offscreen pytest tests/test_cli.py -v
+pytest tests/test_cli.py -v
 
 # Run with coverage report (80% minimum enforced in CI)
-QT_QPA_PLATFORM=offscreen pytest --cov=sc_linac_physics --cov-report=term-missing
+pytest --cov=sc_linac_physics --cov-report=term-missing
 
 # Lint
 flake8 . --count --max-complexity=10 --max-line-length=120 --show-source --statistics
@@ -90,7 +90,7 @@ Long-running operations use `Worker(QThread)` from `utils/qt.py`, which emits `f
 
 ## Testing Notes
 
-- Headless Qt tests require `QT_QPA_PLATFORM=offscreen` (set automatically in CI via Xvfb).
+- Headless Qt tests require `QT_QPA_PLATFORM=offscreen` (set automatically by `conftest.py` — no need to set it manually).
 - `conftest.py` redirects `/home/physics` to a temp directory so tests never write to real paths.
 - EPICS PVs are mocked via `unittest.mock`; no hardware connection is required.
 - `pytest-asyncio` is configured with `asyncio_mode = auto`.

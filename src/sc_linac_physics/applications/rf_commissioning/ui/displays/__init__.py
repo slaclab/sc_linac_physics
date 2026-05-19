@@ -3,6 +3,7 @@
 from .base_placeholder import BasePlaceholderDisplay
 from .piezo_pre_rf import PiezoPreRFDisplay
 from .registry import PHASE_DISPLAY_MAP, get_phase_display_class
+from .ssa_char import SSACharDisplay
 from .standard import (
     CavityCharDisplay,
     FrequencyTuningDisplay,
@@ -10,7 +11,6 @@ from .standard import (
     HighPowerOneHourRunDisplay,
     HighPowerRampDisplay,
     PiezoWithRFDisplay,
-    SSACharDisplay,
 )
 
 __all__ = [

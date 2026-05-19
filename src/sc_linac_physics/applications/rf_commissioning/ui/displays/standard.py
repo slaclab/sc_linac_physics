@@ -7,7 +7,6 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     MPProcessingData,
     OneHourRunData,
     PiezoWithRFTest,
-    SSACharacterization,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     GenericPhaseUI,
@@ -23,15 +22,6 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
     PHASE_NAME = "Frequency Tuning"
     DATA_ATTR = "frequency_tuning"
     DATA_MODEL = FrequencyTuningData
-
-
-class SSACharDisplay(BasePlaceholderDisplay):
-    """Display for SSA Characterization phase."""
-
-    UI_CLASS = GenericPhaseUI
-    PHASE_NAME = "SSA Characterization"
-    DATA_ATTR = "ssa_char"
-    DATA_MODEL = SSACharacterization
 
 
 class CavityCharDisplay(BasePlaceholderDisplay):

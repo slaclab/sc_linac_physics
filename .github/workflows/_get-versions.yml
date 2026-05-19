@@ -1,0 +1,31 @@
+name: Get Python Versions
+
+on:
+  workflow_call:
+    inputs:
+      production-python:
+        required: true
+        type: string
+        description: The production Python version (e.g. '3.12')
+    outputs:
+      required:
+        description: JSON array of required Python versions [production, next]
+        value: ${{ jobs.compute.outputs.required }}
+      experimental:
+        description: JSON array of experimental Python versions (beyond required)
+        value: ${{ jobs.compute.outputs.experimental }}
+
+jobs:
+  compute:
+    runs-on: ubuntu-latest
+    outputs:
+      required: ${{ steps.versions.outputs.required }}
+      experimental: ${{ steps.versions.outputs.experimental }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute Python version matrix
+        id: versions
+        env:
+          PRODUCTION: ${{ inputs.production-python }}
+        run: python3 .github/scripts/get_versions.py

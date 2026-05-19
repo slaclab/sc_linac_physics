@@ -228,13 +228,13 @@ class BatchPiezoPreRFController(QObject):
             )
 
         # Load or create the commissioning record for this cavity
-        record_id = self.session.db.get_record_id_for_cavity(
+        record_id = self.session.get_record_id_for_cavity(
             linac_idx,
             cavity_spec.cryomodule,
             str(cavity_spec.cavity_number),
         )
         if record_id is not None:
-            loaded = self.session.db.get_record_with_version(record_id)
+            loaded = self.session.get_record_with_version(record_id)
             if loaded is None:
                 raise ValueError(f"Record {record_id} not found in database")
             record, version = loaded
@@ -245,7 +245,7 @@ class BatchPiezoPreRFController(QObject):
                 cryomodule=cavity_spec.cryomodule,
                 cavity_number=cavity_spec.cavity_number,
             )
-            record_id = self.session.db.save_record(record)
+            record_id = self.session.save_record(record)
             state.record_version = 1
 
         state.record = record
@@ -491,7 +491,7 @@ class BatchPiezoPreRFController(QObject):
         if state.record is None or state.record_id is None:
             return
         try:
-            self.session.db.save_record(
+            self.session.save_record(
                 state.record,
                 state.record_id,
                 expected_version=state.record_version,

@@ -8,10 +8,11 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
 )
-from pydm.widgets import PyDMEnumComboBox, PyDMLabel
+from pydm.widgets import PyDMEnumComboBox, PyDMLabel, PyDMSpinbox
 
 from .base import PhaseUIBase
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
@@ -316,3 +317,195 @@ class GenericPhaseUI(_StandardPlaceholderUI):
     @property
     def PHASE_TITLE(self) -> str:  # type: ignore[override]
         return getattr(self.parent, "PHASE_NAME", "Phase")
+
+
+class SSACharUI(PhaseUIBase):
+    """Builds the SSA Calibration display UI and exposes widget references."""
+
+    def build(self) -> QHBoxLayout:
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+        left_panel.addLayout(self._build_main_toolbar())
+        left_panel.addWidget(self._build_ssa_inputs())
+        left_panel.addWidget(self._build_history())
+        left_panel.addStretch()
+
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(self._build_ssa_results(), stretch=1)
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                self._get_parent_stored_data_fields()
+            )
+        )
+
+        main_layout.addLayout(left_panel, 1)
+        main_layout.addLayout(right_panel, 1)
+        return main_layout
+
+    def _build_ssa_inputs(self) -> QGroupBox:
+        """Build the Inputs section matching the EDM screen."""
+        group = QGroupBox("SSA Calibration Inputs")
+        layout = QGridLayout()
+        layout.setSpacing(6)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        layout.addWidget(QLabel("Calibration Drive Max:"), 0, 0)
+        spinbox = self._register(
+            "drive_max_spinbox", PyDMSpinbox(parent=self.parent)
+        )
+        spinbox.setRange(0.01, 1.0)
+        spinbox.userDefinedLimits = True
+        spinbox.userMinimum = 0.01
+        spinbox.userMaximum = 1.0
+        spinbox.setSingleStep(0.01)
+        spinbox.setDecimals(3)
+        spinbox.setValue(0.5)
+        spinbox.precisionFromPV = False
+        spinbox.precision = 3
+        spinbox.showStepExponent = False
+        spinbox.writeOnPress = True
+        spinbox.editingFinished.connect(spinbox.send_value)
+        spinbox.setFixedWidth(90)
+        layout.addWidget(spinbox, 0, 1)
+        layout.addWidget(QLabel("(range 0–1)"), 0, 2)
+
+        plot_btn = self._register("plot_btn", QPushButton("Plot"))
+        plot_btn.setStyleSheet(
+            "QPushButton { background-color: #374151; color: #d1d5db; "
+            "padding: 6px 14px; border-radius: 4px; border: 1px solid #4b5563; } "
+            "QPushButton:hover { background-color: #4b5563; }"
+        )
+        self._connect(plot_btn, "on_plot")
+        layout.addWidget(plot_btn, 1, 1)
+
+        group.setLayout(layout)
+        return group
+
+    def _build_ssa_results(self) -> QGroupBox:
+        """Build the Results section with live PV labels and local result indicators."""
+        group = QGroupBox("SSA Calibration — Status && Results")
+        outer = QVBoxLayout()
+        outer.setSpacing(6)
+        outer.setContentsMargins(8, 8, 8, 8)
+
+        # Single unified grid: col 0 = label, cols 1-3 = New / Current / Saved
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(5)
+        grid.setColumnMinimumWidth(0, 80)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        for col, text, color in (
+            (1, "New", "#4a9eff"),
+            (2, "Current", "#e0e0e0"),
+        ):
+            hdr = QLabel(text)
+            hdr.setStyleSheet(
+                f"color: {color}; font-weight: bold; font-size: 9pt;"
+            )
+            hdr.setAlignment(Qt.AlignCenter)
+            grid.addWidget(hdr, 0, col)
+
+        # SSA Slope row
+        grid.addWidget(QLabel("SSA Slope:"), 1, 0)
+
+        pv_slope_new = self._register(
+            "pydm_slope_new", PyDMLabel(parent=self.parent)
+        )
+        pv_slope_new.setStyleSheet(PV_CAP_STYLE)
+        pv_slope_new.setAlignment(Qt.AlignCenter)
+        pv_slope_new.precisionFromPV = False
+        pv_slope_new.precision = 5
+        grid.addWidget(pv_slope_new, 1, 1)
+
+        pv_slope_cur = self._register(
+            "pydm_slope_current", PyDMLabel(parent=self.parent)
+        )
+        pv_slope_cur.setStyleSheet(PV_CAP_STYLE)
+        pv_slope_cur.setAlignment(Qt.AlignCenter)
+        pv_slope_cur.precisionFromPV = False
+        pv_slope_cur.precision = 5
+        grid.addWidget(pv_slope_cur, 1, 2)
+
+        # Drive Max row
+        grid.addWidget(QLabel("Drive Max:"), 2, 0)
+
+        pv_drv_req = self._register(
+            "pydm_drive_max_new", PyDMLabel(parent=self.parent)
+        )
+        pv_drv_req.setStyleSheet(PV_CAP_STYLE)
+        pv_drv_req.setAlignment(Qt.AlignCenter)
+        pv_drv_req.precisionFromPV = False
+        pv_drv_req.precision = 3
+        grid.addWidget(pv_drv_req, 2, 1)
+
+        pv_drv_cur = self._register(
+            "pydm_drive_max_current", PyDMLabel(parent=self.parent)
+        )
+        pv_drv_cur.setStyleSheet(PV_CAP_STYLE)
+        pv_drv_cur.setAlignment(Qt.AlignCenter)
+        pv_drv_cur.precisionFromPV = False
+        pv_drv_cur.precision = 3
+        grid.addWidget(pv_drv_cur, 2, 2)
+
+        # Max Fwd Pwr row (single live value)
+        grid.addWidget(QLabel("Max Fwd Pwr:"), 3, 0)
+        pv_fwd_pwr = self._register(
+            "pydm_max_fwd_pwr", PyDMLabel(parent=self.parent)
+        )
+        pv_fwd_pwr.setStyleSheet(PV_CAP_STYLE)
+        pv_fwd_pwr.setAlignment(Qt.AlignCenter)
+        pv_fwd_pwr.showUnits = True
+        grid.addWidget(pv_fwd_pwr, 3, 1, 1, 2)
+
+        # Cal Status row (EPICS value + local pass/fail)
+        grid.addWidget(QLabel("Cal Status:"), 4, 0)
+        pv_cal_status = self._register(
+            "pydm_cal_status", PyDMLabel(parent=self.parent)
+        )
+        pv_cal_status.setStyleSheet(PV_LABEL_STYLE)
+        pv_cal_status.setAlignment(Qt.AlignCenter)
+        grid.addWidget(pv_cal_status, 4, 1)
+
+        local_phase = self._register(
+            "local_phase_status", self._make_local_label("-")
+        )
+        grid.addWidget(local_phase, 4, 2)
+
+        # Step row
+        grid.addWidget(QLabel("Step:"), 5, 0)
+        local_step = self._register(
+            "local_current_step", self._make_local_label("-")
+        )
+        grid.addWidget(local_step, 5, 1, 1, 2)
+
+        outer.addLayout(grid)
+
+        # Push / Save buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.setContentsMargins(0, 6, 0, 0)
+
+        push_btn = self._register(
+            "push_btn", QPushButton("Push New Slope to Cavity")
+        )
+        push_btn.setStyleSheet(
+            "QPushButton { background-color: #1d6a3a; color: white; "
+            "font-weight: bold; padding: 6px 18px; border-radius: 4px; } "
+            "QPushButton:hover { background-color: #2d8a4a; } "
+            "QPushButton:disabled { background-color: #374151; color: #6b7280; }"
+        )
+        self._connect(push_btn, "on_push_slope")
+        btn_row.addWidget(push_btn)
+
+        btn_row.addStretch()
+        outer.addLayout(btn_row)
+        outer.addStretch()
+
+        group.setLayout(outer)
+        return group
