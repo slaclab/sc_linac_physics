@@ -29,16 +29,17 @@ def test_platform_paths_linux():
 
 def test_platform_paths_macos_like():
     home = Path("/Users/tester")
+    base = home / ".sc_linac_physics"
 
-    assert get_srf_base_dir(system_name="Darwin", home_dir=home) == home
+    assert get_srf_base_dir(system_name="Darwin", home_dir=home) == base
     assert (
         get_database_dir(system_name="Darwin", home_dir=home)
-        == home / "databases"
+        == base / "databases"
     )
-    assert get_json_dir(system_name="Darwin", home_dir=home) == home / "json"
+    assert get_json_dir(system_name="Darwin", home_dir=home) == base / "json"
     assert (
         get_log_base_dir(system_name="Darwin", home_dir=home)
-        == home / "logfiles"
+        == base / "logfiles"
     )
 
 
