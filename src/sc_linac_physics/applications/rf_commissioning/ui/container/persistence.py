@@ -17,26 +17,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.merge_dialog import (
 )
 
 
-def save_active_record(host) -> bool:
-    """Save the active record with conflict detection."""
-    if not host.session.has_active_record():
-        return False
-
-    try:
-        success = host.session.save_active_record()
-        if success:
-            host._update_sync_status(True, "Saved")
-            host.update_progress_indicator(host.session.get_active_record())
-            host._update_tab_states()
-
-        return success
-    except RecordConflictError as error:
-        return host._handle_save_conflict(error)
-
-
 def _fetch_merge_target(host, record_id: int):
     """Fetch the latest database record/version for merge resolution."""
-    result = host.session.db.get_record_with_version(record_id)
+    result = host.session.get_record_with_version(record_id)
     if not result:
         QMessageBox.critical(
             host, "Error", "Failed to load database version for merge."
@@ -75,115 +58,139 @@ def _handle_merge_save_error(host, error: Exception) -> bool:
     return False
 
 
-def handle_save_conflict(host, conflict: RecordConflictError) -> bool:
-    """Handle optimistic locking conflict via merge dialog."""
-    if not host.session.has_active_record():
-        return False
-
-    record_id = host.session.get_active_record_id()
-    if not record_id:
-        return False
-
-    latest_conflict = conflict
-
-    while True:
-        result = _fetch_merge_target(host, record_id)
-        if result is None:
-            return False
-
-        db_record, db_version = result
-        expected_version = _get_expected_version(db_version, latest_conflict)
-        merged_record = _get_merged_record(host, db_record)
-        if not merged_record:
+class _PersistenceMixin:
+    def save_active_record(self) -> bool:
+        """Save the active record with conflict detection."""
+        if not self.session.has_active_record():
             return False
 
         try:
-            host.session.db.save_record(
-                merged_record,
-                record_id,
-                expected_version=expected_version,
-            )
-            host.load_record(record_id)
+            success = self.session.save_active_record()
+            if success:
+                self._update_sync_status(True, "Saved")
+                self.update_progress_indicator(self.session.get_active_record())
+                self._update_tab_states()
 
-            QMessageBox.information(
-                host,
-                "Merge Successful",
-                "Your changes have been merged and saved.",
-            )
-            host._update_sync_status(True, "Merged and saved")
-            return True
+            return success
+        except RecordConflictError as error:
+            return self._handle_save_conflict(error)
 
-        except Exception as error:
-            if not _handle_merge_save_error(host, error):
+    def _handle_save_conflict(self, conflict: RecordConflictError) -> bool:
+        """Handle optimistic locking conflict via merge dialog."""
+        if not self.session.has_active_record():
+            return False
+
+        record_id = self.session.get_active_record_id()
+        if not record_id:
+            return False
+
+        latest_conflict = conflict
+
+        while True:
+            result = _fetch_merge_target(self, record_id)
+            if result is None:
                 return False
-            latest_conflict = error
 
-    return False
+            db_record, db_version = result
+            expected_version = _get_expected_version(
+                db_version, latest_conflict
+            )
+            merged_record = _get_merged_record(self, db_record)
+            if not merged_record:
+                return False
 
+            try:
+                self.session.save_record(
+                    merged_record,
+                    record_id,
+                    expected_version=expected_version,
+                )
+                self.load_record(record_id)
 
-def show_measurement_history(host) -> None:
-    """Open dialog showing all measurement attempts."""
-    if not host.session.has_active_record():
-        QMessageBox.information(
-            host,
-            "No Active Record",
-            "Please load or create a commissioning record first.",
+                QMessageBox.information(
+                    self,
+                    "Merge Successful",
+                    "Your changes have been merged and saved.",
+                )
+                self._update_sync_status(True, "Merged and saved")
+                return True
+
+            except Exception as error:
+                if not _handle_merge_save_error(self, error):
+                    return False
+                latest_conflict = error
+
+        return False
+
+    def _show_measurement_history(self) -> None:
+        """Open dialog showing all measurement attempts."""
+        if not self.session.has_active_record():
+            QMessageBox.information(
+                self,
+                "No Active Record",
+                "Please load or create a commissioning record first.",
+            )
+            return
+
+        existing_dialog = getattr(self, "_measurement_history_dialog", None)
+        if existing_dialog and existing_dialog.isVisible():
+            existing_dialog.raise_()
+            existing_dialog.activateWindow()
+            return
+
+        dialog = MeasurementHistoryDialog(self.session, parent=self)
+        self._measurement_history_dialog = dialog
+        dialog.setAttribute(Qt.WA_DeleteOnClose, True)
+        dialog.destroyed.connect(
+            lambda _obj=None: setattr(self, "_measurement_history_dialog", None)
         )
-        return
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
-    existing_dialog = getattr(host, "_measurement_history_dialog", None)
-    if existing_dialog and existing_dialog.isVisible():
-        existing_dialog.raise_()
-        existing_dialog.activateWindow()
-        return
+    def _show_database_browser(self) -> None:
+        """Open database browser to select and load a record."""
+        cryomodule = self.cryomodule_combo.currentText()
+        cavity = self.cavity_combo.currentText()
 
-    dialog = MeasurementHistoryDialog(host.session, parent=host)
-    host._measurement_history_dialog = dialog
-    dialog.setAttribute(Qt.WA_DeleteOnClose, True)
-    dialog.destroyed.connect(
-        lambda _obj=None: setattr(host, "_measurement_history_dialog", None)
-    )
-    dialog.show()
-    dialog.raise_()
-    dialog.activateWindow()
+        if cryomodule == "CM..." or not cryomodule:
+            cryomodule = None
 
+        if cavity == "Cav..." or not cavity:
+            cavity = None
 
-def show_database_browser(host) -> None:
-    """Open database browser to select and load a record."""
-    cryomodule = host.cryomodule_combo.currentText()
-    cavity = host.cavity_combo.currentText()
+        linac = None
+        if cryomodule:
+            from sc_linac_physics.utils.sc_linac.linac_utils import (
+                get_linac_for_cryomodule,
+            )
 
-    if cryomodule == "Select CM..." or not cryomodule:
-        cryomodule = None
+            linac = get_linac_for_cryomodule(cryomodule)
 
-    if cavity == "Select Cav..." or not cavity:
-        cavity = None
-
-    linac = None
-    if cryomodule:
-        from sc_linac_physics.utils.sc_linac.linac_utils import (
-            get_linac_for_cryomodule,
+        dialog = DatabaseBrowserDialog(
+            self.session.database,
+            self,
+            cryomodule_filter=cryomodule,
+            cavity_filter=cavity,
+            linac_filter=linac,
         )
 
-        linac = get_linac_for_cryomodule(cryomodule)
+        if dialog.exec_() != QDialog.Accepted:
+            return
 
-    dialog = DatabaseBrowserDialog(
-        host.session.database,
-        host,
-        cryomodule_filter=cryomodule,
-        cavity_filter=cavity,
-        linac_filter=linac,
-    )
+        record_id, record_data = dialog.get_selected_record()
 
-    if dialog.exec_() != QDialog.Accepted:
-        return
+        if not record_id or not record_data:
+            return
 
-    record_id, record_data = dialog.get_selected_record()
+        if not self.load_record(record_id):
+            QMessageBox.critical(
+                self, "Load Failed", f"Failed to load record {record_id}"
+            )
 
-    if not record_id or not record_data:
-        return
 
-    if not host.load_record(record_id):
-        QMessageBox.critical(
-            host, "Load Failed", f"Failed to load record {record_id}"
-        )
+# Backward-compat aliases so existing tests continue to work.
+save_active_record = _PersistenceMixin.save_active_record
+handle_save_conflict = _PersistenceMixin._handle_save_conflict
+show_measurement_history = _PersistenceMixin._show_measurement_history
+show_database_browser = _PersistenceMixin._show_database_browser

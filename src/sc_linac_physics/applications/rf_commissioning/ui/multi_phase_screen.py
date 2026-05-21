@@ -12,68 +12,56 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QSplitter,
     QTabWidget,
-    QTableWidget,
     QVBoxLayout,
-    QWidget,
 )
 from pydm import Display, PyDMApplication
 
-from sc_linac_physics.applications.rf_commissioning.ui.magnet_checkout_dialog import (
-    MagnetCheckoutDialog,
-)
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
-    CommissioningPhase,
     CommissioningRecord,
-)
-from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
-    RecordConflictError,
 )
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    ALL_CRYOMODULES,
+    get_linac_for_cryomodule,
+    LINAC_CM_MAP,
+    LINAC_TUPLES,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
     PhaseTabSpec,
-    build_note_dialog,
-    build_compact_progress_bar,
     build_default_phase_specs,
-    build_enhanced_notes_panel,
-    build_header_panel,
-    check_for_external_changes,
-    confirm_and_start_new,
-    dismiss_banner,
-    handle_note_conflict,
-    load_selected_record,
-    load_notes,
-    on_load_or_start,
-    on_edit_note,
-    quick_add_note,
-    reload_from_banner,
-    get_selected_note_ref,
-    handle_save_conflict,
-    load_record,
-    save_active_record,
-    on_phase_advanced,
-    on_tab_changed,
-    start_new_record,
-    show_database_browser,
-    show_measurement_history,
-    show_update_banner,
-    show_notes_context_menu,
-    show_record_selector,
-    sync_cavity_selection_from_record,
-    init_tabs,
-    start_new_from_dialog,
-    get_phase_icon,
-    update_progress_indicator,
-    update_sync_status,
-    update_tab_states,
+    _HeaderMixin,
+    _ProgressMixin,
+    _RecordSelectorMixin,
+    _TabsMixin,
+    _NotesPanelMixin,
+    _NoteActionsMixin,
+    _SyncMixin,
+    _PersistenceMixin,
+    _RecordLifecycleMixin,
 )
-from sc_linac_physics.utils.sc_linac.linac_utils import (
-    get_linac_for_cryomodule,
+from sc_linac_physics.applications.rf_commissioning.ui.magnet_checkout_dialog import (
+    MagnetCheckoutDialog,
 )
 
+_LINAC_INDEX_BY_NAME = {
+    name: idx for idx, (name, _cryomodules) in enumerate(LINAC_TUPLES)
+}
 
-class MultiPhaseCommissioningDisplay(Display):
+
+class MultiPhaseCommissioningDisplay(
+    _TabsMixin,
+    _SyncMixin,
+    _PersistenceMixin,
+    _RecordLifecycleMixin,
+    _RecordSelectorMixin,
+    _NotesPanelMixin,
+    _NoteActionsMixin,
+    _ProgressMixin,
+    _HeaderMixin,
+    Display,
+):
     """Container window that hosts multiple phase displays.
 
     This redesigned display keeps critical information always visible:
@@ -95,7 +83,7 @@ class MultiPhaseCommissioningDisplay(Display):
     ):
         super().__init__(parent)
         self.setWindowTitle("RF Commissioning")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1300, 750)
 
         self.session = session or CommissioningSession()
         self.phase_specs = phase_specs or build_default_phase_specs()
@@ -156,12 +144,21 @@ class MultiPhaseCommissioningDisplay(Display):
         # REMOVED: self._restore_last_session()
         # Operator must explicitly select operator and cavity each time
 
-    # =============================================================================
-    # HEADER PANEL - Always visible operator/cavity selection
-    # =============================================================================
-    def _build_header_panel(self) -> QWidget:
-        """Build persistent header with operator and cavity selection."""
-        return build_header_panel(self)
+    def _on_linac_selection_changed(self) -> None:
+        """Filter the cryomodule combo to show only CMs for the selected linac."""
+        linac = self.linac_combo.currentText()
+        self.cryomodule_combo.blockSignals(True)
+        self.cryomodule_combo.clear()
+        self.cryomodule_combo.addItem("CM...", "")
+        if linac == "All":
+            self.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
+        else:
+            linac_idx = _LINAC_INDEX_BY_NAME.get(linac)
+            if linac_idx is not None:
+                self.cryomodule_combo.addItems(LINAC_CM_MAP[linac_idx])
+        self.cryomodule_combo.blockSignals(False)
+        self._refresh_magnet_badge("CM...")
+        self._refresh_cavity_completion_label("CM...")
 
     def _on_cavity_selection_changed(self) -> None:
         """Update CM status on CM change; load cavity record only when cavity is selected."""
@@ -169,19 +166,19 @@ class MultiPhaseCommissioningDisplay(Display):
         cavity = self.cavity_combo.currentText()
 
         # CM-level status is independent of cavity selection
-        if cryomodule and cryomodule != "Select CM...":
+        if cryomodule and cryomodule != "CM...":
             linac = get_linac_for_cryomodule(cryomodule)
             if linac:
                 self._refresh_magnet_badge(cryomodule, linac)
                 self._refresh_cavity_completion_label(cryomodule, linac)
         else:
-            self._refresh_magnet_badge("Select CM...")
-            self._refresh_cavity_completion_label("Select CM...")
+            self._refresh_magnet_badge("CM...")
+            self._refresh_cavity_completion_label("CM...")
 
         # Skip if no valid selection
         if (
-            cryomodule == "Select CM..."
-            or cavity == "Select Cav..."
+            cryomodule == "CM..."
+            or cavity == "Cav..."
             or not cryomodule
             or not cavity
         ):
@@ -196,7 +193,7 @@ class MultiPhaseCommissioningDisplay(Display):
         self, cryomodule: str, linac: str | None = None
     ) -> None:
         """Refresh header magnet badge for the selected cryomodule."""
-        if not cryomodule or cryomodule == "Select CM...":
+        if not cryomodule or cryomodule == "CM...":
             self.magnet_status_badge.set_status("PENDING")
             return
 
@@ -219,7 +216,7 @@ class MultiPhaseCommissioningDisplay(Display):
         self, cryomodule: str, linac: str | None = None
     ) -> None:
         """Update header cavity completion counter for the selected cryomodule."""
-        if not cryomodule or cryomodule == "Select CM...":
+        if not cryomodule or cryomodule == "CM...":
             self.cavity_completion_label.setText("0/8 Complete")
             return
 
@@ -242,7 +239,7 @@ class MultiPhaseCommissioningDisplay(Display):
     def _open_magnet_checkout_screen(self) -> None:
         """Open modal dialog for CM magnet checkout status and notes."""
         cryomodule = self.cryomodule_combo.currentText()
-        if not cryomodule or cryomodule == "Select CM...":
+        if not cryomodule or cryomodule == "CM...":
             QMessageBox.information(
                 self,
                 "Select Cryomodule",
@@ -283,7 +280,6 @@ class MultiPhaseCommissioningDisplay(Display):
         self.operator_combo.addItem("👤 Select operator...", "")
 
         if operators:
-            # Add all operators
             for op in operators:
                 self.operator_combo.addItem(f"👤 {op}", op)
 
@@ -337,163 +333,6 @@ class MultiPhaseCommissioningDisplay(Display):
         # Reset to previous selection if cancelled
         self.operator_combo.setCurrentIndex(0)
 
-    # =============================================================================
-    # PROGRESS BAR - Compact horizontal phase indicator
-    # =============================================================================
-
-    def _build_compact_progress_bar(self) -> QWidget:
-        return build_compact_progress_bar(self)
-
-    def update_progress_indicator(self, record) -> None:
-        update_progress_indicator(self, record)
-
-    def _on_load_or_start(self) -> None:
-        """Intelligent load/start with validation and recent records."""
-        on_load_or_start(self)
-
-    def _show_record_selector(
-        self,
-        cavity_display_name: str,
-        linac: str,
-        cryomodule: str,
-        cavity_number: str,
-        records: list,
-    ) -> None:
-        """Show dialog to select existing record or start new."""
-        show_record_selector(
-            self,
-            cavity_display_name,
-            linac,
-            cryomodule,
-            cavity_number,
-            records,
-        )
-
-    def _load_selected_record(
-        self, table: QTableWidget, dialog: QDialog
-    ) -> None:
-        """Load the selected record from the table."""
-        load_selected_record(self, table, dialog)
-
-    def _start_new_from_dialog(
-        self,
-        cavity_display_name: str,
-        linac: str,
-        cryomodule: str,
-        cavity_number: str,
-        dialog: QDialog,
-    ) -> None:
-        """Start new record from the selection dialog."""
-        start_new_from_dialog(
-            self,
-            cavity_display_name,
-            linac,
-            cryomodule,
-            cavity_number,
-            dialog,
-        )
-
-    def _confirm_and_start_new(
-        self,
-        cavity_display_name: str,
-        linac: str,
-        cryomodule: str,
-        cavity_number: str,
-    ) -> None:
-        """Confirm and start a new commissioning record."""
-        confirm_and_start_new(
-            self,
-            cavity_display_name,
-            linac,
-            cryomodule,
-            cavity_number,
-        )
-
-    # =============================================================================
-    # TABS - Phase navigation with visual feedback
-    # =============================================================================
-
-    def _init_tabs(self) -> None:
-        init_tabs(self)
-
-    def _get_phase_icon(self, phase: CommissioningPhase | None) -> str:
-        return get_phase_icon(self, phase)
-
-    def _update_tab_states(self) -> None:
-        update_tab_states(self)
-
-    def _on_tab_changed(self, index: int) -> None:
-        on_tab_changed(self, index)
-
-        # =============================================================================
-        # NOTES PANEL - Always accessible note taking
-        # =============================================================================
-
-    def _build_enhanced_notes_panel(self) -> QWidget:
-        """Build always-accessible notes panel with better UX."""
-        return build_enhanced_notes_panel(self)
-
-    def _load_notes(self) -> None:
-        """Load and display all notes for the active record."""
-        load_notes(self)
-
-    def _quick_add_note(self) -> None:
-        quick_add_note(self)
-
-    def _show_notes_context_menu(self, position) -> None:
-        show_notes_context_menu(self, position)
-
-    def _on_edit_note(self) -> None:
-        on_edit_note(self)
-
-    def _get_selected_note_ref(self):
-        return get_selected_note_ref(self)
-
-    def _build_note_dialog(
-        self,
-        title: str,
-        operator_default: str,
-        note_default: str = "",
-    ) -> tuple[str | None, str | None]:
-        return build_note_dialog(
-            self,
-            title,
-            operator_default,
-            note_default,
-        )
-
-    # =============================================================================
-    # SYNC STATUS - External change detection and notification
-    # =============================================================================
-
-    def _update_sync_status(self, is_synced: bool, message: str = "") -> None:
-        update_sync_status(self, is_synced, message)
-
-    def _check_for_external_changes(self) -> None:
-        check_for_external_changes(self)
-
-    def _show_update_banner(self, db_version: int, local_version: int) -> None:
-        show_update_banner(self, db_version, local_version)
-
-    def _reload_from_banner(self) -> None:
-        reload_from_banner(self)
-
-    def _dismiss_banner(self) -> None:
-        dismiss_banner(self)
-
-    def _handle_note_conflict(self, conflict: RecordConflictError) -> None:
-        handle_note_conflict(self, conflict)
-
-    # =============================================================================
-    # RECORD MANAGEMENT
-    # =============================================================================
-
-    def start_new_record(self, cryomodule: str, cavity_number: str) -> bool:
-        return start_new_record(self, cryomodule, cavity_number)
-
-    def load_record(self, record_id: int) -> bool:
-        return load_record(self, record_id)
-
     @staticmethod
     def _linac_str(linac: int) -> str:
         return f"L{linac}B"
@@ -506,30 +345,6 @@ class MultiPhaseCommissioningDisplay(Display):
         linac_str = self._linac_str(record.linac)
         self._refresh_magnet_badge(record.cryomodule, linac_str)
         self._refresh_cavity_completion_label(record.cryomodule, linac_str)
-
-    def _sync_cavity_selection_from_record(
-        self, record: CommissioningRecord
-    ) -> None:
-        sync_cavity_selection_from_record(self, record)
-
-    def on_phase_advanced(self, record: CommissioningRecord) -> None:
-        on_phase_advanced(self, record)
-
-    def save_active_record(self) -> bool:
-        return save_active_record(self)
-
-    def _handle_save_conflict(self, conflict: RecordConflictError) -> bool:
-        return handle_save_conflict(self, conflict)
-
-    # =============================================================================
-    # MEASUREMENT HISTORY
-    # =============================================================================
-
-    def _show_measurement_history(self):
-        show_measurement_history(self)
-
-    def _show_database_browser(self) -> None:
-        show_database_browser(self)
 
     def _open_batch_pre_rf_window(self) -> None:
         """Open (or raise) the floating batch Piezo Pre-RF window."""

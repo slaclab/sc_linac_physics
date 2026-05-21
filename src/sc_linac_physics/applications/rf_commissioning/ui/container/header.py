@@ -7,20 +7,30 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
-from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 from sc_linac_physics.applications.rf_commissioning.ui.magnet_status_badge import (
     MagnetStatusBadge,
 )
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+
+_LINAC_NAMES = ["L0B", "L1B", "L2B", "L3B", "L4B"]
 
 
-def build_header_panel(host) -> QWidget:
-    """Build persistent header with operator and cavity selection."""
-    header = QWidget()
-    header.setStyleSheet("""
+def _vline() -> QFrame:
+    sep = QFrame()
+    sep.setFrameShape(QFrame.VLine)
+    sep.setFrameShadow(QFrame.Sunken)
+    sep.setStyleSheet("color: #555;")
+    return sep
+
+
+class _HeaderMixin:
+    def _build_header_panel(self) -> QWidget:
+        """Build persistent header with operator and cavity selection."""
+        header = QWidget()
+        header.setStyleSheet("""
             QWidget {
                 background-color: #2b2b2b;
                 border-bottom: 2px solid #4a4a4a;
@@ -28,133 +38,155 @@ def build_header_panel(host) -> QWidget:
             QGroupBox {
                 font-weight: bold;
                 border: 1px solid #555;
-                border-radius: 5px;
+                border-radius: 4px;
                 margin-top: 6px;
-                padding-top: 10px;
+                padding-top: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
+                left: 8px;
+                padding: 0 4px;
             }
         """)
-    layout = QHBoxLayout()
-    layout.setContentsMargins(10, 10, 10, 10)
 
-    # Cavity section - comes FIRST (don't need operator to browse)
-    cavity_group = QGroupBox("Cavity Selection")
-    cavity_layout = QHBoxLayout()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
-    host.cryomodule_combo = QComboBox()
-    host.cryomodule_combo.setMinimumWidth(80)
-    host.cryomodule_combo.addItem("Select CM...", "")
-    host.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
-    cavity_layout.addWidget(QLabel("CM:"))
-    cavity_layout.addWidget(host.cryomodule_combo)
+        # ---- Cavity Selection ----
+        cavity_group = QGroupBox("Cavity Selection")
+        cavity_layout = QHBoxLayout()
+        cavity_layout.setSpacing(4)
 
-    host.cavity_combo = QComboBox()
-    host.cavity_combo.setMinimumWidth(60)
-    host.cavity_combo.addItem("Select Cav...", "")
-    host.cavity_combo.addItems([str(i) for i in range(1, 9)])
-    cavity_layout.addWidget(QLabel("Cav:"))
-    cavity_layout.addWidget(host.cavity_combo)
+        self.linac_combo = QComboBox()
+        self.linac_combo.setFixedWidth(68)
+        self.linac_combo.addItem("All")
+        self.linac_combo.addItems(_LINAC_NAMES)
+        cavity_layout.addWidget(QLabel("Linac:"))
+        cavity_layout.addWidget(self.linac_combo)
 
-    cavity_group.setLayout(cavity_layout)
-    layout.addWidget(cavity_group)
+        self.cryomodule_combo = QComboBox()
+        self.cryomodule_combo.setFixedWidth(72)
+        self.cryomodule_combo.addItem("CM...", "")
+        self.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
+        cavity_layout.addWidget(QLabel("CM:"))
+        cavity_layout.addWidget(self.cryomodule_combo)
 
-    # Cavity completion counter
-    host.cavity_completion_label = QLabel("0/8 Complete")
-    host.cavity_completion_label.setStyleSheet("""
+        self.cavity_combo = QComboBox()
+        self.cavity_combo.setFixedWidth(72)
+        self.cavity_combo.addItem("Cav...", "")
+        self.cavity_combo.addItems([str(i) for i in range(1, 9)])
+        cavity_layout.addWidget(QLabel("Cav:"))
+        cavity_layout.addWidget(self.cavity_combo)
+
+        self.cavity_completion_label = QLabel("0/8 Complete")
+        self.cavity_completion_label.setStyleSheet("""
             QLabel {
                 color: #aaa;
                 font-weight: bold;
-                padding: 5px 10px;
+                padding: 2px 6px;
                 background-color: rgba(100, 100, 100, 0.2);
                 border-radius: 3px;
                 font-size: 9px;
             }
         """)
-    host.cavity_completion_label.setMaximumWidth(100)
-    layout.addWidget(host.cavity_completion_label)
+        cavity_layout.addWidget(self.cavity_completion_label)
 
-    # Update PVs and load record when cavity selection changes
-    host.cryomodule_combo.currentIndexChanged.connect(
-        host._on_cavity_selection_changed
-    )
-    host.cavity_combo.currentIndexChanged.connect(
-        host._on_cavity_selection_changed
-    )
+        cavity_group.setLayout(cavity_layout)
+        layout.addWidget(cavity_group)
 
-    # Separator
-    separator = QFrame()
-    separator.setFrameShape(QFrame.VLine)
-    separator.setFrameShadow(QFrame.Sunken)
-    separator.setStyleSheet("color: #555;")
-    layout.addWidget(separator)
+        self.linac_combo.currentIndexChanged.connect(
+            self._on_linac_selection_changed
+        )
+        self.cryomodule_combo.currentIndexChanged.connect(
+            self._on_cavity_selection_changed
+        )
+        self.cavity_combo.currentIndexChanged.connect(
+            self._on_cavity_selection_changed
+        )
 
-    # Operator section - needed for running tests
-    op_group = QGroupBox("Operator (Required for Tests)")
-    op_layout = QHBoxLayout()
-    host.operator_combo = QComboBox()
-    host.operator_combo.setMinimumWidth(200)
-    host.operator_combo.currentIndexChanged.connect(host._on_operator_changed)
-    host._populate_operator_combo()
-    op_layout.addWidget(host.operator_combo)
-    op_group.setLayout(op_layout)
-    layout.addWidget(op_group)
+        # ---- Operator ----
+        layout.addWidget(_vline())
+        layout.addWidget(QLabel("Operator:"))
+        self.operator_combo = QComboBox()
+        self.operator_combo.setMinimumWidth(140)
+        self.operator_combo.setMaximumWidth(200)
+        self.operator_combo.currentIndexChanged.connect(
+            self._on_operator_changed
+        )
+        self._populate_operator_combo()
+        layout.addWidget(self.operator_combo)
 
-    # Sync status indicator
-    host.sync_status = QLabel("○ No Record Loaded")
-    host.sync_status.setStyleSheet("""
+        # ---- Sync status ----
+        layout.addWidget(_vline())
+        self.sync_status = QLabel("○ No Record Loaded")
+        self.sync_status.setStyleSheet("""
             QLabel {
                 color: #888;
                 font-weight: bold;
-                padding: 5px 10px;
+                padding: 2px 6px;
                 background-color: rgba(100, 100, 100, 0.2);
                 border-radius: 3px;
             }
         """)
-    layout.addWidget(host.sync_status)
+        layout.addWidget(self.sync_status)
 
-    # Magnet checkout section (prominent status + open action)
-    magnet_group = QGroupBox("Magnet Checkout")
-    magnet_layout = QVBoxLayout()
-    magnet_layout.setSpacing(6)
+        # ---- Magnet Checkout ----
+        layout.addWidget(_vline())
+        magnet_group = QGroupBox("Magnet Checkout")
+        magnet_layout = QHBoxLayout()
+        magnet_layout.setSpacing(6)
 
-    host.magnet_status_badge = MagnetStatusBadge()
-    host.magnet_status_badge.setToolTip("Cryomodule magnet checkout status")
-    host.magnet_status_badge.setMinimumWidth(120)
-    magnet_layout.addWidget(host.magnet_status_badge)
+        self.magnet_status_badge = MagnetStatusBadge()
+        self.magnet_status_badge.setToolTip("Cryomodule magnet checkout status")
+        self.magnet_status_badge.setFixedWidth(78)
+        magnet_layout.addWidget(self.magnet_status_badge)
 
-    host.open_magnet_checkout_btn = QPushButton("Open Magnet Checkout")
-    host.open_magnet_checkout_btn.setToolTip(
-        "Open the cryomodule magnet checkout screen"
-    )
-    host.open_magnet_checkout_btn.clicked.connect(
-        host._open_magnet_checkout_screen
-    )
-    magnet_layout.addWidget(host.open_magnet_checkout_btn)
+        self.open_magnet_checkout_btn = QPushButton("Open")
+        self.open_magnet_checkout_btn.setToolTip(
+            "Open cryomodule magnet checkout"
+        )
+        self.open_magnet_checkout_btn.setFixedWidth(52)
+        self.open_magnet_checkout_btn.clicked.connect(
+            self._open_magnet_checkout_screen
+        )
+        magnet_layout.addWidget(self.open_magnet_checkout_btn)
 
-    magnet_group.setLayout(magnet_layout)
-    layout.addWidget(magnet_group)
+        magnet_group.setLayout(magnet_layout)
+        layout.addWidget(magnet_group)
 
-    layout.addStretch()
+        layout.addStretch()
 
-    # Quick actions
-    batch_btn = QPushButton("Batch Pre-RF")
-    batch_btn.setToolTip("Run Piezo Pre-RF test on multiple cavities at once")
-    batch_btn.clicked.connect(host._open_batch_pre_rf_window)
-    layout.addWidget(batch_btn)
+        # ---- Action buttons ----
+        layout.addWidget(_vline())
+        layout.addSpacing(4)
 
-    history_btn = QPushButton("📊 Measurements")
-    history_btn.setToolTip("View all measurement attempts and filter by phase")
-    history_btn.clicked.connect(host._show_measurement_history)
-    layout.addWidget(history_btn)
+        batch_btn = QPushButton("Batch Pre-RF")
+        batch_btn.setToolTip(
+            "Run Piezo Pre-RF test on multiple cavities at once"
+        )
+        batch_btn.clicked.connect(self._open_batch_pre_rf_window)
+        layout.addWidget(batch_btn)
 
-    database_btn = QPushButton("🗄️ Database")
-    database_btn.setToolTip("Browse and load commissioning records")
-    database_btn.clicked.connect(host._show_database_browser)
-    layout.addWidget(database_btn)
+        layout.addSpacing(4)
 
-    header.setLayout(layout)
-    return header
+        history_btn = QPushButton("📊 Measurements")
+        history_btn.setToolTip(
+            "View all measurement attempts and filter by phase"
+        )
+        history_btn.clicked.connect(self._show_measurement_history)
+        layout.addWidget(history_btn)
+
+        layout.addSpacing(4)
+
+        database_btn = QPushButton("🗄️ Database")
+        database_btn.setToolTip("Browse and load commissioning records")
+        database_btn.clicked.connect(self._show_database_browser)
+        layout.addWidget(database_btn)
+
+        header.setLayout(layout)
+        return header
+
+
+# Backward-compat alias so existing tests continue to work.
+build_header_panel = _HeaderMixin._build_header_panel
