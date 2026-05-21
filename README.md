@@ -5,42 +5,91 @@ Operator displays, analysis tools, and command-line interface for the LCLS-II su
 [![CI](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-app.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-app.yml)
 [![Release](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml)
 
-The SC linac accelerates the LCLS-II electron beam through five sections (L0B–L4B) containing 60 cryomodules and 296 superconducting RF cavities. This package provides the software used by operators and physicists to control, monitor, and commission those cavities: PyDM-based GUIs, hierarchical setup automation, fault monitoring, and analysis tools for Q0 measurement, microphonics, and tuning.
+The LCLS superconducting linac accelerates an electron beam through five sections (L0B–L4B) containing 60 cryomodules and 480 superconducting RF cavities. This package provides the software used by operators and physicists to control, monitor, and commission those cavities: PyDM-based GUIs, hierarchical setup automation, fault monitoring, and analysis tools for Q0 measurement, microphonics, and tuning.
 
 For architecture documentation and per-application guides, see [`docs/`](docs/index.md).
 
 ## Installation
 
-Requires Python 3.12+. If you don't have a Python environment, [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/) is a convenient option:
+This project requires Python 3.12+. The easiest way to get started:
+
+1. **Install conda** (if you don't have it): Follow the [conda installation guide](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
+
+2. **Create a Python environment:**
 
 ```bash
-conda create -n sclp "python>=3.12" && conda activate sclp
+conda create -n sclp "python>=3.12"
+conda activate sclp
 ```
 
-Install from source (not published to PyPI):
+3. **Install this package** from source (not published to PyPI):
+
+Optional: set up GitHub SSH first (recommended for contributors):
+
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com"
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+cat ~/.ssh/id_ed25519.pub
+```
+
+Add the printed key to GitHub:
+
+- https://github.com/settings/keys
+
+Then verify SSH access:
+
+```bash
+ssh -T git@github.com
+```
+
+Clone with SSH:
 
 ```bash
 git clone git@github.com:slaclab/sc_linac_physics.git
+```
+
+Or clone with HTTPS (no SSH key setup required):
+
+```bash
+git clone https://github.com/slaclab/sc_linac_physics.git
+```
+
+Then install:
+
+```bash
 cd sc_linac_physics
-pip install -e ".[dev,test]"   # development + testing
-# pip install -e .             # package only
+pip install -e ".[dev,test]"
+```
+
+For package-only installation (without development/testing dependencies), use:
+
+```bash
+pip install -e .
 ```
 
 > Two dependencies (`edmbutton`, `lcls-tools`) install from `github.com/slaclab` and require network access.
 
-## Quick start
+## Quick Start
 
-To run displays locally without live accelerator hardware, start the simulator in one terminal (remember to activate your conda environment in each new terminal with `conda activate sclp`):
+### Running displays locally
+
+To run displays without live accelerator hardware, start the simulator in one terminal:
 
 ```bash
+conda activate sclp
 sc-sim
 ```
 
-Then launch any display in another:
+Then launch any display in another terminal:
 
 ```bash
 sc-srf-home
 ```
+
+### Learning to develop
+
+New to this codebase? Start with the [Getting Started Guide](docs/getting_started.md), which walks you through three hands-on exercises building displays from scratch. You'll learn EPICS, PyQt, and PyDM basics along the way. The guide uses `sc-sim` for live data and also includes a layout-only mode with `PYDM_DEFAULT_PROTOCOL=fake`.
 
 ## Usage
 
