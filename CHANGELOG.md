@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.23.2 (2026-05-21)
+
+### Bug Fixes
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#259](https://github.com/slaclab/sc_linac_physics/pull/259),
+  [`f369b97`](https://github.com/slaclab/sc_linac_physics/commit/f369b974f8ada09da3a5fe9f01dd9063580b0c47))
+
+### Documentation
+
+- **getting_started**: Add PyDM onboarding guide with three exercises
+  ([#258](https://github.com/slaclab/sc_linac_physics/pull/258),
+  [`d19a9d5`](https://github.com/slaclab/sc_linac_physics/commit/d19a9d50e305a1ef96d46e3db840f91c5d72f82c))
+
+
 ## v9.23.1 (2026-05-18)
 
 ### Bug Fixes
