@@ -116,7 +116,10 @@ class TestCavityPVGroupInitialization:
             assert isinstance(prop.value, (int, float))
 
         # Test string properties
-        string_props = [regular_cavity.cudStatus, regular_cavity.probe_cal_time]
+        string_props = [
+            regular_cavity.cud.cudStatus,
+            regular_cavity.probe_cal_time,
+        ]
         for prop in string_props:
             assert hasattr(prop, "value")
             assert isinstance(prop.value, str)
@@ -544,7 +547,10 @@ class TestChannelTypeSpecifications:
             assert isinstance(prop.value, (int, float))
 
         # Test string properties
-        string_props = [regular_cavity.cudStatus, regular_cavity.probe_cal_time]
+        string_props = [
+            regular_cavity.cud.cudStatus,
+            regular_cavity.probe_cal_time,
+        ]
         for prop in string_props:
             assert isinstance(prop.value, str)
 
@@ -619,7 +625,7 @@ class TestChannelTypeSpecifications:
             regular_cavity.rf_mode_act,
             regular_cavity.rfPermit,
             regular_cavity.parked,
-            regular_cavity.cudSevr,
+            regular_cavity.cud.cudSevr,
             regular_cavity.tune_config,
         ]
 

@@ -299,8 +299,22 @@ class JTPVGroup(PVGroup):
 
 
 class LiquidLevelPVGroup(PVGroup):
-    upstream = pvproperty(name="2601:US:LVL", value=75.0)
-    downstream = pvproperty(name="2301:DS:LVL", value=93.0)
+    upstream = pvproperty(
+        name="2601:US:LVL",
+        value=75.0,
+        lower_alarm_limit=70.0,
+        lower_warning_limit=72.0,
+        upper_warning_limit=97.0,
+        upper_alarm_limit=100.0,
+    )
+    downstream = pvproperty(
+        name="2301:DS:LVL",
+        value=93.0,
+        lower_alarm_limit=90.0,
+        lower_warning_limit=92.0,
+        upper_warning_limit=97.0,
+        upper_alarm_limit=100.0,
+    )
 
     max_ll = 100
     min_ll = 0

@@ -2,7 +2,7 @@ from datetime import datetime
 from random import randrange, randint
 
 import numpy as np
-from caproto import ChannelType
+from caproto import AlarmSeverity, AlarmStatus, ChannelType
 from caproto.server import (
     PVGroup,
     PvpropertyFloat,
@@ -14,6 +14,7 @@ from caproto.server import (
     PvpropertyChar,
     PvpropertyInteger,
     PvpropertyBoolEnum,
+    SubGroup,
 )
 
 from typing import TYPE_CHECKING
@@ -22,6 +23,73 @@ if TYPE_CHECKING:
     from sc_linac_physics.utils.simulation.cryomodule_service import (
         CryomodulePVGroup,
     )
+
+
+class CUDPVGroup(PVGroup):
+    """Cavity summary display PVs in their own group so alarm.write() is isolated."""
+
+    cudStatus: PvpropertyString = pvproperty(
+        value="TLC", name="CUDSTATUS", dtype=ChannelType.STRING
+    )
+    cudSevr: PvpropertyEnum = pvproperty(
+        value=1,
+        name="CUDSEVR",
+        dtype=ChannelType.ENUM,
+        enum_strings=(
+            "NO_ALARM",
+            "MINOR",
+            "MAJOR",
+            "INVALID",
+            "MAINTENANCE",
+            "OFFLINE",
+            "READY",
+        ),
+    )
+    cudDesc: PvpropertyChar = pvproperty(
+        value="Name", name="CUDDESC", dtype=ChannelType.CHAR
+    )
+
+    _CUDSEVR_STRINGS = (
+        "NO_ALARM",
+        "MINOR",
+        "MAJOR",
+        "INVALID",
+        "MAINTENANCE",
+        "OFFLINE",
+        "READY",
+    )
+    _CUDSEVR_ALARM = {
+        0: (AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM),
+        1: (AlarmStatus.STATE, AlarmSeverity.MINOR_ALARM),
+        2: (AlarmStatus.STATE, AlarmSeverity.MAJOR_ALARM),
+        3: (AlarmStatus.STATE, AlarmSeverity.INVALID_ALARM),
+        4: (AlarmStatus.STATE, AlarmSeverity.MINOR_ALARM),  # MAINTENANCE
+        5: (AlarmStatus.STATE, AlarmSeverity.MAJOR_ALARM),  # OFFLINE
+        6: (AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM),  # READY
+    }
+
+    async def _sync_cud_alarm(self, sevr_value):
+        if isinstance(sevr_value, bytes):
+            sevr_value = sevr_value.decode(errors="ignore").strip()
+        if isinstance(sevr_value, str):
+            idx = (
+                self._CUDSEVR_STRINGS.index(sevr_value)
+                if sevr_value in self._CUDSEVR_STRINGS
+                else 0
+            )
+            sevr_value = idx
+        status, severity = self._CUDSEVR_ALARM.get(
+            sevr_value, (AlarmStatus.STATE, AlarmSeverity.MINOR_ALARM)
+        )
+        await self.cudStatus.alarm.write(status=status, severity=severity)
+
+    @cudSevr.startup
+    async def cudSevr(self, instance, async_lib):
+        await self._sync_cud_alarm(instance.value)
+
+    @cudSevr.putter
+    async def cudSevr(self, instance, value):
+        await self._sync_cud_alarm(value)
 
 
 class CavityPVGroup(PVGroup):
@@ -95,27 +163,9 @@ class CavityPVGroup(PVGroup):
         enum_strings=("Not parked", "Parked"),
         record="mbbi",
     )
-    # Cavity Summary Display PVs
-    cudStatus: PvpropertyString = pvproperty(
-        value="TLC", name="CUDSTATUS", dtype=ChannelType.STRING
-    )
-    cudSevr: PvpropertyEnum = pvproperty(
-        value=1,
-        name="CUDSEVR",
-        dtype=ChannelType.ENUM,
-        enum_strings=(
-            "NO_ALARM",
-            "MINOR",
-            "MAJOR",
-            "INVALID",
-            "MAINTENANCE",
-            "OFFLINE",
-            "READY",
-        ),
-    )
-    cudDesc: PvpropertyChar = pvproperty(
-        value="Name", name="CUDDESC", dtype=ChannelType.CHAR
-    )
+    # Cavity Summary Display PVs — isolated in own subgroup so alarm.write() there
+    # doesn't bleed into the shared CavityPVGroup alarm (which would affect GACT etc.)
+    cud = SubGroup(CUDPVGroup, prefix="")
     ssa_latch: PvpropertyEnum = pvproperty(
         value=0,
         name="SSA_LTCH",
@@ -146,7 +196,11 @@ class CavityPVGroup(PVGroup):
         value=randint(-10000, 200000), name="DF_COLD", dtype=ChannelType.FLOAT
     )
     step_temp: PvpropertyFloat = pvproperty(
-        value=35.0, name="STEPTEMP", dtype=ChannelType.FLOAT
+        value=35.0,
+        name="STEPTEMP",
+        dtype=ChannelType.FLOAT,
+        upper_warning_limit=55.0,
+        upper_alarm_limit=70.0,  # STEPPER_TEMP_LIMIT in linac_utils
     )
 
     fscan_stat: PvpropertyEnum = pvproperty(
@@ -293,6 +347,7 @@ class CavityPVGroup(PVGroup):
         self.length = self.HL_LENGTH if isHL else self.NORMAL_LENGTH
         self.frequency = self.HL_FREQ if isHL else self.NORMAL_FREQ
         self.cm_group: "CryomodulePVGroup" = cm_group
+        self.piezo_group = None
 
     @property
     def power(self):
@@ -302,6 +357,49 @@ class CavityPVGroup(PVGroup):
         q0 = self.q0.value
         power = (amplitude_v * amplitude_v) / (1012 * q0)
         return power
+
+    async def _update_amplitude_alarm(self, target_ades: float = None):
+        if target_ades is None:
+            target_ades = self.ades.value
+        deviation = abs(self.aact.value - target_ades)
+        if deviation > 0.5:
+            status, severity = AlarmStatus.HIHI, AlarmSeverity.MAJOR_ALARM
+        elif deviation > 0.1:
+            status, severity = AlarmStatus.HIGH, AlarmSeverity.MINOR_ALARM
+        else:
+            status, severity = AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
+        await self.aact.alarm.write(status=status, severity=severity)
+        await self.amean.alarm.write(status=status, severity=severity)
+
+    async def _update_detune_alarm(self, instance, value):
+        piezo = self.piezo_group
+        if (
+            piezo is not None
+            and piezo.enable_stat.value == 1
+            and piezo.feedback_mode_stat.value == "Feedback"
+        ):
+            abs_hz = abs(value)
+            if abs_hz > 50:
+                status, severity = AlarmStatus.HIHI, AlarmSeverity.MAJOR_ALARM
+            elif abs_hz > 10:
+                status, severity = AlarmStatus.HIGH, AlarmSeverity.MINOR_ALARM
+            else:
+                status, severity = AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
+        else:
+            status, severity = AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
+        await instance.alarm.write(status=status, severity=severity)
+
+    @detune.putter
+    async def detune(self, instance, value):
+        await self._update_detune_alarm(instance, value)
+
+    @detune_rfs.putter
+    async def detune_rfs(self, instance, value):
+        await self._update_detune_alarm(instance, value)
+
+    @detune_chirp.putter
+    async def detune_chirp(self, instance, value):
+        await self._update_detune_alarm(instance, value)
 
     @quench_latch.putter
     async def quench_latch(self, instance, value):
@@ -339,6 +437,7 @@ class CavityPVGroup(PVGroup):
 
         await self.aact.write(0)
         await self.amean.write(0)
+        await self._update_amplitude_alarm()
         print("DEBUG: Amplitude set to 0", file=sys.stderr, flush=True)
 
     def _determine_quench_type(self) -> str:
@@ -475,6 +574,7 @@ class CavityPVGroup(PVGroup):
             if self.rf_state_act.value == 1:
                 await self.aact.write(self.ades.value)
                 await self.amean.write(self.ades.value)
+            await self._update_amplitude_alarm()
             # Reset the command back to default
             await self.interlock_reset.write(0)
 
@@ -483,6 +583,7 @@ class CavityPVGroup(PVGroup):
         power_prev = self.power
         await self.aact.write(value)
         await self.amean.write(value)
+        await self._update_amplitude_alarm(target_ades=value)
         power_new = self.power
         delta = -(power_new - power_prev)
         gradient = value / self.length
@@ -520,9 +621,11 @@ class CavityPVGroup(PVGroup):
         await self.aact.write(0)
         await self.gact.write(0)
         await self.rf_state_act.write("Off")
+        await self._update_amplitude_alarm()
 
     async def power_on(self):
         await self.aact.write(self.ades.value)
         await self.amean.write(self.ades.value)
         await self.gact.write(self.gdes.value)
         await self.rf_state_act.write("On")
+        await self._update_amplitude_alarm(target_ades=self.ades.value)
