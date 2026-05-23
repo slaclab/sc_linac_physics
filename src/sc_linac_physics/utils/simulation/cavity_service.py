@@ -72,12 +72,14 @@ class CUDPVGroup(PVGroup):
         if isinstance(sevr_value, bytes):
             sevr_value = sevr_value.decode(errors="ignore").strip()
         if isinstance(sevr_value, str):
-            idx = (
-                self._CUDSEVR_STRINGS.index(sevr_value)
-                if sevr_value in self._CUDSEVR_STRINGS
-                else 0
-            )
-            sevr_value = idx
+            if sevr_value.isdigit():
+                sevr_value = int(sevr_value)
+            else:
+                sevr_value = (
+                    self._CUDSEVR_STRINGS.index(sevr_value)
+                    if sevr_value in self._CUDSEVR_STRINGS
+                    else 0
+                )
         status, severity = self._CUDSEVR_ALARM.get(
             sevr_value, (AlarmStatus.STATE, AlarmSeverity.MINOR_ALARM)
         )
