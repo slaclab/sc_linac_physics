@@ -184,6 +184,10 @@ if __name__ == "__main__":
     # Using plain QApplication here would leave PyDMLabel unable to connect to PVs.
     # use_main_window=False prevents PyDM from opening an extra empty window.
     app = PyDMApplication(use_main_window=False)
+    # apply_stylesheet loads PyDM's default alarm color rules.  Without this,
+    # alarmSensitiveBorder and alarmSensitiveContent have no visual effect.
+    from pydm.utilities.stylesheet import apply_stylesheet
+    apply_stylesheet()
     window = CavityStatusDisplay()
     window.resize(380, 160)
     window.show()
@@ -298,6 +302,8 @@ class CryomoduleOverview(Display):
 
 if __name__ == "__main__":
     app = PyDMApplication(use_main_window=False)
+    from pydm.utilities.stylesheet import apply_stylesheet
+    apply_stylesheet()
     window = CryomoduleOverview()
     window.resize(600, 400)
     window.show()
@@ -314,6 +320,7 @@ python cryomodule_overview.py
 
 - The `alarmSensitiveBorder` and `alarmSensitiveContent` properties on `PyDMLabel` make the
   widget change color when the PV goes into alarm. Try setting both to `True` on the fault label.
+  The simulation starts every cavity in MINOR alarm, so the label should turn yellow immediately.
 - Add a column showing `AACTMEAN` (mean amplitude). How does the layout look with five columns?
 - Try `CM = "H1"` (a third-harmonic cryomodule). Does it still run?
 
@@ -402,6 +409,8 @@ class LinacSummary(Display):
 
 if __name__ == "__main__":
     app = PyDMApplication(use_main_window=False)
+    from pydm.utilities.stylesheet import apply_stylesheet
+    apply_stylesheet()
     window = LinacSummary()
     window.resize(600, 250)
     window.show()

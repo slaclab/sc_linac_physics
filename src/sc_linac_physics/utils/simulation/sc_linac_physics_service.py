@@ -432,6 +432,7 @@ class SCLinacPhysicsService(Service):
         piezo_group = PiezoPVGroup(
             prefix=f"{cav_prefix}PZT:", cavity_group=cavity_group
         )
+        cavity_group.piezo_group = piezo_group
         self.add_pvs(piezo_group)
         self.add_pvs(
             StepperPVGroup(
