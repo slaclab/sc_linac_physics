@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.24.1 (2026-05-27)
+
+### Bug Fixes
+
+- Mock RFControls in quench test to prevent PyDMSpinbox CI failures
+  ([#248](https://github.com/slaclab/sc_linac_physics/pull/248),
+  [`03649d1`](https://github.com/slaclab/sc_linac_physics/commit/03649d10ba570b081a80638b711400c0761e825d))
+
+
 ## v9.24.0 (2026-05-26)
 
 ### Bug Fixes
