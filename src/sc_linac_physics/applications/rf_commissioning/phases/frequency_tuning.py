@@ -41,7 +41,7 @@ class FrequencyTuningLimits:
     tolerance_hz: float = 500.0
     probe_steps: int = 50_000
     temp_limit_c: float = linac_utils.STEPPER_TEMP_LIMIT
-    max_total_steps: int = 100_000
+    max_total_steps: int = 10_000_000
     cool_down_retries: int = 6
     cool_down_interval: float = 5.0
     motor_start_wait: float = 5.0
@@ -365,6 +365,7 @@ class FrequencyTuningPhase(PhaseBase):
                 "delta_hz": delta,
                 "positive_step_increases_frequency": positive_step_increases_frequency,
                 "hz_per_microstep": self._hz_per_microstep,
+                "probe_steps": probe,
             },
         )
 
@@ -460,6 +461,7 @@ class FrequencyTuningPhase(PhaseBase):
         signed_total: int,
         peak_temp: float,
         hz_per_step: float,
+        hz_update_cb=None,
     ) -> tuple[int, int, float, bool, PhaseStepResult | None]:
         """Execute one iteration of the tuning loop.
 
@@ -509,6 +511,28 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
 
+        magnitude, steps_this_move, err = self._do_move(
+            total_steps, peak_temp, detune, hz_per_step, hz_update_cb
+        )
+        if err is not None:
+            return total_steps, signed_total, peak_temp, False, err
+        return (
+            total_steps + magnitude,
+            signed_total + steps_this_move,
+            peak_temp,
+            False,
+            None,
+        )
+
+    def _do_move(
+        self,
+        total_steps: int,
+        peak_temp: float,
+        detune: float,
+        hz_per_step: float,
+        hz_update_cb,
+    ) -> tuple[int, int, "PhaseStepResult | None"]:
+        """Compute step size, execute stepper move, and invoke the Hz/step callback."""
         hardware_max = self.cavity.stepper_tuner.max_steps
         estimated = max(1, round(abs(detune) / hz_per_step))
         magnitude = min(hardware_max, estimated)
@@ -520,10 +544,8 @@ class FrequencyTuningPhase(PhaseBase):
             )
         except (linac_utils.StepperError, linac_utils.StepperAbortError) as exc:
             return (
-                total_steps,
-                signed_total,
-                peak_temp,
-                False,
+                magnitude,
+                steps_this_move,
                 PhaseStepResult(
                     result=PhaseResult.FAILED,
                     message=f"Stepper error after {total_steps} steps: {exc}",
@@ -531,13 +553,15 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
 
-        return (
-            total_steps + magnitude,
-            signed_total + steps_this_move,
-            peak_temp,
-            False,
-            None,
-        )
+        if hz_update_cb is not None:
+            try:
+                hz_delta = abs(self.cavity.detune_chirp - detune)
+                if hz_delta > 0:
+                    hz_update_cb(magnitude, hz_delta)
+            except Exception:
+                pass
+
+        return magnitude, steps_this_move, None
 
     def _tune_to_resonance(self) -> PhaseStepResult:
         if self.context.dry_run:
@@ -551,6 +575,9 @@ class FrequencyTuningPhase(PhaseBase):
             )
 
         tuning_cb = self.context.parameters.get("tuning_update_callback")
+        hz_update_cb = self.context.parameters.get(
+            "hz_per_step_update_callback"
+        )
 
         total_steps, signed_total, peak_temp = self._initialize_tuning_state(
             tuning_cb
@@ -559,7 +586,11 @@ class FrequencyTuningPhase(PhaseBase):
         while True:
             total_steps, signed_total, peak_temp, converged, err = (
                 self._one_tuning_iteration(
-                    total_steps, signed_total, peak_temp, hz_per_step
+                    total_steps,
+                    signed_total,
+                    peak_temp,
+                    hz_per_step,
+                    hz_update_cb,
                 )
             )
             if err is not None:

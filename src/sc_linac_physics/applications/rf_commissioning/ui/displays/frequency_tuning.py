@@ -4,6 +4,7 @@ import time
 
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt5.QtWidgets import QDoubleSpinBox
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     FrequencyTuningData,
@@ -34,16 +35,12 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
     ):
         super().__init__(parent, session=session)
         # super().__init__ → setup_ui() → _bind_ui_widgets() → self.tuning_plot set
-        self._detune_times: list[float] = []
-        self._detune_hz: list[float] = []
         self._live_times: list[float] = []
         self._live_hz: list[float] = []
         self._run_start_time: float = time.time()
-        self._actual_curve: pg.PlotDataItem | None = None
         self._projection_curve: pg.PlotDataItem | None = None
         self._live_curve: pg.PlotDataItem | None = None
         self._setup_plot_curves()
-        self.tuning_data_signal.connect(self._on_tuning_update)
 
         self._detune_refresh_timer = QTimer(self)
         self._detune_refresh_timer.setInterval(500)
@@ -61,8 +58,10 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
 
         self._controller = FrequencyTuningController(self, self.session)
         callbacks = {
-            "on_run_automated_test": self._controller.on_run_automated_test,
-            "on_confirm_and_tune": self._controller.on_confirm_and_tune,
+            "on_run_stage_1": self._controller.run_stage_1,
+            "on_run_stage_2": self._controller.run_stage_2,
+            "on_run_stage_3": self._controller.run_stage_3,
+            "on_confirm_and_save": self._controller.confirm_and_save,
             "on_pause_test": self._controller.on_pause_test,
             "on_abort_test": self._controller.on_abort,
             "on_move_left": self._controller.on_move_left,
@@ -71,6 +70,17 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         self.ui = self.UI_CLASS(self, callbacks)
         main_layout = self.ui.build()
         self._bind_ui_widgets()
+
+        self._controller.hz_per_step_updated.connect(
+            self._on_hz_per_step_updated
+        )
+
+        hz_spinbox = getattr(self, "hz_per_step_spinbox", None)
+        if isinstance(hz_spinbox, QDoubleSpinBox):
+            hz_spinbox.valueChanged.connect(
+                self._on_hz_per_step_spinbox_changed
+            )
+
         self.setLayout(main_layout)
         self.update_timestamp()
 
@@ -88,15 +98,6 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             [],
             pen=pg.mkPen(color="#ff6b6b", width=1),
             name="Live detune",
-        )
-        self._actual_curve = pw.plot(
-            [],
-            [],
-            pen=pg.mkPen(color="#4a9eff", width=2),
-            symbol="o",
-            symbolSize=5,
-            symbolBrush="#4a9eff",
-            name="Phase run",
         )
         self._projection_curve = pw.plot(
             [],
@@ -118,9 +119,7 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
 
         t_now = time.time() - self._run_start_time
 
-        if self._detune_hz:
-            current_detune = self._detune_hz[-1]
-        elif self._live_hz:
+        if self._live_hz:
             current_detune = self._live_hz[-1]
         else:
             current_detune = initial_detune_hz
@@ -145,30 +144,12 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
     def reset_plot(self) -> None:
         """Clear all plot data and reset the time reference at the start of a new run."""
         self._run_start_time = time.time()
-        self._detune_times.clear()
-        self._detune_hz.clear()
         self._live_times.clear()
         self._live_hz.clear()
-        if self._actual_curve is not None:
-            self._actual_curve.setData([], [])
         if self._projection_curve is not None:
             self._projection_curve.setData([], [])
         if self._live_curve is not None:
             self._live_curve.setData([], [])
-
-    # ------------------------------------------------------------------
-    # Slot — called on the GUI thread via Qt signal/slot
-    # ------------------------------------------------------------------
-
-    @pyqtSlot(float, float)
-    def _on_tuning_update(self, timestamp: float, detune_hz: float) -> None:
-        elapsed = (
-            (timestamp - self._run_start_time) if self._run_start_time else 0.0
-        )
-        self._detune_times.append(elapsed)
-        self._detune_hz.append(detune_hz)
-        if self._actual_curve is not None:
-            self._actual_curve.setData(self._detune_times, self._detune_hz)
 
     @pyqtSlot()
     def _refresh_live_detune(self) -> None:
@@ -178,6 +159,49 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             self._live_times.append(elapsed)
             self._live_hz.append(detune)
             self._live_curve.setData(self._live_times, self._live_hz)
+
+    # ------------------------------------------------------------------
+    # Hz/step spinbox slots
+    # ------------------------------------------------------------------
+
+    @pyqtSlot(float)
+    def _on_hz_per_step_updated(self, hz_per_step: float) -> None:
+        """Update spinbox when the controller refines the Hz/step estimate."""
+        hz_spinbox = getattr(self, "hz_per_step_spinbox", None)
+        if hz_spinbox is not None:
+            hz_spinbox.blockSignals(True)
+            hz_spinbox.setValue(hz_per_step)
+            hz_spinbox.blockSignals(False)
+        if hz_per_step > 0:
+            self.set_projection(0.0, hz_per_step)
+
+    @pyqtSlot(float)
+    def _on_hz_per_step_spinbox_changed(self, hz_per_step: float) -> None:
+        """Redraw projection when operator edits Hz/step manually."""
+        if hz_per_step > 0:
+            self.set_projection(0.0, hz_per_step)
+
+    def get_current_hz_per_step(self) -> float | None:
+        """Return the current Hz/step value from the editable spinbox."""
+        hz_spinbox = getattr(self, "hz_per_step_spinbox", None)
+        if hz_spinbox is not None:
+            val = float(hz_spinbox.value())
+            return val if val > 0 else None
+        return None
+
+    # ------------------------------------------------------------------
+    # Record load hooks
+    # ------------------------------------------------------------------
+
+    def on_record_loaded(self, record, record_id: int) -> None:
+        """Lock Stage 1 and restore stage states when a saved record is loaded."""
+        super().on_record_loaded(record, record_id)
+        self._controller.restore_from_record(record)
+
+    def refresh_from_record(self, record) -> None:
+        """Re-apply stage restore whenever the active record changes."""
+        super().refresh_from_record(record)
+        self._controller.restore_from_record(record)
 
     # ------------------------------------------------------------------
     # Readout helpers called by FrequencyTuningController
