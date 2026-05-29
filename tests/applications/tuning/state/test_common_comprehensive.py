@@ -27,9 +27,10 @@ def test_platform_default_paths_macos_like():
         Path("/Users/tester"),
     )
 
-    assert base_dir == Path("/Users/tester")
-    assert db_path == Path("/Users/tester/databases/tune_status.sqlite")
-    assert json_path == Path("/Users/tester/json/tune_status.json")
+    base = Path("/Users/tester") / ".sc_linac_physics"
+    assert base_dir == base
+    assert db_path == base / "databases" / "tune_status.sqlite"
+    assert json_path == base / "json" / "tune_status.json"
 
 
 def test_resolve_paths_use_platform_defaults_for_default_base_dir():
