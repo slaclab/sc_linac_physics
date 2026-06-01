@@ -5,11 +5,12 @@ from PyQt5.QtGui import QColor
 
 
 class ColorMapper:
-    """Maps a numeric value to a color on a navy-to-yellow gradient.
+    """Maps a numeric value to a color on a navy to yellow gradient.
 
     Supports log scale for ranges that span several orders of magnitude.
     """
 
+    # 6 stop gradient from dark purple (low) to bright yellow (high)
     DEFAULT_STOPS: List[Tuple[float, QColor]] = [
         (0.0, QColor(68, 1, 84)),  # dark purple
         (0.2, QColor(65, 68, 135)),  # blue purple
@@ -50,13 +51,16 @@ class ColorMapper:
         return self._log_scale
 
     def _normalize(self, value: float) -> float:
+        """Scale value into [0, 1] for gradient lookup."""
         if math.isnan(value) or math.isinf(value):
             return 0.0
         if self._vmax == self._vmin:
             return 0.0
 
         if self._log_scale:
-            # log1p(x) = ln(1+x), maps 0 -> 0 and spreads large ranges
+            # Without log: if one cavity has 500 faults, cavities with 2 vs
+            # 10 faults both look the same dark purple. Log spreads out the
+            # low end so you can see differences between them.
             log_range = math.log1p(self._vmax - self._vmin)
             if log_range == 0.0:
                 return 0.0
@@ -77,6 +81,8 @@ class ColorMapper:
     def get_color(self, value: float) -> QColor:
         t = self._normalize(value)
 
+        # Find which two color stops t falls between, then blend
+        # proportionally between them
         for i in range(len(self._stops) - 1):
             t0, c0 = self._stops[i]
             t1, c1 = self._stops[i + 1]
