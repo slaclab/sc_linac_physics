@@ -7,6 +7,7 @@ from sc_linac_physics.applications.microphonics.utils.constants import (
 from sc_linac_physics.applications.microphonics.utils.data_processing import (
     calculate_fft,
 )
+from sc_linac_physics.utils.plot_tooltip import PlotTooltip
 
 
 class FFTPlot(BasePlot):
@@ -67,18 +68,9 @@ class FFTPlot(BasePlot):
                 default_y_range = self.config.get("y_range", (0, 1.5))
                 self.plot_widget.setYRange(*default_y_range)
 
-    def _format_tooltip(self, plot_type, x, y):
-        """Format tooltip text for FFT plot
-
-        Args:
-            plot_type: Type of plot (unused in this implementation)
-            x: X coordinate (frequency in Hz)
-            y: Y coordinate (amplitude)
-
-        Returns:
-            str: Formatted tooltip text
-        """
-        return f"Frequency: {x:.1f} Hz\nAmplitude: {y:.3f}"
+    def get_formatter(self):
+        """Tooltip formatter for FFT plot."""
+        return PlotTooltip.make_formatter("Frequency (Hz)", "Amplitude")
 
     def update_plot(self, cavity_num, cavity_channel_data):
         """Update FFT plot w/ new data
