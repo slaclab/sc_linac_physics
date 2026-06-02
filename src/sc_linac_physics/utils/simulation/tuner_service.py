@@ -1,4 +1,5 @@
 from asyncio import sleep
+from random import uniform
 
 from caproto import ChannelType
 from caproto.server import (
@@ -12,6 +13,7 @@ from caproto.server import (
 
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     ESTIMATED_MICROSTEPS_PER_HZ,
+    ESTIMATED_MICROSTEPS_PER_HZ_HL,
     PIEZO_HZ_PER_VOLT,
 )
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
@@ -82,10 +84,19 @@ class StepperPVGroup(PVGroup):
         enum_strings=("not at limit", "at limit"),
     )
     hz_per_microstep = pvproperty(
-        value=1 / ESTIMATED_MICROSTEPS_PER_HZ,
+        value=0.0,
         name="SCALE",
         dtype=ChannelType.FLOAT,
     )
+
+    @hz_per_microstep.startup
+    async def hz_per_microstep(self, instance, async_lib):
+        nominal = (
+            1 / ESTIMATED_MICROSTEPS_PER_HZ_HL
+            if self.cavity_group.is_hl
+            else 1 / ESTIMATED_MICROSTEPS_PER_HZ
+        )
+        await instance.write(uniform(0.8 * nominal, 1.2 * nominal))
 
     def __init__(self, prefix, cavity_group, piezo_group):
         super().__init__(prefix)

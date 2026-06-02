@@ -28,10 +28,16 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
+_STAGE_COLD_LANDING = "cold_landing"
+_STAGE_PROBE_DIRECTION = "probe_direction"
+_STAGE_TUNE_TO_RESONANCE = "tune_to_resonance"
+_STAGE_PI_MODES = "pi_modes"
+
 _STAGE1_STEPS = ["verify_initial_state", "record_cold_landing"]
 _STAGE2_STEPS = ["probe_stepper_direction"]
 _STAGE3_STEPS = ["apply_hz_per_step", "tune_to_resonance"]
-_STAGE3_FINALIZE_STEPS = ["record_results"]
+_STAGE4_STEPS = ["measure_pi_modes"]
+_STAGE4_FINALIZE_STEPS = ["record_results"]
 
 
 class FrequencyTuningController(QObject):
@@ -66,6 +72,15 @@ class FrequencyTuningController(QObject):
         self._hz_est_total_steps: float = 0.0
         self._hz_est_total_hz: float = 0.0
         self._net_steps: int = 0
+        self._tune_step_data: dict = {}
+        self._probe_stage_confirmed: bool = False
+        self._step_signed_pv_obj = None
+        self._pending_stage2_data: dict = {}
+        self._probe_s_d0: int | None = None
+        self._probe_s_d1: int | None = None
+        self._probe_d0_hz: float | None = None
+        self._probe_d1_hz: float | None = None
+        self._pi_mode_data: dict = {}
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
         self._stage_done.connect(self._on_stage_done)
@@ -93,6 +108,7 @@ class FrequencyTuningController(QObject):
             cm, cav = int(cryomodule), int(cavity_number)
             cavity = self._get_machine_cavity(cm, cav)
             self._cavity = cavity
+            self._step_signed_pv_obj = None
             self._apply_stepper_pv_mapping(cavity)
             self.view.log_message(
                 format_pv_update_message(cryomodule, cavity_number, cm, cav)
@@ -107,6 +123,13 @@ class FrequencyTuningController(QObject):
             ("steps_spinbox", stepper.step_des_pv),
             ("speed_spinbox", stepper.speed_pv),
             ("max_steps_spinbox", stepper.max_steps_pv),
+            ("detune_chirp_readback", cavity.detune_chirp_pv),
+            ("df_cold_readback", cavity.pv_addr("DF_COLD")),
+            ("scale_readback", stepper.hz_per_microstep_pv),
+            ("net_steps_label", stepper.step_signed_pv),
+            ("fscan_stat_readback", cavity.rack.pv_prefix + "FSCAN:STAT"),
+            ("stage4_8pi9_label", cavity.pv_addr("FSCAN:8PI9MODE")),
+            ("stage4_7pi9_label", cavity.pv_addr("FSCAN:7PI9MODE")),
         ):
             if hasattr(self.view, widget_name):
                 pv_map[getattr(self.view, widget_name)] = pv_addr
@@ -166,11 +189,25 @@ class FrequencyTuningController(QObject):
 
     def run_stage_2(self) -> None:
         """Probe stepper direction to measure Hz/step."""
+        operator = self._get_operator()
+        if not operator:
+            self.view.show_error(
+                "Please select an operator in the header before running."
+            )
+            return
+
         if not self.phase or not self.context:
             self.view.show_error("Run Stage 1 first.")
             return
 
         self.view.log_message("Stage 2: Probing stepper direction...")
+        self._probe_stage_confirmed = False
+        self._pending_stage2_data = {}
+        if hasattr(self.view, "reset_plot"):
+            self.view.reset_plot()
+        confirm_probe_btn = getattr(self.view, "confirm_probe_fit_button", None)
+        if confirm_probe_btn is not None:
+            confirm_probe_btn.setEnabled(False)
         self._current_stage = 2
         self._steps = list(_STAGE2_STEPS)
         self._finalize_after_run = False
@@ -179,32 +216,60 @@ class FrequencyTuningController(QObject):
 
     def run_stage_3(self) -> None:
         """Apply Hz/step to SCALE PV and tune to resonance."""
+        operator = self._get_operator()
+        if not operator:
+            self.view.show_error(
+                "Please select an operator in the header before running."
+            )
+            return
+
         if not self.phase or not self.context:
             self.view.show_error("Run Stage 2 first.")
             return
 
         hz = self._get_hz_per_step_from_view()
-        if hz and hz > 0 and self.phase._signed_hz_per_microstep is not None:
-            sign = 1.0 if self.phase._signed_hz_per_microstep >= 0 else -1.0
-            self.phase._hz_per_microstep = hz
-            self.phase._signed_hz_per_microstep = hz * sign
+        if hz and hz != 0 and self.phase._signed_hz_per_microstep is not None:
+            self.phase._hz_per_microstep = abs(hz)
+            self.phase._signed_hz_per_microstep = hz
 
         self.view.log_message("Stage 3: Tuning to resonance...")
+        if hasattr(self.view, "reset_plot"):
+            self.view.reset_plot()
         self._current_stage = 3
         self._steps = list(_STAGE3_STEPS)
         self._finalize_after_run = False
         self._set_stage_running_ui(3)
         QTimer.singleShot(100, self._run_phase_in_background)
 
+    def run_stage_4(self) -> None:
+        """Run the rack FSCAN to measure 8π/9 and 7π/9 pi modes."""
+        operator = self._get_operator()
+        if not operator:
+            self.view.show_error(
+                "Please select an operator in the header before running."
+            )
+            return
+
+        if not self.phase or not self.context:
+            self.view.show_error("Run Stage 3 first.")
+            return
+
+        self.view.log_message("Stage 4: Measuring pi modes...")
+        self._current_stage = 4
+        self._steps = list(_STAGE4_STEPS)
+        self._finalize_after_run = False
+        self._set_stage_running_ui(4)
+        QTimer.singleShot(100, self._run_phase_in_background)
+
     def confirm_and_save(self) -> None:
         """Finalize results and save to database."""
         if not self.phase or not self.context:
-            self.view.show_error("Complete Stage 3 first.")
+            self.view.show_error("Complete Stage 4 first.")
             return
 
         self.view.log_message("Confirming and saving results...")
-        self._current_stage = 4
-        self._steps = list(_STAGE3_FINALIZE_STEPS)
+        self._current_stage = 5
+        self._steps = list(_STAGE4_FINALIZE_STEPS)
         self._finalize_after_run = True
         self._set_stage_running_ui(None)
         QTimer.singleShot(100, self._run_phase_in_background)
@@ -218,29 +283,40 @@ class FrequencyTuningController(QObject):
     # ------------------------------------------------------------------
 
     def _resolve_target(self) -> tuple[str, int, int] | None:
-        if (
-            not self.session.has_active_record()
-            and not self._auto_create_record()
-        ):
-            return None
-
-        cavity_info = self.view.get_current_cavity()
-        if not cavity_info:
+        cryomodule, cavity_number = resolve_cavity_selection(
+            self.view, None, None
+        )
+        if cryomodule is None or cavity_number is None:
             self.view.show_error(
                 "Unable to determine cavity. Select a cavity and try again."
             )
             return None
 
-        cavity_name, cryomodule = cavity_info
         try:
-            parts = cavity_name.split("_")
-            cav = int(parts[2].replace("CAV", "")) if len(parts) >= 3 else 1
-            cm = int(cryomodule)
-        except (ValueError, IndexError):
-            self.view.show_error(f"Invalid cavity name format: {cavity_name}")
+            cm, cav = int(cryomodule), int(cavity_number)
+        except ValueError:
+            self.view.show_error(
+                f"Invalid cavity selection: CM={cryomodule} Cav={cavity_number}"
+            )
             return None
 
-        return cavity_name, cm, cav
+        try:
+            record, record_id, created = self.session.start_new_record(
+                cryomodule=cryomodule, cavity_number=cavity_number
+            )
+            status = "Created" if created else "Loaded"
+            self.view.log_message(
+                f"✓ {status} record for CM{cryomodule} Cav{cavity_number} (ID: {record_id})"
+            )
+            self.view._notify_parent_of_record_update(record, "Record ready")
+        except Exception as exc:
+            import traceback
+
+            self.view.show_error(f"Failed to get/create record:\n\n{exc}")
+            self.view.log_message(f"Traceback: {traceback.format_exc()}")
+            return None
+
+        return f"CM{cm:02d}_CAV{cav}", cm, cav
 
     def _start_stage(
         self,
@@ -334,10 +410,9 @@ class FrequencyTuningController(QObject):
                 status_lbl.setStyleSheet(
                     "QLabel { color: #dc2626; font-weight: bold; }"
                 )
-        if not success:
-            btn = getattr(self.view, f"stage{stage}_run_btn", None)
-            if btn is not None:
-                btn.setEnabled(True)
+        btn = getattr(self.view, f"stage{stage}_run_btn", None)
+        if btn is not None:
+            btn.setEnabled(not success)
 
     def _enable_stage_btn(self, stage: int) -> None:
         btn = getattr(self.view, f"stage{stage}_run_btn", None)
@@ -365,12 +440,20 @@ class FrequencyTuningController(QObject):
             lambda step, prog: self.view.step_progress_signal.emit(step, prog)
         )
         self.context.parameters["tuning_update_callback"] = (
-            lambda steps, detune: self.view.tuning_data_signal.emit(
-                time.time(), detune
+            lambda signed_steps, detune: self.view.tuning_data_signal.emit(
+                float(signed_steps), detune
+            )
+        )
+        self.context.parameters["probe_update_callback"] = (
+            lambda signed_steps, detune: self.view.tuning_data_signal.emit(
+                float(signed_steps), detune
             )
         )
         self.context.parameters["hz_per_step_update_callback"] = (
             self._on_hz_chunk_update
+        )
+        self.context.parameters["status_update_callback"] = (
+            lambda msg: self._log_signal.emit(msg)
         )
         finalize = self._finalize_after_run
         steps = list(self._steps)
@@ -415,18 +498,20 @@ class FrequencyTuningController(QObject):
             self._on_stage2_done()
         elif stage == 3:
             self._on_stage3_done()
+        elif stage == 4:
+            self._on_stage4_done()
 
     def _on_stage1_done(self) -> None:
-        self._set_stage_done_ui(1, success=True)
-        self._persist_partial_frequency_tuning(
-            initial_detune_hz=self._initial_detune_hz
+        saved = self._save_stage_to_history(
+            _STAGE_COLD_LANDING,
+            {"initial_detune_hz": self._initial_detune_hz},
         )
-
-        lbl = getattr(self.view, "cold_landing_label", None)
-        if lbl is not None and self._initial_detune_hz is not None:
-            lbl.setText(f"{self._initial_detune_hz:.0f} Hz")
+        self._set_stage_done_ui(1, success=saved)
+        if not saved:
+            return
 
         self._enable_stage_btn(2)
+        self._update_partial_results()
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("Stage 1 Done")
         self._log_signal.emit(
@@ -434,55 +519,173 @@ class FrequencyTuningController(QObject):
         )
 
     def _on_stage2_done(self) -> None:
-        hz_per_step = self.phase._hz_per_microstep or 0.0
-        positive = (self.phase._signed_hz_per_microstep or 0.0) >= 0
-        self._set_stage_done_ui(2, success=True)
+        signed_hz = self.phase._signed_hz_per_microstep or 0.0
+        hz_per_step = abs(signed_hz)
+        positive = signed_hz >= 0
 
         probe_steps = float(getattr(self.phase.limits, "probe_steps", 0))
         if probe_steps > 0 and hz_per_step > 0:
             self._hz_est_total_steps = probe_steps
             self._hz_est_total_hz = hz_per_step * probe_steps
 
-        self._persist_partial_frequency_tuning(
-            hz_per_microstep=hz_per_step,
-            positive_step_increases_frequency=positive,
-        )
-        self.hz_per_step_updated.emit(hz_per_step)
+        self._pending_stage2_data = {
+            "hz_per_microstep": hz_per_step,
+            "signed_hz_per_microstep": signed_hz,
+            "positive_step_increases_frequency": positive,
+        }
 
+        self.hz_per_step_updated.emit(signed_hz)
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None:
             spinbox.setEnabled(True)
 
+        if (
+            hasattr(self.view, "show_probe_fit")
+            and self._probe_s_d0 is not None
+            and self._probe_s_d1 is not None
+            and self._probe_d0_hz is not None
+            and self._probe_d1_hz is not None
+        ):
+            self.view.show_probe_fit(
+                self._probe_s_d0,
+                self._probe_d0_hz,
+                self._probe_s_d1,
+                self._probe_d1_hz,
+            )
+
+        status_lbl = getattr(self.view, "stage2_status_label", None)
+        if status_lbl is not None:
+            status_lbl.setText("⟳ Confirm fit")
+            status_lbl.setStyleSheet(
+                "QLabel { color: #f59e0b; font-weight: bold; }"
+            )
+        confirm_probe_btn = getattr(self.view, "confirm_probe_fit_button", None)
+        if confirm_probe_btn is not None:
+            confirm_probe_btn.setEnabled(True)
+
+        if hasattr(self.view, "local_phase_status"):
+            self.view.local_phase_status.setText("Stage 2 — Awaiting Confirm")
+        self._log_signal.emit(
+            f"Stage 2 complete: {hz_per_step:.4f} Hz/step measured. "
+            "Review the fit on the plot, adjust Hz/step if needed, "
+            "then click 'Confirm Fit'."
+        )
+
+    def confirm_probe_fit(self) -> None:
+        """Save Stage 2 result after the operator reviews and confirms the fit."""
+        if not self._pending_stage2_data:
+            self.view.show_error("No probe data to confirm. Run Stage 2 first.")
+            return
+
+        # Use the current (possibly operator-edited) spinbox value as the confirmed Hz/step.
+        current_hz = self._get_hz_per_step_from_view()
+        if current_hz is not None and current_hz != 0:
+            abs_hz = abs(current_hz)
+            self._pending_stage2_data["signed_hz_per_microstep"] = current_hz
+            self._pending_stage2_data["hz_per_microstep"] = abs_hz
+            self._pending_stage2_data["positive_step_increases_frequency"] = (
+                current_hz > 0
+            )
+            if self.phase is not None:
+                self.phase._hz_per_microstep = abs_hz
+                self.phase._signed_hz_per_microstep = current_hz
+
+        saved = self._save_stage_to_history(
+            _STAGE_PROBE_DIRECTION,
+            self._pending_stage2_data,
+        )
+        self._set_stage_done_ui(2, success=saved)
+        if not saved:
+            return
+
+        signed_hz = self._pending_stage2_data.get(
+            "signed_hz_per_microstep",
+            self._pending_stage2_data.get("hz_per_microstep", 0.0),
+        )
+        self._probe_stage_confirmed = True
+        self._update_partial_results()
+
+        confirm_probe_btn = getattr(self.view, "confirm_probe_fit_button", None)
+        if confirm_probe_btn is not None:
+            confirm_probe_btn.setEnabled(False)
+
         if self._initial_detune_hz is not None:
             initial = self._initial_detune_hz
-            hps = hz_per_step
+            hps = abs(signed_hz)
             QTimer.singleShot(0, lambda: self.view.set_projection(initial, hps))
 
+        self.push_hz_per_step_to_scale()
         self._enable_stage_btn(3)
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("Stage 2 Done")
         self._log_signal.emit(
-            f"Stage 2 complete: {hz_per_step:.4f} Hz/step measured. "
-            "Review/edit Hz/step if needed, then run Stage 3."
+            f"Stage 2 confirmed: {abs(signed_hz):.4f} Hz/step saved. "
+            "Run Stage 3 to tune to resonance."
         )
 
     def _on_stage3_done(self) -> None:
-        self._set_stage_done_ui(3, success=True)
+        saved = self._save_stage_to_history(
+            _STAGE_TUNE_TO_RESONANCE,
+            {
+                "net_steps": self._net_steps,
+                "cold_landing_steps": self._tune_step_data.get(
+                    "cold_landing_steps"
+                ),
+                "steps_to_resonance": self._tune_step_data.get("total_steps"),
+            },
+        )
+        self._set_stage_done_ui(3, success=saved)
+        if not saved:
+            return
 
-        net_lbl = getattr(self.view, "net_steps_label", None)
-        if net_lbl is not None:
-            net_lbl.setText(f"{self._net_steps:+d} steps")
+        self._enable_stage_btn(4)
+        self._update_partial_results()
+        if hasattr(self.view, "local_phase_status"):
+            self.view.local_phase_status.setText("AT RESONANCE")
+        self._log_signal.emit(
+            f"Stage 3 complete: at resonance. Net steps: {self._net_steps:+d}. "
+            "Run Stage 4 to measure pi modes."
+        )
+
+    def _on_stage4_done(self) -> None:
+        saved = self._save_stage_to_history(_STAGE_PI_MODES, self._pi_mode_data)
+        self._set_stage_done_ui(4, success=saved)
+        if not saved:
+            return
 
         confirm_btn = getattr(self.view, "confirm_save_button", None)
         if confirm_btn is not None:
             confirm_btn.setEnabled(True)
 
+        self._update_partial_results()
         if hasattr(self.view, "local_phase_status"):
-            self.view.local_phase_status.setText("AT RESONANCE")
+            self.view.local_phase_status.setText("PI MODES DONE")
+        hz_8 = self._pi_mode_data.get("mode_8pi_9_hz")
+        hz_7 = self._pi_mode_data.get("mode_7pi_9_hz")
+
+        def _fmt(v):
+            return f"{v:.0f} Hz" if v is not None else "N/A"
+
         self._log_signal.emit(
-            f"Stage 3 complete: at resonance. Net steps: {self._net_steps:+d}. "
+            f"Stage 4 complete: 8π/9={_fmt(hz_8)}, 7π/9={_fmt(hz_7)}. "
             "Click 'Confirm & Save' to store results."
         )
+
+    def _update_partial_results(self) -> None:
+        """Populate Stored Data panel with whatever fields are known so far."""
+        partial = FrequencyTuningData(
+            initial_detune_hz=self._initial_detune_hz,
+            hz_per_microstep=self._pending_stage2_data.get("hz_per_microstep"),
+            positive_step_increases_frequency=self._pending_stage2_data.get(
+                "positive_step_increases_frequency"
+            ),
+            cold_landing_steps=self._tune_step_data.get("cold_landing_steps"),
+            steps_to_resonance=self._tune_step_data.get("total_steps"),
+            mode_8pi_9_frequency=self._pi_mode_data.get("mode_8pi_9_hz"),
+            mode_7pi_9_frequency=self._pi_mode_data.get("mode_7pi_9_hz"),
+        )
+        if hasattr(self.view, "_update_local_results"):
+            self.view._update_local_results(partial)
 
     def _on_hz_chunk_update(self, steps: int, hz_delta: float) -> None:
         """Called from background thread after each tuning move."""
@@ -566,19 +769,38 @@ class FrequencyTuningController(QObject):
             self._initial_detune_hz = data.get("initial_detune_hz")
 
         elif step_name == "probe_stepper_direction":
-            hz_per_step = data.get("hz_per_microstep")
-            if hz_per_step and self._initial_detune_hz is not None:
-                initial = self._initial_detune_hz
-                hps = hz_per_step
-                QTimer.singleShot(
-                    0, lambda: self.view.set_projection(initial, hps)
-                )
+            self._probe_d0_hz = data.get("d0_hz")
+            self._probe_d1_hz = data.get("d1_hz")
+            self._probe_s_d0 = data.get("s_d0", 0)
+            self._probe_s_d1 = data.get("s_d1", data.get("probe_steps", 0))
 
         elif step_name == "tune_to_resonance":
             cold_landing_steps = data.get("cold_landing_steps", 0)
             self._net_steps = (
                 -cold_landing_steps if cold_landing_steps is not None else 0
             )
+            self._tune_step_data = dict(data)
+
+        elif step_name == "measure_pi_modes":
+            self._pi_mode_data = dict(data)
+
+    def _save_stage_to_history(self, step: str, data: dict) -> bool:
+        """Persist a stage completion to measurement_history.
+
+        Returns True on success so callers can gate UI updates on a confirmed save.
+        """
+        try:
+            return self.session.add_measurement_to_history(
+                CommissioningPhase.FREQUENCY_TUNING,
+                {"step": step, **data},
+                self._get_operator(),
+                phase_instance_id=self._active_phase_instance_id,
+            )
+        except Exception as exc:
+            self._log_signal.emit(
+                f"Warning: could not save stage history: {exc}"
+            )
+            return False
 
     def _create_step_checkpoint(self, step_name: str, result) -> None:
         measurements = dict(result.data or {})
@@ -752,6 +974,89 @@ class FrequencyTuningController(QObject):
         except Exception:
             return None
 
+    def get_live_steps(self) -> int | None:
+        if self._cavity is None:
+            return None
+        try:
+            from sc_linac_physics.utils.epics import PV
+
+            if self._step_signed_pv_obj is None:
+                self._step_signed_pv_obj = PV(
+                    self._cavity.stepper_tuner.step_signed_pv
+                )
+            val = self._step_signed_pv_obj.get()
+            return int(val) if val is not None else None
+        except Exception:
+            return None
+
+    def get_signed_hz_per_step(self) -> float | None:
+        """Return signed Hz/step from the active phase (sign encodes motor direction)."""
+        if self.phase is not None:
+            return getattr(self.phase, "_signed_hz_per_microstep", None)
+        return None
+
+    def get_probe_anchor(self) -> tuple[int, float, int] | None:
+        """Return (s_d0, d0_hz, s_d1) anchor points for recalculating the probe fit.
+
+        Returns None if probe data is not yet available.
+        """
+        if (
+            self._probe_s_d0 is not None
+            and self._probe_d0_hz is not None
+            and self._probe_s_d1 is not None
+        ):
+            return self._probe_s_d0, self._probe_d0_hz, self._probe_s_d1
+        return None
+
+    def push_hz_per_step_to_scale(self) -> None:
+        """Write the current Hz/step estimate to the SCALE PV (signed)."""
+        if self._cavity is None:
+            self.view.log_message("No cavity selected — cannot push to SCALE.")
+            return
+
+        signed_hz = self._get_hz_per_step_from_view()
+        if not signed_hz or signed_hz == 0:
+            self.view.log_message("No Hz/step value to push.")
+            return
+
+        def _do_push() -> None:
+            try:
+                from sc_linac_physics.utils.epics import PV
+
+                pv = PV(self._cavity.stepper_tuner.hz_per_microstep_pv)
+                pv.put(signed_hz)
+                self._log_signal.emit(
+                    f"Pushed {signed_hz:.4f} Hz/step to SCALE PV."
+                )
+            except Exception as exc:
+                self._log_signal.emit(f"Failed to push to SCALE PV: {exc}")
+
+        Thread(target=_do_push, daemon=True).start()
+
+    def push_detune_to_df_cold(self) -> None:
+        """Write the current live detune reading to the DF_COLD PV."""
+        if self._cavity is None:
+            self.view.log_message(
+                "No cavity selected — cannot push to DF_COLD."
+            )
+            return
+        detune = self.get_live_detune()
+        if detune is None:
+            self.view.log_message("Could not read current detune.")
+            return
+
+        def _do_push() -> None:
+            try:
+                from sc_linac_physics.utils.epics import PV
+
+                pv = PV(self._cavity.pv_addr("DF_COLD"))
+                pv.put(detune)
+                self._log_signal.emit(f"Pushed {detune:.0f} Hz to DF_COLD.")
+            except Exception as exc:
+                self._log_signal.emit(f"Failed to push to DF_COLD: {exc}")
+
+        Thread(target=_do_push, daemon=True).start()
+
     def on_move_left(self) -> None:
         if self._cavity is None:
             self.view.log_message("No cavity selected — cannot move stepper.")
@@ -799,29 +1104,6 @@ class FrequencyTuningController(QObject):
             return float(spinbox.value())
         return None
 
-    def _persist_partial_frequency_tuning(self, **kwargs) -> None:
-        """Write partial FrequencyTuningData fields to the active record and save.
-
-        Creates the FrequencyTuningData object if it doesn't exist yet so that
-        cold landing and probe results survive an application restart even before
-        the operator reaches 'Confirm & Save'.
-        """
-        record = self.session.get_active_record()
-        if record is None:
-            return
-        if record.frequency_tuning is None:
-            record.frequency_tuning = FrequencyTuningData()
-        for key, value in kwargs.items():
-            if value is not None:
-                setattr(record.frequency_tuning, key, value)
-        try:
-            if self.session.save_active_record():
-                self.view.log_message("Partial results saved to database")
-        except Exception as exc:
-            self.view.log_message(
-                f"Warning: could not save partial results: {exc}"
-            )
-
     def _update_toolbar_state(self, state: str) -> None:
         if hasattr(self.view, "ui") and hasattr(
             self.view.ui, "update_toolbar_state"
@@ -833,33 +1115,96 @@ class FrequencyTuningController(QObject):
     # ------------------------------------------------------------------
 
     def restore_from_record(self, record) -> None:
-        """Restore stage UI state from an already-saved record.
-
-        Cold landing is a one-time measurement taken at initial cooldown.
-        If it already exists in the record, Stage 1 must be locked so the
-        operator cannot overwrite it.  Stage completion is inferred from the
-        persisted FrequencyTuningData fields (phase_history is not persisted).
-        """
+        """Restore stage UI state from an already-saved record."""
         if record is None:
             return
 
         self._reset_all_stages()
 
-        ft = record.frequency_tuning
-        cold_done = ft is not None and ft.initial_detune_hz is not None
-        probe_done = ft is not None and ft.hz_per_microstep is not None
+        history = self._load_stage_history(record)
+        stage1 = history.get(_STAGE_COLD_LANDING)
+        stage2 = history.get(_STAGE_PROBE_DIRECTION)
+        stage3 = history.get(_STAGE_TUNE_TO_RESONANCE)
+        stage4 = history.get(_STAGE_PI_MODES)
 
-        if cold_done:
-            self._restore_stage1(ft, record, has_probe=probe_done)
-        if probe_done:
-            # Stage 3 is never auto-restored — cavity may have drifted since
-            # the last session, so the operator must always re-run tuning.
-            self._restore_stage2(ft, has_tune=False)
+        if stage1:
+            self._restore_stage1(stage1, record, has_probe=stage2 is not None)
+        if stage2:
+            self._restore_stage2(stage2, has_tune=stage3 is not None)
+        if stage3:
+            self._restore_stage3(stage3)
+            # Data already saved — disable confirm until the user re-runs stage 3.
+            confirm_btn = getattr(self.view, "confirm_save_button", None)
+            if confirm_btn is not None:
+                confirm_btn.setEnabled(False)
+            # Keep run button enabled — cavity may have drifted since last session.
+            self._enable_stage_btn(3)
+            if stage4:
+                self._restore_stage4(stage4)
+            else:
+                self._enable_stage_btn(4)
+
+    def _load_stage_history(self, record) -> dict[str, dict]:
+        """Return the latest measurement_history payload for each stage step.
+
+        Falls back to synthesizing from the FrequencyTuningData blob for
+        records created before stage history was persisted.
+        """
+        rows = self.session.get_measurement_history(
+            CommissioningPhase.FREQUENCY_TUNING
+        )
+        latest: dict[str, dict] = {}
+        _known_steps = {
+            _STAGE_COLD_LANDING,
+            _STAGE_PROBE_DIRECTION,
+            _STAGE_TUNE_TO_RESONANCE,
+            _STAGE_PI_MODES,
+        }
+        for row in rows:  # already DESC by timestamp
+            data = row.get("measurement_data", {})
+            step = data.get("step")
+            if step and step in _known_steps and step not in latest:
+                latest[step] = data
+
+        if not latest:
+            latest = self._synthesize_history_from_blob(record)
+
+        return latest
+
+    def _synthesize_history_from_blob(self, record) -> dict[str, dict]:
+        """Build a stage-history dict from the FrequencyTuningData blob.
+
+        Used as a fallback for records that predate per-stage history rows.
+        """
+        ft = record.frequency_tuning if record else None
+        if ft is None:
+            return {}
+
+        result: dict[str, dict] = {}
+        if ft.initial_detune_hz is not None:
+            result[_STAGE_COLD_LANDING] = {
+                "step": _STAGE_COLD_LANDING,
+                "initial_detune_hz": ft.initial_detune_hz,
+            }
+        if ft.hz_per_microstep is not None:
+            result[_STAGE_PROBE_DIRECTION] = {
+                "step": _STAGE_PROBE_DIRECTION,
+                "hz_per_microstep": ft.hz_per_microstep,
+                "positive_step_increases_frequency": ft.positive_step_increases_frequency,
+            }
+        if ft.steps_to_resonance is not None:
+            result[_STAGE_TUNE_TO_RESONANCE] = {
+                "step": _STAGE_TUNE_TO_RESONANCE,
+                "cold_landing_steps": ft.cold_landing_steps,
+                "steps_to_resonance": ft.steps_to_resonance,
+                "net_steps": -(ft.cold_landing_steps or 0),
+            }
+        return result
 
     def _reset_all_stages(self) -> None:
         """Return all stage widgets to their initial 'Not started' state."""
         not_started_style = "QLabel { color: #9ca3af; }"
-        for stage in (1, 2, 3):
+        for stage in (1, 2, 3, 4):
             lbl = getattr(self.view, f"stage{stage}_status_label", None)
             if lbl is not None:
                 lbl.setText("Not started")
@@ -867,14 +1212,6 @@ class FrequencyTuningController(QObject):
             btn = getattr(self.view, f"stage{stage}_run_btn", None)
             if btn is not None:
                 btn.setEnabled(stage == 1)
-
-        for widget_name, text in (
-            ("cold_landing_label", "—"),
-            ("net_steps_label", "—"),
-        ):
-            w = getattr(self.view, widget_name, None)
-            if w is not None:
-                w.setText(text)
 
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None:
@@ -887,6 +1224,10 @@ class FrequencyTuningController(QObject):
         if confirm_btn is not None:
             confirm_btn.setEnabled(False)
 
+        confirm_probe_btn = getattr(self.view, "confirm_probe_fit_button", None)
+        if confirm_probe_btn is not None:
+            confirm_probe_btn.setEnabled(False)
+
         self.phase = None
         self.context = None
         self._phase_started = False
@@ -894,6 +1235,14 @@ class FrequencyTuningController(QObject):
         self._hz_est_total_steps = 0.0
         self._hz_est_total_hz = 0.0
         self._net_steps = 0
+        self._tune_step_data = {}
+        self._probe_stage_confirmed = False
+        self._pending_stage2_data = {}
+        self._probe_s_d0 = None
+        self._probe_s_d1 = None
+        self._probe_d0_hz = None
+        self._probe_d1_hz = None
+        self._pi_mode_data = {}
 
         if hasattr(self.view, "reset_plot"):
             self.view.reset_plot()
@@ -901,17 +1250,13 @@ class FrequencyTuningController(QObject):
             self.view.clear_results()
         self._update_toolbar_state("idle")
 
-    def _restore_stage1(self, ft, record, has_probe: bool) -> None:
+    def _restore_stage1(self, data: dict, record, has_probe: bool) -> None:
         self._set_stage_done_ui(1, success=True)
         btn = getattr(self.view, "stage1_run_btn", None)
         if btn is not None:
             btn.setEnabled(False)
 
-        self._initial_detune_hz = ft.initial_detune_hz
-        lbl = getattr(self.view, "cold_landing_label", None)
-        if lbl is not None:
-            lbl.setText(f"{self._initial_detune_hz:.0f} Hz")
-
+        self._initial_detune_hz = data.get("initial_detune_hz")
         self._rebuild_phase_context(record)
 
         if not has_probe:
@@ -940,16 +1285,17 @@ class FrequencyTuningController(QObject):
                 f"Note: could not rebuild phase context from record: {exc}"
             )
 
-    def _restore_stage2(self, ft, has_tune: bool) -> None:
+    def _restore_stage2(self, data: dict, has_tune: bool) -> None:
         self._set_stage_done_ui(2, success=True)
 
-        hz_per_step = float(ft.hz_per_microstep or 0.0)
-        positive = ft.positive_step_increases_frequency
+        hz_per_step = float(data.get("hz_per_microstep") or 0.0)
+        positive = data.get("positive_step_increases_frequency", True)
         sign = 1.0 if positive else -1.0
+        signed_hz = hz_per_step * sign
 
         if self.phase is not None and hz_per_step:
             self.phase._hz_per_microstep = hz_per_step
-            self.phase._signed_hz_per_microstep = hz_per_step * sign
+            self.phase._signed_hz_per_microstep = signed_hz
 
         if hz_per_step > 0:
             self._hz_est_total_steps = hz_per_step
@@ -958,25 +1304,36 @@ class FrequencyTuningController(QObject):
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None and hz_per_step:
             spinbox.blockSignals(True)
-            spinbox.setValue(hz_per_step)
+            spinbox.setValue(signed_hz)
             spinbox.blockSignals(False)
             spinbox.setEnabled(True)
+
+        if hz_per_step > 0:
+            self._probe_stage_confirmed = True
+            self.hz_per_step_updated.emit(signed_hz)
 
         if not has_tune:
             self._enable_stage_btn(3)
 
-    def _restore_stage3(self, ft) -> None:
+    def _restore_stage3(self, data: dict) -> None:
         self._set_stage_done_ui(3, success=True)
 
-        cold_steps = ft.cold_landing_steps or 0
-        self._net_steps = -cold_steps
-        net_lbl = getattr(self.view, "net_steps_label", None)
-        if net_lbl is not None:
-            net_lbl.setText(f"{self._net_steps:+d} steps")
+        self._net_steps = data.get("net_steps") or -(
+            data.get("cold_landing_steps") or 0
+        )
+
+    def _restore_stage4(self, data: dict) -> None:
+        self._pi_mode_data = {
+            "mode_8pi_9_hz": data.get("mode_8pi_9_hz"),
+            "mode_7pi_9_hz": data.get("mode_7pi_9_hz"),
+        }
+        self._set_stage_done_ui(4, success=True)
 
         confirm_btn = getattr(self.view, "confirm_save_button", None)
         if confirm_btn is not None:
             confirm_btn.setEnabled(True)
+        # Keep stage 4 re-runnable in case re-measurement is needed.
+        self._enable_stage_btn(4)
 
     def _auto_create_record(self) -> bool:
         parent = self.view.parent()

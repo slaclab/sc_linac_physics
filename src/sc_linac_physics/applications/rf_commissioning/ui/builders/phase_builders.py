@@ -554,9 +554,14 @@ class FrequencyTuningUI(PhaseUIBase):
         main = QHBoxLayout()
         main.setSpacing(6)
 
-        # Left: stage checklist
+        # Left: stage checklist (scrollable so cards don't overlap)
         checklist = self._build_checklist_panel()
-        main.addWidget(checklist, stretch=2)
+        checklist_scroll = QScrollArea()
+        checklist_scroll.setWidgetResizable(True)
+        checklist_scroll.setWidget(checklist)
+        checklist_scroll.setFrameShape(QFrame.NoFrame)
+        checklist_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        main.addWidget(checklist_scroll, stretch=2)
 
         # Center: plot + history
         center = QVBoxLayout()
@@ -695,6 +700,7 @@ class FrequencyTuningUI(PhaseUIBase):
         layout.addWidget(self._build_stage1_card())
         layout.addWidget(self._build_stage2_card())
         layout.addWidget(self._build_stage3_card())
+        layout.addWidget(self._build_stage4_card())
         layout.addStretch()
 
         group.setLayout(layout)
@@ -731,6 +737,17 @@ class FrequencyTuningUI(PhaseUIBase):
             run_label="▶ Run Stage 3",
             initially_enabled=False,
             extra_widgets=self._build_stage3_extra,
+        )
+
+    def _build_stage4_card(self) -> QFrame:
+        return self._build_stage_card(
+            stage=4,
+            title="④ Measure Pi Modes",
+            description="Run rack FSCAN to find 8π/9 and 7π/9 parasitic modes.",
+            run_callback="on_run_stage_4",
+            run_label="▶ Run Stage 4",
+            initially_enabled=False,
+            extra_widgets=self._build_stage4_extra,
         )
 
     def _build_stage_card(
@@ -789,22 +806,52 @@ class FrequencyTuningUI(PhaseUIBase):
         return frame
 
     def _build_stage1_extra(self, layout: QVBoxLayout) -> None:
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Cold landing:"))
-        lbl = self._register("cold_landing_label", QLabel("—"))
-        lbl.setStyleSheet(
-            "QLabel { color: #4a9eff; font-weight: bold; font-family: monospace; }"
+        detune_row = QHBoxLayout()
+        detune_row.addWidget(QLabel("Current detune:"))
+        detune_lbl = self._register(
+            "detune_chirp_readback", PyDMLabel(parent=self.parent)
         )
-        row.addWidget(lbl)
-        row.addStretch()
-        layout.addLayout(row)
+        detune_lbl.setStyleSheet(PV_CAP_STYLE)
+        detune_lbl.showUnits = True
+        detune_lbl.precisionFromPV = False
+        detune_lbl.precision = 0
+        detune_row.addWidget(detune_lbl)
+        detune_row.addStretch()
+        layout.addLayout(detune_row)
+
+        df_cold_row = QHBoxLayout()
+        df_cold_row.addWidget(QLabel("DF_COLD PV:"))
+        df_cold_lbl = self._register(
+            "df_cold_readback", PyDMLabel(parent=self.parent)
+        )
+        df_cold_lbl.setStyleSheet(PV_CAP_STYLE)
+        df_cold_lbl.showUnits = True
+        df_cold_lbl.precisionFromPV = False
+        df_cold_lbl.precision = 0
+        df_cold_row.addWidget(df_cold_lbl)
+        push_btn = self._register(
+            "push_df_cold_button", QPushButton("Push → DF_COLD")
+        )
+        push_btn.setFixedHeight(24)
+        push_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #374151; color: #e2e8f0;
+                font-size: 9pt; padding: 2px 8px;
+                border-radius: 3px; border: 1px solid #4b5563;
+            }
+            QPushButton:hover { background-color: #4b5563; }
+            QPushButton:disabled { background-color: #1f2937; color: #6b7280; }
+        """)
+        self._connect(push_btn, "on_push_to_df_cold")
+        df_cold_row.addWidget(push_btn)
+        layout.addLayout(df_cold_row)
 
     def _build_stage2_extra(self, layout: QVBoxLayout) -> None:
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Hz/step:"))
+        calc_row = QHBoxLayout()
+        calc_row.addWidget(QLabel("Hz/step:"))
 
         hz_spinbox = self._register("hz_per_step_spinbox", QDoubleSpinBox())
-        hz_spinbox.setRange(0.0001, 1000.0)
+        hz_spinbox.setRange(-1000.0, 1000.0)
         hz_spinbox.setDecimals(4)
         hz_spinbox.setSingleStep(0.0001)
         hz_spinbox.setValue(0.0)
@@ -815,21 +862,85 @@ class FrequencyTuningUI(PhaseUIBase):
             "font-family: monospace; }"
         )
         hz_spinbox.setFixedWidth(120)
-        row.addWidget(hz_spinbox)
-        row.addWidget(QLabel("Hz/step"))
-        row.addStretch()
-        layout.addLayout(row)
+        calc_row.addWidget(hz_spinbox)
+        calc_row.addWidget(QLabel("Hz/step"))
+        calc_row.addStretch()
+        layout.addLayout(calc_row)
+
+        scale_row = QHBoxLayout()
+        scale_row.addWidget(QLabel("SCALE PV:"))
+        scale_lbl = self._register(
+            "scale_readback", PyDMLabel(parent=self.parent)
+        )
+        scale_lbl.setStyleSheet(PV_CAP_STYLE)
+        scale_lbl.showUnits = True
+        scale_lbl.precisionFromPV = False
+        scale_lbl.precision = 4
+        scale_row.addWidget(scale_lbl)
+        push_scale_btn = self._register(
+            "push_scale_button", QPushButton("Push → Scale")
+        )
+        push_scale_btn.setFixedHeight(24)
+        push_scale_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #374151; color: #e2e8f0;
+                font-size: 9pt; padding: 2px 8px;
+                border-radius: 3px; border: 1px solid #4b5563;
+            }
+            QPushButton:hover { background-color: #4b5563; }
+            QPushButton:disabled { background-color: #1f2937; color: #6b7280; }
+        """)
+        self._connect(push_scale_btn, "on_push_to_scale")
+        scale_row.addWidget(push_scale_btn)
+        layout.addLayout(scale_row)
+
+        confirm_probe_btn = self._register(
+            "confirm_probe_fit_button", QPushButton("✓ Confirm Fit")
+        )
+        confirm_probe_btn.setStyleSheet(self._CONFIRM_BTN_STYLE)
+        confirm_probe_btn.setFixedHeight(28)
+        confirm_probe_btn.setEnabled(False)
+        self._connect(confirm_probe_btn, "on_confirm_probe_fit")
+        layout.addWidget(confirm_probe_btn)
 
     def _build_stage3_extra(self, layout: QVBoxLayout) -> None:
         row = QHBoxLayout()
         row.addWidget(QLabel("Net steps:"))
-        net_lbl = self._register("net_steps_label", QLabel("—"))
-        net_lbl.setStyleSheet(
-            "QLabel { color: #4a9eff; font-weight: bold; font-family: monospace; }"
+        net_lbl = self._register(
+            "net_steps_label", PyDMLabel(parent=self.parent)
         )
+        net_lbl.setStyleSheet(PV_LABEL_STYLE)
+        net_lbl.showUnits = True
         row.addWidget(net_lbl)
         row.addStretch()
         layout.addLayout(row)
+
+    def _build_stage4_extra(self, layout: QVBoxLayout) -> None:
+        stat_row = QHBoxLayout()
+        stat_row.addWidget(QLabel("Scan status:"))
+        fscan_stat = self._register(
+            "fscan_stat_readback", PyDMLabel(parent=self.parent)
+        )
+        fscan_stat.setStyleSheet(PV_LABEL_STYLE)
+        fscan_stat.setAlignment(Qt.AlignCenter)
+        stat_row.addWidget(fscan_stat)
+        stat_row.addStretch()
+        layout.addLayout(stat_row)
+
+        for label, widget_name in (
+            ("8π/9 mode:", "stage4_8pi9_label"),
+            ("7π/9 mode:", "stage4_7pi9_label"),
+        ):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            lbl = self._register(widget_name, PyDMLabel(parent=self.parent))
+            lbl.setStyleSheet(PV_CAP_STYLE)
+            lbl.showUnits = True
+            lbl.precisionFromPV = False
+            lbl.precision = 0
+            row.addWidget(lbl)
+            row.addStretch()
+            layout.addLayout(row)
 
         confirm_btn = self._register(
             "confirm_save_button", QPushButton("✓ Confirm & Save")
@@ -1038,7 +1149,7 @@ class FrequencyTuningUI(PhaseUIBase):
         return group
 
     def _build_tuning_plot(self) -> QGroupBox:
-        group = QGroupBox("Detune vs. Time")
+        group = QGroupBox("Detune vs. Steps")
         layout = QVBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
 
@@ -1046,7 +1157,7 @@ class FrequencyTuningUI(PhaseUIBase):
         pw.setBackground("#1a1a2e")
         pw.showGrid(x=True, y=True, alpha=0.3)
         pw.setLabel("left", "Detune", units="Hz")
-        pw.setLabel("bottom", "Elapsed Time", units="s")
+        pw.setLabel("bottom", "Net Steps")
         pw.addLegend(offset=(10, 10))
         pw.setMinimumHeight(180)
 

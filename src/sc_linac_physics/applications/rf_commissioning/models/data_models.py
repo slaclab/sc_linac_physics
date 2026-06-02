@@ -252,8 +252,8 @@ class FrequencyTuningData:
 
     @property
     def is_complete(self) -> bool:
-        """Check if entire frequency tuning phase is complete."""
-        return self.cold_landing_complete and self.pi_mode_complete
+        """Check if frequency tuning phase is complete."""
+        return self.cold_landing_complete
 
     @property
     def passed(self) -> bool:

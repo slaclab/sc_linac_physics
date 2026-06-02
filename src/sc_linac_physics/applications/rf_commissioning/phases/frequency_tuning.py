@@ -11,7 +11,9 @@ the stepper this phase:
   4. Moves to resonance in small chunks, checking motor temperature before each
      chunk and pausing if the temperature exceeds the limit.  After converging,
      writes the (signed) return-trip step count to the NSTEPS_COLD PV.
-  5. Writes a FrequencyTuningData record.
+  5. Runs a single-cavity FSCAN to find the 8π/9 and 7π/9 parasitic modes and
+     pushes results to the cavity mode-frequency PVs.
+  6. Writes a FrequencyTuningData record.
 """
 
 import math
@@ -33,12 +35,16 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
 from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
+_FSCAN_STAT_SCAN_DONE = 5
+_FSCAN_STAT_SCAN_ABORTED = 6
+_FSCAN_STAT_FREQ_RESTORE_FAIL = 7
+
 
 @dataclass
 class FrequencyTuningLimits:
     """Configurable limits for the frequency tuning phase."""
 
-    tolerance_hz: float = 500.0
+    tolerance_hz: float = 50.0
     probe_steps: int = 50_000
     temp_limit_c: float = linac_utils.STEPPER_TEMP_LIMIT
     max_total_steps: int = 10_000_000
@@ -47,6 +53,12 @@ class FrequencyTuningLimits:
     motor_start_wait: float = 5.0
     motor_poll_interval: float = 2.0
     min_probe_delta_hz: float = 10.0
+    pi_scan_freq_start: int = -3_500_000
+    pi_scan_freq_stop: int = 50_000
+    pi_scan_rms_thresh: float = 10.0
+    pi_scan_mode_overlap: int = 1_000
+    pi_scan_poll_interval: float = 2.0
+    pi_scan_timeout_seconds: float = 300.0
 
 
 class FrequencyTuningPhase(PhaseBase):
@@ -99,6 +111,7 @@ class FrequencyTuningPhase(PhaseBase):
             "probe_stepper_direction",
             "apply_hz_per_step",
             "tune_to_resonance",
+            "measure_pi_modes",
             "record_results",
         ]
 
@@ -114,6 +127,7 @@ class FrequencyTuningPhase(PhaseBase):
             "probe_stepper_direction": self._probe_stepper_direction,
             "apply_hz_per_step": self._apply_hz_per_step,
             "tune_to_resonance": self._tune_to_resonance,
+            "measure_pi_modes": self._measure_pi_modes,
             "record_results": self._record_results,
         }
 
@@ -249,18 +263,10 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=3.0,
             )
 
-        try:
-            self._write_df_cold(initial_detune_hz)
-        except Exception as exc:
-            return PhaseStepResult(
-                result=PhaseResult.RETRY,
-                message=f"Could not write cold landing frequency to DF_COLD: {exc}",
-                retry_delay_seconds=3.0,
-            )
-
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message=f"Cold landing frequency recorded: detune={initial_detune_hz:.0f} Hz written to DF_COLD",
+            message=f"Cold landing frequency recorded: detune={initial_detune_hz:.0f} Hz. "
+            "Push to DF_COLD when satisfied.",
             data={
                 "initial_detune_hz": initial_detune_hz,
                 "initial_timestamp": datetime.now().isoformat(),
@@ -298,6 +304,25 @@ class FrequencyTuningPhase(PhaseBase):
             message=f"Wrote {self._signed_hz_per_microstep:.4f} Hz/step to SCALE PV",
         )
 
+    def _do_probe_move(self, probe: int, probe_cb) -> tuple[float, float]:
+        """Execute the forward+back probe move; return (d0_hz, d1_hz)."""
+        self.cavity.stepper_tuner.reset_signed_steps()
+        d0 = self.cavity.detune_chirp
+        try:
+            if probe_cb:
+                probe_cb(0, d0)
+        except Exception:
+            pass
+        self.cavity.stepper_tuner.move(probe, check_detune=False)
+        d1 = self.cavity.detune_chirp
+        try:
+            if probe_cb:
+                probe_cb(probe, d1)
+        except Exception:
+            pass
+        self.cavity.stepper_tuner.move(-probe, check_detune=False)
+        return d0, d1
+
     def _probe_stepper_direction(self) -> PhaseStepResult:
         if self.context.dry_run:
             self._hz_per_microstep = 1.0
@@ -316,12 +341,10 @@ class FrequencyTuningPhase(PhaseBase):
             )
 
         probe = self.limits.probe_steps
+        probe_cb = self.context.parameters.get("probe_update_callback")
 
         try:
-            d0 = self.cavity.detune_chirp
-            self.cavity.stepper_tuner.move(probe, check_detune=False)
-            d1 = self.cavity.detune_chirp
-            self.cavity.stepper_tuner.move(-probe, check_detune=False)
+            d0, d1 = self._do_probe_move(probe, probe_cb)
         except (linac_utils.StepperError, linac_utils.StepperAbortError) as exc:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
@@ -335,7 +358,6 @@ class FrequencyTuningPhase(PhaseBase):
             )
 
         delta = d1 - d0
-        positive_step_increases_frequency = delta > 0
 
         if abs(delta) < self.limits.min_probe_delta_hz:
             return PhaseStepResult(
@@ -347,21 +369,27 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
 
-        # Signed value preserves direction; abs value is used in tuning calculations.
-        signed_hz_per_step = delta / probe
+        # SCALE convention: d(cavity_freq)/d(step).
+        # CHIRP:DF = ref_freq - cav_freq, so d(CHIRP:DF)/d(step) = -SCALE.
+        # Positive SCALE → positive steps increase cavity frequency → CHIRP:DF decreases.
+        signed_hz_per_step = -delta / probe
         self._hz_per_microstep = abs(signed_hz_per_step)
         self._signed_hz_per_microstep = signed_hz_per_step
+        positive_step_increases_frequency = signed_hz_per_step > 0
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
                 f"Direction probe: Δdetune={delta:+.0f} Hz for +{probe} steps. "
                 f"Measured {self._hz_per_microstep:.4f} Hz/step written to SCALE PV. "
-                f"move(+N) {'increases' if positive_step_increases_frequency else 'decreases'} frequency."
+                f"move(+N) "
+                f"{'increases' if positive_step_increases_frequency else 'decreases'} frequency."
             ),
             data={
                 "d0_hz": d0,
                 "d1_hz": d1,
+                "s_d0": 0,
+                "s_d1": probe,
                 "delta_hz": delta,
                 "positive_step_increases_frequency": positive_step_increases_frequency,
                 "hz_per_microstep": self._hz_per_microstep,
@@ -421,6 +449,11 @@ class FrequencyTuningPhase(PhaseBase):
         peak_temp = 0.0
 
         try:
+            self.cavity.stepper_tuner.reset_signed_steps()
+        except Exception:
+            pass
+
+        try:
             peak_temp = self._read_temp()
         except Exception:
             pass
@@ -433,10 +466,10 @@ class FrequencyTuningPhase(PhaseBase):
 
         return total_steps, signed_total, peak_temp
 
-    def _emit_tuning_update(self, tuning_cb, total_steps: int) -> None:
+    def _emit_tuning_update(self, tuning_cb, signed_total: int) -> None:
         try:
             if tuning_cb:
-                tuning_cb(total_steps, self.cavity.detune_chirp)
+                tuning_cb(signed_total, self.cavity.detune_chirp)
         except Exception:
             pass
 
@@ -536,7 +569,13 @@ class FrequencyTuningPhase(PhaseBase):
         hardware_max = self.cavity.stepper_tuner.max_steps
         estimated = max(1, round(abs(detune) / hz_per_step))
         magnitude = min(hardware_max, estimated)
-        steps_this_move = int(math.copysign(magnitude, detune))
+        # Direction: steps_to_zero = detune / SCALE, so sign = sign(detune / signed_hz).
+        # This handles motors wired in either direction (positive or negative SCALE).
+        signed_hz = self._signed_hz_per_microstep
+        if signed_hz:
+            steps_this_move = int(math.copysign(magnitude, detune / signed_hz))
+        else:
+            steps_this_move = int(math.copysign(magnitude, detune))
 
         try:
             self.cavity.stepper_tuner.move(
@@ -595,7 +634,7 @@ class FrequencyTuningPhase(PhaseBase):
             )
             if err is not None:
                 return err
-            self._emit_tuning_update(tuning_cb, total_steps)
+            self._emit_tuning_update(tuning_cb, signed_total)
             if converged:
                 break
 
@@ -614,6 +653,203 @@ class FrequencyTuningPhase(PhaseBase):
                 "cold_landing_steps": -signed_total,
                 "final_timestamp": datetime.now().isoformat(),
             },
+        )
+
+    # ------------------------------------------------------------------
+    # Pi-mode scan step
+    # ------------------------------------------------------------------
+
+    def _measure_pi_modes(self) -> PhaseStepResult:
+        """Run the full rack FSCAN sequence for this cavity and read back results.
+
+        Checks rack exclusivity, selects only this cavity, configures and
+        triggers the scan, waits for completion, pushes mode results, and
+        reads back the 8π/9 and 7π/9 frequencies.
+        """
+        if self.context.dry_run:
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message="Dry run: pi mode scan skipped",
+                data={
+                    "mode_8pi_9_hz": 0.0,
+                    "mode_7pi_9_hz": 0.0,
+                    "timestamp": datetime.now().isoformat(),
+                    "dry_run": True,
+                },
+            )
+
+        rack = self.cavity.rack
+
+        err = self._check_rack_exclusivity(rack)
+        if err is not None:
+            return err
+        err = self._select_cavity_for_fscan(rack)
+        if err is not None:
+            return err
+        err = self._configure_fscan_params(rack)
+        if err is not None:
+            return err
+        err = self._trigger_fscan(rack)
+        if err is not None:
+            return err
+
+        status_cb = self.context.parameters.get("status_update_callback")
+        err = self._wait_for_fscan(rack, status_cb)
+        if err is not None:
+            return err
+
+        err = self._push_mode_results()
+        if err is not None:
+            return err
+        return self._read_mode_frequencies()
+
+    def _check_rack_exclusivity(self, rack) -> "PhaseStepResult | None":
+        rack_check = self.context.parameters.get("rack_check_callback")
+        if rack_check is None:
+            return None
+        try:
+            ok, reason = rack_check(rack)
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Rack check callback raised an exception: {exc}",
+                retry_delay_seconds=5.0,
+            )
+        if not ok:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    f"Cannot run FSCAN: another cavity in rack "
+                    f"{rack.rack_name} is being commissioned. {reason}"
+                ),
+            )
+        return None
+
+    def _select_cavity_for_fscan(self, rack) -> "PhaseStepResult | None":
+        for cav_num, cav in rack.cavities.items():
+            selected = 1 if cav_num == self.cavity.number else 0
+            try:
+                PV(cav.pv_addr("FSCAN:SEL")).put(selected)
+            except Exception as exc:
+                return PhaseStepResult(
+                    result=PhaseResult.RETRY,
+                    message=f"Could not write FSCAN:SEL for cavity {cav_num}: {exc}",
+                    retry_delay_seconds=3.0,
+                )
+        return None
+
+    def _configure_fscan_params(self, rack) -> "PhaseStepResult | None":
+        for suffix, value in (
+            ("FSCAN:FREQ_START", self.limits.pi_scan_freq_start),
+            ("FSCAN:FREQ_STOP", self.limits.pi_scan_freq_stop),
+            ("FSCAN:RMS_THRESH", self.limits.pi_scan_rms_thresh),
+            ("FSCAN:MODE_OVERLAP", self.limits.pi_scan_mode_overlap),
+        ):
+            try:
+                PV(rack.pv_prefix + suffix).put(value)
+            except Exception as exc:
+                return PhaseStepResult(
+                    result=PhaseResult.RETRY,
+                    message=f"Could not write {suffix}: {exc}",
+                    retry_delay_seconds=3.0,
+                )
+        return None
+
+    def _trigger_fscan(self, rack) -> "PhaseStepResult | None":
+        try:
+            PV(rack.pv_prefix + "FSCAN:START").put(1)
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not write FSCAN:START: {exc}",
+                retry_delay_seconds=3.0,
+            )
+        return None
+
+    _FSCAN_STATE_NAMES = {
+        0: "Await request",
+        1: "No cav selected",
+        2: "Bad range",
+        3: "Search in progress",
+        4: "Shift mode",
+        5: "Scan done",
+        6: "Scan aborted",
+        7: "Freq restore fail",
+    }
+
+    def _wait_for_fscan(self, rack, status_cb) -> "PhaseStepResult | None":
+        stat_pv = PV(rack.pv_prefix + "FSCAN:STAT")
+        scan_start = time.monotonic()
+        deadline = scan_start + self.limits.pi_scan_timeout_seconds
+        while time.monotonic() < deadline:
+            if self.context.is_abort_requested():
+                return PhaseStepResult(
+                    result=PhaseResult.FAILED,
+                    message="Abort requested while waiting for FSCAN",
+                )
+            try:
+                stat = int(stat_pv.get())
+            except Exception as exc:
+                return PhaseStepResult(
+                    result=PhaseResult.RETRY,
+                    message=f"Could not read FSCAN:STAT: {exc}",
+                    retry_delay_seconds=self.limits.pi_scan_poll_interval,
+                )
+            if stat == _FSCAN_STAT_SCAN_DONE:
+                return None
+            if stat in (
+                _FSCAN_STAT_SCAN_ABORTED,
+                _FSCAN_STAT_FREQ_RESTORE_FAIL,
+            ):
+                name = self._FSCAN_STATE_NAMES.get(stat, str(stat))
+                return PhaseStepResult(
+                    result=PhaseResult.FAILED,
+                    message=f"FSCAN failed: {name} (state {stat})",
+                )
+            if status_cb:
+                elapsed = time.monotonic() - scan_start
+                name = self._FSCAN_STATE_NAMES.get(stat, str(stat))
+                status_cb(f"FSCAN: {name} ({elapsed:.0f}s elapsed)")
+            time.sleep(self.limits.pi_scan_poll_interval)
+        return PhaseStepResult(
+            result=PhaseResult.FAILED,
+            message=f"FSCAN did not complete within {self.limits.pi_scan_timeout_seconds:.0f} s",
+        )
+
+    def _push_mode_results(self) -> "PhaseStepResult | None":
+        for proc_suffix in ("FSCAN:PUSH_8PI9.PROC", "FSCAN:PUSH_7PI9.PROC"):
+            try:
+                PV(self.cavity.pv_addr(proc_suffix)).put(1)
+            except Exception as exc:
+                return PhaseStepResult(
+                    result=PhaseResult.RETRY,
+                    message=f"Could not write {proc_suffix}: {exc}",
+                    retry_delay_seconds=3.0,
+                )
+        return None
+
+    def _read_mode_frequencies(self) -> PhaseStepResult:
+        results: dict = {}
+        for key, suffix in (
+            ("mode_8pi_9_hz", "FSCAN:8PI9MODE"),
+            ("mode_7pi_9_hz", "FSCAN:7PI9MODE"),
+        ):
+            try:
+                results[key] = float(PV(self.cavity.pv_addr(suffix)).get())
+            except Exception as exc:
+                return PhaseStepResult(
+                    result=PhaseResult.RETRY,
+                    message=f"Could not read {suffix}: {exc}",
+                    retry_delay_seconds=3.0,
+                )
+        results["timestamp"] = datetime.now().isoformat()
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=(
+                f"8π/9 mode: {results['mode_8pi_9_hz']:.0f} Hz, "
+                f"7π/9 mode: {results['mode_7pi_9_hz']:.0f} Hz"
+            ),
+            data=results,
         )
 
     def _record_results(self) -> PhaseStepResult:
@@ -644,6 +880,7 @@ class FrequencyTuningPhase(PhaseBase):
         cold = self._get_checkpoint_data("record_cold_landing")
         probe = self._get_checkpoint_data("probe_stepper_direction")
         tune = self._get_checkpoint_data("tune_to_resonance")
+        pi = self._get_checkpoint_data("measure_pi_modes")
 
         initial_ts_raw = cold.get("initial_timestamp")
         initial_ts = (
@@ -664,4 +901,6 @@ class FrequencyTuningPhase(PhaseBase):
             ),
             hz_per_microstep=probe.get("hz_per_microstep"),
             cold_landing_steps=tune.get("cold_landing_steps"),
+            mode_8pi_9_frequency=pi.get("mode_8pi_9_hz"),
+            mode_7pi_9_frequency=pi.get("mode_7pi_9_hz"),
         )
