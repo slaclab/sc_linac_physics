@@ -121,6 +121,7 @@ def test_get_phase_steps(phase):
         "probe_stepper_direction",
         "apply_hz_per_step",
         "tune_to_resonance",
+        "measure_pi_modes",
         "record_results",
     ]
 
@@ -248,16 +249,8 @@ def test_record_cold_landing_success(phase, mock_cavity):
     assert "cold_landing_steps" not in result.data
     assert result.data["initial_detune_hz"] == 8000.0
     assert "initial_timestamp" in result.data
-    phase._df_cold_pv_obj.put.assert_called_once_with(8000.0)
-
-
-def test_record_cold_landing_df_cold_write_error(phase, mock_cavity):
-    _setup_phase(phase)
-    mock_cavity.detune_chirp = 8000.0
-    phase._df_cold_pv_obj.put.side_effect = RuntimeError("PV timeout")
-    result = phase._record_cold_landing()
-    assert result.result == PhaseResult.RETRY
-    assert "DF_COLD" in result.message
+    # DF_COLD is written by the operator via the UI button, not auto-written here.
+    phase._df_cold_pv_obj.put.assert_not_called()
 
 
 def test_record_cold_landing_detune_read_error_retries(phase, mock_cavity):
@@ -295,9 +288,8 @@ def test_probe_stepper_direction_positive_increases_frequency(
 
     def after_move(steps, *args, **kwargs):
         if steps > 0:
-            mock_cavity.detune_chirp = (
-                1500.0  # freq went up after positive move
-            )
+            # CHIRP:DF = ref − cav; freq increased → CHIRP:DF decreases
+            mock_cavity.detune_chirp = 500.0
         else:
             mock_cavity.detune_chirp = 1000.0  # restored
 
@@ -307,7 +299,7 @@ def test_probe_stepper_direction_positive_increases_frequency(
 
     assert result.result == PhaseResult.SUCCESS
     assert result.data["positive_step_increases_frequency"] is True
-    # delta=500, probe_steps=10 (fast_limits) → 50 Hz/step
+    # delta=-500, probe_steps=10 (fast_limits) → signed_hz=+50 Hz/step
     assert result.data["hz_per_microstep"] == pytest.approx(50.0)
     assert phase._hz_per_microstep == pytest.approx(50.0)
     assert phase._signed_hz_per_microstep == pytest.approx(50.0)
@@ -326,9 +318,8 @@ def test_probe_stepper_direction_positive_decreases_frequency(
 
     def after_move(steps, *args, **kwargs):
         if steps > 0:
-            mock_cavity.detune_chirp = (
-                800.0  # freq went down after positive move
-            )
+            # CHIRP:DF = ref − cav; freq decreased → CHIRP:DF increases
+            mock_cavity.detune_chirp = 1200.0
         else:
             mock_cavity.detune_chirp = 1000.0
 
@@ -338,7 +329,7 @@ def test_probe_stepper_direction_positive_decreases_frequency(
 
     assert result.result == PhaseResult.SUCCESS
     assert result.data["positive_step_increases_frequency"] is False
-    # delta=-200, probe_steps=10 → abs = 20 Hz/step; signed stored for later apply
+    # delta=+200, probe_steps=10 → signed_hz=-20 Hz/step
     assert result.data["hz_per_microstep"] == pytest.approx(20.0)
     assert phase._signed_hz_per_microstep == pytest.approx(-20.0)
     mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
