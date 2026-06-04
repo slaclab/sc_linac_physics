@@ -96,7 +96,12 @@ source = ["src"]
 omit = [
     "*/tests/*",
     "*/test_*",
-    "*/__pycache__/*"
+    "*/__pycache__/*",
+    # PyDM UI dialogs require display-integration tests, not unit tests
+    "*/rf_commissioning/ui/*_dialog.py",
+    # Logger infrastructure is always mocked in tests; not unit-testable
+    "*/utils/logger.py",
+    "*/utils/epics/logger.py"
 ]
 
 [tool.coverage.report]
