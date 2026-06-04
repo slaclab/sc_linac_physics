@@ -226,7 +226,10 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             self._live_curve.setData(self._live_steps, self._live_hz)
         if self._cursor_curve is not None:
             self._cursor_curve.setData([steps], [detune])
-        if self._controller._probe_stage_confirmed:
+        if (
+            self._controller._probe_stage_confirmed
+            and self._controller._current_stage >= 3
+        ):
             hz = self.get_current_hz_per_step()
             if hz:
                 self.set_projection(detune, abs(hz))
@@ -252,6 +255,7 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             )
         if (
             self._controller._probe_stage_confirmed
+            and self._controller._current_stage >= 3
             and self._projection_curve is not None
         ):
             signed_hz = self._controller.get_signed_hz_per_step()
@@ -295,10 +299,26 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         anchor = self._controller.get_probe_anchor()
         if anchor is not None:
             s_d0, d0_hz, s_d1 = anchor
-            # CHIRP:DF changes at -SCALE per step, so d1 = d0 - SCALE*steps
-            d1_hz = d0_hz - signed_hz * s_d1
-            self.show_probe_fit(s_d0, d0_hz, s_d1, d1_hz)
-        if self._controller._probe_stage_confirmed:
+            probe_delta_steps = s_d1 - s_d0
+            # Anchor the probe fit to the first live data point so the slope
+            # stays visible in the context of the current stage's data.
+            if self._live_steps:
+                anchor_step = self._live_steps[0]
+                anchor_hz = self._live_hz[0]
+            else:
+                anchor_step = s_d0
+                anchor_hz = d0_hz
+            fit_d1 = anchor_hz - signed_hz * probe_delta_steps
+            self.show_probe_fit(
+                anchor_step,
+                anchor_hz,
+                anchor_step + probe_delta_steps,
+                fit_d1,
+            )
+        if (
+            self._controller._probe_stage_confirmed
+            and self._controller._current_stage >= 3
+        ):
             self.set_projection(0.0, abs(signed_hz))
 
     def get_current_hz_per_step(self) -> float | None:

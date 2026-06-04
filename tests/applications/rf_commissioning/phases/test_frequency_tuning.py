@@ -93,13 +93,15 @@ def phase(context, fast_limits):
     return p
 
 
-def _setup_phase(phase, temp_c=25.0):
+def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0):
     """Call validate_prerequisites and inject pre-built PV mocks."""
     phase.validate_prerequisites()
     phase._stepper_temp_pv_obj = Mock()
     phase._stepper_temp_pv_obj.get.return_value = temp_c
     phase._df_cold_pv_obj = Mock()
     phase._nsteps_cold_pv_obj = Mock()
+    phase._step_signed_pv_obj = Mock()
+    phase._step_signed_pv_obj.get.return_value = initial_signed_steps
     phase._hz_per_microstep = 2.0
     phase._signed_hz_per_microstep = 2.0
     return phase
@@ -606,6 +608,33 @@ def test_tune_to_resonance_writes_nsteps_cold(phase, mock_cavity, mock_stepper):
     phase._nsteps_cold_pv_obj.put.assert_called_once_with(
         result.data["cold_landing_steps"]
     )
+
+
+def test_tune_to_resonance_accumulates_steps_across_restarts(
+    phase, mock_cavity, mock_stepper
+):
+    """NSTEPS_COLD must reflect total steps from cold landing, not just this run."""
+    prior_steps = -500_000
+    _setup_phase(phase, initial_signed_steps=prior_steps)
+    mock_cavity.detune_chirp = 1000.0
+
+    def after_move(*args, **kwargs):
+        mock_cavity.detune_chirp = 0.0
+
+    mock_stepper.move.side_effect = after_move
+
+    result = phase._tune_to_resonance()
+
+    assert result.result == PhaseResult.SUCCESS
+    cold_landing_steps = result.data["cold_landing_steps"]
+    total_steps_this_run = result.data["total_steps"]
+    # cold_landing_steps = -(prior_signed_offset + signed_steps_this_run).
+    # Its magnitude must exceed what this run contributed alone, proving the
+    # prior accumulated offset was preserved rather than reset to zero.
+    assert (
+        abs(cold_landing_steps) > total_steps_this_run
+    ), "cold_landing_steps must reflect steps from prior (aborted) runs"
+    phase._nsteps_cold_pv_obj.put.assert_called_once_with(cold_landing_steps)
 
 
 def test_tune_to_resonance_nsteps_cold_write_error(

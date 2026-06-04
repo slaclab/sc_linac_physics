@@ -39,6 +39,18 @@ _STAGE3_STEPS = ["apply_hz_per_step", "tune_to_resonance"]
 _STAGE4_STEPS = ["measure_pi_modes"]
 _STAGE4_FINALIZE_STEPS = ["record_results"]
 
+# Cumulative step offset for each stage, used to compute overall progress.
+_TOTAL_COMMISSIONING_STEPS = sum(
+    len(s) for s in (_STAGE1_STEPS, _STAGE2_STEPS, _STAGE3_STEPS, _STAGE4_STEPS)
+)
+_STAGE_STEP_OFFSETS = {
+    1: 0,
+    2: len(_STAGE1_STEPS),
+    3: len(_STAGE1_STEPS) + len(_STAGE2_STEPS),
+    4: len(_STAGE1_STEPS) + len(_STAGE2_STEPS) + len(_STAGE3_STEPS),
+    5: _TOTAL_COMMISSIONING_STEPS,  # confirm & save — clamps at 100%
+}
+
 
 class FrequencyTuningController(QObject):
     """Owns phase execution and plot wiring for the Frequency Tuning display."""
@@ -121,7 +133,6 @@ class FrequencyTuningController(QObject):
         pv_map = {}
         for widget_name, pv_addr in (
             ("steps_spinbox", stepper.step_des_pv),
-            ("speed_spinbox", stepper.speed_pv),
             ("max_steps_spinbox", stepper.max_steps_pv),
             ("detune_chirp_readback", cavity.detune_chirp_pv),
             ("df_cold_readback", cavity.pv_addr("DF_COLD")),
@@ -432,9 +443,22 @@ class FrequencyTuningController(QObject):
     # Background execution
     # ------------------------------------------------------------------
 
+    def _reset_abort_and_speed(self) -> None:
+        self.context.abort_requested = False
+        if self._cavity is not None:
+            try:
+                self._cavity.stepper_tuner.abort_flag = False
+            except Exception:
+                pass
+        speed_spinbox = getattr(self.view, "speed_spinbox", None)
+        if speed_spinbox is not None and self.phase is not None:
+            self.phase.limits.move_speed = speed_spinbox.value()
+
     def _run_phase_in_background(self) -> None:
         if not self.context or not self.phase:
             return
+
+        self._reset_abort_and_speed()
 
         self.context.progress_callback = (
             lambda step, prog: self.view.step_progress_signal.emit(step, prog)
@@ -609,10 +633,8 @@ class FrequencyTuningController(QObject):
         if confirm_probe_btn is not None:
             confirm_probe_btn.setEnabled(False)
 
-        if self._initial_detune_hz is not None:
-            initial = self._initial_detune_hz
-            hps = abs(signed_hz)
-            QTimer.singleShot(0, lambda: self.view.set_projection(initial, hps))
+        # Projection belongs to Stage 3; don't draw it here so the Stage 2
+        # probe-fit plot stays at the narrow probe-step scale.
 
         self.push_hz_per_step_to_scale()
         self._enable_stage_btn(3)
@@ -652,6 +674,10 @@ class FrequencyTuningController(QObject):
         self._set_stage_done_ui(4, success=saved)
         if not saved:
             return
+
+        # Stage 4 (FSCAN) is repeatable — re-enable so the operator can re-scan
+        # if the first result looked noisy or failed partway through.
+        self._enable_stage_btn(4)
 
         confirm_btn = getattr(self.view, "confirm_save_button", None)
         if confirm_btn is not None:
@@ -709,12 +735,14 @@ class FrequencyTuningController(QObject):
             return False
 
         if self.context and self.context.progress_callback:
+            stage_offset = _STAGE_STEP_OFFSETS.get(self._current_stage, 0)
             idx = (
                 self._steps.index(step_name) if step_name in self._steps else 0
             )
-            self.context.progress_callback(
-                step_name, int((idx / len(self._steps)) * 100)
+            overall = int(
+                (stage_offset + idx) / _TOTAL_COMMISSIONING_STEPS * 100
             )
+            self.context.progress_callback(step_name, overall)
 
         return self._execute_step_with_retries(step_name, max_retries=3)
 
@@ -946,6 +974,11 @@ class FrequencyTuningController(QObject):
             abort_btn = getattr(self.view, "abort_button", None)
             if abort_btn:
                 abort_btn.setEnabled(False)
+        if self._cavity is not None:
+            try:
+                self._cavity.stepper_tuner.abort_flag = True
+            except Exception:
+                pass
 
     def on_pause_test(self) -> None:
         pause_btn = getattr(self.view, "pause_button", None)
@@ -1133,12 +1166,6 @@ class FrequencyTuningController(QObject):
             self._restore_stage2(stage2, has_tune=stage3 is not None)
         if stage3:
             self._restore_stage3(stage3)
-            # Data already saved — disable confirm until the user re-runs stage 3.
-            confirm_btn = getattr(self.view, "confirm_save_button", None)
-            if confirm_btn is not None:
-                confirm_btn.setEnabled(False)
-            # Keep run button enabled — cavity may have drifted since last session.
-            self._enable_stage_btn(3)
             if stage4:
                 self._restore_stage4(stage4)
             else:
@@ -1322,18 +1349,23 @@ class FrequencyTuningController(QObject):
             data.get("cold_landing_steps") or 0
         )
 
+        if hasattr(self.view, "local_phase_status"):
+            self.view.local_phase_status.setText("AT RESONANCE")
+
     def _restore_stage4(self, data: dict) -> None:
         self._pi_mode_data = {
             "mode_8pi_9_hz": data.get("mode_8pi_9_hz"),
             "mode_7pi_9_hz": data.get("mode_7pi_9_hz"),
         }
         self._set_stage_done_ui(4, success=True)
+        self._enable_stage_btn(4)
+
+        if hasattr(self.view, "local_phase_status"):
+            self.view.local_phase_status.setText("PI MODES DONE")
 
         confirm_btn = getattr(self.view, "confirm_save_button", None)
         if confirm_btn is not None:
             confirm_btn.setEnabled(True)
-        # Keep stage 4 re-runnable in case re-measurement is needed.
-        self._enable_stage_btn(4)
 
     def _auto_create_record(self) -> bool:
         parent = self.view.parent()

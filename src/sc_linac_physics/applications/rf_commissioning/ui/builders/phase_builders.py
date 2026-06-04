@@ -971,20 +971,11 @@ class FrequencyTuningUI(PhaseUIBase):
         # Row 0: Speed | Max Steps
         layout.addWidget(QLabel("Speed (steps/s):"), 0, 0)
         speed_spinbox = self._register(
-            "speed_spinbox", PyDMSpinbox(parent=self.parent)
+            "speed_spinbox", QSpinBox(parent=self.parent)
         )
         speed_spinbox.setRange(1, linac_utils.MAX_STEPPER_SPEED)
-        speed_spinbox.userDefinedLimits = True
-        speed_spinbox.userMinimum = 1
-        speed_spinbox.userMaximum = linac_utils.MAX_STEPPER_SPEED
         speed_spinbox.setSingleStep(1000)
-        speed_spinbox.setDecimals(0)
         speed_spinbox.setValue(linac_utils.DEFAULT_STEPPER_SPEED)
-        speed_spinbox.precisionFromPV = False
-        speed_spinbox.precision = 0
-        speed_spinbox.showStepExponent = False
-        speed_spinbox.writeOnPress = True
-        speed_spinbox.editingFinished.connect(speed_spinbox.send_value)
         layout.addWidget(speed_spinbox, 0, 1)
 
         layout.addWidget(QLabel("Max Steps:"), 0, 2)
@@ -1087,10 +1078,8 @@ class FrequencyTuningUI(PhaseUIBase):
         grid = QGridLayout()
         grid.setSpacing(4)
         grid.setVerticalSpacing(5)
-        grid.setColumnMinimumWidth(0, 75)
-        grid.setColumnMinimumWidth(2, 75)
+        grid.setColumnMinimumWidth(0, 120)
         grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(3, 1)
 
         row = 0
 
@@ -1102,7 +1091,7 @@ class FrequencyTuningUI(PhaseUIBase):
             "min-height: 20px; max-height: 20px; } "
             "QProgressBar::chunk { background-color: #ff9a4a; }"
         )
-        grid.addWidget(progress_bar, row, 1, 1, 3)
+        grid.addWidget(progress_bar, row, 1)
         row += 1
 
         grid.addWidget(QLabel("Status:"), row, 0)
@@ -1111,28 +1100,23 @@ class FrequencyTuningUI(PhaseUIBase):
             row,
             1,
         )
-        grid.addWidget(QLabel("Stored At:"), row, 2)
+        row += 1
+
+        grid.addWidget(QLabel("Stored At:"), row, 0)
         grid.addWidget(
             self._register(
                 "local_stored_timestamp", self._make_local_label("-")
             ),
             row,
-            3,
+            1,
         )
         row += 1
 
-        for i in range(0, len(fields), 2):
-            label1, name1 = fields[i]
-            grid.addWidget(QLabel(f"{label1}:"), row, 0)
+        for label, name in fields:
+            grid.addWidget(QLabel(f"{label}:"), row, 0)
             grid.addWidget(
-                self._register(name1, self._make_local_label("-")), row, 1
+                self._register(name, self._make_local_label("-")), row, 1
             )
-            if i + 1 < len(fields):
-                label2, name2 = fields[i + 1]
-                grid.addWidget(QLabel(f"{label2}:"), row, 2)
-                grid.addWidget(
-                    self._register(name2, self._make_local_label("-")), row, 3
-                )
             row += 1
 
         grid.addWidget(QLabel("Notes:"), row, 0)
@@ -1141,7 +1125,7 @@ class FrequencyTuningUI(PhaseUIBase):
         )
         notes_label.setWordWrap(True)
         notes_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        grid.addWidget(notes_label, row, 1, 1, 3)
+        grid.addWidget(notes_label, row, 1)
 
         layout.addLayout(grid)
         layout.addStretch()

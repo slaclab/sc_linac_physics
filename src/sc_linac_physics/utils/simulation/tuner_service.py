@@ -49,6 +49,17 @@ class StepperPVGroup(PVGroup):
     step_signed: PvpropertyInteger = pvproperty(value=0, name="REG_TOTSGN")
     reset_tot = pvproperty(name="TOTABS_RESET")
     reset_signed = pvproperty(name="TOTSGN_RESET")
+
+    @reset_tot.putter
+    async def reset_tot(self, instance, value):
+        await self.step_tot.write(0)
+        return value
+
+    @reset_signed.putter
+    async def reset_signed(self, instance, value):
+        await self.step_signed.write(0)
+        return value
+
     steps_cold_landing = pvproperty(name="NSTEPS_COLD")
     nsteps_park = pvproperty(name="NSTEPS_PARK", value=5000000)
     push_signed_cold = pvproperty(name="PUSH_NSTEPS_COLD.PROC")
@@ -102,10 +113,6 @@ class StepperPVGroup(PVGroup):
         super().__init__(prefix)
         self.cavity_group: CavityPVGroup = cavity_group
         self.piezo_group: PiezoPVGroup = piezo_group
-        if not self.cavity_group.is_hl:
-            self.steps_per_hertz = 256 / 1.4
-        else:
-            self.steps_per_hertz = 256 / 18.3
 
     async def move(self, move_sign_des: int):
         print("Motor moving")
@@ -125,7 +132,7 @@ class StepperPVGroup(PVGroup):
             await self.step_signed.write(self.step_signed.value + step_change)
 
             steps += self.speed.value
-            delta = self.speed.value // self.steps_per_hertz
+            delta = self.speed.value * abs(self.hz_per_microstep.value)
             new_detune = self.cavity_group.detune.value + (
                 freq_move_sign * delta
             )
@@ -145,7 +152,7 @@ class StepperPVGroup(PVGroup):
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = remainder // self.steps_per_hertz
+        delta = remainder * abs(self.hz_per_microstep.value)
         new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
 
         print(
