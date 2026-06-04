@@ -2,7 +2,7 @@
 
 import time
 from datetime import datetime
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -742,3 +742,334 @@ def test_finalize_phase_no_checkpoints_creates_defaults(phase, record):
     assert ft.initial_detune_hz is None
     assert ft.steps_to_resonance is None
     assert ft.positive_step_increases_frequency is None
+
+
+# ---------------------------------------------------------------------------
+# _do_probe_move — probe callback paths
+# ---------------------------------------------------------------------------
+
+_FT_MODULE = (
+    "sc_linac_physics.applications.rf_commissioning.phases.frequency_tuning.PV"
+)
+
+
+def test_do_probe_move_invokes_callbacks(phase, mock_cavity, mock_stepper):
+    """probe_cb must be called with (0, d0) before and (probe, d1) after move."""
+    _setup_phase(phase)
+    called_with = []
+    mock_cavity.detune_chirp = 1000.0
+
+    def probe_cb(steps, hz):
+        called_with.append((steps, hz))
+
+    phase._do_probe_move(10, probe_cb, speed=1000)
+
+    assert len(called_with) == 2
+    assert called_with[0] == (0, 1000.0)
+    assert called_with[1][0] == 10
+
+
+def test_do_probe_move_callback_exception_is_swallowed(
+    phase, mock_cavity, mock_stepper
+):
+    """A failing probe_cb must not propagate — the move should succeed."""
+    _setup_phase(phase)
+
+    def bad_cb(*_):
+        raise RuntimeError("callback error")
+
+    phase._do_probe_move(10, bad_cb)
+    assert mock_stepper.move.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# _measure_pi_modes — dry-run and live paths
+# ---------------------------------------------------------------------------
+
+
+def _make_rack(phase, fscan_stat_sequence):
+    """Build a mock rack and wire mock_cavity.rack to it."""
+    rack = Mock()
+    rack.pv_prefix = "ACCL:L1B:0210:"
+    rack.rack_name = "A"
+
+    cav2 = Mock()
+    cav2.pv_addr = lambda s: f"ACCL:L1B:0220:{s}"
+    rack.cavities = {
+        phase.cavity.number: phase.cavity,
+        phase.cavity.number + 1: cav2,
+    }
+
+    phase.cavity.rack = rack
+    phase.cavity.pv_addr = lambda s: f"ACCL:L1B:0210:{s}"
+    phase.cavity.number = 1
+
+    return rack, fscan_stat_sequence
+
+
+def _make_pv_factory(stat_sequence):
+    """Return a PV factory that replays stat_sequence on FSCAN:STAT reads."""
+    stat_iter = iter(stat_sequence)
+
+    def factory(addr):
+        pv = Mock()
+        if "FSCAN:STAT" in addr:
+            pv.get.side_effect = lambda: next(stat_iter)
+        elif "8PI9MODE" in addr:
+            pv.get.return_value = 1_400_000_000.0
+        elif "7PI9MODE" in addr:
+            pv.get.return_value = 1_399_000_000.0
+        else:
+            pv.get.return_value = 0
+        return pv
+
+    return factory
+
+
+def test_measure_pi_modes_dry_run(phase):
+    _setup_phase(phase)
+    phase.context.dry_run = True
+    result = phase._measure_pi_modes()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["dry_run"] is True
+
+
+def test_measure_pi_modes_success(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    rack, _ = _make_rack(phase, [3, 5])  # 3=in-progress, 5=done
+
+    with patch(_FT_MODULE, side_effect=_make_pv_factory([3, 5])):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.SUCCESS
+    assert "mode_8pi_9_hz" in result.data
+    assert "mode_7pi_9_hz" in result.data
+
+
+def test_measure_pi_modes_rack_check_blocks(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    _make_rack(phase, [])
+    phase.context.parameters["rack_check_callback"] = lambda rack: (
+        False,
+        "another cavity active",
+    )
+
+    with patch(_FT_MODULE, side_effect=_make_pv_factory([])):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.FAILED
+    assert "rack" in result.message.lower()
+
+
+def test_measure_pi_modes_rack_check_callback_raises(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    _make_rack(phase, [])
+    phase.context.parameters["rack_check_callback"] = Mock(
+        side_effect=RuntimeError("unexpected")
+    )
+
+    with patch(_FT_MODULE, side_effect=_make_pv_factory([])):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.RETRY
+
+
+def test_measure_pi_modes_fscan_aborted(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    _make_rack(phase, [6])  # 6=scan aborted
+
+    with patch(_FT_MODULE, side_effect=_make_pv_factory([6])):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.FAILED
+    assert "aborted" in result.message.lower() or "FSCAN" in result.message
+
+
+def test_measure_pi_modes_fscan_timeout(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    phase.limits.pi_scan_timeout_seconds = 0.0  # expire immediately
+    _make_rack(phase, [])
+
+    with patch(_FT_MODULE, side_effect=_make_pv_factory([])):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.FAILED
+    assert "did not complete" in result.message
+
+
+def test_measure_pi_modes_abort_during_wait(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    phase.limits.pi_scan_timeout_seconds = 60.0
+    _make_rack(phase, [3])  # stays in-progress
+
+    phase.context.abort_requested = True
+
+    with patch(_FT_MODULE, side_effect=_make_pv_factory([3])):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.FAILED
+    assert "Abort" in result.message
+
+
+def test_measure_pi_modes_sel_pv_write_error(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    _make_rack(phase, [])
+
+    def pv_factory(addr):
+        pv = Mock()
+        if "FSCAN:SEL" in addr:
+            pv.put.side_effect = RuntimeError("write timeout")
+        return pv
+
+    with patch(_FT_MODULE, side_effect=pv_factory):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.RETRY
+
+
+def test_measure_pi_modes_fscan_param_write_error(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    _make_rack(phase, [])
+
+    def pv_factory(addr):
+        pv = Mock()
+        if "FSCAN:FREQ_START" in addr:
+            pv.put.side_effect = RuntimeError("write timeout")
+        return pv
+
+    with patch(_FT_MODULE, side_effect=pv_factory):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.RETRY
+
+
+def test_measure_pi_modes_start_write_error(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    _make_rack(phase, [])
+
+    def pv_factory(addr):
+        pv = Mock()
+        if "FSCAN:START" in addr:
+            pv.put.side_effect = RuntimeError("write timeout")
+        return pv
+
+    with patch(_FT_MODULE, side_effect=pv_factory):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.RETRY
+
+
+def test_measure_pi_modes_stat_read_error(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    phase.limits.pi_scan_timeout_seconds = 60.0
+    _make_rack(phase, [])
+
+    def pv_factory(addr):
+        pv = Mock()
+        if "FSCAN:STAT" in addr:
+            pv.get.side_effect = RuntimeError("read timeout")
+        return pv
+
+    with patch(_FT_MODULE, side_effect=pv_factory):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.RETRY
+
+
+def test_measure_pi_modes_status_callback_invoked(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    phase.limits.pi_scan_timeout_seconds = 60.0
+    _make_rack(phase, [3, 5])
+
+    status_msgs = []
+    phase.context.parameters["status_update_callback"] = status_msgs.append
+
+    with patch(_FT_MODULE, side_effect=_make_pv_factory([3, 5])):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.SUCCESS
+    assert any("FSCAN" in m for m in status_msgs)
+
+
+def test_measure_pi_modes_push_results_error(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    _make_rack(phase, [5])
+
+    def pv_factory(addr):
+        pv = Mock()
+        if "FSCAN:STAT" in addr:
+            pv.get.return_value = 5
+        elif "PUSH_8PI9" in addr:
+            pv.put.side_effect = RuntimeError("put failed")
+        return pv
+
+    with patch(_FT_MODULE, side_effect=pv_factory):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.RETRY
+
+
+def test_measure_pi_modes_read_frequency_error(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.number = 1
+    _make_rack(phase, [5])
+
+    def pv_factory(addr):
+        pv = Mock()
+        if "FSCAN:STAT" in addr:
+            pv.get.return_value = 5
+        elif "8PI9MODE" in addr:
+            pv.get.side_effect = RuntimeError("read failed")
+        return pv
+
+    with patch(_FT_MODULE, side_effect=pv_factory):
+        result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.RETRY
+
+
+# ---------------------------------------------------------------------------
+# _initialize_tuning_state — lazy PV init
+# ---------------------------------------------------------------------------
+
+
+def test_initialize_tuning_state_creates_pv_when_none(
+    phase, mock_cavity, mock_stepper
+):
+    """When _step_signed_pv_obj is None it should be lazily created."""
+    _setup_phase(phase)
+    phase._step_signed_pv_obj = None
+    mock_stepper.step_signed_pv = "ACCL:L1B:0210:STEP:REG_TOTSGN"
+
+    mock_pv = Mock()
+    mock_pv.get.return_value = -200_000
+
+    with patch(_FT_MODULE, return_value=mock_pv):
+        total, signed, peak = phase._initialize_tuning_state(None)
+
+    assert signed == -200_000
+    assert phase._step_signed_pv_obj is mock_pv
+
+
+def test_initialize_tuning_state_pv_read_error_defaults_zero(
+    phase, mock_cavity, mock_stepper
+):
+    """A PV read exception during init should silently yield signed_total=0."""
+    _setup_phase(phase)
+    phase._step_signed_pv_obj = Mock()
+    phase._step_signed_pv_obj.get.side_effect = RuntimeError("read error")
+
+    total, signed, peak = phase._initialize_tuning_state(None)
+    assert signed == 0
