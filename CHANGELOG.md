@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v9.24.1 (2026-05-27)
+
+### Bug Fixes
+
+- Mock RFControls in quench test to prevent PyDMSpinbox CI failures
+  ([#248](https://github.com/slaclab/sc_linac_physics/pull/248),
+  [`03649d1`](https://github.com/slaclab/sc_linac_physics/commit/03649d10ba570b081a80638b711400c0761e825d))
+
+
+## v9.24.0 (2026-05-26)
+
+### Bug Fixes
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#260](https://github.com/slaclab/sc_linac_physics/pull/260),
+  [`4458173`](https://github.com/slaclab/sc_linac_physics/commit/44581738dc81a506000a27ab76c905d920296155))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#260](https://github.com/slaclab/sc_linac_physics/pull/260),
+  [`4458173`](https://github.com/slaclab/sc_linac_physics/commit/44581738dc81a506000a27ab76c905d920296155))
+
+### Features
+
+- **sim**: Add EPICS alarm states to simulation and fix tutorial alarm display
+  ([#260](https://github.com/slaclab/sc_linac_physics/pull/260),
+  [`4458173`](https://github.com/slaclab/sc_linac_physics/commit/44581738dc81a506000a27ab76c905d920296155))
+
+
 ## v9.23.2 (2026-05-21)
 
 ### Bug Fixes
