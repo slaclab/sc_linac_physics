@@ -4,10 +4,10 @@ Frequency Tuning Phase
 Tunes the cavity stepper to resonance after initial cool-down.  Before moving
 the stepper this phase:
   1. Checks that the stepper is idle and chirp detune is valid.
-  2. Records the cold-landing detune and writes it to the DF_COLD PV so that
-     future warm-up operations can find cold landing by frequency.
-  3. Runs a probe move to measure Hz/step and write it to the SCALE PV, and
-     to record whether stepper.move(+N) increases or decreases cavity frequency.
+  2. Records the cold-landing detune for display; the operator pushes it to
+     DF_COLD via the UI after reviewing.
+  3. Runs a probe move to measure Hz/step; the operator confirms and the UI
+     writes the value to the SCALE PV via apply_hz_per_step.
   4. Moves to resonance in small chunks, checking motor temperature before each
      chunk and pausing if the temperature exceeds the limit.  After converging,
      writes the (signed) return-trip step count to the NSTEPS_COLD PV.
@@ -68,8 +68,8 @@ class FrequencyTuningPhase(PhaseBase):
 
     Sequence:
     1. verify_initial_state    – stepper idle, not on limit switch, chirp valid
-    2. record_cold_landing     – record initial detune; write to DF_COLD PV
-    3. probe_stepper_direction – measure Hz/step; write to SCALE PV
+    2. record_cold_landing     – record initial detune (operator pushes to DF_COLD via UI)
+    3. probe_stepper_direction – measure Hz/step (operator confirms; UI writes to SCALE)
     4. tune_to_resonance       – chunked loop with temperature guard; write NSTEPS_COLD
     5. record_results          – write FrequencyTuningData to commissioning record
     """
@@ -389,7 +389,7 @@ class FrequencyTuningPhase(PhaseBase):
             result=PhaseResult.SUCCESS,
             message=(
                 f"Direction probe: Δdetune={delta:+.0f} Hz for +{probe} steps. "
-                f"Measured {self._hz_per_microstep:.4f} Hz/step written to SCALE PV. "
+                f"Measured {self._hz_per_microstep:.4f} Hz/step (confirm to write to SCALE PV). "
                 f"move(+N) "
                 f"{'increases' if positive_step_increases_frequency else 'decreases'} frequency."
             ),

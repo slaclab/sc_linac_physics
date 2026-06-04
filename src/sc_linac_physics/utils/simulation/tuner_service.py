@@ -119,9 +119,6 @@ class StepperPVGroup(PVGroup):
         await self.motor_moving.write("Moving")
         steps = 0
         step_change = move_sign_des * self.speed.value
-        freq_move_sign = (
-            move_sign_des if self.cavity_group.is_hl else -move_sign_des
-        )
         starting_detune = self.cavity_group.detune.value
 
         while (
@@ -132,10 +129,10 @@ class StepperPVGroup(PVGroup):
             await self.step_signed.write(self.step_signed.value + step_change)
 
             steps += self.speed.value
-            delta = self.speed.value * abs(self.hz_per_microstep.value)
-            new_detune = self.cavity_group.detune.value + (
-                freq_move_sign * delta
+            delta = (
+                move_sign_des * self.speed.value * self.hz_per_microstep.value
             )
+            new_detune = self.cavity_group.detune.value + delta
 
             await self.cavity_group.detune.write(new_detune)
             await self.cavity_group.detune_rfs.write(new_detune)
@@ -152,8 +149,8 @@ class StepperPVGroup(PVGroup):
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = remainder * abs(self.hz_per_microstep.value)
-        new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
+        delta = move_sign_des * remainder * self.hz_per_microstep.value
+        new_detune = self.cavity_group.detune.value + delta
 
         print(
             f"Piezo feedback status: {self.piezo_group.feedback_mode_stat.value}"
