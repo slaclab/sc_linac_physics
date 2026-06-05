@@ -341,7 +341,6 @@ class TestSerializationAndRegistry:
         assert [spec.widget_name for spec in freq_specs] == [
             "freq_tuning_initial_detune",
             "freq_tuning_steps_to_resonance",
-            "freq_tuning_pos_step_dir",
             "freq_tuning_hz_per_step",
             "freq_tuning_cold_steps",
             "freq_tuning_8pi_9_freq",

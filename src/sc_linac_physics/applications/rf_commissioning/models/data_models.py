@@ -190,11 +190,7 @@ class FrequencyTuningData:
     final_timestamp: datetime | None = None
 
     # Stepper characterization data
-    positive_step_increases_frequency: bool | None = phase_display_field(
-        default=None,
-        label="Pos Step → Freq Up",
-        widget_name="freq_tuning_pos_step_dir",
-    )
+    # Signed: positive means +steps increase cavity frequency (SCALE convention)
     hz_per_microstep: float | None = phase_display_field(
         default=None,
         label="Hz/Microstep",
@@ -235,10 +231,17 @@ class FrequencyTuningData:
         return self.initial_detune_hz / 1000
 
     @property
+    def positive_step_increases_frequency(self) -> bool | None:
+        if self.hz_per_microstep is None:
+            return None
+        return self.hz_per_microstep > 0
+
+    @property
     def cold_landing_complete(self) -> bool:
         """Check if cold landing phase is complete."""
         return (
             self.initial_detune_hz is not None
+            and self.hz_per_microstep is not None
             and self.steps_to_resonance is not None
         )
 
@@ -253,7 +256,7 @@ class FrequencyTuningData:
     @property
     def is_complete(self) -> bool:
         """Check if frequency tuning phase is complete."""
-        return self.cold_landing_complete
+        return self.cold_landing_complete and self.pi_mode_complete
 
     @property
     def passed(self) -> bool:
@@ -265,6 +268,7 @@ class FrequencyTuningData:
             self,
             computed_fields=(
                 "initial_detune_khz",
+                "positive_step_increases_frequency",
                 "cold_landing_complete",
                 "pi_mode_complete",
                 "is_complete",
