@@ -3,14 +3,13 @@
 import signal
 import sys
 
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QLabel,
     QLineEdit,
     QMessageBox,
-    QSplitter,
     QTabWidget,
     QVBoxLayout,
 )
@@ -109,24 +108,13 @@ class MultiPhaseCommissioningDisplay(
         progress = self._build_compact_progress_bar()
         main_layout.addWidget(progress)
 
-        # 4. MAIN CONTENT AREA (scrollable)
-        content_splitter = QSplitter(Qt.Vertical)
-
-        # Phase tabs
+        # 4. MAIN CONTENT AREA: phase tabs fill all remaining space
         self.tabs = QTabWidget()
         self.tabs.setTabPosition(QTabWidget.North)
-        content_splitter.addWidget(self.tabs)
+        main_layout.addWidget(self.tabs, stretch=1)
 
-        # Notes panel (collapsible but always accessible)
-        notes_panel = self._build_enhanced_notes_panel()
-        content_splitter.addWidget(notes_panel)
-
-        # Initial sizes: 70% tabs, 30% notes
-        content_splitter.setSizes([700, 300])
-        content_splitter.setCollapsible(0, False)  # Tabs can't collapse
-        content_splitter.setCollapsible(1, True)  # Notes can collapse
-
-        main_layout.addWidget(content_splitter)
+        # 5. COMPACT NOTES FOOTER (always visible, opens dialog on demand)
+        main_layout.addWidget(self._build_compact_notes_bar())
 
         self.setLayout(main_layout)
 

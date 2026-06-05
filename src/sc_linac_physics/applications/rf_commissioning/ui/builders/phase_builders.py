@@ -1,18 +1,23 @@
 """Phase-specific UI builder classes for RF commissioning displays."""
 
+import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
 )
 from pydm.widgets import PyDMEnumComboBox, PyDMLabel, PyDMSpinbox
+from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
@@ -508,4 +513,647 @@ class SSACharUI(PhaseUIBase):
         outer.addStretch()
 
         group.setLayout(outer)
+        return group
+
+
+class FrequencyTuningUI(PhaseUIBase):
+    """Builds the Frequency Tuning display UI with 3-stage checklist layout."""
+
+    _STAGE_BTN_STYLE = """
+        QPushButton {
+            background-color: #2563eb;
+            color: white;
+            font-weight: bold;
+            padding: 5px 14px;
+            border-radius: 4px;
+            border: none;
+        }
+        QPushButton:hover { background-color: #1d4ed8; }
+        QPushButton:disabled { background-color: #374151; color: #6b7280; }
+    """
+    _CONFIRM_BTN_STYLE = """
+        QPushButton {
+            background-color: #059669;
+            color: white;
+            font-weight: bold;
+            padding: 5px 14px;
+            border-radius: 4px;
+            border: none;
+        }
+        QPushButton:hover { background-color: #047857; }
+        QPushButton:disabled { background-color: #374151; color: #6b7280; }
+    """
+
+    def build(self) -> QVBoxLayout:
+        outer = QVBoxLayout()
+        outer.setContentsMargins(5, 5, 5, 5)
+        outer.setSpacing(4)
+
+        outer.addLayout(self._build_status_bar())
+
+        main = QHBoxLayout()
+        main.setSpacing(6)
+
+        # Left: stage checklist (scrollable so cards don't overlap)
+        checklist = self._build_checklist_panel()
+        checklist_scroll = QScrollArea()
+        checklist_scroll.setWidgetResizable(True)
+        checklist_scroll.setWidget(checklist)
+        checklist_scroll.setFrameShape(QFrame.NoFrame)
+        checklist_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        main.addWidget(checklist_scroll, stretch=2)
+
+        # Center: plot + history
+        center = QVBoxLayout()
+        center.setSpacing(4)
+        center.addWidget(self._build_tuning_plot(), stretch=3)
+        center.addWidget(self._build_compact_history())
+        main.addLayout(center, stretch=4)
+
+        # Right: motor settings + stored data
+        right = QVBoxLayout()
+        right.setSpacing(4)
+        right.addWidget(self._build_motor_settings())
+        stored = self._build_stored_data_section(
+            self._get_parent_stored_data_fields()
+        )
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(stored)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        right.addWidget(scroll, stretch=1)
+        main.addLayout(right, stretch=2)
+
+        outer.addLayout(main, stretch=1)
+        return outer
+
+    def update_toolbar_state(self, state: str) -> None:
+        """Override: checklist layout has no run_button."""
+        pause_btn = self.widgets.get("pause_button")
+        abort_btn = self.widgets.get("abort_button")
+        status_ind = self.widgets.get("status_indicator")
+
+        active = state in ("running", "paused")
+        if pause_btn:
+            pause_btn.setEnabled(active)
+            if state != "paused":
+                pause_btn.setText("⏸ Pause")
+        if abort_btn:
+            abort_btn.setEnabled(active)
+
+        _status_map = {
+            "idle": ("● IDLE", "#10b981"),
+            "running": ("● RUNNING", "#3b82f6"),
+            "paused": ("● PAUSED", "#f59e0b"),
+            "complete": ("✓ COMPLETE", "#10b981"),
+            "error": ("✗ ERROR", "#dc2626"),
+        }
+        if status_ind and state in _status_map:
+            text, color = _status_map[state]
+            status_ind.setText(text)
+            status_ind.setStyleSheet(
+                f"QLabel {{ color: {color}; font-weight: bold; font-size: 10pt; }}"
+            )
+
+    def _build_status_bar(self) -> QVBoxLayout:
+        """Compact pause/abort/status bar spanning full width."""
+        frame = QFrame()
+        frame.setStyleSheet(self._TOOLBAR_FRAME_STYLE)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(8)
+
+        pause_button = self._register("pause_button", QPushButton("⏸ Pause"))
+        pause_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f59e0b; color: white;
+                font-weight: bold; padding: 5px 14px;
+                border-radius: 4px; border: none;
+            }
+            QPushButton:hover { background-color: #d97706; }
+            QPushButton:disabled { background-color: #475569; color: #94a3b8; }
+        """)
+        pause_button.setFixedHeight(30)
+        pause_button.setEnabled(False)
+        self._connect(pause_button, "on_pause_test")
+        layout.addWidget(pause_button)
+
+        abort_button = self._register("abort_button", QPushButton("⏹ Abort"))
+        abort_button.setStyleSheet("""
+            QPushButton {
+                background-color: #dc2626; color: white;
+                font-weight: bold; padding: 5px 14px;
+                border-radius: 4px; border: none;
+            }
+            QPushButton:hover { background-color: #b91c1c; }
+            QPushButton:disabled { background-color: #475569; color: #94a3b8; }
+        """)
+        abort_button.setFixedHeight(30)
+        abort_button.setEnabled(False)
+        self._connect(abort_button, "on_abort_test")
+        layout.addWidget(abort_button)
+
+        layout.addStretch()
+
+        status_indicator = self._register("status_indicator", QLabel("● IDLE"))
+        status_indicator.setStyleSheet(
+            "QLabel { color: #10b981; font-weight: bold; font-size: 10pt; }"
+        )
+        layout.addWidget(status_indicator)
+
+        from .styles import MONO_FONT_STACK
+
+        timestamp_label = self._register("timestamp_label", QLabel("--:--:--"))
+        timestamp_label.setStyleSheet(
+            f"QLabel {{ color: #9ca3af; font-size: 9pt; font-family: {MONO_FONT_STACK}; }}"
+        )
+        layout.addWidget(timestamp_label)
+
+        frame.setLayout(layout)
+        wrapper = QVBoxLayout()
+        wrapper.setContentsMargins(0, 0, 0, 0)
+        wrapper.addWidget(frame)
+        return wrapper
+
+    def _build_checklist_panel(self) -> QGroupBox:
+        group = QGroupBox("Commissioning Stages")
+        group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #334155;
+                border-radius: 4px;
+                margin-top: 6px;
+                color: #94a3b8;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+            }
+        """)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(6, 8, 6, 6)
+        layout.setSpacing(6)
+
+        layout.addWidget(self._build_stage1_card())
+        layout.addWidget(self._build_stage2_card())
+        layout.addWidget(self._build_stage3_card())
+        layout.addWidget(self._build_stage4_card())
+        layout.addStretch()
+
+        group.setLayout(layout)
+        return group
+
+    def _build_stage1_card(self) -> QFrame:
+        return self._build_stage_card(
+            stage=1,
+            title="① Setup & Cold Landing",
+            description="Verify stepper state and record cold landing frequency.",
+            run_callback="on_run_stage_1",
+            run_label="▶ Run Stage 1",
+            initially_enabled=True,
+            extra_widgets=self._build_stage1_extra,
+        )
+
+    def _build_stage2_card(self) -> QFrame:
+        return self._build_stage_card(
+            stage=2,
+            title="② Probe Direction",
+            description="Measure Hz/step from a probe move.",
+            run_callback="on_run_stage_2",
+            run_label="▶ Run Stage 2",
+            initially_enabled=False,
+            extra_widgets=self._build_stage2_extra,
+        )
+
+    def _build_stage3_card(self) -> QFrame:
+        return self._build_stage_card(
+            stage=3,
+            title="③ Tune to Resonance",
+            description="Move stepper to resonance using Hz/step estimate.",
+            run_callback="on_run_stage_3",
+            run_label="▶ Run Stage 3",
+            initially_enabled=False,
+            extra_widgets=self._build_stage3_extra,
+        )
+
+    def _build_stage4_card(self) -> QFrame:
+        return self._build_stage_card(
+            stage=4,
+            title="④ Measure Pi Modes",
+            description="Run rack FSCAN to find 8π/9 and 7π/9 parasitic modes.",
+            run_callback="on_run_stage_4",
+            run_label="▶ Run Stage 4",
+            initially_enabled=False,
+            extra_widgets=self._build_stage4_extra,
+        )
+
+    def _build_stage_card(
+        self,
+        stage: int,
+        title: str,
+        description: str,
+        run_callback: str,
+        run_label: str,
+        initially_enabled: bool,
+        extra_widgets,
+    ) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame {
+                background-color: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 4px;
+            }
+        """)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(5)
+
+        hdr = QHBoxLayout()
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet(
+            "QLabel { color: #e2e8f0; font-weight: bold; font-size: 10pt; }"
+        )
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        status_lbl = self._register(
+            f"stage{stage}_status_label", QLabel("⬜ Not started")
+        )
+        status_lbl.setStyleSheet("QLabel { color: #6b7280; font-size: 9pt; }")
+        hdr.addWidget(status_lbl)
+        layout.addLayout(hdr)
+
+        desc = QLabel(description)
+        desc.setStyleSheet("QLabel { color: #94a3b8; font-size: 9pt; }")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        run_btn = self._register(
+            f"stage{stage}_run_btn", QPushButton(run_label)
+        )
+        run_btn.setStyleSheet(self._STAGE_BTN_STYLE)
+        run_btn.setFixedHeight(28)
+        run_btn.setEnabled(initially_enabled)
+        self._connect(run_btn, run_callback)
+        layout.addWidget(run_btn)
+
+        extra_widgets(layout)
+
+        frame.setLayout(layout)
+        return frame
+
+    def _build_stage1_extra(self, layout: QVBoxLayout) -> None:
+        detune_row = QHBoxLayout()
+        detune_row.addWidget(QLabel("Current detune:"))
+        detune_lbl = self._register(
+            "detune_chirp_readback", PyDMLabel(parent=self.parent)
+        )
+        detune_lbl.setStyleSheet(PV_CAP_STYLE)
+        detune_lbl.showUnits = True
+        detune_lbl.precisionFromPV = False
+        detune_lbl.precision = 0
+        detune_row.addWidget(detune_lbl)
+        detune_row.addStretch()
+        layout.addLayout(detune_row)
+
+        df_cold_row = QHBoxLayout()
+        df_cold_row.addWidget(QLabel("DF_COLD PV:"))
+        df_cold_lbl = self._register(
+            "df_cold_readback", PyDMLabel(parent=self.parent)
+        )
+        df_cold_lbl.setStyleSheet(PV_CAP_STYLE)
+        df_cold_lbl.showUnits = True
+        df_cold_lbl.precisionFromPV = False
+        df_cold_lbl.precision = 0
+        df_cold_row.addWidget(df_cold_lbl)
+        push_btn = self._register(
+            "push_df_cold_button", QPushButton("Push → DF_COLD")
+        )
+        push_btn.setFixedHeight(24)
+        push_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #374151; color: #e2e8f0;
+                font-size: 9pt; padding: 2px 8px;
+                border-radius: 3px; border: 1px solid #4b5563;
+            }
+            QPushButton:hover { background-color: #4b5563; }
+            QPushButton:disabled { background-color: #1f2937; color: #6b7280; }
+        """)
+        self._connect(push_btn, "on_push_to_df_cold")
+        df_cold_row.addWidget(push_btn)
+        layout.addLayout(df_cold_row)
+
+    def _build_stage2_extra(self, layout: QVBoxLayout) -> None:
+        calc_row = QHBoxLayout()
+        calc_row.addWidget(QLabel("Hz/step:"))
+
+        hz_spinbox = self._register("hz_per_step_spinbox", QDoubleSpinBox())
+        hz_spinbox.setRange(-1000.0, 1000.0)
+        hz_spinbox.setDecimals(4)
+        hz_spinbox.setSingleStep(0.0001)
+        hz_spinbox.setValue(0.0)
+        hz_spinbox.setEnabled(False)
+        hz_spinbox.setStyleSheet(
+            "QDoubleSpinBox { background-color: #0f172a; color: #4a9eff; "
+            "border: 1px solid #334155; border-radius: 3px; padding: 2px 4px; "
+            "font-family: monospace; }"
+        )
+        hz_spinbox.setFixedWidth(120)
+        calc_row.addWidget(hz_spinbox)
+        calc_row.addWidget(QLabel("Hz/step"))
+        calc_row.addStretch()
+        layout.addLayout(calc_row)
+
+        scale_row = QHBoxLayout()
+        scale_row.addWidget(QLabel("SCALE PV:"))
+        scale_lbl = self._register(
+            "scale_readback", PyDMLabel(parent=self.parent)
+        )
+        scale_lbl.setStyleSheet(PV_CAP_STYLE)
+        scale_lbl.showUnits = True
+        scale_lbl.precisionFromPV = False
+        scale_lbl.precision = 4
+        scale_row.addWidget(scale_lbl)
+        push_scale_btn = self._register(
+            "push_scale_button", QPushButton("Push → Scale")
+        )
+        push_scale_btn.setFixedHeight(24)
+        push_scale_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #374151; color: #e2e8f0;
+                font-size: 9pt; padding: 2px 8px;
+                border-radius: 3px; border: 1px solid #4b5563;
+            }
+            QPushButton:hover { background-color: #4b5563; }
+            QPushButton:disabled { background-color: #1f2937; color: #6b7280; }
+        """)
+        self._connect(push_scale_btn, "on_push_to_scale")
+        scale_row.addWidget(push_scale_btn)
+        layout.addLayout(scale_row)
+
+        confirm_probe_btn = self._register(
+            "confirm_probe_fit_button", QPushButton("✓ Confirm Fit")
+        )
+        confirm_probe_btn.setStyleSheet(self._CONFIRM_BTN_STYLE)
+        confirm_probe_btn.setFixedHeight(28)
+        confirm_probe_btn.setEnabled(False)
+        self._connect(confirm_probe_btn, "on_confirm_probe_fit")
+        layout.addWidget(confirm_probe_btn)
+
+    def _build_stage3_extra(self, layout: QVBoxLayout) -> None:
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Net steps:"))
+        net_lbl = self._register(
+            "net_steps_label", PyDMLabel(parent=self.parent)
+        )
+        net_lbl.setStyleSheet(PV_LABEL_STYLE)
+        net_lbl.showUnits = True
+        row.addWidget(net_lbl)
+        row.addStretch()
+        layout.addLayout(row)
+
+    def _build_stage4_extra(self, layout: QVBoxLayout) -> None:
+        stat_row = QHBoxLayout()
+        stat_row.addWidget(QLabel("Scan status:"))
+        fscan_stat = self._register(
+            "fscan_stat_readback", PyDMLabel(parent=self.parent)
+        )
+        fscan_stat.setStyleSheet(PV_LABEL_STYLE)
+        fscan_stat.setAlignment(Qt.AlignCenter)
+        stat_row.addWidget(fscan_stat)
+        stat_row.addStretch()
+        layout.addLayout(stat_row)
+
+        for label, widget_name in (
+            ("8π/9 mode:", "stage4_8pi9_label"),
+            ("7π/9 mode:", "stage4_7pi9_label"),
+        ):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            lbl = self._register(widget_name, PyDMLabel(parent=self.parent))
+            lbl.setStyleSheet(PV_CAP_STYLE)
+            lbl.showUnits = True
+            lbl.precisionFromPV = False
+            lbl.precision = 0
+            row.addWidget(lbl)
+            row.addStretch()
+            layout.addLayout(row)
+
+        confirm_btn = self._register(
+            "confirm_save_button", QPushButton("✓ Confirm & Save")
+        )
+        confirm_btn.setStyleSheet(self._CONFIRM_BTN_STYLE)
+        confirm_btn.setFixedHeight(28)
+        confirm_btn.setEnabled(False)
+        self._connect(confirm_btn, "on_confirm_and_save")
+        layout.addWidget(confirm_btn)
+
+    def _build_compact_history(self) -> QGroupBox:
+        group = self._build_history()
+        history = self.widgets.get("history_text")
+        if history:
+            history.setMinimumHeight(50)
+            history.setMaximumHeight(90)
+        return group
+
+    def _build_motor_settings(self) -> QGroupBox:
+        """Speed, max steps, manual stepper controls, and live phase readouts."""
+        group = QGroupBox("Stepper Settings")
+        layout = QGridLayout()
+        layout.setSpacing(4)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(3, 1)
+
+        # Row 0: Speed | Max Steps
+        layout.addWidget(QLabel("Speed (steps/s):"), 0, 0)
+        speed_spinbox = self._register(
+            "speed_spinbox", QSpinBox(parent=self.parent)
+        )
+        speed_spinbox.setRange(1, linac_utils.MAX_STEPPER_SPEED)
+        speed_spinbox.setSingleStep(1000)
+        speed_spinbox.setValue(linac_utils.DEFAULT_STEPPER_SPEED)
+        layout.addWidget(speed_spinbox, 0, 1)
+
+        layout.addWidget(QLabel("Max Steps:"), 0, 2)
+        max_steps_spinbox = self._register(
+            "max_steps_spinbox", PyDMSpinbox(parent=self.parent)
+        )
+        max_steps_spinbox.setRange(1, linac_utils.DEFAULT_STEPPER_MAX_STEPS)
+        max_steps_spinbox.userDefinedLimits = True
+        max_steps_spinbox.userMinimum = 1
+        max_steps_spinbox.userMaximum = linac_utils.DEFAULT_STEPPER_MAX_STEPS
+        max_steps_spinbox.setSingleStep(1000)
+        max_steps_spinbox.setDecimals(0)
+        max_steps_spinbox.setValue(linac_utils.DEFAULT_STEPPER_MAX_STEPS)
+        max_steps_spinbox.precisionFromPV = False
+        max_steps_spinbox.precision = 0
+        max_steps_spinbox.showStepExponent = False
+        max_steps_spinbox.writeOnPress = True
+        max_steps_spinbox.editingFinished.connect(max_steps_spinbox.send_value)
+        layout.addWidget(max_steps_spinbox, 0, 3)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        sep.setStyleSheet("QFrame { color: #3a3a3a; }")
+        layout.addWidget(sep, 1, 0, 1, 4)
+
+        # Row 2: Manual steps spinbox | directional buttons
+        layout.addWidget(QLabel("Steps:"), 2, 0)
+        steps_spinbox = self._register(
+            "steps_spinbox", PyDMSpinbox(parent=self.parent)
+        )
+        steps_spinbox.setRange(1, linac_utils.DEFAULT_STEPPER_MAX_STEPS)
+        steps_spinbox.userDefinedLimits = True
+        steps_spinbox.userMinimum = 1
+        steps_spinbox.userMaximum = linac_utils.DEFAULT_STEPPER_MAX_STEPS
+        steps_spinbox.setSingleStep(1)
+        steps_spinbox.setDecimals(0)
+        steps_spinbox.setValue(100)
+        steps_spinbox.precisionFromPV = False
+        steps_spinbox.precision = 0
+        steps_spinbox.showStepExponent = False
+        steps_spinbox.writeOnPress = True
+        steps_spinbox.editingFinished.connect(steps_spinbox.send_value)
+        layout.addWidget(steps_spinbox, 2, 1)
+
+        _btn_style = (
+            "QPushButton { background-color: #374151; color: #d1d5db; "
+            "padding: 3px 8px; border-radius: 3px; border: 1px solid #4b5563; "
+            "font-size: 9pt; } "
+            "QPushButton:hover { background-color: #4b5563; } "
+            "QPushButton:disabled { background-color: #1f2937; color: #4b5563; }"
+        )
+        move_left_btn = self._register("move_left_btn", QPushButton("← Left"))
+        move_left_btn.setStyleSheet(_btn_style)
+        move_left_btn.setFixedHeight(26)
+        self._connect(move_left_btn, "on_move_left")
+        layout.addWidget(move_left_btn, 2, 2)
+
+        move_right_btn = self._register(
+            "move_right_btn", QPushButton("Right →")
+        )
+        move_right_btn.setStyleSheet(_btn_style)
+        move_right_btn.setFixedHeight(26)
+        self._connect(move_right_btn, "on_move_right")
+        layout.addWidget(move_right_btn, 2, 3)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.HLine)
+        sep2.setFrameShadow(QFrame.Sunken)
+        sep2.setStyleSheet("QFrame { color: #3a3a3a; }")
+        layout.addWidget(sep2, 3, 0, 1, 4)
+
+        # Row 4: Step | Status
+        layout.addWidget(QLabel("Step:"), 4, 0)
+        layout.addWidget(
+            self._register("local_current_step", self._make_local_label("-")),
+            4,
+            1,
+        )
+        layout.addWidget(QLabel("Status:"), 4, 2)
+        layout.addWidget(
+            self._register("local_phase_status", self._make_local_label("-")),
+            4,
+            3,
+        )
+
+        group.setLayout(layout)
+        return group
+
+    def _build_stored_data_section(
+        self, fields: list[tuple[str, str]] | None = None
+    ) -> QGroupBox:
+        """2-column stored data layout for frequency tuning."""
+        fields = fields or []
+        group = QGroupBox("Stored Data")
+        layout = QVBoxLayout()
+        layout.setSpacing(4)
+        layout.setContentsMargins(8, 6, 8, 6)
+
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        grid.setVerticalSpacing(5)
+        grid.setColumnMinimumWidth(0, 120)
+        grid.setColumnStretch(1, 1)
+
+        row = 0
+
+        grid.addWidget(QLabel("Progress:"), row, 0)
+        progress_bar = self._register("local_progress_bar", QProgressBar())
+        progress_bar.setStyleSheet(
+            "QProgressBar { border: 1px solid #ff9a4a; border-radius: 3px; "
+            "background-color: #2a2a1a; text-align: center; color: white; "
+            "min-height: 20px; max-height: 20px; } "
+            "QProgressBar::chunk { background-color: #ff9a4a; }"
+        )
+        grid.addWidget(progress_bar, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("Status:"), row, 0)
+        grid.addWidget(
+            self._register("local_stored_status", self._make_local_label("-")),
+            row,
+            1,
+        )
+        row += 1
+
+        grid.addWidget(QLabel("Stored At:"), row, 0)
+        grid.addWidget(
+            self._register(
+                "local_stored_timestamp", self._make_local_label("-")
+            ),
+            row,
+            1,
+        )
+        row += 1
+
+        for label, name in fields:
+            grid.addWidget(QLabel(f"{label}:"), row, 0)
+            grid.addWidget(
+                self._register(name, self._make_local_label("-")), row, 1
+            )
+            row += 1
+
+        grid.addWidget(QLabel("Notes:"), row, 0)
+        notes_label = self._register(
+            "local_stored_notes", self._make_local_label("-")
+        )
+        notes_label.setWordWrap(True)
+        notes_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        grid.addWidget(notes_label, row, 1)
+
+        layout.addLayout(grid)
+        layout.addStretch()
+        group.setLayout(layout)
+        return group
+
+    def _build_tuning_plot(self) -> QGroupBox:
+        group = QGroupBox("Detune vs. Steps")
+        layout = QVBoxLayout()
+        layout.setContentsMargins(4, 4, 4, 4)
+
+        pw = pg.PlotWidget()
+        pw.setBackground("#1a1a2e")
+        pw.showGrid(x=True, y=True, alpha=0.3)
+        pw.setLabel("left", "Detune", units="Hz")
+        pw.setLabel("bottom", "Net Steps")
+        pw.addLegend(offset=(10, 10))
+        pw.setMinimumHeight(180)
+
+        pw.addItem(
+            pg.InfiniteLine(
+                pos=0,
+                angle=0,
+                pen=pg.mkPen(color="#555555", width=1, style=Qt.DashLine),
+            )
+        )
+
+        self._register("tuning_plot", pw)
+        layout.addWidget(pw)
+        group.setLayout(layout)
         return group

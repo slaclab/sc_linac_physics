@@ -45,8 +45,17 @@ class PhaseUIBase:
         if callback:
             widget.clicked.connect(callback)
 
-    def _build_main_toolbar(self) -> QVBoxLayout:
-        """Create an enhanced toolbar with better controls and visual hierarchy."""
+    _TOOLBAR_FRAME_STYLE = """
+        QFrame {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 4px;
+        }
+    """
+
+    def _build_toolbar_content_row(self) -> QHBoxLayout:
+        """Build the standard toolbar buttons row (without frame wrapping)."""
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
         toolbar.setContentsMargins(4, 4, 4, 4)
@@ -60,7 +69,7 @@ class PhaseUIBase:
                 background-color: #2563eb;
                 color: white;
                 font-weight: bold;
-                padding: 10px 20px;
+                padding: 6px 20px;
                 border-radius: 4px;
                 border: none;
                 font-size: 11pt;
@@ -76,7 +85,7 @@ class PhaseUIBase:
                 color: #94a3b8;
             }
         """)
-        run_button.setFixedHeight(40)
+        run_button.setFixedHeight(34)
         run_button.setMinimumWidth(120)
         self._connect(run_button, "on_run_automated_test")
 
@@ -86,7 +95,7 @@ class PhaseUIBase:
                 background-color: #f59e0b;
                 color: white;
                 font-weight: bold;
-                padding: 10px 16px;
+                padding: 6px 16px;
                 border-radius: 4px;
                 border: none;
             }
@@ -98,7 +107,7 @@ class PhaseUIBase:
                 color: #94a3b8;
             }
         """)
-        pause_button.setFixedHeight(40)
+        pause_button.setFixedHeight(34)
         pause_button.setEnabled(False)
         self._connect(pause_button, "on_pause_test")
 
@@ -108,7 +117,7 @@ class PhaseUIBase:
                 background-color: #dc2626;
                 color: white;
                 font-weight: bold;
-                padding: 10px 16px;
+                padding: 6px 16px;
                 border-radius: 4px;
                 border: none;
             }
@@ -120,7 +129,7 @@ class PhaseUIBase:
                 color: #94a3b8;
             }
         """)
-        abort_button.setFixedHeight(40)
+        abort_button.setFixedHeight(34)
         abort_button.setEnabled(False)
         self._connect(abort_button, "on_abort_test")
 
@@ -144,7 +153,7 @@ class PhaseUIBase:
             QPushButton {
                 background-color: #374151;
                 color: #d1d5db;
-                padding: 8px 12px;
+                padding: 6px 12px;
                 border-radius: 4px;
                 border: 1px solid #4b5563;
             }
@@ -157,7 +166,7 @@ class PhaseUIBase:
                 background-color: #4b5563;
             }
         """)
-        step_mode_btn.setFixedHeight(40)
+        step_mode_btn.setFixedHeight(34)
         self._connect(step_mode_btn, "on_toggle_step_mode")
 
         next_step_btn = self._register("next_step_btn", QPushButton("Next →"))
@@ -165,7 +174,7 @@ class PhaseUIBase:
             QPushButton {
                 background-color: #6366f1;
                 color: white;
-                padding: 8px 12px;
+                padding: 6px 12px;
                 border-radius: 4px;
             }
             QPushButton:disabled {
@@ -173,7 +182,7 @@ class PhaseUIBase:
                 color: #6b7280;
             }
         """)
-        next_step_btn.setFixedHeight(40)
+        next_step_btn.setFixedHeight(34)
         next_step_btn.setEnabled(False)
         self._connect(next_step_btn, "on_next_step")
 
@@ -212,16 +221,13 @@ class PhaseUIBase:
         toolbar.addStretch()
         toolbar.addLayout(status_section)
 
+        return toolbar
+
+    def _build_main_toolbar(self) -> QVBoxLayout:
+        """Create toolbar wrapped in a styled frame."""
         frame = QFrame()
-        frame.setStyleSheet("""
-            QFrame {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 6px;
-                padding: 4px;
-            }
-        """)
-        frame.setLayout(toolbar)
+        frame.setStyleSheet(self._TOOLBAR_FRAME_STYLE)
+        frame.setLayout(self._build_toolbar_content_row())
 
         wrapper = QVBoxLayout()
         wrapper.setContentsMargins(0, 0, 0, 0)
