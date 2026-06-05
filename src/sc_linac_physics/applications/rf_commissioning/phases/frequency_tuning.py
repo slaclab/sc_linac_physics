@@ -85,8 +85,8 @@ class FrequencyTuningPhase(PhaseBase):
         self._df_cold_pv_obj: PV | None = None
         self._nsteps_cold_pv_obj: PV | None = None
         self._step_signed_pv_obj: PV | None = None
+        # Signed: positive means +steps increase cavity frequency (matches SCALE PV convention)
         self._hz_per_microstep: float | None = None
-        self._signed_hz_per_microstep: float | None = None
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -284,7 +284,7 @@ class FrequencyTuningPhase(PhaseBase):
                 data={"dry_run": True},
             )
 
-        if self._signed_hz_per_microstep is None:
+        if self._hz_per_microstep is None:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
                 message="Hz/step not measured — probe_stepper_direction must run first",
@@ -292,7 +292,7 @@ class FrequencyTuningPhase(PhaseBase):
 
         try:
             self.cavity.stepper_tuner.hz_per_microstep_pv_obj.put(
-                self._signed_hz_per_microstep
+                self._hz_per_microstep
             )
         except Exception as exc:
             return PhaseStepResult(
@@ -303,7 +303,7 @@ class FrequencyTuningPhase(PhaseBase):
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message=f"Wrote {self._signed_hz_per_microstep:.4f} Hz/step to SCALE PV",
+            message=f"Wrote {self._hz_per_microstep:.4f} Hz/step to SCALE PV",
         )
 
     def _do_probe_move(
@@ -333,7 +333,6 @@ class FrequencyTuningPhase(PhaseBase):
     def _probe_stepper_direction(self) -> PhaseStepResult:
         if self.context.dry_run:
             self._hz_per_microstep = 1.0
-            self._signed_hz_per_microstep = 1.0
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
                 message="Dry run: direction probe simulated",
@@ -341,7 +340,6 @@ class FrequencyTuningPhase(PhaseBase):
                     "d0_hz": 0.0,
                     "d1_hz": 0.0,
                     "delta_hz": 0.0,
-                    "positive_step_increases_frequency": False,
                     "hz_per_microstep": 1.0,
                     "dry_run": True,
                 },
@@ -381,17 +379,15 @@ class FrequencyTuningPhase(PhaseBase):
         # CHIRP:DF = ref_freq - cav_freq, so d(CHIRP:DF)/d(step) = -SCALE.
         # Positive SCALE → positive steps increase cavity frequency → CHIRP:DF decreases.
         signed_hz_per_step = -delta / probe
-        self._hz_per_microstep = abs(signed_hz_per_step)
-        self._signed_hz_per_microstep = signed_hz_per_step
-        positive_step_increases_frequency = signed_hz_per_step > 0
+        self._hz_per_microstep = signed_hz_per_step
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
                 f"Direction probe: Δdetune={delta:+.0f} Hz for +{probe} steps. "
-                f"Measured {self._hz_per_microstep:.4f} Hz/step (confirm to write to SCALE PV). "
+                f"Measured {abs(self._hz_per_microstep):.4f} Hz/step (confirm to write to SCALE PV). "
                 f"move(+N) "
-                f"{'increases' if positive_step_increases_frequency else 'decreases'} frequency."
+                f"{'increases' if signed_hz_per_step > 0 else 'decreases'} frequency."
             ),
             data={
                 "d0_hz": d0,
@@ -399,7 +395,6 @@ class FrequencyTuningPhase(PhaseBase):
                 "s_d0": 0,
                 "s_d1": probe,
                 "delta_hz": delta,
-                "positive_step_increases_frequency": positive_step_increases_frequency,
                 "hz_per_microstep": self._hz_per_microstep,
                 "probe_steps": probe,
             },
@@ -585,11 +580,11 @@ class FrequencyTuningPhase(PhaseBase):
     ) -> tuple[int, int, "PhaseStepResult | None"]:
         """Compute step size, execute stepper move, and invoke the Hz/step callback."""
         hardware_max = self.cavity.stepper_tuner.max_steps
-        estimated = max(1, round(abs(detune) / hz_per_step))
+        estimated = max(1, round(abs(detune) / abs(hz_per_step)))
         magnitude = min(hardware_max, estimated)
         # Direction: steps_to_zero = detune / SCALE, so sign = sign(detune / signed_hz).
         # This handles motors wired in either direction (positive or negative SCALE).
-        signed_hz = self._signed_hz_per_microstep
+        signed_hz = self._hz_per_microstep
         if signed_hz:
             steps_this_move = int(math.copysign(magnitude, detune / signed_hz))
         else:
@@ -919,9 +914,6 @@ class FrequencyTuningPhase(PhaseBase):
             initial_timestamp=initial_ts,
             steps_to_resonance=tune.get("total_steps"),
             final_timestamp=final_ts,
-            positive_step_increases_frequency=probe.get(
-                "positive_step_increases_frequency"
-            ),
             hz_per_microstep=probe.get("hz_per_microstep"),
             cold_landing_steps=tune.get("cold_landing_steps"),
             mode_8pi_9_frequency=pi.get("mode_8pi_9_hz"),
