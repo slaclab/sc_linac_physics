@@ -190,13 +190,13 @@ class FrequencyTuningData:
     final_timestamp: datetime | None = None
 
     # Stepper characterization data
-    # Signed: positive means +steps increase cavity frequency (SCALE convention)
+    # Signed: positive means +microsteps increase cavity frequency (SCALE convention)
     hz_per_microstep: float | None = phase_display_field(
         default=None,
         label="Hz/Microstep",
-        widget_name="freq_tuning_hz_per_step",
+        widget_name="freq_tuning_hz_per_microstep",
         format_spec=".4f",
-        unit="Hz/step",
+        unit="Hz/µstep",
     )
     cold_landing_steps: int | None = phase_display_field(
         default=None,

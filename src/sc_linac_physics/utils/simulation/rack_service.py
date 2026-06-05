@@ -54,3 +54,4 @@ class RACKPVGroup(PVGroup):
             await self.fscan_stat.write(_FSCAN_STAT_SEARCH)
             await sleep(3)
             await self.fscan_stat.write(_FSCAN_STAT_DONE)
+        return value
