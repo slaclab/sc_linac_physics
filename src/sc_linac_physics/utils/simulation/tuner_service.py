@@ -132,7 +132,7 @@ class StepperPVGroup(PVGroup):
             delta = (
                 move_sign_des * self.speed.value * self.hz_per_microstep.value
             )
-            new_detune = self.cavity_group.detune.value + delta
+            new_detune = round(self.cavity_group.detune.value + delta)
 
             await self.cavity_group.detune.write(new_detune)
             await self.cavity_group.detune_rfs.write(new_detune)
@@ -150,7 +150,7 @@ class StepperPVGroup(PVGroup):
         await self.step_signed.write(self.step_signed.value + step_change)
 
         delta = move_sign_des * remainder * self.hz_per_microstep.value
-        new_detune = self.cavity_group.detune.value + delta
+        new_detune = round(self.cavity_group.detune.value + delta)
 
         print(
             f"Piezo feedback status: {self.piezo_group.feedback_mode_stat.value}"

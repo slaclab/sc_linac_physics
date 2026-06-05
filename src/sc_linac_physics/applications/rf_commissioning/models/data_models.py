@@ -196,7 +196,7 @@ class FrequencyTuningData:
         label="Hz/Microstep",
         widget_name="freq_tuning_hz_per_step",
         format_spec=".4f",
-        unit="Hz",
+        unit="Hz/step",
     )
     cold_landing_steps: int | None = phase_display_field(
         default=None,
