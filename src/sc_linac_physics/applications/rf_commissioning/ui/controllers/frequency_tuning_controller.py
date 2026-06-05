@@ -239,9 +239,8 @@ class FrequencyTuningController(QObject):
             return
 
         hz = self._get_hz_per_step_from_view()
-        if hz and hz != 0 and self.phase._signed_hz_per_microstep is not None:
-            self.phase._hz_per_microstep = abs(hz)
-            self.phase._signed_hz_per_microstep = hz
+        if hz and hz != 0 and self.phase._hz_per_microstep is not None:
+            self.phase._hz_per_microstep = hz
 
         self.view.log_message("Stage 3: Tuning to resonance...")
         if hasattr(self.view, "reset_plot"):
@@ -543,19 +542,15 @@ class FrequencyTuningController(QObject):
         )
 
     def _on_stage2_done(self) -> None:
-        signed_hz = self.phase._signed_hz_per_microstep or 0.0
-        hz_per_step = abs(signed_hz)
-        positive = signed_hz >= 0
+        signed_hz = self.phase._hz_per_microstep or 0.0
 
         probe_steps = float(getattr(self.phase.limits, "probe_steps", 0))
-        if probe_steps > 0 and hz_per_step > 0:
+        if probe_steps > 0 and abs(signed_hz) > 0:
             self._hz_est_total_steps = probe_steps
-            self._hz_est_total_hz = hz_per_step * probe_steps
+            self._hz_est_total_hz = abs(signed_hz) * probe_steps
 
         self._pending_stage2_data = {
-            "hz_per_microstep": hz_per_step,
-            "signed_hz_per_microstep": signed_hz,
-            "positive_step_increases_frequency": positive,
+            "hz_per_microstep": signed_hz,
         }
 
         self.hz_per_step_updated.emit(signed_hz)
@@ -590,7 +585,7 @@ class FrequencyTuningController(QObject):
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("Stage 2 — Awaiting Confirm")
         self._log_signal.emit(
-            f"Stage 2 complete: {hz_per_step:.4f} Hz/step measured. "
+            f"Stage 2 complete: {abs(signed_hz):.4f} Hz/step measured. "
             "Review the fit on the plot, adjust Hz/step if needed, "
             "then click 'Confirm Fit'."
         )
@@ -604,15 +599,9 @@ class FrequencyTuningController(QObject):
         # Use the current (possibly operator-edited) spinbox value as the confirmed Hz/step.
         current_hz = self._get_hz_per_step_from_view()
         if current_hz is not None and current_hz != 0:
-            abs_hz = abs(current_hz)
-            self._pending_stage2_data["signed_hz_per_microstep"] = current_hz
-            self._pending_stage2_data["hz_per_microstep"] = abs_hz
-            self._pending_stage2_data["positive_step_increases_frequency"] = (
-                current_hz > 0
-            )
+            self._pending_stage2_data["hz_per_microstep"] = current_hz
             if self.phase is not None:
-                self.phase._hz_per_microstep = abs_hz
-                self.phase._signed_hz_per_microstep = current_hz
+                self.phase._hz_per_microstep = current_hz
 
         saved = self._save_stage_to_history(
             _STAGE_PROBE_DIRECTION,
@@ -622,10 +611,7 @@ class FrequencyTuningController(QObject):
         if not saved:
             return
 
-        signed_hz = self._pending_stage2_data.get(
-            "signed_hz_per_microstep",
-            self._pending_stage2_data.get("hz_per_microstep", 0.0),
-        )
+        signed_hz = self._pending_stage2_data.get("hz_per_microstep", 0.0)
         self._probe_stage_confirmed = True
         self._update_partial_results()
 
@@ -702,9 +688,6 @@ class FrequencyTuningController(QObject):
         partial = FrequencyTuningData(
             initial_detune_hz=self._initial_detune_hz,
             hz_per_microstep=self._pending_stage2_data.get("hz_per_microstep"),
-            positive_step_increases_frequency=self._pending_stage2_data.get(
-                "positive_step_increases_frequency"
-            ),
             cold_landing_steps=self._tune_step_data.get("cold_landing_steps"),
             steps_to_resonance=self._tune_step_data.get("total_steps"),
             mode_8pi_9_frequency=self._pi_mode_data.get("mode_8pi_9_hz"),
@@ -1025,7 +1008,7 @@ class FrequencyTuningController(QObject):
     def get_signed_hz_per_step(self) -> float | None:
         """Return signed Hz/step from the active phase (sign encodes motor direction)."""
         if self.phase is not None:
-            return getattr(self.phase, "_signed_hz_per_microstep", None)
+            return getattr(self.phase, "_hz_per_microstep", None)
         return None
 
     def get_probe_anchor(self) -> tuple[int, float, int] | None:
@@ -1217,7 +1200,6 @@ class FrequencyTuningController(QObject):
             result[_STAGE_PROBE_DIRECTION] = {
                 "step": _STAGE_PROBE_DIRECTION,
                 "hz_per_microstep": ft.hz_per_microstep,
-                "positive_step_increases_frequency": ft.positive_step_increases_frequency,
             }
         if ft.steps_to_resonance is not None:
             result[_STAGE_TUNE_TO_RESONANCE] = {
@@ -1315,27 +1297,23 @@ class FrequencyTuningController(QObject):
     def _restore_stage2(self, data: dict, has_tune: bool) -> None:
         self._set_stage_done_ui(2, success=True)
 
-        hz_per_step = float(data.get("hz_per_microstep") or 0.0)
-        positive = data.get("positive_step_increases_frequency", True)
-        sign = 1.0 if positive else -1.0
-        signed_hz = hz_per_step * sign
+        signed_hz = float(data.get("hz_per_microstep") or 0.0)
 
-        if self.phase is not None and hz_per_step:
-            self.phase._hz_per_microstep = hz_per_step
-            self.phase._signed_hz_per_microstep = signed_hz
+        if self.phase is not None and signed_hz:
+            self.phase._hz_per_microstep = signed_hz
 
-        if hz_per_step > 0:
-            self._hz_est_total_steps = hz_per_step
-            self._hz_est_total_hz = hz_per_step
+        if abs(signed_hz) > 0:
+            self._hz_est_total_steps = abs(signed_hz)
+            self._hz_est_total_hz = abs(signed_hz)
 
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
-        if spinbox is not None and hz_per_step:
+        if spinbox is not None and signed_hz:
             spinbox.blockSignals(True)
             spinbox.setValue(signed_hz)
             spinbox.blockSignals(False)
             spinbox.setEnabled(True)
 
-        if hz_per_step > 0:
+        if signed_hz:
             self._probe_stage_confirmed = True
             self.hz_per_step_updated.emit(signed_hz)
 
