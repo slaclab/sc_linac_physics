@@ -231,4 +231,9 @@ ignore = [
     # Test data (in git but not in distribution)
     "src/sc_linac_physics/applications/microphonics/test_data",
     "src/sc_linac_physics/applications/microphonics/test_data/*",
+    # Brainstorm and design artifacts
+    ".superpowers",
+    ".superpowers/**/*",
+    "docs/superpowers",
+    "docs/superpowers/**/*",
 ]

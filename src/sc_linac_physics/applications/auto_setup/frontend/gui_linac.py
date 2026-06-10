@@ -1,30 +1,38 @@
 import dataclasses
-from typing import List, Optional, Dict
+from typing import Optional, Callable, Dict, List
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QPushButton,
-    QTabWidget,
-    QWidget,
+    QFrame,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QGroupBox,
-    QGridLayout,
+    QMessageBox,
+    QScrollArea,
 )
-from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
-from pydm import Display
-from pydm.widgets import PyDMLabel
 
-from sc_linac_physics.applications.auto_setup.backend.setup_linac import (
-    SetupLinac,
-)
-from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
-    SETUP_MACHINE,
-)
 from sc_linac_physics.applications.auto_setup.frontend.gui_cryomodule import (
     GUICryomodule,
 )
+from sc_linac_physics.applications.auto_setup.frontend.style import (
+    CARD_BG,
+    ACCENT_TEXT,
+    LINAC_COLORS,
+    card_stylesheet,
+    chip_stylesheet,
+)
 from sc_linac_physics.applications.auto_setup.frontend.utils import Settings
+from sc_linac_physics.applications.auto_setup.frontend.widgets import (
+    FlowLayout,
+    HeightForWidthWidget,
+)
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    STATUS_READY_VALUE,
+    STATUS_RUNNING_VALUE,
+    STATUS_ERROR_VALUE,
+)
+from sc_linac_physics.utils.qt import make_sanity_check_popup
 
 
 @dataclasses.dataclass
@@ -33,132 +41,216 @@ class GUILinac:
     idx: int
     cryomodule_names: List[str]
     settings: Settings
-    parent: Display
+    on_tile_clicked: Optional[Callable[["GUILinac"], None]] = None
+    on_cm_selected: Optional[Callable[[str, "GUILinac"], None]] = None
+    on_machine_cm_status_changed: Optional[Callable[[str, int, bool], None]] = (
+        None
+    )
 
     def __post_init__(self):
-        self._linac_object: Optional[SetupLinac] = None
+        self.is_locked: bool = False
+        self._pre_cascade_locked: set = set()
+        self._cm_statuses: Dict[str, int] = {
+            name: STATUS_READY_VALUE for name in self.cryomodule_names
+        }
 
-        self.setup_button: QPushButton = QPushButton(f"Set Up {self.name}")
-        self.setup_button.clicked.connect(self.trigger_setup)
-
-        self.abort_button: QPushButton = QPushButton(
-            f"Abort Action for {self.name}"
-        )
-        self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.request_stop)
-
-        self.acon_button: QPushButton = QPushButton(
-            f"Capture all {self.name} ACON"
-        )
-        self.acon_button.clicked.connect(self.capture_acon)
-
-        self.aact_pv = (
-            f"ACCL:L{self.idx}B:1:AACTMEANSUM"
-            if self.name != "L1BHL"
-            else "ACCL:L1B:1:HL_AACTMEANSUM"
-        )
-
-        self.readback_label: PyDMLabel = PyDMLabel(init_channel=self.aact_pv)
-        self.readback_label.alarmSensitiveBorder = True
-        self.readback_label.alarmSensitiveContent = True
-        self.readback_label.showUnits = True
-
-        self.cryomodules: List[GUICryomodule] = []
-        self.cm_tab_widget: QTabWidget = QTabWidget()
         self.gui_cryomodules: Dict[str, GUICryomodule] = {}
-
         for cm_name in self.cryomodule_names:
-            self.add_cm_tab(cm_name)
+            gui_cm = GUICryomodule(
+                linac_idx=self.idx,
+                name=cm_name,
+                settings=self.settings,
+                on_status_changed=self._on_cm_status_changed,
+            )
+            self.gui_cryomodules[cm_name] = gui_cm
 
-    @property
-    def linac_object(self):
-        if not self._linac_object:
-            self._linac_object: SetupLinac = SETUP_MACHINE.linacs[self.idx]
-        return self._linac_object
+        self.tile = self._build_tile()
+        self.detail_panel = self._build_detail_panel()
+        self.detail_panel.hide()
 
-    def request_stop(self):
-        self.linac_object.trigger_abort()
+    @staticmethod
+    def _chip_text(cm_name: str, status: int, locked: bool) -> str:
+        if locked:
+            return f"\U0001f512CM{cm_name}"
+        if status == STATUS_RUNNING_VALUE:
+            return f"⟳CM{cm_name}"
+        if status == STATUS_ERROR_VALUE:
+            return f"✗CM{cm_name}"
+        return f"CM{cm_name}"
 
-    def trigger_shutdown(self):
-        self.linac_object.trigger_shutdown()
+    def _build_tile(self) -> QFrame:
+        tile = QFrame()
+        tile.setFrameShape(QFrame.StyledPanel)
+        tile.setStyleSheet(card_stylesheet(STATUS_READY_VALUE))
+        tile.setCursor(Qt.PointingHandCursor)
+        tile.mousePressEvent = lambda event: self._on_tile_clicked_handler()
+        layout = QVBoxLayout(tile)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(4)
+        title = QLabel(self.name)
+        title.setStyleSheet(
+            f"color: {ACCENT_TEXT}; font-weight: bold; font-size: 10px;"
+        )
+        layout.addWidget(title)
+        n = len(self.cryomodule_names)
+        cols = min(n, 4)
+        chip_slot = 60
+        chips_w = max(chip_slot, cols * chip_slot - 3)
+        chips_widget = HeightForWidthWidget()
+        chips_widget.setFixedWidth(chips_w)
+        flow = FlowLayout(chips_widget, h_spacing=3, v_spacing=3)
+        self._cm_chips: Dict[str, QLabel] = {}
+        for cm_name in self.cryomodule_names:
+            chip = QLabel(self._chip_text(cm_name, STATUS_READY_VALUE, False))
+            chip.setStyleSheet(chip_stylesheet(STATUS_READY_VALUE))
+            self._cm_chips[cm_name] = chip
+            flow.addWidget(chip)
+        layout.addWidget(chips_widget)
+        return tile
+
+    def _build_detail_panel(self) -> QFrame:
+        color = LINAC_COLORS[self.name]
+        panel = QFrame()
+        panel.setStyleSheet(
+            f"QFrame {{ background: {CARD_BG}; border: 2px solid {color}; "
+            f"border-radius: 6px; }}"
+        )
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(10, 8, 10, 10)
+        ctrl_row = QHBoxLayout()
+        linac_label = QLabel(self.name)
+        linac_label.setStyleSheet(
+            f"color: {color}; font-weight: bold; border: none;"
+        )
+        ctrl_row.addWidget(linac_label)
+        self.setup_button = QPushButton("Set Up")
+        self.setup_button.clicked.connect(self.trigger_setup)
+        self.shutdown_button = QPushButton("Shut Down")
+        self.shutdown_button.clicked.connect(self.trigger_shutdown)
+        self.abort_button = QPushButton("Abort")
+        self.abort_button.setStyleSheet("color: #e08090;")
+        self.abort_button.clicked.connect(self.trigger_abort)
+        self.lock_linac_button = QPushButton("\U0001f512 Lock")
+        self.lock_linac_button.setCheckable(True)
+        self.lock_linac_button.clicked.connect(self._on_lock_linac_clicked)
+        ctrl_row.addWidget(self.setup_button)
+        ctrl_row.addWidget(self.shutdown_button)
+        ctrl_row.addWidget(self.abort_button)
+        ctrl_row.addWidget(self.lock_linac_button)
+        ctrl_row.addStretch()
+        layout.addLayout(ctrl_row)
+        cms_widget = HeightForWidthWidget()
+        cms_flow = FlowLayout(cms_widget, h_spacing=6, v_spacing=6)
+        for cm_name in self.cryomodule_names:
+            gui_cm = self.gui_cryomodules[cm_name]
+            gui_cm.tile.mousePressEvent = (
+                lambda event, n=cm_name: self._on_cm_tile_clicked(n)
+            )
+            cms_flow.addWidget(gui_cm.tile)
+        cms_scroll = QScrollArea()
+        cms_scroll.setWidgetResizable(True)
+        cms_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        cms_scroll.setFrameShape(QFrame.NoFrame)
+        cms_scroll.setWidget(cms_widget)
+        layout.addWidget(cms_scroll, 1)
+        return panel
+
+    def _on_tile_clicked_handler(self):
+        if self.on_tile_clicked:
+            self.on_tile_clicked(self)
+
+    def _on_cm_tile_clicked(self, cm_name: str):
+        if self.on_cm_selected:
+            self.on_cm_selected(cm_name, self)
+
+    def _on_cm_status_changed(self, cm_name: str, status: int):
+        self._cm_statuses[cm_name] = status
+        locked = self.gui_cryomodules[cm_name].is_locked
+        self._cm_chips[cm_name].setText(
+            self._chip_text(cm_name, status, locked)
+        )
+        self._cm_chips[cm_name].setStyleSheet(chip_stylesheet(status, locked))
+        agg = self._aggregate_status()
+        self.tile.setStyleSheet(card_stylesheet(agg, self.is_locked))
+        if self.on_machine_cm_status_changed:
+            self.on_machine_cm_status_changed(cm_name, status, locked)
+
+    def _aggregate_status(self) -> int:
+        statuses = list(self._cm_statuses.values())
+        if STATUS_ERROR_VALUE in statuses:
+            return STATUS_ERROR_VALUE
+        if STATUS_RUNNING_VALUE in statuses:
+            return STATUS_RUNNING_VALUE
+        return STATUS_READY_VALUE
+
+    def _on_lock_linac_clicked(self):
+        if self.is_locked:
+            reply = QMessageBox.question(
+                self.tile,
+                "Unlock Linac",
+                f"Unlock {self.name}? Make sure no one is working on it.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply == QMessageBox.Yes:
+                self._unlock_linac()
+            else:
+                self.lock_linac_button.setChecked(True)
+        else:
+            self._lock_linac()
+
+    def _lock_linac(self):
+        if self.is_locked:
+            return
+        self._pre_cascade_locked = {
+            name for name, cm in self.gui_cryomodules.items() if cm.is_locked
+        }
+        self.is_locked = True
+        self.lock_linac_button.setChecked(True)
+        for gui_cm in self.gui_cryomodules.values():
+            gui_cm.lock()
+        self.tile.setStyleSheet(card_stylesheet(self._aggregate_status(), True))
+        if self.on_machine_cm_status_changed:
+            for cm_name in self.gui_cryomodules:
+                self.on_machine_cm_status_changed(
+                    cm_name, self._cm_statuses[cm_name], True
+                )
+
+    def _unlock_linac(self):
+        self.is_locked = False
+        self.lock_linac_button.setChecked(False)
+        for name, gui_cm in self.gui_cryomodules.items():
+            if name not in self._pre_cascade_locked:
+                gui_cm.unlock_no_confirm()
+        self.tile.setStyleSheet(
+            card_stylesheet(self._aggregate_status(), False)
+        )
+        if self.on_machine_cm_status_changed:
+            for cm_name, gui_cm in self.gui_cryomodules.items():
+                self.on_machine_cm_status_changed(
+                    cm_name, self._cm_statuses[cm_name], gui_cm.is_locked
+                )
 
     def trigger_setup(self):
-        self.linac_object.ssa_cal_requested = (
-            self.settings.ssa_cal_checkbox.isChecked()
+        popup = make_sanity_check_popup(
+            f"Set up all unlocked cavities in {self.name}?"
         )
-        self.linac_object.auto_tune_requested = (
-            self.settings.auto_tune_checkbox.isChecked()
+        if popup.exec() == QMessageBox.Yes:
+            for gui_cm in self.gui_cryomodules.values():
+                gui_cm.trigger_setup_all()
+
+    def trigger_shutdown(self):
+        popup = make_sanity_check_popup(
+            f"Shut down all unlocked cavities in {self.name}?"
         )
-        self.linac_object.cav_char_requested = (
-            self.settings.cav_char_checkbox.isChecked()
+        if popup.exec() == QMessageBox.Yes:
+            for gui_cm in self.gui_cryomodules.values():
+                gui_cm.trigger_shutdown_all()
+
+    def trigger_abort(self):
+        popup = make_sanity_check_popup(
+            f"Abort all running setup operations in {self.name}?"
         )
-        self.linac_object.rf_ramp_requested = (
-            self.settings.rf_ramp_checkbox.isChecked()
-        )
-        self.linac_object.trigger_start()
-
-    def capture_acon(self):
-        for gui_cm in self.gui_cryomodules.values():
-            gui_cm.capture_acon()
-
-    def add_cm_tab(self, cm_name: str):
-        page: QWidget = QWidget()
-        vlayout: QVBoxLayout = QVBoxLayout()
-        page.setLayout(vlayout)
-        self.cm_tab_widget.addTab(page, f"CM{cm_name}")
-
-        gui_cryomodule = GUICryomodule(
-            linac_idx=self.idx,
-            name=cm_name,
-            settings=self.settings,
-            parent=self.parent,
-        )
-        self.gui_cryomodules[cm_name] = gui_cryomodule
-        hlayout: QHBoxLayout = QHBoxLayout()
-        hlayout.addStretch()
-        hlayout.addWidget(QLabel(f"CM{cm_name} Amplitude:"))
-        hlayout.addWidget(gui_cryomodule.readback_label)
-        hlayout.addWidget(gui_cryomodule.setup_button)
-        hlayout.addWidget(gui_cryomodule.turn_off_button)
-        hlayout.addWidget(gui_cryomodule.abort_button)
-        hlayout.addWidget(gui_cryomodule.acon_button)
-        hlayout.addStretch()
-
-        vlayout.addLayout(hlayout)
-
-        groupbox: QGroupBox = QGroupBox()
-        all_cav_layout: QGridLayout = QGridLayout()
-        groupbox.setLayout(all_cav_layout)
-        vlayout.addWidget(groupbox)
-        for cav_num in range(1, 9):
-            cav_groupbox: QGroupBox = QGroupBox(f"CM{cm_name} Cavity {cav_num}")
-            cav_groupbox.setStyleSheet("QGroupBox { font-weight: bold; } ")
-
-            cav_vlayout: QVBoxLayout = QVBoxLayout()
-            cav_groupbox.setLayout(cav_vlayout)
-            cav_widgets = gui_cryomodule.gui_cavities[cav_num]
-            cav_amp_hlayout: QHBoxLayout = QHBoxLayout()
-            cav_amp_hlayout.addStretch()
-            cav_amp_hlayout.addWidget(QLabel("ACON: "))
-            cav_amp_hlayout.addWidget(cav_widgets.acon_label)
-            cav_amp_hlayout.addWidget(QLabel("AACT: "))
-            cav_amp_hlayout.addWidget(cav_widgets.aact_readback_label)
-            cav_amp_hlayout.addStretch()
-            cav_button_hlayout: QHBoxLayout = QHBoxLayout()
-            cav_button_hlayout.addStretch()
-            cav_button_hlayout.addWidget(cav_widgets.setup_button)
-            cav_button_hlayout.addWidget(cav_widgets.shutdown_button)
-            cav_button_hlayout.addWidget(cav_widgets.abort_button)
-            cav_button_hlayout.addWidget(cav_widgets.expert_screen_button)
-            cav_button_hlayout.addStretch()
-
-            cav_vlayout.addLayout(cav_amp_hlayout)
-            cav_vlayout.addLayout(cav_button_hlayout)
-            cav_vlayout.addWidget(cav_widgets.status_label)
-            cav_vlayout.addWidget(cav_widgets.progress_bar)
-            cav_vlayout.addWidget(cav_widgets.note_label)
-            all_cav_layout.addWidget(
-                cav_groupbox,
-                0 if cav_num in range(1, 5) else 1,
-                (cav_num - 1) % 4,
-            )
+        if popup.exec() == QMessageBox.Yes:
+            for gui_cm in self.gui_cryomodules.values():
+                gui_cm.trigger_abort_all()
