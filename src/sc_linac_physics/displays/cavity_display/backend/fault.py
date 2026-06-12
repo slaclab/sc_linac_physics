@@ -23,6 +23,29 @@ from sc_linac_physics.utils.epics import (
 )
 
 
+class SeverityLevel:
+    """EPICS alarm severity levels."""
+
+    NO_ALARM = 0
+    WARNING = 1
+    ALARM = 2
+    INVALID = 3
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class FaultEvent:
+    """A single cavity status transition from the archiver.
+
+    Returns to OK are included (severity NO_ALARM) so consumers can
+    tell when a fault cleared; for those, tlc holds the cavity number
+    string instead of a three letter code.
+    """
+
+    timestamp: datetime
+    tlc: str
+    severity: int
+
+
 @dataclasses.dataclass
 class FaultCounter:
     """Tracks fault statistics over a time period.
@@ -38,6 +61,17 @@ class FaultCounter:
     ok_count: int = 0
     invalid_count: int = 0
     warning_count: int = 0
+
+    def count_severity(self, severity: int) -> None:
+        """Tally one sample; unrecognized severities count as invalid."""
+        if severity == SeverityLevel.NO_ALARM:
+            self.ok_count += 1
+        elif severity == SeverityLevel.WARNING:
+            self.warning_count += 1
+        elif severity == SeverityLevel.ALARM:
+            self.alarm_count += 1
+        else:
+            self.invalid_count += 1
 
     @property
     def sum_fault_count(self) -> int:
