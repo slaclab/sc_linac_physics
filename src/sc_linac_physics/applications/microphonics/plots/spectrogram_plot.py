@@ -156,10 +156,6 @@ class SpectrogramPlot(BasePlot):
         if visible_cavities:
             self._add_colorbar(num_rows)
 
-    def _format_tooltip(self, plot_type, x, y):
-        """Format tooltip text specifically for spectrogram plot"""
-        return f"Time: {x:.3f} s\nFrequency: {y:.1f} Hz"
-
     def update_plot(self, cavity_num, cavity_channel_data):
         df_data, is_valid = self._preprocess_data(
             cavity_channel_data, channel_type="DF"
@@ -269,10 +265,6 @@ class SpectrogramPlot(BasePlot):
 
         elif self.cavity_data_cache:
             self._refresh_grid_layout()
-
-    def _show_tooltip(self, plot_type, ev):
-        """Override tooltip behavior"""
-        pass
 
     def clear_plot(self):
         """Clear all plot data"""
