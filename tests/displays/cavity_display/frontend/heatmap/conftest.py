@@ -75,7 +75,7 @@ def make_machine(num_cavities: int = 1) -> Mock:
     cavities = {}
     for i in range(1, num_cavities + 1):
         cav = Mock()
-        cav.get_fault_counts = Mock(return_value={})
+        cav.get_fault_history = Mock(return_value=({}, []))
         cavities[i] = cav
     cm.cavities = cavities
     linac.cryomodules = {"01": cm}
