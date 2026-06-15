@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v9.25.0 (2026-06-15)
+
+### Bug Fixes
+
+- Simulation service correctness fixes
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+### Features
+
+- Redesign auto setup UI with dark theme and drill-down navigation
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **auto-setup**: Redesign UI with tile hierarchy, status indicators, lock support, and editable
+  notes ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+
 ## v9.24.1 (2026-05-27)
 
 ### Bug Fixes
