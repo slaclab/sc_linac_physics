@@ -9,11 +9,13 @@ Machine
 └── Linac  (×5: L0B, L1B, L2B, L3B, L4B)
     └── Cryomodule  (up to 23 per linac, 60 total)
         ├── Rack A  →  Cavities 1–4
-        │              └── SSA, StepperTuner, Piezo (one each)
+        │              └── SSA, StepperTuner, Piezo (one each)*
         ├── Rack B  →  Cavities 5–8
-        │              └── SSA, StepperTuner, Piezo (one each)
+        │              └── SSA, StepperTuner, Piezo (one each)*
         └── Magnets  (QUAD, XCOR, YCOR) — non-HL cryomodules only
 ```
+
+\* Exception: Harmonic Linearizer cryomodules (`H1`, `H2`) share 4 SSAs across their 8 cavities via `HL_SSA_MAP = {1:1, 2:2, 3:3, 4:4, 5:1, 6:2, 7:3, 8:4}` — cavities 1 and 5 share SSA 1, etc.
 
 All classes inherit from `SCLinacObject`, which provides:
 - Abstract property `pv_prefix` — every subclass builds its own prefix string

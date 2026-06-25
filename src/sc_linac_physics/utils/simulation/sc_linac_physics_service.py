@@ -1,6 +1,8 @@
 import os
 import shutil
+import socket
 import subprocess
+import time
 import warnings
 
 from caproto import ChannelEnum, ChannelFloat, ChannelInteger
@@ -430,6 +432,7 @@ class SCLinacPhysicsService(Service):
         piezo_group = PiezoPVGroup(
             prefix=f"{cav_prefix}PZT:", cavity_group=cavity_group
         )
+        cavity_group.piezo_group = piezo_group
         self.add_pvs(piezo_group)
         self.add_pvs(
             StepperPVGroup(
@@ -440,9 +443,11 @@ class SCLinacPhysicsService(Service):
         )
 
         # Other cavity-related groups
-        self.add_pvs(
-            SSAPVGroup(prefix=f"{cav_prefix}SSA:", cavityGroup=cavity_group)
+        ssa_group = SSAPVGroup(
+            prefix=f"{cav_prefix}SSA:", cavityGroup=cavity_group
         )
+        cavity_group.ssa_group = ssa_group
+        self.add_pvs(ssa_group)
         self.add_pvs(CavFaultPVGroup(prefix=cav_prefix))
         jt_prefix = f"CLIC:CM{cm_name}:3001:PVJT:"
         jt_group = JTPVGroup(prefix=jt_prefix, cm_group=cm_group)
@@ -465,6 +470,11 @@ class SCLinacPhysicsService(Service):
         return cavity_launchers
 
 
+_REPEATER_PORT = 5065
+_REPEATER_WAIT_S = 2.0
+_REPEATER_POLL_S = 0.05
+
+
 def main():
     os.environ.setdefault("EPICS_CAS_AUTO_BEACON_ADDR_LIST", "no")
     os.environ.setdefault("EPICS_CAS_BEACON_ADDR_LIST", "127.0.0.1")
@@ -481,7 +491,7 @@ def main():
 
 
 def _start_caproto_repeater():
-    """Start caproto-repeater if available, warning and continuing on failure."""
+    """Start caproto-repeater if available and wait for it to bind, warning on failure."""
     repeater_path = shutil.which("caproto-repeater")
     if repeater_path is None:
         warnings.warn(
@@ -513,7 +523,55 @@ def _start_caproto_repeater():
         )
         return None
 
+    if not _wait_for_repeater(process):
+        _stop_caproto_repeater(process)
+        return None
+
     return process
+
+
+def _wait_for_repeater(
+    process: subprocess.Popen,
+    timeout: float = _REPEATER_WAIT_S,
+) -> bool:
+    """Wait until repeater binds its UDP port.
+
+    Returns True when the expected port is in use, False if the process exits
+    or the timeout elapses without the port being claimed.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        returncode = process.poll()
+        if returncode is not None:
+            warnings.warn(
+                (
+                    "caproto-repeater exited during startup "
+                    f"(code {returncode}); continuing without it"
+                ),
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return False
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.bind(("127.0.0.1", _REPEATER_PORT))
+        except OSError:
+            return True  # port in use -> repeater is ready
+        finally:
+            sock.close()
+        time.sleep(_REPEATER_POLL_S)
+
+    if process.poll() is None:
+        warnings.warn(
+            (
+                "Timed out waiting for caproto-repeater to claim "
+                f"UDP port {_REPEATER_PORT}; continuing without it"
+            ),
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return False
 
 
 def _stop_caproto_repeater(process):

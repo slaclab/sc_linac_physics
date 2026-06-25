@@ -36,7 +36,7 @@ class PlotTooltip:
             self._container = plot
         else:
             self._plot_item = plot
-            self._container = plot
+            self._container = plot.getViewBox()
 
         self.formatter = formatter or format_default
         self.enabled = True
@@ -98,3 +98,13 @@ class PlotTooltip:
             self._plot_item.removeItem(self._tooltip)
         except (RuntimeError, AttributeError):
             pass
+
+    @staticmethod
+    def make_formatter(
+        x_label: str,
+        y_label: str,
+        x_fmt: str = ".2f",
+        y_fmt: str = ".2f",
+    ) -> Callable[[float, float], str]:
+        """Create a formatter from axis labels and optional format specs."""
+        return lambda x, y: f"{x_label}: {x:{x_fmt}}\n{y_label}: {y:{y_fmt}}"

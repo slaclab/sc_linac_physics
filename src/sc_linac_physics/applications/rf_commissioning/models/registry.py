@@ -53,7 +53,7 @@ def create_phase_registry() -> dict:
         CommissioningPhase.SSA_CHAR: PhaseRegistration(
             record_attr="ssa_char",
             data_model=SSACharacterization,
-            display_label="SSA Characterization",
+            display_label="SSA Calibration",
             progress_label="SSA\nChar",
         ),
         CommissioningPhase.FREQUENCY_TUNING: PhaseRegistration(

@@ -2,6 +2,8 @@
 
 `sc_linac_physics` is the controls, analysis, and display software for the SLAC Superconducting (SC) Linac. It provides operator GUIs, command-line tools, and a Python library for interacting with the 296-cavity RF system via EPICS/Channel Access.
 
+**New here?** Start with [Getting Started](getting_started.md) — it covers EPICS, PyDM, and Qt through three hands-on exercises before pointing you to the reference docs below.
+
 ## How the codebase is organized
 
 ```

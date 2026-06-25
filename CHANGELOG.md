@@ -2,6 +2,244 @@
 
 <!-- version list -->
 
+## v9.25.0 (2026-06-15)
+
+### Bug Fixes
+
+- Simulation service correctness fixes
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+### Features
+
+- Redesign auto setup UI with dark theme and drill-down navigation
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **auto-setup**: Redesign UI with tile hierarchy, status indicators, lock support, and editable
+  notes ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+
+## v9.24.1 (2026-05-27)
+
+### Bug Fixes
+
+- Mock RFControls in quench test to prevent PyDMSpinbox CI failures
+  ([#248](https://github.com/slaclab/sc_linac_physics/pull/248),
+  [`03649d1`](https://github.com/slaclab/sc_linac_physics/commit/03649d10ba570b081a80638b711400c0761e825d))
+
+
+## v9.24.0 (2026-05-26)
+
+### Bug Fixes
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#260](https://github.com/slaclab/sc_linac_physics/pull/260),
+  [`4458173`](https://github.com/slaclab/sc_linac_physics/commit/44581738dc81a506000a27ab76c905d920296155))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#260](https://github.com/slaclab/sc_linac_physics/pull/260),
+  [`4458173`](https://github.com/slaclab/sc_linac_physics/commit/44581738dc81a506000a27ab76c905d920296155))
+
+### Features
+
+- **sim**: Add EPICS alarm states to simulation and fix tutorial alarm display
+  ([#260](https://github.com/slaclab/sc_linac_physics/pull/260),
+  [`4458173`](https://github.com/slaclab/sc_linac_physics/commit/44581738dc81a506000a27ab76c905d920296155))
+
+
+## v9.23.2 (2026-05-21)
+
+### Bug Fixes
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#259](https://github.com/slaclab/sc_linac_physics/pull/259),
+  [`f369b97`](https://github.com/slaclab/sc_linac_physics/commit/f369b974f8ada09da3a5fe9f01dd9063580b0c47))
+
+### Documentation
+
+- **getting_started**: Add PyDM onboarding guide with three exercises
+  ([#258](https://github.com/slaclab/sc_linac_physics/pull/258),
+  [`d19a9d5`](https://github.com/slaclab/sc_linac_physics/commit/d19a9d50e305a1ef96d46e3db840f91c5d72f82c))
+
+
+## v9.23.1 (2026-05-18)
+
+### Bug Fixes
+
+- **ci**: Address Copilot review comments
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Address Copilot review comments
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Fall back to 3.12 when PRODUCTION_PYTHON var is not set
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Fall back to 3.12 when PRODUCTION_PYTHON var is not set
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Move continue-on-error inside reusable workflow
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Move continue-on-error inside reusable workflow
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Move matrix inside reusable workflow to fix dynamic matrix limitation
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Move matrix inside reusable workflow to fix dynamic matrix limitation
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Replace heredoc with single-line python3 -c in _package.yml
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Replace heredoc with single-line python3 -c in _package.yml
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Resolve workflow file validation errors
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Resolve workflow file validation errors
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+### Continuous Integration
+
+- Move version-matrix Python script to .github/scripts/
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- Move version-matrix Python script to .github/scripts/
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+### Documentation
+
+- **ci**: Update README, docs, and refactor workflows
+  ([#257](https://github.com/slaclab/sc_linac_physics/pull/257),
+  [`1dd95cd`](https://github.com/slaclab/sc_linac_physics/commit/1dd95cdeb8c73680673a01ea785fd255b35e6daa))
+
+- **ci**: Update README, docs, and refactor workflows
+  ([#256](https://github.com/slaclab/sc_linac_physics/pull/256),
+  [`f82e997`](https://github.com/slaclab/sc_linac_physics/commit/f82e99777ea61c227e251dcdf2f41929256b0d23))
+
+- **ci**: Update README, docs, and refactor workflows
+  ([#255](https://github.com/slaclab/sc_linac_physics/pull/255),
+  [`15363ca`](https://github.com/slaclab/sc_linac_physics/commit/15363ca94708c5514d64c0ac703db9a7ecfe836e))
+
+
+## v9.23.0 (2026-05-15)
+
+### Features
+
+- **rf-commissioning-ui**: Add linac-based CM filtering and sync header selections
+  ([#253](https://github.com/slaclab/sc_linac_physics/pull/253),
+  [`d3460a8`](https://github.com/slaclab/sc_linac_physics/commit/d3460a8fc6cad2f8b98b58bfb603b49a06b2b246))
+
+
+## v9.22.2 (2026-05-14)
+
+### Refactoring
+
+- **rf-commissioning**: Add session facade methods and extract MagnetCheckoutDialog
+  ([#251](https://github.com/slaclab/sc_linac_physics/pull/251),
+  [`2a97115`](https://github.com/slaclab/sc_linac_physics/commit/2a97115cbf004537955163f9cb004205fe99cbc9))
+
+- **rf-commissioning**: Convert ui/container modules to mixins, inherit in display
+  ([#251](https://github.com/slaclab/sc_linac_physics/pull/251),
+  [`2a97115`](https://github.com/slaclab/sc_linac_physics/commit/2a97115cbf004537955163f9cb004205fe99cbc9))
+
+
+## v9.22.1 (2026-05-14)
+
+### Refactoring
+
+- **rf-commissioning**: Add session facade methods and extract MagnetCheckoutDialog
+  ([#250](https://github.com/slaclab/sc_linac_physics/pull/250),
+  [`61edff7`](https://github.com/slaclab/sc_linac_physics/commit/61edff77857c087c91502d7019fff671c87d00cf))
+
+
+## v9.22.0 (2026-05-13)
+
+### Features
+
+- **rf-commissioning**: Implement SSA Calibration Phase
+  ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+- **rf-commissioning**: Introducing SSA Calibration phase
+  ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+- **rf-commissioning**: Polish SSA Calibration phase UI and simulation
+  ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+### Testing
+
+- Patching failing tests ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+- **rf-commissioning**: Add test coverage for SSA Calibration phase
+  ([#247](https://github.com/slaclab/sc_linac_physics/pull/247),
+  [`4f75f54`](https://github.com/slaclab/sc_linac_physics/commit/4f75f543ab9038f15010b239f7746236286e9760))
+
+
+## v9.21.0 (2026-05-11)
+
+### Bug Fixes
+
+- **simulation**: Wait for caproto-repeater to bind before continuing
+  ([#246](https://github.com/slaclab/sc_linac_physics/pull/246),
+  [`65c39fc`](https://github.com/slaclab/sc_linac_physics/commit/65c39fc36e3d7b069188c7d6aaa7160b999f092b))
+
+### Documentation
+
+- **rf-commissioning**: Update architecture and usage documentation
+  ([#246](https://github.com/slaclab/sc_linac_physics/pull/246),
+  [`65c39fc`](https://github.com/slaclab/sc_linac_physics/commit/65c39fc36e3d7b069188c7d6aaa7160b999f092b))
+
+### Features
+
+- **rf-commissioning**: Add multi-phase commissioning screen with CLI launcher
+  ([#246](https://github.com/slaclab/sc_linac_physics/pull/246),
+  [`65c39fc`](https://github.com/slaclab/sc_linac_physics/commit/65c39fc36e3d7b069188c7d6aaa7160b999f092b))
+
+
+## v9.20.0 (2026-05-11)
+
+### Features
+
+- **rf-commissioning**: Add batch Piezo Pre-RF runner for multi-cavity execution
+  ([#245](https://github.com/slaclab/sc_linac_physics/pull/245),
+  [`9655288`](https://github.com/slaclab/sc_linac_physics/commit/96552883f54abe5595bc8bf11073701c229c044a))
+
+- **rf-commissioning**: Add Piezo Pre-RF single-cavity display and controller
+  ([#245](https://github.com/slaclab/sc_linac_physics/pull/245),
+  [`9655288`](https://github.com/slaclab/sc_linac_physics/commit/96552883f54abe5595bc8bf11073701c229c044a))
+
+
 ## v9.19.1 (2026-05-10)
 
 ### Bug Fixes

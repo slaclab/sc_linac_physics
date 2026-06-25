@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from caproto import AlarmSeverity, AlarmStatus
 
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
 
@@ -116,7 +117,10 @@ class TestCavityPVGroupInitialization:
             assert isinstance(prop.value, (int, float))
 
         # Test string properties
-        string_props = [regular_cavity.cudStatus, regular_cavity.probe_cal_time]
+        string_props = [
+            regular_cavity.cud.cudStatus,
+            regular_cavity.probe_cal_time,
+        ]
         for prop in string_props:
             assert hasattr(prop, "value")
             assert isinstance(prop.value, str)
@@ -544,7 +548,10 @@ class TestChannelTypeSpecifications:
             assert isinstance(prop.value, (int, float))
 
         # Test string properties
-        string_props = [regular_cavity.cudStatus, regular_cavity.probe_cal_time]
+        string_props = [
+            regular_cavity.cud.cudStatus,
+            regular_cavity.probe_cal_time,
+        ]
         for prop in string_props:
             assert isinstance(prop.value, str)
 
@@ -619,7 +626,7 @@ class TestChannelTypeSpecifications:
             regular_cavity.rf_mode_act,
             regular_cavity.rfPermit,
             regular_cavity.parked,
-            regular_cavity.cudSevr,
+            regular_cavity.cud.cudSevr,
             regular_cavity.tune_config,
         ]
 
@@ -810,6 +817,213 @@ class TestIntegrationScenarios:
 
         expected_amplitude = 25.0 * regular_cavity.length
         mock_ades.assert_called_once_with(expected_amplitude)
+
+
+class TestCUDAlarmSync:
+    """Test CUDSEVR -> CUDSTATUS alarm synchronization."""
+
+    @pytest.mark.asyncio
+    async def test_sync_int_minor(self, regular_cavity):
+        mock_write = AsyncMock()
+        regular_cavity.cud.cudStatus.alarm.write = mock_write
+        await regular_cavity.cud._sync_cud_alarm(1)
+        mock_write.assert_called_once_with(
+            status=AlarmStatus.STATE, severity=AlarmSeverity.MINOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_sync_int_major(self, regular_cavity):
+        mock_write = AsyncMock()
+        regular_cavity.cud.cudStatus.alarm.write = mock_write
+        await regular_cavity.cud._sync_cud_alarm(2)
+        mock_write.assert_called_once_with(
+            status=AlarmStatus.STATE, severity=AlarmSeverity.MAJOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_sync_int_no_alarm(self, regular_cavity):
+        mock_write = AsyncMock()
+        regular_cavity.cud.cudStatus.alarm.write = mock_write
+        await regular_cavity.cud._sync_cud_alarm(0)
+        mock_write.assert_called_once_with(
+            status=AlarmStatus.NO_ALARM, severity=AlarmSeverity.NO_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_sync_named_string(self, regular_cavity):
+        mock_write = AsyncMock()
+        regular_cavity.cud.cudStatus.alarm.write = mock_write
+        await regular_cavity.cud._sync_cud_alarm("MAJOR")
+        mock_write.assert_called_once_with(
+            status=AlarmStatus.STATE, severity=AlarmSeverity.MAJOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_sync_digit_string(self, regular_cavity):
+        """Caproto can deliver enum values as digit strings like '1' or '2'."""
+        mock_write = AsyncMock()
+        regular_cavity.cud.cudStatus.alarm.write = mock_write
+        await regular_cavity.cud._sync_cud_alarm("1")
+        mock_write.assert_called_once_with(
+            status=AlarmStatus.STATE, severity=AlarmSeverity.MINOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_sync_bytes(self, regular_cavity):
+        mock_write = AsyncMock()
+        regular_cavity.cud.cudStatus.alarm.write = mock_write
+        await regular_cavity.cud._sync_cud_alarm(b"MINOR")
+        mock_write.assert_called_once_with(
+            status=AlarmStatus.STATE, severity=AlarmSeverity.MINOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_sync_unknown_string_defaults_to_no_alarm(
+        self, regular_cavity
+    ):
+        mock_write = AsyncMock()
+        regular_cavity.cud.cudStatus.alarm.write = mock_write
+        await regular_cavity.cud._sync_cud_alarm("BOGUS")
+        mock_write.assert_called_once_with(
+            status=AlarmStatus.NO_ALARM, severity=AlarmSeverity.NO_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_sync_ready_is_no_alarm(self, regular_cavity):
+        mock_write = AsyncMock()
+        regular_cavity.cud.cudStatus.alarm.write = mock_write
+        await regular_cavity.cud._sync_cud_alarm(6)
+        mock_write.assert_called_once_with(
+            status=AlarmStatus.NO_ALARM, severity=AlarmSeverity.NO_ALARM
+        )
+
+
+class TestAmplitudeAlarm:
+    """Test deviation-based amplitude alarm thresholds.
+
+    aact and amean share the same PVGroup ChannelAlarm instance, so a single
+    mock suffices — and the write will be called twice per helper invocation.
+    """
+
+    def _mock_alarm(self, cavity):
+        """Replace the shared alarm.write with an AsyncMock and return it."""
+        mock = AsyncMock()
+        cavity.aact.alarm.write = mock
+        return mock
+
+    @pytest.mark.asyncio
+    async def test_no_alarm_when_on_setpoint(self, regular_cavity):
+        regular_cavity.aact._data["value"] = 16.6
+        mock = self._mock_alarm(regular_cavity)
+        await regular_cavity._update_amplitude_alarm(target_ades=16.6)
+        mock.assert_any_call(
+            status=AlarmStatus.NO_ALARM, severity=AlarmSeverity.NO_ALARM
+        )
+        assert mock.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_minor_alarm_above_warning_threshold(self, regular_cavity):
+        regular_cavity.aact._data["value"] = 16.6
+        mock = self._mock_alarm(regular_cavity)
+        await regular_cavity._update_amplitude_alarm(
+            target_ades=16.3
+        )  # dev=0.3
+        mock.assert_any_call(
+            status=AlarmStatus.HIGH, severity=AlarmSeverity.MINOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_major_alarm_above_alarm_threshold(self, regular_cavity):
+        regular_cavity.aact._data["value"] = 16.6
+        mock = self._mock_alarm(regular_cavity)
+        await regular_cavity._update_amplitude_alarm(
+            target_ades=15.0
+        )  # dev=1.6
+        mock.assert_any_call(
+            status=AlarmStatus.HIHI, severity=AlarmSeverity.MAJOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_uses_ades_when_target_not_given(self, regular_cavity):
+        regular_cavity.aact._data["value"] = 16.6
+        regular_cavity.ades._data["value"] = 16.6
+        mock = self._mock_alarm(regular_cavity)
+        await regular_cavity._update_amplitude_alarm()
+        mock.assert_any_call(
+            status=AlarmStatus.NO_ALARM, severity=AlarmSeverity.NO_ALARM
+        )
+
+
+class TestDetuneAlarm:
+    """Test piezo-feedback-aware detune alarm thresholds."""
+
+    def _make_piezo(self, enabled=True, in_feedback=True):
+        piezo = Mock()
+        piezo.enable_stat.value = 1 if enabled else 0
+        piezo.enable_stat.enum_strings = ("Disabled", "Enabled")
+        piezo.feedback_mode_stat.value = "Feedback" if in_feedback else "Manual"
+        piezo.feedback_mode_stat.enum_strings = ("Manual", "Feedback")
+        return piezo
+
+    @pytest.mark.asyncio
+    async def test_no_alarm_when_piezo_disabled(self, regular_cavity):
+        regular_cavity.piezo_group = self._make_piezo(enabled=False)
+        instance = Mock()
+        instance.alarm.write = AsyncMock()
+        await regular_cavity._update_detune_alarm(instance, 200)
+        instance.alarm.write.assert_called_once_with(
+            status=AlarmStatus.NO_ALARM, severity=AlarmSeverity.NO_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_alarm_when_not_in_feedback(self, regular_cavity):
+        regular_cavity.piezo_group = self._make_piezo(in_feedback=False)
+        instance = Mock()
+        instance.alarm.write = AsyncMock()
+        await regular_cavity._update_detune_alarm(instance, 200)
+        instance.alarm.write.assert_called_once_with(
+            status=AlarmStatus.NO_ALARM, severity=AlarmSeverity.NO_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_minor_alarm_above_warning_threshold(self, regular_cavity):
+        regular_cavity.piezo_group = self._make_piezo()
+        instance = Mock()
+        instance.alarm.write = AsyncMock()
+        await regular_cavity._update_detune_alarm(instance, 25)
+        instance.alarm.write.assert_called_once_with(
+            status=AlarmStatus.HIGH, severity=AlarmSeverity.MINOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_major_alarm_above_alarm_threshold(self, regular_cavity):
+        regular_cavity.piezo_group = self._make_piezo()
+        instance = Mock()
+        instance.alarm.write = AsyncMock()
+        await regular_cavity._update_detune_alarm(instance, 75)
+        instance.alarm.write.assert_called_once_with(
+            status=AlarmStatus.HIHI, severity=AlarmSeverity.MAJOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_negative_detune_uses_abs_value(self, regular_cavity):
+        regular_cavity.piezo_group = self._make_piezo()
+        instance = Mock()
+        instance.alarm.write = AsyncMock()
+        await regular_cavity._update_detune_alarm(instance, -75)
+        instance.alarm.write.assert_called_once_with(
+            status=AlarmStatus.HIHI, severity=AlarmSeverity.MAJOR_ALARM
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_alarm_within_threshold(self, regular_cavity):
+        regular_cavity.piezo_group = self._make_piezo()
+        instance = Mock()
+        instance.alarm.write = AsyncMock()
+        await regular_cavity._update_detune_alarm(instance, 5)
+        instance.alarm.write.assert_called_once_with(
+            status=AlarmStatus.NO_ALARM, severity=AlarmSeverity.NO_ALARM
+        )
 
 
 if __name__ == "__main__":

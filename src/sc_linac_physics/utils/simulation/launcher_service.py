@@ -285,7 +285,9 @@ class BaseCavityPVGroup(BaseScriptPVGroup):
         enum_strings=("Ready", "Running", "Error"),
     )
 
-    status_message: PvpropertyChar = pvproperty(name="MSG", value="Ready")
+    status_message: PvpropertyChar = pvproperty(
+        name="MSG", value="Ready", max_length=256
+    )
 
     time_stamp: PvpropertyChar = pvproperty(
         name="TS",

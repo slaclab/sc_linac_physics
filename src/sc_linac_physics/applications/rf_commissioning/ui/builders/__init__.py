@@ -4,6 +4,7 @@ from .base import PhaseUIBase
 from .phase_builders import (
     GenericPhaseUI,
     PiezoPreRFUI,
+    SSACharUI,
 )
 from .styles import (
     LOCAL_CAP_STYLE,
@@ -16,6 +17,7 @@ from .styles import (
 __all__ = [
     "PhaseUIBase",
     "PiezoPreRFUI",
+    "SSACharUI",
     "GenericPhaseUI",
     "MONO_FONT_STACK",
     "PV_LABEL_STYLE",

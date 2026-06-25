@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PhaseStatus,
@@ -71,12 +73,15 @@ def test_note_helpers_build_append_and_update_canonical_entries():
 
 def test_serialize_measurement_data_uses_model_to_dict():
     payload = serialize_measurement_data(
-        SSACharacterization(max_drive=0.25, initial_drive=0.5, num_attempts=2)
+        SSACharacterization(
+            max_drive=0.25,
+            slope_new=1.02345,
+        )
     )
 
     parsed = json.loads(payload)
     assert parsed["max_drive"] == 0.25
-    assert parsed["drive_reduction"] == 0.25
+    assert parsed["max_drive_percent"] == pytest.approx(25.0)
     assert parsed["is_complete"] is True
 
 
