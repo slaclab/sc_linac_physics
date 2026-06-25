@@ -92,9 +92,9 @@ The display needs a `BackendMachine` instance. When run as `__main__`, it create
 The grid mirrors the physical linac layout:
 
 ```
-Row 1:  L0B (1 CM)  |  L1B (12 CMs + H1, H2)  |  L2B (4 CMs)
-Row 2:  L3B (12 CMs)
-Row 3:  L4B (8 CMs)
+Row 1:  L0B (1 CM)  |  L1B (2 CMs + H1, H2)  |  L2B (12 CMs)
+Row 2:  L3B (20 CMs)
+Row 3:  L4B (23 CMs)
 ```
 
 Each section has its own color theme in the UI so you can tell at a glance which part of the linac you're looking at.
