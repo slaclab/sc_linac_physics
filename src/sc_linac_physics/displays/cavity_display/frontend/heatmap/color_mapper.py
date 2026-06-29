@@ -5,7 +5,7 @@ from PyQt5.QtGui import QColor
 
 
 class ColorMapper:
-    """Maps a numeric value to a color on a navy to yellow gradient.
+    """Maps a numeric value to a color on a dark purple to yellow gradient.
 
     Supports log scale for ranges that span several orders of magnitude.
     """

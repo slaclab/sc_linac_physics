@@ -1,6 +1,6 @@
 # Fault Heatmap Display
 
-A single-screen visualization of fault activity across all 296 cavities in the LCLS-II superconducting linac. Each cavity is color-coded by fault count over a user-selected time range. Navy/purple means low activity, yellow means the worst offenders.
+A single-screen visualization of fault activity across all 480 cavities in the LCLS superconducting linac. Each cavity is color-coded by fault count over a user-selected time range. Navy/purple means low activity, yellow means the worst offenders.
 
 ## Why This Exists
 
