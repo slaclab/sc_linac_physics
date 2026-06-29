@@ -5,16 +5,24 @@ from __future__ import annotations
 import hashlib
 import random
 from datetime import datetime, timedelta
+<<<<<<< HEAD
 
 from .models import ArchiverValue, ArchiveDataHandler
 
 _LIVE_QUERY_TIMEOUT_S = 0.5
 
+=======
+from typing import Dict, List, Union
+
+from .models import ArchiverValue, ArchiveDataHandler
+
+>>>>>>> d4170b1 (Add archiver source and test files)
 
 def _stable_seed(pv_name: str, start_time: datetime, end_time: datetime) -> int:
     key = f"{pv_name}|{start_time.isoformat()}|{end_time.isoformat()}".encode("utf-8")
     return int(hashlib.sha256(key).hexdigest()[:8], 16)
 
+<<<<<<< HEAD
 def _live_kind(pv_name: str) -> tuple[str, tuple] | None:
     """
     Ask the running IOC for a PV's native type.
@@ -44,6 +52,8 @@ def _live_kind(pv_name: str) -> tuple[str, tuple] | None:
     if "STRING" in name:
         return "STRING", ()
     return "FLOAT", ()  # safe default
+=======
+>>>>>>> d4170b1 (Add archiver source and test files)
 
 class MockArchiveDataHandler:
     """Generates mock time-series for one PV."""
@@ -61,13 +71,17 @@ class MockArchiveDataHandler:
         self.sample_rate_hz = sample_rate_hz
 
         self.rng = random.Random(_stable_seed(pv_name, start_time, end_time))
+<<<<<<< HEAD
         self.kind, self.enum_strings = self._resolve_kind()
+=======
+>>>>>>> d4170b1 (Add archiver source and test files)
 
         self.timestamps = self._generate_timestamps()
         self.values = self._generate_values()
         self.severities = self._generate_severities()
         self.statuses = self._generate_statuses()
 
+<<<<<<< HEAD
     def _resolve_kind(self) -> tuple[str, tuple]:
         """Tier 1: live IOC query. Tier 2: name heuristic. Tier 3: FLOAT default."""
         live = _live_kind(self.pv_name)
@@ -86,6 +100,10 @@ class MockArchiveDataHandler:
 
     def _generate_timestamps(self) -> list[datetime]:
         timestamps: list[datetime] = []
+=======
+    def _generate_timestamps(self) -> List[datetime]:
+        timestamps: List[datetime] = []
+>>>>>>> d4170b1 (Add archiver source and test files)
         current = self.start_time
         interval = timedelta(seconds=1.0 / self.sample_rate_hz)
 
@@ -95,6 +113,7 @@ class MockArchiveDataHandler:
 
         return timestamps
 
+<<<<<<< HEAD
     def _generate_values(self) -> list[union[float, int, str]]:
         # CUDSTATUS keeps its historical string behavior.
         if "CUDSTATUS" in self.pv_name:
@@ -139,6 +158,37 @@ class MockArchiveDataHandler:
     
     def _generate_numeric_values(self, base_value: float, noise_range: float) -> list[float]:
         values: list[float] = []
+=======
+    def _generate_values(self) -> List[Union[float, int, str]]:
+        pv = self.pv_name
+
+        # Gradients
+        if any(k in pv for k in ("ADES", "AACT", "GDES", "GACT", "AACTMEAN")):
+            return self._generate_numeric_values(base_value=16.5, noise_range=0.1)
+
+        # Phases
+        if any(k in pv for k in ("PDES", "PACT")):
+            return self._generate_numeric_values(base_value=0.0, noise_range=0.5)
+
+        # Detune/df
+        if any(k in pv for k in ("DF", "DETUNE")):
+            return self._generate_numeric_values(base_value=0.0, noise_range=10.0)
+
+        # Drive level-ish
+        if "SEL_ASET" in pv:
+            return self._generate_numeric_values(base_value=0.0, noise_range=0.5)
+
+        # Status/fault PVs
+        if "CUDSTATUS" in pv:
+            # Keep as strings for now; adjust to ints if downstream expects numeric
+            return self._generate_fault_codes()
+
+        # Default
+        return self._generate_numeric_values(base_value=0.0, noise_range=0.1)
+
+    def _generate_numeric_values(self, base_value: float, noise_range: float) -> List[float]:
+        values: List[float] = []
+>>>>>>> d4170b1 (Add archiver source and test files)
         for i in range(len(self.timestamps)):
             noise = self.rng.uniform(-noise_range, noise_range)
             drift = i * 0.00001
@@ -152,9 +202,15 @@ class MockArchiveDataHandler:
             values.append(v)
         return values
 
+<<<<<<< HEAD
     def _generate_fault_codes(self) -> list[str]:
         fault_codes = ["TLC", "Quench", "FPGA Fault", "No Fault"]
         values: list[str] = []
+=======
+    def _generate_fault_codes(self) -> List[str]:
+        fault_codes = ["TLC", "Quench", "FPGA Fault", "No Fault"]
+        values: List[str] = []
+>>>>>>> d4170b1 (Add archiver source and test files)
         for _ in self.timestamps:
             if self.rng.random() < 0.9:
                 values.append("TLC")
@@ -162,8 +218,13 @@ class MockArchiveDataHandler:
                 values.append(self.rng.choice(fault_codes))
         return values
 
+<<<<<<< HEAD
     def _generate_severities(self) -> list[int]:
         severities: list[int] = []
+=======
+    def _generate_severities(self) -> List[int]:
+        severities: List[int] = []
+>>>>>>> d4170b1 (Add archiver source and test files)
         for _ in self.timestamps:
             if self.rng.random() < 0.9:
                 severities.append(0)
@@ -171,8 +232,13 @@ class MockArchiveDataHandler:
                 severities.append(self.rng.choice([1, 2]))
         return severities
 
+<<<<<<< HEAD
     def _generate_statuses(self) -> list[int]:
         statuses: list[int] = []
+=======
+    def _generate_statuses(self) -> List[int]:
+        statuses: List[int] = []
+>>>>>>> d4170b1 (Add archiver source and test files)
         for _ in self.timestamps:
             if self.rng.random() < 0.95:
                 statuses.append(0)
@@ -182,15 +248,26 @@ class MockArchiveDataHandler:
 
 
 def mock_get_values_over_time_range(
+<<<<<<< HEAD
     pv_list: list[str],
     start_time: datetime,
     end_time: datetime,
 ) -> dict[str, ArchiveDataHandler]:
+=======
+    pv_list: List[str],
+    start_time: datetime,
+    end_time: datetime,
+) -> Dict[str, ArchiveDataHandler]:
+>>>>>>> d4170b1 (Add archiver source and test files)
     """Generate mock data for multiple PVs."""
     if not pv_list:
         return {}
 
+<<<<<<< HEAD
     result: dict[str, ArchiveDataHandler] = {}
+=======
+    result: Dict[str, ArchiveDataHandler] = {}
+>>>>>>> d4170b1 (Add archiver source and test files)
     for pv_name in pv_list:
         mock = MockArchiveDataHandler(pv_name, start_time, end_time)
 

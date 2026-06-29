@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+<<<<<<< HEAD
 import matplotlib.pyplot as plt
 
 from sc_linac_physics.utils.archiver import (
@@ -7,6 +8,13 @@ from sc_linac_physics.utils.archiver import (
 )
 
 start_mock_archiver()
+=======
+import requests
+import matplotlib.pyplot as plt
+
+from sc_linac_physics.utils.archiver import get_values_over_time_range
+
+>>>>>>> d4170b1 (Add archiver source and test files)
 
 def fmt(dt):
     if dt.tzinfo is None:
@@ -23,10 +31,31 @@ pv_candidates = [
 ]
 
 end = datetime.now(timezone.utc)
+<<<<<<< HEAD
 start = end - timedelta(days=1)
 
 for pv_name in pv_candidates:
     print(f"Trying {pv_name}")
+=======
+start = end - timedelta(days=30)
+
+for pv_name in pv_candidates:
+    r = requests.get(
+        "http://lcls-archapp.slac.stanford.edu/retrieval/data/getData.json",
+        params={
+            "from": fmt(start),
+            "to": fmt(end),
+            "pv": [pv_name],
+        },
+        timeout=10,
+    )
+
+    print(f"Trying {pv_name} -> status {r.status_code}")
+
+    if r.status_code != 200:
+        print("  no real data for this PV")
+        continue
+>>>>>>> d4170b1 (Add archiver source and test files)
 
     data = get_values_over_time_range(
         pv_list=[pv_name],
