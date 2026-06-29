@@ -232,6 +232,7 @@ _DEFAULT_OPERATORS = [
     "Nicole Neveu",
     "Ryan Porter",
     "Sebastian Aderhold",
+    "Haley Marts",
 ]
 
 
