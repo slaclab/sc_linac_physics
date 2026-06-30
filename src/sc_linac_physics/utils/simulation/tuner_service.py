@@ -97,7 +97,6 @@ class StepperPVGroup(PVGroup):
             self.steps_per_hertz = 256 / 18.3
 
     async def move(self, move_sign_des: int):
-        print("Motor moving")
         await self.motor_moving.write("Moving")
         steps = 0
         step_change = move_sign_des * self.speed.value
@@ -114,7 +113,7 @@ class StepperPVGroup(PVGroup):
             await self.step_signed.write(self.step_signed.value + step_change)
 
             steps += self.speed.value
-            delta = self.speed.value // self.steps_per_hertz
+            delta = self.speed.value / self.steps_per_hertz
             new_detune = self.cavity_group.detune.value + (
                 freq_move_sign * delta
             )
@@ -134,19 +133,20 @@ class StepperPVGroup(PVGroup):
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = remainder // self.steps_per_hertz
+        delta = remainder / self.steps_per_hertz
         new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
 
-        print(
-            f"Piezo feedback status: {self.piezo_group.feedback_mode_stat.value}"
+        enable_int = _enum_to_int(
+            self.piezo_group.enable_stat.value,
+            self.piezo_group.enable_stat.enum_strings,
         )
-        if (
-            self.piezo_group.enable_stat.value == 1
-            and self.piezo_group.feedback_mode_stat.value == "Feedback"
-        ):
+        feedback_int = _enum_to_int(
+            self.piezo_group.feedback_mode_stat.value,
+            self.piezo_group.feedback_mode_stat.enum_strings,
+        )
+        if enable_int == 1 and feedback_int == 1:
             freq_change = new_detune - starting_detune
             voltage_change = freq_change * (1 / PIEZO_HZ_PER_VOLT)
-            print(f"Changing piezo voltage by {voltage_change} V")
             await self.piezo_group.voltage.write(
                 self.piezo_group.voltage.value + voltage_change
             )

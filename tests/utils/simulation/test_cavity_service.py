@@ -960,7 +960,9 @@ class TestDetuneAlarm:
     def _make_piezo(self, enabled=True, in_feedback=True):
         piezo = Mock()
         piezo.enable_stat.value = 1 if enabled else 0
+        piezo.enable_stat.enum_strings = ("Disabled", "Enabled")
         piezo.feedback_mode_stat.value = "Feedback" if in_feedback else "Manual"
+        piezo.feedback_mode_stat.enum_strings = ("Manual", "Feedback")
         return piezo
 
     @pytest.mark.asyncio
