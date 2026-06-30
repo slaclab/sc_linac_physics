@@ -193,6 +193,7 @@ def initialize_database_schema(
             created_at TEXT NOT NULL
         )
         """)
+    _seed_operators(cursor)
 
     cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS cryomodule_records (
@@ -223,3 +224,21 @@ def initialize_database_schema(
         CREATE UNIQUE INDEX IF NOT EXISTS idx_cm_unique
         ON cryomodule_records(linac, cryomodule)
         """)
+
+
+_DEFAULT_OPERATORS = [
+    "Lauren Alsberg",
+    "Lisa Zacarias",
+    "Nicole Neveu",
+    "Ryan Porter",
+    "Sebastian Aderhold",
+    "Haley Marts",
+]
+
+
+def _seed_operators(cursor: sqlite3.Cursor) -> None:
+    for name in _DEFAULT_OPERATORS:
+        cursor.execute(
+            "INSERT OR IGNORE INTO operators (name, created_at) VALUES (?, datetime('now'))",
+            (name,),
+        )
