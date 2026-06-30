@@ -99,6 +99,8 @@ omit = [
     "*/__pycache__/*",
     # PyDM UI dialogs require display-integration tests, not unit tests
     "*/rf_commissioning/ui/*_dialog.py",
+    # PyDM plot/display glue requires display-integration tests, not unit tests
+    "*/rf_commissioning/ui/displays/frequency_tuning.py",
     # Logger infrastructure is always mocked in tests; not unit-testable
     "*/utils/logger.py",
     "*/utils/epics/logger.py"
