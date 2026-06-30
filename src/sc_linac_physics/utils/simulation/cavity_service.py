@@ -222,7 +222,7 @@ class CavityPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("Not Selected", "Selected"),
     )
-    fscan_res = pvproperty(name="FSCAN:8PI9MODE", value=-800000)
+    fscan_res_8pi9 = pvproperty(name="FSCAN:8PI9MODE", value=-800000)
     fscan_res_7pi9 = pvproperty(name="FSCAN:7PI9MODE", value=-900000)
     fscan_push_8pi9 = pvproperty(name="FSCAN:PUSH_8PI9.PROC", value=0)
     fscan_push_7pi9 = pvproperty(name="FSCAN:PUSH_7PI9.PROC", value=0)
