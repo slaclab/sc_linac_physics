@@ -25,6 +25,20 @@ if TYPE_CHECKING:
     )
 
 
+def _enum_to_int(value, enum_strings) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, bytes):
+        value = value.decode(errors="ignore")
+    if isinstance(value, str):
+        value = value.strip()
+        if value.isdigit():
+            return int(value)
+        if value in enum_strings:
+            return enum_strings.index(value)
+    return -1
+
+
 class CUDPVGroup(PVGroup):
     """Cavity summary display PVs in their own group so alarm.write() is isolated."""
 
@@ -379,8 +393,15 @@ class CavityPVGroup(PVGroup):
         piezo = self.piezo_group
         if (
             piezo is not None
-            and piezo.enable_stat.value == 1
-            and piezo.feedback_mode_stat.value == "Feedback"
+            and _enum_to_int(
+                piezo.enable_stat.value, piezo.enable_stat.enum_strings
+            )
+            == 1
+            and _enum_to_int(
+                piezo.feedback_mode_stat.value,
+                piezo.feedback_mode_stat.enum_strings,
+            )
+            == 1
         ):
             abs_hz = abs(value)
             if abs_hz > 50:

@@ -1,21 +1,43 @@
 import dataclasses
-from typing import Optional, Dict
+from typing import Optional, Callable, Dict
 
-from PyQt5.QtWidgets import QPushButton
-from lcls_tools.common.frontend.display.util import ERROR_STYLESHEET
-from pydm import Display
-from pydm.widgets import PyDMLabel
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (
+    QPushButton,
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGridLayout,
+    QLabel,
+    QMessageBox,
+    QWidget,
+)
 
-from sc_linac_physics.applications.auto_setup.backend.setup_cryomodule import (
-    SetupCryomodule,
+from sc_linac_physics.applications.auto_setup.frontend.widgets import (
+    FlowLayout,
+    HeightForWidthWidget,
 )
-from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
-    SETUP_MACHINE,
-)
+
 from sc_linac_physics.applications.auto_setup.frontend.gui_cavity import (
     GUICavity,
 )
+from sc_linac_physics.applications.auto_setup.frontend.style import (
+    CARD_BG,
+    CARD_TEXT,
+    ACCENT_BORDER,
+    LINAC_COLORS,
+    button_stylesheet,
+    card_stylesheet,
+    dot_stylesheet,
+    dot_text,
+)
 from sc_linac_physics.applications.auto_setup.frontend.utils import Settings
+from sc_linac_physics.utils.qt import make_sanity_check_popup
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    STATUS_READY_VALUE,
+    STATUS_RUNNING_VALUE,
+    STATUS_ERROR_VALUE,
+)
 
 
 @dataclasses.dataclass
@@ -23,78 +45,180 @@ class GUICryomodule:
     linac_idx: int
     name: str
     settings: Settings
-    parent: Display
+    on_status_changed: Optional[Callable[[str, int], None]] = None
+    on_cav_status_changed: Optional[Callable[[int, int, bool], None]] = None
 
     def __post_init__(self):
-        self._cryomodule: Optional[SetupCryomodule] = None
-
-        self.readback_label: PyDMLabel = PyDMLabel(
-            init_channel=f"ACCL:L{self.linac_idx}B:{self.name}00:AACTMEANSUM"
-        )
-        self.readback_label.alarmSensitiveBorder = True
-        self.readback_label.alarmSensitiveContent = True
-        self.readback_label.showUnits = True
-
-        self.setup_button: QPushButton = QPushButton(f"Set Up CM{self.name}")
-        self.setup_button.clicked.connect(self.trigger_setup)
-
-        self.abort_button: QPushButton = QPushButton(
-            f"Abort Action for CM{self.name}"
-        )
-        self.abort_button.setStyleSheet(ERROR_STYLESHEET)
-        self.abort_button.clicked.connect(self.request_stop)
-        self.turn_off_button: QPushButton = QPushButton(
-            f"Turn off CM{self.name}"
-        )
-        self.turn_off_button.clicked.connect(self.trigger_shutdown)
-
-        self.acon_button: QPushButton = QPushButton(
-            f"Push all CM{self.name} ADES to ACON"
-        )
-        self.acon_button.clicked.connect(self.capture_acon)
+        self.is_locked: bool = False
+        self._pre_cascade_locked: set = set()
+        self._cavity_statuses: Dict[int, int] = {
+            n: STATUS_READY_VALUE for n in range(1, 9)
+        }
 
         self.gui_cavities: Dict[int, GUICavity] = {}
-
         for cav_num in range(1, 9):
-            gui_cavity = GUICavity(
-                cav_num,
-                f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
-                self.name,
+            gui_cav = GUICavity(
+                number=cav_num,
+                prefix=f"ACCL:L{self.linac_idx}B:{self.name}{cav_num}0:",
+                cm=self.name,
                 settings=self.settings,
-                parent=self.parent,
+                on_status_changed=self._on_cavity_status_changed,
             )
-            self.gui_cavities[cav_num] = gui_cavity
+            self.gui_cavities[cav_num] = gui_cav
+
+        self.tile = self._build_tile()
+        self.detail_panel = self._build_detail_panel()
+        self.detail_panel.hide()
+
+    def _build_tile(self) -> QFrame:
+        tile = QFrame()
+        tile.setFrameShape(QFrame.StyledPanel)
+        tile.setStyleSheet(card_stylesheet(STATUS_READY_VALUE))
+        tile.setCursor(Qt.PointingHandCursor)
+        layout = QVBoxLayout(tile)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+        name_label = QLabel(f"CM{self.name}")
+        name_label.setStyleSheet(
+            f"color: {CARD_TEXT}; font-weight: bold; font-size: 14px;"
+        )
+        layout.addWidget(name_label)
+        dot_container = QWidget()
+        dot_container.setFixedSize(84, 44)
+        dot_grid = QGridLayout(dot_container)
+        dot_grid.setContentsMargins(0, 0, 0, 0)
+        dot_grid.setHorizontalSpacing(4)
+        dot_grid.setVerticalSpacing(8)
+        self._dots: Dict[int, QLabel] = {}
+        for i, cav_num in enumerate(range(1, 9)):
+            row, col = i // 4, i % 4
+            dot = QLabel()
+            dot.setFixedSize(18, 18)
+            dot.setAlignment(Qt.AlignCenter)
+            dot.setStyleSheet(dot_stylesheet(STATUS_READY_VALUE, font_size=10))
+            dot.setText(dot_text(STATUS_READY_VALUE))
+            self._dots[cav_num] = dot
+            dot_grid.addWidget(dot, row, col)
+        layout.addWidget(dot_container)
+        return tile
+
+    def _build_detail_panel(self) -> QFrame:
+        linac_color = LINAC_COLORS.get(f"L{self.linac_idx}B", ACCENT_BORDER)
+        panel = QFrame()
+        panel.setStyleSheet(
+            f"QFrame {{ background: {CARD_BG}; border: 1px solid {linac_color}; "
+            f"border-radius: 6px; }}" + button_stylesheet()
+        )
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(10, 8, 10, 8)
+        ctrl_row = QHBoxLayout()
+        cm_label = QLabel(f"CM{self.name}")
+        cm_label.setStyleSheet(f"color: {linac_color}; font-weight: bold;")
+        ctrl_row.addWidget(cm_label)
+        self.setup_all_button = QPushButton("Set Up All")
+        self.setup_all_button.clicked.connect(self.trigger_setup_all)
+        self.shutdown_all_button = QPushButton("Shut Down All")
+        self.shutdown_all_button.clicked.connect(self.trigger_shutdown_all)
+        self.abort_all_button = QPushButton("Abort All")
+        self.abort_all_button.setStyleSheet("color: #e08090;")
+        self.abort_all_button.clicked.connect(self.trigger_abort_all)
+        self.lock_cm_button = QPushButton("\U0001f512 Lock CM")
+        self.lock_cm_button.setCheckable(True)
+        self.lock_cm_button.clicked.connect(self._on_lock_cm_clicked)
+        ctrl_row.addWidget(self.setup_all_button)
+        ctrl_row.addWidget(self.shutdown_all_button)
+        ctrl_row.addWidget(self.abort_all_button)
+        ctrl_row.addWidget(self.lock_cm_button)
+        ctrl_row.addStretch()
+        layout.addLayout(ctrl_row)
+        self._cav_widget = HeightForWidthWidget()
+        cav_flow = FlowLayout(self._cav_widget, h_spacing=6, v_spacing=6)
+        for cav_num in range(1, 9):
+            cav_flow.addWidget(self.gui_cavities[cav_num].frame)
+        layout.addWidget(self._cav_widget)
+        return panel
+
+    def _aggregate_status(self) -> int:
+        statuses = list(self._cavity_statuses.values())
+        if STATUS_ERROR_VALUE in statuses:
+            return STATUS_ERROR_VALUE
+        if STATUS_RUNNING_VALUE in statuses:
+            return STATUS_RUNNING_VALUE
+        return STATUS_READY_VALUE
+
+    def _on_cavity_status_changed(self, cav_num: int, status: int):
+        self._cavity_statuses[cav_num] = status
+        locked = self.gui_cavities[cav_num].locked
+        self._dots[cav_num].setStyleSheet(
+            dot_stylesheet(status, locked, font_size=10)
+        )
+        self._dots[cav_num].setText(dot_text(status, locked))
+        agg = self._aggregate_status()
+        self.tile.setStyleSheet(card_stylesheet(agg, self.is_locked))
+        if self.on_status_changed:
+            self.on_status_changed(self.name, agg)
+        if self.on_cav_status_changed:
+            self.on_cav_status_changed(cav_num, status, locked)
+
+    def _on_lock_cm_clicked(self):
+        if self.is_locked:
+            popup = make_sanity_check_popup(
+                f"Unlock CM{self.name}? Make sure no one is working on it."
+            )
+            result = popup.exec()
+            if result == QMessageBox.Yes:
+                self._do_unlock()
+            else:
+                self.lock_cm_button.setChecked(True)
+        else:
+            self._do_lock()
+
+    def _do_lock(self):
+        if self.is_locked:
+            return
+        self._pre_cascade_locked = {
+            n for n, g in self.gui_cavities.items() if g.locked
+        }
+        self.is_locked = True
+        self.lock_cm_button.setChecked(True)
+        for gui_cav in self.gui_cavities.values():
+            gui_cav.lock()
+        self.tile.setStyleSheet(card_stylesheet(self._aggregate_status(), True))
+        if self.on_status_changed:
+            self.on_status_changed(self.name, self._aggregate_status())
+
+    def _do_unlock(self):
+        self.is_locked = False
+        self.lock_cm_button.setChecked(False)
+        for n, gui_cav in self.gui_cavities.items():
+            if n not in self._pre_cascade_locked:
+                gui_cav.unlock_no_confirm()
+        self.tile.setStyleSheet(
+            card_stylesheet(self._aggregate_status(), False)
+        )
+        if self.on_status_changed:
+            self.on_status_changed(self.name, self._aggregate_status())
+
+    def lock(self):
+        self._do_lock()
+
+    def unlock_no_confirm(self):
+        self._do_unlock()
+
+    def trigger_setup_all(self):
+        for gui_cav in self.gui_cavities.values():
+            if not gui_cav.locked:
+                gui_cav.trigger_setup()
+
+    def trigger_shutdown_all(self):
+        for gui_cav in self.gui_cavities.values():
+            if not gui_cav.locked:
+                gui_cav.trigger_shutdown()
+
+    def trigger_abort_all(self):
+        for gui_cav in self.gui_cavities.values():
+            gui_cav.request_abort()
 
     def capture_acon(self):
-        for cavity_widget in self.gui_cavities.values():
-            cavity_widget.cavity.capture_acon()
-
-    def trigger_shutdown(self):
-        self.cryomodule_object.trigger_shutdown()
-
-    def request_stop(self):
-        self.cryomodule_object.trigger_abort()
-
-    @property
-    def cryomodule_object(self) -> SetupCryomodule:
-        if not self._cryomodule:
-            self._cryomodule: SetupCryomodule = SETUP_MACHINE.cryomodules[
-                self.name
-            ]
-        return self._cryomodule
-
-    def trigger_setup(self):
-        self.cryomodule_object.ssa_cal_requested = (
-            self.settings.ssa_cal_checkbox.isChecked()
-        )
-        self.cryomodule_object.auto_tune_requested = (
-            self.settings.auto_tune_checkbox.isChecked()
-        )
-        self.cryomodule_object.cav_char_requested = (
-            self.settings.cav_char_checkbox.isChecked()
-        )
-        self.cryomodule_object.rf_ramp_requested = (
-            self.settings.rf_ramp_checkbox.isChecked()
-        )
-
-        self.cryomodule_object.trigger_start()
+        for gui_cav in self.gui_cavities.values():
+            gui_cav.cavity.capture_acon()
