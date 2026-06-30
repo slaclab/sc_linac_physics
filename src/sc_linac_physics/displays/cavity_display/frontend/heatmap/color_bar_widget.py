@@ -34,7 +34,7 @@ class ColorBarWidget(QWidget):
     LABEL_COLOR = QColor(200, 200, 200)
     LABEL_FONT_SIZE = 7
     BAR_X_OFFSET = 10
-    GRADIENT_STOPS = 64
+    GRADIENT_STOPS = 64  # number of color samples in the gradient bar
 
     def __init__(
         self,
@@ -73,6 +73,10 @@ class ColorBarWidget(QWidget):
         self.update()
 
     def _get_tick_values(self) -> List[float]:
+        """Generate evenly spaced tick values from max (top) to min (bottom).
+
+        In log mode, ticks are spaced evenly in log space so they bunch up
+        toward the low end, matching the color distribution."""
         if self._num_ticks < 2 or self._vmax == self._vmin:
             return [self._vmax, self._vmin]
 
@@ -106,6 +110,9 @@ class ColorBarWidget(QWidget):
         return f"{value:.1f}"
 
     def paintEvent(self, event) -> None:
+        """Draw the color bar legend. Layout from top to bottom:
+        title label, gradient bar, tick marks with numeric labels.
+        Bails out early if the widget is too small to fit the bar."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
@@ -145,10 +152,11 @@ class ColorBarWidget(QWidget):
         gradient = QLinearGradient(bar_x, bar_top, bar_x, bar_bottom)
 
         if self._color_mapper:
+            # Sample enough points along the gradient to look smooth
+            # we reverse map each stop through the same log/linear space
+            # the ColorMapper uses so the bar visually matches the heatmap
             for i in range(self.GRADIENT_STOPS + 1):
                 t = i / self.GRADIENT_STOPS
-                # Sample in the same space as the scale (log or linear)
-                # so the gradient shows an even color distribution.
                 if self._log_scale and self._vmax > self._vmin:
                     log_range = math.log1p(self._vmax - self._vmin)
                     value = self._vmin + math.expm1(log_range * (1 - t))
