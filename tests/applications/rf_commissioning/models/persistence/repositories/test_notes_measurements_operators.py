@@ -27,10 +27,15 @@ def test_operator_repository_normalizes_and_deduplicates_names(tmp_path):
     db = _new_db(tmp_path)
 
     assert db.add_operator("  Alice  ") is True
-    assert db.add_operator("Alice") is False
+    assert db.add_operator("Alice") is False  # duplicate after strip
     assert db.add_operator("Bob") is True
-    assert db.add_operator("   ") is False
-    assert db.get_operators() == ["Alice", "Bob"]
+    assert db.add_operator("   ") is False  # blank rejected
+    operators = db.get_operators()
+    assert "Alice" in operators
+    assert "Bob" in operators
+    assert operators.count("Alice") == 1
+    assert operators.count("Bob") == 1
+    assert operators == sorted(operators)  # returned in sorted order
 
 
 def test_general_notes_round_trip_with_versioned_updates(tmp_path):

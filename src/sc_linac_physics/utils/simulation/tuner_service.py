@@ -1,4 +1,5 @@
 from asyncio import sleep
+from random import uniform
 
 from caproto import ChannelType
 from caproto.server import (
@@ -12,6 +13,7 @@ from caproto.server import (
 
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     ESTIMATED_MICROSTEPS_PER_HZ,
+    ESTIMATED_MICROSTEPS_PER_HZ_HL,
     PIEZO_HZ_PER_VOLT,
 )
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
@@ -47,6 +49,17 @@ class StepperPVGroup(PVGroup):
     step_signed: PvpropertyInteger = pvproperty(value=0, name="REG_TOTSGN")
     reset_tot = pvproperty(name="TOTABS_RESET")
     reset_signed = pvproperty(name="TOTSGN_RESET")
+
+    @reset_tot.putter
+    async def reset_tot(self, instance, value):
+        await self.step_tot.write(0)
+        return value
+
+    @reset_signed.putter
+    async def reset_signed(self, instance, value):
+        await self.step_signed.write(0)
+        return value
+
     steps_cold_landing = pvproperty(name="NSTEPS_COLD")
     nsteps_park = pvproperty(name="NSTEPS_PARK", value=5000000)
     push_signed_cold = pvproperty(name="PUSH_NSTEPS_COLD.PROC")
@@ -82,27 +95,29 @@ class StepperPVGroup(PVGroup):
         enum_strings=("not at limit", "at limit"),
     )
     hz_per_microstep = pvproperty(
-        value=1 / ESTIMATED_MICROSTEPS_PER_HZ,
+        value=0.0,
         name="SCALE",
         dtype=ChannelType.FLOAT,
     )
+
+    @hz_per_microstep.startup
+    async def hz_per_microstep(self, instance, async_lib):
+        nominal = (
+            1 / ESTIMATED_MICROSTEPS_PER_HZ_HL
+            if self.cavity_group.is_hl
+            else 1 / ESTIMATED_MICROSTEPS_PER_HZ
+        )
+        await instance.write(uniform(0.8 * nominal, 1.2 * nominal))
 
     def __init__(self, prefix, cavity_group, piezo_group):
         super().__init__(prefix)
         self.cavity_group: CavityPVGroup = cavity_group
         self.piezo_group: PiezoPVGroup = piezo_group
-        if not self.cavity_group.is_hl:
-            self.steps_per_hertz = 256 / 1.4
-        else:
-            self.steps_per_hertz = 256 / 18.3
 
     async def move(self, move_sign_des: int):
         await self.motor_moving.write("Moving")
         steps = 0
         step_change = move_sign_des * self.speed.value
-        freq_move_sign = (
-            move_sign_des if self.cavity_group.is_hl else -move_sign_des
-        )
         starting_detune = self.cavity_group.detune.value
 
         while (
@@ -113,10 +128,10 @@ class StepperPVGroup(PVGroup):
             await self.step_signed.write(self.step_signed.value + step_change)
 
             steps += self.speed.value
-            delta = self.speed.value / self.steps_per_hertz
-            new_detune = self.cavity_group.detune.value + (
-                freq_move_sign * delta
+            delta = (
+                move_sign_des * self.speed.value * self.hz_per_microstep.value
             )
+            new_detune = round(self.cavity_group.detune.value + delta)
 
             await self.cavity_group.detune.write(new_detune)
             await self.cavity_group.detune_rfs.write(new_detune)
@@ -133,8 +148,8 @@ class StepperPVGroup(PVGroup):
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = remainder / self.steps_per_hertz
-        new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
+        delta = move_sign_des * remainder * self.hz_per_microstep.value
+        new_detune = round(self.cavity_group.detune.value + delta)
 
         enable_int = _enum_to_int(
             self.piezo_group.enable_stat.value,

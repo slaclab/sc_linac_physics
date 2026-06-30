@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v9.26.0 (2026-06-30)
+
+### Bug Fixes
+
+- Handle scipy linregress NaN slope for identical x-values
+  ([#268](https://github.com/slaclab/sc_linac_physics/pull/268),
+  [`9dfb3b7`](https://github.com/slaclab/sc_linac_physics/commit/9dfb3b7de52714c043d5e0b878a7ee7c6866caac))
+
+- Make hz_per_microstep signed, derive direction from sign
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+- Round simulated detune to int and correct hz_per_microstep unit
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+### Features
+
+- Data models, DB schema, and simulation updates for frequency tuning
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+- **rf-commissioning**: Flesh out frequency tuning infrastructure
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+
 ## v9.25.0 (2026-06-15)
 
 ### Bug Fixes
