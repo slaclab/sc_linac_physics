@@ -13,11 +13,9 @@ from unittest.mock import Mock
 import pytest
 from PyQt5.QtCore import QPointF
 
-from sc_linac_physics.displays.cavity_display.backend.backend_cavity import (
-    SeverityLevel,
-)
 from sc_linac_physics.displays.cavity_display.backend.fault import (
     FaultEvent,
+    SeverityLevel,
 )
 from sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_data_fetcher import (
     CavityFaultResult,
