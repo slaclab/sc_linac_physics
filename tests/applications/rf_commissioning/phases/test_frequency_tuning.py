@@ -82,8 +82,6 @@ def fast_limits():
         max_total_steps=10_000,
         cool_down_retries=2,
         cool_down_interval=0.0,
-        motor_start_wait=0.0,
-        motor_poll_interval=0.0,
     )
 
 
@@ -559,6 +557,16 @@ def test_tune_to_resonance_missing_hz_per_microstep(phase, mock_cavity):
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
     assert "probe_stepper_direction" in result.message
+
+
+def test_tune_to_resonance_signed_step_read_error_retries(phase, mock_cavity):
+    # A failure reading the resume step count must abort with RETRY rather
+    # than silently resuming at 0 and corrupting NSTEPS_COLD.
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 5000.0
+    phase._step_signed_pv_obj.get.side_effect = RuntimeError("PV timeout")
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.RETRY
 
 
 def test_tune_to_resonance_tracks_peak_temp(phase, mock_cavity, mock_stepper):
@@ -1051,19 +1059,25 @@ def test_initialize_tuning_state_creates_pv_when_none(
     mock_pv.get.return_value = -200_000
 
     with patch(_FT_MODULE, return_value=mock_pv):
-        total, signed, peak = phase._initialize_tuning_state(None)
+        total, signed, peak, err = phase._initialize_tuning_state(None)
 
     assert signed == -200_000
+    assert err is None
     assert phase._step_signed_pv_obj is mock_pv
 
 
-def test_initialize_tuning_state_pv_read_error_defaults_zero(
+def test_initialize_tuning_state_pv_read_error_returns_retry(
     phase, mock_cavity, mock_stepper
 ):
-    """A PV read exception during init should silently yield signed_total=0."""
+    """A PV read exception during init must surface a RETRY, not default to 0.
+
+    Silently resuming at 0 would corrupt the NSTEPS_COLD return-trip value.
+    """
     _setup_phase(phase)
     phase._step_signed_pv_obj = Mock()
     phase._step_signed_pv_obj.get.side_effect = RuntimeError("read error")
 
-    total, signed, peak = phase._initialize_tuning_state(None)
+    total, signed, peak, err = phase._initialize_tuning_state(None)
     assert signed == 0
+    assert err is not None
+    assert err.result == PhaseResult.RETRY
