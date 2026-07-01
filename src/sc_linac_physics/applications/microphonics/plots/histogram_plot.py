@@ -4,6 +4,7 @@ from sc_linac_physics.applications.microphonics.plots.base_plot import BasePlot
 from sc_linac_physics.applications.microphonics.utils.data_processing import (
     calculate_histogram,
 )
+from sc_linac_physics.utils.plot_tooltip import PlotTooltip
 
 
 class HistogramPlot(BasePlot):
@@ -26,18 +27,9 @@ class HistogramPlot(BasePlot):
         self.num_bins = 140  # Default number of bins
         super().__init__(parent, plot_type="histogram", config=config)
 
-    def _format_tooltip(self, plot_type, x, y):
-        """Format tooltip text specifically for histogram plot
-
-        Args:
-            plot_type: Type of plot (unused in this implementation)
-            x: X coordinate (detuning in Hz)
-            y: Y coordinate (count)
-
-        Returns:
-            str: Formatted tooltip text
-        """
-        return f"Detuning: {x:.1f} Hz\nCount: {int(max(1, y))}"
+    def get_formatter(self):
+        """Tooltip formatter for histogram plot."""
+        return PlotTooltip.make_formatter("Detuning (Hz)", "Count")
 
     def _update_data_range(self, df_data):
         """Update data range based on current data."""

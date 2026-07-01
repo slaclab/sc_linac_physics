@@ -54,15 +54,18 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     L4B,
 )
 
+# Grid layout mirrors the physical linac, each inner list is one row,
+# each tuple is (section label, list of CM names in that section)
 HEATMAP_ROWS = [
     [("L0B", L0B), ("L1B", L1B + L1BHL), ("L2B", L2B)],
     [("L3B", L3B)],
     [("L4B", L4B)],
 ]
 
+# Cavities at or above this fraction of the max get a red highlight border
 HIGHLIGHT_THRESHOLD_FRACTION = 0.75
 
-
+# Per-section color themes for visual distinction between linac regions
 LINAC_COLORS = {
     "L0B": {
         "border": "rgb(100, 180, 255)",
@@ -123,6 +126,7 @@ class FaultHeatmapDisplay(Display):
         # Fallback when the zoom box holds text that doesn't parse
         self._last_window_duration = timedelta(hours=1)
 
+        # Log scale by default, most cavities cluster near zero, a few spike high
         self._color_mapper = ColorMapper(vmin=0, vmax=1, log_scale=True)
         self._severity_filter = SeverityFilter()
 
@@ -132,6 +136,8 @@ class FaultHeatmapDisplay(Display):
         self._selection: Set[Tuple[str, int]] = set()
         self._last_edited: str = "end"
 
+        # Debounced resize, without this, dragging the window edge triggers
+        # hundreds of expensive relayout cycles
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self._auto_fit)
@@ -159,15 +165,20 @@ class FaultHeatmapDisplay(Display):
                     self._cm_to_section[cm] = section_name
 
     def _setup_ui(self) -> None:
+        """Build the full window layout top to bottom:
+        controls row, summary row, scrollable heatmap grid + color bar,
+        progress bar, status label, selection label."""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(2, 2, 2, 2)
         main_layout.setSpacing(4)
         self.setLayout(main_layout)
 
+        # Top controls and per section summary
         main_layout.addLayout(self._build_controls_row())
         main_layout.addLayout(self._build_summary_row())
         main_layout.addLayout(self._build_time_slider_row())
 
+        # Scrollable heatmap grid with color bar on the right
         heatmap_row = QHBoxLayout()
 
         self._scroll = QScrollArea()
@@ -194,6 +205,7 @@ class FaultHeatmapDisplay(Display):
 
         main_layout.addLayout(heatmap_row, stretch=1)
 
+        # Bottom: progress bar, status text, selection info
         self._progress_bar = QProgressBar()
         self._progress_bar.setValue(0)
         self._progress_bar.setTextVisible(True)
@@ -214,6 +226,7 @@ class FaultHeatmapDisplay(Display):
 
         self.setWindowTitle("LCLS-II Fault Heatmap")
 
+        # Keyboard shortcuts
         refresh_shortcut = QShortcut(QKeySequence(Qt.Key_F5), self)
         refresh_shortcut.activated.connect(self._on_refresh_clicked)
 
@@ -221,6 +234,8 @@ class FaultHeatmapDisplay(Display):
         clear_sel_shortcut.activated.connect(self._clear_selection)
 
     def _build_controls_row(self) -> QHBoxLayout:
+        """Build the top row: time range pickers, quick-range buttons,
+        severity checkboxes, TLC dropdown, and action buttons."""
         row = QHBoxLayout()
         row.setSpacing(6)
 
@@ -809,6 +824,8 @@ class FaultHeatmapDisplay(Display):
 
         for section_name, cm_names in sections:
             section_widget = self._create_linac_section(section_name, cm_names)
+            # Stretch proportional to number of CMs so each cavity column
+            # gets roughly the same width across sections
             row.addWidget(section_widget, len(cm_names))
 
         return row
@@ -884,6 +901,8 @@ class FaultHeatmapDisplay(Display):
         section_layout.addLayout(body, stretch=1)
         section.setLayout(section_layout)
 
+        # objectName scopes the stylesheet so it only applies to this widget,
+        # not its children
         section.setObjectName("linac_section")
         section.setStyleSheet(
             f"#linac_section {{"
@@ -897,6 +916,9 @@ class FaultHeatmapDisplay(Display):
         return section
 
     def _set_quick_range(self, minutes=0, hours=0, days=0):
+        """Apply a preset time window. Anchors to whichever end the user
+        last touched, so clicking '1h' after editing the start time sets
+        end = start + 1h, not the other way around."""
         delta = timedelta(minutes=minutes, hours=hours, days=days)
         if getattr(self, "_last_edited", "end") == "start":
             start = self._start_dt.dateTime().toPyDateTime()
@@ -923,7 +945,12 @@ class FaultHeatmapDisplay(Display):
         self._resize_timer.start(200)
 
     def _auto_fit(self) -> None:
-        """Reset to scale 1.0, then measure on next tick to get correct sizes."""
+        """Reset to scale 1.0, then measure on next tick to get correct sizes.
+
+        Two-phase approach: we reset to 1.0 first because Qt's sizeHint is
+        wrong if we measure while already scaled. The singleShot(0) lets the
+        layout engine settle before we read dimensions.
+        """
         if self._auto_fit_in_progress:
             return
         self._auto_fit_in_progress = True
@@ -1002,7 +1029,10 @@ class FaultHeatmapDisplay(Display):
                 self._apply_results_to_heatmap(self._results)
 
     def _populate_tlc_combo(self) -> None:
-        """Rebuild TLC dropdown from current results, preserving selection."""
+        """Rebuild TLC dropdown from current results, preserving selection.
+
+        blockSignals prevents the combo's currentTextChanged from firing
+        during the rebuild, which would trigger a redundant recolor."""
         tlc_codes: Set[str] = set()
         for result in self._results:
             if result.fault_counts_by_tlc:
@@ -1040,6 +1070,9 @@ class FaultHeatmapDisplay(Display):
         self,
         cavity_filter: Optional[Set[Tuple[str, int]]] = None,
     ) -> None:
+        """Kick off a background fetch. If cavity_filter is None, fetches
+        everything. Otherwise only re-fetches the specified (cm, cav) pairs
+        and merges them into the existing results."""
         try:
             start, end = self._get_time_range()
         except ValueError as e:
@@ -1334,7 +1367,9 @@ class FaultHeatmapDisplay(Display):
         self._update_selection_ui()
 
     def _on_cavity_double_clicked(self, cm_name: str, cavity_num: int) -> None:
-        """Open fault detail display for the double-clicked cavity."""
+        """Open fault detail display for the double-clicked cavity.
+        Has to walk the machine hierarchy to find the actual cavity object
+        since we only store cm_name/cavity_num in the widget layer."""
         if self._machine is None:
             return
         for linac in self._machine.linacs:
@@ -1411,6 +1446,8 @@ class FaultHeatmapDisplay(Display):
         self._update_selection_ui()
 
     def closeEvent(self, event) -> None:
+        # Give the fetcher thread a chance to exit cleanly before we
+        # force terminate, avoids occasional segfaults on shutdown
         if self._fetcher and self._fetcher.isRunning():
             self._fetcher.abort()
             if not self._fetcher.wait(5000):

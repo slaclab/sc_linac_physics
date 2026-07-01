@@ -33,6 +33,7 @@ class CavityFaultResult:
     error: Optional[str] = None
 
     def _sum_tlc_field(self, field: str) -> int:
+        """Sum a single field (e.g. 'alarm_count') across all TLC fault types."""
         if not self.fault_counts_by_tlc:
             return 0
         return sum(getattr(c, field) for c in self.fault_counts_by_tlc.values())
@@ -105,11 +106,16 @@ class CavityFaultResult:
 
 
 class FaultDataFetcher(QThread):
-    """Fetches fault counts for all cavities in a background thread."""
+    """Fetches fault counts for all cavities in a background thread.
 
-    progress = pyqtSignal(int, int)
-    cavity_result = pyqtSignal(object)
-    finished_all = pyqtSignal(object)
+    Uses a ThreadPoolExecutor internally so individual archiver queries
+    run concurrently, but signals are emitted back on the Qt thread for
+    safe UI updates.
+    """
+
+    progress = pyqtSignal(int, int)  # (completed, total)
+    cavity_result = pyqtSignal(object)  # CavityFaultResult per cavity
+    finished_all = pyqtSignal(object)  # List[CavityFaultResult]
     fetch_error = pyqtSignal(str)
 
     def __init__(
@@ -137,6 +143,9 @@ class FaultDataFetcher(QThread):
         return self._abort_event.is_set()
 
     def _collect_cavities(self) -> List[Tuple[str, int, Any]]:
+        """Build the list of cavities to query. cm_whitelist limits which CMs
+        are included (set by the display to match its grid). cavity_filter
+        further narrows to specific (cm, cav) pairs for partial re-fetches."""
         cavities = []
         for linac in self._machine.linacs:
             for cm_name, cm in linac.cryomodules.items():
@@ -153,6 +162,7 @@ class FaultDataFetcher(QThread):
                         cavities.append((cm_name, cav_num, cavity))
         return cavities
 
+    # Keep low to avoid overloading the archiver
     MAX_WORKERS = 8
 
     def run(self) -> None:
@@ -200,6 +210,7 @@ class FaultDataFetcher(QThread):
     def _fetch_single_cavity(
         self, cm_name: str, cavity_num: int, cavity
     ) -> CavityFaultResult:
+        """Query the archiver for one cavity. Runs inside the thread pool."""
         if self._abort_event.is_set():
             return CavityFaultResult(
                 cm_name=cm_name,

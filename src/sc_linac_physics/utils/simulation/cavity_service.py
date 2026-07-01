@@ -25,6 +25,20 @@ if TYPE_CHECKING:
     )
 
 
+def _enum_to_int(value, enum_strings) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, bytes):
+        value = value.decode(errors="ignore")
+    if isinstance(value, str):
+        value = value.strip()
+        if value.isdigit():
+            return int(value)
+        if value in enum_strings:
+            return enum_strings.index(value)
+    return -1
+
+
 class CUDPVGroup(PVGroup):
     """Cavity summary display PVs in their own group so alarm.write() is isolated."""
 
@@ -178,15 +192,14 @@ class CavityPVGroup(PVGroup):
     sel_aset: PvpropertyFloat = pvproperty(
         value=0.0, name="SEL_ASET", dtype=ChannelType.FLOAT
     )
-    landing_freq = randrange(-10000, 10000)
     detune: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="DFBEST", dtype=ChannelType.INT
+        value=0, name="DFBEST", dtype=ChannelType.INT
     )
     detune_rfs: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="DF", dtype=ChannelType.INT
+        value=0, name="DF", dtype=ChannelType.INT
     )
     detune_chirp: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="CHIRP:DF", dtype=ChannelType.INT
+        value=0, name="CHIRP:DF", dtype=ChannelType.INT
     )
     tune_config: PvpropertyEnum = pvproperty(
         name="TUNE_CONFIG",
@@ -195,7 +208,7 @@ class CavityPVGroup(PVGroup):
         enum_strings=("On resonance", "Cold landing", "Parked", "Other"),
     )
     df_cold: PvpropertyFloat = pvproperty(
-        value=randint(-10000, 200000), name="DF_COLD", dtype=ChannelType.FLOAT
+        value=0, name="DF_COLD", dtype=ChannelType.FLOAT
     )
     step_temp: PvpropertyFloat = pvproperty(
         value=35.0,
@@ -223,7 +236,10 @@ class CavityPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("Not Selected", "Selected"),
     )
-    fscan_res = pvproperty(name="FSCAN:8PI9MODE", value=-800000)
+    fscan_res_8pi9 = pvproperty(name="FSCAN:8PI9MODE", value=-800000)
+    fscan_res_7pi9 = pvproperty(name="FSCAN:7PI9MODE", value=-900000)
+    fscan_push_8pi9 = pvproperty(name="FSCAN:PUSH_8PI9.PROC", value=0)
+    fscan_push_7pi9 = pvproperty(name="FSCAN:PUSH_7PI9.PROC", value=0)
     chirp_start: PvpropertyInteger = pvproperty(
         name="CHIRP:FREQ_START", value=-200000
     )
@@ -377,8 +393,15 @@ class CavityPVGroup(PVGroup):
         piezo = self.piezo_group
         if (
             piezo is not None
-            and piezo.enable_stat.value == 1
-            and piezo.feedback_mode_stat.value == "Feedback"
+            and _enum_to_int(
+                piezo.enable_stat.value, piezo.enable_stat.enum_strings
+            )
+            == 1
+            and _enum_to_int(
+                piezo.feedback_mode_stat.value,
+                piezo.feedback_mode_stat.enum_strings,
+            )
+            == 1
         ):
             abs_hz = abs(value)
             if abs_hz > 50:
@@ -390,6 +413,14 @@ class CavityPVGroup(PVGroup):
         else:
             status, severity = AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
         await instance.alarm.write(status=status, severity=severity)
+
+    @detune.startup
+    async def detune(self, instance, async_lib):
+        val = randrange(-10000, 10000)
+        await instance.write(val)
+        await self.detune_rfs.write(val)
+        await self.detune_chirp.write(val)
+        await self.df_cold.write(randint(-10000, 200000))
 
     @detune.putter
     async def detune(self, instance, value):

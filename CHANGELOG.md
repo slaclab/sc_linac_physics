@@ -2,6 +2,97 @@
 
 <!-- version list -->
 
+## v9.27.0 (2026-07-01)
+
+### Bug Fixes
+
+- Address review comments on FaultEvent
+  ([#266](https://github.com/slaclab/sc_linac_physics/pull/266),
+  [`25d1fcc`](https://github.com/slaclab/sc_linac_physics/commit/25d1fcc9e2e5c1fd4eb7595fc06901bfebbea1f9))
+
+### Documentation
+
+- Fix cavity count and color gradient description
+  ([#261](https://github.com/slaclab/sc_linac_physics/pull/261),
+  [`8569dce`](https://github.com/slaclab/sc_linac_physics/commit/8569dcebc5b1ebc044187ca2261b257122befa60))
+
+- **heatmap**: Add README and code comments for fault heatmap
+  ([#261](https://github.com/slaclab/sc_linac_physics/pull/261),
+  [`8569dce`](https://github.com/slaclab/sc_linac_physics/commit/8569dcebc5b1ebc044187ca2261b257122befa60))
+
+- **heatmap**: Move heatmap docs to docs/displays/
+  ([#261](https://github.com/slaclab/sc_linac_physics/pull/261),
+  [`8569dce`](https://github.com/slaclab/sc_linac_physics/commit/8569dcebc5b1ebc044187ca2261b257122befa60))
+
+### Features
+
+- **cavity-display**: Keep timestamped fault events from archiver fetches
+  ([#266](https://github.com/slaclab/sc_linac_physics/pull/266),
+  [`25d1fcc`](https://github.com/slaclab/sc_linac_physics/commit/25d1fcc9e2e5c1fd4eb7595fc06901bfebbea1f9))
+
+
+## v9.26.0 (2026-06-30)
+
+### Bug Fixes
+
+- Handle scipy linregress NaN slope for identical x-values
+  ([#268](https://github.com/slaclab/sc_linac_physics/pull/268),
+  [`9dfb3b7`](https://github.com/slaclab/sc_linac_physics/commit/9dfb3b7de52714c043d5e0b878a7ee7c6866caac))
+
+- Make hz_per_microstep signed, derive direction from sign
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+- Round simulated detune to int and correct hz_per_microstep unit
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+### Features
+
+- Data models, DB schema, and simulation updates for frequency tuning
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+- **rf-commissioning**: Flesh out frequency tuning infrastructure
+  ([#263](https://github.com/slaclab/sc_linac_physics/pull/263),
+  [`a4f4317`](https://github.com/slaclab/sc_linac_physics/commit/a4f431759968adf47b29734aef80152d0d8b48d8))
+
+
+## v9.25.0 (2026-06-15)
+
+### Bug Fixes
+
+- Simulation service correctness fixes
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+### Features
+
+- Redesign auto setup UI with dark theme and drill-down navigation
+  ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+- **auto-setup**: Redesign UI with tile hierarchy, status indicators, lock support, and editable
+  notes ([#265](https://github.com/slaclab/sc_linac_physics/pull/265),
+  [`c319a97`](https://github.com/slaclab/sc_linac_physics/commit/c319a975745d338fa5a4ea07b37b5d99ca5ff887))
+
+
 ## v9.24.1 (2026-05-27)
 
 ### Bug Fixes

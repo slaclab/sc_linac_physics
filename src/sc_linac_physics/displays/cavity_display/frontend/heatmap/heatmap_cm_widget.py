@@ -17,6 +17,8 @@ from sc_linac_physics.displays.cavity_display.frontend.heatmap.heatmap_cavity_wi
 
 
 def format_cm_display_name(cm_name: str) -> str:
+    """Add 'CM' prefix to numeric names (e.g. '01' becomes 'CM01').
+    H-prefixed names (H1, H2) are kept as is."""
     return cm_name if cm_name.startswith("H") else f"CM{cm_name}"
 
 
@@ -47,10 +49,11 @@ class HeatmapCMWidget(QWidget):
     NUM_CAVITIES = 8
     LABEL_FONT_SIZE = 9
 
-    BAR_NO_DATA_COLOR = QColor(80, 80, 80)
-    BAR_OK_COLOR = QColor(0, 140, 0)
-    BAR_FAULTED_COLOR = QColor(255, 160, 0)
-    BAR_CRITICAL_COLOR = QColor(200, 0, 0)
+    # Thin status bar under the CM label, quick visual for per-CM health
+    BAR_NO_DATA_COLOR = QColor(80, 80, 80)  # gray = no data loaded yet
+    BAR_OK_COLOR = QColor(0, 140, 0)  # green = zero faults
+    BAR_FAULTED_COLOR = QColor(255, 160, 0)  # orange = has faults
+    BAR_CRITICAL_COLOR = QColor(200, 0, 0)  # red = has highlighted cavities
     BAR_HEIGHT = 3
 
     def __init__(self, cm_name: str, parent: Optional[QWidget] = None) -> None:
@@ -191,6 +194,9 @@ class HeatmapCMWidget(QWidget):
             widget.clear()
 
     def _update_label_and_bar(self) -> None:
+        """Update the CM label text (adds total count) and the thin status
+        bar color. Skips the stylesheet update if the color hasn't changed
+        to avoid unnecessary repaints."""
         base = format_cm_display_name(self._cm_name)
         if self._cavity_counts:
             total = sum(self._cavity_counts.values())
