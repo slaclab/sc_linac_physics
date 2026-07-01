@@ -5,7 +5,7 @@ Backend cavity fault monitoring and management with batch PV initialization.
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from time import time
-from typing import DefaultDict, Optional, Dict, List
+from typing import DefaultDict, Optional, Dict, List, Tuple
 
 from lcls_tools.common.data.archiver import (
     get_values_over_time_range,
@@ -15,7 +15,9 @@ from lcls_tools.common.data.archiver import (
 from sc_linac_physics.displays.cavity_display.backend.fault import (
     Fault,
     FaultCounter,
+    FaultEvent,
     PVInvalidError,
+    SeverityLevel,
 )
 from sc_linac_physics.displays.cavity_display.utils import utils
 from sc_linac_physics.displays.cavity_display.utils.utils import (
@@ -24,21 +26,10 @@ from sc_linac_physics.displays.cavity_display.utils.utils import (
     SEVERITY_SUFFIX,
     SpreadsheetError,
     display_hash,
-    severity_of_fault,
     cavity_fault_logger,
 )
 from sc_linac_physics.utils.epics import PV, PVBatch
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
-
-
-# Constants for severity levels
-class SeverityLevel:
-    """EPICS alarm severity levels."""
-
-    NO_ALARM = 0
-    WARNING = 1
-    ALARM = 2
-    INVALID = 3
 
 
 class FaultLevel:
@@ -344,23 +335,20 @@ class BackendCavity(Cavity):
     def get_fault_counts(
         self, start_time: datetime, end_time: datetime
     ) -> DefaultDict[str, FaultCounter]:
-        """Analyze fault history over a time range using archiver data.
+        """Fault counts by TLC over a time range; see get_fault_history."""
+        counts, _ = self.get_fault_history(start_time, end_time)
+        return counts
 
-        This method retrieves cavity fault status and severity from the archiver
-        and aggregates fault counts by TLC (Three Letter Code).
+    def get_fault_history(
+        self, start_time: datetime, end_time: datetime
+    ) -> Tuple[DefaultDict[str, FaultCounter], List[FaultEvent]]:
+        """Fetch this cavity's fault history from the archiver.
 
-        For duplicate TLCs (e.g., MGT with X, Y, Q variants), the maximum
-        fault count is used to represent the TLC.
-
-        Args:
-            start_time: Beginning of analysis period
-            end_time: End of analysis period
-
-        Returns:
-            Dictionary mapping TLC to FaultCounter with statistics
+        Returns (counts by TLC, chronological FaultEvents); both are
+        empty if the archiver query fails. Callers fetching many
+        cavities should batch the query themselves and use
+        process_fault_history().
         """
-        result: DefaultDict[str, FaultCounter] = defaultdict(FaultCounter)
-
         try:
             data: Dict[str, ArchiveDataHandler] = get_values_over_time_range(
                 pv_list=[self.pv_addr("CUDSTATUS"), self.pv_addr("CUDSEVR")],
@@ -371,38 +359,68 @@ class BackendCavity(Cavity):
             cavity_fault_logger.error(
                 f"Error retrieving archiver data for {self.pv_prefix}: {e}"
             )
-            return result
+            return defaultdict(FaultCounter), []
 
-        statuses: ArchiveDataHandler = data[self.pv_addr("CUDSTATUS")]
-        severities: ArchiveDataHandler = data[self.pv_addr("CUDSEVR")]
+        return self.process_fault_history(
+            statuses=data[self.pv_addr("CUDSTATUS")],
+            severities=data[self.pv_addr("CUDSEVR")],
+        )
+
+    def process_fault_history(
+        self,
+        statuses: ArchiveDataHandler,
+        severities: ArchiveDataHandler,
+    ) -> Tuple[DefaultDict[str, FaultCounter], List[FaultEvent]]:
+        """Aggregate archived status/severity samples into counts and events.
+
+        Note the archiver includes one sample from before the requested
+        start (the last known value), so the first event can predate the
+        range. That sample is the only trace of a fault that was already
+        standing when the range began.
+        """
+        result: DefaultDict[str, FaultCounter] = defaultdict(FaultCounter)
+        fault_events: List[FaultEvent] = []
+
+        # Both lists are chronological, so one merge pass finds the
+        # severity in effect at each status (rescanning gets slow fast)
+        severity_values = severities.values
+        severity_timestamps = [
+            self._round_to_10ms(ts) for ts in severities.timestamps
+        ]
+        severity_idx = 0
+        current_severity = None
 
         for status, status_ts in zip(statuses.values, statuses.timestamps):
-            # Skip if status indicates cavity number (no fault)
+            # The cavity number as status means OK; keep the event so
+            # it's clear when a fault ended
             if status == str(self.number):
+                fault_events.append(
+                    FaultEvent(status_ts, status, SeverityLevel.NO_ALARM)
+                )
                 continue
 
-            # Round timestamp to 10ms precision for matching with severity data
-            try:
-                ts = status_ts.replace(
-                    microsecond=round(status_ts.microsecond / 10000) * 10000
-                )
-            except ValueError:
-                # Handle edge case where rounding exceeds valid range
-                ts = status_ts + timedelta(seconds=1)
+            ts = self._round_to_10ms(status_ts)
+            while (
+                severity_idx < len(severity_timestamps)
+                and (ts - severity_timestamps[severity_idx]).total_seconds()
+                >= 0
+            ):
+                current_severity = severity_values[severity_idx]
+                severity_idx += 1
 
-            severity = severity_of_fault(ts, severities)
+            result[status].count_severity(current_severity)
+            fault_events.append(FaultEvent(status_ts, status, current_severity))
 
-            # Categorize by severity level
-            if severity == SeverityLevel.NO_ALARM:
-                result[status].ok_count += 1
-            elif severity == SeverityLevel.WARNING:
-                result[status].warning_count += 1
-            elif severity == SeverityLevel.ALARM:
-                result[status].alarm_count += 1
-            else:  # INVALID
-                result[status].invalid_count += 1
+        return result, fault_events
 
-        return result
+    @staticmethod
+    def _round_to_10ms(ts: datetime) -> datetime:
+        """Round to 10ms precision for status/severity matching."""
+        try:
+            return ts.replace(microsecond=round(ts.microsecond / 10000) * 10000)
+        except ValueError:
+            # Rounding carried past the end of the second
+            return ts + timedelta(seconds=1)
 
     def run_through_faults(self) -> None:
         """Check all faults and update cavity status PVs (optimized batch version).
