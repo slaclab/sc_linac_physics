@@ -805,7 +805,7 @@ class FaultHeatmapDisplay(Display):
                 # OK transitions are state markers
                 if event.severity == SeverityLevel.NO_ALARM:
                     continue
-                if tlc is not None and event.tlc != tlc:
+                if tlc is not None and event.status != tlc:
                     continue
                 # Anything that isn't warning/alarm counts as invalid
                 if not include_by_severity.get(

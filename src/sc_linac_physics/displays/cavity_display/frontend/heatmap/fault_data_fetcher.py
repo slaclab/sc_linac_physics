@@ -96,12 +96,12 @@ class CavityFaultResult:
         if lo > 0:
             previous = self.fault_events[lo - 1]
             if previous.severity != SeverityLevel.NO_ALARM:
-                counts[previous.tlc].count_severity(previous.severity)
+                counts[previous.status].count_severity(previous.severity)
 
         for event in self.fault_events[lo:hi]:
             if event.severity == SeverityLevel.NO_ALARM:  # an OK, not a fault
                 continue
-            counts[event.tlc].count_severity(event.severity)
+            counts[event.status].count_severity(event.severity)
         return dict(counts)
 
 

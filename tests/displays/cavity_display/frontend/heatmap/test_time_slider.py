@@ -31,21 +31,21 @@ from sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_heatmap_dis
 class TestFaultEvent:
     def test_basic_creation(self):
         ts = datetime(2025, 4, 27, 10, 0, 0)
-        event = FaultEvent(timestamp=ts, tlc="SSA", severity=2)
+        event = FaultEvent(timestamp=ts, status="SSA", severity=2)
         assert event.timestamp == ts
-        assert event.tlc == "SSA"
+        assert event.status == "SSA"
         assert event.severity == 2
 
     def test_equality(self):
         ts = datetime(2025, 4, 27, 10, 0, 0)
-        a = FaultEvent(timestamp=ts, tlc="SSA", severity=2)
-        b = FaultEvent(timestamp=ts, tlc="SSA", severity=2)
+        a = FaultEvent(timestamp=ts, status="SSA", severity=2)
+        b = FaultEvent(timestamp=ts, status="SSA", severity=2)
         assert a == b
 
-    def test_inequality_different_tlc(self):
+    def test_inequality_different_status(self):
         ts = datetime(2025, 4, 27, 10, 0, 0)
-        a = FaultEvent(timestamp=ts, tlc="SSA", severity=2)
-        b = FaultEvent(timestamp=ts, tlc="QCH", severity=2)
+        a = FaultEvent(timestamp=ts, status="SSA", severity=2)
+        b = FaultEvent(timestamp=ts, status="QCH", severity=2)
         assert a != b
 
 
