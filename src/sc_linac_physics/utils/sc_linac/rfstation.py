@@ -1,3 +1,4 @@
+import threading
 from typing import TYPE_CHECKING, Optional
 
 from sc_linac_physics.utils.epics import PV
@@ -22,6 +23,9 @@ class RFStation(SCLinacObject):
 
         self.dac_amp_pv: str = self.pv_addr("DAC_AMPLITUDE")
         self._dac_amp_pv_obj: Optional[PV] = None
+        # Serializes lazy init and concurrent puts: multiple cavity threads share
+        # the same RFStation when running SSA cal in parallel on the same rack.
+        self._dac_lock = threading.RLock()
 
     @property
     def pv_prefix(self):
@@ -30,7 +34,9 @@ class RFStation(SCLinacObject):
     @property
     def dac_amp_pv_obj(self) -> PV:
         if not self._dac_amp_pv_obj:
-            self._dac_amp_pv_obj = PV(self.dac_amp_pv)
+            with self._dac_lock:
+                if not self._dac_amp_pv_obj:
+                    self._dac_amp_pv_obj = PV(self.dac_amp_pv)
         return self._dac_amp_pv_obj
 
     @property
@@ -39,4 +45,5 @@ class RFStation(SCLinacObject):
 
     @dac_amp.setter
     def dac_amp(self, value: float):
-        self.dac_amp_pv_obj.put(value)
+        with self._dac_lock:
+            self.dac_amp_pv_obj.put(value)
