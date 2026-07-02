@@ -192,15 +192,14 @@ class CavityPVGroup(PVGroup):
     sel_aset: PvpropertyFloat = pvproperty(
         value=0.0, name="SEL_ASET", dtype=ChannelType.FLOAT
     )
-    landing_freq = randrange(-10000, 10000)
     detune: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="DFBEST", dtype=ChannelType.INT
+        value=0, name="DFBEST", dtype=ChannelType.INT
     )
     detune_rfs: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="DF", dtype=ChannelType.INT
+        value=0, name="DF", dtype=ChannelType.INT
     )
     detune_chirp: PvpropertyInteger = pvproperty(
-        value=landing_freq, name="CHIRP:DF", dtype=ChannelType.INT
+        value=0, name="CHIRP:DF", dtype=ChannelType.INT
     )
     tune_config: PvpropertyEnum = pvproperty(
         name="TUNE_CONFIG",
@@ -209,7 +208,7 @@ class CavityPVGroup(PVGroup):
         enum_strings=("On resonance", "Cold landing", "Parked", "Other"),
     )
     df_cold: PvpropertyFloat = pvproperty(
-        value=randint(-10000, 200000), name="DF_COLD", dtype=ChannelType.FLOAT
+        value=0, name="DF_COLD", dtype=ChannelType.FLOAT
     )
     step_temp: PvpropertyFloat = pvproperty(
         value=35.0,
@@ -237,7 +236,10 @@ class CavityPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("Not Selected", "Selected"),
     )
-    fscan_res = pvproperty(name="FSCAN:8PI9MODE", value=-800000)
+    fscan_res_8pi9 = pvproperty(name="FSCAN:8PI9MODE", value=-800000)
+    fscan_res_7pi9 = pvproperty(name="FSCAN:7PI9MODE", value=-900000)
+    fscan_push_8pi9 = pvproperty(name="FSCAN:PUSH_8PI9.PROC", value=0)
+    fscan_push_7pi9 = pvproperty(name="FSCAN:PUSH_7PI9.PROC", value=0)
     chirp_start: PvpropertyInteger = pvproperty(
         name="CHIRP:FREQ_START", value=-200000
     )
@@ -246,6 +248,15 @@ class CavityPVGroup(PVGroup):
     )
     qloaded = pvproperty(name="QLOADED", value=4e7)
     qloaded_new = pvproperty(name="QLOADED_NEW", value=4e7)
+
+    @qloaded_new.startup
+    async def qloaded_new(self, instance, async_lib):
+        # HL tolerance [1.5e7, 3.5e7]; regular [2.5e7, 5.1e7]
+        initial_q = 2.5e7 if self.is_hl else 4e7
+        await self.qloaded_new.write(initial_q)
+        await self.qloaded.write(initial_q)
+        # HL scale tolerance [5, 25]; regular [10, 125]
+        await self.scale_new.write(15.0 if self.is_hl else 30.0)
 
     scale_new = pvproperty(name="CAV:CAL_SCALEB_NEW", value=30)
     quench_bypass: PvpropertyEnum = pvproperty(
@@ -412,6 +423,14 @@ class CavityPVGroup(PVGroup):
             status, severity = AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
         await instance.alarm.write(status=status, severity=severity)
 
+    @detune.startup
+    async def detune(self, instance, async_lib):
+        val = randrange(-10000, 10000)
+        await instance.write(val)
+        await self.detune_rfs.write(val)
+        await self.detune_chirp.write(val)
+        await self.df_cold.write(randint(-10000, 200000))
+
     @detune.putter
     async def detune(self, instance, value):
         await self._update_detune_alarm(instance, value)
@@ -426,42 +445,14 @@ class CavityPVGroup(PVGroup):
 
     @quench_latch.putter
     async def quench_latch(self, instance, value):
-        """Handle quench latch - capture waveforms then drop amplitude."""
-        import sys
-
-        print(
-            f"DEBUG: quench_latch putter called! value={value}",
-            file=sys.stderr,
-            flush=True,
-        )
-        print(f"DEBUG: value type: {type(value)}", file=sys.stderr, flush=True)
-        print(
-            f"DEBUG: Current amplitude: {self.aact.value}",
-            file=sys.stderr,
-            flush=True,
-        )
-
+        """Handle quench latch - capture waveforms then drop amplitude on fault only."""
         # Enum values come through as strings, not integers
         if value == "Fault" or value == 1:
             quench_type = self._determine_quench_type()
-            print(
-                f"DEBUG: Generating {quench_type} quench",
-                file=sys.stderr,
-                flush=True,
-            )
             await self._capture_quench_waveforms(quench_type)
-            print("DEBUG: Waveforms captured", file=sys.stderr, flush=True)
-        else:
-            print(
-                f"DEBUG: Not a fault trigger (value={value})",
-                file=sys.stderr,
-                flush=True,
-            )
-
-        await self.aact.write(0)
-        await self.amean.write(0)
-        await self._update_amplitude_alarm()
-        print("DEBUG: Amplitude set to 0", file=sys.stderr, flush=True)
+            await self.aact.write(0)
+            await self.amean.write(0)
+            await self._update_amplitude_alarm()
 
     def _determine_quench_type(self) -> str:
         """Determine what type of quench to simulate."""
@@ -612,7 +603,9 @@ class CavityPVGroup(PVGroup):
         gradient = value / self.length
         await self.gdes.write(gradient, verify_value=False)  # Skip the putter
 
-        if self.cm_group.heater.mode.value == 2:  # SEQUENCER
+        if (
+            self.cm_group.heater.mode.value == 0
+        ):  # MANUAL only — no-op in SEQUENCER
             await self.cm_group.heater.setpoint.write(
                 self.cm_group.heater.setpoint.value + delta
             )

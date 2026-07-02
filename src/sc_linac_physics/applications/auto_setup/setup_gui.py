@@ -21,13 +21,14 @@ from sc_linac_physics.applications.auto_setup.frontend.style import (
     PAGE_BG,
     CARD_BG,
     CARD_BORDER,
-    CARD_TEXT,
     MUTED_TEXT,
     NOTE_TEXT,
     ACCENT_BORDER,
     ACCENT_TEXT,
     LINAC_COLORS,
+    abort_button_stylesheet,
     button_stylesheet,
+    checkbox_stylesheet,
     chip_frame_stylesheet,
     dot_stylesheet,
     dot_text,
@@ -62,7 +63,7 @@ class SetupGUI(Display):
         top_bar.setStyleSheet(
             f"QFrame#topBar {{ background: {CARD_BG}; border-bottom: 1px solid {CARD_BORDER}; }}"
             + button_stylesheet()
-            + f"QCheckBox {{ color: {CARD_TEXT}; font-size: 11px; }}"
+            + checkbox_stylesheet()
         )
         top_bar_layout = QVBoxLayout(top_bar)
         top_bar_layout.setContentsMargins(12, 10, 12, 10)
@@ -73,9 +74,7 @@ class SetupGUI(Display):
         self.machine_setup_button = QPushButton("Set Up Machine")
         self.machine_shutdown_button = QPushButton("Shut Down Machine")
         self.machine_abort_button = QPushButton("Abort Machine")
-        self.machine_abort_button.setStyleSheet(
-            "QPushButton { color: #e08090; }"
-        )
+        self.machine_abort_button.setStyleSheet(abort_button_stylesheet())
 
         self.machine_setup_popup = make_sanity_check_popup(
             "Set up all unlocked cavities across the entire machine?"

@@ -100,6 +100,12 @@ class SSAPVGroup(PVGroup):
     power: PvpropertyFloat = pvproperty(
         name="CALPWR", value=4000, dtype=ChannelType.FLOAT
     )
+    ps_volt_setpt1: PvpropertyFloat = pvproperty(
+        name="PSVoltSetpt1", value=2500.0, dtype=ChannelType.FLOAT
+    )
+    ps_volt_setpt2: PvpropertyFloat = pvproperty(
+        name="PSVoltSetpt2", value=2500.0, dtype=ChannelType.FLOAT
+    )
 
     nirp: PvpropertyEnum = pvproperty(
         value=1,
