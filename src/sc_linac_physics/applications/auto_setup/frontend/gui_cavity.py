@@ -1,4 +1,6 @@
 import dataclasses
+import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Callable
 
 from PyQt5.QtCore import Qt
@@ -26,14 +28,22 @@ from sc_linac_physics.applications.auto_setup.frontend.style import (
     CARD_TEXT,
     MUTED_TEXT,
     NOTE_TEXT,
+    abort_button_stylesheet,
     card_stylesheet,
     status_icon,
     status_text_color,
     step_label_for_progress,
 )
 from sc_linac_physics.applications.auto_setup.frontend.utils import Settings
+from sc_linac_physics.utils.epics.exceptions import (
+    PVConnectionError,
+    PVGetError,
+    PVPutError,
+)
 from sc_linac_physics.utils.qt import make_sanity_check_popup
 from sc_linac_physics.utils.sc_linac.linac_utils import STATUS_RUNNING_VALUE
+
+_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 4)
 
 
 class _ChannelWatcher(PyDMLabel):
@@ -160,8 +170,11 @@ class GUICavity:
         title_row.addWidget(self.expert_screen_button)
         layout.addLayout(title_row)
 
+        _field_label_style = f"color: {MUTED_TEXT}; font-size: 10px; font-weight: 600; border: none;"
         amp_row = QHBoxLayout()
-        amp_row.addWidget(QLabel("ACON"))
+        acon_lbl = QLabel("ACON")
+        acon_lbl.setStyleSheet(_field_label_style)
+        amp_row.addWidget(acon_lbl)
         self.acon_edit = PyDMSpinbox(init_channel=self.prefix + "ACON")
         self.acon_edit.showStepExponent = False
         self.acon_edit.alarmSensitiveBorder = False
@@ -178,7 +191,9 @@ class GUICavity:
         self.aact_label.precisionFromPV = False
         self.aact_label.precision = 2
         amp_row.addWidget(self.acon_edit)
-        amp_row.addWidget(QLabel("AACT"))
+        aact_lbl = QLabel("AACT")
+        aact_lbl.setStyleSheet(_field_label_style)
+        amp_row.addWidget(aact_lbl)
         amp_row.addWidget(self.aact_label)
         amp_row.addStretch()
         layout.addLayout(amp_row)
@@ -236,7 +251,7 @@ class GUICavity:
         self.shutdown_button = QPushButton("Turn Off")
         self.shutdown_button.clicked.connect(self.trigger_shutdown)
         self.abort_button = QPushButton("Abort")
-        self.abort_button.setStyleSheet("color: #e08090;")
+        self.abort_button.setStyleSheet(abort_button_stylesheet())
         self.abort_button.clicked.connect(self.request_abort)
         btn_row.addWidget(self.setup_button)
         btn_row.addWidget(self.shutdown_button)
@@ -341,33 +356,46 @@ class GUICavity:
     def trigger_setup(self):
         if self.locked:
             return
-        if self.cavity.script_is_running:
-            self.cavity.status_message = f"{self.cavity} script already running"
-            return
-        if not self.cavity.is_online:
-            self.cavity.status_message = f"{self.cavity} not online, skipping"
-            return
-        self.cavity.ssa_cal_requested = (
-            self.settings.ssa_cal_checkbox.isChecked()
-        )
-        self.cavity.auto_tune_requested = (
-            self.settings.auto_tune_checkbox.isChecked()
-        )
-        self.cavity.cav_char_requested = (
-            self.settings.cav_char_checkbox.isChecked()
-        )
-        self.cavity.rf_ramp_requested = (
-            self.settings.rf_ramp_checkbox.isChecked()
-        )
-        self.cavity.trigger_start()
+        # Read checkbox state now on the main thread; EPICS I/O runs off it.
+        ssa_cal = self.settings.ssa_cal_checkbox.isChecked()
+        auto_tune = self.settings.auto_tune_checkbox.isChecked()
+        cav_char = self.settings.cav_char_checkbox.isChecked()
+        rf_ramp = self.settings.rf_ramp_checkbox.isChecked()
+        cav = self.cavity
+
+        def _run():
+            try:
+                if cav.script_is_running:
+                    cav.status_message = f"{cav} script already running"
+                    return
+                if not cav.is_online:
+                    cav.status_message = f"{cav} not online, skipping"
+                    return
+                cav.ssa_cal_requested = ssa_cal
+                cav.auto_tune_requested = auto_tune
+                cav.cav_char_requested = cav_char
+                cav.rf_ramp_requested = rf_ramp
+                cav.trigger_start()
+            except (PVConnectionError, PVGetError, PVPutError) as e:
+                cav.status_message = f"PV error: {e}"
+
+        _executor.submit(_run)
 
     def trigger_shutdown(self):
         if self.locked:
             return
-        if self.cavity.script_is_running:
-            self.cavity.status_message = f"{self.cavity} script already running"
-            return
-        self.cavity.trigger_shutdown()
+        cav = self.cavity
+
+        def _run():
+            try:
+                if cav.script_is_running:
+                    cav.status_message = f"{cav} script already running"
+                    return
+                cav.trigger_shutdown()
+            except (PVConnectionError, PVGetError, PVPutError) as e:
+                cav.status_message = f"PV error: {e}"
+
+        _executor.submit(_run)
 
     def request_abort(self):
-        self.cavity.trigger_abort()
+        _executor.submit(self.cavity.trigger_abort)

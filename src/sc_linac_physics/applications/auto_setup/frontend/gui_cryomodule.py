@@ -26,6 +26,7 @@ from sc_linac_physics.applications.auto_setup.frontend.style import (
     CARD_TEXT,
     ACCENT_BORDER,
     LINAC_COLORS,
+    abort_button_stylesheet,
     button_stylesheet,
     card_stylesheet,
     dot_stylesheet,
@@ -120,7 +121,7 @@ class GUICryomodule:
         self.shutdown_all_button = QPushButton("Shut Down All")
         self.shutdown_all_button.clicked.connect(self.trigger_shutdown_all)
         self.abort_all_button = QPushButton("Abort All")
-        self.abort_all_button.setStyleSheet("color: #e08090;")
+        self.abort_all_button.setStyleSheet(abort_button_stylesheet())
         self.abort_all_button.clicked.connect(self.trigger_abort_all)
         self.lock_cm_button = QPushButton("\U0001f512 Lock CM")
         self.lock_cm_button.setCheckable(True)
