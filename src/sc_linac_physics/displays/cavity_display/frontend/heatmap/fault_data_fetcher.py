@@ -1,5 +1,7 @@
+import bisect
 import dataclasses
 import threading
+from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -8,16 +10,26 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 from sc_linac_physics.displays.cavity_display.backend.fault import (
     FaultCounter,
+    FaultEvent,
+    SeverityLevel,
 )
 
 
 @dataclasses.dataclass
 class CavityFaultResult:
-    """Fault counts for a single cavity, broken down by TLC."""
+    """Fault counts for a single cavity, broken down by TLC.
+
+    fault_events stores the raw timestamped fault data from the archiver,
+    enabling the time slider to filter by time window and re-aggregate
+    counts without re-fetching. Events are stored in chronological order
+    (as returned by the archiver) so bisect can be used for O(log n)
+    window lookups.
+    """
 
     cm_name: str
     cavity_num: int
     fault_counts_by_tlc: Optional[Dict[str, FaultCounter]] = None
+    fault_events: Optional[List[FaultEvent]] = None
     error: Optional[str] = None
 
     def _sum_tlc_field(self, field: str) -> int:
@@ -53,6 +65,44 @@ class CavityFaultResult:
             invalid_count=self.invalid_count,
             ok_count=self.ok_count,
         )
+
+    def get_windowed_counts(
+        self,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> Optional[Dict[str, FaultCounter]]:
+        """Re-aggregate fault counts for a time sub-window.
+
+        A window's counts are the events inside it plus whatever fault
+        was already standing when it opened, so the answer matches a
+        direct archiver fetch of just that window. Returns None for
+        results with no events (e.g. errors). Runs per cavity on every
+        slider tick, hence the bisect.
+        """
+        if self.fault_events is None:
+            return None
+
+        # events are in archiver (chronological) order
+        lo = bisect.bisect_left(
+            self.fault_events, window_start, key=lambda e: e.timestamp
+        )
+        hi = bisect.bisect_right(
+            self.fault_events, window_end, key=lambda e: e.timestamp
+        )
+
+        counts: Dict[str, FaultCounter] = defaultdict(FaultCounter)
+
+        # carry in a fault that was still standing when the window opened
+        if lo > 0:
+            previous = self.fault_events[lo - 1]
+            if previous.severity != SeverityLevel.NO_ALARM:
+                counts[previous.status].count_severity(previous.severity)
+
+        for event in self.fault_events[lo:hi]:
+            if event.severity == SeverityLevel.NO_ALARM:  # an OK, not a fault
+                continue
+            counts[event.status].count_severity(event.severity)
+        return dict(counts)
 
 
 class FaultDataFetcher(QThread):
@@ -169,7 +219,7 @@ class FaultDataFetcher(QThread):
             )
 
         try:
-            fault_counts = cavity.get_fault_counts(
+            fault_counts, fault_events = cavity.get_fault_history(
                 self._start_time, self._end_time
             )
         except Exception as e:
@@ -189,4 +239,5 @@ class FaultDataFetcher(QThread):
             cm_name=cm_name,
             cavity_num=cavity_num,
             fault_counts_by_tlc=dict(fault_counts),
+            fault_events=fault_events,
         )

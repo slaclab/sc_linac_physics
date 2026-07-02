@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.28.0 (2026-07-01)
+
+### Features
+
+- **cavity-display**: Keep timestamped fault events from archiver fetches
+  ([#267](https://github.com/slaclab/sc_linac_physics/pull/267),
+  [`06a066f`](https://github.com/slaclab/sc_linac_physics/commit/06a066f930192937cd4a98d0ce14cd61980f0cf8))
+
+- **heatmap**: Add time slider for scrubbing through fetched data
+  ([#267](https://github.com/slaclab/sc_linac_physics/pull/267),
+  [`06a066f`](https://github.com/slaclab/sc_linac_physics/commit/06a066f930192937cd4a98d0ce14cd61980f0cf8))
+
+
 ## v9.27.0 (2026-07-01)
 
 ### Bug Fixes
