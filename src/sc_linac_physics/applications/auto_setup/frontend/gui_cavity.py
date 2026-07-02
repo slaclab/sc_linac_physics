@@ -365,6 +365,12 @@ class GUICavity:
 
         def _run():
             try:
+                import epics
+
+                epics.ca.use_initial_context()
+            except Exception:
+                pass
+            try:
                 if cav.script_is_running:
                     cav.status_message = f"{cav} script already running"
                     return
@@ -387,6 +393,12 @@ class GUICavity:
         cav = self.cavity
 
         def _run():
+            try:
+                import epics
+
+                epics.ca.use_initial_context()
+            except Exception:
+                pass
             try:
                 if cav.script_is_running:
                     cav.status_message = f"{cav} script already running"

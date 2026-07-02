@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -122,7 +121,7 @@ class TestCMPVGroups:
         ) as mock_run:
             mock_run.return_value = None
             await group.trigger_start()
-            await asyncio.sleep(0.05)  # let the executor thread call the fn
+            await group._future
             mock_run.assert_called_once_with("CM01")
 
 
@@ -298,6 +297,8 @@ class TestStartStopPVs:
         ) as mock_run:
             mock_run.return_value = None
             await group.trigger_start()
+            await group._future
+            mock_run.assert_called_once_with("CM01")
 
 
 class TestCommonPVs:
