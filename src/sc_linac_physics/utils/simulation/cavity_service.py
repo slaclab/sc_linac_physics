@@ -249,6 +249,15 @@ class CavityPVGroup(PVGroup):
     qloaded = pvproperty(name="QLOADED", value=4e7)
     qloaded_new = pvproperty(name="QLOADED_NEW", value=4e7)
 
+    @qloaded_new.startup
+    async def qloaded_new(self, instance, async_lib):
+        # HL tolerance [1.5e7, 3.5e7]; regular [2.5e7, 5.1e7]
+        initial_q = 2.5e7 if self.is_hl else 4e7
+        await self.qloaded_new.write(initial_q)
+        await self.qloaded.write(initial_q)
+        # HL scale tolerance [5, 25]; regular [10, 125]
+        await self.scale_new.write(15.0 if self.is_hl else 30.0)
+
     scale_new = pvproperty(name="CAV:CAL_SCALEB_NEW", value=30)
     quench_bypass: PvpropertyEnum = pvproperty(
         name="QUENCH_BYP",
@@ -436,42 +445,14 @@ class CavityPVGroup(PVGroup):
 
     @quench_latch.putter
     async def quench_latch(self, instance, value):
-        """Handle quench latch - capture waveforms then drop amplitude."""
-        import sys
-
-        print(
-            f"DEBUG: quench_latch putter called! value={value}",
-            file=sys.stderr,
-            flush=True,
-        )
-        print(f"DEBUG: value type: {type(value)}", file=sys.stderr, flush=True)
-        print(
-            f"DEBUG: Current amplitude: {self.aact.value}",
-            file=sys.stderr,
-            flush=True,
-        )
-
+        """Handle quench latch - capture waveforms then drop amplitude on fault only."""
         # Enum values come through as strings, not integers
         if value == "Fault" or value == 1:
             quench_type = self._determine_quench_type()
-            print(
-                f"DEBUG: Generating {quench_type} quench",
-                file=sys.stderr,
-                flush=True,
-            )
             await self._capture_quench_waveforms(quench_type)
-            print("DEBUG: Waveforms captured", file=sys.stderr, flush=True)
-        else:
-            print(
-                f"DEBUG: Not a fault trigger (value={value})",
-                file=sys.stderr,
-                flush=True,
-            )
-
-        await self.aact.write(0)
-        await self.amean.write(0)
-        await self._update_amplitude_alarm()
-        print("DEBUG: Amplitude set to 0", file=sys.stderr, flush=True)
+            await self.aact.write(0)
+            await self.amean.write(0)
+            await self._update_amplitude_alarm()
 
     def _determine_quench_type(self) -> str:
         """Determine what type of quench to simulate."""
@@ -622,7 +603,9 @@ class CavityPVGroup(PVGroup):
         gradient = value / self.length
         await self.gdes.write(gradient, verify_value=False)  # Skip the putter
 
-        if self.cm_group.heater.mode.value == 2:  # SEQUENCER
+        if (
+            self.cm_group.heater.mode.value == 0
+        ):  # MANUAL only — no-op in SEQUENCER
             await self.cm_group.heater.setpoint.write(
                 self.cm_group.heater.setpoint.value + delta
             )
