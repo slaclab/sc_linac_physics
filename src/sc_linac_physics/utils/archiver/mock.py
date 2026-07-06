@@ -5,15 +5,45 @@ from __future__ import annotations
 import hashlib
 import random
 from datetime import datetime, timedelta
-from typing import Dict, List, Union
 
 from .models import ArchiverValue, ArchiveDataHandler
+
+_LIVE_QUERY_TIMEOUT_S = 0.5
 
 
 def _stable_seed(pv_name: str, start_time: datetime, end_time: datetime) -> int:
     key = f"{pv_name}|{start_time.isoformat()}|{end_time.isoformat()}".encode("utf-8")
     return int(hashlib.sha256(key).hexdigest()[:8], 16)
 
+def _live_kind(pv_name: str) -> tuple[str, tuple] | None:
+    """
+    Ask the running IOC for a PV's native type.
+    Returns (kind, enum_strings) or None if the IOC is unreachable.
+    kind is one of "FLOAT", "INT", "ENUM", "STRING".
+    """
+    try:
+        from caproto.sync.client import read  
+        resp = read(pv_name, data_type="control", timeout=_LIVE_QUERY_TIMEOUT_S)
+    except Exception:
+        return None
+        
+    ct = getattr(resp, "data_type", None)  
+    if ct is None:
+        return None
+        
+    name = getattr(ct, "name", str(ct)).upper()
+    enum_strings = tuple(
+    getattr(getattr(resp, "metadata", None), "enum_strings", ()) or ()
+    )
+    if "ENUM" in name:
+        return "ENUM", enum_strings
+    if "LONG" in name or "INT" in name or "CHAR" in name:
+        return "INT", ()
+    if "DOUBLE" in name or "FLOAT" in name:
+        return "FLOAT", ()
+    if "STRING" in name:
+        return "STRING", ()
+    return "FLOAT", ()  # safe default
 
 class MockArchiveDataHandler:
     """Generates mock time-series for one PV."""
@@ -31,14 +61,31 @@ class MockArchiveDataHandler:
         self.sample_rate_hz = sample_rate_hz
 
         self.rng = random.Random(_stable_seed(pv_name, start_time, end_time))
+        self.kind, self.enum_strings = self._resolve_kind()
 
         self.timestamps = self._generate_timestamps()
         self.values = self._generate_values()
         self.severities = self._generate_severities()
         self.statuses = self._generate_statuses()
 
-    def _generate_timestamps(self) -> List[datetime]:
-        timestamps: List[datetime] = []
+    def _resolve_kind(self) -> tuple[str, tuple]:
+        """Tier 1: live IOC query. Tier 2: name heuristic. Tier 3: FLOAT default."""
+        live = _live_kind(self.pv_name)
+        if live is not None:
+            return live
+
+        # Fallback when IOC is unreachable (names are unreliable — last resort)
+        pv = self.pv_name.upper()
+        if "CUDSTATUS" in pv:
+            return "STRING", ()
+        if any(t in pv for t in ("_LTCH", "STATUS", "STATE", "READY", "ALRM", "BYP")):
+            return "ENUM", ()
+        if any(t in pv for t in ("COUNT", "CNT", "NUM", "RATE", "NBR", "INDEX")):
+            return "INT", ()
+        return "FLOAT", ()
+
+    def _generate_timestamps(self) -> list[datetime]:
+        timestamps: list[datetime] = []
         current = self.start_time
         interval = timedelta(seconds=1.0 / self.sample_rate_hz)
 
@@ -48,35 +95,50 @@ class MockArchiveDataHandler:
 
         return timestamps
 
-    def _generate_values(self) -> List[Union[float, int, str]]:
-        pv = self.pv_name
-
-        # Gradients
-        if any(k in pv for k in ("ADES", "AACT", "GDES", "GACT", "AACTMEAN")):
-            return self._generate_numeric_values(base_value=16.5, noise_range=0.1)
-
-        # Phases
-        if any(k in pv for k in ("PDES", "PACT")):
-            return self._generate_numeric_values(base_value=0.0, noise_range=0.5)
-
-        # Detune/df
-        if any(k in pv for k in ("DF", "DETUNE")):
-            return self._generate_numeric_values(base_value=0.0, noise_range=10.0)
-
-        # Drive level-ish
-        if "SEL_ASET" in pv:
-            return self._generate_numeric_values(base_value=0.0, noise_range=0.5)
-
-        # Status/fault PVs
-        if "CUDSTATUS" in pv:
-            # Keep as strings for now; adjust to ints if downstream expects numeric
+    def _generate_values(self) -> list[union[float, int, str]]:
+        # CUDSTATUS keeps its historical string behavior.
+        if "CUDSTATUS" in self.pv_name:
             return self._generate_fault_codes()
 
-        # Default
-        return self._generate_numeric_values(base_value=0.0, noise_range=0.1)
+        if self.kind == "ENUM":
+            return self._generate_enum_values()
+        if self.kind == "INT":
+            return self._generate_int_values()
+        if self.kind == "STRING":
+            return self._generate_fault_codes()
 
-    def _generate_numeric_values(self, base_value: float, noise_range: float) -> List[float]:
-        values: List[float] = []
+        # FLOAT: pick a realistic range from the known analog PVs, else generic.
+        base, noise = self._analog_range()
+        return self._generate_numeric_values(base_value=base, noise_range=noise)
+    
+    def _analog_range(self) -> tuple[float, float]:
+        pv = self.pv_name
+        if any(k in pv for k in ("ADES", "AACT", "GDES", "GACT", "AACTMEAN")):
+            return 16.5, 0.1
+        if any(k in pv for k in ("PDES", "PACT")):
+            return 0.0, 0.5
+        if any(k in pv for k in ("DF", "DETUNE")):
+            return 0.0, 10.0
+        if "SEL_ASET" in pv:
+            return 0.0, 0.5
+        return 0.0, 0.1  # generic float default
+
+    def _generate_int_values(self) -> list[int]:
+        return [self.rng.randint(0, 5) for _ in self.timestamps]
+
+    def _generate_enum_values(self) -> list[int]:
+        # MODE showed enum_strings can be empty -> fall back to small cardinality.
+        n_states = len(self.enum_strings) if self.enum_strings else 3
+        values: list[int] = []
+        for _ in self.timestamps:
+            if self.rng.random() < 0.9:
+                values.append(0)   # nominal state
+            else:
+                values.append(self.rng.randint(1, max(1, n_states - 1)))
+        return values
+    
+    def _generate_numeric_values(self, base_value: float, noise_range: float) -> list[float]:
+        values: list[float] = []
         for i in range(len(self.timestamps)):
             noise = self.rng.uniform(-noise_range, noise_range)
             drift = i * 0.00001
@@ -90,9 +152,9 @@ class MockArchiveDataHandler:
             values.append(v)
         return values
 
-    def _generate_fault_codes(self) -> List[str]:
+    def _generate_fault_codes(self) -> list[str]:
         fault_codes = ["TLC", "Quench", "FPGA Fault", "No Fault"]
-        values: List[str] = []
+        values: list[str] = []
         for _ in self.timestamps:
             if self.rng.random() < 0.9:
                 values.append("TLC")
@@ -100,8 +162,8 @@ class MockArchiveDataHandler:
                 values.append(self.rng.choice(fault_codes))
         return values
 
-    def _generate_severities(self) -> List[int]:
-        severities: List[int] = []
+    def _generate_severities(self) -> list[int]:
+        severities: list[int] = []
         for _ in self.timestamps:
             if self.rng.random() < 0.9:
                 severities.append(0)
@@ -109,8 +171,8 @@ class MockArchiveDataHandler:
                 severities.append(self.rng.choice([1, 2]))
         return severities
 
-    def _generate_statuses(self) -> List[int]:
-        statuses: List[int] = []
+    def _generate_statuses(self) -> list[int]:
+        statuses: list[int] = []
         for _ in self.timestamps:
             if self.rng.random() < 0.95:
                 statuses.append(0)
@@ -120,15 +182,15 @@ class MockArchiveDataHandler:
 
 
 def mock_get_values_over_time_range(
-    pv_list: List[str],
+    pv_list: list[str],
     start_time: datetime,
     end_time: datetime,
-) -> Dict[str, ArchiveDataHandler]:
+) -> dict[str, ArchiveDataHandler]:
     """Generate mock data for multiple PVs."""
     if not pv_list:
         return {}
 
-    result: Dict[str, ArchiveDataHandler] = {}
+    result: dict[str, ArchiveDataHandler] = {}
     for pv_name in pv_list:
         mock = MockArchiveDataHandler(pv_name, start_time, end_time)
 
