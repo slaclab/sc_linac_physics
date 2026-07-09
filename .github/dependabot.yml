@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Keep GitHub Actions current. The org requires actions to be pinned to a
+  # full commit SHA (no moving @vN tags), so Dependabot opens PRs that bump the
+  # pinned SHA and its "# vN" comment when a new release ships.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
