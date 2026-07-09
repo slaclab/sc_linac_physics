@@ -265,34 +265,44 @@ class FrequencyTuningPhase(PhaseBase):
         )
 
     def _apply_hz_per_step(self) -> PhaseStepResult:
-        """Write the measured Hz/step to the SCALE PV after operator confirmation."""
+        """Persist the measured Hz/microstep after operator confirmation.
+
+        STEP:SCALE is a derived, read-only calc-record output
+        (SCALE = SCALE_CALC.B / 256), so we write the Hz-per-full-step field
+        (SCALE_CALC.B) and let the IOC recompute SCALE.
+        """
         if self.context.dry_run:
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
-                message="Dry run: skipping SCALE PV write",
+                message="Dry run: skipping SCALE_CALC.B write",
                 data={"dry_run": True},
             )
 
         if self._hz_per_microstep is None:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
-                message="Hz/step not measured — probe_stepper_direction must run first",
+                message="Hz/microstep not measured — probe_stepper_direction must run first",
             )
 
         try:
-            self.cavity.stepper_tuner.hz_per_microstep_pv_obj.put(
+            self.cavity.stepper_tuner.set_hz_per_microstep(
                 self._hz_per_microstep
             )
         except Exception as exc:
             return PhaseStepResult(
                 result=PhaseResult.RETRY,
-                message=f"Could not write Hz/step to SCALE PV: {exc}",
+                message=f"Could not write Hz/step to SCALE_CALC.B: {exc}",
                 retry_delay_seconds=3.0,
             )
 
+        calc_b = self._hz_per_microstep * linac_utils.MICROSTEPS_PER_STEP
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message=f"Wrote {self._hz_per_microstep:.4f} Hz/step to SCALE PV",
+            message=(
+                f"Wrote {self._hz_per_microstep:.4f} Hz/microstep "
+                f"(SCALE_CALC.B={calc_b:.4f} Hz/full-step); "
+                "IOC will recompute STEP:SCALE"
+            ),
         )
 
     def _do_probe_move(

@@ -386,23 +386,23 @@ def test_apply_hz_per_step_not_measured(phase):
     assert "probe_stepper_direction" in result.message
 
 
-def test_apply_hz_per_step_writes_scale_pv(phase, mock_stepper):
+def test_apply_hz_per_step_writes_scale_calc_pv(phase, mock_stepper):
     _setup_phase(phase)
     phase._hz_per_microstep = 42.5
     result = phase._apply_hz_per_step()
     assert result.result == PhaseResult.SUCCESS
-    mock_stepper.hz_per_microstep_pv_obj.put.assert_called_once_with(42.5)
+    # SCALE is derived (read-only); the phase must write SCALE_CALC.B, not SCALE.
+    mock_stepper.set_hz_per_microstep.assert_called_once_with(42.5)
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
 
 
 def test_apply_hz_per_step_pv_error_retries(phase, mock_stepper):
     _setup_phase(phase)
     phase._hz_per_microstep = 10.0
-    mock_stepper.hz_per_microstep_pv_obj.put.side_effect = RuntimeError(
-        "timeout"
-    )
+    mock_stepper.set_hz_per_microstep.side_effect = RuntimeError("timeout")
     result = phase._apply_hz_per_step()
     assert result.result == PhaseResult.RETRY
-    assert "SCALE PV" in result.message
+    assert "SCALE_CALC.B" in result.message
 
 
 # ---------------------------------------------------------------------------
