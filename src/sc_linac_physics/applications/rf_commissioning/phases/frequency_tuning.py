@@ -1,16 +1,20 @@
 """
 Frequency Tuning Phase
 
-Tunes the cavity stepper to resonance after initial cool-down.  Before moving
-the stepper this phase:
-  1. Checks that the stepper is idle and chirp detune is valid.
+Tunes the cavity stepper to resonance after initial cool-down.  Cavities are
+expected to start at the COLD tune config.  Before moving the stepper this
+phase:
+  1. Checks that the stepper is idle and chirp detune is valid; warns (but does
+     not fail) if the cavity is not at the COLD tune config.
   2. Records the cold-landing detune for display; the operator pushes it to
      DF_COLD via the UI after reviewing.
-  3. Runs a probe move to measure Hz/step; the operator confirms and the UI
-     writes the value to the SCALE PV via apply_hz_per_step.
-  4. Moves to resonance in small chunks, checking motor temperature before each
-     chunk and pausing if the temperature exceeds the limit.  After converging,
-     writes the (signed) return-trip step count to the NSTEPS_COLD PV.
+  3. Runs a probe move to measure Hz/microstep; the operator confirms and the UI
+     writes the value (to SCALE_CALC.B) via apply_hz_per_step.
+  4. Gates on DF_COLD having been recorded, then moves to resonance in small
+     chunks, checking motor temperature before each chunk and pausing if the
+     temperature exceeds the limit.  After converging, writes the (signed)
+     return-trip step count to the NSTEPS_COLD PV and sets tune_config to
+     RESONANCE.
   5. Runs a single-cavity FSCAN to find the 8π/9 and 7π/9 parasitic modes and
      pushes results to the cavity mode-frequency PVs.
   6. Writes a FrequencyTuningData record.
@@ -148,10 +152,51 @@ class FrequencyTuningPhase(PhaseBase):
             self._stepper_temp_pv_obj = PV(self.cavity.stepper_temp_pv)
         return self._stepper_temp_pv_obj.get()
 
-    def _write_df_cold(self, detune_hz: float) -> None:
+    def _read_df_cold(self) -> float:
+        # DF_COLD is written by the operator via the UI after reviewing the
+        # cold-landing frequency; the backend reads it back to gate tuning.
         if self._df_cold_pv_obj is None:
             self._df_cold_pv_obj = PV(self.cavity.pv_addr("DF_COLD"))
-        self._df_cold_pv_obj.put(detune_hz)
+        return self._df_cold_pv_obj.get()
+
+    _DF_COLD_MATCH_TOLERANCE_HZ = 1.0
+
+    def _check_df_cold_recorded(self) -> "PhaseStepResult | None":
+        """Ensure the operator pushed the cold-landing detune to DF_COLD.
+
+        Returns a FAILED/RETRY result if DF_COLD was not recorded, else None.
+        The recorded cold-landing detune (from record_cold_landing) is the
+        reliable reference: DF_COLD defaults to a valid 0, so there is no
+        INVALID severity to key off — we require DF_COLD to match it.
+        """
+        cold = self._get_checkpoint_data("record_cold_landing")
+        recorded = cold.get("df_cold_hz")
+        if recorded is None:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    "Cold landing frequency was not recorded — run "
+                    "record_cold_landing before tuning"
+                ),
+            )
+        try:
+            df_cold = self._read_df_cold()
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read DF_COLD: {exc}",
+                retry_delay_seconds=3.0,
+            )
+        if abs(df_cold - recorded) > self._DF_COLD_MATCH_TOLERANCE_HZ:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    "DF_COLD not recorded — push the cold-landing frequency "
+                    f"({recorded:.0f} Hz) to DF_COLD before tuning "
+                    f"(DF_COLD currently reads {df_cold:.0f} Hz)"
+                ),
+            )
+        return None
 
     def _write_nsteps_cold(self, steps: int) -> None:
         if self._nsteps_cold_pv_obj is None:
@@ -227,10 +272,38 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=3.0,
             )
 
+        tune_config_warning = self._tune_config_warning()
+
+        message = f"Stepper idle, chirp valid. Temp {temp:.1f} °C, detune {detune:.0f} Hz"
+        if tune_config_warning:
+            message += f". WARNING: {tune_config_warning}"
+
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message=f"Stepper idle, chirp valid. Temp {temp:.1f} °C, detune {detune:.0f} Hz",
-            data={"initial_temp_c": temp, "initial_detune_hz": detune},
+            message=message,
+            data={
+                "initial_temp_c": temp,
+                "initial_detune_hz": detune,
+                "tune_config_warning": tune_config_warning,
+            },
+        )
+
+    def _tune_config_warning(self) -> str | None:
+        """Return a warning if the cavity is not at the COLD tune config.
+
+        Cavities are expected to start at COLD; a different state is not fatal
+        (the operator may have a reason), so this only flags it.
+        """
+        try:
+            tune_config = self.cavity.tune_config_pv_obj.get()
+        except Exception:
+            return None
+        if tune_config == linac_utils.TUNE_CONFIG_COLD_VALUE:
+            return None
+        return (
+            f"tune_config is {tune_config} (expected COLD="
+            f"{linac_utils.TUNE_CONFIG_COLD_VALUE}); "
+            "cavity may not be at cold landing"
         )
 
     def _record_cold_landing(self) -> PhaseStepResult:
@@ -239,14 +312,14 @@ class FrequencyTuningPhase(PhaseBase):
                 result=PhaseResult.SUCCESS,
                 message="Dry run: cold landing snapshot simulated",
                 data={
-                    "initial_detune_hz": 0.0,
+                    "df_cold_hz": 0.0,
                     "initial_timestamp": datetime.now().isoformat(),
                     "dry_run": True,
                 },
             )
 
         try:
-            initial_detune_hz = self.cavity.detune_chirp
+            df_cold_hz = self.cavity.detune_chirp
         except Exception as exc:
             return PhaseStepResult(
                 result=PhaseResult.RETRY,
@@ -256,10 +329,10 @@ class FrequencyTuningPhase(PhaseBase):
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message=f"Cold landing frequency recorded: detune={initial_detune_hz:.0f} Hz. "
+            message=f"Cold landing frequency recorded: detune={df_cold_hz:.0f} Hz. "
             "Push to DF_COLD when satisfied.",
             data={
-                "initial_detune_hz": initial_detune_hz,
+                "df_cold_hz": df_cold_hz,
                 "initial_timestamp": datetime.now().isoformat(),
             },
         )
@@ -641,6 +714,10 @@ class FrequencyTuningPhase(PhaseBase):
                 message="hz_per_microstep not set — probe_stepper_direction must run first",
             )
 
+        df_cold_err = self._check_df_cold_recorded()
+        if df_cold_err is not None:
+            return df_cold_err
+
         tuning_cb = self.context.parameters.get("tuning_update_callback")
         hz_update_cb = self.context.parameters.get(
             "hz_per_step_update_callback"
@@ -674,11 +751,15 @@ class FrequencyTuningPhase(PhaseBase):
         if err is not None:
             return err
 
+        err = self._write_tune_config_resonance()
+        if err is not None:
+            return err
+
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
                 f"Reached resonance in {total_steps} steps. "
-                f"NSTEPS_COLD set to {-signed_total}."
+                f"NSTEPS_COLD set to {-signed_total}. tune_config set to RESONANCE."
             ),
             data={
                 "total_steps": total_steps,
@@ -686,6 +767,21 @@ class FrequencyTuningPhase(PhaseBase):
                 "final_timestamp": datetime.now().isoformat(),
             },
         )
+
+    def _write_tune_config_resonance(self) -> "PhaseStepResult | None":
+        # The cavity is now on resonance; record that state (mirrors
+        # Cavity.move_to_resonance).
+        try:
+            self.cavity.tune_config_pv_obj.put(
+                linac_utils.TUNE_CONFIG_RESONANCE_VALUE
+            )
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not set tune_config to RESONANCE: {exc}",
+                retry_delay_seconds=3.0,
+            )
+        return None
 
     # ------------------------------------------------------------------
     # Pi-mode scan step
@@ -919,7 +1015,7 @@ class FrequencyTuningPhase(PhaseBase):
         )
 
         self.context.record.frequency_tuning = FrequencyTuningData(
-            initial_detune_hz=cold.get("initial_detune_hz"),
+            df_cold_hz=cold.get("df_cold_hz"),
             initial_timestamp=initial_ts,
             steps_to_resonance=tune.get("total_steps"),
             final_timestamp=final_ts,

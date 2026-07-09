@@ -174,10 +174,11 @@ class FrequencyTuningData:
     """
 
     # Cold landing phase data
-    initial_detune_hz: float | None = phase_display_field(
+    # The first measured detune is the cold-landing frequency, pushed to DF_COLD.
+    df_cold_hz: float | None = phase_display_field(
         default=None,
-        label="Initial Detune",
-        widget_name="freq_tuning_initial_detune",
+        label="Cold Landing Detune",
+        widget_name="freq_tuning_df_cold",
         format_spec=".3f",
         unit="Hz",
     )
@@ -224,11 +225,11 @@ class FrequencyTuningData:
     notes: str = ""
 
     @property
-    def initial_detune_khz(self) -> float | None:
-        """Initial detune in kHz."""
-        if self.initial_detune_hz is None:
+    def df_cold_khz(self) -> float | None:
+        """Cold-landing detune in kHz."""
+        if self.df_cold_hz is None:
             return None
-        return self.initial_detune_hz / 1000
+        return self.df_cold_hz / 1000
 
     @property
     def positive_step_increases_frequency(self) -> bool | None:
@@ -240,7 +241,7 @@ class FrequencyTuningData:
     def cold_landing_complete(self) -> bool:
         """Check if cold landing phase is complete."""
         return (
-            self.initial_detune_hz is not None
+            self.df_cold_hz is not None
             and self.hz_per_microstep is not None
             and self.steps_to_resonance is not None
         )
@@ -267,7 +268,7 @@ class FrequencyTuningData:
         return serialize_model(
             self,
             computed_fields=(
-                "initial_detune_khz",
+                "df_cold_khz",
                 "positive_step_increases_frequency",
                 "cold_landing_complete",
                 "pi_mode_complete",
