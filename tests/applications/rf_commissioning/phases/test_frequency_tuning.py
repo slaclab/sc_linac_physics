@@ -372,12 +372,15 @@ def test_probe_stepper_direction_positive_decreases_frequency(
 def test_probe_stepper_direction_delta_too_small(
     phase, mock_cavity, mock_stepper
 ):
+    # A change below min_probe_delta_hz (default 100 Hz) fails — a 50 Hz probe
+    # response is treated as a degraded/uncoupled stepper, not a valid measurement.
+    assert phase.limits.min_probe_delta_hz == 100.0
     _setup_phase(phase)
     mock_cavity.detune_chirp = 1000.0
 
     def after_move(steps, *args, **kwargs):
         if steps > 0:
-            mock_cavity.detune_chirp = 1001.0  # barely any change
+            mock_cavity.detune_chirp = 1050.0  # only 50 Hz — below the floor
 
     mock_stepper.move.side_effect = after_move
 

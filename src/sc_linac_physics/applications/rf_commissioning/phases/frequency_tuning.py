@@ -55,7 +55,11 @@ class FrequencyTuningLimits:
     move_speed: int = linac_utils.DEFAULT_STEPPER_SPEED
     temp_limit_c: float = linac_utils.STEPPER_TEMP_LIMIT
     max_total_steps: int = 10_000_000
-    min_probe_delta_hz: float = 10.0
+    # A healthy probe move (probe_steps microsteps at ~0.005 Hz/microstep)
+    # produces a few hundred Hz of detune change on real cavities; require a
+    # solid fraction of that so a degraded/uncoupled stepper is caught, not
+    # just a totally dead one.
+    min_probe_delta_hz: float = 100.0
     pi_scan_freq_start: int = -3_500_000
     pi_scan_freq_stop: int = 50_000
     pi_scan_rms_thresh: float = 10.0
