@@ -1,6 +1,11 @@
 import asyncio
+import concurrent.futures
+import functools
+import os
+import threading
 from asyncio import create_subprocess_exec
 from datetime import datetime
+from time import sleep
 
 from caproto import ChannelType
 from caproto.server import (
@@ -14,6 +19,220 @@ from caproto.server import (
 from caproto.server.server import PVGroupMeta
 
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
+
+# ca_attach_context in libca is not thread-safe: concurrent calls from
+# multiple executor threads segfault.  This lock serialises our
+# use_initial_context() calls so each thread attaches cleanly in turn.
+# After attachment, PV.context == initial_context, so _ensure_context
+# never needs to re-attach and there are no further concurrent calls.
+_ca_init_lock = threading.Lock()
+
+
+def _epics_thread(fn):
+    """Attach the main EPICS CA context before calling fn, detach after.
+
+    ThreadPoolExecutor workers are non-EPICS threads.  If they call into
+    pyepics without attaching the initial context first, libCom creates a
+    per-thread context; when the thread exits libCom's TLS destructor fires
+    and panics with "free_threadInfo … can't proceed".  Attaching the shared
+    initial context avoids both the implicit context creation and the noisy
+    shutdown crash.
+
+    Attachment is serialised via _ca_init_lock because ca_attach_context is
+    not safe to call from multiple threads simultaneously.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        import epics.ca
+
+        with _ca_init_lock:
+            epics.ca.use_initial_context()
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            epics.ca.detach_context()
+
+    return wrapper
+
+
+# Cavity setups are long-running (minutes). Cap at cpu_count so a full CM (8 cavities)
+# can run concurrently on most machines without spawning more threads than cores.
+_CAVITY_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=os.cpu_count(), thread_name_prefix="cavity-setup"
+)
+
+# Orchestrators (CM/Linac/Global/Rack) just propagate flags and fire STRT PV writes;
+# they finish in seconds, so a larger pool is fine.
+_ORCHESTRATOR_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=16, thread_name_prefix="setup-orch"
+)
+
+
+# ---------------------------------------------------------------------------
+# In-process cavity functions
+# ---------------------------------------------------------------------------
+
+
+@_epics_thread
+def _run_setup_cavity(cm_name: str, cav_num: int) -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+
+    SETUP_MACHINE.cryomodules[cm_name].cavities[cav_num].setup()
+
+
+@_epics_thread
+def _run_shutdown_cavity(cm_name: str, cav_num: int) -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+
+    SETUP_MACHINE.cryomodules[cm_name].cavities[cav_num].shut_down()
+
+
+# ---------------------------------------------------------------------------
+# In-process CM functions
+# ---------------------------------------------------------------------------
+
+
+@_epics_thread
+def _run_setup_cm(cm_name: str) -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+
+    cm = SETUP_MACHINE.cryomodules[cm_name]
+    for cavity in cm.cavities.values():
+        cavity.ssa_cal_requested = cm.ssa_cal_requested
+        cavity.auto_tune_requested = cm.auto_tune_requested
+        cavity.cav_char_requested = cm.cav_char_requested
+        cavity.rf_ramp_requested = cm.rf_ramp_requested
+        cavity.trigger_start()
+        sleep(0.1)
+
+
+@_epics_thread
+def _run_shutdown_cm(cm_name: str) -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+
+    for cavity in SETUP_MACHINE.cryomodules[cm_name].cavities.values():
+        cavity.trigger_shutdown()
+        sleep(0.1)
+
+
+# ---------------------------------------------------------------------------
+# In-process Rack functions (no sc-setup-rack script exists)
+# Flag values are read from the PVGroup in the async context and passed in.
+# ---------------------------------------------------------------------------
+
+
+@_epics_thread
+def _run_setup_rack(
+    cm_name: str,
+    rack_name: str,
+    ssa_cal: bool,
+    auto_tune: bool,
+    cav_char: bool,
+    rf_ramp: bool,
+) -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+
+    cm = SETUP_MACHINE.cryomodules[cm_name]
+    cav_range = range(1, 5) if rack_name == "A" else range(5, 9)
+    for cav_num in cav_range:
+        cavity = cm.cavities[cav_num]
+        cavity.ssa_cal_requested = ssa_cal
+        cavity.auto_tune_requested = auto_tune
+        cavity.cav_char_requested = cav_char
+        cavity.rf_ramp_requested = rf_ramp
+        cavity.trigger_start()
+        sleep(0.1)
+
+
+@_epics_thread
+def _run_shutdown_rack(cm_name: str, rack_name: str) -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+
+    cm = SETUP_MACHINE.cryomodules[cm_name]
+    cav_range = range(1, 5) if rack_name == "A" else range(5, 9)
+    for cav_num in cav_range:
+        cm.cavities[cav_num].trigger_shutdown()
+        sleep(0.1)
+
+
+# ---------------------------------------------------------------------------
+# In-process Linac functions
+# ---------------------------------------------------------------------------
+
+
+@_epics_thread
+def _run_setup_linac(linac_idx: int) -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+    from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_DICT
+
+    linac = SETUP_MACHINE.linacs[linac_idx]
+    for cm_name in LINAC_CM_DICT[linac_idx]:
+        cm = SETUP_MACHINE.cryomodules[cm_name]
+        cm.ssa_cal_requested = linac.ssa_cal_requested
+        cm.auto_tune_requested = linac.auto_tune_requested
+        cm.cav_char_requested = linac.cav_char_requested
+        cm.rf_ramp_requested = linac.rf_ramp_requested
+        cm.trigger_start()
+        sleep(0.5)
+
+
+@_epics_thread
+def _run_shutdown_linac(linac_idx: int) -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+    from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_DICT
+
+    for cm_name in LINAC_CM_DICT[linac_idx]:
+        SETUP_MACHINE.cryomodules[cm_name].trigger_shutdown()
+        sleep(0.5)
+
+
+# ---------------------------------------------------------------------------
+# In-process Global functions
+# ---------------------------------------------------------------------------
+
+
+@_epics_thread
+def _run_setup_global() -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+    from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+
+    for cm_name in ALL_CRYOMODULES:
+        cm = SETUP_MACHINE.cryomodules[cm_name]
+        cm.ssa_cal_requested = SETUP_MACHINE.ssa_cal_requested
+        cm.auto_tune_requested = SETUP_MACHINE.auto_tune_requested
+        cm.cav_char_requested = SETUP_MACHINE.cav_char_requested
+        cm.rf_ramp_requested = SETUP_MACHINE.rf_ramp_requested
+        cm.trigger_start()
+
+
+@_epics_thread
+def _run_shutdown_global() -> None:
+    from sc_linac_physics.applications.auto_setup.backend.setup_machine import (
+        SETUP_MACHINE,
+    )
+    from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+
+    for cm_name in ALL_CRYOMODULES:
+        SETUP_MACHINE.cryomodules[cm_name].trigger_shutdown()
 
 
 class LauncherPVGroupMeta(PVGroupMeta):
@@ -167,6 +386,7 @@ class BaseScriptPVGroup(LauncherPVGroup):
         self.script_args = script_args
         self.extra_flags = []
         self.process = None
+        self._future = None
 
     def get_command_args(self):
         """Build command arguments from script name, args, and extra flags"""
@@ -176,18 +396,38 @@ class BaseScriptPVGroup(LauncherPVGroup):
         args.extend(self.extra_flags)
         return args
 
-    async def trigger_start(self):
-        if self.process and self.process.returncode is None:
-            await self.status.write("Already running")
-            return
+    def _get_run_fn(self):
+        """Return a no-arg callable for in-process execution, or None to use subprocess."""
+        return None
 
-        args = self.get_command_args()
-        self.process = await create_subprocess_exec(*args)
-        await self.timestamp.write(
-            datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-        )
-        await self.status.write("Running")
-        asyncio.create_task(self._monitor_process())
+    def _get_executor(self):
+        return _ORCHESTRATOR_EXECUTOR
+
+    async def trigger_start(self):
+        run_fn = self._get_run_fn()
+        if run_fn is not None:
+            if self._future is not None and not self._future.done():
+                await self.status.write("Already running")
+                return
+            await self.timestamp.write(
+                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
+            )
+            await self.status.write("Running")
+            self._future = asyncio.get_running_loop().run_in_executor(
+                self._get_executor(), run_fn
+            )
+            asyncio.create_task(self._monitor_future())
+        else:
+            if self.process and self.process.returncode is None:
+                await self.status.write("Already running")
+                return
+            args = self.get_command_args()
+            self.process = await create_subprocess_exec(*args)
+            await self.timestamp.write(
+                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
+            )
+            await self.status.write("Running")
+            asyncio.create_task(self._monitor_process())
 
     async def trigger_stop(self):
         if self.process:
@@ -209,6 +449,19 @@ class BaseScriptPVGroup(LauncherPVGroup):
                 await self.status.write("Completed")
             else:
                 await self.status.write(f"Failed (exit code: {returncode})")
+
+    async def _monitor_future(self):
+        try:
+            await self._future
+            await self.timestamp.write(
+                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
+            )
+            await self.status.write("Completed")
+        except Exception as e:
+            await self.timestamp.write(
+                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
+            )
+            await self.status.write(f"Failed: {type(e).__name__}")
 
 
 class BaseCMPVGroup(BaseScriptPVGroup):
@@ -304,8 +557,10 @@ class BaseCavityPVGroup(BaseScriptPVGroup):
         super().__init__(prefix, script_name, cm=cm_name, cav=cav_num)
         self.cm_name = cm_name
         self.cav_num = cav_num
-        # Cavities don't have subgroups
         self.subgroups = []
+
+    def _get_executor(self):
+        return _CAVITY_EXECUTOR
 
     @status_enum.putter
     async def _status_enum_putter(self, instance, value):
@@ -326,21 +581,49 @@ class BaseCavityPVGroup(BaseScriptPVGroup):
 class SetupCMPVGroup(BaseCMPVGroup):
     LAUNCHER_NAME = "SETUP"
 
+    def _get_run_fn(self):
+        return functools.partial(_run_setup_cm, self.cm_name)
+
 
 class SetupLinacPVGroup(BaseLinacPVGroup):
     LAUNCHER_NAME = "SETUP"
+
+    def _get_run_fn(self):
+        return functools.partial(_run_setup_linac, self.linac_idx)
 
 
 class SetupGlobalPVGroup(BaseGlobalPVGroup):
     LAUNCHER_NAME = "SETUP"
 
+    def _get_run_fn(self):
+        return _run_setup_global
+
 
 class SetupCavityPVGroup(BaseCavityPVGroup):
+    """In-process setup simulation: runs as an asyncio coroutine instead of
+    spawning a subprocess, so hundreds of cavities can run concurrently on the
+    single caproto event loop without overwhelming the server.
+    """
+
     LAUNCHER_NAME = "SETUP"
+
+    def _get_run_fn(self):
+        return functools.partial(_run_setup_cavity, self.cm_name, self.cav_num)
 
 
 class SetupRackPVGroup(BaseRackPVGroup):
     LAUNCHER_NAME = "SETUP"
+
+    def _get_run_fn(self):
+        return functools.partial(
+            _run_setup_rack,
+            self.cm_name,
+            self.rack_name,
+            bool(self.ssa_cal.value),
+            bool(self.tune.value),
+            bool(self.cav_char.value),
+            bool(self.ramp.value),
+        )
 
 
 # ============================================================================
@@ -351,21 +634,42 @@ class SetupRackPVGroup(BaseRackPVGroup):
 class OffCMPVGroup(BaseCMPVGroup):
     LAUNCHER_NAME = "OFF"
 
+    def _get_run_fn(self):
+        return functools.partial(_run_shutdown_cm, self.cm_name)
+
 
 class OffLinacPVGroup(BaseLinacPVGroup):
     LAUNCHER_NAME = "OFF"
+
+    def _get_run_fn(self):
+        return functools.partial(_run_shutdown_linac, self.linac_idx)
 
 
 class OffGlobalPVGroup(BaseGlobalPVGroup):
     LAUNCHER_NAME = "OFF"
 
+    def _get_run_fn(self):
+        return _run_shutdown_global
+
 
 class OffCavityPVGroup(BaseCavityPVGroup):
+    """In-process shutdown simulation — mirrors SetupCavityPVGroup."""
+
     LAUNCHER_NAME = "OFF"
+
+    def _get_run_fn(self):
+        return functools.partial(
+            _run_shutdown_cavity, self.cm_name, self.cav_num
+        )
 
 
 class OffRackPVGroup(BaseRackPVGroup):
     LAUNCHER_NAME = "OFF"
+
+    def _get_run_fn(self):
+        return functools.partial(
+            _run_shutdown_rack, self.cm_name, self.rack_name
+        )
 
 
 # ============================================================================

@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.29.0 (2026-07-02)
+
+### Bug Fixes
+
+- **auto-setup**: Off-thread EPICS dispatch, PV error handling, and simulation correctness
+  ([#271](https://github.com/slaclab/sc_linac_physics/pull/271),
+  [`7cd710f`](https://github.com/slaclab/sc_linac_physics/commit/7cd710f636d2c9a4a707e303209222af83fdd44e))
+
+- **sim**: Run cavity setup/shutdown in-process, fix segfault, HL piezo centering, and thread safety
+  ([#271](https://github.com/slaclab/sc_linac_physics/pull/271),
+  [`7cd710f`](https://github.com/slaclab/sc_linac_physics/commit/7cd710f636d2c9a4a707e303209222af83fdd44e))
+
+### Features
+
+- **auto-setup**: Off-thread EPICS dispatch, PV error handling, consistent abort/checkbox styling
+  ([#271](https://github.com/slaclab/sc_linac_physics/pull/271),
+  [`7cd710f`](https://github.com/slaclab/sc_linac_physics/commit/7cd710f636d2c9a4a707e303209222af83fdd44e))
+
+
 ## v9.28.0 (2026-07-01)
 
 ### Features

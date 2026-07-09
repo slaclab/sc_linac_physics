@@ -1,4 +1,4 @@
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
 import pytest
 from caproto import ChannelType
@@ -112,17 +112,17 @@ class TestCMPVGroups:
         assert args == ["sc-setup-cm", "-cm=CM02", "-off"]
 
     @pytest.mark.asyncio
-    async def test_trigger_start_calls_subprocess(self):
-        """Test that trigger_start executes the command"""
+    async def test_trigger_start_submits_in_process(self):
+        """Test that trigger_start uses an in-process run function, not subprocess."""
         group = SetupCMPVGroup(prefix="TEST:", cm_name="CM01")
 
         with patch(
-            "sc_linac_physics.utils.simulation.launcher_service.create_subprocess_exec"
-        ) as mock_exec:
-            mock_exec.return_value = AsyncMock()
+            "sc_linac_physics.utils.simulation.launcher_service._run_setup_cm"
+        ) as mock_run:
+            mock_run.return_value = None
             await group.trigger_start()
-
-            mock_exec.assert_called_once_with("sc-setup-cm", "-cm=CM01")
+            await group._future
+            mock_run.assert_called_once_with("CM01")
 
 
 class TestLinacPVGroups:
@@ -291,13 +291,14 @@ class TestStartStopPVs:
         assert hasattr(group, "trigger_start")
         assert callable(group.trigger_start)
 
-        # Test that it can be called (with mocked subprocess)
+        # Test that it can be called (in-process run fn mocked to no-op)
         with patch(
-            "sc_linac_physics.utils.simulation.launcher_service.create_subprocess_exec"
-        ) as mock_exec:
-            mock_exec.return_value = AsyncMock()
+            "sc_linac_physics.utils.simulation.launcher_service._run_setup_cm"
+        ) as mock_run:
+            mock_run.return_value = None
             await group.trigger_start()
-            mock_exec.assert_called_once_with("sc-setup-cm", "-cm=CM01")
+            await group._future
+            mock_run.assert_called_once_with("CM01")
 
 
 class TestCommonPVs:
