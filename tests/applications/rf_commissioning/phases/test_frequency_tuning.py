@@ -84,8 +84,6 @@ def fast_limits():
         probe_steps=10,
         temp_limit_c=70.0,
         max_total_steps=10_000,
-        cool_down_retries=2,
-        cool_down_interval=0.0,
     )
 
 
@@ -580,17 +578,31 @@ def test_tune_to_resonance_max_steps_exceeded(phase, mock_cavity):
     assert "max step limit" in result.message.lower()
 
 
-def test_tune_to_resonance_temperature_over_limit_then_cools(
-    phase, mock_cavity, mock_stepper
-):
+def test_tune_to_resonance_over_temp_fails_without_ack(phase, mock_cavity):
+    # No automatic cool-down: an over-temp reading fails the step and flags
+    # that an operator acknowledgement is required.
     _setup_phase(phase)
     phase.limits.temp_limit_c = 70.0
+    phase._stepper_temp_pv_obj.get.return_value = 85.0
+    mock_cavity.detune_chirp = 5000.0
 
-    # Reads: (1) initial peak_temp, (2) loop-iter-1 first check = over limit,
-    # (3) cool-down retry = OK, (4) loop-iter-2 check after move resolves detune.
-    temp_values = iter([25.0, 80.0, 60.0, 25.0])
-    phase._stepper_temp_pv_obj.get.side_effect = lambda: next(temp_values)
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+    assert result.data["requires_over_temp_ack"] is True
+    assert result.data["stepper_temp_c"] == 85.0
+    assert result.data["temp_limit_c"] == 70.0
+    assert "85" in result.message
 
+
+def test_tune_to_resonance_over_temp_proceeds_with_ack(
+    phase, mock_cavity, mock_stepper, context
+):
+    # With an acknowledgement ceiling >= the reading, tuning proceeds and the
+    # acknowledging operator is recorded.
+    _setup_phase(phase)
+    phase.limits.temp_limit_c = 70.0
+    context.parameters["over_temp_ack_c"] = 90.0
+    phase._stepper_temp_pv_obj.get.return_value = 85.0
     mock_cavity.detune_chirp = 1000.0
 
     def after_move(*args, **kwargs):
@@ -600,20 +612,33 @@ def test_tune_to_resonance_temperature_over_limit_then_cools(
 
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.SUCCESS
+    assert result.data["over_temp_acknowledged_c"] == 85.0
+    assert result.data["over_temp_acknowledged_by"] == context.operator
 
 
-def test_tune_to_resonance_temperature_never_cools(phase, mock_cavity):
+def test_tune_to_resonance_hotter_breach_requires_new_ack(
+    phase, mock_cavity, mock_stepper, context
+):
+    # Ack ceiling authorizes up to 90 °C, but a later reading climbs above it
+    # → fail again for a fresh acknowledgement.
     _setup_phase(phase)
     phase.limits.temp_limit_c = 70.0
-    phase.limits.cool_down_retries = 2
+    context.parameters["over_temp_ack_c"] = 90.0
 
-    # Always over limit
-    phase._stepper_temp_pv_obj.get.return_value = 85.0
-    mock_cavity.detune_chirp = 5000.0
+    # (1) init read OK, (2) iter-1 = 85 (acked, proceeds), (3) iter-2 = 95 (> ceiling → fail)
+    temp_values = iter([25.0, 85.0, 95.0])
+    phase._stepper_temp_pv_obj.get.side_effect = lambda: next(temp_values)
+    mock_cavity.detune_chirp = 5000.0  # never converges, keeps looping
+
+    def after_move(*args, **kwargs):
+        pass  # detune unchanged → second iteration runs
+
+    mock_stepper.move.side_effect = after_move
 
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
-    assert "temp" in result.message.lower()
+    assert result.data["requires_over_temp_ack"] is True
+    assert result.data["stepper_temp_c"] == 95.0
 
 
 def test_tune_to_resonance_abort_requested(phase, mock_cavity, context):

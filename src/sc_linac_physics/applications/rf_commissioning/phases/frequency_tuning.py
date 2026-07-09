@@ -11,8 +11,10 @@ phase:
   3. Runs a probe move to measure Hz/microstep; the operator confirms and the UI
      writes the value (to SCALE_CALC.B) via apply_hz_per_step.
   4. Gates on DF_COLD having been recorded, then moves to resonance in small
-     chunks, checking motor temperature before each chunk and pausing if the
-     temperature exceeds the limit.  After converging, writes the (signed)
+     chunks, checking motor temperature before each chunk.  There is no
+     automatic cool-down: if the temperature exceeds the limit the step fails
+     and the operator must investigate and re-run with an explicit
+     acknowledgement (over_temp_ack_c).  After converging, writes the (signed)
      return-trip step count to the NSTEPS_COLD PV and sets tune_config to
      RESONANCE.
   5. Runs a single-cavity FSCAN to find the 8π/9 and 7π/9 parasitic modes and
@@ -53,8 +55,6 @@ class FrequencyTuningLimits:
     move_speed: int = linac_utils.DEFAULT_STEPPER_SPEED
     temp_limit_c: float = linac_utils.STEPPER_TEMP_LIMIT
     max_total_steps: int = 10_000_000
-    cool_down_retries: int = 6
-    cool_down_interval: float = 5.0
     min_probe_delta_hz: float = 10.0
     pi_scan_freq_start: int = -3_500_000
     pi_scan_freq_stop: int = 50_000
@@ -89,6 +89,9 @@ class FrequencyTuningPhase(PhaseBase):
         self._step_signed_pv_obj: PV | None = None
         # Signed: positive means +steps increase cavity frequency (matches SCALE PV convention)
         self._hz_per_microstep: float | None = None
+        # Over-temperature breaches the operator acknowledged this run:
+        # list of (temp_c, operator) tuples.
+        self._over_temp_acks: list[tuple[float, str]] = []
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -204,30 +207,6 @@ class FrequencyTuningPhase(PhaseBase):
                 self.cavity.stepper_tuner.steps_cold_landing_pv
             )
         self._nsteps_cold_pv_obj.put(steps)
-
-    def _check_temp_with_cooldown(self) -> tuple[bool, float, str]:
-        """
-        Read motor temperature and wait for cool-down if over the limit.
-
-        Returns (ok, temp_c, message).
-        """
-        temp = self._read_temp()
-        if temp <= self.limits.temp_limit_c:
-            return True, temp, f"Motor temp {temp:.1f} °C OK"
-
-        for _ in range(self.limits.cool_down_retries):
-            time.sleep(self.limits.cool_down_interval)
-            temp = self._read_temp()
-            if temp <= self.limits.temp_limit_c:
-                return True, temp, f"Motor cooled to {temp:.1f} °C"
-
-        return (
-            False,
-            temp,
-            f"Motor temp {temp:.1f} °C still above limit "
-            f"{self.limits.temp_limit_c} °C after "
-            f"{self.limits.cool_down_retries} retries",
-        )
 
     # ------------------------------------------------------------------
     # Step implementations
@@ -475,26 +454,51 @@ class FrequencyTuningPhase(PhaseBase):
     def _guard_temp(
         self, total_steps: int, peak_temp: float
     ) -> tuple[float, PhaseStepResult | None]:
-        """Check motor temperature and wait for cool-down if needed.
+        """Check motor temperature; fail on over-temp unless acknowledged.
+
+        There is no automatic cool-down.  If the motor exceeds the limit the
+        step fails and the operator must investigate and re-run, passing
+        ``over_temp_ack_c`` (a temperature ceiling they authorize) via
+        context.parameters.  A reading hotter than that ceiling re-arms the
+        gate and requires a fresh acknowledgement.
 
         Returns (updated_peak_temp, error_or_None).
         """
         try:
-            ok, temp, msg = self._check_temp_with_cooldown()
-            peak_temp = max(peak_temp, temp)
+            temp = self._read_temp()
         except Exception as exc:
             return peak_temp, PhaseStepResult(
                 result=PhaseResult.RETRY,
                 message=f"Could not read motor temperature: {exc}",
                 retry_delay_seconds=5.0,
             )
-        if not ok:
-            return peak_temp, PhaseStepResult(
-                result=PhaseResult.FAILED,
-                message=msg,
-                data={"total_steps": total_steps, "peak_temp_c": peak_temp},
-            )
-        return peak_temp, None
+        peak_temp = max(peak_temp, temp)
+
+        if temp <= self.limits.temp_limit_c:
+            return peak_temp, None
+
+        ack_ceiling = self.context.parameters.get("over_temp_ack_c")
+        if ack_ceiling is not None and temp <= ack_ceiling:
+            # Operator acknowledged proceeding up to this temperature.
+            self._over_temp_acks.append((temp, self.context.operator))
+            return peak_temp, None
+
+        return peak_temp, PhaseStepResult(
+            result=PhaseResult.FAILED,
+            message=(
+                f"Stepper motor temp {temp:.1f} °C exceeds limit "
+                f"{self.limits.temp_limit_c} °C after {total_steps} steps. "
+                "Investigate; to proceed, acknowledge and re-run with "
+                f"over_temp_ack_c ≥ {temp:.1f}."
+            ),
+            data={
+                "total_steps": total_steps,
+                "peak_temp_c": peak_temp,
+                "stepper_temp_c": temp,
+                "temp_limit_c": self.limits.temp_limit_c,
+                "requires_over_temp_ack": True,
+            },
+        )
 
     def _guard_detune(self) -> tuple[float, PhaseStepResult | None]:
         """Read chirp detune. Returns (detune_hz, error_or_None)."""
@@ -755,17 +759,29 @@ class FrequencyTuningPhase(PhaseBase):
         if err is not None:
             return err
 
+        return self._tuning_success_result(total_steps, signed_total)
+
+    def _tuning_success_result(
+        self, total_steps: int, signed_total: int
+    ) -> PhaseStepResult:
+        data = {
+            "total_steps": total_steps,
+            "cold_landing_steps": -signed_total,
+            "final_timestamp": datetime.now().isoformat(),
+        }
+        if self._over_temp_acks:
+            data["over_temp_acknowledged_c"] = max(
+                t for t, _ in self._over_temp_acks
+            )
+            data["over_temp_acknowledged_by"] = self.context.operator
+
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
                 f"Reached resonance in {total_steps} steps. "
                 f"NSTEPS_COLD set to {-signed_total}. tune_config set to RESONANCE."
             ),
-            data={
-                "total_steps": total_steps,
-                "cold_landing_steps": -signed_total,
-                "final_timestamp": datetime.now().isoformat(),
-            },
+            data=data,
         )
 
     def _write_tune_config_resonance(self) -> "PhaseStepResult | None":
