@@ -225,13 +225,6 @@ class FrequencyTuningData:
     notes: str = ""
 
     @property
-    def df_cold_khz(self) -> float | None:
-        """Cold-landing detune in kHz."""
-        if self.df_cold_hz is None:
-            return None
-        return self.df_cold_hz / 1000
-
-    @property
     def positive_step_increases_frequency(self) -> bool | None:
         if self.hz_per_microstep is None:
             return None
@@ -268,7 +261,6 @@ class FrequencyTuningData:
         return serialize_model(
             self,
             computed_fields=(
-                "df_cold_khz",
                 "positive_step_increases_frequency",
                 "cold_landing_complete",
                 "pi_mode_complete",
