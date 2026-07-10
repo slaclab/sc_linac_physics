@@ -809,7 +809,7 @@ def test_on_stage1_done_saved() -> None:
     controller = _make_controller(view=view)
     controller._save_stage_to_history = Mock(return_value=True)
     controller._update_partial_results = Mock()
-    controller._initial_detune_hz = 12.3
+    controller._df_cold_hz = 12.3
 
     controller._on_stage1_done()
 
@@ -941,7 +941,7 @@ def test_on_stage4_done_save_fails() -> None:
 def test_update_partial_results_calls_view() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller._initial_detune_hz = 5.0
+    controller._df_cold_hz = 5.0
 
     controller._update_partial_results()
 
@@ -1075,10 +1075,8 @@ def test_execute_step_with_retries_zero_retries() -> None:
 def test_on_step_succeeded_routes_data() -> None:
     controller = _make_controller()
 
-    controller._on_step_succeeded(
-        "record_cold_landing", {"initial_detune_hz": 9.0}
-    )
-    assert controller._initial_detune_hz == 9.0
+    controller._on_step_succeeded("record_cold_landing", {"df_cold_hz": 9.0})
+    assert controller._df_cold_hz == 9.0
 
     controller._on_step_succeeded(
         "probe_stepper_direction",
@@ -1221,7 +1219,7 @@ def test_on_phase_completed_success_saves() -> None:
     session.get_active_record_id.return_value = 42
     controller = _make_controller(view=view, session=session)
     record = _record()
-    record.frequency_tuning = FrequencyTuningData(initial_detune_hz=5.0)
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=5.0)
     controller.context = PhaseContext(record=record, operator="op")
     controller._active_phase_instance_id = 3
     captured = []
@@ -1240,7 +1238,7 @@ def test_on_phase_completed_save_fails_logs() -> None:
     session.save_active_record.return_value = False
     controller = _make_controller(view=view, session=session)
     record = _record()
-    record.frequency_tuning = FrequencyTuningData(initial_detune_hz=5.0)
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=5.0)
     controller.context = PhaseContext(record=record, operator="op")
 
     controller.on_phase_completed()
@@ -1267,7 +1265,7 @@ def test_on_phase_failed_resets_and_shows_error() -> None:
     controller = _make_controller(view=view, session=session)
     controller.phase = Mock()
     record = _record()
-    record.frequency_tuning = FrequencyTuningData(initial_detune_hz=5.0)
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=5.0)
     controller.context = PhaseContext(record=record, operator="op")
     controller._active_phase_instance_id = 9
     controller._current_stage = 2
@@ -1427,36 +1425,34 @@ def test_push_hz_per_step_to_scale_no_value() -> None:
     assert any("No Hz/step value" in m for m in view.logs)
 
 
-def test_push_hz_per_step_to_scale_puts(monkeypatch) -> None:
+def test_push_hz_per_step_to_scale_puts() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
     controller._cavity = Mock()
-    controller._cavity.stepper_tuner.hz_per_microstep_pv = "PV:SCALE"
     controller._get_hz_per_step_from_view = Mock(return_value=2.5)
-    fake_pv = Mock()
-    monkeypatch.setattr(
-        "sc_linac_physics.utils.epics.PV", lambda *_a, **_k: fake_pv
-    )
 
     controller.push_hz_per_step_to_scale()
 
-    fake_pv.put.assert_called_once_with(2.5)
+    # STEP:SCALE is derived/read-only — persist via set_hz_per_microstep
+    # (writes SCALE_CALC.B), not a direct SCALE put.
+    controller._cavity.stepper_tuner.set_hz_per_microstep.assert_called_once_with(
+        2.5
+    )
     assert any("Pushed" in m for m in view.logs)
 
 
-def test_push_hz_per_step_to_scale_exception(monkeypatch) -> None:
+def test_push_hz_per_step_to_scale_exception() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
     controller._cavity = Mock()
-    controller._get_hz_per_step_from_view = Mock(return_value=2.5)
-    monkeypatch.setattr(
-        "sc_linac_physics.utils.epics.PV",
-        Mock(side_effect=RuntimeError("pv fail")),
+    controller._cavity.stepper_tuner.set_hz_per_microstep.side_effect = (
+        RuntimeError("pv fail")
     )
+    controller._get_hz_per_step_from_view = Mock(return_value=2.5)
 
     controller.push_hz_per_step_to_scale()
 
-    assert any("Failed to push to SCALE" in m for m in view.logs)
+    assert any("Failed to push" in m for m in view.logs)
 
 
 def test_push_detune_to_df_cold_no_cavity() -> None:
@@ -1575,7 +1571,7 @@ def test_restore_from_record_all_stages() -> None:
     controller._restore_stage4 = Mock()
     controller._load_stage_history = Mock(
         return_value={
-            "cold_landing": {"initial_detune_hz": 1.0},
+            "cold_landing": {"df_cold_hz": 1.0},
             "probe_direction": {"hz_per_microstep": 2.0},
             "tune_to_resonance": {"net_steps": -5},
             "pi_modes": {"mode_8pi_9_hz": 100.0},
@@ -1598,7 +1594,7 @@ def test_restore_from_record_stage3_no_stage4_enables_btn() -> None:
     controller._enable_stage_btn = Mock()
     controller._load_stage_history = Mock(
         return_value={
-            "cold_landing": {"initial_detune_hz": 1.0},
+            "cold_landing": {"df_cold_hz": 1.0},
             "tune_to_resonance": {"net_steps": -5},
         }
     )
@@ -1611,7 +1607,7 @@ def test_restore_from_record_stage3_no_stage4_enables_btn() -> None:
 def test_load_stage_history_from_rows() -> None:
     session = Mock()
     session.get_measurement_history.return_value = [
-        {"measurement_data": {"step": "cold_landing", "initial_detune_hz": 1}},
+        {"measurement_data": {"step": "cold_landing", "df_cold_hz": 1}},
         {"measurement_data": {"step": "probe_direction"}},
     ]
     controller = _make_controller(session=session)
@@ -1627,7 +1623,7 @@ def test_load_stage_history_falls_back_to_blob() -> None:
     session.get_measurement_history.return_value = []
     controller = _make_controller(session=session)
     record = _record()
-    record.frequency_tuning = FrequencyTuningData(initial_detune_hz=7.0)
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=7.0)
 
     history = controller._load_stage_history(record)
 
@@ -1645,7 +1641,7 @@ def test_synthesize_history_from_blob_full() -> None:
     controller = _make_controller()
     record = _record()
     record.frequency_tuning = FrequencyTuningData(
-        initial_detune_hz=1.0,
+        df_cold_hz=1.0,
         hz_per_microstep=2.0,
         cold_landing_steps=10,
         steps_to_resonance=50,
@@ -1682,11 +1678,9 @@ def test_restore_stage1_rebuilds_context() -> None:
     controller._rebuild_phase_context = Mock()
     controller._enable_stage_btn = Mock()
 
-    controller._restore_stage1(
-        {"initial_detune_hz": 3.0}, _record(), has_probe=False
-    )
+    controller._restore_stage1({"df_cold_hz": 3.0}, _record(), has_probe=False)
 
-    assert controller._initial_detune_hz == 3.0
+    assert controller._df_cold_hz == 3.0
     assert view.stage1_run_btn.enabled is False
     controller._rebuild_phase_context.assert_called_once()
     controller._enable_stage_btn.assert_called_once_with(2)

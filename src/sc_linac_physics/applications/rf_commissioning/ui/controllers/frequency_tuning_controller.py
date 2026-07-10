@@ -77,7 +77,7 @@ class FrequencyTuningController(QObject):
         self._steps: list[str] = []
         self._finalize_after_run: bool = False
         self._phase_started: bool = False
-        self._initial_detune_hz: float | None = None
+        self._df_cold_hz: float | None = None
         self._active_phase_instance_id: int | None = None
 
         self._current_stage: int = 0
@@ -178,7 +178,7 @@ class FrequencyTuningController(QObject):
         )
         self.view.clear_results()
         self.view.reset_plot()
-        self._initial_detune_hz = None
+        self._df_cold_hz = None
         self._hz_est_total_steps = 0.0
         self._hz_est_total_hz = 0.0
         self._net_steps = 0
@@ -527,7 +527,7 @@ class FrequencyTuningController(QObject):
     def _on_stage1_done(self) -> None:
         saved = self._save_stage_to_history(
             _STAGE_COLD_LANDING,
-            {"initial_detune_hz": self._initial_detune_hz},
+            {"df_cold_hz": self._df_cold_hz},
         )
         self._set_stage_done_ui(1, success=saved)
         if not saved:
@@ -686,7 +686,7 @@ class FrequencyTuningController(QObject):
     def _update_partial_results(self) -> None:
         """Populate Stored Data panel with whatever fields are known so far."""
         partial = FrequencyTuningData(
-            initial_detune_hz=self._initial_detune_hz,
+            df_cold_hz=self._df_cold_hz,
             hz_per_microstep=self._pending_stage2_data.get("hz_per_microstep"),
             cold_landing_steps=self._tune_step_data.get("cold_landing_steps"),
             steps_to_resonance=self._tune_step_data.get("total_steps"),
@@ -777,7 +777,7 @@ class FrequencyTuningController(QObject):
 
     def _on_step_succeeded(self, step_name: str, data: dict) -> None:
         if step_name == "record_cold_landing":
-            self._initial_detune_hz = data.get("initial_detune_hz")
+            self._df_cold_hz = data.get("df_cold_hz")
 
         elif step_name == "probe_stepper_direction":
             self._probe_d0_hz = data.get("d0_hz")
@@ -1025,7 +1025,12 @@ class FrequencyTuningController(QObject):
         return None
 
     def push_hz_per_step_to_scale(self) -> None:
-        """Write the current Hz/step estimate to the SCALE PV (signed)."""
+        """Persist the current Hz/microstep estimate (signed).
+
+        STEP:SCALE is a derived, read-only calc-record output
+        (SCALE = SCALE_CALC.B / 256), so we write the Hz-per-full-step field
+        via StepperTuner.set_hz_per_microstep and let the IOC recompute SCALE.
+        """
         if self._cavity is None:
             self.view.log_message("No cavity selected — cannot push to SCALE.")
             return
@@ -1037,15 +1042,13 @@ class FrequencyTuningController(QObject):
 
         def _do_push() -> None:
             try:
-                from sc_linac_physics.utils.epics import PV
-
-                pv = PV(self._cavity.stepper_tuner.hz_per_microstep_pv)
-                pv.put(signed_hz)
+                self._cavity.stepper_tuner.set_hz_per_microstep(signed_hz)
                 self._log_signal.emit(
-                    f"Pushed {signed_hz:.4f} Hz/step to SCALE PV."
+                    f"Pushed {signed_hz:.4f} Hz/microstep "
+                    "(via SCALE_CALC.B; IOC recomputes STEP:SCALE)."
                 )
             except Exception as exc:
-                self._log_signal.emit(f"Failed to push to SCALE PV: {exc}")
+                self._log_signal.emit(f"Failed to push Hz/microstep: {exc}")
 
         Thread(target=_do_push, daemon=True).start()
 
@@ -1191,10 +1194,10 @@ class FrequencyTuningController(QObject):
             return {}
 
         result: dict[str, dict] = {}
-        if ft.initial_detune_hz is not None:
+        if ft.df_cold_hz is not None:
             result[_STAGE_COLD_LANDING] = {
                 "step": _STAGE_COLD_LANDING,
-                "initial_detune_hz": ft.initial_detune_hz,
+                "df_cold_hz": ft.df_cold_hz,
             }
         if ft.hz_per_microstep is not None:
             result[_STAGE_PROBE_DIRECTION] = {
@@ -1240,7 +1243,7 @@ class FrequencyTuningController(QObject):
         self.phase = None
         self.context = None
         self._phase_started = False
-        self._initial_detune_hz = None
+        self._df_cold_hz = None
         self._hz_est_total_steps = 0.0
         self._hz_est_total_hz = 0.0
         self._net_steps = 0
@@ -1265,7 +1268,7 @@ class FrequencyTuningController(QObject):
         if btn is not None:
             btn.setEnabled(False)
 
-        self._initial_detune_hz = data.get("initial_detune_hz")
+        self._df_cold_hz = data.get("df_cold_hz")
         self._rebuild_phase_context(record)
 
         if not has_probe:
