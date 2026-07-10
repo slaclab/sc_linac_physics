@@ -116,9 +116,9 @@ def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0, seed_cold=True):
     phase._stepper_temp_pv_obj = Mock()
     phase._stepper_temp_pv_obj.get.return_value = temp_c
     phase._df_cold_pv_obj = Mock()
-    phase._nsteps_cold_pv_obj = Mock()
-    phase._step_signed_pv_obj = Mock()
-    phase._step_signed_pv_obj.get.return_value = initial_signed_steps
+    # NSTEPS_COLD / signed-step PVs now come from the stepper accessors.
+    stepper = phase.cavity.stepper_tuner
+    stepper.step_signed_pv_obj.get.return_value = initial_signed_steps
     phase._hz_per_microstep = 2.0
     # Satisfy the DF_COLD gate for tune_to_resonance tests by default.
     if seed_cold:
@@ -684,7 +684,9 @@ def test_tune_to_resonance_signed_step_read_error_retries(phase, mock_cavity):
     # than silently resuming at 0 and corrupting NSTEPS_COLD.
     _setup_phase(phase)
     mock_cavity.detune_chirp = 5000.0
-    phase._step_signed_pv_obj.get.side_effect = RuntimeError("PV timeout")
+    phase.cavity.stepper_tuner.step_signed_pv_obj.get.side_effect = (
+        RuntimeError("PV timeout")
+    )
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.RETRY
 
@@ -728,7 +730,7 @@ def test_tune_to_resonance_writes_nsteps_cold(phase, mock_cavity, mock_stepper):
     # cold_landing_steps in data should be the negated signed total
     assert "cold_landing_steps" in result.data
     assert result.data["cold_landing_steps"] == -result.data["total_steps"]
-    phase._nsteps_cold_pv_obj.put.assert_called_once_with(
+    mock_stepper.steps_cold_landing_pv_obj.put.assert_called_once_with(
         result.data["cold_landing_steps"]
     )
 
@@ -757,7 +759,9 @@ def test_tune_to_resonance_accumulates_steps_across_restarts(
     assert (
         abs(cold_landing_steps) > total_steps_this_run
     ), "cold_landing_steps must reflect steps from prior (aborted) runs"
-    phase._nsteps_cold_pv_obj.put.assert_called_once_with(cold_landing_steps)
+    mock_stepper.steps_cold_landing_pv_obj.put.assert_called_once_with(
+        cold_landing_steps
+    )
 
 
 def test_tune_to_resonance_nsteps_cold_write_error(
@@ -770,7 +774,9 @@ def test_tune_to_resonance_nsteps_cold_write_error(
         mock_cavity.detune_chirp = 0.0
 
     mock_stepper.move.side_effect = after_move
-    phase._nsteps_cold_pv_obj.put.side_effect = RuntimeError("PV timeout")
+    mock_stepper.steps_cold_landing_pv_obj.put.side_effect = RuntimeError(
+        "PV timeout"
+    )
 
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.RETRY
@@ -1167,23 +1173,17 @@ def test_measure_pi_modes_read_frequency_error(phase, mock_cavity):
 # ---------------------------------------------------------------------------
 
 
-def test_initialize_tuning_state_creates_pv_when_none(
+def test_initialize_tuning_state_reads_stepper_signed_pv(
     phase, mock_cavity, mock_stepper
 ):
-    """When _step_signed_pv_obj is None it should be lazily created."""
+    """Signed step count is read from the stepper's step_signed_pv_obj."""
     _setup_phase(phase)
-    phase._step_signed_pv_obj = None
-    mock_stepper.step_signed_pv = "ACCL:L1B:0210:STEP:REG_TOTSGN"
+    mock_stepper.step_signed_pv_obj.get.return_value = -200_000
 
-    mock_pv = Mock()
-    mock_pv.get.return_value = -200_000
-
-    with patch(_FT_MODULE, return_value=mock_pv):
-        total, signed, peak, err = phase._initialize_tuning_state(None)
+    total, signed, peak, err = phase._initialize_tuning_state(None)
 
     assert signed == -200_000
     assert err is None
-    assert phase._step_signed_pv_obj is mock_pv
 
 
 def test_initialize_tuning_state_pv_read_error_returns_retry(
@@ -1194,8 +1194,7 @@ def test_initialize_tuning_state_pv_read_error_returns_retry(
     Silently resuming at 0 would corrupt the NSTEPS_COLD return-trip value.
     """
     _setup_phase(phase)
-    phase._step_signed_pv_obj = Mock()
-    phase._step_signed_pv_obj.get.side_effect = RuntimeError("read error")
+    mock_stepper.step_signed_pv_obj.get.side_effect = RuntimeError("read error")
 
     total, signed, peak, err = phase._initialize_tuning_state(None)
     assert signed == 0

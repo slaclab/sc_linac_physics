@@ -1,5 +1,5 @@
 from random import randint, choice
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
@@ -51,6 +51,32 @@ def test_set_hz_per_microstep_writes_calc_pv(stepper):
 
     calc_pv.put.assert_called_once_with(0.005 * 256)
     scale_pv.put.assert_not_called()
+
+
+def test_step_signed_pv_obj_lazy_and_cached(stepper):
+    assert stepper._step_signed_pv_obj is None
+    mock_pv = make_mock_pv()
+    with patch(
+        "sc_linac_physics.utils.sc_linac.stepper.PV", return_value=mock_pv
+    ) as pv_ctor:
+        first = stepper.step_signed_pv_obj
+        second = stepper.step_signed_pv_obj
+    assert first is mock_pv
+    assert second is mock_pv
+    pv_ctor.assert_called_once_with(stepper.step_signed_pv)
+
+
+def test_steps_cold_landing_pv_obj_lazy_and_cached(stepper):
+    assert stepper._steps_cold_landing_pv_obj is None
+    mock_pv = make_mock_pv()
+    with patch(
+        "sc_linac_physics.utils.sc_linac.stepper.PV", return_value=mock_pv
+    ) as pv_ctor:
+        first = stepper.steps_cold_landing_pv_obj
+        second = stepper.steps_cold_landing_pv_obj
+    assert first is mock_pv
+    assert second is mock_pv
+    pv_ctor.assert_called_once_with(stepper.steps_cold_landing_pv)
 
 
 def test_check_abort(stepper):

@@ -89,8 +89,6 @@ class FrequencyTuningPhase(PhaseBase):
         self.cavity = None
         self._stepper_temp_pv_obj: PV | None = None
         self._df_cold_pv_obj: PV | None = None
-        self._nsteps_cold_pv_obj: PV | None = None
-        self._step_signed_pv_obj: PV | None = None
         # Signed: positive means +steps increase cavity frequency (matches SCALE PV convention)
         self._hz_per_microstep: float | None = None
         # Over-temperature breaches the operator acknowledged this run:
@@ -206,11 +204,7 @@ class FrequencyTuningPhase(PhaseBase):
         return None
 
     def _write_nsteps_cold(self, steps: int) -> None:
-        if self._nsteps_cold_pv_obj is None:
-            self._nsteps_cold_pv_obj = PV(
-                self.cavity.stepper_tuner.steps_cold_landing_pv
-            )
-        self._nsteps_cold_pv_obj.put(steps)
+        self.cavity.stepper_tuner.steps_cold_landing_pv_obj.put(steps)
 
     # ------------------------------------------------------------------
     # Step implementations
@@ -540,11 +534,9 @@ class FrequencyTuningPhase(PhaseBase):
         # 0 — that would silently corrupt the NSTEPS_COLD return trip — so we
         # surface a RETRY instead.
         try:
-            if self._step_signed_pv_obj is None:
-                self._step_signed_pv_obj = PV(
-                    self.cavity.stepper_tuner.step_signed_pv
-                )
-            signed_total = round(self._step_signed_pv_obj.get() or 0)
+            signed_total = round(
+                self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
+            )
         except Exception as exc:
             return (
                 total_steps,
