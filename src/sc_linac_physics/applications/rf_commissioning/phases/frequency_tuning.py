@@ -4,8 +4,10 @@ Frequency Tuning Phase
 Tunes the cavity stepper to resonance after initial cool-down.  Cavities are
 expected to start at the COLD tune config.  Before moving the stepper this
 phase:
-  1. Checks that the stepper is idle and chirp detune is valid; warns (but does
-     not fail) if the cavity is not at the COLD tune config.
+  1. Checks that the stepper is idle, then prepares the cavity for tuning —
+     RF off, SSA on, reset interlocks, set up chirp (mirrors the production
+     SetupCavity + Cavity.setup_tuning path); warns (but does not fail) if the
+     cavity is not at the COLD tune config.
   2. Records the cold-landing detune for display; the operator pushes it to
      DF_COLD via the UI after reviewing.
   3. Runs a probe move to measure Hz/microstep; the operator confirms and the UI
@@ -73,7 +75,7 @@ class FrequencyTuningPhase(PhaseBase):
     Frequency Tuning Phase.
 
     Sequence:
-    1. verify_initial_state    – stepper idle, not on limit switch, chirp valid
+    1. verify_initial_state    – stepper idle; prepare cavity (SSA on, reset interlocks, setup_tuning)
     2. record_cold_landing     – record initial detune (operator pushes to DF_COLD via UI)
     3. probe_stepper_direction – measure Hz/step (operator confirms; UI writes to SCALE)
     4. tune_to_resonance       – chunked loop with temperature guard; write NSTEPS_COLD
@@ -218,28 +220,23 @@ class FrequencyTuningPhase(PhaseBase):
                 message="Stepper motor is on a limit switch — manual intervention required",
             )
 
-        if self.cavity.detune_invalid:
+        if not self.cavity.is_online:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
-                message=(
-                    "Chirp detune is invalid — ensure the chirp scan is running "
-                    "and producing a valid CHIRP:DF reading before starting this phase"
-                ),
+                message="Cavity is not online — cannot prepare it for tuning",
             )
 
-        try:
-            temp = self._read_temp()
-            detune = self.cavity.detune_chirp
-        except Exception as exc:
-            return PhaseStepResult(
-                result=PhaseResult.RETRY,
-                message=f"Could not read stepper/detune state: {exc}",
-                retry_delay_seconds=3.0,
-            )
+        prepared = self._prepare_and_read()
+        if isinstance(prepared, PhaseStepResult):
+            return prepared
+        temp, detune = prepared
 
         tune_config_warning = self._tune_config_warning()
 
-        message = f"Stepper idle, chirp valid. Temp {temp:.1f} °C, detune {detune:.0f} Hz"
+        message = (
+            "Cavity prepared for tuning (SSA on, interlocks reset, chirp valid). "
+            f"Temp {temp:.1f} °C, detune {detune:.0f} Hz"
+        )
         if tune_config_warning:
             message += f". WARNING: {tune_config_warning}"
 
@@ -252,6 +249,56 @@ class FrequencyTuningPhase(PhaseBase):
                 "tune_config_warning": tune_config_warning,
             },
         )
+
+    def _prepare_and_read(self) -> "PhaseStepResult | tuple[float, float]":
+        """Read temp, prepare the cavity, read detune.
+
+        Returns (temp_c, detune_hz) on success, or a FAILED/RETRY
+        PhaseStepResult if preparation could not complete.
+        """
+        try:
+            temp = self._read_temp()
+            self._prepare_cavity_for_tuning()
+            return temp, self.cavity.detune_chirp
+        except linac_utils.DetuneError as exc:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    "Could not establish a valid chirp detune "
+                    f"(find_chirp_range exhausted its range): {exc}"
+                ),
+            )
+        except linac_utils.CavityFaultError as exc:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=f"Cavity still faulted after interlock resets: {exc}",
+            )
+        except (
+            linac_utils.StepperAbortError,
+            linac_utils.CavityAbortError,
+        ) as exc:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=f"Aborted during cavity setup: {exc}",
+            )
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not prepare cavity / read state: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+    def _prepare_cavity_for_tuning(self) -> None:
+        """Prepare the cavity for chirp tuning, mirroring the production path.
+
+        RF off first so a latched interlock clears even if RF was requested on,
+        then SSA on, reset interlocks, and set up chirp tuning — the same
+        sequence as SetupCavity.setup + Cavity.setup_tuning.
+        """
+        self.cavity.turn_off()
+        self.cavity.ssa.turn_on()
+        self.cavity.reset_interlocks()
+        self.cavity.setup_tuning()  # use_sela=False default → chirp mode
 
     def _tune_config_warning(self) -> str | None:
         """Return a warning if the cavity is not at the COLD tune config.

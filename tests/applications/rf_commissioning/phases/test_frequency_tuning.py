@@ -20,6 +20,8 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseResult,
 )
 from sc_linac_physics.utils.sc_linac.linac_utils import (
+    CavityFaultError,
+    DetuneError,
     StepperError,
     TUNE_CONFIG_COLD_VALUE,
     TUNE_CONFIG_RESONANCE_VALUE,
@@ -58,6 +60,7 @@ def mock_cavity(mock_stepper):
     cavity.stepper_temp_pv = "ACCL:L1B:0210:STEPTEMP"
     cavity.detune_invalid = False
     cavity.detune_chirp = 5000.0
+    cavity.is_online = True
     # Cavities launch at cold landing (COLD == 1).
     cavity.tune_config_pv_obj.get.return_value = TUNE_CONFIG_COLD_VALUE
     return cavity
@@ -212,6 +215,8 @@ def test_verify_initial_state_motor_already_moving(phase, mock_stepper):
     result = phase._verify_initial_state()
     assert result.result == PhaseResult.FAILED
     assert "moving" in result.message.lower()
+    # Guard fails before any cavity preparation.
+    phase.cavity.setup_tuning.assert_not_called()
 
 
 def test_verify_initial_state_on_limit_switch(phase, mock_stepper):
@@ -220,14 +225,32 @@ def test_verify_initial_state_on_limit_switch(phase, mock_stepper):
     result = phase._verify_initial_state()
     assert result.result == PhaseResult.FAILED
     assert "limit switch" in result.message.lower()
+    phase.cavity.setup_tuning.assert_not_called()
 
 
-def test_verify_initial_state_detune_invalid(phase, mock_cavity):
+def test_verify_initial_state_offline_fails(phase, mock_cavity):
     _setup_phase(phase)
-    mock_cavity.detune_invalid = True
+    mock_cavity.is_online = False
     result = phase._verify_initial_state()
     assert result.result == PhaseResult.FAILED
-    assert "chirp" in result.message.lower()
+    assert "online" in result.message.lower()
+    mock_cavity.setup_tuning.assert_not_called()
+
+
+def test_verify_initial_state_detune_error_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.setup_tuning.side_effect = DetuneError("no valid detune")
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.FAILED
+    assert "detune" in result.message.lower()
+
+
+def test_verify_initial_state_fault_error_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.reset_interlocks.side_effect = CavityFaultError("still faulted")
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.FAILED
+    assert "fault" in result.message.lower()
 
 
 def test_verify_initial_state_read_exception_retries(phase, mock_cavity):
@@ -246,6 +269,11 @@ def test_verify_initial_state_success(phase, mock_cavity):
     assert result.result == PhaseResult.SUCCESS
     assert result.data["initial_temp_c"] == 30.0
     assert "initial_detune_hz" in result.data
+    # The cavity was prepared for tuning (production sequence).
+    mock_cavity.turn_off.assert_called_once()
+    mock_cavity.ssa.turn_on.assert_called_once()
+    mock_cavity.reset_interlocks.assert_called_once()
+    mock_cavity.setup_tuning.assert_called_once()
     # COLD start → no warning
     assert result.data["tune_config_warning"] is None
     assert "WARNING" not in result.message
