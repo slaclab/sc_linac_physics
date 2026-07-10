@@ -54,7 +54,9 @@ class FrequencyTuningLimits:
 
     tolerance_hz: float = 50.0
     probe_steps: int = 50_000
-    move_speed: int = linac_utils.DEFAULT_STEPPER_SPEED
+    # Run commissioning moves at max speed; StepperTuner.move() restores the
+    # speed to DEFAULT_STEPPER_SPEED via restore_defaults() after each move.
+    move_speed: int = linac_utils.MAX_STEPPER_SPEED
     temp_limit_c: float = linac_utils.STEPPER_TEMP_LIMIT
     max_total_steps: int = 10_000_000
     # A healthy probe move (probe_steps microsteps at ~0.005 Hz/microstep)
