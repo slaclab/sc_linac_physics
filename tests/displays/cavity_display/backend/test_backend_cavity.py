@@ -153,3 +153,74 @@ def test_run_through_faults_faulted(cavity):
     cavity._description_pv_obj.put.assert_called_with(
         faulted_fault.short_description
     )
+
+
+def _make_handler(samples):
+    """Build an ArchiveDataHandler-like mock from (value, timestamp) pairs."""
+    handler = MagicMock()
+    handler.values = [value for value, _ in samples]
+    handler.timestamps = [ts for _, ts in samples]
+    return handler
+
+
+class TestProcessFaultHistory:
+    def test_counts_and_events_match_severities(self, cavity):
+        """Statuses pick up the severity in effect at their timestamp."""
+        base = datetime(2025, 6, 2, 12, 0, 0)
+        statuses = _make_handler(
+            [
+                ("SSA", base + timedelta(seconds=10)),
+                (str(cavity.number), base + timedelta(seconds=20)),
+                ("QCH", base + timedelta(seconds=30)),
+            ]
+        )
+        severities = _make_handler(
+            [
+                (2, base + timedelta(seconds=10)),  # alarm during SSA
+                (0, base + timedelta(seconds=20)),
+                (1, base + timedelta(seconds=30)),  # warning during QCH
+            ]
+        )
+
+        counts, events = cavity.process_fault_history(statuses, severities)
+
+        assert counts["SSA"].alarm_count == 1
+        assert counts["QCH"].warning_count == 1
+        # All three transitions recorded, including the OK one
+        assert len(events) == 3
+        assert events[0].severity == 2
+        assert events[1].severity == 0  # the OK clear
+        assert events[2].severity == 1
+        assert events[0].timestamp < events[1].timestamp < events[2].timestamp
+
+    def test_severity_matching_equivalent_to_per_sample_scan(self, cavity):
+        """The merge pass must match severity_of_fault's per-sample scan."""
+        from sc_linac_physics.displays.cavity_display.utils.utils import (
+            severity_of_fault,
+        )
+
+        base = datetime(2025, 6, 2, 12, 0, 0)
+        # offset timestamps so the matching isn't trivial
+        severities = _make_handler(
+            [(i % 4, base + timedelta(seconds=5 * i)) for i in range(40)]
+        )
+        statuses = _make_handler(
+            [("SSA", base + timedelta(seconds=3 + 7 * i)) for i in range(25)]
+        )
+
+        _, events = cavity.process_fault_history(statuses, severities)
+
+        for event in events:
+            ts = cavity._round_to_10ms(event.timestamp)
+            assert event.severity == severity_of_fault(ts, severities)
+
+    def test_status_before_any_severity_counts_invalid(self, cavity):
+        """A status sample with no severity yet has severity None."""
+        base = datetime(2025, 6, 2, 12, 0, 0)
+        statuses = _make_handler([("SSA", base)])
+        severities = _make_handler([(2, base + timedelta(seconds=10))])
+
+        counts, events = cavity.process_fault_history(statuses, severities)
+
+        assert counts["SSA"].invalid_count == 1
+        assert events[0].severity is None

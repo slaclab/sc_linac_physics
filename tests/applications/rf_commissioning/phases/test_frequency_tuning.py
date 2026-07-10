@@ -21,6 +21,8 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
 )
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     StepperError,
+    TUNE_CONFIG_COLD_VALUE,
+    TUNE_CONFIG_RESONANCE_VALUE,
 )
 
 # ---------------------------------------------------------------------------
@@ -56,6 +58,8 @@ def mock_cavity(mock_stepper):
     cavity.stepper_temp_pv = "ACCL:L1B:0210:STEPTEMP"
     cavity.detune_invalid = False
     cavity.detune_chirp = 5000.0
+    # Cavities launch at cold landing (COLD == 1).
+    cavity.tune_config_pv_obj.get.return_value = TUNE_CONFIG_COLD_VALUE
     return cavity
 
 
@@ -80,8 +84,6 @@ def fast_limits():
         probe_steps=10,
         temp_limit_c=70.0,
         max_total_steps=10_000,
-        cool_down_retries=2,
-        cool_down_interval=0.0,
     )
 
 
@@ -91,7 +93,24 @@ def phase(context, fast_limits):
     return p
 
 
-def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0):
+def _seed_cold_landing(phase, df_cold_hz=5000.0):
+    """Record a cold-landing checkpoint and make DF_COLD read back matching it,
+    so the DF_COLD gate in _tune_to_resonance is satisfied."""
+    phase.context.record.phase_history.append(
+        PhaseCheckpoint(
+            phase=phase.phase_type,
+            timestamp=datetime.now(),
+            operator="test_op",
+            step_name="record_cold_landing",
+            success=True,
+            measurements={"df_cold_hz": df_cold_hz},
+        )
+    )
+    phase._df_cold_pv_obj = Mock()
+    phase._df_cold_pv_obj.get.return_value = df_cold_hz
+
+
+def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0, seed_cold=True):
     """Call validate_prerequisites and inject pre-built PV mocks."""
     phase.validate_prerequisites()
     phase._stepper_temp_pv_obj = Mock()
@@ -101,6 +120,9 @@ def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0):
     phase._step_signed_pv_obj = Mock()
     phase._step_signed_pv_obj.get.return_value = initial_signed_steps
     phase._hz_per_microstep = 2.0
+    # Satisfy the DF_COLD gate for tune_to_resonance tests by default.
+    if seed_cold:
+        _seed_cold_landing(phase)
     return phase
 
 
@@ -217,12 +239,28 @@ def test_verify_initial_state_read_exception_retries(phase, mock_cavity):
     assert result.result == PhaseResult.RETRY
 
 
-def test_verify_initial_state_success(phase):
+def test_verify_initial_state_success(phase, mock_cavity):
     _setup_phase(phase, temp_c=30.0)
+    mock_cavity.tune_config_pv_obj.get.return_value = TUNE_CONFIG_COLD_VALUE
     result = phase._verify_initial_state()
     assert result.result == PhaseResult.SUCCESS
     assert result.data["initial_temp_c"] == 30.0
     assert "initial_detune_hz" in result.data
+    # COLD start → no warning
+    assert result.data["tune_config_warning"] is None
+    assert "WARNING" not in result.message
+
+
+def test_verify_initial_state_warns_when_not_cold(phase, mock_cavity):
+    _setup_phase(phase, temp_c=30.0)
+    mock_cavity.tune_config_pv_obj.get.return_value = (
+        TUNE_CONFIG_RESONANCE_VALUE
+    )
+    result = phase._verify_initial_state()
+    # Not fatal — still SUCCESS, but flagged.
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["tune_config_warning"] is not None
+    assert "WARNING" in result.message
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +284,7 @@ def test_record_cold_landing_success(phase, mock_cavity):
     assert result.result == PhaseResult.SUCCESS
     assert "hz_per_microstep" not in result.data
     assert "cold_landing_steps" not in result.data
-    assert result.data["initial_detune_hz"] == 8000.0
+    assert result.data["df_cold_hz"] == 8000.0
     assert "initial_timestamp" in result.data
     # DF_COLD is written by the operator via the UI button, not auto-written here.
     phase._df_cold_pv_obj.put.assert_not_called()
@@ -334,12 +372,15 @@ def test_probe_stepper_direction_positive_decreases_frequency(
 def test_probe_stepper_direction_delta_too_small(
     phase, mock_cavity, mock_stepper
 ):
+    # A change below min_probe_delta_hz (default 100 Hz) fails — a 50 Hz probe
+    # response is treated as a degraded/uncoupled stepper, not a valid measurement.
+    assert phase.limits.min_probe_delta_hz == 100.0
     _setup_phase(phase)
     mock_cavity.detune_chirp = 1000.0
 
     def after_move(steps, *args, **kwargs):
         if steps > 0:
-            mock_cavity.detune_chirp = 1001.0  # barely any change
+            mock_cavity.detune_chirp = 1050.0  # only 50 Hz — below the floor
 
     mock_stepper.move.side_effect = after_move
 
@@ -386,23 +427,23 @@ def test_apply_hz_per_step_not_measured(phase):
     assert "probe_stepper_direction" in result.message
 
 
-def test_apply_hz_per_step_writes_scale_pv(phase, mock_stepper):
+def test_apply_hz_per_step_writes_scale_calc_pv(phase, mock_stepper):
     _setup_phase(phase)
     phase._hz_per_microstep = 42.5
     result = phase._apply_hz_per_step()
     assert result.result == PhaseResult.SUCCESS
-    mock_stepper.hz_per_microstep_pv_obj.put.assert_called_once_with(42.5)
+    # SCALE is derived (read-only); the phase must write SCALE_CALC.B, not SCALE.
+    mock_stepper.set_hz_per_microstep.assert_called_once_with(42.5)
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
 
 
 def test_apply_hz_per_step_pv_error_retries(phase, mock_stepper):
     _setup_phase(phase)
     phase._hz_per_microstep = 10.0
-    mock_stepper.hz_per_microstep_pv_obj.put.side_effect = RuntimeError(
-        "timeout"
-    )
+    mock_stepper.set_hz_per_microstep.side_effect = RuntimeError("timeout")
     result = phase._apply_hz_per_step()
     assert result.result == PhaseResult.RETRY
-    assert "SCALE PV" in result.message
+    assert "SCALE_CALC.B" in result.message
 
 
 # ---------------------------------------------------------------------------
@@ -443,6 +484,58 @@ def test_tune_to_resonance_converges_one_iteration(
     assert result.result == PhaseResult.SUCCESS
     assert result.data["total_steps"] > 0
     mock_stepper.move.assert_called_once()
+
+
+def test_tune_to_resonance_fails_when_df_cold_not_recorded(phase, mock_cavity):
+    # No record_cold_landing checkpoint at all.
+    _setup_phase(phase, seed_cold=False)
+    mock_cavity.detune_chirp = 5000.0
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+    assert "record_cold_landing" in result.message
+
+
+def test_tune_to_resonance_fails_when_df_cold_mismatched(phase, mock_cavity):
+    # Cold landing was recorded, but DF_COLD PV was never pushed to match it.
+    _setup_phase(phase, seed_cold=False)
+    _seed_cold_landing(phase, df_cold_hz=5000.0)
+    phase._df_cold_pv_obj.get.return_value = 0.0  # operator did not push
+    mock_cavity.detune_chirp = 5000.0
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+    assert "DF_COLD not recorded" in result.message
+
+
+def test_tune_to_resonance_proceeds_when_df_cold_matches(
+    phase, mock_cavity, mock_stepper
+):
+    _setup_phase(phase, seed_cold=False)
+    _seed_cold_landing(phase, df_cold_hz=5000.0)
+    mock_cavity.detune_chirp = 5000.0
+
+    def after_move(*args, **kwargs):
+        mock_cavity.detune_chirp = 100.0
+
+    mock_stepper.move.side_effect = after_move
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.SUCCESS
+
+
+def test_tune_to_resonance_sets_tune_config_resonance(
+    phase, mock_cavity, mock_stepper
+):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 5000.0
+
+    def after_move(*args, **kwargs):
+        mock_cavity.detune_chirp = 100.0
+
+    mock_stepper.move.side_effect = after_move
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.SUCCESS
+    mock_cavity.tune_config_pv_obj.put.assert_called_once_with(
+        TUNE_CONFIG_RESONANCE_VALUE
+    )
 
 
 def test_tune_to_resonance_moves_positive_for_positive_detune(
@@ -488,17 +581,31 @@ def test_tune_to_resonance_max_steps_exceeded(phase, mock_cavity):
     assert "max step limit" in result.message.lower()
 
 
-def test_tune_to_resonance_temperature_over_limit_then_cools(
-    phase, mock_cavity, mock_stepper
-):
+def test_tune_to_resonance_over_temp_fails_without_ack(phase, mock_cavity):
+    # No automatic cool-down: an over-temp reading fails the step and flags
+    # that an operator acknowledgement is required.
     _setup_phase(phase)
     phase.limits.temp_limit_c = 70.0
+    phase._stepper_temp_pv_obj.get.return_value = 85.0
+    mock_cavity.detune_chirp = 5000.0
 
-    # Reads: (1) initial peak_temp, (2) loop-iter-1 first check = over limit,
-    # (3) cool-down retry = OK, (4) loop-iter-2 check after move resolves detune.
-    temp_values = iter([25.0, 80.0, 60.0, 25.0])
-    phase._stepper_temp_pv_obj.get.side_effect = lambda: next(temp_values)
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+    assert result.data["requires_over_temp_ack"] is True
+    assert result.data["stepper_temp_c"] == 85.0
+    assert result.data["temp_limit_c"] == 70.0
+    assert "85" in result.message
 
+
+def test_tune_to_resonance_over_temp_proceeds_with_ack(
+    phase, mock_cavity, mock_stepper, context
+):
+    # With an acknowledgement ceiling >= the reading, tuning proceeds and the
+    # acknowledging operator is recorded.
+    _setup_phase(phase)
+    phase.limits.temp_limit_c = 70.0
+    context.parameters["over_temp_ack_c"] = 90.0
+    phase._stepper_temp_pv_obj.get.return_value = 85.0
     mock_cavity.detune_chirp = 1000.0
 
     def after_move(*args, **kwargs):
@@ -508,20 +615,33 @@ def test_tune_to_resonance_temperature_over_limit_then_cools(
 
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.SUCCESS
+    assert result.data["over_temp_acknowledged_c"] == 85.0
+    assert result.data["over_temp_acknowledged_by"] == context.operator
 
 
-def test_tune_to_resonance_temperature_never_cools(phase, mock_cavity):
+def test_tune_to_resonance_hotter_breach_requires_new_ack(
+    phase, mock_cavity, mock_stepper, context
+):
+    # Ack ceiling authorizes up to 90 °C, but a later reading climbs above it
+    # → fail again for a fresh acknowledgement.
     _setup_phase(phase)
     phase.limits.temp_limit_c = 70.0
-    phase.limits.cool_down_retries = 2
+    context.parameters["over_temp_ack_c"] = 90.0
 
-    # Always over limit
-    phase._stepper_temp_pv_obj.get.return_value = 85.0
-    mock_cavity.detune_chirp = 5000.0
+    # (1) init read OK, (2) iter-1 = 85 (acked, proceeds), (3) iter-2 = 95 (> ceiling → fail)
+    temp_values = iter([25.0, 85.0, 95.0])
+    phase._stepper_temp_pv_obj.get.side_effect = lambda: next(temp_values)
+    mock_cavity.detune_chirp = 5000.0  # never converges, keeps looping
+
+    def after_move(*args, **kwargs):
+        pass  # detune unchanged → second iteration runs
+
+    mock_stepper.move.side_effect = after_move
 
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
-    assert "temp" in result.message.lower()
+    assert result.data["requires_over_temp_ack"] is True
+    assert result.data["stepper_temp_c"] == 95.0
 
 
 def test_tune_to_resonance_abort_requested(phase, mock_cavity, context):
@@ -685,7 +805,7 @@ def _make_checkpoint(phase_type, step_name, measurements):
 
 
 def test_finalize_phase_populates_frequency_tuning_data(phase, record):
-    _setup_phase(phase)
+    _setup_phase(phase, seed_cold=False)
     phase._history_start = 0
 
     record.phase_history.extend(
@@ -694,7 +814,7 @@ def test_finalize_phase_populates_frequency_tuning_data(phase, record):
                 CommissioningPhase.FREQUENCY_TUNING,
                 "record_cold_landing",
                 {
-                    "initial_detune_hz": 8000.0,
+                    "df_cold_hz": 8000.0,
                     "initial_timestamp": datetime.now().isoformat(),
                 },
             ),
@@ -724,7 +844,7 @@ def test_finalize_phase_populates_frequency_tuning_data(phase, record):
 
     ft = record.frequency_tuning
     assert ft is not None
-    assert ft.initial_detune_hz == 8000.0
+    assert ft.df_cold_hz == 8000.0
     assert ft.steps_to_resonance == 4000
     assert ft.positive_step_increases_frequency is True
     assert ft.hz_per_microstep == 2.0
@@ -734,14 +854,14 @@ def test_finalize_phase_populates_frequency_tuning_data(phase, record):
 
 
 def test_finalize_phase_no_checkpoints_creates_defaults(phase, record):
-    _setup_phase(phase)
+    _setup_phase(phase, seed_cold=False)
     phase._history_start = 0
 
     phase.finalize_phase()
 
     ft = record.frequency_tuning
     assert ft is not None
-    assert ft.initial_detune_hz is None
+    assert ft.df_cold_hz is None
     assert ft.steps_to_resonance is None
     assert ft.positive_step_increases_frequency is None
 

@@ -18,6 +18,7 @@ from sc_linac_physics.applications.auto_setup.frontend.style import (
     CARD_BG,
     ACCENT_TEXT,
     LINAC_COLORS,
+    abort_button_stylesheet,
     button_stylesheet,
     card_stylesheet,
     chip_stylesheet,
@@ -133,7 +134,7 @@ class GUILinac:
         self.shutdown_button = QPushButton("Shut Down")
         self.shutdown_button.clicked.connect(self.trigger_shutdown)
         self.abort_button = QPushButton("Abort")
-        self.abort_button.setStyleSheet("color: #e08090;")
+        self.abort_button.setStyleSheet(abort_button_stylesheet())
         self.abort_button.clicked.connect(self.trigger_abort)
         self.lock_linac_button = QPushButton("\U0001f512 Lock")
         self.lock_linac_button.setCheckable(True)

@@ -14,6 +14,7 @@ from caproto.server import (
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     ESTIMATED_MICROSTEPS_PER_HZ,
     ESTIMATED_MICROSTEPS_PER_HZ_HL,
+    MICROSTEPS_PER_STEP,
     PIEZO_HZ_PER_VOLT,
 )
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
@@ -109,6 +110,20 @@ class StepperPVGroup(PVGroup):
         )
         await instance.write(uniform(0.8 * nominal, 1.2 * nominal))
 
+    # SCALE is derived on real IOCs: SCALE = SCALE_CALC.B / 256. Model that
+    # dependency so SCALE is only updated by writing the (writable) calc field,
+    # not by writing SCALE directly.
+    hz_per_step_calc = pvproperty(
+        value=0.0,
+        name="SCALE_CALC.B",
+        dtype=ChannelType.FLOAT,
+    )
+
+    @hz_per_step_calc.putter
+    async def hz_per_step_calc(self, instance, value):
+        await self.hz_per_microstep.write(value / MICROSTEPS_PER_STEP)
+        return value
+
     def __init__(self, prefix, cavity_group, piezo_group):
         super().__init__(prefix)
         self.cavity_group: CavityPVGroup = cavity_group
@@ -116,22 +131,28 @@ class StepperPVGroup(PVGroup):
 
     async def move(self, move_sign_des: int):
         await self.motor_moving.write("Moving")
+        # Snapshot speed and step_des once — restore_defaults() on the hardware
+        # thread can overwrite these PVs while this coroutine is suspended at
+        # each `await sleep(1)`, causing the loop to run with the wrong speed
+        # and accumulate excess detune updates that trip _auto_tune's tolerance.
+        speed_val = int(self.speed.value)
+        step_des_val = int(self.step_des.value)
         steps = 0
-        step_change = move_sign_des * self.speed.value
+        step_change = move_sign_des * speed_val
+        freq_move_sign = (
+            move_sign_des if self.cavity_group.is_hl else -move_sign_des
+        )
         starting_detune = self.cavity_group.detune.value
 
-        while (
-            self.step_des.value - steps >= self.speed.value
-            and self.abort.value != 1
-        ):
-            await self.step_tot.write(self.step_tot.value + self.speed.value)
+        while step_des_val - steps >= speed_val and self.abort.value != 1:
+            await self.step_tot.write(self.step_tot.value + speed_val)
             await self.step_signed.write(self.step_signed.value + step_change)
 
-            steps += self.speed.value
-            delta = (
-                move_sign_des * self.speed.value * self.hz_per_microstep.value
+            steps += speed_val
+            delta = speed_val * self.hz_per_microstep.value
+            new_detune = round(
+                self.cavity_group.detune.value + freq_move_sign * delta
             )
-            new_detune = round(self.cavity_group.detune.value + delta)
 
             await self.cavity_group.detune.write(new_detune)
             await self.cavity_group.detune_rfs.write(new_detune)
@@ -143,13 +164,15 @@ class StepperPVGroup(PVGroup):
             await self.abort.write(0)
             return
 
-        remainder = self.step_des.value - steps
+        remainder = step_des_val - steps
         await self.step_tot.write(self.step_tot.value + remainder)
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = move_sign_des * remainder * self.hz_per_microstep.value
-        new_detune = round(self.cavity_group.detune.value + delta)
+        delta = remainder * self.hz_per_microstep.value
+        new_detune = round(
+            self.cavity_group.detune.value + freq_move_sign * delta
+        )
 
         enable_int = _enum_to_int(
             self.piezo_group.enable_stat.value,
@@ -161,6 +184,10 @@ class StepperPVGroup(PVGroup):
         )
         if enable_int == 1 and feedback_int == 1:
             freq_change = new_detune - starting_detune
+            # HL: issue_move_command inverts steps (tuner moves opposite direction),
+            # so the SELA feedback voltage response is also opposite to freq_change.
+            if self.cavity_group.is_hl:
+                freq_change = -freq_change
             voltage_change = freq_change * (1 / PIEZO_HZ_PER_VOLT)
             await self.piezo_group.voltage.write(
                 self.piezo_group.voltage.value + voltage_change

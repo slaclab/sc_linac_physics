@@ -2,6 +2,67 @@
 
 <!-- version list -->
 
+## v9.29.0 (2026-07-02)
+
+### Bug Fixes
+
+- **auto-setup**: Off-thread EPICS dispatch, PV error handling, and simulation correctness
+  ([#271](https://github.com/slaclab/sc_linac_physics/pull/271),
+  [`7cd710f`](https://github.com/slaclab/sc_linac_physics/commit/7cd710f636d2c9a4a707e303209222af83fdd44e))
+
+- **sim**: Run cavity setup/shutdown in-process, fix segfault, HL piezo centering, and thread safety
+  ([#271](https://github.com/slaclab/sc_linac_physics/pull/271),
+  [`7cd710f`](https://github.com/slaclab/sc_linac_physics/commit/7cd710f636d2c9a4a707e303209222af83fdd44e))
+
+### Features
+
+- **auto-setup**: Off-thread EPICS dispatch, PV error handling, consistent abort/checkbox styling
+  ([#271](https://github.com/slaclab/sc_linac_physics/pull/271),
+  [`7cd710f`](https://github.com/slaclab/sc_linac_physics/commit/7cd710f636d2c9a4a707e303209222af83fdd44e))
+
+
+## v9.28.0 (2026-07-01)
+
+### Features
+
+- **cavity-display**: Keep timestamped fault events from archiver fetches
+  ([#267](https://github.com/slaclab/sc_linac_physics/pull/267),
+  [`06a066f`](https://github.com/slaclab/sc_linac_physics/commit/06a066f930192937cd4a98d0ce14cd61980f0cf8))
+
+- **heatmap**: Add time slider for scrubbing through fetched data
+  ([#267](https://github.com/slaclab/sc_linac_physics/pull/267),
+  [`06a066f`](https://github.com/slaclab/sc_linac_physics/commit/06a066f930192937cd4a98d0ce14cd61980f0cf8))
+
+
+## v9.27.0 (2026-07-01)
+
+### Bug Fixes
+
+- Address review comments on FaultEvent
+  ([#266](https://github.com/slaclab/sc_linac_physics/pull/266),
+  [`25d1fcc`](https://github.com/slaclab/sc_linac_physics/commit/25d1fcc9e2e5c1fd4eb7595fc06901bfebbea1f9))
+
+### Documentation
+
+- Fix cavity count and color gradient description
+  ([#261](https://github.com/slaclab/sc_linac_physics/pull/261),
+  [`8569dce`](https://github.com/slaclab/sc_linac_physics/commit/8569dcebc5b1ebc044187ca2261b257122befa60))
+
+- **heatmap**: Add README and code comments for fault heatmap
+  ([#261](https://github.com/slaclab/sc_linac_physics/pull/261),
+  [`8569dce`](https://github.com/slaclab/sc_linac_physics/commit/8569dcebc5b1ebc044187ca2261b257122befa60))
+
+- **heatmap**: Move heatmap docs to docs/displays/
+  ([#261](https://github.com/slaclab/sc_linac_physics/pull/261),
+  [`8569dce`](https://github.com/slaclab/sc_linac_physics/commit/8569dcebc5b1ebc044187ca2261b257122befa60))
+
+### Features
+
+- **cavity-display**: Keep timestamped fault events from archiver fetches
+  ([#266](https://github.com/slaclab/sc_linac_physics/pull/266),
+  [`25d1fcc`](https://github.com/slaclab/sc_linac_physics/commit/25d1fcc9e2e5c1fd4eb7595fc06901bfebbea1f9))
+
+
 ## v9.26.0 (2026-06-30)
 
 ### Bug Fixes

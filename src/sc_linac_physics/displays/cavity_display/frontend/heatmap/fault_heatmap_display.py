@@ -1,9 +1,11 @@
 import math
+import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QKeySequence
+from PyQt5.QtGui import QColor, QPainter
 from PyQt5.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
@@ -19,9 +21,13 @@ from PyQt5.QtWidgets import (
     QShortcut,
     QSizePolicy,
     QComboBox,
+    QSlider,
 )
 from pydm import Display
 
+from sc_linac_physics.displays.cavity_display.backend.fault import (
+    SeverityLevel,
+)
 from sc_linac_physics.displays.cavity_display.frontend.heatmap.color_bar_widget import (
     ColorBarWidget,
 )
@@ -111,6 +117,15 @@ class FaultHeatmapDisplay(Display):
         self._results: List[CavityFaultResult] = []
         self._cavity_filter_active = False
 
+        # Time slider state
+        self._slider_active = False
+        self._fetch_start: Optional[datetime] = None
+        self._fetch_end: Optional[datetime] = None
+        # Full-range status text, restored when the slider is disabled
+        self._full_range_status: str = ""
+        # Fallback when the zoom box holds text that doesn't parse
+        self._last_window_duration = timedelta(hours=1)
+
         # Log scale by default, most cavities cluster near zero, a few spike high
         self._color_mapper = ColorMapper(vmin=0, vmax=1, log_scale=True)
         self._severity_filter = SeverityFilter()
@@ -127,6 +142,17 @@ class FaultHeatmapDisplay(Display):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self._auto_fit)
         self._auto_fit_in_progress = False
+
+        # debounce so dragging doesn't recolor on every step
+        self._slider_debounce = QTimer(self)
+        self._slider_debounce.setSingleShot(True)
+        self._slider_debounce.setInterval(50)
+        self._slider_debounce.timeout.connect(self._apply_slider_position)
+
+        # playback advances the window one width per tick
+        self._play_timer = QTimer(self)
+        self._play_timer.setInterval(500)
+        self._play_timer.timeout.connect(self._play_step)
 
         self._setup_ui()
         self._set_quick_range(hours=1)
@@ -150,6 +176,7 @@ class FaultHeatmapDisplay(Display):
         # Top controls and per section summary
         main_layout.addLayout(self._build_controls_row())
         main_layout.addLayout(self._build_summary_row())
+        main_layout.addLayout(self._build_time_slider_row())
 
         # Scrollable heatmap grid with color bar on the right
         heatmap_row = QHBoxLayout()
@@ -344,6 +371,453 @@ class FaultHeatmapDisplay(Display):
                 self._section_labels[section_name] = label
         return row
 
+    def _build_time_slider_row(self) -> QHBoxLayout:
+        """Build the time slider controls for scrubbing through fetched data.
+
+        Layout: [Enable checkbox] [Window: combo] [density bar] [slider] [time label]
+        The density bar shows where faults are concentrated across the
+        fetched time range so you can see hot spots at a glance.
+        """
+        row = QHBoxLayout()
+        row.setSpacing(6)
+
+        slider_group = QGroupBox("Time Slider")
+        slider_layout = QHBoxLayout()
+        slider_layout.setContentsMargins(4, 2, 4, 2)
+        slider_layout.setSpacing(4)
+        slider_group.setLayout(slider_layout)
+
+        self._slider_enable_cb = QCheckBox("Enable")
+        self._slider_enable_cb.setChecked(False)
+        self._slider_enable_cb.setToolTip(
+            "Enable to zoom into and scrub through the fetched time range"
+        )
+        self._slider_enable_cb.toggled.connect(self._on_slider_toggled)
+        slider_layout.addWidget(self._slider_enable_cb)
+
+        slider_layout.addWidget(QLabel("Zoom:"))
+        self._window_combo = QComboBox()
+        # editable so you can type a custom window, not just the presets
+        self._window_combo.setEditable(True)
+        self._window_combo.setInsertPolicy(QComboBox.NoInsert)
+        self._window_combo.addItems(self.ZOOM_PRESETS)
+        self._window_combo.setCurrentText("1h")
+        self._window_combo.setFixedHeight(28)
+        self._window_combo.setMinimumWidth(70)
+        self._window_combo.setToolTip(
+            "Zoom level — pick a preset or type a custom window size "
+            "like 45m, 90m, or 1h30m"
+        )
+        # activated = dropdown pick, editingFinished = typed value
+        self._window_combo.activated.connect(self._on_window_size_changed)
+        self._window_combo.lineEdit().editingFinished.connect(
+            self._on_window_size_changed
+        )
+        slider_layout.addWidget(self._window_combo)
+
+        # play/pause steps the window through the range
+        self._play_btn = QPushButton("▶")
+        self._play_btn.setCheckable(True)
+        self._play_btn.setFixedSize(28, 28)
+        self._play_btn.setEnabled(False)
+        self._play_btn.setToolTip(
+            "Play — step the window through the time range automatically"
+        )
+        self._play_btn.toggled.connect(self._on_play_toggled)
+        slider_layout.addWidget(self._play_btn)
+
+        # density bar shows where faults cluster across the range
+        self._density_bar = FaultDensityBar()
+        self._density_bar.setFixedHeight(16)
+        self._density_bar.setMinimumWidth(300)
+        self._density_bar.setToolTip(
+            "Fault density across the fetched time range — "
+            "click to jump the window there"
+        )
+        self._density_bar.time_clicked.connect(self._on_density_bar_clicked)
+        slider_layout.addWidget(self._density_bar, stretch=1)
+
+        self._time_slider = QSlider(Qt.Horizontal)
+        self._time_slider.setRange(0, 1000)
+        self._time_slider.setValue(0)
+        self._time_slider.setEnabled(False)
+        self._time_slider.setTickPosition(QSlider.TicksBelow)
+        self._time_slider.setTickInterval(100)
+        self._time_slider.setMinimumWidth(300)
+        self._time_slider.valueChanged.connect(self._on_slider_value_changed)
+        slider_layout.addWidget(self._time_slider, stretch=1)
+
+        self._slider_time_label = QLabel("Full Range")
+        self._slider_time_label.setMinimumWidth(220)
+        self._slider_time_label.setAlignment(Qt.AlignCenter)
+        self._slider_time_label.setStyleSheet(
+            "QLabel {"
+            "  font-weight: bold;"
+            "  color: rgb(200, 200, 200);"
+            "  background-color: rgb(50, 50, 50);"
+            "  border: 1px solid rgb(80, 80, 80);"
+            "  border-radius: 3px;"
+            "  padding: 2px 6px;"
+            "}"
+        )
+        slider_layout.addWidget(self._slider_time_label)
+
+        row.addWidget(slider_group)
+        return row
+
+    # quick-pick presets; custom values can be typed too
+    ZOOM_PRESETS = ["15m", "30m", "1h", "2h", "4h"]
+
+    @staticmethod
+    def _parse_window_text(text: str) -> Optional[timedelta]:
+        """Parse "45m", "1.5h", "1h30m", or a bare number (minutes).
+
+        Returns None if it doesn't parse or is under a minute.
+        """
+        text = text.strip().lower().replace(" ", "")
+        match = re.fullmatch(
+            r"(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m?)?", text
+        )
+        if not match or not any(match.groups()):
+            return None
+        hours = float(match.group(1)) if match.group(1) else 0.0
+        minutes = float(match.group(2)) if match.group(2) else 0.0
+        duration = timedelta(hours=hours, minutes=minutes)
+        if duration < timedelta(minutes=1):
+            return None
+        return duration
+
+    def _get_window_duration(self) -> timedelta:
+        """Window size from the zoom box; falls back to the last valid one."""
+        duration = self._parse_window_text(self._window_combo.currentText())
+        if duration is None:
+            return self._last_window_duration
+        self._last_window_duration = duration
+        return duration
+
+    def _update_zoom_options(self) -> None:
+        """Show only presets ≤ half the fetch range (need room to scrub)."""
+        if not self._fetch_start or not self._fetch_end:
+            return
+
+        total = self._fetch_end - self._fetch_start
+        half = total / 2
+
+        previous = self._window_combo.currentText()
+        self._window_combo.blockSignals(True)
+        self._window_combo.clear()
+
+        for label in self.ZOOM_PRESETS:
+            duration = self._parse_window_text(label)
+            if duration is not None and duration <= half:
+                self._window_combo.addItem(label)
+
+        # keep the previous selection if it still fits the half-range rule
+        previous_duration = self._parse_window_text(previous)
+        idx = self._window_combo.findText(previous)
+        if idx >= 0:
+            self._window_combo.setCurrentIndex(idx)
+        elif previous_duration is not None and previous_duration <= half:
+            self._window_combo.setCurrentText(previous)
+        elif self._window_combo.count() > 0:
+            self._window_combo.setCurrentIndex(self._window_combo.count() - 1)
+        else:
+            # nothing fits, so use half the range as a custom window
+            minutes = max(1, int(half.total_seconds() // 60))
+            self._window_combo.setCurrentText(f"{minutes}m")
+
+        self._window_combo.blockSignals(False)
+
+    def _format_slider_time(
+        self, window_start: datetime, window_end: datetime
+    ) -> str:
+        """Format the slider label, including date when range spans > 24h."""
+        if not self._fetch_start or not self._fetch_end:
+            return "Full Range"
+        total_hours = (
+            self._fetch_end - self._fetch_start
+        ).total_seconds() / 3600
+        if total_hours > 24:
+            return (
+                f"{window_start.strftime('%m/%d %H:%M')} — "
+                f"{window_end.strftime('%m/%d %H:%M')}"
+            )
+        return (
+            f"{window_start.strftime('%H:%M')} — "
+            f"{window_end.strftime('%H:%M')}"
+        )
+
+    def _on_slider_toggled(self, enabled: bool) -> None:
+        """Enable or disable the time slider."""
+        self._slider_active = enabled
+        self._time_slider.setEnabled(enabled)
+        self._window_combo.setEnabled(enabled)
+        self._play_btn.setEnabled(enabled)
+        if not enabled and self._play_btn.isChecked():
+            self._play_btn.setChecked(False)
+
+        if not enabled:
+            self._slider_time_label.setText("Full Range")
+            self._density_bar.clear_window_position()
+            if self._full_range_status:
+                self._status_label.setText(self._full_range_status)
+            if self._results:
+                self._apply_results_to_heatmap(self._results)
+        else:
+            if self._results and self._fetch_start and self._fetch_end:
+                self._apply_slider_position()
+            else:
+                self._slider_time_label.setText("No data loaded")
+
+    def _on_window_size_changed(self) -> None:
+        """Re-apply the slider when the window size changes."""
+        if self._slider_active and self._results:
+            self._apply_slider_position()
+
+    def _get_slider_geometry(self) -> Optional[Tuple[float, float, float]]:
+        """Total, window, and slidable seconds for the fetched range.
+
+        slidable is how far the window can travel (total minus window).
+        Returns None if no range is loaded or the window is the whole
+        range, since then there's nothing to slide.
+        """
+        if not self._fetch_start or not self._fetch_end:
+            return None
+        total = (self._fetch_end - self._fetch_start).total_seconds()
+        window = self._get_window_duration().total_seconds()
+        slidable = total - window
+        if slidable <= 0:
+            return None
+        return total, window, slidable
+
+    def _on_density_bar_clicked(self, frac: float) -> None:
+        """Center the window on the clicked point of the density bar."""
+        if not self._slider_active or not self._results:
+            return
+        geometry = self._get_slider_geometry()
+        if geometry is None:
+            return
+        total, window, slidable = geometry
+
+        offset = frac * total - window / 2
+        value = round(offset / slidable * 1000)
+        self._time_slider.setValue(max(0, min(1000, value)))
+
+    def _get_play_step(self) -> Optional[int]:
+        """One window width in slider units, for playback stepping."""
+        geometry = self._get_slider_geometry()
+        if geometry is None:
+            return None
+        _, window, slidable = geometry
+        return max(1, round(window / slidable * 1000))
+
+    def _on_play_toggled(self, playing: bool) -> None:
+        """Start or stop stepping the window through the range."""
+        if playing:
+            if (
+                not self._results
+                or not self._fetch_start
+                or not self._fetch_end
+            ):
+                self._play_btn.setChecked(False)
+                return
+            # Restart from the beginning if already at the end
+            if self._time_slider.value() >= self._time_slider.maximum():
+                self._time_slider.setValue(0)
+            self._play_btn.setText("⏸")
+            self._play_timer.start()
+        else:
+            self._play_timer.stop()
+            self._play_btn.setText("▶")
+
+    def _play_step(self) -> None:
+        """Advance the window one width; stop at the end of the range."""
+        step = self._get_play_step()
+        if step is None:
+            self._play_btn.setChecked(False)
+            return
+        new_value = self._time_slider.value() + step
+        if new_value >= self._time_slider.maximum():
+            self._time_slider.setValue(self._time_slider.maximum())
+            self._play_btn.setChecked(False)
+            return
+        self._time_slider.setValue(new_value)
+
+    def _on_slider_value_changed(self, value: int) -> None:
+        """Restart the 50ms debounce timer on each drag step."""
+        if not self._slider_active:
+            return
+        self._slider_debounce.start()
+
+    def _get_slider_window(self) -> Optional[Tuple[datetime, datetime]]:
+        """Calculate the time window for the current slider position.
+
+        Returns None if preconditions aren't met (no data, no range).
+        """
+        if not self._fetch_start or not self._fetch_end:
+            return None
+        if not self._results:
+            return None
+
+        geometry = self._get_slider_geometry()
+        if geometry is None:
+            # window covers the whole range, nothing to slide
+            return self._fetch_start, self._fetch_end
+        _, window_secs, slidable = geometry
+
+        value = self._time_slider.value()
+        offset_secs = (value / 1000.0) * slidable
+        window_start = self._fetch_start + timedelta(seconds=offset_secs)
+        window_end = window_start + timedelta(seconds=window_secs)
+        return window_start, window_end
+
+    def _apply_slider_position(self) -> None:
+        """Recolor the heatmap for the time window at the current slider pos.
+
+        Called by the debounce timer after the user stops dragging (or
+        pauses for 50ms).
+        """
+        window = self._get_slider_window()
+        if window is None:
+            return
+        window_start, window_end = window
+
+        # Groove clicks and PgUp/PgDn move exactly one window width
+        step = self._get_play_step()
+        if step is not None:
+            self._time_slider.setPageStep(step)
+
+        self._slider_time_label.setText(
+            self._format_slider_time(window_start, window_end)
+        )
+
+        # Update the density bar overlay to highlight the current window
+        if self._fetch_start and self._fetch_end:
+            total = (self._fetch_end - self._fetch_start).total_seconds()
+            if total > 0:
+                start_frac = (
+                    window_start - self._fetch_start
+                ).total_seconds() / total
+                end_frac = (
+                    window_end - self._fetch_start
+                ).total_seconds() / total
+                self._density_bar.set_window_position(start_frac, end_frac)
+
+        self._apply_windowed_results(window_start, window_end)
+
+    def _apply_windowed_results(
+        self, window_start: datetime, window_end: datetime
+    ) -> None:
+        """Re-aggregate fault events for a window and recolor.
+
+        Builds temporary windowed CavityFaultResults and runs them
+        through the normal coloring pipeline. Pins the color scale to the
+        full-range max so windows stay comparable as you scrub.
+        """
+        # filtered so the scale tracks the active severity/TLC filters
+        full_range_max = max(
+            (
+                self._get_filtered_count(r)
+                for r in self._results
+                if not r.is_error
+            ),
+            default=0,
+        )
+
+        windowed_results: List[CavityFaultResult] = []
+        for result in self._results:
+            if result.is_error:
+                windowed_results.append(result)
+                continue
+
+            windowed_counts = result.get_windowed_counts(
+                window_start, window_end
+            )
+            if windowed_counts is not None:
+                windowed_result = CavityFaultResult(
+                    cm_name=result.cm_name,
+                    cavity_num=result.cavity_num,
+                    fault_counts_by_tlc=windowed_counts,
+                    fault_events=result.fault_events,
+                )
+                windowed_results.append(windowed_result)
+            else:
+                windowed_results.append(result)
+
+        self._apply_results_to_heatmap(
+            windowed_results, vmax_override=full_range_max
+        )
+        self._update_window_status(windowed_results, window_start, window_end)
+
+    def _update_window_status(
+        self,
+        windowed_results: List[CavityFaultResult],
+        window_start: datetime,
+        window_end: datetime,
+    ) -> None:
+        """Show the current window's totals in the status bar.
+
+        The full-range status is kept in _full_range_status and restored
+        when the slider is disabled.
+        """
+        valid = [r for r in windowed_results if not r.is_error]
+        if not valid:
+            return
+
+        # One filtered-count pass shared by the total and the max
+        counts = [(self._get_filtered_count(r), r) for r in valid]
+        total = sum(count for count, _ in counts)
+        time_label = self._format_slider_time(window_start, window_end)
+
+        if total == 0:
+            self._status_label.setText(f"Window {time_label}: no faults")
+            return
+
+        max_count, max_result = max(counts, key=lambda pair: pair[0])
+        self._status_label.setText(
+            f"Window {time_label}: {total} faults | "
+            f"Max: {format_cm_display_name(max_result.cm_name)} "
+            f"Cav {max_result.cavity_num} ({max_count})"
+        )
+
+    def _update_density_bar(self) -> None:
+        """Rebuild the fault density bar from current results.
+
+        Called after a fetch completes and whenever the severity/TLC
+        filters change, so the bar shows the same population of faults
+        as the heatmap.
+        """
+        if not self._results or not self._fetch_start or not self._fetch_end:
+            self._density_bar.set_data([], self._fetch_start, self._fetch_end)
+            return
+
+        include_by_severity = {
+            SeverityLevel.WARNING: self._severity_filter.include_warnings,
+            SeverityLevel.ALARM: self._severity_filter.include_alarms,
+        }
+        tlc = self._get_selected_tlc()
+
+        all_timestamps: List[datetime] = []
+        for result in self._results:
+            if not result.fault_events:
+                continue
+            for event in result.fault_events:
+                # OK transitions are state markers
+                if event.severity == SeverityLevel.NO_ALARM:
+                    continue
+                if tlc is not None and event.status != tlc:
+                    continue
+                # Anything that isn't warning/alarm counts as invalid
+                if not include_by_severity.get(
+                    event.severity, self._severity_filter.include_invalid
+                ):
+                    continue
+                all_timestamps.append(event.timestamp)
+
+        self._density_bar.set_data(
+            all_timestamps, self._fetch_start, self._fetch_end
+        )
+
     def _build_heatmap_row(self, sections: list) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setSpacing(4)
@@ -530,7 +1004,11 @@ class FaultHeatmapDisplay(Display):
             include_invalid=self._cb_invalid.isChecked(),
         )
         if self._results:
-            self._apply_results_to_heatmap(self._results)
+            self._update_density_bar()
+            if self._slider_active:
+                self._apply_slider_position()
+            else:
+                self._apply_results_to_heatmap(self._results)
 
     # TLC fault type filter
 
@@ -544,7 +1022,11 @@ class FaultHeatmapDisplay(Display):
     def _on_tlc_filter_changed(self) -> None:
         """Re-apply heatmap coloring when TLC selection changes."""
         if self._results:
-            self._apply_results_to_heatmap(self._results)
+            self._update_density_bar()
+            if self._slider_active:
+                self._apply_slider_position()
+            else:
+                self._apply_results_to_heatmap(self._results)
 
     def _populate_tlc_combo(self) -> None:
         """Rebuild TLC dropdown from current results, preserving selection.
@@ -608,6 +1090,10 @@ class FaultHeatmapDisplay(Display):
             return
 
         self._cavity_filter_active = cavity_filter is not None
+
+        # Store the fetch time range for the slider
+        self._fetch_start = start
+        self._fetch_end = end
 
         if cavity_filter is None:
             self._results.clear()
@@ -673,15 +1159,23 @@ class FaultHeatmapDisplay(Display):
     def _on_fetch_finished(self, results: List[CavityFaultResult]) -> None:
         self._merge_results(results)
         self._populate_tlc_combo()
-        self._apply_results_to_heatmap(self._results)
+        self._update_zoom_options()
+        self._update_density_bar()
 
         valid = [r for r in self._results if not r.is_error]
         errors = sum(1 for r in self._results if r.is_error)
         aborted = self._fetcher.is_abort_requested if self._fetcher else False
-
-        self._status_label.setText(
-            self._build_status_text(valid, errors, aborted)
+        self._full_range_status = self._build_status_text(
+            valid, errors, aborted
         )
+        self._status_label.setText(self._full_range_status)
+
+        # after the status text, so an active slider overwrites it
+        if self._slider_active and self._fetch_start and self._fetch_end:
+            self._apply_slider_position()
+        else:
+            self._apply_results_to_heatmap(self._results)
+
         self._progress_bar.setFormat("Done")
         self._cavity_filter_active = False
         self._set_idle_state()
@@ -762,12 +1256,16 @@ class FaultHeatmapDisplay(Display):
         )
 
     def _apply_results_to_heatmap(
-        self, results: List[CavityFaultResult]
+        self,
+        results: List[CavityFaultResult],
+        vmax_override: Optional[int] = None,
     ) -> None:
-        """Recolor all cavity widgets based on current filter settings.
+        """Color the heatmap from the given results.
 
-        Called after a fetch completes and whenever severity/TLC filters
-        change. No re-fetch needed for filter-only changes."""
+        vmax_override pins the top of the color scale instead of deriving
+        it from the results. The time slider passes the full-range max so
+        colors stay comparable as the user scrubs between windows.
+        """
         valid_results = [r for r in results if not r.is_error]
         if not valid_results:
             for section_name, label in self._section_labels.items():
@@ -779,10 +1277,11 @@ class FaultHeatmapDisplay(Display):
             for r in valid_results
         }
 
-        # Normalize color range to the current max so the full gradient
-        # is always used regardless of absolute fault counts
-        counts = list(filtered_counts.values())
-        vmax = max(counts) if counts else 1
+        if vmax_override is not None:
+            vmax = vmax_override
+        else:
+            counts = list(filtered_counts.values())
+            vmax = max(counts) if counts else 1
         if vmax == 0:
             vmax = 1
 
@@ -818,12 +1317,20 @@ class FaultHeatmapDisplay(Display):
                 highlight=highlight,
             )
 
-        self._update_section_summaries()
+        self._update_section_summaries(results)
 
-    def _update_section_summaries(self) -> None:
-        """Aggregate filtered fault counts per linac section."""
+    def _update_section_summaries(
+        self, results: Optional[List[CavityFaultResult]] = None
+    ) -> None:
+        """Aggregate filtered fault counts per linac section.
+
+        Uses the passed-in results so the summary reflects windowed
+        data when the slider is active, not just the full-range totals.
+        """
+        if results is None:
+            results = self._results
         section_totals: Dict[str, int] = {s: 0 for s in self._section_labels}
-        for result in self._results:
+        for result in results:
             if result.is_error:
                 continue
             section = self._cm_to_section.get(result.cm_name)
@@ -947,6 +1454,153 @@ class FaultHeatmapDisplay(Display):
                 self._fetcher.terminate()
                 self._fetcher.wait(2000)
         super().closeEvent(event)
+
+
+class FaultDensityBar(QWidget):
+    """Miniature bar chart showing where faults cluster in the time range.
+
+    Divides the fetched time range into equal-width buckets and draws a
+    bar for each one proportional to the number of fault events in that
+    bucket. Hot spots appear as taller/brighter bars, and clicking one
+    emits time_clicked so the display can jump the window there.
+
+    Sits above the slider in the Time Slider group box.
+    """
+
+    # Click position as a fraction of the bar width (0.0-1.0)
+    time_clicked = pyqtSignal(float)
+
+    NUM_BUCKETS = 100
+    BAR_COLOR = QColor(255, 140, 0)  # orange
+    BAR_PEAK_COLOR = QColor(255, 60, 60)  # red for the densest buckets
+    BG_COLOR = QColor(40, 40, 40)
+    WINDOW_COLOR = QColor(100, 180, 255, 60)  # translucent blue overlay
+    WINDOW_BORDER = QColor(100, 180, 255, 200)  # bright blue edge lines
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._buckets: List[int] = []
+        self._max_count = 0
+        # Window overlay position as fractions of the bar width (0.0–1.0)
+        self._window_start_frac: Optional[float] = None
+        self._window_end_frac: Optional[float] = None
+        self.setMinimumHeight(12)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and self.width() > 0:
+            frac = event.x() / self.width()
+            self.time_clicked.emit(max(0.0, min(1.0, frac)))
+
+    def set_data(
+        self,
+        timestamps: List[datetime],
+        start: Optional[datetime],
+        end: Optional[datetime],
+    ) -> None:
+        """Bucket the timestamps and trigger a repaint."""
+        if not timestamps or not start or not end:
+            self._buckets = []
+            self._max_count = 0
+            self.update()
+            return
+
+        total_secs = (end - start).total_seconds()
+        if total_secs <= 0:
+            self._buckets = []
+            self._max_count = 0
+            self.update()
+            return
+
+        buckets = [0] * self.NUM_BUCKETS
+        for ts in timestamps:
+            # the archiver's pre-range sample would land in a bad bucket
+            if ts < start or ts > end:
+                continue
+            offset = (ts - start).total_seconds()
+            idx = int((offset / total_secs) * self.NUM_BUCKETS)
+            idx = max(0, min(idx, self.NUM_BUCKETS - 1))
+            buckets[idx] += 1
+
+        self._buckets = buckets
+        self._max_count = max(buckets) if buckets else 0
+        self.update()
+
+    def set_window_position(
+        self,
+        start_frac: float,
+        end_frac: float,
+    ) -> None:
+        """Overlay the current window on the bar (fractions 0.0-1.0)."""
+        self._window_start_frac = max(0.0, min(1.0, start_frac))
+        self._window_end_frac = max(0.0, min(1.0, end_frac))
+        self.update()
+
+    def clear_window_position(self) -> None:
+        """Remove the window overlay."""
+        self._window_start_frac = None
+        self._window_end_frac = None
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, False)
+
+        w = self.width()
+        h = self.height()
+
+        # Background
+        painter.fillRect(0, 0, w, h, self.BG_COLOR)
+
+        if not self._buckets or self._max_count == 0:
+            painter.end()
+            return
+
+        n = len(self._buckets)
+        bar_width = w / n
+
+        for i, count in enumerate(self._buckets):
+            if count == 0:
+                continue
+            fraction = count / self._max_count
+            bar_height = max(1, int(fraction * h))
+
+            # Interpolate color from orange to red based on density
+            r = int(
+                self.BAR_COLOR.red()
+                + (self.BAR_PEAK_COLOR.red() - self.BAR_COLOR.red()) * fraction
+            )
+            g = int(
+                self.BAR_COLOR.green()
+                + (self.BAR_PEAK_COLOR.green() - self.BAR_COLOR.green())
+                * fraction
+            )
+            b = int(
+                self.BAR_COLOR.blue()
+                + (self.BAR_PEAK_COLOR.blue() - self.BAR_COLOR.blue())
+                * fraction
+            )
+            color = QColor(r, g, b)
+
+            x = int(i * bar_width)
+            bw = max(1, int(bar_width))
+            painter.fillRect(x, h - bar_height, bw, bar_height, color)
+
+        # Draw translucent overlay showing the current slider window
+        if (
+            self._window_start_frac is not None
+            and self._window_end_frac is not None
+        ):
+            x0 = int(self._window_start_frac * w)
+            x1 = int(self._window_end_frac * w)
+            overlay_w = max(1, x1 - x0)
+            painter.fillRect(x0, 0, overlay_w, h, self.WINDOW_COLOR)
+            # Left and right edge lines for crisp borders
+            painter.fillRect(x0, 0, 1, h, self.WINDOW_BORDER)
+            painter.fillRect(x0 + overlay_w - 1, 0, 1, h, self.WINDOW_BORDER)
+
+        painter.end()
 
 
 if __name__ == "__main__":
