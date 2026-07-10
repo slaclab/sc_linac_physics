@@ -153,11 +153,6 @@ class FrequencyTuningPhase(PhaseBase):
     def _read_temp(self) -> float:
         return self.cavity.stepper_temp_pv_obj.get()
 
-    def _read_df_cold(self) -> float:
-        # DF_COLD is written by the operator via the UI after reviewing the
-        # cold-landing frequency; the backend reads it back to gate tuning.
-        return self.cavity.df_cold_pv_obj.get()
-
     _DF_COLD_MATCH_TOLERANCE_HZ = 1.0
 
     def _check_df_cold_recorded(self) -> "PhaseStepResult | None":
@@ -178,8 +173,10 @@ class FrequencyTuningPhase(PhaseBase):
                     "record_cold_landing before tuning"
                 ),
             )
+        # DF_COLD is written by the operator via the UI after reviewing the
+        # cold-landing frequency; the backend reads it back to gate tuning.
         try:
-            df_cold = self._read_df_cold()
+            df_cold = self.cavity.df_cold_pv_obj.get()
         except Exception as exc:
             return PhaseStepResult(
                 result=PhaseResult.RETRY,
@@ -196,9 +193,6 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
         return None
-
-    def _write_nsteps_cold(self, steps: int) -> None:
-        self.cavity.stepper_tuner.steps_cold_landing_pv_obj.put(steps)
 
     # ------------------------------------------------------------------
     # Step implementations
@@ -569,7 +563,9 @@ class FrequencyTuningPhase(PhaseBase):
         # NSTEPS_COLD stores the return-trip step count (from resonance to cold
         # landing), which is the negation of the steps we just took.
         try:
-            self._write_nsteps_cold(-signed_total)
+            self.cavity.stepper_tuner.steps_cold_landing_pv_obj.put(
+                -signed_total
+            )
         except Exception as exc:
             return PhaseStepResult(
                 result=PhaseResult.RETRY,
