@@ -159,6 +159,10 @@ class Cavity(linac_utils.SCLinacObject):
         self.cav_waveform_pv: str = self.pv_addr("CAV:AWF")
 
         self.stepper_temp_pv: str = self.pv_addr("STEPTEMP")
+        self._stepper_temp_pv_obj: Optional[PV] = None
+
+        self.df_cold_pv: str = self.pv_addr("DF_COLD")
+        self._df_cold_pv_obj: Optional[PV] = None
 
         self.detune_best_pv: str = self.pv_addr("DFBEST")
         self._detune_best_pv_obj: Optional[PV] = None
@@ -741,6 +745,18 @@ class Cavity(linac_utils.SCLinacObject):
         if not self._detune_chirp_pv_obj:
             self._detune_chirp_pv_obj = PV(self.detune_chirp_pv)
         return self._detune_chirp_pv_obj
+
+    @property
+    def stepper_temp_pv_obj(self) -> PV:
+        if not self._stepper_temp_pv_obj:
+            self._stepper_temp_pv_obj = PV(self.stepper_temp_pv)
+        return self._stepper_temp_pv_obj
+
+    @property
+    def df_cold_pv_obj(self) -> PV:
+        if not self._df_cold_pv_obj:
+            self._df_cold_pv_obj = PV(self.df_cold_pv)
+        return self._df_cold_pv_obj
 
     @property
     def detune_best(self):

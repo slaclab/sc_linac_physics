@@ -87,8 +87,6 @@ class FrequencyTuningPhase(PhaseBase):
         self.limits = limits or FrequencyTuningLimits()
         self._history_start = len(context.record.phase_history)
         self.cavity = None
-        self._stepper_temp_pv_obj: PV | None = None
-        self._df_cold_pv_obj: PV | None = None
         # Signed: positive means +steps increase cavity frequency (matches SCALE PV convention)
         self._hz_per_microstep: float | None = None
         # Over-temperature breaches the operator acknowledged this run:
@@ -153,16 +151,12 @@ class FrequencyTuningPhase(PhaseBase):
     # ------------------------------------------------------------------
 
     def _read_temp(self) -> float:
-        if self._stepper_temp_pv_obj is None:
-            self._stepper_temp_pv_obj = PV(self.cavity.stepper_temp_pv)
-        return self._stepper_temp_pv_obj.get()
+        return self.cavity.stepper_temp_pv_obj.get()
 
     def _read_df_cold(self) -> float:
         # DF_COLD is written by the operator via the UI after reviewing the
         # cold-landing frequency; the backend reads it back to gate tuning.
-        if self._df_cold_pv_obj is None:
-            self._df_cold_pv_obj = PV(self.cavity.pv_addr("DF_COLD"))
-        return self._df_cold_pv_obj.get()
+        return self.cavity.df_cold_pv_obj.get()
 
     _DF_COLD_MATCH_TOLERANCE_HZ = 1.0
 

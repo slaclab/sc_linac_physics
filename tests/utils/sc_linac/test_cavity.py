@@ -101,6 +101,32 @@ def test_microsteps_per_hz(cavity):
     assert cavity.microsteps_per_hz == 1 / cavity.stepper_tuner.hz_per_microstep
 
 
+def test_stepper_temp_pv_obj_lazy_and_cached(cavity):
+    assert cavity._stepper_temp_pv_obj is None
+    mock_pv = make_mock_pv()
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+    ) as pv_ctor:
+        first = cavity.stepper_temp_pv_obj
+        second = cavity.stepper_temp_pv_obj
+    assert first is mock_pv
+    assert second is mock_pv
+    pv_ctor.assert_called_once_with(cavity.stepper_temp_pv)
+
+
+def test_df_cold_pv_obj_lazy_and_cached(cavity):
+    assert cavity._df_cold_pv_obj is None
+    mock_pv = make_mock_pv()
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+    ) as pv_ctor:
+        first = cavity.df_cold_pv_obj
+        second = cavity.df_cold_pv_obj
+    assert first is mock_pv
+    assert second is mock_pv
+    pv_ctor.assert_called_once_with(cavity.df_cold_pv)
+
+
 def test_start_characterization(cavity):
     cavity._characterization_start_pv_obj = make_mock_pv()
     cavity.start_characterization()

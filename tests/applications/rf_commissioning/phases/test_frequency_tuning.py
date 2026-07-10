@@ -106,17 +106,15 @@ def _seed_cold_landing(phase, df_cold_hz=5000.0):
             measurements={"df_cold_hz": df_cold_hz},
         )
     )
-    phase._df_cold_pv_obj = Mock()
-    phase._df_cold_pv_obj.get.return_value = df_cold_hz
+    phase.cavity.df_cold_pv_obj.get.return_value = df_cold_hz
 
 
 def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0, seed_cold=True):
     """Call validate_prerequisites and inject pre-built PV mocks."""
     phase.validate_prerequisites()
-    phase._stepper_temp_pv_obj = Mock()
-    phase._stepper_temp_pv_obj.get.return_value = temp_c
-    phase._df_cold_pv_obj = Mock()
-    # NSTEPS_COLD / signed-step PVs now come from the stepper accessors.
+    # STEPTEMP / DF_COLD / signed-step PVs now come from the cavity+stepper
+    # accessors (mock_cavity is a Mock, so these are auto-mocks).
+    phase.cavity.stepper_temp_pv_obj.get.return_value = temp_c
     stepper = phase.cavity.stepper_tuner
     stepper.step_signed_pv_obj.get.return_value = initial_signed_steps
     phase._hz_per_microstep = 2.0
@@ -234,7 +232,9 @@ def test_verify_initial_state_detune_invalid(phase, mock_cavity):
 
 def test_verify_initial_state_read_exception_retries(phase, mock_cavity):
     _setup_phase(phase, temp_c=25.0)
-    phase._stepper_temp_pv_obj.get.side_effect = RuntimeError("PV timeout")
+    phase.cavity.stepper_temp_pv_obj.get.side_effect = RuntimeError(
+        "PV timeout"
+    )
     result = phase._verify_initial_state()
     assert result.result == PhaseResult.RETRY
 
@@ -287,7 +287,7 @@ def test_record_cold_landing_success(phase, mock_cavity):
     assert result.data["df_cold_hz"] == 8000.0
     assert "initial_timestamp" in result.data
     # DF_COLD is written by the operator via the UI button, not auto-written here.
-    phase._df_cold_pv_obj.put.assert_not_called()
+    phase.cavity.df_cold_pv_obj.put.assert_not_called()
 
 
 def test_record_cold_landing_detune_read_error_retries(phase, mock_cavity):
@@ -499,7 +499,7 @@ def test_tune_to_resonance_fails_when_df_cold_mismatched(phase, mock_cavity):
     # Cold landing was recorded, but DF_COLD PV was never pushed to match it.
     _setup_phase(phase, seed_cold=False)
     _seed_cold_landing(phase, df_cold_hz=5000.0)
-    phase._df_cold_pv_obj.get.return_value = 0.0  # operator did not push
+    phase.cavity.df_cold_pv_obj.get.return_value = 0.0  # operator did not push
     mock_cavity.detune_chirp = 5000.0
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
@@ -586,7 +586,7 @@ def test_tune_to_resonance_over_temp_fails_without_ack(phase, mock_cavity):
     # that an operator acknowledgement is required.
     _setup_phase(phase)
     phase.limits.temp_limit_c = 70.0
-    phase._stepper_temp_pv_obj.get.return_value = 85.0
+    phase.cavity.stepper_temp_pv_obj.get.return_value = 85.0
     mock_cavity.detune_chirp = 5000.0
 
     result = phase._tune_to_resonance()
@@ -605,7 +605,7 @@ def test_tune_to_resonance_over_temp_proceeds_with_ack(
     _setup_phase(phase)
     phase.limits.temp_limit_c = 70.0
     context.parameters["over_temp_ack_c"] = 90.0
-    phase._stepper_temp_pv_obj.get.return_value = 85.0
+    phase.cavity.stepper_temp_pv_obj.get.return_value = 85.0
     mock_cavity.detune_chirp = 1000.0
 
     def after_move(*args, **kwargs):
@@ -630,7 +630,7 @@ def test_tune_to_resonance_hotter_breach_requires_new_ack(
 
     # (1) init read OK, (2) iter-1 = 85 (acked, proceeds), (3) iter-2 = 95 (> ceiling → fail)
     temp_values = iter([25.0, 85.0, 95.0])
-    phase._stepper_temp_pv_obj.get.side_effect = lambda: next(temp_values)
+    phase.cavity.stepper_temp_pv_obj.get.side_effect = lambda: next(temp_values)
     mock_cavity.detune_chirp = 5000.0  # never converges, keeps looping
 
     def after_move(*args, **kwargs):
@@ -665,7 +665,9 @@ def test_tune_to_resonance_detune_read_error_retries(phase, mock_cavity):
     # Simulate PV read failure on temp: phase should return RETRY.
     _setup_phase(phase)
     # Initial read (before loop) silently swallows errors, loop read will RETRY.
-    phase._stepper_temp_pv_obj.get.side_effect = RuntimeError("PV timeout")
+    phase.cavity.stepper_temp_pv_obj.get.side_effect = RuntimeError(
+        "PV timeout"
+    )
     mock_cavity.detune_chirp = 5000.0
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.RETRY
@@ -698,7 +700,7 @@ def test_tune_to_resonance_tracks_peak_temp(phase, mock_cavity, mock_stepper):
     # Reads: (1) initial peak_temp, then one per loop iteration (3 iterations
     # before detune hits tolerance), plus one final read after last move.
     temp_values = iter([30.0, 55.0, 40.0, 25.0])
-    phase._stepper_temp_pv_obj.get.side_effect = lambda: next(temp_values)
+    phase.cavity.stepper_temp_pv_obj.get.side_effect = lambda: next(temp_values)
 
     detunes = [2000.0, 1000.0, 100.0]
     move_count = [0]
