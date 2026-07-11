@@ -278,6 +278,12 @@ class StepperTempError(StepperError):
     pass
 
 
+class FSCANError(Exception):
+    """Exception thrown when a rack FSCAN scan fails or times out."""
+
+    pass
+
+
 class SSACalibrationError(Exception):
     """
     Exception thrown during cavity SSA calibration

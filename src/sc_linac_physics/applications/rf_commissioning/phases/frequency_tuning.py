@@ -24,7 +24,6 @@ phase:
   6. Writes a FrequencyTuningData record.
 """
 
-import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -39,12 +38,7 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseResult,
     PhaseStepResult,
 )
-from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac import linac_utils
-
-_FSCAN_STAT_SCAN_DONE = 5
-_FSCAN_STAT_SCAN_ABORTED = 6
-_FSCAN_STAT_FREQ_RESTORE_FAIL = 7
 
 
 @dataclass
@@ -673,11 +667,10 @@ class FrequencyTuningPhase(PhaseBase):
     # ------------------------------------------------------------------
 
     def _measure_pi_modes(self) -> PhaseStepResult:
-        """Run the full rack FSCAN sequence for this cavity and read back results.
+        """Run a single-cavity FSCAN via Rack.run_fscan and read back results.
 
-        Checks rack exclusivity, selects only this cavity, configures and
-        triggers the scan, waits for completion, pushes mode results, and
-        reads back the 8π/9 and 7π/9 frequencies.
+        Checks rack exclusivity (commissioning policy), delegates the scan
+        sequence to the rack, then reads back the 8π/9 and 7π/9 frequencies.
         """
         if self.context.dry_run:
             return PhaseStepResult(
@@ -696,39 +689,34 @@ class FrequencyTuningPhase(PhaseBase):
         err = self._check_rack_exclusivity(rack)
         if err is not None:
             return err
-        err = self._select_cavity_for_fscan(rack)
-        if err is not None:
-            return err
-        err = self._configure_fscan_params(rack)
-        if err is not None:
-            return err
-        err = self._trigger_fscan(rack)
-        if err is not None:
-            return err
 
-        status_cb = self.context.parameters.get("status_update_callback")
-        err = self._wait_for_fscan(rack, status_cb)
-        if err is not None:
-            return err
-
-        err = self._push_mode_results()
-        if err is not None:
-            return err
-        return self._read_mode_frequencies()
-
-    def _put_pv(
-        self, address: str, value, label: str
-    ) -> "PhaseStepResult | None":
-        """Write ``value`` to ``address``; return a RETRY result on failure."""
         try:
-            PV(address).put(value)
+            rack.run_fscan(
+                [self.cavity],
+                freq_start=self.limits.pi_scan_freq_start,
+                freq_stop=self.limits.pi_scan_freq_stop,
+                rms_thresh=self.limits.pi_scan_rms_thresh,
+                mode_overlap=self.limits.pi_scan_mode_overlap,
+                poll_interval=self.limits.pi_scan_poll_interval,
+                timeout_seconds=self.limits.pi_scan_timeout_seconds,
+                status_callback=self.context.parameters.get(
+                    "status_update_callback"
+                ),
+                should_abort=self.context.is_abort_requested,
+            )
+        except (linac_utils.FSCANError, linac_utils.CavityAbortError) as exc:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=f"FSCAN failed: {exc}",
+            )
         except Exception as exc:
             return PhaseStepResult(
                 result=PhaseResult.RETRY,
-                message=f"Could not write {label}: {exc}",
+                message=f"Transient error during FSCAN: {exc}",
                 retry_delay_seconds=3.0,
             )
-        return None
+
+        return self._read_mode_frequencies()
 
     def _check_rack_exclusivity(self, rack) -> "PhaseStepResult | None":
         rack_check = self.context.parameters.get("rack_check_callback")
@@ -752,102 +740,26 @@ class FrequencyTuningPhase(PhaseBase):
             )
         return None
 
-    def _select_cavity_for_fscan(self, rack) -> "PhaseStepResult | None":
-        for cav_num, cav in rack.cavities.items():
-            selected = 1 if cav_num == self.cavity.number else 0
-            err = self._put_pv(
-                cav.pv_addr("FSCAN:SEL"),
-                selected,
-                f"FSCAN:SEL for cavity {cav_num}",
-            )
-            if err is not None:
-                return err
-        return None
-
-    def _configure_fscan_params(self, rack) -> "PhaseStepResult | None":
-        for suffix, value in (
-            ("FSCAN:FREQ_START", self.limits.pi_scan_freq_start),
-            ("FSCAN:FREQ_STOP", self.limits.pi_scan_freq_stop),
-            ("FSCAN:RMS_THRESH", self.limits.pi_scan_rms_thresh),
-            ("FSCAN:MODE_OVERLAP", self.limits.pi_scan_mode_overlap),
-        ):
-            err = self._put_pv(rack.pv_prefix + suffix, value, suffix)
-            if err is not None:
-                return err
-        return None
-
-    def _trigger_fscan(self, rack) -> "PhaseStepResult | None":
-        return self._put_pv(rack.pv_prefix + "FSCAN:START", 1, "FSCAN:START")
-
-    _FSCAN_STATE_NAMES = {
-        0: "Await request",
-        1: "No cav selected",
-        2: "Bad range",
-        3: "Search in progress",
-        4: "Shift mode",
-        5: "Scan done",
-        6: "Scan aborted",
-        7: "Freq restore fail",
-    }
-
-    def _wait_for_fscan(self, rack, status_cb) -> "PhaseStepResult | None":
-        stat_pv = PV(rack.pv_prefix + "FSCAN:STAT")
-        scan_start = time.monotonic()
-        deadline = scan_start + self.limits.pi_scan_timeout_seconds
-        while time.monotonic() < deadline:
-            if self.context.is_abort_requested():
-                return PhaseStepResult(
-                    result=PhaseResult.FAILED,
-                    message="Abort requested while waiting for FSCAN",
-                )
-            try:
-                stat = int(stat_pv.get())
-            except Exception as exc:
-                return PhaseStepResult(
-                    result=PhaseResult.RETRY,
-                    message=f"Could not read FSCAN:STAT: {exc}",
-                    retry_delay_seconds=self.limits.pi_scan_poll_interval,
-                )
-            if stat == _FSCAN_STAT_SCAN_DONE:
-                return None
-            if stat in (
-                _FSCAN_STAT_SCAN_ABORTED,
-                _FSCAN_STAT_FREQ_RESTORE_FAIL,
-            ):
-                name = self._FSCAN_STATE_NAMES.get(stat, str(stat))
-                return PhaseStepResult(
-                    result=PhaseResult.FAILED,
-                    message=f"FSCAN failed: {name} (state {stat})",
-                )
-            if status_cb:
-                elapsed = time.monotonic() - scan_start
-                name = self._FSCAN_STATE_NAMES.get(stat, str(stat))
-                status_cb(f"FSCAN: {name} ({elapsed:.0f}s elapsed)")
-            time.sleep(self.limits.pi_scan_poll_interval)
-        return PhaseStepResult(
-            result=PhaseResult.FAILED,
-            message=f"FSCAN did not complete within {self.limits.pi_scan_timeout_seconds:.0f} s",
-        )
-
-    def _push_mode_results(self) -> "PhaseStepResult | None":
-        for proc_suffix in ("FSCAN:PUSH_8PI9.PROC", "FSCAN:PUSH_7PI9.PROC"):
-            err = self._put_pv(self.cavity.pv_addr(proc_suffix), 1, proc_suffix)
-            if err is not None:
-                return err
-        return None
-
     def _read_mode_frequencies(self) -> PhaseStepResult:
         results: dict = {}
-        for key, suffix in (
-            ("mode_8pi_9_hz", "FSCAN:8PI9MODE"),
-            ("mode_7pi_9_hz", "FSCAN:7PI9MODE"),
+        for key, pv_obj, label in (
+            (
+                "mode_8pi_9_hz",
+                self.cavity.fscan_8pi9_mode_pv_obj,
+                "FSCAN:8PI9MODE",
+            ),
+            (
+                "mode_7pi_9_hz",
+                self.cavity.fscan_7pi9_mode_pv_obj,
+                "FSCAN:7PI9MODE",
+            ),
         ):
             try:
-                results[key] = float(PV(self.cavity.pv_addr(suffix)).get())
+                results[key] = float(pv_obj.get())
             except Exception as exc:
                 return PhaseStepResult(
                     result=PhaseResult.RETRY,
-                    message=f"Could not read {suffix}: {exc}",
+                    message=f"Could not read {label}: {exc}",
                     retry_delay_seconds=3.0,
                 )
         results["timestamp"] = datetime.now().isoformat()

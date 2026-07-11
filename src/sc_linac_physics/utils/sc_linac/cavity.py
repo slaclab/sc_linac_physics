@@ -164,6 +164,18 @@ class Cavity(linac_utils.SCLinacObject):
         self.df_cold_pv: str = self.pv_addr("DF_COLD")
         self._df_cold_pv_obj: Optional[PV] = None
 
+        # FSCAN (π-mode scan) cavity-level PVs.
+        self.fscan_sel_pv: str = self.pv_addr("FSCAN:SEL")
+        self._fscan_sel_pv_obj: Optional[PV] = None
+        self.fscan_8pi9_mode_pv: str = self.pv_addr("FSCAN:8PI9MODE")
+        self._fscan_8pi9_mode_pv_obj: Optional[PV] = None
+        self.fscan_7pi9_mode_pv: str = self.pv_addr("FSCAN:7PI9MODE")
+        self._fscan_7pi9_mode_pv_obj: Optional[PV] = None
+        self.fscan_push_8pi9_pv: str = self.pv_addr("FSCAN:PUSH_8PI9.PROC")
+        self._fscan_push_8pi9_pv_obj: Optional[PV] = None
+        self.fscan_push_7pi9_pv: str = self.pv_addr("FSCAN:PUSH_7PI9.PROC")
+        self._fscan_push_7pi9_pv_obj: Optional[PV] = None
+
         self.detune_best_pv: str = self.pv_addr("DFBEST")
         self._detune_best_pv_obj: Optional[PV] = None
 
@@ -757,6 +769,36 @@ class Cavity(linac_utils.SCLinacObject):
         if not self._df_cold_pv_obj:
             self._df_cold_pv_obj = PV(self.df_cold_pv)
         return self._df_cold_pv_obj
+
+    @property
+    def fscan_sel_pv_obj(self) -> PV:
+        if not self._fscan_sel_pv_obj:
+            self._fscan_sel_pv_obj = PV(self.fscan_sel_pv)
+        return self._fscan_sel_pv_obj
+
+    @property
+    def fscan_8pi9_mode_pv_obj(self) -> PV:
+        if not self._fscan_8pi9_mode_pv_obj:
+            self._fscan_8pi9_mode_pv_obj = PV(self.fscan_8pi9_mode_pv)
+        return self._fscan_8pi9_mode_pv_obj
+
+    @property
+    def fscan_7pi9_mode_pv_obj(self) -> PV:
+        if not self._fscan_7pi9_mode_pv_obj:
+            self._fscan_7pi9_mode_pv_obj = PV(self.fscan_7pi9_mode_pv)
+        return self._fscan_7pi9_mode_pv_obj
+
+    @property
+    def fscan_push_8pi9_pv_obj(self) -> PV:
+        if not self._fscan_push_8pi9_pv_obj:
+            self._fscan_push_8pi9_pv_obj = PV(self.fscan_push_8pi9_pv)
+        return self._fscan_push_8pi9_pv_obj
+
+    @property
+    def fscan_push_7pi9_pv_obj(self) -> PV:
+        if not self._fscan_push_7pi9_pv_obj:
+            self._fscan_push_7pi9_pv_obj = PV(self.fscan_push_7pi9_pv)
+        return self._fscan_push_7pi9_pv_obj
 
     @property
     def detune_best(self):

@@ -128,6 +128,29 @@ def test_df_cold_pv_obj_lazy_and_cached(cavity):
     pv_ctor.assert_called_once_with(cavity.df_cold_pv)
 
 
+@pytest.mark.parametrize(
+    "prop_name, addr_attr",
+    [
+        ("fscan_sel_pv_obj", "fscan_sel_pv"),
+        ("fscan_8pi9_mode_pv_obj", "fscan_8pi9_mode_pv"),
+        ("fscan_7pi9_mode_pv_obj", "fscan_7pi9_mode_pv"),
+        ("fscan_push_8pi9_pv_obj", "fscan_push_8pi9_pv"),
+        ("fscan_push_7pi9_pv_obj", "fscan_push_7pi9_pv"),
+    ],
+)
+def test_cavity_fscan_pv_obj_lazy_and_cached(cavity, prop_name, addr_attr):
+    assert getattr(cavity, f"_{prop_name}") is None
+    mock_pv = make_mock_pv()
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+    ) as pv_ctor:
+        first = getattr(cavity, prop_name)
+        second = getattr(cavity, prop_name)
+    assert first is mock_pv
+    assert second is mock_pv
+    pv_ctor.assert_called_once_with(getattr(cavity, addr_attr))
+
+
 def test_start_characterization(cavity):
     cavity._characterization_start_pv_obj = make_mock_pv()
     cavity.start_characterization()
