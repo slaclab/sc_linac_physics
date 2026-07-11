@@ -77,10 +77,12 @@ class FrequencyTuningPhase(PhaseBase):
 
     Sequence:
     1. verify_initial_state    – stepper idle; prepare cavity (SSA on, reset interlocks, setup_tuning)
-    2. record_cold_landing     – record initial detune (operator pushes to DF_COLD via UI)
-    3. probe_stepper_direction – measure Hz/step (operator confirms; UI writes to SCALE)
-    4. tune_to_resonance       – delegate to Cavity._auto_tune (temp guard); write NSTEPS_COLD
-    5. record_results          – write FrequencyTuningData to commissioning record
+    2. record_cold_landing     – record cold-landing detune (operator pushes to DF_COLD via UI)
+    3. probe_stepper_direction – measure Hz/microstep (operator confirms; UI writes to SCALE_CALC.B)
+    4. apply_hz_per_step       – write confirmed Hz/microstep to SCALE_CALC.B
+    5. tune_to_resonance       – delegate to Cavity._auto_tune (temp guard); write NSTEPS_COLD
+    6. measure_pi_modes        – single-cavity FSCAN for 8π/9 and 7π/9 parasitic modes
+    7. record_results          – write FrequencyTuningData to commissioning record
     """
 
     def __init__(
