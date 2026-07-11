@@ -12,19 +12,18 @@ phase:
      DF_COLD via the UI after reviewing.
   3. Runs a probe move to measure Hz/microstep; the operator confirms and the UI
      writes the value (to SCALE_CALC.B) via apply_hz_per_step.
-  4. Gates on DF_COLD having been recorded, then moves to resonance in small
-     chunks, checking motor temperature before each chunk.  There is no
-     automatic cool-down: if the temperature exceeds the limit the step fails
-     and the operator must investigate and re-run with an explicit
-     acknowledgement (over_temp_ack_c).  After converging, writes the (signed)
-     return-trip step count to the NSTEPS_COLD PV and sets tune_config to
-     RESONANCE.
+  4. Gates on DF_COLD having been recorded, then delegates to
+     Cavity._auto_tune to move to resonance (with a per-iteration stepper
+     temperature guard).  There is no automatic cool-down: if the temperature
+     exceeds the limit the step fails and the operator must investigate and
+     re-run with a higher acknowledgement ceiling (over_temp_ack_c).  After
+     converging, writes the (signed) return-trip step count to the NSTEPS_COLD
+     PV and sets tune_config to RESONANCE.
   5. Runs a single-cavity FSCAN to find the 8π/9 and 7π/9 parasitic modes and
      pushes results to the cavity mode-frequency PVs.
   6. Writes a FrequencyTuningData record.
 """
 
-import math
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -80,7 +79,7 @@ class FrequencyTuningPhase(PhaseBase):
     1. verify_initial_state    – stepper idle; prepare cavity (SSA on, reset interlocks, setup_tuning)
     2. record_cold_landing     – record initial detune (operator pushes to DF_COLD via UI)
     3. probe_stepper_direction – measure Hz/step (operator confirms; UI writes to SCALE)
-    4. tune_to_resonance       – chunked loop with temperature guard; write NSTEPS_COLD
+    4. tune_to_resonance       – delegate to Cavity._auto_tune (temp guard); write NSTEPS_COLD
     5. record_results          – write FrequencyTuningData to commissioning record
     """
 
@@ -93,9 +92,6 @@ class FrequencyTuningPhase(PhaseBase):
         self.cavity = None
         # Signed: positive means +steps increase cavity frequency (matches SCALE PV convention)
         self._hz_per_microstep: float | None = None
-        # Over-temperature breaches the operator acknowledged this run:
-        # list of (temp_c, operator) tuples.
-        self._over_temp_acks: list[tuple[float, str]] = []
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -486,66 +482,6 @@ class FrequencyTuningPhase(PhaseBase):
             },
         )
 
-    def _guard_temp(
-        self, total_steps: int, peak_temp: float
-    ) -> tuple[float, PhaseStepResult | None]:
-        """Check motor temperature; fail on over-temp unless acknowledged.
-
-        There is no automatic cool-down.  If the motor exceeds the limit the
-        step fails and the operator must investigate and re-run, passing
-        ``over_temp_ack_c`` (a temperature ceiling they authorize) via
-        context.parameters.  A reading hotter than that ceiling re-arms the
-        gate and requires a fresh acknowledgement.
-
-        Returns (updated_peak_temp, error_or_None).
-        """
-        try:
-            temp = self._read_temp()
-        except Exception as exc:
-            return peak_temp, PhaseStepResult(
-                result=PhaseResult.RETRY,
-                message=f"Could not read motor temperature: {exc}",
-                retry_delay_seconds=5.0,
-            )
-        peak_temp = max(peak_temp, temp)
-
-        if temp <= self.limits.temp_limit_c:
-            return peak_temp, None
-
-        ack_ceiling = self.context.parameters.get("over_temp_ack_c")
-        if ack_ceiling is not None and temp <= ack_ceiling:
-            # Operator acknowledged proceeding up to this temperature.
-            self._over_temp_acks.append((temp, self.context.operator))
-            return peak_temp, None
-
-        return peak_temp, PhaseStepResult(
-            result=PhaseResult.FAILED,
-            message=(
-                f"Stepper motor temp {temp:.1f} °C exceeds limit "
-                f"{self.limits.temp_limit_c} °C after {total_steps} steps. "
-                "Investigate; to proceed, acknowledge and re-run with "
-                f"over_temp_ack_c ≥ {temp:.1f}."
-            ),
-            data={
-                "total_steps": total_steps,
-                "peak_temp_c": peak_temp,
-                "stepper_temp_c": temp,
-                "temp_limit_c": self.limits.temp_limit_c,
-                "requires_over_temp_ack": True,
-            },
-        )
-
-    def _guard_detune(self) -> tuple[float, PhaseStepResult | None]:
-        """Read chirp detune. Returns (detune_hz, error_or_None)."""
-        try:
-            return self.cavity.detune_chirp, None
-        except Exception as exc:
-            return 0.0, PhaseStepResult(
-                result=PhaseResult.RETRY,
-                message=f"Could not read detune: {exc}",
-                retry_delay_seconds=3.0,
-            )
-
     def _tuning_dry_run_result(self) -> PhaseStepResult:
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
@@ -557,58 +493,150 @@ class FrequencyTuningPhase(PhaseBase):
             },
         )
 
-    def _initialize_tuning_state(
-        self, tuning_cb
-    ) -> tuple[int, int, float, "PhaseStepResult | None"]:
-        total_steps = 0
-        peak_temp = 0.0
+    def _tuning_iteration_hook(self) -> None:
+        """Per-iteration hook passed to Cavity._auto_tune.
 
-        # Read the current signed step count rather than resetting it.
-        # REG_TOTSGN was zeroed by the Stage 2 probe, so on the first run
-        # signed_total starts at 0.  After an abort and restart it retains the
-        # displacement already accumulated from cold landing, keeping NSTEPS_COLD
-        # accurate across partial runs.  A read failure here must NOT default to
-        # 0 — that would silently corrupt the NSTEPS_COLD return trip — so we
-        # surface a RETRY instead.
+        Surfaces the phase-level abort flag as an exception (so _auto_tune's
+        loop unwinds) and feeds the live tuning plot.  Signed step count comes
+        straight from the REG_TOTSGN hardware register that _auto_tune's moves
+        accumulate — no parallel bookkeeping needed.
+        """
+        if self.context.is_abort_requested():
+            raise linac_utils.CavityAbortError("Abort requested during tuning")
+        tuning_cb = self.context.parameters.get("tuning_update_callback")
+        if tuning_cb:
+            try:
+                signed = round(
+                    self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
+                )
+                tuning_cb(signed, self.cavity.detune_chirp)
+            except Exception:
+                pass
+
+    def _tune_to_resonance(self) -> PhaseStepResult:
+        if self.context.dry_run:
+            return self._tuning_dry_run_result()
+
+        if not self._hz_per_microstep:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="hz_per_microstep not set — probe_stepper_direction must run first",
+            )
+
+        df_cold_err = self._check_df_cold_recorded()
+        if df_cold_err is not None:
+            return df_cold_err
+
+        # Operator-authorized over-temp ceiling (re-run raises it); default is
+        # the plain temperature limit.  _auto_tune fails hard on a breach.
+        ack_ceiling = self.context.parameters.get("over_temp_ack_c")
+        max_temp = (
+            ack_ceiling if ack_ceiling is not None else self.limits.temp_limit_c
+        )
+
+        bridged = self._run_auto_tune(max_temp)
+        if bridged is not None:
+            return bridged
+
+        # NSTEPS_COLD is the return trip: negation of the accumulated signed
+        # steps (read once from the hardware register _auto_tune drove).
         try:
             signed_total = round(
                 self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
             )
         except Exception as exc:
-            return (
-                total_steps,
-                0,
-                peak_temp,
-                PhaseStepResult(
-                    result=PhaseResult.RETRY,
-                    message=f"Could not read signed step count to resume tuning: {exc}",
-                    retry_delay_seconds=3.0,
-                ),
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read signed step count after tuning: {exc}",
+                retry_delay_seconds=3.0,
             )
 
-        try:
-            peak_temp = self._read_temp()
-        except Exception:
-            pass
+        err = self._write_cold_landing_steps(signed_total)
+        if err is not None:
+            return err
 
-        try:
-            if tuning_cb:
-                tuning_cb(signed_total, self.cavity.detune_chirp)
-        except Exception:
-            pass
+        err = self._write_tune_config_resonance()
+        if err is not None:
+            return err
 
-        return total_steps, signed_total, peak_temp, None
+        return self._tuning_success_result(signed_total, ack_ceiling)
 
-    def _emit_tuning_update(self, tuning_cb, signed_total: int) -> None:
+    def _run_auto_tune(self, max_temp: float) -> "PhaseStepResult | None":
+        """Delegate the tuning loop to Cavity._auto_tune.
+
+        Returns a FAILED/RETRY PhaseStepResult on failure, or None on success.
+        """
         try:
-            if tuning_cb:
-                tuning_cb(signed_total, self.cavity.detune_chirp)
+            self.cavity._auto_tune(
+                delta_hz_func=lambda: self.cavity.detune_chirp,
+                tolerance=self.limits.tolerance_hz,
+                iteration_callback=self._tuning_iteration_hook,
+                max_stepper_temp=max_temp,
+            )
+        except linac_utils.StepperTempError as exc:
+            temp = self._safe_read_temp()
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    f"{exc}. Investigate; to proceed, acknowledge and re-run "
+                    "with a higher over_temp_ack_c."
+                ),
+                data={
+                    "stepper_temp_c": temp,
+                    "temp_limit_c": self.limits.temp_limit_c,
+                    "requires_over_temp_ack": True,
+                },
+            )
+        except (
+            linac_utils.DetuneError,
+            linac_utils.StepperError,
+            linac_utils.StepperAbortError,
+            linac_utils.CavityAbortError,
+        ) as exc:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=f"Tuning to resonance failed: {exc}",
+            )
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Transient error during tuning: {exc}",
+                retry_delay_seconds=3.0,
+            )
+        return None
+
+    def _safe_read_temp(self) -> float | None:
+        try:
+            return self._read_temp()
         except Exception:
-            pass
+            return None
+
+    def _tuning_success_result(
+        self, signed_total: int, ack_ceiling: float | None
+    ) -> PhaseStepResult:
+        data = {
+            "total_steps": abs(signed_total),
+            "cold_landing_steps": -signed_total,
+            "final_timestamp": datetime.now().isoformat(),
+        }
+        # Audit trail: if the operator authorized proceeding over the temp
+        # limit, record the ceiling and who authorized it.
+        if ack_ceiling is not None and ack_ceiling > self.limits.temp_limit_c:
+            data["over_temp_acknowledged_c"] = ack_ceiling
+            data["over_temp_acknowledged_by"] = self.context.operator
+
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=(
+                f"Reached resonance. NSTEPS_COLD set to {-signed_total}. "
+                "tune_config set to RESONANCE."
+            ),
+            data=data,
+        )
 
     def _write_cold_landing_steps(
         self, signed_total: int
-    ) -> PhaseStepResult | None:
+    ) -> "PhaseStepResult | None":
         # NSTEPS_COLD stores the return-trip step count (from resonance to cold
         # landing), which is the negation of the steps we just took.
         try:
@@ -622,202 +650,6 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=3.0,
             )
         return None
-
-    def _one_tuning_iteration(
-        self,
-        total_steps: int,
-        signed_total: int,
-        peak_temp: float,
-        hz_per_step: float,
-        hz_update_cb=None,
-        speed: int = linac_utils.DEFAULT_STEPPER_SPEED,
-    ) -> tuple[int, int, float, bool, PhaseStepResult | None]:
-        """Execute one iteration of the tuning loop.
-
-        Returns (new_total_steps, new_signed_total, new_peak_temp, converged, error_or_None).
-        signed_total accumulates the signed step count for writing to NSTEPS_COLD.
-        """
-        if self.context.is_abort_requested():
-            return (
-                total_steps,
-                signed_total,
-                peak_temp,
-                False,
-                PhaseStepResult(
-                    result=PhaseResult.FAILED,
-                    message=f"Abort requested after {total_steps} steps",
-                ),
-            )
-
-        peak_temp, err = self._guard_temp(total_steps, peak_temp)
-        if err is not None:
-            return total_steps, signed_total, peak_temp, False, err
-
-        detune, err = self._guard_detune()
-        if err is not None:
-            return total_steps, signed_total, peak_temp, False, err
-
-        if abs(detune) <= self.limits.tolerance_hz:
-            return total_steps, signed_total, peak_temp, True, None
-
-        if total_steps >= self.limits.max_total_steps:
-            return (
-                total_steps,
-                signed_total,
-                peak_temp,
-                False,
-                PhaseStepResult(
-                    result=PhaseResult.FAILED,
-                    message=(
-                        f"Reached max step limit ({self.limits.max_total_steps}) "
-                        f"without converging; final detune {detune:.0f} Hz"
-                    ),
-                    data={
-                        "total_steps": total_steps,
-                        "final_detune_hz": detune,
-                        "peak_temp_c": peak_temp,
-                    },
-                ),
-            )
-
-        magnitude, steps_this_move, err = self._do_move(
-            total_steps, peak_temp, detune, hz_per_step, hz_update_cb, speed
-        )
-        if err is not None:
-            return total_steps, signed_total, peak_temp, False, err
-        return (
-            total_steps + magnitude,
-            signed_total + steps_this_move,
-            peak_temp,
-            False,
-            None,
-        )
-
-    def _do_move(
-        self,
-        total_steps: int,
-        peak_temp: float,
-        detune: float,
-        hz_per_step: float,
-        hz_update_cb,
-        speed: int = linac_utils.DEFAULT_STEPPER_SPEED,
-    ) -> tuple[int, int, "PhaseStepResult | None"]:
-        """Compute step size, execute stepper move, and invoke the Hz/step callback."""
-        hardware_max = int(self.cavity.stepper_tuner.max_steps)
-        estimated = max(1, round(abs(detune) / abs(hz_per_step)))
-        magnitude = min(hardware_max, estimated)
-        # Direction: steps_to_zero = detune / SCALE, so sign = sign(detune / signed_hz).
-        # This handles motors wired in either direction (positive or negative SCALE).
-        signed_hz = self._hz_per_microstep
-        if signed_hz:
-            steps_this_move = int(math.copysign(magnitude, detune / signed_hz))
-        else:
-            steps_this_move = int(math.copysign(magnitude, detune))
-
-        try:
-            self.cavity.stepper_tuner.move(
-                steps_this_move,
-                max_steps=hardware_max,
-                speed=speed,
-                check_detune=False,
-            )
-        except (linac_utils.StepperError, linac_utils.StepperAbortError) as exc:
-            return (
-                magnitude,
-                steps_this_move,
-                PhaseStepResult(
-                    result=PhaseResult.FAILED,
-                    message=f"Stepper error after {total_steps} steps: {exc}",
-                    data={"total_steps": total_steps, "peak_temp_c": peak_temp},
-                ),
-            )
-
-        if hz_update_cb is not None:
-            try:
-                hz_delta = abs(self.cavity.detune_chirp - detune)
-                if hz_delta > 0:
-                    hz_update_cb(magnitude, hz_delta)
-            except Exception:
-                pass
-
-        return magnitude, steps_this_move, None
-
-    def _tune_to_resonance(self) -> PhaseStepResult:
-        if self.context.dry_run:
-            return self._tuning_dry_run_result()
-
-        hz_per_step = self._hz_per_microstep
-        if not hz_per_step:
-            return PhaseStepResult(
-                result=PhaseResult.FAILED,
-                message="hz_per_microstep not set — probe_stepper_direction must run first",
-            )
-
-        df_cold_err = self._check_df_cold_recorded()
-        if df_cold_err is not None:
-            return df_cold_err
-
-        tuning_cb = self.context.parameters.get("tuning_update_callback")
-        hz_update_cb = self.context.parameters.get(
-            "hz_per_step_update_callback"
-        )
-        speed = self.limits.move_speed
-
-        total_steps, signed_total, peak_temp, err = (
-            self._initialize_tuning_state(tuning_cb)
-        )
-        if err is not None:
-            return err
-
-        while True:
-            total_steps, signed_total, peak_temp, converged, err = (
-                self._one_tuning_iteration(
-                    total_steps,
-                    signed_total,
-                    peak_temp,
-                    hz_per_step,
-                    hz_update_cb,
-                    speed,
-                )
-            )
-            if err is not None:
-                return err
-            self._emit_tuning_update(tuning_cb, signed_total)
-            if converged:
-                break
-
-        err = self._write_cold_landing_steps(signed_total)
-        if err is not None:
-            return err
-
-        err = self._write_tune_config_resonance()
-        if err is not None:
-            return err
-
-        return self._tuning_success_result(total_steps, signed_total)
-
-    def _tuning_success_result(
-        self, total_steps: int, signed_total: int
-    ) -> PhaseStepResult:
-        data = {
-            "total_steps": total_steps,
-            "cold_landing_steps": -signed_total,
-            "final_timestamp": datetime.now().isoformat(),
-        }
-        if self._over_temp_acks:
-            data["over_temp_acknowledged_c"] = max(
-                t for t, _ in self._over_temp_acks
-            )
-            data["over_temp_acknowledged_by"] = self.context.operator
-
-        return PhaseStepResult(
-            result=PhaseResult.SUCCESS,
-            message=(
-                f"Reached resonance in {total_steps} steps. "
-                f"NSTEPS_COLD set to {-signed_total}. tune_config set to RESONANCE."
-            ),
-            data=data,
-        )
 
     def _write_tune_config_resonance(self) -> "PhaseStepResult | None":
         # The cavity is now on resonance; record that state (mirrors

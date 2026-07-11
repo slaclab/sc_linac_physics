@@ -40,6 +40,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityCharacterizationError,
     QuenchError,
     ALL_CRYOMODULES,
+    StepperTempError,
 )
 from sc_linac_physics.utils.sc_linac.piezo import Piezo
 from tests.mock_utils import mock_func
@@ -564,6 +565,36 @@ def test__auto_tune_out_of_tol(cavity):
     cavity._auto_tune(delta_hz_func=mock_detune.mock_detune)
     cavity.stepper_tuner.move.assert_called()
     assert mock_detune.num_calls == 2
+
+
+def test__auto_tune_over_temp_raises(cavity):
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    cavity._stepper_temp_pv_obj = make_mock_pv(get_val=85.0)
+
+    with pytest.raises(StepperTempError):
+        cavity._auto_tune(delta_hz_func=lambda: 5000, max_stepper_temp=70)
+    # Over-temp caught before moving.
+    cavity.stepper_tuner.move.assert_not_called()
+
+
+def test__auto_tune_iteration_callback_invoked(cavity):
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    cavity._stepper_temp_pv_obj = make_mock_pv(get_val=25.0)
+    mock_detune = MockDetune()
+    calls = []
+
+    cavity._auto_tune(
+        delta_hz_func=mock_detune.mock_detune,
+        iteration_callback=lambda: calls.append(1),
+        max_stepper_temp=70,
+    )
+    assert len(calls) >= 1
 
 
 def test_check_detune(cavity):

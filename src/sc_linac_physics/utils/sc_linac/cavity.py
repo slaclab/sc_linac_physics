@@ -785,6 +785,8 @@ class Cavity(linac_utils.SCLinacObject):
         delta_hz_func: Callable,
         tolerance: int = 50,
         reset_signed_steps: bool = False,
+        iteration_callback: Optional[Callable[[], None]] = None,
+        max_stepper_temp: Optional[float] = None,
     ):
         if self.detune_invalid:
             raise linac_utils.DetuneError(f"{self} detune invalid")
@@ -803,6 +805,21 @@ class Cavity(linac_utils.SCLinacObject):
 
         while abs(delta_hz) > tolerance:
             self.check_abort()
+
+            # Optional stepper motor temperature guard (no automatic cool-down;
+            # callers that pass a limit get a hard failure on breach).
+            if max_stepper_temp is not None:
+                temp = self.stepper_temp_pv_obj.get()
+                if temp > max_stepper_temp:
+                    raise linac_utils.StepperTempError(
+                        f"{self} stepper motor temp {temp:.1f} °C exceeds "
+                        f"limit {max_stepper_temp} °C"
+                    )
+
+            # Optional per-iteration hook (e.g. progress/telemetry).
+            if iteration_callback is not None:
+                iteration_callback()
+
             est_steps = int(0.9 * delta_hz * self.microsteps_per_hz)
 
             self.set_status_message(

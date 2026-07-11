@@ -272,6 +272,12 @@ class StepperError(Exception):
     pass
 
 
+class StepperTempError(StepperError):
+    """Exception thrown when the stepper motor exceeds its temperature limit."""
+
+    pass
+
+
 class SSACalibrationError(Exception):
     """
     Exception thrown during cavity SSA calibration
