@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.29.1 (2026-07-09)
+
+### Bug Fixes
+
+- **ci**: Pin GitHub Actions to full commit SHAs
+  ([#272](https://github.com/slaclab/sc_linac_physics/pull/272),
+  [`2c61cda`](https://github.com/slaclab/sc_linac_physics/commit/2c61cdab7799ef9dd2b52133ac37090c04b8dc3c))
+
+### Chores
+
+- **ci**: Add Dependabot to keep pinned Actions current
+  ([#272](https://github.com/slaclab/sc_linac_physics/pull/272),
+  [`2c61cda`](https://github.com/slaclab/sc_linac_physics/commit/2c61cdab7799ef9dd2b52133ac37090c04b8dc3c))
+
+
 ## v9.29.0 (2026-07-02)
 
 ### Bug Fixes
