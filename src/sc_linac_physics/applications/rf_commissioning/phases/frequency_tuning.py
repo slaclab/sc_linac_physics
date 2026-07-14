@@ -202,19 +202,30 @@ class FrequencyTuningPhase(PhaseBase):
                 data={"dry_run": True},
             )
 
-        if self.cavity.stepper_tuner.motor_moving:
+        try:
+            motor_moving = self.cavity.stepper_tuner.motor_moving
+            on_limit_switch = self.cavity.stepper_tuner.on_limit_switch
+            is_online = self.cavity.is_online
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read initial stepper/cavity state: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        if motor_moving:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
                 message="Stepper motor already moving — abort or wait for it to stop",
             )
 
-        if self.cavity.stepper_tuner.on_limit_switch:
+        if on_limit_switch:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
                 message="Stepper motor is on a limit switch — manual intervention required",
             )
 
-        if not self.cavity.is_online:
+        if not is_online:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
                 message="Cavity is not online — cannot prepare it for tuning",
@@ -453,19 +464,19 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
 
-        # SCALE convention: d(cavity_freq)/d(step).
-        # CHIRP:DF = ref_freq - cav_freq, so d(CHIRP:DF)/d(step) = -SCALE.
-        # Positive SCALE → positive steps increase cavity frequency → CHIRP:DF decreases.
-        signed_hz_per_step = -delta / probe
-        self._hz_per_microstep = signed_hz_per_step
+        # SCALE convention: d(cavity_freq)/d(microstep) — probe is in microsteps.
+        # CHIRP:DF = ref_freq - cav_freq, so d(CHIRP:DF)/d(microstep) = -SCALE.
+        # Positive SCALE → positive microsteps increase cavity frequency → CHIRP:DF decreases.
+        signed_hz_per_microstep = -delta / probe
+        self._hz_per_microstep = signed_hz_per_microstep
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
-                f"Direction probe: Δdetune={delta:+.0f} Hz for +{probe} steps. "
-                f"Measured {abs(self._hz_per_microstep):.4f} Hz/step (confirm to write to SCALE PV). "
+                f"Direction probe: Δdetune={delta:+.0f} Hz for +{probe} microsteps. "
+                f"Measured {abs(self._hz_per_microstep):.4f} Hz/microstep (confirm to write to SCALE PV). "
                 f"move(+N) "
-                f"{'increases' if signed_hz_per_step > 0 else 'decreases'} frequency."
+                f"{'increases' if signed_hz_per_microstep > 0 else 'decreases'} frequency."
             ),
             data={
                 "d0_hz": d0,
@@ -776,7 +787,7 @@ class FrequencyTuningPhase(PhaseBase):
         """Placeholder step — actual population happens in finalize_phase()."""
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message="Results collected; ready to finalise",
+            message="Results collected; ready to finalize",
         )
 
     # ------------------------------------------------------------------

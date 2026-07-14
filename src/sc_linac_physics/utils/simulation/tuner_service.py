@@ -110,6 +110,14 @@ class StepperPVGroup(PVGroup):
         )
         await instance.write(uniform(0.8 * nominal, 1.2 * nominal))
 
+    @hz_per_microstep.putter
+    async def hz_per_microstep(self, instance, value):
+        # SCALE is derived on real IOCs (SCALE = SCALE_CALC.B / 256), so
+        # direct client writes are silently reverted. Only hz_per_step_calc's
+        # putter (via instance.write(), which bypasses this putter) may
+        # update this value.
+        return instance.value
+
     # SCALE is derived on real IOCs: SCALE = SCALE_CALC.B / 256. Model that
     # dependency so SCALE is only updated by writing the (writable) calc field,
     # not by writing SCALE directly.
