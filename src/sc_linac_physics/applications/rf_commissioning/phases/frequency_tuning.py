@@ -183,9 +183,9 @@ class FrequencyTuningPhase(PhaseBase):
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
                 message=(
-                    "DF_COLD not recorded — push the cold-landing frequency "
-                    f"({recorded:.0f} Hz) to DF_COLD before tuning "
-                    f"(DF_COLD currently reads {df_cold:.0f} Hz)"
+                    "DF_COLD does not match the recorded cold-landing "
+                    f"frequency — push {recorded:.0f} Hz to DF_COLD before "
+                    f"tuning (DF_COLD currently reads {df_cold:.0f} Hz)"
                 ),
             )
         return None
@@ -303,7 +303,10 @@ class FrequencyTuningPhase(PhaseBase):
         self.cavity.turn_off()
         self.cavity.ssa.turn_on()
         self.cavity.reset_interlocks()
-        self.cavity.setup_tuning()  # use_sela=False default → chirp mode
+        # setup_tuning(use_sela=False) puts the cavity in chirp mode (piezo
+        # feedback off, RF driven by the chirp generator rather than SELA)
+        # so detune can be read via CHIRP:DF while the stepper is moved.
+        self.cavity.setup_tuning()
 
     def _tune_config_warning(self) -> str | None:
         """Return a warning if the cavity is not at the COLD tune config.
@@ -401,23 +404,23 @@ class FrequencyTuningPhase(PhaseBase):
         probe_cb,
         speed: int = linac_utils.DEFAULT_STEPPER_SPEED,
     ) -> tuple[float, float]:
-        """Execute the forward+back probe move; return (d0_hz, d1_hz)."""
+        """Execute the forward+back probe move; return (detune0_hz, detune1_hz)."""
         self.cavity.stepper_tuner.reset_signed_steps()
-        d0 = self.cavity.detune_chirp
+        detune0_hz = self.cavity.detune_chirp
         try:
             if probe_cb:
-                probe_cb(0, d0)
+                probe_cb(0, detune0_hz)
         except Exception:
             pass
         self.cavity.stepper_tuner.move(probe, speed=speed, check_detune=False)
-        d1 = self.cavity.detune_chirp
+        detune1_hz = self.cavity.detune_chirp
         try:
             if probe_cb:
-                probe_cb(probe, d1)
+                probe_cb(probe, detune1_hz)
         except Exception:
             pass
         self.cavity.stepper_tuner.move(-probe, speed=speed, check_detune=False)
-        return d0, d1
+        return detune0_hz, detune1_hz
 
     def _probe_stepper_direction(self) -> PhaseStepResult:
         if self.context.dry_run:
@@ -439,7 +442,9 @@ class FrequencyTuningPhase(PhaseBase):
         speed = self.limits.move_speed
 
         try:
-            d0, d1 = self._do_probe_move(probe, probe_cb, speed=speed)
+            detune0_hz, detune1_hz = self._do_probe_move(
+                probe, probe_cb, speed=speed
+            )
         except (linac_utils.StepperError, linac_utils.StepperAbortError) as exc:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
@@ -452,7 +457,7 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=5.0,
             )
 
-        delta = d1 - d0
+        delta = detune1_hz - detune0_hz
 
         if abs(delta) < self.limits.min_probe_delta_hz:
             return PhaseStepResult(
@@ -464,9 +469,13 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
 
-        # SCALE convention: d(cavity_freq)/d(microstep) — probe is in microsteps.
-        # CHIRP:DF = ref_freq - cav_freq, so d(CHIRP:DF)/d(microstep) = -SCALE.
-        # Positive SCALE → positive microsteps increase cavity frequency → CHIRP:DF decreases.
+        # SCALE is defined as the cavity frequency change per microstep
+        # (d(cavity_freq)/d(microstep), i.e. Hz/microstep; probe is in
+        # microsteps). A positive number of microsteps decreases CHIRP:DF —
+        # this is the same relationship Cavity._auto_tune relies on (a
+        # positive detune drives a positive step estimate that reduces it) —
+        # so d(CHIRP:DF)/d(microstep) = -SCALE. We measured
+        # delta = d(CHIRP:DF) for +probe microsteps, so SCALE = -delta/probe.
         signed_hz_per_microstep = -delta / probe
         self._hz_per_microstep = signed_hz_per_microstep
 
@@ -479,8 +488,8 @@ class FrequencyTuningPhase(PhaseBase):
                 f"{'increases' if signed_hz_per_microstep > 0 else 'decreases'} frequency."
             ),
             data={
-                "d0_hz": d0,
-                "d1_hz": d1,
+                "d0_hz": detune0_hz,
+                "d1_hz": detune1_hz,
                 "s_d0": 0,
                 "s_d1": probe,
                 "delta_hz": delta,

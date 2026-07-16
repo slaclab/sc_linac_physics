@@ -848,8 +848,11 @@ class Cavity(linac_utils.SCLinacObject):
         while abs(delta_hz) > tolerance:
             self.check_abort()
 
-            # Optional stepper motor temperature guard (no automatic cool-down;
-            # callers that pass a limit get a hard failure on breach).
+            # Optional stepper motor temperature guard: if a limit is passed
+            # and the stepper exceeds it, raise immediately and stop tuning
+            # rather than waiting/retrying — there is no automatic cool-down
+            # or wait-and-retry logic here, so the caller must intervene
+            # (e.g. pause and let the stepper cool) and re-run tuning.
             if max_stepper_temp is not None:
                 temp = self.stepper_temp_pv_obj.get()
                 if temp > max_stepper_temp:

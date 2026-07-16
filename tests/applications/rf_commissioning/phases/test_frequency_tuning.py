@@ -532,7 +532,7 @@ def test_tune_to_resonance_fails_when_df_cold_mismatched(phase, mock_cavity):
     phase.cavity.df_cold_pv_obj.get.return_value = 0.0  # operator did not push
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
-    assert "DF_COLD not recorded" in result.message
+    assert "DF_COLD does not match" in result.message
     mock_cavity._auto_tune.assert_not_called()
 
 
