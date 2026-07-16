@@ -186,6 +186,18 @@ def launch_plotter(standalone=True):
 
 
 @display
+def launch_fault_heatmap(standalone=True):
+    """Launch the fault heatmap display."""
+    from sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_heatmap_display import (
+        FaultHeatmapDisplay,
+    )
+
+    return launch_python_display(
+        FaultHeatmapDisplay, *sys.argv[1:], standalone=standalone
+    )
+
+
+@display
 def launch_cryo_signals(standalone=True):
     from sc_linac_physics.displays.plot.cryo_signals import (
         LinacGroupedCryomodulePlotDisplay,
