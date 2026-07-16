@@ -20,7 +20,7 @@ RACK_A_CAVITIES = [1, 2, 3, 4]
 RACK_B_CAVITIES = [5, 6, 7, 8]
 
 # LINAC CONFIGURATION
-VALID_LINACS = dict(zip(["L0B", "L1B", "L2B", "L3B"], LINAC_CM_MAP))
+VALID_LINACS = dict(zip(["L0B", "L1B", "L2B", "L3B", "L4B"], LINAC_CM_MAP))
 
 # FILE PATHS
 DEFAULT_DATA_PATH = Path("/u1/lcls/physics/rf_lcls2/microphonics")
