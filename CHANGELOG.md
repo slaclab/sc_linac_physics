@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.31.0 (2026-07-16)
+
+### Features
+
+- **microphonics**: Add L4B linac support
+  ([#275](https://github.com/slaclab/sc_linac_physics/pull/275),
+  [`91b6e71`](https://github.com/slaclab/sc_linac_physics/commit/91b6e7192964059729c7837d5834f69f0cadc605))
+
+
 ## v9.30.0 (2026-07-16)
 
 ### Chores
