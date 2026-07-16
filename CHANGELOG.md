@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.30.0 (2026-07-16)
+
+### Chores
+
+- **ci**: Bump the github-actions group across 1 directory with 3 updates
+  ([#273](https://github.com/slaclab/sc_linac_physics/pull/273),
+  [`faf41df`](https://github.com/slaclab/sc_linac_physics/commit/faf41dff0290d01b49e817d0bc6206317bcdf9ad))
+
+### Features
+
+- Add fault heatmap to CLI infrastructure
+  ([#274](https://github.com/slaclab/sc_linac_physics/pull/274),
+  [`aab9c49`](https://github.com/slaclab/sc_linac_physics/commit/aab9c491047a292c0c506b0ca06a5c2af7d09d0e))
+
+
 ## v9.29.1 (2026-07-09)
 
 ### Bug Fixes
