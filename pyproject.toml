@@ -166,6 +166,7 @@ sc-srf-home = "sc_linac_physics.cli.launchers:launch_srf_home"
 sc-cavity = "sc_linac_physics.cli.launchers:launch_cavity_display"
 sc-faults = "sc_linac_physics.cli.launchers:launch_fault_decoder"
 sc-fcount = "sc_linac_physics.cli.launchers:launch_fault_count"
+sc-fheatmap = "sc_linac_physics.cli.launchers:launch_fault_heatmap"
 
 # ============================================================================
 # Application Launchers
