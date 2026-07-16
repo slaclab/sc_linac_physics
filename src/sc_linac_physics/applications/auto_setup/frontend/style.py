@@ -114,6 +114,27 @@ def button_stylesheet() -> str:
     )
 
 
+def abort_button_stylesheet() -> str:
+    return (
+        f"QPushButton {{ background: {CARD_BG}; color: #e08090; "
+        f"border: 1px solid {CARD_BORDER}; border-radius: 4px; "
+        f"padding: 3px 10px; font-size: 11px; }}"
+        f"QPushButton:hover {{ border-color: #e08090; }}"
+        f"QPushButton:pressed {{ background: {CARD_BORDER}; }}"
+    )
+
+
+def checkbox_stylesheet() -> str:
+    return (
+        f"QCheckBox {{ color: {CARD_TEXT}; font-size: 11px; spacing: 5px; }}"
+        f"QCheckBox::indicator {{ width: 13px; height: 13px; "
+        f"border: 1px solid {CARD_BORDER}; border-radius: 2px; background: {PAGE_BG}; }}"
+        f"QCheckBox::indicator:checked {{ background: {ACCENT_BORDER}; "
+        f"border-color: {ACCENT_BORDER}; }}"
+        f"QCheckBox::indicator:hover {{ border-color: {ACCENT_BORDER}; }}"
+    )
+
+
 def chip_frame_stylesheet(status: int, locked: bool = False) -> str:
     bg, border, _ = _tokens(status, locked)
     return (

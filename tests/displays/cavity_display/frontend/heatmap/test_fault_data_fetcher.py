@@ -159,10 +159,10 @@ class TestFaultDataFetcherAbort:
             call_count += 1
             if call_count >= 2:
                 fetcher.abort()
-            return {"BCS": FaultCounter(1, 10, 0, 0)}
+            return {"BCS": FaultCounter(1, 10, 0, 0)}, []
 
         for cav in machine.linacs[0].cryomodules["01"].cavities.values():
-            cav.get_fault_counts = abort_after_two
+            cav.get_fault_history = abort_after_two
 
         result_spy = Mock()
         finished_spy = Mock()
@@ -178,7 +178,7 @@ class TestFaultDataFetcherErrors:
     def test_single_cavity_exception_continues(self):
         machine = make_machine(num_cavities=3)
         cavities = machine.linacs[0].cryomodules["01"].cavities
-        cavities[2].get_fault_counts = Mock(
+        cavities[2].get_fault_history = Mock(
             side_effect=RuntimeError("PV timeout")
         )
 
@@ -265,8 +265,8 @@ class TestFaultDataFetcherParallel:
     def test_parallel_fetch_all_results_collected(self):
         machine = make_machine(num_cavities=8)
         for cav in machine.linacs[0].cryomodules["01"].cavities.values():
-            cav.get_fault_counts = Mock(
-                return_value={"BCS": FaultCounter(1, 10, 0, 0)}
+            cav.get_fault_history = Mock(
+                return_value=({"BCS": FaultCounter(1, 10, 0, 0)}, [])
             )
 
         fetcher = FaultDataFetcher(machine, datetime.now(), datetime.now())
@@ -281,16 +281,16 @@ class TestFaultDataFetcherParallel:
     def test_parallel_mixed_errors_and_successes(self):
         machine = make_machine(num_cavities=4)
         cavities = machine.linacs[0].cryomodules["01"].cavities
-        cavities[1].get_fault_counts = Mock(
-            return_value={"BCS": FaultCounter(1, 10, 0, 0)}
+        cavities[1].get_fault_history = Mock(
+            return_value=({"BCS": FaultCounter(1, 10, 0, 0)}, [])
         )
-        cavities[2].get_fault_counts = Mock(
+        cavities[2].get_fault_history = Mock(
             side_effect=RuntimeError("PV timeout")
         )
-        cavities[3].get_fault_counts = Mock(
-            return_value={"SSA": FaultCounter(2, 5, 0, 0)}
+        cavities[3].get_fault_history = Mock(
+            return_value=({"SSA": FaultCounter(2, 5, 0, 0)}, [])
         )
-        cavities[4].get_fault_counts = Mock(
+        cavities[4].get_fault_history = Mock(
             side_effect=RuntimeError("Connection refused")
         )
 

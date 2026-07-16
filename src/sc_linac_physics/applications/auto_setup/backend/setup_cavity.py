@@ -1,4 +1,6 @@
 import logging
+import sys
+import traceback
 from time import sleep
 
 from epics.ca import CASeverityException
@@ -158,6 +160,8 @@ class SetupCavity(Cavity, SetupLinacObject):
             self.progress = 100
             self.status = STATUS_READY_VALUE
         except Exception as e:
+            print(f"[setup] {self} FAILED: {e}", file=sys.stderr, flush=True)
+            traceback.print_exc(file=sys.stderr)
             self.status = STATUS_ERROR_VALUE
             self.clear_abort()
             self.set_status_message(str(e), logging.ERROR)

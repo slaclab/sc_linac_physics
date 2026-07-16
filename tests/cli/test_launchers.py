@@ -264,6 +264,20 @@ class TestDisplayLaunchers:
             assert call_args.args[0] == mock_display
             assert call_args.kwargs["standalone"] is True
 
+    def test_launch_fault_heatmap(self):
+        """Test fault heatmap launcher."""
+        from sc_linac_physics.cli.launchers import launch_fault_heatmap
+
+        with patch(
+            "sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_heatmap_display.FaultHeatmapDisplay"
+        ) as mock_display:
+            launch_fault_heatmap(standalone=True)
+
+            assert self.mock_launch.called
+            call_args = self.mock_launch.call_args
+            assert call_args.args[0] == mock_display
+            assert call_args.kwargs["standalone"] is True
+
 
 class TestApplicationLaunchers:
     """Test application launchers."""

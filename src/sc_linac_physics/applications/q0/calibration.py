@@ -108,7 +108,7 @@ class Calibration:
             )
 
             if np.isnan(slope):
-                self._slope = None
+                raise ValueError("Cannot calculate a linear regression")
             else:
                 self.adjustment = intercept
                 self._slope = slope

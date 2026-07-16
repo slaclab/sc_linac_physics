@@ -1,3 +1,4 @@
+import io
 import os
 import shutil
 import socket
@@ -476,6 +477,12 @@ _REPEATER_POLL_S = 0.05
 
 
 def main():
+    import faulthandler
+
+    try:
+        faulthandler.enable()
+    except io.UnsupportedOperation:
+        pass  # pytest in-process runner captures stderr without a real fd
     os.environ.setdefault("EPICS_CAS_AUTO_BEACON_ADDR_LIST", "no")
     os.environ.setdefault("EPICS_CAS_BEACON_ADDR_LIST", "127.0.0.1")
     service = SCLinacPhysicsService()

@@ -84,6 +84,8 @@ class HeatmapCavityWidget(QWidget):
         self.set_error_state("No data loaded")
 
     def _get_text_color(self) -> QColor:
+        # Picks white or black text so the cavity number stays
+        # readable regardless of background color
         luminance = (
             0.299 * self._color.red()
             + 0.587 * self._color.green()
@@ -107,6 +109,7 @@ class HeatmapCavityWidget(QWidget):
             border_color = self.BORDER_COLOR
             border_width = self.BORDER_WIDTH
 
+        # Inset by half the pen width so the border doesn't get clipped
         half_pen = border_width / 2.0
         painter.setBrush(QBrush(self._color))
         painter.setPen(QPen(border_color, border_width))
@@ -119,6 +122,7 @@ class HeatmapCavityWidget(QWidget):
 
         painter.setPen(self._get_text_color())
         font = QFont()
+        # Scale font with widget size so it stays readable when zoomed
         font.setPointSize(max(5, int(self.height() * 0.4)))
         font.setBold(True)
         painter.setFont(font)
