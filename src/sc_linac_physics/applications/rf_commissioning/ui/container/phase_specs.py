@@ -23,9 +23,8 @@ class PhaseTabSpec:
     phase: CommissioningPhase | None = None
 
 
-DEFAULT_BETA_VISIBLE_PHASES: tuple[CommissioningPhase, ...] = (
-    CommissioningPhase.PIEZO_PRE_RF,
-    CommissioningPhase.SSA_CHAR,
+DEFAULT_BETA_VISIBLE_PHASES: tuple[CommissioningPhase, ...] = tuple(
+    CommissioningPhase
 )
 
 

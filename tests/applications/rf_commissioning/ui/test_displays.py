@@ -25,7 +25,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.displays.registry import 
     PHASE_DISPLAY_MAP,
     get_phase_display_class,
 )
-from sc_linac_physics.applications.rf_commissioning.ui.displays.standard import (
+from sc_linac_physics.applications.rf_commissioning.ui.displays.frequency_tuning import (
     FrequencyTuningDisplay,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.displays.ssa_char import (

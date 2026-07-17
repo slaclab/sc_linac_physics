@@ -69,6 +69,12 @@ class StepperTuner(linac_utils.SCLinacObject):
         self.hz_per_microstep_pv: str = self.pv_addr("SCALE")
         self._hz_per_microstep_pv_obj: Optional[PV] = None
 
+        # SCALE is a derived, read-only calc-record output (SCALE = SCALE_CALC.B / 256).
+        # To persist a measured scale we write the Hz-per-full-step field and let the
+        # IOC recompute SCALE. See set_hz_per_microstep().
+        self.hz_per_step_calc_pv: str = self.pv_addr("SCALE_CALC.B")
+        self._hz_per_step_calc_pv_obj: Optional[PV] = None
+
         self.abort_flag: bool = False
 
     def __str__(self):
@@ -87,6 +93,24 @@ class StepperTuner(linac_utils.SCLinacObject):
     @property
     def hz_per_microstep(self):
         return abs(self.hz_per_microstep_pv_obj.get())
+
+    @property
+    def hz_per_step_calc_pv_obj(self) -> PV:
+        if not self._hz_per_step_calc_pv_obj:
+            self._hz_per_step_calc_pv_obj = PV(self.hz_per_step_calc_pv)
+        return self._hz_per_step_calc_pv_obj
+
+    def set_hz_per_microstep(self, hz_per_microstep: float) -> None:
+        """Persist a measured stepper scale.
+
+        STEP:SCALE is a derived, read-only calc-record output
+        (SCALE = SCALE_CALC.B / 256), so writing SCALE directly is silently
+        reverted by the IOC. Instead we write the Hz-per-full-step field
+        (SCALE_CALC.B) and let the IOC recompute SCALE.
+        """
+        self.hz_per_step_calc_pv_obj.put(
+            hz_per_microstep * linac_utils.MICROSTEPS_PER_STEP
+        )
 
     def check_abort(self):
         """

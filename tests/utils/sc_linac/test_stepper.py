@@ -38,6 +38,21 @@ def test_hz_per_microstep(stepper):
     assert stepper.hz_per_microstep == abs(step_scale)
 
 
+def test_set_hz_per_microstep_writes_calc_pv(stepper):
+    # SCALE is derived (SCALE = SCALE_CALC.B / 256) and read-only, so the
+    # writer must put Hz-per-full-step (value * 256) to SCALE_CALC.B and must
+    # NOT write SCALE directly.
+    calc_pv = make_mock_pv()
+    scale_pv = make_mock_pv()
+    stepper._hz_per_step_calc_pv_obj = calc_pv
+    stepper._hz_per_microstep_pv_obj = scale_pv
+
+    stepper.set_hz_per_microstep(0.005)
+
+    calc_pv.put.assert_called_once_with(0.005 * 256)
+    scale_pv.put.assert_not_called()
+
+
 def test_check_abort(stepper):
     stepper.cavity.check_abort = MagicMock()
 
