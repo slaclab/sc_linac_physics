@@ -159,6 +159,22 @@ class Cavity(linac_utils.SCLinacObject):
         self.cav_waveform_pv: str = self.pv_addr("CAV:AWF")
 
         self.stepper_temp_pv: str = self.pv_addr("STEPTEMP")
+        self._stepper_temp_pv_obj: Optional[PV] = None
+
+        self.df_cold_pv: str = self.pv_addr("DF_COLD")
+        self._df_cold_pv_obj: Optional[PV] = None
+
+        # FSCAN (π-mode scan) cavity-level PVs.
+        self.fscan_sel_pv: str = self.pv_addr("FSCAN:SEL")
+        self._fscan_sel_pv_obj: Optional[PV] = None
+        self.fscan_8pi9_mode_pv: str = self.pv_addr("FSCAN:8PI9MODE")
+        self._fscan_8pi9_mode_pv_obj: Optional[PV] = None
+        self.fscan_7pi9_mode_pv: str = self.pv_addr("FSCAN:7PI9MODE")
+        self._fscan_7pi9_mode_pv_obj: Optional[PV] = None
+        self.fscan_push_8pi9_pv: str = self.pv_addr("FSCAN:PUSH_8PI9.PROC")
+        self._fscan_push_8pi9_pv_obj: Optional[PV] = None
+        self.fscan_push_7pi9_pv: str = self.pv_addr("FSCAN:PUSH_7PI9.PROC")
+        self._fscan_push_7pi9_pv_obj: Optional[PV] = None
 
         self.detune_best_pv: str = self.pv_addr("DFBEST")
         self._detune_best_pv_obj: Optional[PV] = None
@@ -743,6 +759,48 @@ class Cavity(linac_utils.SCLinacObject):
         return self._detune_chirp_pv_obj
 
     @property
+    def stepper_temp_pv_obj(self) -> PV:
+        if not self._stepper_temp_pv_obj:
+            self._stepper_temp_pv_obj = PV(self.stepper_temp_pv)
+        return self._stepper_temp_pv_obj
+
+    @property
+    def df_cold_pv_obj(self) -> PV:
+        if not self._df_cold_pv_obj:
+            self._df_cold_pv_obj = PV(self.df_cold_pv)
+        return self._df_cold_pv_obj
+
+    @property
+    def fscan_sel_pv_obj(self) -> PV:
+        if not self._fscan_sel_pv_obj:
+            self._fscan_sel_pv_obj = PV(self.fscan_sel_pv)
+        return self._fscan_sel_pv_obj
+
+    @property
+    def fscan_8pi9_mode_pv_obj(self) -> PV:
+        if not self._fscan_8pi9_mode_pv_obj:
+            self._fscan_8pi9_mode_pv_obj = PV(self.fscan_8pi9_mode_pv)
+        return self._fscan_8pi9_mode_pv_obj
+
+    @property
+    def fscan_7pi9_mode_pv_obj(self) -> PV:
+        if not self._fscan_7pi9_mode_pv_obj:
+            self._fscan_7pi9_mode_pv_obj = PV(self.fscan_7pi9_mode_pv)
+        return self._fscan_7pi9_mode_pv_obj
+
+    @property
+    def fscan_push_8pi9_pv_obj(self) -> PV:
+        if not self._fscan_push_8pi9_pv_obj:
+            self._fscan_push_8pi9_pv_obj = PV(self.fscan_push_8pi9_pv)
+        return self._fscan_push_8pi9_pv_obj
+
+    @property
+    def fscan_push_7pi9_pv_obj(self) -> PV:
+        if not self._fscan_push_7pi9_pv_obj:
+            self._fscan_push_7pi9_pv_obj = PV(self.fscan_push_7pi9_pv)
+        return self._fscan_push_7pi9_pv_obj
+
+    @property
     def detune_best(self):
         return self.detune_best_pv_obj.get()
 
@@ -769,6 +827,8 @@ class Cavity(linac_utils.SCLinacObject):
         delta_hz_func: Callable,
         tolerance: int = 50,
         reset_signed_steps: bool = False,
+        iteration_callback: Optional[Callable[[], None]] = None,
+        max_stepper_temp: Optional[float] = None,
     ):
         if self.detune_invalid:
             raise linac_utils.DetuneError(f"{self} detune invalid")
@@ -787,6 +847,24 @@ class Cavity(linac_utils.SCLinacObject):
 
         while abs(delta_hz) > tolerance:
             self.check_abort()
+
+            # Optional stepper motor temperature guard: if a limit is passed
+            # and the stepper exceeds it, raise immediately and stop tuning
+            # rather than waiting/retrying — there is no automatic cool-down
+            # or wait-and-retry logic here, so the caller must intervene
+            # (e.g. pause and let the stepper cool) and re-run tuning.
+            if max_stepper_temp is not None:
+                temp = self.stepper_temp_pv_obj.get()
+                if temp > max_stepper_temp:
+                    raise linac_utils.StepperTempError(
+                        f"{self} stepper motor temp {temp:.1f} °C exceeds "
+                        f"limit {max_stepper_temp} °C"
+                    )
+
+            # Optional per-iteration hook (e.g. progress/telemetry).
+            if iteration_callback is not None:
+                iteration_callback()
+
             est_steps = int(0.9 * delta_hz * self.microsteps_per_hz)
 
             self.set_status_message(

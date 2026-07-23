@@ -14,6 +14,7 @@ from caproto.server import (
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     ESTIMATED_MICROSTEPS_PER_HZ,
     ESTIMATED_MICROSTEPS_PER_HZ_HL,
+    MICROSTEPS_PER_STEP,
     PIEZO_HZ_PER_VOLT,
 )
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
@@ -108,6 +109,28 @@ class StepperPVGroup(PVGroup):
             else 1 / ESTIMATED_MICROSTEPS_PER_HZ
         )
         await instance.write(uniform(0.8 * nominal, 1.2 * nominal))
+
+    @hz_per_microstep.putter
+    async def hz_per_microstep(self, instance, value):
+        # SCALE is derived on real IOCs (SCALE = SCALE_CALC.B / 256), so
+        # direct client writes are silently reverted. Only hz_per_step_calc's
+        # putter (via instance.write(), which bypasses this putter) may
+        # update this value.
+        return instance.value
+
+    # SCALE is derived on real IOCs: SCALE = SCALE_CALC.B / 256. Model that
+    # dependency so SCALE is only updated by writing the (writable) calc field,
+    # not by writing SCALE directly.
+    hz_per_step_calc = pvproperty(
+        value=0.0,
+        name="SCALE_CALC.B",
+        dtype=ChannelType.FLOAT,
+    )
+
+    @hz_per_step_calc.putter
+    async def hz_per_step_calc(self, instance, value):
+        await self.hz_per_microstep.write(value / MICROSTEPS_PER_STEP)
+        return value
 
     def __init__(self, prefix, cavity_group, piezo_group):
         super().__init__(prefix)

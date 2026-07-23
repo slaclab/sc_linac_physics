@@ -1,0 +1,853 @@
+"""Tests for Frequency Tuning Phase."""
+
+import time
+from datetime import datetime
+from unittest.mock import Mock
+
+import pytest
+
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
+    CommissioningRecord,
+    PhaseCheckpoint,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.frequency_tuning import (
+    FrequencyTuningLimits,
+    FrequencyTuningPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
+    PhaseContext,
+    PhaseResult,
+)
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    CavityAbortError,
+    CavityFaultError,
+    DetuneError,
+    FSCANError,
+    StepperError,
+    StepperTempError,
+    TUNE_CONFIG_COLD_VALUE,
+    TUNE_CONFIG_RESONANCE_VALUE,
+)
+
+# ---------------------------------------------------------------------------
+# Autouse fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def no_sleep(monkeypatch):
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_stepper():
+    stepper = Mock()
+    stepper.motor_moving = False
+    stepper.on_limit_switch = False
+    stepper.hz_per_microstep = 2.0
+    stepper.max_steps = 50
+    stepper.steps_cold_landing_pv = "ACCL:L1B:0210:STEP:NSTEPS_COLD"
+    return stepper
+
+
+@pytest.fixture
+def mock_cavity(mock_stepper):
+    cavity = Mock()
+    cavity.stepper_tuner = mock_stepper
+    cavity.stepper_temp_pv = "ACCL:L1B:0210:STEPTEMP"
+    cavity.detune_invalid = False
+    cavity.detune_chirp = 5000.0
+    cavity.is_online = True
+    # Cavities launch at cold landing (COLD == 1).
+    cavity.tune_config_pv_obj.get.return_value = TUNE_CONFIG_COLD_VALUE
+    return cavity
+
+
+@pytest.fixture
+def record():
+    return CommissioningRecord(linac=1, cryomodule="02", cavity_number=1)
+
+
+@pytest.fixture
+def context(mock_cavity, record):
+    return PhaseContext(
+        record=record,
+        operator="test_op",
+        parameters={"cavity": mock_cavity},
+    )
+
+
+@pytest.fixture
+def fast_limits():
+    return FrequencyTuningLimits(
+        tolerance_hz=500.0,
+        probe_steps=10,
+        temp_limit_c=70.0,
+        max_total_steps=10_000,
+    )
+
+
+@pytest.fixture
+def phase(context, fast_limits):
+    p = FrequencyTuningPhase(context, limits=fast_limits)
+    return p
+
+
+def _seed_cold_landing(phase, df_cold_hz=5000.0):
+    """Record a cold-landing checkpoint and make DF_COLD read back matching it,
+    so the DF_COLD gate in _tune_to_resonance is satisfied."""
+    phase.context.record.phase_history.append(
+        PhaseCheckpoint(
+            phase=phase.phase_type,
+            timestamp=datetime.now(),
+            operator="test_op",
+            step_name="record_cold_landing",
+            success=True,
+            measurements={"df_cold_hz": df_cold_hz},
+        )
+    )
+    phase.cavity.df_cold_pv_obj.get.return_value = df_cold_hz
+
+
+def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0, seed_cold=True):
+    """Call validate_prerequisites and inject pre-built PV mocks."""
+    phase.validate_prerequisites()
+    # STEPTEMP / DF_COLD / signed-step PVs now come from the cavity+stepper
+    # accessors (mock_cavity is a Mock, so these are auto-mocks).
+    phase.cavity.stepper_temp_pv_obj.get.return_value = temp_c
+    stepper = phase.cavity.stepper_tuner
+    stepper.step_signed_pv_obj.get.return_value = initial_signed_steps
+    phase._hz_per_microstep = 2.0
+    # Satisfy the DF_COLD gate for tune_to_resonance tests by default.
+    if seed_cold:
+        _seed_cold_landing(phase)
+    return phase
+
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+
+
+def test_phase_type(phase):
+    assert phase.phase_type == CommissioningPhase.FREQUENCY_TUNING
+
+
+def test_get_phase_steps(phase):
+    assert phase.get_phase_steps() == [
+        "verify_initial_state",
+        "record_cold_landing",
+        "probe_stepper_direction",
+        "apply_hz_per_step",
+        "tune_to_resonance",
+        "measure_pi_modes",
+        "record_results",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# validate_prerequisites
+# ---------------------------------------------------------------------------
+
+
+def test_validate_prerequisites_success(phase, mock_cavity):
+    ok, _ = phase.validate_prerequisites()
+    assert ok is True
+    assert phase.cavity is mock_cavity
+
+
+def test_validate_prerequisites_no_cavity(context):
+    context.parameters["cavity"] = None
+    ok, msg = FrequencyTuningPhase(context).validate_prerequisites()
+    assert ok is False
+    assert "cavity" in msg.lower()
+
+
+def test_validate_prerequisites_no_stepper(context):
+    context.parameters["cavity"].stepper_tuner = None
+    ok, _ = FrequencyTuningPhase(context).validate_prerequisites()
+    assert ok is False
+
+
+def test_validate_prerequisites_no_temp_pv(context):
+    context.parameters["cavity"].stepper_temp_pv = ""
+    ok, _ = FrequencyTuningPhase(context).validate_prerequisites()
+    assert ok is False
+
+
+# ---------------------------------------------------------------------------
+# execute_step dispatch
+# ---------------------------------------------------------------------------
+
+
+def test_execute_step_unknown_step(phase):
+    _setup_phase(phase)
+    result = phase.execute_step("nonexistent_step")
+    assert result.result == PhaseResult.FAILED
+    assert "Unknown step" in result.message
+
+
+def test_execute_step_without_cavity_raises(phase):
+    with pytest.raises(Exception):
+        phase.execute_step("verify_initial_state")
+
+
+# ---------------------------------------------------------------------------
+# verify_initial_state
+# ---------------------------------------------------------------------------
+
+
+def test_verify_initial_state_dry_run(context, fast_limits):
+    context.dry_run = True
+    p = FrequencyTuningPhase(context, limits=fast_limits)
+    p.validate_prerequisites()
+    result = p._verify_initial_state()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["dry_run"] is True
+
+
+def test_verify_initial_state_motor_already_moving(phase, mock_stepper):
+    _setup_phase(phase)
+    mock_stepper.motor_moving = True
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.FAILED
+    assert "moving" in result.message.lower()
+    # Guard fails before any cavity preparation.
+    phase.cavity.setup_tuning.assert_not_called()
+
+
+def test_verify_initial_state_on_limit_switch(phase, mock_stepper):
+    _setup_phase(phase)
+    mock_stepper.on_limit_switch = True
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.FAILED
+    assert "limit switch" in result.message.lower()
+    phase.cavity.setup_tuning.assert_not_called()
+
+
+def test_verify_initial_state_offline_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.is_online = False
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.FAILED
+    assert "online" in result.message.lower()
+    mock_cavity.setup_tuning.assert_not_called()
+
+
+def test_verify_initial_state_detune_error_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.setup_tuning.side_effect = DetuneError("no valid detune")
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.FAILED
+    assert "detune" in result.message.lower()
+
+
+def test_verify_initial_state_fault_error_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.reset_interlocks.side_effect = CavityFaultError("still faulted")
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.FAILED
+    assert "fault" in result.message.lower()
+
+
+def test_verify_initial_state_read_exception_retries(phase, mock_cavity):
+    _setup_phase(phase, temp_c=25.0)
+    phase.cavity.stepper_temp_pv_obj.get.side_effect = RuntimeError(
+        "PV timeout"
+    )
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.RETRY
+
+
+def test_verify_initial_state_success(phase, mock_cavity):
+    _setup_phase(phase, temp_c=30.0)
+    mock_cavity.tune_config_pv_obj.get.return_value = TUNE_CONFIG_COLD_VALUE
+    result = phase._verify_initial_state()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["initial_temp_c"] == 30.0
+    assert "initial_detune_hz" in result.data
+    # The cavity was prepared for tuning (production sequence).
+    mock_cavity.turn_off.assert_called_once()
+    mock_cavity.ssa.turn_on.assert_called_once()
+    mock_cavity.reset_interlocks.assert_called_once()
+    mock_cavity.setup_tuning.assert_called_once()
+    # COLD start → no warning
+    assert result.data["tune_config_warning"] is None
+    assert "WARNING" not in result.message
+
+
+def test_verify_initial_state_warns_when_not_cold(phase, mock_cavity):
+    _setup_phase(phase, temp_c=30.0)
+    mock_cavity.tune_config_pv_obj.get.return_value = (
+        TUNE_CONFIG_RESONANCE_VALUE
+    )
+    result = phase._verify_initial_state()
+    # Not fatal — still SUCCESS, but flagged.
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["tune_config_warning"] is not None
+    assert "WARNING" in result.message
+
+
+# ---------------------------------------------------------------------------
+# record_cold_landing
+# ---------------------------------------------------------------------------
+
+
+def test_record_cold_landing_dry_run(context, fast_limits):
+    context.dry_run = True
+    p = FrequencyTuningPhase(context, limits=fast_limits)
+    p.validate_prerequisites()
+    result = p._record_cold_landing()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["dry_run"] is True
+
+
+def test_record_cold_landing_success(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 8000.0
+    result = phase._record_cold_landing()
+    assert result.result == PhaseResult.SUCCESS
+    assert "hz_per_microstep" not in result.data
+    assert "cold_landing_steps" not in result.data
+    assert result.data["df_cold_hz"] == 8000.0
+    assert "initial_timestamp" in result.data
+    # DF_COLD is written by the operator via the UI button, not auto-written here.
+    phase.cavity.df_cold_pv_obj.put.assert_not_called()
+
+
+def test_record_cold_landing_detune_read_error_retries(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = property(
+        Mock(side_effect=RuntimeError("PV timeout"))
+    )
+    # Simulate detune_chirp raising on access
+    type(phase.cavity).detune_chirp = property(
+        Mock(side_effect=RuntimeError("PV timeout"))
+    )
+    result = phase._record_cold_landing()
+    assert result.result == PhaseResult.RETRY
+
+
+# ---------------------------------------------------------------------------
+# probe_stepper_direction
+# ---------------------------------------------------------------------------
+
+
+def test_probe_stepper_direction_dry_run(context, fast_limits):
+    context.dry_run = True
+    p = FrequencyTuningPhase(context, limits=fast_limits)
+    p.validate_prerequisites()
+    result = p._probe_stepper_direction()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["dry_run"] is True
+
+
+def test_probe_stepper_direction_positive_increases_frequency(
+    phase, mock_cavity, mock_stepper
+):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 1000.0
+
+    def after_move(steps, *args, **kwargs):
+        if steps > 0:
+            # CHIRP:DF = ref − cav; freq increased → CHIRP:DF decreases
+            mock_cavity.detune_chirp = 500.0
+        else:
+            mock_cavity.detune_chirp = 1000.0  # restored
+
+    mock_stepper.move.side_effect = after_move
+
+    result = phase._probe_stepper_direction()
+
+    assert result.result == PhaseResult.SUCCESS
+    # delta=-500, probe_steps=10 (fast_limits) → signed_hz=+50 Hz/step
+    assert result.data["hz_per_microstep"] == pytest.approx(50.0)
+    assert phase._hz_per_microstep == pytest.approx(50.0)
+    # SCALE PV is NOT written by the probe step — operator confirms via apply_hz_per_step
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
+    assert mock_stepper.move.call_count == 2
+    assert mock_stepper.move.call_args_list[0][0][0] > 0
+    assert mock_stepper.move.call_args_list[1][0][0] < 0
+
+
+def test_probe_stepper_direction_positive_decreases_frequency(
+    phase, mock_cavity, mock_stepper
+):
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 1000.0
+
+    def after_move(steps, *args, **kwargs):
+        if steps > 0:
+            # CHIRP:DF = ref − cav; freq decreased → CHIRP:DF increases
+            mock_cavity.detune_chirp = 1200.0
+        else:
+            mock_cavity.detune_chirp = 1000.0
+
+    mock_stepper.move.side_effect = after_move
+
+    result = phase._probe_stepper_direction()
+
+    assert result.result == PhaseResult.SUCCESS
+    # delta=+200, probe_steps=10 → signed_hz=-20 Hz/step
+    assert result.data["hz_per_microstep"] == pytest.approx(-20.0)
+    assert phase._hz_per_microstep == pytest.approx(-20.0)
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
+
+
+def test_probe_stepper_direction_delta_too_small(
+    phase, mock_cavity, mock_stepper
+):
+    # A change below min_probe_delta_hz (default 100 Hz) fails — a 50 Hz probe
+    # response is treated as a degraded/uncoupled stepper, not a valid measurement.
+    assert phase.limits.min_probe_delta_hz == 100.0
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 1000.0
+
+    def after_move(steps, *args, **kwargs):
+        if steps > 0:
+            mock_cavity.detune_chirp = 1050.0  # only 50 Hz — below the floor
+
+    mock_stepper.move.side_effect = after_move
+
+    result = phase._probe_stepper_direction()
+
+    assert result.result == PhaseResult.FAILED
+    assert "minimum" in result.message.lower()
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
+
+
+def test_probe_stepper_direction_stepper_error(phase, mock_stepper):
+    _setup_phase(phase)
+    mock_stepper.move.side_effect = StepperError("limit switch")
+    result = phase._probe_stepper_direction()
+    assert result.result == PhaseResult.FAILED
+    assert "limit switch" in result.message.lower()
+
+
+def test_probe_stepper_direction_transient_error_retries(phase, mock_stepper):
+    _setup_phase(phase)
+    mock_stepper.move.side_effect = RuntimeError("transient")
+    result = phase._probe_stepper_direction()
+    assert result.result == PhaseResult.RETRY
+
+
+# ---------------------------------------------------------------------------
+# apply_hz_per_step
+# ---------------------------------------------------------------------------
+
+
+def test_apply_hz_per_step_dry_run(context, fast_limits):
+    context.dry_run = True
+    p = FrequencyTuningPhase(context, limits=fast_limits)
+    p.validate_prerequisites()
+    result = p._apply_hz_per_step()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["dry_run"] is True
+
+
+def test_apply_hz_per_step_not_measured(phase):
+    phase.validate_prerequisites()
+    result = phase._apply_hz_per_step()
+    assert result.result == PhaseResult.FAILED
+    assert "probe_stepper_direction" in result.message
+
+
+def test_apply_hz_per_step_writes_scale_calc_pv(phase, mock_stepper):
+    _setup_phase(phase)
+    phase._hz_per_microstep = 42.5
+    result = phase._apply_hz_per_step()
+    assert result.result == PhaseResult.SUCCESS
+    # SCALE is derived (read-only); the phase must write SCALE_CALC.B, not SCALE.
+    mock_stepper.set_hz_per_microstep.assert_called_once_with(42.5)
+    mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
+
+
+def test_apply_hz_per_step_pv_error_retries(phase, mock_stepper):
+    _setup_phase(phase)
+    phase._hz_per_microstep = 10.0
+    mock_stepper.set_hz_per_microstep.side_effect = RuntimeError("timeout")
+    result = phase._apply_hz_per_step()
+    assert result.result == PhaseResult.RETRY
+    assert "SCALE_CALC.B" in result.message
+
+
+# ---------------------------------------------------------------------------
+# tune_to_resonance
+# ---------------------------------------------------------------------------
+
+
+def test_tune_to_resonance_dry_run(context, fast_limits):
+    context.dry_run = True
+    p = FrequencyTuningPhase(context, limits=fast_limits)
+    p.validate_prerequisites()
+    result = p._tune_to_resonance()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["dry_run"] is True
+
+
+def test_tune_to_resonance_delegates_to_auto_tune(
+    phase, mock_cavity, mock_stepper
+):
+    # Happy path: the phase delegates the loop to Cavity._auto_tune, then
+    # reads REG_TOTSGN for NSTEPS_COLD and sets tune_config=RESONANCE.
+    _setup_phase(phase)
+    mock_cavity.stepper_tuner.step_signed_pv_obj.get.return_value = 4000
+
+    result = phase._tune_to_resonance()
+
+    assert result.result == PhaseResult.SUCCESS
+    mock_cavity._auto_tune.assert_called_once()
+    # max_stepper_temp defaults to the plain limit, and an iteration_callback
+    # is supplied for abort + live plot.
+    kwargs = mock_cavity._auto_tune.call_args.kwargs
+    assert kwargs["max_stepper_temp"] == phase.limits.temp_limit_c
+    assert callable(kwargs["iteration_callback"])
+    # NSTEPS_COLD = negation of the accumulated signed steps.
+    assert result.data["cold_landing_steps"] == -4000
+    mock_stepper.steps_cold_landing_pv_obj.put.assert_called_once_with(-4000)
+    mock_cavity.tune_config_pv_obj.put.assert_called_once_with(
+        TUNE_CONFIG_RESONANCE_VALUE
+    )
+
+
+def test_tune_to_resonance_fails_when_df_cold_not_recorded(phase, mock_cavity):
+    # No record_cold_landing checkpoint at all.
+    _setup_phase(phase, seed_cold=False)
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+    assert "record_cold_landing" in result.message
+    mock_cavity._auto_tune.assert_not_called()
+
+
+def test_tune_to_resonance_fails_when_df_cold_mismatched(phase, mock_cavity):
+    # Cold landing was recorded, but DF_COLD PV was never pushed to match it.
+    _setup_phase(phase, seed_cold=False)
+    _seed_cold_landing(phase, df_cold_hz=5000.0)
+    phase.cavity.df_cold_pv_obj.get.return_value = 0.0  # operator did not push
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+    assert "DF_COLD does not match" in result.message
+    mock_cavity._auto_tune.assert_not_called()
+
+
+def test_tune_to_resonance_over_temp_fails_with_ack_flag(phase, mock_cavity):
+    # _auto_tune raises StepperTempError on an over-temp breach; the phase
+    # maps it to FAILED + requires_over_temp_ack for the UI to prompt.
+    _setup_phase(phase)
+    phase.limits.temp_limit_c = 70.0
+    phase.cavity.stepper_temp_pv_obj.get.return_value = 85.0
+    mock_cavity._auto_tune.side_effect = StepperTempError(
+        "stepper motor temp 85.0 °C exceeds limit 70 °C"
+    )
+
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+    assert result.data["requires_over_temp_ack"] is True
+    assert result.data["stepper_temp_c"] == 85.0
+    assert result.data["temp_limit_c"] == 70.0
+
+
+def test_tune_to_resonance_passes_ack_ceiling_and_records(
+    phase, mock_cavity, context
+):
+    # Operator-supplied over_temp_ack_c raises the ceiling passed to _auto_tune
+    # and is recorded (with the operator) on success.
+    _setup_phase(phase)
+    phase.limits.temp_limit_c = 70.0
+    context.parameters["over_temp_ack_c"] = 90.0
+    mock_cavity.stepper_tuner.step_signed_pv_obj.get.return_value = 1000
+
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.SUCCESS
+    assert mock_cavity._auto_tune.call_args.kwargs["max_stepper_temp"] == 90.0
+    assert result.data["over_temp_acknowledged_c"] == 90.0
+    assert result.data["over_temp_acknowledged_by"] == context.operator
+
+
+def test_tune_to_resonance_detune_error_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity._auto_tune.side_effect = DetuneError("motor moved too far")
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+
+
+def test_tune_to_resonance_abort_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity._auto_tune.side_effect = CavityAbortError("aborted")
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+
+
+def test_tune_to_resonance_transient_error_retries(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity._auto_tune.side_effect = RuntimeError("PV timeout")
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.RETRY
+
+
+def test_tune_to_resonance_missing_hz_per_microstep(phase, mock_cavity):
+    _setup_phase(phase)
+    phase._hz_per_microstep = None
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.FAILED
+    assert "probe_stepper_direction" in result.message
+    mock_cavity._auto_tune.assert_not_called()
+
+
+def test_tune_to_resonance_signed_step_read_error_retries(phase, mock_cavity):
+    # A failure reading REG_TOTSGN after tuning must RETRY rather than silently
+    # writing a corrupt NSTEPS_COLD.
+    _setup_phase(phase)
+    phase.cavity.stepper_tuner.step_signed_pv_obj.get.side_effect = (
+        RuntimeError("PV timeout")
+    )
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.RETRY
+
+
+def test_tune_to_resonance_nsteps_cold_write_error(
+    phase, mock_cavity, mock_stepper
+):
+    _setup_phase(phase)
+    mock_cavity.stepper_tuner.step_signed_pv_obj.get.return_value = 4000
+    mock_stepper.steps_cold_landing_pv_obj.put.side_effect = RuntimeError(
+        "PV timeout"
+    )
+    result = phase._tune_to_resonance()
+    assert result.result == PhaseResult.RETRY
+    assert "NSTEPS_COLD" in result.message
+
+
+def test_tuning_iteration_hook_raises_on_abort(phase, mock_cavity, context):
+    # The per-iteration hook surfaces the abort flag as an exception so
+    # _auto_tune's loop unwinds.
+    _setup_phase(phase)
+    context.request_abort()
+    with pytest.raises(CavityAbortError):
+        phase._tuning_iteration_hook()
+
+
+# ---------------------------------------------------------------------------
+# record_results
+# ---------------------------------------------------------------------------
+
+
+def test_record_results_success(phase):
+    _setup_phase(phase)
+    result = phase._record_results()
+    assert result.result == PhaseResult.SUCCESS
+
+
+# ---------------------------------------------------------------------------
+# finalize_phase
+# ---------------------------------------------------------------------------
+
+
+def _make_checkpoint(phase_type, step_name, measurements):
+    return PhaseCheckpoint(
+        phase=phase_type,
+        timestamp=datetime.now(),
+        operator="op",
+        step_name=step_name,
+        success=True,
+        measurements=measurements,
+    )
+
+
+def test_finalize_phase_populates_frequency_tuning_data(phase, record):
+    _setup_phase(phase, seed_cold=False)
+    phase._history_start = 0
+
+    record.phase_history.extend(
+        [
+            _make_checkpoint(
+                CommissioningPhase.FREQUENCY_TUNING,
+                "record_cold_landing",
+                {
+                    "df_cold_hz": 8000.0,
+                    "initial_timestamp": datetime.now().isoformat(),
+                },
+            ),
+            _make_checkpoint(
+                CommissioningPhase.FREQUENCY_TUNING,
+                "probe_stepper_direction",
+                {
+                    "d0_hz": 8000.0,
+                    "d1_hz": 8200.0,
+                    "delta_hz": 200.0,
+                    "hz_per_microstep": 2.0,
+                },
+            ),
+            _make_checkpoint(
+                CommissioningPhase.FREQUENCY_TUNING,
+                "tune_to_resonance",
+                {
+                    "total_steps": 4000,
+                    "cold_landing_steps": -4000,
+                    "final_timestamp": datetime.now().isoformat(),
+                },
+            ),
+        ]
+    )
+
+    phase.finalize_phase()
+
+    ft = record.frequency_tuning
+    assert ft is not None
+    assert ft.df_cold_hz == 8000.0
+    assert ft.steps_to_resonance == 4000
+    assert ft.positive_step_increases_frequency is True
+    assert ft.hz_per_microstep == 2.0
+    assert ft.cold_landing_steps == -4000
+    assert ft.initial_timestamp is not None
+    assert ft.final_timestamp is not None
+
+
+def test_finalize_phase_no_checkpoints_creates_defaults(phase, record):
+    _setup_phase(phase, seed_cold=False)
+    phase._history_start = 0
+
+    phase.finalize_phase()
+
+    ft = record.frequency_tuning
+    assert ft is not None
+    assert ft.df_cold_hz is None
+    assert ft.steps_to_resonance is None
+    assert ft.positive_step_increases_frequency is None
+
+
+# ---------------------------------------------------------------------------
+# _do_probe_move — probe callback paths
+# ---------------------------------------------------------------------------
+
+
+def test_do_probe_move_invokes_callbacks(phase, mock_cavity, mock_stepper):
+    """probe_cb must be called with (0, d0) before and (probe, d1) after move."""
+    _setup_phase(phase)
+    called_with = []
+    mock_cavity.detune_chirp = 1000.0
+
+    def probe_cb(steps, hz):
+        called_with.append((steps, hz))
+
+    phase._do_probe_move(10, probe_cb, speed=1000)
+
+    assert len(called_with) == 2
+    assert called_with[0] == (0, 1000.0)
+    assert called_with[1][0] == 10
+
+
+def test_do_probe_move_callback_exception_is_swallowed(
+    phase, mock_cavity, mock_stepper
+):
+    """A failing probe_cb must not propagate — the move should succeed."""
+    _setup_phase(phase)
+
+    def bad_cb(*_):
+        raise RuntimeError("callback error")
+
+    phase._do_probe_move(10, bad_cb)
+    assert mock_stepper.move.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# _measure_pi_modes — dry-run and live paths
+# ---------------------------------------------------------------------------
+
+
+def test_measure_pi_modes_dry_run(phase):
+    _setup_phase(phase)
+    phase.context.dry_run = True
+    result = phase._measure_pi_modes()
+    assert result.result == PhaseResult.SUCCESS
+    assert result.data["dry_run"] is True
+
+
+def test_measure_pi_modes_delegates_to_run_fscan(phase, mock_cavity):
+    # Phase delegates the scan to rack.run_fscan, then reads modes off the
+    # cavity accessors.
+    _setup_phase(phase)
+    mock_cavity.rack.run_fscan = Mock()
+    mock_cavity.fscan_8pi9_mode_pv_obj.get.return_value = 1_400_000_000.0
+    mock_cavity.fscan_7pi9_mode_pv_obj.get.return_value = 1_399_000_000.0
+
+    result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.SUCCESS
+    mock_cavity.rack.run_fscan.assert_called_once()
+    call = mock_cavity.rack.run_fscan.call_args
+    assert call.args[0] == [mock_cavity]  # scans just this cavity
+    assert call.kwargs["freq_start"] == phase.limits.pi_scan_freq_start
+    assert result.data["mode_8pi_9_hz"] == 1_400_000_000.0
+    assert result.data["mode_7pi_9_hz"] == 1_399_000_000.0
+
+
+def test_measure_pi_modes_rack_check_blocks(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.rack.run_fscan = Mock()
+    phase.context.parameters["rack_check_callback"] = lambda rack: (
+        False,
+        "another cavity active",
+    )
+
+    result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.FAILED
+    assert "rack" in result.message.lower()
+    # Exclusivity gate fails before any scan.
+    mock_cavity.rack.run_fscan.assert_not_called()
+
+
+def test_measure_pi_modes_rack_check_callback_raises(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.rack.run_fscan = Mock()
+    phase.context.parameters["rack_check_callback"] = Mock(
+        side_effect=RuntimeError("unexpected")
+    )
+
+    result = phase._measure_pi_modes()
+
+    assert result.result == PhaseResult.RETRY
+    mock_cavity.rack.run_fscan.assert_not_called()
+
+
+def test_measure_pi_modes_fscan_error_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.rack.run_fscan = Mock(
+        side_effect=FSCANError("scan aborted (state 6)")
+    )
+    result = phase._measure_pi_modes()
+    assert result.result == PhaseResult.FAILED
+    assert "FSCAN" in result.message
+
+
+def test_measure_pi_modes_abort_fails(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.rack.run_fscan = Mock(
+        side_effect=CavityAbortError("abort requested")
+    )
+    result = phase._measure_pi_modes()
+    assert result.result == PhaseResult.FAILED
+
+
+def test_measure_pi_modes_transient_error_retries(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.rack.run_fscan = Mock(side_effect=RuntimeError("PV timeout"))
+    result = phase._measure_pi_modes()
+    assert result.result == PhaseResult.RETRY
+
+
+def test_measure_pi_modes_read_frequency_error(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.rack.run_fscan = Mock()
+    mock_cavity.fscan_8pi9_mode_pv_obj.get.side_effect = RuntimeError(
+        "read failed"
+    )
+    result = phase._measure_pi_modes()
+    assert result.result == PhaseResult.RETRY

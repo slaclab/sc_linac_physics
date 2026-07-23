@@ -339,7 +339,7 @@ class TestSerializationAndRegistry:
         freq_specs = get_phase_display_specs(FrequencyTuningData)
 
         assert [spec.widget_name for spec in freq_specs] == [
-            "freq_tuning_initial_detune",
+            "freq_tuning_df_cold",
             "freq_tuning_steps_to_resonance",
             "freq_tuning_hz_per_microstep",
             "freq_tuning_cold_steps",
