@@ -346,6 +346,43 @@ def test_job_handling(gui):
     assert not gui.measurement_running
 
 
+def test_load_data_resets_status_panel(gui, temp_data_file):
+    """Loading new data should reset all cavity statuses so cavities
+    not in the new data don't keep stale results."""
+    mock_df_data = MagicMock()
+    mock_df_data.size = 100
+
+    mock_stats = {"rms": 1.0, "peak": 2.0}
+    gui.stats_calculator.calculate_statistics.return_value = mock_stats
+    gui.stats_calculator.convert_to_panel_format.return_value = mock_stats
+
+    # First load: cavities 1 and 2
+    first_data = {
+        "cavity_list": [1, 2],
+        "cavities": {1: {"DF": mock_df_data}, 2: {"DF": mock_df_data}},
+    }
+    gui._handle_new_data("file", first_data)
+    assert gui.status_panel.mock.update_statistics.call_count == 2
+
+    # Load a second file: this should reset the status panel
+    gui.status_panel.mock.reset_all.reset_mock()
+    gui.load_data(temp_data_file)
+    gui.status_panel.mock.reset_all.assert_called_once()
+
+    # Second load: only cavity 1
+    second_data = {
+        "cavity_list": [1],
+        "cavities": {1: {"DF": mock_df_data}},
+    }
+    gui.status_panel.mock.update_statistics.reset_mock()
+    gui._handle_new_data("file", second_data)
+
+    # Only cavity 1 should have been updated cavity 2 stays reset
+    gui.status_panel.mock.update_statistics.assert_called_once_with(
+        1, mock_stats
+    )
+
+
 def test_cleanup(gui, mock_data_manager):
     """Test cleanup on window close."""
     # Ensure data_manager is set

@@ -377,8 +377,9 @@ class MicrophonicsGUI(Display):
     def load_data(self, file_path: Path):
         """Load data from file and display using existing visualization code."""
         try:
-            # Clear existing plots
+            # Clear state from the previously displayed file
             self.plot_panel.clear_plots()
+            self.status_panel.reset_all()
 
             # Load and process the data using DataLoader
             self.data_loader.load_file(file_path)
