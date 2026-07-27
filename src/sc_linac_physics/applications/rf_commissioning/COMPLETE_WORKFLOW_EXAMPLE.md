@@ -101,7 +101,7 @@ run_phase(
 
 # Continue technical phases.
 for phase, measurement in [
-    (CommissioningPhase.FREQUENCY_TUNING, {"final_detune_hz": 5.0}),
+    (CommissioningPhase.FREQUENCY_TUNING, {"df_cold_hz": 5000.0}),
     (CommissioningPhase.CAVITY_CHAR, {"loaded_q": 2.8e7}),
     (CommissioningPhase.PIEZO_WITH_RF, {"detune_gain": 0.10}),
     (CommissioningPhase.HIGH_POWER_RAMP, {"max_amplitude_reached": 17.5}),

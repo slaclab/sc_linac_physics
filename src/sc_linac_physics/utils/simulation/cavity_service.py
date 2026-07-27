@@ -203,7 +203,8 @@ class CavityPVGroup(PVGroup):
     )
     tune_config: PvpropertyEnum = pvproperty(
         name="TUNE_CONFIG",
-        value=0,
+        # Cavities launch at cold landing (index 1) before frequency tuning.
+        value=1,
         dtype=ChannelType.ENUM,
         enum_strings=("On resonance", "Cold landing", "Parked", "Other"),
     )
