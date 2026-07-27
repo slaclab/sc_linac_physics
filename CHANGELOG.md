@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v9.32.0 (2026-07-27)
+
+### Bug Fixes
+
+- Store hz_per_microstep as signed, remove redundant direction field
+  ([#269](https://github.com/slaclab/sc_linac_physics/pull/269),
+  [`e2325de`](https://github.com/slaclab/sc_linac_physics/commit/e2325dec3d06947221eede5956f03ade62452266))
+
+### Chores
+
+- **ci**: Bump the github-actions group with 2 updates
+  ([#276](https://github.com/slaclab/sc_linac_physics/pull/276),
+  [`06eb80f`](https://github.com/slaclab/sc_linac_physics/commit/06eb80ff6be4110fa34c23845685bd49c1cd3970))
+
+### Features
+
+- Frequency tuning phase backend logic
+  ([#269](https://github.com/slaclab/sc_linac_physics/pull/269),
+  [`e2325de`](https://github.com/slaclab/sc_linac_physics/commit/e2325dec3d06947221eede5956f03ade62452266))
+
+- **rf-commissioning**: Add frequency tuning phase backend logic
+  ([#269](https://github.com/slaclab/sc_linac_physics/pull/269),
+  [`e2325de`](https://github.com/slaclab/sc_linac_physics/commit/e2325dec3d06947221eede5956f03ade62452266))
+
+
 ## v9.31.0 (2026-07-16)
 
 ### Features
