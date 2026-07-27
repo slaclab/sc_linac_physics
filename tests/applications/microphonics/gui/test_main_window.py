@@ -365,6 +365,7 @@ def test_load_data_resets_status_panel(gui, temp_data_file):
     assert gui.status_panel.mock.update_statistics.call_count == 2
 
     # Load a second file: this should reset the status panel
+    gui.data_loader = Mock()
     gui.status_panel.mock.reset_all.reset_mock()
     gui.load_data(temp_data_file)
     gui.status_panel.mock.reset_all.assert_called_once()
