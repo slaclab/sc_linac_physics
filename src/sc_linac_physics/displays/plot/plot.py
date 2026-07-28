@@ -661,6 +661,10 @@ class PVGroupArchiverDisplay(Display):
             yAxisName=axis_name,
             useArchiveData=True,
         )
+        from sc_linac_physics.displays.plot.embeddable_plots import connect_mock_archive_source
+        _pi = self.archiver_plot.getPlotItem()
+        if _pi.curves:
+            connect_mock_archive_source(_pi.curves[-1])
 
         # Get the curve that was just added and store it
         if len(plot_item.curves) > 0:

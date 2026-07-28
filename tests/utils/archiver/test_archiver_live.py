@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 """Test archiver integration without GUI. Used for personal debugging"""
 
-from sc_linac_physics.utils.archiver import start_mock_archiver, get_values_over_time_range
+import os
 from datetime import datetime, timedelta
+from sc_linac_physics.utils.archiver import get_values_over_time_range
 
 # Enable mock (simulates what sc-sim does)
-start_mock_archiver()
+os.environ["SC_ARCHIVER_MOCK"] = "1"
 print("✓ Mock archiver enabled\n")
 
 # Test 1: Single PV, 1 minute
@@ -53,7 +54,7 @@ from sc_linac_physics.utils.archiver import (
 )
 from datetime import datetime, timedelta
 
-# DON'T call start_mock_archiver() - test real routing!
+# DON'T set SC_ARCHIVER_MOCK - test real routing!
 
 print("Test: Archiver Smart Routing")
 print("=" * 50)

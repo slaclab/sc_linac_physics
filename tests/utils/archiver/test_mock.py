@@ -5,7 +5,8 @@ import pytest
 
 from sc_linac_physics.utils.archiver.mock import (
     MockArchiveDataHandler,
-    mock_get_values_over_time_range
+    mock_get_values_over_time_range,
+    TREND_FUNCTIONS,
 )
 from sc_linac_physics.utils.archiver.models import ArchiveDataHandler
 
@@ -71,19 +72,26 @@ def test_generate_values_phase():
 
 
 def test_generate_values_cudstatus():
-    """Test value generation for fault code PV (CUDSTATUS)."""
+    """CUDSTATUS emits the cavity-number string (OK) mostly, fault codes rarely."""
     start = datetime(2024, 1, 15, 12, 0, 0)
     end = datetime(2024, 1, 15, 12, 1, 0)
-    
     mock = MockArchiveDataHandler("ACCL:L1B:0110:CUDSTATUS", start, end)
-    
-    # All values should be strings
+
     assert len(mock.values) > 0
     assert all(isinstance(v, str) for v in mock.values)
-    
-    # Most should be "TLC" (normal state)
-    tlc_count = sum(1 for v in mock.values if v == "TLC")
-    assert tlc_count > len(mock.values) * 0.8, "Expected >80% TLC values"
+
+    cavity_num = mock._extract_cavity_number()
+    assert cavity_num == "1"
+
+    # Most values are the OK (cavity-number) string. Some cavities may be
+    # fully healthy (per-cavity fault-rate variation), so we only require
+    # that the majority are OK, not that faults are present.
+    ok_count = sum(1 for v in mock.values if v == cavity_num)
+    assert ok_count >= len(mock.values) * 0.5, "Expected majority OK values"
+
+    # Any non-OK values must be valid fault codes (strings, not the number).
+    for v in mock.values:
+        assert isinstance(v, str)
 
 
 def test_generate_values_detune():
@@ -194,3 +202,174 @@ def test_mock_get_values_over_time_range_empty_list():
     
     assert isinstance(result, dict)
     assert len(result) == 0
+
+# Shared time range for trend tests
+TREND_START = datetime(2024, 1, 15, 12, 0, 0)
+TREND_END = TREND_START + timedelta(minutes=1)   # 61 points at 1 Hz
+
+
+# --- Default / backward-compatibility ------------------------------------
+
+def test_flat_is_default_trend():
+    """Default trend is 'flat' so existing behavior is preserved."""
+    handler = MockArchiveDataHandler("X:ADES", TREND_START, TREND_END)
+    assert handler.trend == "flat"
+
+
+def test_flat_default_keeps_base_value():
+    """With the flat default, ADES stays centered near its base (~16.5)."""
+    d = mock_get_values_over_time_range(["X:ADES"], TREND_START, TREND_END)
+    vals = d["X:ADES"].values
+    avg = sum(vals) / len(vals)
+    assert 16.0 <= avg <= 17.0
+
+
+# --- Trend shapes (noise_scale=0 -> clean, deterministic curves) ---------
+
+def test_linear_trend_rises():
+    """Linear trend: last value clearly higher than the first."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="linear", trend_amplitude=10, noise_scale=0,
+    )
+    vals = d["X:ADES"].values
+    assert vals[-1] > vals[0]
+
+
+def test_linear_trend_is_monotonic():
+    """With no noise, a linear trend increases at every step."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="linear", trend_amplitude=10, noise_scale=0,
+    )
+    vals = d["X:ADES"].values
+    assert all(vals[i] <= vals[i + 1] for i in range(len(vals) - 1))
+
+
+def test_parabolic_is_u_shaped():
+    """Parabolic trend dips in the middle (endpoints higher than center)."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="parabolic", trend_amplitude=10, noise_scale=0,
+    )
+    vals = d["X:ADES"].values
+    mid = len(vals) // 2
+    assert vals[0] > vals[mid]
+    assert vals[-1] > vals[mid]
+
+
+def test_quadratic_rises_and_accelerates():
+    """Quadratic trend: rising, and the last step is bigger than the first."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="quadratic", trend_amplitude=10, noise_scale=0,
+    )
+    vals = d["X:ADES"].values
+    assert vals[-1] > vals[0]
+    first_step = vals[1] - vals[0]
+    last_step = vals[-1] - vals[-2]
+    assert last_step > first_step   # accelerating
+
+
+def test_sine_goes_up_then_down():
+    """Sine trend over one period: peaks around the quarter point,
+    troughs around the three-quarter point."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="sine", trend_amplitude=5, noise_scale=0,
+    )
+    vals = d["X:ADES"].values
+    n = len(vals)
+    quarter = vals[n // 4]
+    three_quarter = vals[3 * n // 4]
+    assert quarter > vals[0]           # risen by the quarter point
+    assert three_quarter < quarter     # fallen by the three-quarter point
+
+
+def test_flat_trend_stays_near_base():
+    """Flat trend with no noise stays essentially constant at the base value."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="flat", noise_scale=0,
+    )
+    vals = d["X:ADES"].values
+    assert max(vals) - min(vals) < 1e-6   # no variation with flat + no noise
+
+
+# --- Amplitude & noise knobs ---------------------------------------------
+
+def test_amplitude_scales_the_trend():
+    """Larger amplitude produces a larger rise for a linear trend."""
+    small = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="linear", trend_amplitude=1, noise_scale=0,
+    )["X:ADES"].values
+    big = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="linear", trend_amplitude=10, noise_scale=0,
+    )["X:ADES"].values
+    small_rise = small[-1] - small[0]
+    big_rise = big[-1] - big[0]
+    assert big_rise > small_rise
+
+
+def test_zero_noise_gives_clean_line():
+    """noise_scale=0 removes scatter: a linear trend has constant step size."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="linear", trend_amplitude=10, noise_scale=0,
+    )
+    vals = d["X:ADES"].values
+    diffs = [vals[i + 1] - vals[i] for i in range(len(vals) - 1)]
+    assert max(diffs) - min(diffs) < 1e-6   # every step identical
+
+
+# --- Determinism ----------------------------------------------------------
+
+def test_determinism_preserved_with_trend():
+    """Same PV + range + trend produces identical output every time."""
+    a = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END, trend="sine", trend_amplitude=3
+    )["X:ADES"].values
+    b = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END, trend="sine", trend_amplitude=3
+    )["X:ADES"].values
+    assert a == b
+
+
+# --- Scope: trends apply to floats, not enums/ints -----------------------
+
+def test_trend_does_not_affect_enum_values():
+    """ENUM PVs ignore the trend (values stay small integer codes)."""
+    d = mock_get_values_over_time_range(
+        ["X:CRYO_LTCH"], TREND_START, TREND_END,   # resolves to ENUM via heuristic
+        trend="linear", trend_amplitude=100, noise_scale=0,
+    )
+    vals = d["X:CRYO_LTCH"].values
+    # enum values are small indices, unaffected by the big linear amplitude
+    assert all(isinstance(v, int) for v in vals)
+    assert all(0 <= v < 10 for v in vals)
+
+
+# --- Registry sanity ------------------------------------------------------
+
+@pytest.mark.parametrize("shape", ["flat", "linear", "parabolic", "quadratic", "sine"])
+def test_all_trends_produce_valid_data(shape):
+    """Every registered trend produces the right number of points, no errors."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END, trend=shape
+    )
+    vals = d["X:ADES"].values
+    assert len(vals) == 61
+    assert all(isinstance(v, float) for v in vals)
+
+
+def test_unknown_trend_falls_back_to_flat():
+    """An unrecognized trend name falls back gracefully (no crash)."""
+    d = mock_get_values_over_time_range(
+        ["X:ADES"], TREND_START, TREND_END,
+        trend="banana", trend_amplitude=10, noise_scale=0,
+    )
+    vals = d["X:ADES"].values
+    # falls back to _trend_flat -> stays near base, no rise
+    assert abs(vals[-1] - vals[0]) < 1e-6

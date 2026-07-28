@@ -13,7 +13,9 @@ from .models import ArchiverValue, ArchiveDataHandler
 
 
 ARCHIVER_BASE_URL = "http://lcls-archapp.slac.stanford.edu/retrieval/data"
-RANGE_ENDPOINT = f"{ARCHIVER_BASE_URL}/getData.json"
+RANGE_ENDPOINT_SINGLE = f"{ARCHIVER_BASE_URL}/getData.json"
+RANGE_ENDPOINT_MULTI = f"{ARCHIVER_BASE_URL}/getDataForPVs.json"
+
 
 
 class ArchiverError(Exception):
@@ -47,9 +49,8 @@ def _create_session() -> requests.Session:
 def is_archiver_available(timeout: float = 2.0) -> bool:
     """Quick connectivity check."""
     try:
-        # HEAD the actual endpoint we use
-        r = requests.head(RANGE_ENDPOINT, timeout=timeout)
-        # Consider any <500 response as "reachable"
+        # HEAD the single-PV endpoint just to check reachability
+        r = requests.head(RANGE_ENDPOINT_SINGLE, timeout=timeout)  
         return r.status_code < 500
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
         return False
@@ -66,13 +67,16 @@ def real_get_values_over_time_range(
 
     start_str = start_time.isoformat(timespec="microseconds")
     end_str = end_time.isoformat(timespec="microseconds")
-
     params = {"from": start_str, "to": end_str, "pv": pv_list}
 
+    # Use the right endpoint for single vs multiple PVs
+    endpoint = RANGE_ENDPOINT_MULTI if len(pv_list) > 1 else RANGE_ENDPOINT_SINGLE
+
     session = _create_session()
+    print("[archiver] GET", endpoint, params)
 
     try:
-        response = session.get(RANGE_ENDPOINT, params=params, timeout=10)
+        response = session.get(endpoint, params=params, timeout=10)   # ONE call only
         response.raise_for_status()
     except requests.exceptions.Timeout as e:
         raise ArchiverTimeoutError("Request timed out") from e
@@ -82,12 +86,10 @@ def real_get_values_over_time_range(
         raise ArchiverError(f"HTTP {response.status_code}") from e
 
     data = response.json()
-
-    result: Dict[str, ArchiveDataHandler] = {}
+    result = {}
     for pv_data in data:
         pv_name = pv_data["meta"]["name"]
-        archiver_values: List[ArchiverValue] = []
-
+        archiver_values = []
         for point in pv_data.get("data", []):
             ts_secs = point["secs"] + point.get("nanos", 0) / 1e9
             ts = datetime.fromtimestamp(ts_secs, tz=timezone.utc)
@@ -99,7 +101,5 @@ def real_get_values_over_time_range(
                     status=int(point.get("status", 0)),
                 )
             )
-
         result[pv_name] = ArchiveDataHandler.from_archiver_values(pv_name, archiver_values)
-
     return result

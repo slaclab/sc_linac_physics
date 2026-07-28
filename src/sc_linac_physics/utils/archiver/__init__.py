@@ -3,13 +3,10 @@ Smart archiver routing wrapper.
 
 Public API:
 - get_values_over_time_range(...)
-- start_mock_archiver()
 
 Routing:
 - If SC_ARCHIVER_MOCK=1 -> always mock
-- If start_mock_archiver() called -> always mock
-- Else if real archiver unreachable -> mock
-- Else try real -> fallback to mock on ArchiverError subclasses
+- Else -> real archiver (errors propagate; NO mock fallback)
 """
 
 from __future__ import annotations
@@ -35,30 +32,16 @@ __all__ = [
     "ArchiverError",
     "ArchiverTimeoutError",
     "ArchiverConnectionError",
-    "start_mock_archiver",
     "get_values_over_time_range",
-    # Expose these for test patching / debug:
     "is_archiver_available",
     "real_get_values_over_time_range",
 ]
 
-_mock_archiver_enabled = False
-
-
-def start_mock_archiver() -> None:
-    """Enable mock archiver mode (e.g., called by sc-sim)."""
-    global _mock_archiver_enabled
-    _mock_archiver_enabled = True
-
+logger = logging.getLogger(__name__)
 
 def _should_force_mock() -> bool:
-    if os.getenv("SC_ARCHIVER_MOCK") == "1":
-        return True
-    if _mock_archiver_enabled:
-        return True
-    return False
+    return os.getenv("SC_ARCHIVER_MOCK") == "1"
 
-logger = logging.getLogger(__name__)
 
 def get_values_over_time_range(
     pv_list: List[str],
@@ -67,6 +50,10 @@ def get_values_over_time_range(
 ) -> Dict[str, ArchiveDataHandler]:
     """
     Get historical PV data over a time range.
+
+    Mock is used ONLY when explicitly forced (SC_ARCHIVER_MOCK=1). 
+    Otherwise the real archiver is used and itserrors propagate — 
+    there is no silent fallback to mock data.
 
     Returns:
         Dict[pv_name, ArchiveDataHandler]
@@ -78,15 +65,5 @@ def get_values_over_time_range(
         logger.debug("Using mock archiver (forced mode)")
         return mock_get_values_over_time_range(pv_list, start_time, end_time)
 
-    # Quick connectivity check (patched in tests)
-    if not is_archiver_available():
-        logger.debug("Archiver unavailable, using mock")
-        return mock_get_values_over_time_range(pv_list, start_time, end_time)
-
-    try:
-        logger.debug("Fetching from real archiver")
-        return real_get_values_over_time_range(pv_list, start_time, end_time)
-    except (ArchiverConnectionError, ArchiverTimeoutError, ArchiverError) as e:
-        # In auto mode, fallback to mock if anything archiver-related fails
-        logger.warning(f"Real archiver failed: {e}, falling back to mock")
-        return mock_get_values_over_time_range(pv_list, start_time, end_time)
+    logger.debug("Fetching from real archiver")
+    return real_get_values_over_time_range(pv_list, start_time, end_time)
