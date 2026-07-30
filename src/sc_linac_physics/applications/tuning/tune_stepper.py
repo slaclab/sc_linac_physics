@@ -14,12 +14,6 @@ class TuneStepper(StepperTuner):
         self.nsteps_park_pv: str = self.pv_addr("NSTEPS_PARK")
         self._nsteps_park_pv_obj: PV = None
 
-        self.nsteps_cold_pv: str = self.pv_addr("NSTEPS_COLD")
-        self._nsteps_cold_pv_obj: PV = None
-
-        self._step_signed_pv_obj: PV = None
-        self._steps_cold_landing_pv_obj: PV = None
-
         self._park_steps = None
 
     @property
@@ -29,31 +23,13 @@ class TuneStepper(StepperTuner):
         return self._park_steps
 
     @property
-    def steps_cold_landing_pv_obj(self) -> PV:
-        if not self._steps_cold_landing_pv_obj:
-            self._steps_cold_landing_pv_obj = PV(self.steps_cold_landing_pv)
-        return self._steps_cold_landing_pv_obj
-
-    @property
     def nsteps_park_pv_obj(self) -> PV:
         if not self._nsteps_park_pv_obj:
             self._nsteps_park_pv_obj = PV(self.nsteps_park_pv)
         return self._nsteps_park_pv_obj
 
-    @property
-    def nsteps_cold_pv_obj(self) -> PV:
-        if not self._nsteps_cold_pv_obj:
-            self._nsteps_cold_pv_obj = PV(self.nsteps_cold_pv)
-        return self._nsteps_cold_pv_obj
-
-    @property
-    def step_signed_pv_obj(self):
-        if not self._step_signed_pv_obj:
-            self._step_signed_pv_obj = PV(self.step_signed_pv)
-        return self._step_signed_pv_obj
-
     def move_to_cold_landing(self, check_detune: bool = False):
-        steps = self.nsteps_cold_pv_obj.get()
+        steps = self.steps_cold_landing_pv_obj.get()
         self.cavity.set_status_message(
             "Moving stepper to cold landing",
             logging.INFO,

@@ -26,7 +26,6 @@ def stepper(mock_cavity):
         stepper_instance.cavity = mock_cavity
         stepper_instance._steps_cold_landing_pv_obj = None
         stepper_instance._nsteps_park_pv_obj = None
-        stepper_instance._nsteps_cold_pv_obj = None
         stepper_instance._step_signed_pv_obj = None
         stepper_instance._park_steps = None
         # Mock the hz_per_microstep PV object with a default value
@@ -35,83 +34,34 @@ def stepper(mock_cavity):
 
 
 class TestPropertyLazyLoading:
-    """Test lazy loading of PV objects."""
+    """Test lazy loading of TuneStepper-specific PV objects.
 
-    def test_steps_cold_landing_pv_obj_lazy_load(self, stepper):
-        """Test that steps_cold_landing_pv_obj is created on first access."""
+    (steps_cold_landing_pv_obj and step_signed_pv_obj are inherited from the
+    base StepperTuner and covered in tests/utils/sc_linac/test_stepper.py.)
+    """
+
+    def test_nsteps_park_pv_obj_lazy_load(self, stepper):
+        """Test that nsteps_park_pv_obj is created on first access."""
         with patch(
             "sc_linac_physics.applications.tuning.tune_stepper.PV"
         ) as mock_pv:
             mock_pv_instance = make_mock_pv()
             mock_pv.return_value = mock_pv_instance
-            stepper.steps_cold_landing_pv = "TEST:STEPS:COLD"
-            stepper._steps_cold_landing_pv_obj = (
-                None  # Reset to test lazy loading
-            )
+            stepper.nsteps_park_pv = "TEST:NSTEPS:PARK"
+            stepper._nsteps_park_pv_obj = None  # Reset to test lazy loading
 
-            result = stepper.steps_cold_landing_pv_obj
+            result = stepper.nsteps_park_pv_obj
 
-            mock_pv.assert_called_once_with("TEST:STEPS:COLD")
+            mock_pv.assert_called_once_with("TEST:NSTEPS:PARK")
             assert result == mock_pv_instance
 
-    def test_steps_cold_landing_pv_obj_cached(self, stepper):
-        """Test that subsequent accesses use cached PV object."""
+    def test_nsteps_park_pv_obj_cached(self, stepper):
+        """Test that nsteps_park_pv_obj is cached."""
         mock_pv = make_mock_pv()
-        stepper._steps_cold_landing_pv_obj = mock_pv
+        stepper._nsteps_park_pv_obj = mock_pv
 
-        result1 = stepper.steps_cold_landing_pv_obj
-        result2 = stepper.steps_cold_landing_pv_obj
-
-        assert result1 is result2
-        assert result1 == mock_pv
-
-    def test_nsteps_cold_pv_obj_lazy_load(self, stepper):
-        """Test that nsteps_cold_pv_obj is created on first access."""
-        with patch(
-            "sc_linac_physics.applications.tuning.tune_stepper.PV"
-        ) as mock_pv:
-            mock_pv_instance = make_mock_pv()
-            mock_pv.return_value = mock_pv_instance
-            stepper.nsteps_cold_pv = "TEST:NSTEPS:COLD"
-            stepper._nsteps_cold_pv_obj = None  # Reset to test lazy loading
-
-            result = stepper.nsteps_cold_pv_obj
-
-            mock_pv.assert_called_once_with("TEST:NSTEPS:COLD")
-            assert result == mock_pv_instance
-
-    def test_nsteps_cold_pv_obj_cached(self, stepper):
-        """Test that nsteps_cold_pv_obj is cached."""
-        mock_pv = make_mock_pv()
-        stepper._nsteps_cold_pv_obj = mock_pv
-
-        result1 = stepper.nsteps_cold_pv_obj
-        result2 = stepper.nsteps_cold_pv_obj
-
-        assert result1 is result2
-
-    def test_step_signed_pv_obj_lazy_load(self, stepper):
-        """Test that step_signed_pv_obj is created on first access."""
-        with patch(
-            "sc_linac_physics.applications.tuning.tune_stepper.PV"
-        ) as mock_pv:
-            mock_pv_instance = make_mock_pv()
-            mock_pv.return_value = mock_pv_instance
-            stepper.step_signed_pv = "TEST:STEP:SIGNED"
-            stepper._step_signed_pv_obj = None  # Reset to test lazy loading
-
-            result = stepper.step_signed_pv_obj
-
-            mock_pv.assert_called_once_with("TEST:STEP:SIGNED")
-            assert result == mock_pv_instance
-
-    def test_step_signed_pv_obj_cached(self, stepper):
-        """Test that step_signed_pv_obj is cached."""
-        mock_pv = make_mock_pv()
-        stepper._step_signed_pv_obj = mock_pv
-
-        result1 = stepper.step_signed_pv_obj
-        result2 = stepper.step_signed_pv_obj
+        result1 = stepper.nsteps_park_pv_obj
+        result2 = stepper.nsteps_park_pv_obj
 
         assert result1 is result2
 
@@ -164,7 +114,9 @@ class TestMoveToColdLanding:
     def test_move_to_cold_landing_positive_steps(self, stepper):
         """Test moving to cold landing with positive steps."""
         expected_steps = randint(1000, 50000)
-        stepper._nsteps_cold_pv_obj = make_mock_pv(get_val=expected_steps)
+        stepper._steps_cold_landing_pv_obj = make_mock_pv(
+            get_val=expected_steps
+        )
         stepper.move = MagicMock()
 
         stepper.move_to_cold_landing()
@@ -179,7 +131,9 @@ class TestMoveToColdLanding:
     def test_move_to_cold_landing_negative_steps(self, stepper):
         """Test moving to cold landing with negative steps."""
         expected_steps = randint(-50000, -1000)
-        stepper._nsteps_cold_pv_obj = make_mock_pv(get_val=expected_steps)
+        stepper._steps_cold_landing_pv_obj = make_mock_pv(
+            get_val=expected_steps
+        )
         stepper.move = MagicMock()
 
         stepper.move_to_cold_landing()
@@ -194,7 +148,9 @@ class TestMoveToColdLanding:
     def test_move_to_cold_landing_with_check_detune(self, stepper):
         """Test that check_detune parameter is passed correctly."""
         expected_steps = 5000
-        stepper._nsteps_cold_pv_obj = make_mock_pv(get_val=expected_steps)
+        stepper._steps_cold_landing_pv_obj = make_mock_pv(
+            get_val=expected_steps
+        )
         stepper.move = MagicMock()
 
         stepper.move_to_cold_landing(check_detune=True)
@@ -209,7 +165,9 @@ class TestMoveToColdLanding:
     def test_move_to_cold_landing_logs_status(self, stepper, mock_cavity):
         """Test that status message is logged."""
         expected_steps = 5000
-        stepper._nsteps_cold_pv_obj = make_mock_pv(get_val=expected_steps)
+        stepper._steps_cold_landing_pv_obj = make_mock_pv(
+            get_val=expected_steps
+        )
         stepper.move = MagicMock()
 
         stepper.move_to_cold_landing(check_detune=True)
@@ -311,7 +269,7 @@ class TestEdgeCases:
 
     def test_move_to_cold_landing_with_zero_steps(self, stepper):
         """Test moving to cold landing with zero steps."""
-        stepper._nsteps_cold_pv_obj = make_mock_pv(get_val=0)
+        stepper._steps_cold_landing_pv_obj = make_mock_pv(get_val=0)
         stepper.move = MagicMock()
 
         stepper.move_to_cold_landing()
