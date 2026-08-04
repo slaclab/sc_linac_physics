@@ -1,0 +1,85 @@
+﻿Inclusion,Cryomodule,Date,Start,Date end,Stop,Decarad number,Link to measurement sheet,Comment,Rechar,Multipacting,Commissioning
+,CM01,10/2/23,9:13,,10:00,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1228238,,Y,N,N
+,CM01,10/15/23,11:22,,11:51,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1231626,,Y,N,N
+,CM01,10/25/23,8:43,,9:07,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1233911,,Y,N,N
+,CM01,11/9/23,16:08,,16:45,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1239200,,Y,N,N
+,CM01,11/20/23,5:37,,6:10,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1242054,,Y,N,N
+,CM01,2/2/24,11:42,,12:41,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1253056,,Y,N,N
+,CM01,2/16/24,15:58,,16:33,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1256208,,Y,N,N
+,CM01,2/29/24,16:33,,17:21,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1259978,,Y,N,N
+,CM01,3/14/24,10:06,,10:54,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1263820,,Y,N,N
+,CM01,3/29/24,15:01,,15:50,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1268868,,Y,N,N
+,CM01,4/11/24,14:13,,15:15,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1272764,,Y,N,N
+,CM01,5/4/24,9:10,,10:00,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1272764,,Y,N,N
+,CM01,5/9/24,12:34,,13:35,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1280192,,Y,N,N
+,CM01,6/6/24,16:26,,17:35,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1288849,,Y,N,N
+,CM01,6/18/24,17:52,,18:30,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1292488,,Y,N,N
+,CM01,10/2/24,9:58,,11:08,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1313915,,Y,N,N
+,CM01,11/20/24,16:46,,17:52,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1329717,,Y,N,N
+,CM01,12/5/24,16:39,,17:41,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1333395,,Y,N,N
+,CM01,12/15/24,10:22,,11:02,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1335719,,Y,N,N
+,CM01,2/19/25,7:03,,7:59,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1348146,,Y,N,N
+,CM01,5/14/25,13:03,,14:27,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1376545,,Y,N,N
+#,CM01,7/7/25,,,,1,,No data recorded due to S3DF related archiver outage,Y,N,N
+,CM02,2/11/25,18:28,,19:51,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1346226,,Y,N,N
+,CM03,2/12/25,19:49,,20:24,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1346226,,Y,N,N
+,CM03,6/26/25,13:00,,13:55,1,,,Y,N,N
+,CM04,10/25/23,9:15,,11:21,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1233911,Square amplitudes…?,Y,N,N
+,CM04,6/11/25,17:39,,18:16,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1385614,,Y,N,N
+,CM05,11/9/23,15:45,,16:02,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1239200,,Y,N,N
+,CM05,12/5/24,16:46,,17:14,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1333391,,Y,N,N
+,CM06,2/2/24,12:40,,13:03,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1253142,,Y,N,N
+,CM07,2/20/24,9:36,,10:06,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1256921,,Y,N,N
+,CM08,10/6/23,8:42,,8:54,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1256921,,Y,N,N
+,CM08,2/29/24,17:28,,18:05,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1259987,,Y,N,N
+,CM08,4/17/25,7:37,,8:26,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1366896,,Y,N,N
+,CM09,3/14/24,10:59,,11:45,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1366896,,Y,N,N
+,CM10,3/29/24,14:38,,15:53,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1268867,,Y,N,N
+,CM10,4/3/25,15:54,,16:19,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1362428,,Y,N,N
+,CM10,11/19/25,17:20,,17:57,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1430092,,Y,N,N
+,CM11,4/11/24,14:06,,15:07,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1272755,,Y,N,N
+,CM11,5/14/25,13:16,,13:45,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1376514,,Y,N,N
+,CM12,11/7/24,15:31,,15:57,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1325749,,Y,N,N
+,CM12,2/13/25,17:44,,18:35,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1347008,,Y,N,N
+,CM12,5/29/25,17:38,,18:03,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1381624,,Y,N,N
+,CM13,3/6/25,17:25,,18:02,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1353098,,Y,N,N
+,CM14,3/21/25,15:06,,16:05,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1358346,,Y,N,N
+,CM15,11/20/24,18:04,,19:16,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1329736,,Y,N,N
+,CM16,10/10/24,7:35,,7:50,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1316576,Active cavity window for multipacting date,Y,Y,N
+,CM16,10/10/24,7:55,,16:33,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1316576,Multipacting window,Y,Y,N
+,CM17,10/28/24,9:09,,9:48,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1322226,,Y,N,N
+,CM18,2/6/25,14:17,,15:04,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1344810,,Y,N,N
+,CM18,3/21/25,15:16,,15:39,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1358329,,Y,N,N
+,CM19,2/11/25,17:32,,18:15,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1346206,,Y,N,N
+,CM20,10/12/24,8:15,,8:35,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1317378,Active cavity window for multipacting date,Y,Y,N
+,CM20,10/12/24,8:56,,15:14,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1317378,Multipacting window,Y,Y,N
+,CM21,2/12/25,19:47,,20:39,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1346623,,Y,N,N
+,CM22,10/16/24,7:39,,7:59,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1318582,Active cavity window for multipacting date,Y,Y,N
+,CM22,10/16/24,8:28,,19:12,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1318582,Multipacting window,Y,Y,N
+,CM23,2/13/25,17:49,,18:13,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1346999,,Y,N,N
+,CM24,10/12/24,8:24,,8:58,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1317379,Active cavity window for multipacting date,Y,Y,N
+,CM24,10/12/24,9:08,,15:17,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1317379,Multipacting window,Y,Y,N
+,CM25,3/6/25,17:22,,18:07,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1353102,,Y,N,N
+,CM26,10/2/24,11:14,,12:13,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1313953,,Y,N,N
+,CM27,10/16/24,8:09,,8:26,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1318596,Active cavity window for multipacting date,Y,Y,N
+,CM27,10/16/26,10:48,,18:53,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1318596,Multipacting window,Y,Y,N
+,CM28,5/9/24,13:18,,14:12,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1280213,,Y,N,N
+,CM28,6/26/25,12:46,,13:18,2,,,Y,N,N
+,CM29,10/10/24,7:30,,7:53,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1316577,Active cavity window for multipacting date,Y,Y,N
+,CM29,10/10/24,8:09,,15:58,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1316577,Multipacting window,Y,Y,N
+,CM30,11/7/24,15:32,,16:30,2,,,Y,N,N
+,CM30,2/19/25,8:05,,8:57,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1348169,,Y,N,N
+,CM31,10/28/24,8:59,,9:34,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1322223,,Y,N,N
+,CM31,5/29/25,17:39,,18:02,2,,,Y,N,N
+,CM32,6/18/24,17:50,,18:25,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1292485,,Y,N,N
+#,CM32,6/23/24,,,,2,,,Y,N,N
+#,CM32,7/7/25,,,,2,,No data recorded due to S3DF related archiver outage,Y,N,N
+,CM32,first remeasure,,,,2,,,Y,N,N
+,CM33,6/6/24,16:27,,17:24,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1288846,,Y,N,N
+,CM33,6/11/25,17:37,,17:47,2,,,Y,N,N
+,CM34,5/23/24,19:27,,20:26,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1284577,,Y,N,N
+,CM34,5/1/25,16:33,,17:25,1,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1371796,,Y,N,N
+,CM35,5/23/24,20:30,,21:17,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1284597,,Y,N,N
+,CM35,4/17/25,7:41,,8:24,2,https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1366895,,Y,N,N
+,CMH1,4/3/25,15:50,,16:35,1,,,Y,N,N
+,CMH2,4/3/25,16:02,,16:17,1,,,Y,N,N
