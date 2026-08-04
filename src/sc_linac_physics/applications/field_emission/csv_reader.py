@@ -24,7 +24,7 @@ def read_from_csv(filepath):
             cm = row[1][2:]
             try:
                 date = datetime.strptime(row[2], "%m/%d/%y")
-            except ValueError, IndexError:
+            except (ValueError, IndexError):
                 # print(f"Row malformed, skipping row:\n{row}")
                 continue
 
