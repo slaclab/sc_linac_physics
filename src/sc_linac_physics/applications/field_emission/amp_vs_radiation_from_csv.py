@@ -41,8 +41,9 @@ def build_amplitude_pvs(linac, cryomodule):
     return amplitude_pvs
 
 
-def build_rad_readout_pvs(decarad, rad_channels):
+def build_rad_readout_pvs(decarad, rad_channels, rad_readout_type):
     """choose radmon readout suffix depending on selection (instant vs average)"""
+    rad_readout_type = rad_readout_type.lower()
     rad_readout_pvs = []
     rad_prefix, _, _ = build_decarad_pvs(decarad)
     if rad_readout_type == "instant":
@@ -51,10 +52,12 @@ def build_rad_readout_pvs(decarad, rad_channels):
                 rad_prefix + f"{sel_rad_channel:02d}:GAMMA_DOSE_RATE"
             )
             rad_readout_pvs.append(rad_readout_pv)
-    if rad_readout_type == "average":
+    elif rad_readout_type == "average":
         for sel_rad_channel in rad_channels:
             rad_readout_pv = rad_prefix + f"{sel_rad_channel:02d}:GAMMAAVE"
             rad_readout_pvs.append(rad_readout_pv)
+    else:
+        raise ValueError(f"Unknown readout type: {rad_readout_type}")
     return rad_readout_pvs
 
 
@@ -112,19 +115,19 @@ def plot_amp_vs_rad(aligned_data):
 
 if __name__ == "__main__":
     rad_chans = list(range(1, 11))
-    rad_readout_type = "average"
+    rad_readout = "average"
     # cryomod: str = "18"
     # dec = 2
     # start = datetime(2025,2,6,14,17)
     # end = datetime(2025,2,6,15,4)
     # delta = timedelta(seconds=1)
 
-    input_csv = "All Comm measurements by CM.csv"
+    input_csv = "All FE measurements by CM.csv"
     for cryomod, dec, start, end, stamp in read_from_csv(input_csv):
         print(f"Processing CM{cryomod} {start} -> {end}")
         selected_linac = match_cryo_to_linac(cryomod)
         amp_pvs = build_amplitude_pvs(selected_linac, cryomod)
-        rad_pvs = build_rad_readout_pvs(dec, rad_chans)
+        rad_pvs = build_rad_readout_pvs(dec, rad_chans, rad_readout)
 
         pv_lists = []
         for amp_pv in amp_pvs:
@@ -136,7 +139,7 @@ if __name__ == "__main__":
             dataframes = fetch_pv_data(p_list, start, end)
             aligned_time_data = align_pvs_to_common_time(dataframes)
             aligned_time_data.to_csv(
-                f"/Users/kvetta/sc-rad/radi/{rad_readout_type}/cm{cryomod}_"
-                f"{stamp}_cavity{cav_num}_{rad_readout_type}.csv"
+                f"/Users/kvetta/sc-rad/radi/{rad_readout}/cm{cryomod}_"
+                f"{stamp}_cavity{cav_num}_{rad_readout}.csv"
             )
     #        plot_amp_vs_rad(aligned_time_data)
