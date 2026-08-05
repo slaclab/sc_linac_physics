@@ -13,15 +13,16 @@ def plot_amp_vs_rad(df, titles, ax, r_channels, fit):
     for col in rad_cols:
         print(f"channel {col}")  # debug line
         color = color_cycle[(col - 1) % len(color_cycle)]
+        y_rad = df[col]
         ax.scatter(
-            x_amplitude, df[col], label=f"Ch {col}", marker=".", color=color
+            x_amplitude, y_rad, label=f"Ch {col}", marker=".", color=color
         )
         if fit:
             mask = (
-                (df[col] > 0) & np.isfinite(x_amplitude) & np.isfinite(df[col])
+                (y_rad > 0) & np.isfinite(x_amplitude) & np.isfinite(y_rad)
             )  # filter for 0 and NaN
             x = x_amplitude[mask].to_numpy()
-            y = df[col][mask].to_numpy()
+            y = y_rad[mask].to_numpy()
             add_poly_fit(x, y, ax, color=color)
     plt.setp(ax.get_xticklabels(), fontsize="x-small")
     plt.setp(ax.get_yticklabels(), fontsize="x-small")
