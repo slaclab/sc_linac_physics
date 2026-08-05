@@ -10,9 +10,6 @@ def plot_amp_vs_rad(df, titles, ax, r_channels, fit):
     """plot amplitude on x-axis and radiation on y-axis, locking colors to channels"""
     x_amplitude, rad_cols = get_columns(df, r_channels)
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    #for col in rad_cols:
-    #    print(f"channel {col}")  # debug line
-    #    color = color_cycle[(col - 1) % len(color_cycle)]
     for i, col in enumerate(rad_cols.columns):
         print(f"channel {col}")  # debug line
         color = color_cycle[i % len(color_cycle)]
