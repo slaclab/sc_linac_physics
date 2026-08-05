@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from datetime import datetime
 from scipy.optimize import curve_fit
-from measurements import find_dataframes, get_columns
+from sc_linac_physics.applications.field_emission.measurements import find_dataframes, get_columns
 
 
 def plot_amp_vs_rad(df, titles, ax, r_channels, fit):
