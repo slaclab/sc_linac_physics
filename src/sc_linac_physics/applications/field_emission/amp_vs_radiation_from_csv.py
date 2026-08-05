@@ -1,6 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-from csv_reader import read_from_csv
+from sc_linac_physics.applications.field_emission.csv_reader import read_from_csv
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     build_cavity_pv_prefix,
     LINAC_TUPLES,

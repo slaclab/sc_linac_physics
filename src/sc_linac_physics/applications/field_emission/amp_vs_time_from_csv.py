@@ -1,7 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from csv_reader import read_from_csv
-from amp_vs_radiation import fetch_pv_data, align_pvs_to_common_time
+from sc_linac_physics.applications.field_emission.csv_reader import read_from_csv
+from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (
+    fetch_pv_data,
+    align_pvs_to_common_time
+)
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     build_cavity_pv_prefix,
     LINAC_TUPLES,
