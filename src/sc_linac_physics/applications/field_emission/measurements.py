@@ -36,8 +36,8 @@ def fetch_measurement_metadata(cm, date):
         csv_start,
         csv_stop,
         csv_dec,
-        csv_notes,
         csv_log,
+        csv_notes,
     ) in read_raw_data(input_csv):
         if cm == csv_cryo:
             csv_date_fmt = datetime.strptime(
@@ -50,8 +50,8 @@ def fetch_measurement_metadata(cm, date):
                     csv_start,
                     csv_stop,
                     csv_dec,
-                    csv_notes,
                     csv_log,
+                    csv_notes,
                 )
             else:
                 continue
@@ -63,6 +63,8 @@ def find_dataframes(cm, date, cav, read):
     readout = read.lower()
     stripped_date = datetime.strftime(date, "%Y-%m-%d_%H%M")
     cav_list = [i + 1 for i, c in enumerate(cav) if c]
+    if not cav_list:
+        return {}, "", 0
     with h5py.File(h5_filename, "r") as h5f:
         dfs = {}
         for c in cav_list:
