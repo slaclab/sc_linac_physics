@@ -22,12 +22,12 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import (
     NavigationToolbar2QT as NavigationToolbar,
 )
-from measurements import (
+from sc_linac_physics.applications.field_emission.measurements import (
     match_measurement_dates,
     fetch_measurement_metadata,
     find_dataframes,
 )
-from plot_me import plot_amp_vs_rad
+from sc_linac_physics.applications.field_emission.plot_me import plot_amp_vs_rad
 
 # LINAC CONFIGURATION (lifted from Haley #plagarism)
 VALID_LINACS = dict(zip(["L0B", "L1B", "L2B", "L3B"], LINAC_CM_MAP))
