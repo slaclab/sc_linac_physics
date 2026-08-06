@@ -72,7 +72,7 @@ class _ProgressMixin:
             text = QLabel(label)
             text.setAlignment(Qt.AlignCenter)
             text.setStyleSheet(
-                f"font-size: 9px; color: {TEXT_MUTED}; background-color: transparent;"
+                f"font-size: 11px; color: {TEXT_SECONDARY}; background-color: transparent;"
             )
             text.setWordWrap(True)
             text.setFixedWidth(60)

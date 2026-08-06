@@ -14,8 +14,10 @@ from PyQt5.QtWidgets import (
 
 from .theme import (
     BG_PANEL,
+    BORDER,
     COLOR_PRIMARY,
     COLOR_SUCCESS,
+    RADIUS_LG,
     SANS_FONT_STACK,
     TEXT_MUTED,
     TEXT_PRIMARY,
@@ -48,7 +50,8 @@ class ActivityFeedWidget(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.NoFrame)
         self._scroll.setStyleSheet(
-            f"QScrollArea {{ background: {BG_PANEL}; border: none; }}"
+            f"QScrollArea {{ background: {BG_PANEL}; "
+            f"border: 1px solid {BORDER}; border-radius: {RADIUS_LG}; }}"
         )
 
         self._container = QWidget()
@@ -59,7 +62,16 @@ class ActivityFeedWidget(QWidget):
         self._feed_layout.addStretch()
 
         self._scroll.setWidget(self._container)
+
+        self._placeholder = QLabel("Activity will appear here when a test runs")
+        self._placeholder.setAlignment(Qt.AlignCenter)
+        self._placeholder.setStyleSheet(
+            f"color: {TEXT_MUTED}; font-size: 11px; "
+            f"font-family: {SANS_FONT_STACK}; font-style: italic;"
+        )
+        outer.addWidget(self._placeholder)
         outer.addWidget(self._scroll)
+        self._scroll.hide()
 
     def count(self) -> int:
         """Return number of entries currently in the feed."""
@@ -71,6 +83,9 @@ class ActivityFeedWidget(QWidget):
         # Insert before the trailing stretch
         self._feed_layout.insertWidget(self._feed_layout.count() - 1, row)
         self._count += 1
+        if self._count == 1:
+            self._placeholder.hide()
+            self._scroll.show()
         QTimer.singleShot(0, self._scroll_to_bottom)
 
     def clear(self) -> None:
@@ -80,13 +95,15 @@ class ActivityFeedWidget(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self._count = 0
+        self._placeholder.show()
+        self._scroll.hide()
 
     def _scroll_to_bottom(self) -> None:
         bar = self._scroll.verticalScrollBar()
         bar.setValue(bar.maximum())
 
     def _make_row(self, message: str, entry_type: str) -> QWidget:
-        timestamp = datetime.now().strftime("%-I:%M %p")
+        timestamp = datetime.now().strftime("%I:%M %p").lstrip("0")
         dot_color = _DOT_COLORS.get(entry_type, TEXT_MUTED)
         msg_color = (
             TEXT_PRIMARY

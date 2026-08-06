@@ -13,8 +13,10 @@ from PyQt5.QtWidgets import (
 from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     BG_PANEL,
     BORDER,
+    BORDER_EMPHASIS,
     RADIUS_MD,
     TEXT_MUTED,
+    TEXT_SECONDARY,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.magnet_status_badge import (
     MagnetStatusBadge,
@@ -125,14 +127,13 @@ class _HeaderMixin:
 
         # ---- Sync status ----
         layout.addWidget(_vline())
-        self.sync_status = QLabel("○ No Record Loaded")
+        self.sync_status = QLabel("Select a cavity to begin")
         self.sync_status.setStyleSheet(f"""
             QLabel {{
                 color: {TEXT_MUTED};
-                font-weight: bold;
+                font-style: italic;
                 padding: 2px 6px;
-                background-color: rgba(90, 98, 120, 0.2);
-                border-radius: {RADIUS_MD};
+                background-color: transparent;
             }}
         """)
         layout.addWidget(self.sync_status)
@@ -167,26 +168,41 @@ class _HeaderMixin:
         layout.addWidget(_vline())
         layout.addSpacing(4)
 
+        _ghost = (
+            f"QPushButton {{"
+            f"  color: {TEXT_SECONDARY}; background: transparent;"
+            f"  border: 1px solid {BORDER_EMPHASIS}; border-radius: {RADIUS_MD};"
+            f"  padding: 3px 10px; font-size: 11px;"
+            f"}}"
+            f"QPushButton:hover {{"
+            f"  color: #c9cdd6; border-color: #6b7899;"
+            f"  background: rgba(123,140,222,0.08);"
+            f"}}"
+        )
+
         batch_btn = QPushButton("Batch Pre-RF")
         batch_btn.setToolTip(
             "Run Piezo Pre-RF test on multiple cavities at once"
         )
+        batch_btn.setStyleSheet(_ghost)
         batch_btn.clicked.connect(self._open_batch_pre_rf_window)
         layout.addWidget(batch_btn)
 
         layout.addSpacing(4)
 
-        history_btn = QPushButton("📊 Measurements")
+        history_btn = QPushButton("Measurements")
         history_btn.setToolTip(
             "View all measurement attempts and filter by phase"
         )
+        history_btn.setStyleSheet(_ghost)
         history_btn.clicked.connect(self._show_measurement_history)
         layout.addWidget(history_btn)
 
         layout.addSpacing(4)
 
-        database_btn = QPushButton("🗄️ Database")
+        database_btn = QPushButton("Database")
         database_btn.setToolTip("Browse and load commissioning records")
+        database_btn.setStyleSheet(_ghost)
         database_btn.clicked.connect(self._show_database_browser)
         layout.addWidget(database_btn)
 

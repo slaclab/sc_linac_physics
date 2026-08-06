@@ -5,6 +5,7 @@ from .theme import (
     ACCENT_PV,
     BG_INSET,
     BG_LOCAL,
+    BORDER,
     BG_STATUS_FAIL,
     BG_STATUS_INCOMPLETE,
     BG_STATUS_PASS,
@@ -42,13 +43,13 @@ PV_CAP_STYLE = (
 
 LOCAL_LABEL_STYLE = (
     f"background: {BG_LOCAL}; padding: 2px 6px; "
-    f"border: 1px solid {ACCENT_LOCAL}; border-left: 3px solid {ACCENT_LOCAL}; "
+    f"border: 1px solid {BORDER}; border-left: 3px solid {ACCENT_LOCAL}; "
     f"font-size: 11px; border-radius: {RADIUS_SM};"
 )
 
 LOCAL_CAP_STYLE = (
     f"background-color: {BG_LOCAL}; padding: 2px 6px; "
-    f"border: 1px solid {ACCENT_LOCAL}; border-left: 3px solid {ACCENT_LOCAL}; "
+    f"border: 1px solid {BORDER}; border-left: 3px solid {ACCENT_LOCAL}; "
     f"font-family: {MONO_FONT_STACK}; font-size: 11px; border-radius: {RADIUS_SM};"
 )
 
