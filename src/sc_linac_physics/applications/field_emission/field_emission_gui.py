@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
 )
 from pydm import Display, PyDMApplication
 from matplotlib.figure import Figure
-from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_MAP
+from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_DICT
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import (
     NavigationToolbar2QT as NavigationToolbar,
@@ -29,8 +29,9 @@ from sc_linac_physics.applications.field_emission.measurements import (
 )
 from sc_linac_physics.applications.field_emission.plot_me import plot_amp_vs_rad
 
-# LINAC CONFIGURATION (lifted from Haley #plagarism)
-VALID_LINACS = dict(zip(["L0B", "L1B", "L2B", "L3B"], LINAC_CM_MAP))
+# LINAC CONFIGURATION
+VALID_LINACS = {0, 1, 2, 3}
+VALID_CMS = {key: LINAC_CM_DICT[key] for key in VALID_LINACS}
 
 
 class FieldEmission(Display):
@@ -155,7 +156,7 @@ class FieldEmission(Display):
         cryo_sel_layout.addWidget(QLabel("Cryomodule"))
         self.cryo_dropdown = QComboBox()
         self.cryo_dropdown.addItems(
-            [str(cm) for linac in VALID_LINACS.values() for cm in linac]
+            [str(cm) for linac in VALID_CMS.values() for cm in linac]
         )
         self.cryo_dropdown.setCurrentIndex(-1)
         cryo_sel_layout.addWidget(self.cryo_dropdown)
