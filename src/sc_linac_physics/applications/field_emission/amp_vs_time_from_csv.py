@@ -4,12 +4,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from sc_linac_physics.applications.field_emission.csv_reader import read_from_csv
 from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (
+    build_amplitude_pvs,
     fetch_pv_data,
     align_pvs_to_common_time
-)
-from sc_linac_physics.utils.sc_linac.linac_utils import (
-    build_cavity_pv_prefix,
-    LINAC_TUPLES,
 )
 
 """
@@ -24,19 +21,6 @@ data to closest cavity activity window. Not yet perfect trimming.
 _DATA_DIR = Path(__file__).resolve().parent
 DEFAULT_INPUT_CSV = _DATA_DIR / "All FE measurements by CM.csv"
 DEFAULT_OUTPUT_FOLDER = _DATA_DIR
-
-def build_amplitude_pvs(cryomodule):
-    """AACTMEAN amplitudes for each cavity to be plotted against"""
-    amplitude_pv = []
-    sel_linac = next(
-        (linac for linac, cms in LINAC_TUPLES if cryomodule in cms), "L1B"
-    )
-
-    for cavity in range(1, 9):
-        amplitude_pv.append(
-            build_cavity_pv_prefix(sel_linac, cryomodule, cavity) + "AACTMEAN"
-        )
-    return amplitude_pv
 
 
 def trim_ends(df, tolerance):

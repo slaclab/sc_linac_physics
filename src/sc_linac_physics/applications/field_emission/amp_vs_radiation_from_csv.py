@@ -9,10 +9,19 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 )
 from lcls_tools.common.data.archiver import get_values_over_time_range
 
+"""
+08/06/26 - Kvetta Q
+Reads .csv (structured: COMMENT, CRYOMODULE, DATE MM/DD/YY, START_TIME, STOP_TIME, DECARAD)
+and calls fetch method to request archiver data of cryomodule amplitude (MV) vs radiation. If time
+is not listed in .csv, time is start date listed in .csv file + 24 hours. Most helpful if used
+after start and stop times for cavities are known (or after running amp_vs_time).
+"""
+
 
 _DATA_DIR = Path(__file__).resolve().parent
 DEFAULT_INPUT_CSV = _DATA_DIR / "All FE measurements by CM.csv"
 DEFAULT_OUTPUT_FOLDER = _DATA_DIR
+
 
 def is_date_valid(start_date, end_date):
     """end date before start date ->  send error"""
@@ -21,12 +30,18 @@ def is_date_valid(start_date, end_date):
     return start_date, end_date
 
 
-def match_cryo_to_linac(cryomodule):
-    """search by cryomodule for appropriate linac to build process variables"""
+def build_amplitude_pvs(cryomodule):
+    """AACTMEAN amplitudes for each cavity to be plotted against"""
+    amplitude_pv = []
     sel_linac = next(
         (linac for linac, cms in LINAC_TUPLES if cryomodule in cms), "L1B"
     )
-    return sel_linac
+
+    for cavity in range(1, 9):
+        amplitude_pv.append(
+            build_cavity_pv_prefix(sel_linac, cryomodule, cavity) + "AACTMEAN"
+        )
+    return amplitude_pv
 
 
 def build_decarad_pvs(decarad):
@@ -35,17 +50,6 @@ def build_decarad_pvs(decarad):
     decarad_position = rad_pv_prefix + "POSN"
     decarad_hvmon = rad_pv_prefix + "HVMON"
     return rad_pv_prefix, decarad_position, decarad_hvmon
-
-
-def build_amplitude_pvs(linac, cryomodule):
-    """construct AACTMEAN amplitudes for each cavity"""
-    amplitude_pvs = []
-    for cavity in range(1, 9):
-        amplitude_pv = (
-            build_cavity_pv_prefix(linac, cryomodule, cavity) + "AACTMEAN"
-        )
-        amplitude_pvs.append(amplitude_pv)
-    return amplitude_pvs
 
 
 def build_rad_readout_pvs(decarad, rad_channels, rad_readout_type):
@@ -146,8 +150,7 @@ def main():
 
     for cryomod, dec, start, end, stamp in read_from_csv(args.input_csv):
         print(f"Processing CM{cryomod} {start} -> {end}")
-        selected_linac = match_cryo_to_linac(cryomod)
-        amp_pvs = build_amplitude_pvs(selected_linac, cryomod)
+        amp_pvs = build_amplitude_pvs(cryomod)
         rad_pvs = build_rad_readout_pvs(dec, rad_chans, rad_readout)
 
         pv_lists = []
