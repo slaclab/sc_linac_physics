@@ -398,7 +398,7 @@ class FieldEmission(Display):
         for i, (cav_num, df) in enumerate(selected.items(), start=1):
             print(f"CAVITY {cav_num}")  # debug line
             ax = self.fig.add_subplot(row, col, i)
-            plot_amp_vs_rad(df, label, ax, r_channels, fit)
+            plot_amp_vs_rad(df, ax, r_channels, fit)
             ax.set_title(f"Cavity {cav_num}")
             axes.append(ax)
 

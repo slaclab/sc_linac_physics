@@ -6,7 +6,7 @@ from scipy.optimize import curve_fit
 from sc_linac_physics.applications.field_emission.measurements import find_dataframes, get_columns
 
 
-def plot_amp_vs_rad(df, titles, ax, r_channels, fit):
+def plot_amp_vs_rad(df, ax, r_channels, fit):
     """plot amplitude on x-axis and radiation on y-axis, locking colors to channels"""
     x_amplitude, rad_cols = get_columns(df, r_channels)
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]

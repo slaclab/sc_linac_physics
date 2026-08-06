@@ -1,6 +1,14 @@
+import pandas as pd
 import pytest
 
 from sc_linac_physics.applications.field_emission import plot_me
+
+def test_plot_amp_vs_rad():
+    pass
+
+
+def test_fit_equation():
+    pass
 
 
 def test_add_poly_fit():
