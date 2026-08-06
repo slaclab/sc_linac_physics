@@ -1,5 +1,7 @@
+import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
 from sc_linac_physics.applications.field_emission.csv_reader import read_from_csv
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     build_cavity_pv_prefix,
@@ -8,7 +10,10 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 from lcls_tools.common.data.archiver import get_values_over_time_range
 
 
-# check for valid date entry
+_DATA_DIR = Path(__file__).resolve().parent
+DEFAULT_INPUT_CSV = _DATA_DIR / "All FE measurements by CM.csv"
+DEFAULT_OUTPUT_FOLDER = _DATA_DIR
+
 def is_date_valid(start_date, end_date):
     """end date before start date ->  send error"""
     if start_date > end_date:
@@ -17,6 +22,7 @@ def is_date_valid(start_date, end_date):
 
 
 def match_cryo_to_linac(cryomodule):
+    """search by cryomodule for appropriate linac to build process variables"""
     sel_linac = next(
         (linac for linac, cms in LINAC_TUPLES if cryomodule in cms), "L1B"
     )
@@ -32,6 +38,7 @@ def build_decarad_pvs(decarad):
 
 
 def build_amplitude_pvs(linac, cryomodule):
+    """construct AACTMEAN amplitudes for each cavity"""
     amplitude_pvs = []
     for cavity in range(1, 9):
         amplitude_pv = (
@@ -109,11 +116,26 @@ def plot_amp_vs_rad(aligned_data):
     ax.set_xlabel("Amplitude (MV)")
     ax.set_ylabel("Radiation")
     ax.legend()
-    # plt.show()  # get rid of me later
+    # plt.show()  # uncomment if you'd like to visualize
     plt.close(fig)
 
 
-if __name__ == "__main__":
+def main():
+    # File handling
+    parser = argparse.ArgumentParser("Plot amplitude vs radiation from .csv file")
+    parser.add_argument("-i", "--input_csv",
+                        type=Path,
+                        default=DEFAULT_INPUT_CSV,
+                        help="Path to the input csv file")
+    parser.add_argument("-o", "--output_folder",
+                        type=Path,
+                        default=DEFAULT_OUTPUT_FOLDER,
+                        help="Path to the output folder")
+    args = parser.parse_args()
+    if not args.input_csv.exists():
+        raise FileNotFoundError(f"Input csv file not found at {args.input_csv}")
+    args.output_folder.mkdir(parents=True, exist_ok=True)
+
     rad_chans = list(range(1, 11))
     rad_readout = "average"
     # cryomod: str = "18"
@@ -122,8 +144,7 @@ if __name__ == "__main__":
     # end = datetime(2025,2,6,15,4)
     # delta = timedelta(seconds=1)
 
-    input_csv = "All FE measurements by CM.csv"
-    for cryomod, dec, start, end, stamp in read_from_csv(input_csv):
+    for cryomod, dec, start, end, stamp in read_from_csv(args.input_csv):
         print(f"Processing CM{cryomod} {start} -> {end}")
         selected_linac = match_cryo_to_linac(cryomod)
         amp_pvs = build_amplitude_pvs(selected_linac, cryomod)
@@ -133,13 +154,14 @@ if __name__ == "__main__":
         for amp_pv in amp_pvs:
             pv_lists.append([amp_pv] + rad_pvs)
 
-        i = 0
         for i, p_list in enumerate(pv_lists):
             cav_num = i + 1
             dataframes = fetch_pv_data(p_list, start, end)
             aligned_time_data = align_pvs_to_common_time(dataframes)
-            aligned_time_data.to_csv(
-                f"/Users/kvetta/sc-rad/radi/{rad_readout}/cm{cryomod}_"
-                f"{stamp}_cavity{cav_num}_{rad_readout}.csv"
-            )
+            csv_path = args.output_folder / f"cm{cryomod}_{stamp}_cavity{cav_num}_{rad_readout}.csv"
+            aligned_time_data.to_csv(csv_path)
     #        plot_amp_vs_rad(aligned_time_data)
+
+
+if __name__ == "__main__":
+    main()
