@@ -10,6 +10,12 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    BG_PANEL,
+    BORDER,
+    RADIUS_MD,
+    TEXT_MUTED,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.magnet_status_badge import (
     MagnetStatusBadge,
 )
@@ -22,7 +28,7 @@ def _vline() -> QFrame:
     sep = QFrame()
     sep.setFrameShape(QFrame.VLine)
     sep.setFrameShadow(QFrame.Sunken)
-    sep.setStyleSheet("color: #555;")
+    sep.setStyleSheet(f"color: {BORDER};")
     return sep
 
 
@@ -30,23 +36,23 @@ class _HeaderMixin:
     def _build_header_panel(self) -> QWidget:
         """Build persistent header with operator and cavity selection."""
         header = QWidget()
-        header.setStyleSheet("""
-            QWidget {
-                background-color: #2b2b2b;
-                border-bottom: 2px solid #4a4a4a;
-            }
-            QGroupBox {
+        header.setStyleSheet(f"""
+            QWidget {{
+                background-color: {BG_PANEL};
+                border-bottom: 2px solid {BORDER};
+            }}
+            QGroupBox {{
                 font-weight: bold;
-                border: 1px solid #555;
-                border-radius: 4px;
+                border: 1px solid {BORDER};
+                border-radius: {RADIUS_MD};
                 margin-top: 6px;
                 padding-top: 8px;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 8px;
                 padding: 0 4px;
-            }
+            }}
         """)
 
         layout = QHBoxLayout()
@@ -80,15 +86,15 @@ class _HeaderMixin:
         cavity_layout.addWidget(self.cavity_combo)
 
         self.cavity_completion_label = QLabel("0/8 Complete")
-        self.cavity_completion_label.setStyleSheet("""
-            QLabel {
-                color: #aaa;
+        self.cavity_completion_label.setStyleSheet(f"""
+            QLabel {{
+                color: {TEXT_MUTED};
                 font-weight: bold;
                 padding: 2px 6px;
-                background-color: rgba(100, 100, 100, 0.2);
-                border-radius: 3px;
+                background-color: rgba(123, 140, 222, 0.12);
+                border-radius: {RADIUS_MD};
                 font-size: 9px;
-            }
+            }}
         """)
         cavity_layout.addWidget(self.cavity_completion_label)
 
@@ -120,14 +126,14 @@ class _HeaderMixin:
         # ---- Sync status ----
         layout.addWidget(_vline())
         self.sync_status = QLabel("○ No Record Loaded")
-        self.sync_status.setStyleSheet("""
-            QLabel {
-                color: #888;
+        self.sync_status.setStyleSheet(f"""
+            QLabel {{
+                color: {TEXT_MUTED};
                 font-weight: bold;
                 padding: 2px 6px;
-                background-color: rgba(100, 100, 100, 0.2);
-                border-radius: 3px;
-            }
+                background-color: rgba(90, 98, 120, 0.2);
+                border-radius: {RADIUS_MD};
+            }}
         """)
         layout.addWidget(self.sync_status)
 

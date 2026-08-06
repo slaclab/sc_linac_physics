@@ -16,6 +16,8 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     LOCAL_CAP_STYLE,
     LOCAL_LABEL_STYLE,
     PiezoPreRFUI,
+    STATUS_LABEL_FAIL,
+    STATUS_LABEL_PASS,
 )
 
 from .base_placeholder import BasePlaceholderDisplay
@@ -91,14 +93,8 @@ class PiezoPreRFDisplay(BasePlaceholderDisplay):
 
     def _update_local_results(self, result: PiezoPreRFCheck):
         """Update local result displays (orange-bordered widgets on right panel)."""
-        pass_style = (
-            LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
-            + "color: #90ee90; font-weight: bold;"
-        )
-        fail_style = (
-            LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
-            + "color: #ff6b6b; font-weight: bold;"
-        )
+        pass_style = STATUS_LABEL_PASS
+        fail_style = STATUS_LABEL_FAIL
 
         if hasattr(self, "local_cha_result"):
             self.local_cha_result.setText(
