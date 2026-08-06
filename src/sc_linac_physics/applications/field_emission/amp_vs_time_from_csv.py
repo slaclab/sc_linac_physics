@@ -6,7 +6,8 @@ from sc_linac_physics.applications.field_emission.csv_reader import read_from_cs
 from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (
     build_amplitude_pvs,
     fetch_pv_data,
-    align_pvs_to_common_time
+    align_pvs_to_common_time,
+    file_handling,
 )
 
 """
@@ -76,21 +77,10 @@ def plot_cavity_data(cavity_data, cryomodule, timestamp, output_path):
         pass
     return
 
+
 def main():
-    # File handling
-    parser = argparse.ArgumentParser("Plot amplitude vs time from .csv file")
-    parser.add_argument("-i", "--input_csv",
-                        type=Path,
-                        default=DEFAULT_INPUT_CSV,
-                        help="Path to the input csv file")
-    parser.add_argument("-o", "--output_folder",
-                        type=Path,
-                        default=DEFAULT_OUTPUT_FOLDER,
-                        help="Path to the output folder")
-    args = parser.parse_args()
-    if not args.input_csv.exists():
-        raise FileNotFoundError(f"Input csv file not found at {args.input_csv}")
-    args.output_folder.mkdir(parents=True, exist_ok=True)
+    summary = "Plot amplitude vs time from .csv file"
+    arg = file_handling(summary)
 
     # INDIVIDUAL CASE
     # cr = 8
@@ -110,15 +100,15 @@ def main():
     # plot_cavity_data(aligned_data, cryo, stamp, args.output_folder)
 
     # Process
-    for cryo, _, start, end, stamp in read_from_csv(args.input_csv):
+    for cryo, _, start, end, stamp in read_from_csv(arg.input_csv):
         print(f"Processing CM{cryo} {start} -> {end}")
         amplitude_pvs = build_amplitude_pvs(cryo)
         dataframes = fetch_pv_data(amplitude_pvs, start, end)
         aligned_data = align_pvs_to_common_time(dataframes)
         # aligned_data = trim_ends(aligned_data, 0.8)
-        csv_path = args.output_folder / f"amplitudes_{cryo}_{stamp}.csv"
+        csv_path = arg.output_folder / f"amplitudes_{cryo}_{stamp}.csv"
         aligned_data.to_csv(csv_path)
-        plot_cavity_data(aligned_data, cryo, stamp, args.output_folder)
+        plot_cavity_data(aligned_data, cryo, stamp, arg.output_folder)
 
 
 if __name__ == "__main__":
