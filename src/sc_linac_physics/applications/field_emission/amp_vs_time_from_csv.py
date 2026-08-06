@@ -1,5 +1,7 @@
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 from sc_linac_physics.applications.field_emission.csv_reader import read_from_csv
 from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (
     fetch_pv_data,
@@ -18,11 +20,13 @@ is not listed in .csv, time is start date listed in .csv file + 24 hours. Attemp
 data to closest cavity activity window. Not yet perfect trimming.
 """
 
-input_csv = "All Comm measurements by CM.csv"
 
+_DATA_DIR = Path(__file__).resolve().parent
+DEFAULT_INPUT_CSV = _DATA_DIR / "All FE measurements by CM.csv"
+DEFAULT_OUTPUT_FOLDER = _DATA_DIR
 
 def build_amplitude_pvs(cryomodule):
-    # TODO """fill"""
+    """AACTMEAN amplitudes for each cavity to be plotted against"""
     amplitude_pv = []
     sel_linac = next(
         (linac for linac, cms in LINAC_TUPLES if cryomodule in cms), "L1B"
@@ -36,7 +40,7 @@ def build_amplitude_pvs(cryomodule):
 
 
 def trim_ends(df, tolerance):
-    # TODO """fill"""
+    """works to clean data of zero or high constant tails"""
     df = df.copy()
     vals = df.values
 
@@ -66,8 +70,8 @@ def trim_ends(df, tolerance):
     return df
 
 
-def plot_cavity_data(cavity_data, cryomodule, timestamp):
-    # TODO """fill"""
+def plot_cavity_data(cavity_data, cryomodule, timestamp, output_path):
+    """plot amplitude vs time for cavities of listed cryomodules"""
     if not cavity_data.empty:
         fig, ax = plt.subplots()
         for i, col in enumerate(cavity_data.columns):
@@ -80,7 +84,7 @@ def plot_cavity_data(cavity_data, cryomodule, timestamp):
         ax.legend(loc="lower right")
         #   plt.show()
         fig.savefig(
-            f"/Users/kvetta/sc-rad/cropped_comm/amp_plot_cm{cryomodule}_{timestamp}.png"
+            f"/{output_path}/amp_plot_cm{cryomodule}_{timestamp}.png"
         )
         plt.close(fig)
     else:
@@ -88,8 +92,22 @@ def plot_cavity_data(cavity_data, cryomodule, timestamp):
         pass
     return
 
+def main():
+    # File handling
+    parser = argparse.ArgumentParser("Plot amplitude vs time from .csv file")
+    parser.add_argument("-i", "--input_csv",
+                        type=Path,
+                        default=DEFAULT_INPUT_CSV,
+                        help="Path to the input csv file")
+    parser.add_argument("-o", "--output_folder",
+                        type=Path,
+                        default=DEFAULT_OUTPUT_FOLDER,
+                        help="Path to the output folder")
+    args = parser.parse_args()
+    if not args.input_csv.exists():
+        raise FileNotFoundError(f"Input csv file not found at {args.input_csv}")
+    args.output_folder.mkdir(parents=True, exist_ok=True)
 
-if __name__ == "__main__":
     # INDIVIDUAL CASE
     # cr = 8
     # cryo = f"{cr:02d}"
@@ -103,16 +121,30 @@ if __name__ == "__main__":
     # dataframes = fetch_pv_data(amplitude_pvs, start, end)
     # aligned_data = align_pvs_to_common_time(dataframes)
     # aligned_data = trim_ends(aligned_data, 0.8)
-    # aligned_data.to_csv(f"/Users/kvetta/sc-rad/extra_run/amplitudes_cm{cryo}_{stamp}.csv")
-    # plot_cavity_data(aligned_data, cryo, stamp)
+    # csv_path = args.output_folder / f"amplitudes_{cryo}_{stamp}.csv"
+    # aligned_data.to_csv(csv_path)
+    # plot_cavity_data(aligned_data, cryo, stamp, args.output_folder)
 
-    for cryo, _, start, end, stamp in read_from_csv(input_csv):
+    # Process
+    for cryo, _, start, end, stamp in read_from_csv(args.input_csv):
         print(f"Processing CM{cryo} {start} -> {end}")
         amplitude_pvs = build_amplitude_pvs(cryo)
         dataframes = fetch_pv_data(amplitude_pvs, start, end)
         aligned_data = align_pvs_to_common_time(dataframes)
         # aligned_data = trim_ends(aligned_data, 0.8)
-        aligned_data.to_csv(
-            f"/Users/kvetta/sc-rad/cropped_comm/amplitudes_cm{cryo}_{stamp}.csv"
-        )
-        plot_cavity_data(aligned_data, cryo, stamp)
+        csv_path = args.output_folder / f"amplitudes_{cryo}_{stamp}.csv"
+        aligned_data.to_csv(csv_path)
+        plot_cavity_data(aligned_data, cryo, stamp, args.output_folder)
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
