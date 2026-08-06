@@ -2,24 +2,29 @@ import os
 import re
 import glob
 import h5py
+import argparse
 import pandas as pd
+from pathlib import Path
+from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (file_handling)
 
 """
 07/13/26 - Kvetta Q
-Converts .CSVs from amp_vs_radiation_from_csv.py to .hdf5 file. Follows CM --> DATE --> CAVITY --> AVERAGE
-READOUT/INSTANT READOUT hierarchy for a folder of .CSVs with specific naming convention
-ex: cm08_23_10_06_08_42_cavity7_average.csv.
+Converts .CSVs from amp_vs_radiation_from_csv.py, contained in central location or folder,
+to .hdf5 file. Follows CM --> DATE --> CAVITY --> AVERAGE READOUT/INSTANT READOUT hierarchy for
+a folder of .CSVs with specific naming convention. ex: cm08_23_10_06_08_42_cavity7_average.csv.
 """
 
 
-input_path = "/Users/kvetta/Desktop/combined_data/"
-input_csvs = glob.glob(os.path.join(input_path, "*.csv"))
-h5_filename = "field_emission_data.hdf5"
+_DATA_DIR = Path(__file__).resolve().parent
+DEFAULT_INPUT_CSV = _DATA_DIR
+DEFAULT_OUTPUT_FOLDER = _DATA_DIR
+INPUT_CSVS = glob.glob(os.path.join(DEFAULT_INPUT_CSV, "*.csv"))
+H5_FILENAME = "field_emission_data_test.hdf5"
 
 
-if __name__ == "__main__":
-    with h5py.File(h5_filename, "a") as h5f:
-        for csv_path in input_csvs:
+def main():
+    with h5py.File(H5_FILENAME, "a") as h5f:
+        for csv_path in INPUT_CSVS:
             csv_name = os.path.basename(csv_path)
 
             match = re.fullmatch(
@@ -42,9 +47,13 @@ if __name__ == "__main__":
                 group.attrs["cavity"] = cav
                 group.attrs["date"] = date
 
-                dset = group.create_dataset(
-                    f"{readout_type}", data=values, compression="gzip"
+                dset = group.require_dataset(
+                    f"{readout_type}",
+                    shape=values.shape,
+                    dtype=values.dtype,
+                    compression="gzip"
                 )
+                dset[...] = values
                 no_time_df = df.drop(columns="timestamps")
                 dset.attrs["columns"] = no_time_df.columns.astype(str).tolist()
                 dset.attrs["readout_type"] = readout_type
@@ -53,3 +62,9 @@ if __name__ == "__main__":
 
             else:
                 print(f"CSV: {csv_name} has incorrect naming format")
+                continue
+
+if __name__ == "__main__":
+    summary = "Convert amplitude vs radiation .csv files to .hdf5"
+    file_handling(summary)
+    main()

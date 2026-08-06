@@ -127,18 +127,18 @@ def plot_amp_vs_rad(aligned_data):
 def file_handling(summary_str):
     """establish input and output folders"""
     parser = argparse.ArgumentParser(summary_str)
-    parser.add_argument("-i", "--input_csv",
+    parser.add_argument("-i", "--input",
                         type=Path,
                         default=DEFAULT_INPUT_CSV,
-                        help="Path to the input csv file")
-    parser.add_argument("-o", "--output_folder",
+                        help="Path to the input file(s)")
+    parser.add_argument("-o", "--output",
                         type=Path,
                         default=DEFAULT_OUTPUT_FOLDER,
                         help="Path to the output folder")
     args = parser.parse_args()
-    if not args.input_csv.exists():
-        raise FileNotFoundError(f"Input csv file not found at {args.input_csv}")
-    args.output_folder.mkdir(parents=True, exist_ok=True)
+    if not args.input.exists():
+        raise FileNotFoundError(f"Input file not found at {args.input}")
+    args.output.mkdir(parents=True, exist_ok=True)
     return args
 
 
@@ -154,7 +154,7 @@ def main():
     # end = datetime(2025,2,6,15,4)
     # delta = timedelta(seconds=1)
 
-    for cryomod, dec, start, end, stamp in read_from_csv(arg.input_csv):
+    for cryomod, dec, start, end, stamp in read_from_csv(arg.input):
         print(f"Processing CM{cryomod} {start} -> {end}")
         amp_pvs = build_amplitude_pvs(cryomod)
         rad_pvs = build_rad_readout_pvs(dec, rad_chans, rad_readout)
@@ -167,7 +167,7 @@ def main():
             cav_num = i + 1
             dataframes = fetch_pv_data(p_list, start, end)
             aligned_time_data = align_pvs_to_common_time(dataframes)
-            csv_path = arg.output_folder / f"cm{cryomod}_{stamp}_cavity{cav_num}_{rad_readout}.csv"
+            csv_path = arg.output / f"cm{cryomod}_{stamp}_cavity{cav_num}_{rad_readout}.csv"
             aligned_time_data.to_csv(csv_path)
     #        plot_amp_vs_rad(aligned_time_data)
 
