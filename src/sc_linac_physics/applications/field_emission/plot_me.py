@@ -66,5 +66,5 @@ if __name__ == "__main__":
     for dat in data.values():
         x_axis, columns = get_columns(dat, r_chan)
         fig, axes = plt.subplots(1, 1, figsize=(5, 4))
-        plot_amp_vs_rad(dat, label0, axes, r_chan, fit_line)
+        plot_amp_vs_rad(dat, axes, r_chan, fit_line)
         plt.show()
