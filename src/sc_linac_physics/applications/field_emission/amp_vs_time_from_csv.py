@@ -57,7 +57,9 @@ def trim_ends(df, tolerance):
 
 def plot_cavity_data(cavity_data, cryomodule, timestamp, output_path):
     """plot amplitude vs time for cavities of listed cryomodules"""
-    if not cavity_data.empty:
+    if cavity_data.empty:
+        print("Cavity data is empty, skipping plot")
+    else:
         fig, ax = plt.subplots()
         for i, col in enumerate(cavity_data.columns):
             ax.plot(
@@ -72,9 +74,6 @@ def plot_cavity_data(cavity_data, cryomodule, timestamp, output_path):
             f"/{output_path}/amp_plot_cm{cryomodule}_{timestamp}.png"
         )
         plt.close(fig)
-    else:
-        print("Cavity data is empty, skipping plot")
-        pass
     return
 
 
@@ -95,20 +94,20 @@ def main():
     # dataframes = fetch_pv_data(amplitude_pvs, start, end)
     # aligned_data = align_pvs_to_common_time(dataframes)
     # aligned_data = trim_ends(aligned_data, 0.8)
-    # csv_path = args.output_folder / f"amplitudes_{cryo}_{stamp}.csv"
+    # csv_path = args.output / f"amplitudes_{cryo}_{stamp}.csv"
     # aligned_data.to_csv(csv_path)
-    # plot_cavity_data(aligned_data, cryo, stamp, args.output_folder)
+    # plot_cavity_data(aligned_data, cryo, stamp, args.output)
 
     # Process
-    for cryo, _, start, end, stamp in read_from_csv(arg.input_csv):
+    for cryo, _, start, end, stamp in read_from_csv(arg.input):
         print(f"Processing CM{cryo} {start} -> {end}")
         amplitude_pvs = build_amplitude_pvs(cryo)
         dataframes = fetch_pv_data(amplitude_pvs, start, end)
         aligned_data = align_pvs_to_common_time(dataframes)
         # aligned_data = trim_ends(aligned_data, 0.8)
-        csv_path = arg.output_folder / f"amplitudes_{cryo}_{stamp}.csv"
+        csv_path = arg.output / f"amplitudes_{cryo}_{stamp}.csv"
         aligned_data.to_csv(csv_path)
-        plot_cavity_data(aligned_data, cryo, stamp, arg.output_folder)
+        plot_cavity_data(aligned_data, cryo, stamp, arg.output)
 
 
 if __name__ == "__main__":

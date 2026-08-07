@@ -103,8 +103,6 @@ if __name__ == "__main__":
     reads = "Average"
     r_chan = [True, False, False, False, False, False, False, False]
 
-    m = match_measurement_dates(cryo)
-    print(m)
     data, label, n = find_dataframes(cryo, day, cavi, reads)
     for dat in data.values():
         x_axis, cols = get_columns(dat, r_chan)
