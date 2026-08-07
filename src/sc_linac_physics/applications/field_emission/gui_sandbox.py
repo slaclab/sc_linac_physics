@@ -268,14 +268,16 @@ class FieldEmission(Display):
             for item in self.meas_list_widget.selectedItems()
         ]
         print(f"selected rows: {self._selected_rows}")
-        # TODO - circular index??
-        idx = self._selected_rows[-1]
-        m = self._current_measurements[idx]
-
-        if idx < 0 or not self._selected_rows:
+        if not self._selected_rows:
             self.clear_metadata_labels()
             return
 
+        idx = self._selected_rows[-1]
+        if idx < 0 or idx >= len(self._current_measurements):
+            self.clear_metadata_labels()
+            return
+
+        m = self._current_measurements[idx]
         labels = fetch_measurement_metadata(m["cm"], m["date"])
 
         if labels is None:
