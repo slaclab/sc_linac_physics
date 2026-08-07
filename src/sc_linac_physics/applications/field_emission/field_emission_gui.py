@@ -256,12 +256,12 @@ class FieldEmission(Display):
     def on_measurement_updated(self):
         measurement = self.meas_dropdown.currentText()
         idx = self.meas_dropdown.currentIndex()
-        m = self._current_measurements[idx]
 
-        if idx < 0 or not measurement:
+        if idx < 0 or not measurement or not self._current_measurements:
             self.clear_metadata_labels()
             return
 
+        m = self._current_measurements[idx]
         labels = fetch_measurement_metadata(m["cm"], m["date"])
 
         if labels is None:
@@ -378,7 +378,6 @@ class FieldEmission(Display):
 
         # Generate subplots
         for i, (cav_num, df) in enumerate(selected.items(), start=1):
-            print(f"CAVITY: {cav_num}")
             ax = self.fig.add_subplot(row, col, i)
             plot_amp_vs_rad(df, ax, r_channels, fit)
             ax.set_title(f"Cavity {cav_num}")
