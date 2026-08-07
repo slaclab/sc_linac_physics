@@ -35,8 +35,6 @@ class TuneCavity(Cavity, ColdLinacObject):
             30000 if self.cryomodule.is_harmonic_linearizer else 10000
         )
 
-        self.df_cold_pv: str = self.pv_addr("DF_COLD")
-        self._df_cold_pv_obj: Optional[PV] = None
         self.use_rf_pv: str = self.auto_pv_addr("USE_RF")
         self._use_rf_pv_obj: Optional[PV] = None
 
@@ -73,12 +71,6 @@ class TuneCavity(Cavity, ColdLinacObject):
         if not self._hw_mode_pv_obj:
             self._hw_mode_pv_obj = PV(self.hw_mode_pv)
         return self._hw_mode_pv_obj.get(as_string=True)
-
-    @property
-    def df_cold_pv_obj(self) -> PV:
-        if not self._df_cold_pv_obj:
-            self._df_cold_pv_obj = PV(self.df_cold_pv)
-        return self._df_cold_pv_obj
 
     def park(self, reset_stepper_count: bool = True):
         if self.tune_config_pv_obj.get() == TUNE_CONFIG_PARKED_VALUE:

@@ -46,12 +46,14 @@ class StepperTuner(linac_utils.SCLinacObject):
 
         self.step_tot_pv: str = self.pv_addr("REG_TOTABS")
         self.step_signed_pv: str = self.pv_addr("REG_TOTSGN")
+        self._step_signed_pv_obj: Optional[PV] = None
         self.reset_tot_pv: str = self.pv_addr("TOTABS_RESET")
 
         self.reset_signed_pv: str = self.pv_addr("TOTSGN_RESET")
         self._reset_signed_pv_obj: Optional[PV] = None
 
         self.steps_cold_landing_pv: str = self.pv_addr("NSTEPS_COLD")
+        self._steps_cold_landing_pv_obj: Optional[PV] = None
         self.push_signed_cold_pv: str = self.pv_addr("PUSH_NSTEPS_COLD.PROC")
         self.push_signed_park_pv: str = self.pv_addr("PUSH_NSTEPS_PARK.PROC")
 
@@ -68,6 +70,12 @@ class StepperTuner(linac_utils.SCLinacObject):
 
         self.hz_per_microstep_pv: str = self.pv_addr("SCALE")
         self._hz_per_microstep_pv_obj: Optional[PV] = None
+
+        # SCALE is a derived, read-only calc-record output (SCALE = SCALE_CALC.B / 256).
+        # To persist a measured scale we write the Hz-per-full-step field and let the
+        # IOC recompute SCALE. See set_hz_per_microstep().
+        self.hz_per_step_calc_pv: str = self.pv_addr("SCALE_CALC.B")
+        self._hz_per_step_calc_pv_obj: Optional[PV] = None
 
         self.abort_flag: bool = False
 
@@ -87,6 +95,36 @@ class StepperTuner(linac_utils.SCLinacObject):
     @property
     def hz_per_microstep(self):
         return abs(self.hz_per_microstep_pv_obj.get())
+
+    @property
+    def hz_per_step_calc_pv_obj(self) -> PV:
+        if not self._hz_per_step_calc_pv_obj:
+            self._hz_per_step_calc_pv_obj = PV(self.hz_per_step_calc_pv)
+        return self._hz_per_step_calc_pv_obj
+
+    def set_hz_per_microstep(self, hz_per_microstep: float) -> None:
+        """Persist a measured stepper scale.
+
+        STEP:SCALE is a derived, read-only calc-record output
+        (SCALE = SCALE_CALC.B / 256), so writing SCALE directly is silently
+        reverted by the IOC. Instead we write the Hz-per-full-step field
+        (SCALE_CALC.B) and let the IOC recompute SCALE.
+        """
+        self.hz_per_step_calc_pv_obj.put(
+            hz_per_microstep * linac_utils.MICROSTEPS_PER_STEP
+        )
+
+    @property
+    def step_signed_pv_obj(self) -> PV:
+        if not self._step_signed_pv_obj:
+            self._step_signed_pv_obj = PV(self.step_signed_pv)
+        return self._step_signed_pv_obj
+
+    @property
+    def steps_cold_landing_pv_obj(self) -> PV:
+        if not self._steps_cold_landing_pv_obj:
+            self._steps_cold_landing_pv_obj = PV(self.steps_cold_landing_pv)
+        return self._steps_cold_landing_pv_obj
 
     def check_abort(self):
         """

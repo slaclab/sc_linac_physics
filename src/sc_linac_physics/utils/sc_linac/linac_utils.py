@@ -272,6 +272,18 @@ class StepperError(Exception):
     pass
 
 
+class StepperTempError(StepperError):
+    """Exception thrown when the stepper motor exceeds its temperature limit."""
+
+    pass
+
+
+class FSCANError(Exception):
+    """Exception thrown when a rack FSCAN scan fails or times out."""
+
+    pass
+
+
 class SSACalibrationError(Exception):
     """
     Exception thrown during cavity SSA calibration
