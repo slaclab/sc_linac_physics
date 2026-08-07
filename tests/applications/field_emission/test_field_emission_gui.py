@@ -1,3 +1,15 @@
+import pytest
+from PyQt5.QtWidgets import (
+    QComboBox,
+    QCheckBox,
+    QPushButton,
+    QRadioButton,
+)
+from unittest.mock import MagicMock, patch
+
+from sc_linac_physics.applications.field_emission.field_emission_gui import FieldEmission
+from sc_linac_physics.applications.field_emission import field_emission_gui as feg
+
 """
 Unit tests for the FieldEmission PyDM Display.
 
@@ -14,19 +26,6 @@ NOTE:
     import path / module name of the script under test.
 """
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-from PyQt5.QtWidgets import (
-    QComboBox,
-    QCheckBox,
-    QPushButton,
-    QRadioButton,
-)
-
-from sc_linac_physics.applications.field_emission.field_emission_gui import FieldEmission
-from sc_linac_physics.applications.field_emission import field_emission_gui as feg
-
 # ---------------------------------------------------------------------------
 # Sample data used to fake the external "measurements" module
 # ---------------------------------------------------------------------------
@@ -36,12 +35,12 @@ SAMPLE_MEASUREMENTS = [
 ]
 
 SAMPLE_METADATA = (
-    "2024-01-01",          # date_label
-    "08:00",               # start_label
-    "10:00",               # end_label
-    "Decarad 1",           # dec_label
-    "http://elog.example", # elog_label
-    "Some notes",          # notes_label
+    "2024-01-01",               # date_label
+    "08:00",                    # start_label
+    "10:00",                    # end_label
+    "Decarad 1",                # dec_label
+    "http://elog.example",      # elog_label
+    "Some notes",               # notes_label
 )
 
 

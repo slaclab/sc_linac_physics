@@ -78,7 +78,7 @@ def find_dataframes(cm, date, cav, read):
         amp_label_parts = amp_label.split(":")
         title = ":".join(amp_label_parts[:3])
         if len(cav_list) > 1:
-            #ex: "ACCL:L1B:0310" → "ACCL:L1B:03x0" for multiple cavities
+            # ex: "ACCL:L1B:0310" → "ACCL:L1B:03x0" for multiple cavities
             title = re.sub(r"(:\d+)(\d)0", r"\1x0", title)
         num = len(dfs)
 

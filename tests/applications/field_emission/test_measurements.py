@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from datetime import datetime
 
 from sc_linac_physics.applications.field_emission import measurements

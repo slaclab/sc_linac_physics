@@ -1,3 +1,16 @@
+import numpy as np
+import pandas as pd
+import pytest
+import matplotlib
+
+# Use a non-interactive backend so tests never try to open a window.
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgba
+from unittest.mock import patch, MagicMock
+
+from sc_linac_physics.applications.field_emission import plot_me
+
 """
 Unit tests for the plot_me module (amplitude vs radiation plotting + fits).
 
@@ -10,22 +23,6 @@ Requirements:
     matplotlib
     scipy
 """
-
-import numpy as np
-import pandas as pd
-import pytest
-import matplotlib
-
-# Use a non-interactive backend so tests never try to open a window.
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from unittest.mock import patch, MagicMock
-
-from sc_linac_physics.applications.field_emission import plot_me
-
-
-
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures / helpers
@@ -122,7 +119,6 @@ class TestAddPolyFit:
         plot_me.add_poly_fit(amp, rad, ax, "#123456")
         line = ax.lines[0]
         # matplotlib normalises hex colors; compare via to_rgba
-        from matplotlib.colors import to_rgba
         assert to_rgba(line.get_color()) == to_rgba("#123456")
 
     def test_fit_line_has_250_points(self):
@@ -197,7 +193,7 @@ class TestPlotAmpVsRadRealColumns:
         plot_me.plot_amp_vs_rad(sample_df, ax, three_channel_mask, False)
         handles, labels = ax.get_legend_handles_labels()
         assert len(labels) == 3
-        assert all(l.startswith("Ch ") for l in labels)
+        assert all(label.startswith("Ch ") for label in labels)
 
 
 # ===========================================================================
