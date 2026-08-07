@@ -1,11 +1,11 @@
 import pytest
-from PyQt5.QtWidgets import (
+from PyQt5.QtWidgets import(
     QComboBox,
     QCheckBox,
     QPushButton,
     QRadioButton,
 )
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch, MagicMock
 
 from sc_linac_physics.applications.field_emission.field_emission_gui import FieldEmission
 from sc_linac_physics.applications.field_emission import field_emission_gui as feg
@@ -20,10 +20,6 @@ Requirements:
     pytest-qt
     PyQt5
     matplotlib
-
-NOTE:
-    Replace `field_emission_display` everywhere below with the actual
-    import path / module name of the script under test.
 """
 
 # ---------------------------------------------------------------------------

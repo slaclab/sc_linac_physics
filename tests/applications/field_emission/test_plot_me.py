@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from unittest.mock import patch, MagicMock
 
 from sc_linac_physics.applications.field_emission import plot_me
-
 # Use a non-interactive backend so tests never try to open a window.
 matplotlib.use("Agg")
 
@@ -16,18 +15,16 @@ Unit tests for the plot_me module (amplitude vs radiation plotting + fits).
 Run with:  pytest -q test_plot_me.py
 
 Requirements:
-    pytest
-    numpy
-    pandas
-    matplotlib
-    scipy
+	pytest
+	numpy
+	pandas
+	matplotlib
+	scipy
 """
 
 # ---------------------------------------------------------------------------
 # Shared fixtures / helpers
 # ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def sample_df():
     return pd.DataFrame({
