@@ -1,56 +1,10 @@
 # sc_linac_physics/displays/plot/embeddable_plots.py
 import colorsys
-import os
-import logging
-from datetime import datetime
 
-import numpy as np
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from pydm.widgets import PyDMArchiverTimePlot
 from pydm.widgets.timeplot import updateMode
-
-
-logger = logging.getLogger(__name__)
-
-
-def _mock_mode_enabled() -> bool:
-    """Mock archiver is forced via env var (per-process)."""
-    return os.getenv("SC_ARCHIVER_MOCK") == "1"
-
-
-def connect_mock_archive_source(curve, pv_name=None) -> None:
-    """In mock mode, feed a curve's archive requests from the mock archiver
-    instead of PyDM's HTTP plugin. No-op in real mode.
-    """
-    if not _mock_mode_enabled():
-        return
-
-    pv = pv_name or getattr(curve, "address", None)
-    if not pv:
-        return
-
-    def _feed(min_x, max_x, _cmd, c=curve, pv=pv):
-        try:
-            from sc_linac_physics.utils.archiver import get_values_over_time_range
-            start = datetime.fromtimestamp(min_x)
-            end = datetime.fromtimestamp(max_x)
-            handler = get_values_over_time_range([pv], start, end)[pv]
-            ts = np.array([t.timestamp() for t in handler.timestamps], dtype=float)
-            vals = np.array([float(v) for v in handler.values], dtype=float)
-            buf_size = getattr(c, "_archiveBufferSize", 8000)
-            max_points = max(int(buf_size) - 100, 100)
-            if ts.size > max_points:
-                idx = np.linspace(0, ts.size - 1, max_points).astype(int)
-                ts = ts[idx]
-                vals = vals[idx]
-            if ts.size == 0:
-                return
-            c.receiveArchiveData(np.array([ts, vals]))
-        except Exception as e:
-            logger.warning(f"Mock archive feed failed for {pv}: {e}")
-
-    curve.archive_data_request_signal.connect(_feed)
 
 
 class EmbeddableArchiverPlot(QWidget):
@@ -159,7 +113,6 @@ class EmbeddableArchiverPlot(QWidget):
         if len(plot_item.curves) > 0:
             curve = plot_item.curves[-1]
             self.pv_curves[pv_name] = curve
-            connect_mock_archive_source(curve, pv_name)
 
     def remove_pv(self, pv_name):
         """Remove a PV from the plot."""

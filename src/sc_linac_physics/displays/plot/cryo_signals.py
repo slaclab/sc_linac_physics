@@ -415,7 +415,6 @@ class LinacGroupedCryomodulePlotDisplay(Display):
         for idx, pv_attr in enumerate(self.SELECTED_PV_ATTRIBUTES):
             if hasattr(cryomodule, pv_attr):
                 pv_name = getattr(cryomodule, pv_attr)
-                print(f">>>PV {pv_attr} = {pv_name!r}")
                 if pv_name:
                     label = pv_attr.replace("_pv", "").replace("_", " ").title()
 
@@ -427,8 +426,6 @@ class LinacGroupedCryomodulePlotDisplay(Display):
                             idx, len(self.SELECTED_PV_ATTRIBUTES)
                         ),
                     )
-            else:
-                print(f">>>{pv_attr} NOT on cryomodule")
 
     def ui_filename(self):
         """Return None since we're building UI programmatically."""
