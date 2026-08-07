@@ -2,7 +2,6 @@ import os
 import re
 import glob
 import h5py
-import argparse
 import pandas as pd
 from pathlib import Path
 from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (file_handling)
@@ -63,6 +62,7 @@ def main():
             else:
                 print(f"CSV: {csv_name} has incorrect naming format")
                 continue
+
 
 if __name__ == "__main__":
     summary = "Convert amplitude vs radiation .csv files to .hdf5"

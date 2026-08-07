@@ -114,6 +114,7 @@ def test_get_columns_masks_by_threshold():
     assert amp.iloc[2] == 5.0
     assert np.isnan(amp.iloc[3])
 
+
 def test_get_columns_gets_correct_column():
     dset = pd.DataFrame({
         "amps": [3.0, 7.0, 5.0, 2.0],
