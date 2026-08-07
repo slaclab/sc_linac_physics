@@ -26,6 +26,7 @@ Requirements:
 # ---------------------------------------------------------------------------
 # Shared fixtures / helpers
 # ---------------------------------------------------------------------------
+
 @pytest.fixture
 def sample_df():
     return pd.DataFrame({
@@ -267,7 +268,6 @@ class TestPlotAmpVsRadMockedColumns:
             plot_me.plot_amp_vs_rad(MagicMock(), ax, [True] * 10, fit=False)
 
         assert len(ax.collections) == n
-        from matplotlib.colors import to_rgba
         first = ax.collections[0].get_facecolor()[0]
         wrapped = ax.collections[len(color_cycle)].get_facecolor()[0]
         # channel 0 and channel len(color_cycle) should share the same color
