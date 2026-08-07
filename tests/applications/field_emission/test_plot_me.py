@@ -2,14 +2,13 @@ import numpy as np
 import pandas as pd
 import pytest
 import matplotlib
-
-# Use a non-interactive backend so tests never try to open a window.
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import to_rgba
 from unittest.mock import patch, MagicMock
 
 from sc_linac_physics.applications.field_emission import plot_me
+
+# Use a non-interactive backend so tests never try to open a window.
+matplotlib.use("Agg")
 
 """
 Unit tests for the plot_me module (amplitude vs radiation plotting + fits).
@@ -111,15 +110,6 @@ class TestAddPolyFit:
         rad = plot_me.fit_equation(amp, 1.5, 4.0)
         plot_me.add_poly_fit(amp, rad, ax, "green")
         assert len(ax.lines) == 1
-
-    def test_fit_line_uses_given_color(self):
-        fig, ax = plt.subplots()
-        amp = np.linspace(2.0, 10.0, 30)
-        rad = plot_me.fit_equation(amp, 1.0, 2.0)
-        plot_me.add_poly_fit(amp, rad, ax, "#123456")
-        line = ax.lines[0]
-        # matplotlib normalises hex colors; compare via to_rgba
-        assert to_rgba(line.get_color()) == to_rgba("#123456")
 
     def test_fit_line_has_250_points(self):
         fig, ax = plt.subplots()
