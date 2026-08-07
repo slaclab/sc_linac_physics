@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pytest
 
 from sc_linac_physics.applications.field_emission import plot_me
 
@@ -21,6 +20,7 @@ def test_plot_amp_vs_rad_one_scatter_per_channel():
     )
     plt.close(fig)
 
+
 def test_plot_amp_vs_rad_no_fit_when_false():
     dset = pd.DataFrame({
         "amps": [3.0, 7.0, 5.0, 2.0],
@@ -34,6 +34,7 @@ def test_plot_amp_vs_rad_no_fit_when_false():
     assert len(ax.collections) == 3
     assert len(ax.lines) == 0
     plt.close(fig)
+
 
 def test_plot_amp_vs_rad_line_when_fit_true():
     dset = pd.DataFrame({
@@ -49,15 +50,18 @@ def test_plot_amp_vs_rad_line_when_fit_true():
     assert len(ax.lines) >= 1
     plt.close(fig)
 
+
 def test_fit_equation_takes_arrays():
     amps = np.array([3.0, 7.0, 5.0, 2.0])
     results = plot_me.fit_equation(amps, 1.0, 1.0)
     assert results.shape == amps.shape
 
+
 def test_fit_equation_is_finite():
     amps = np.array([3.0, 7.0, 5.0, 2.0])
     results = plot_me.fit_equation(amps, 1.0, 1.0)
     assert np.all(np.isfinite(results))
+
 
 def test_add_poly_fit_returns_none_for_empty_dataset():
     fig, ax = plt.subplots()
