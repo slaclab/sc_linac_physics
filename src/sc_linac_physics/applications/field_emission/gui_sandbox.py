@@ -382,28 +382,75 @@ class FieldEmission(Display):
         readout = self.readout_dropdown.currentText()
         r_channels = [cb.isChecked() for cb in self.rad_chan_cb]
         fit = self.radio_fit_btn.isChecked()
-        for m in meas:
-            selected, label, n = find_dataframes(
-                m["cm"], m["date"], cav, readout
+
+        plot_dfs = self._fetch_plot_data(cav, meas, readout)
+        if len(plot_dfs) == 1:
+            axes_list, plot_title = self._plot_one_date(
+                plot_dfs[0], r_channels, fit
             )
 
+        #        # Calculate subplot rows, cols
+        #        if len(all_results) > 1:
+        #            selected_cavities = sorted(
+        #                {
+        #                    cav
+        #                    for result in all_results
+        #                    for cav in result["dataframes"].keys()
+        #                }
+        #            )
+        #            n_cols = len(meas)
+        #            n_rows = len(selected_cavities)
+        all_handles, all_labels = self._unify_legends(axes_list)
+        if all_handles:
+            self.fig.legend(
+                all_handles, all_labels, fontsize="x-small", loc="upper right"
+            )
+        self.fig.suptitle(plot_title)
+        self.fig.supxlabel("Amplitude (MV)")
+        self.fig.supylabel("Radiation (mR/hr)")
+        #        self._unify_axes(axes_list)
+        self.canvas.draw()
+
+    def _fetch_plot_data(self, cavity, measurement, readout_type):
+        if not measurement or not any(cavity):
+            return {}
+
+        # Fetch data for every measurement
+        all_results = []
+        for m in measurement:
+            selected, label, n = find_dataframes(
+                m["cm"], m["date"], cavity, readout_type
+            )
+            all_results.append(
+                {
+                    "measurement": m,
+                    "dataframes": selected,
+                    "label": label,
+                }
+            )
+        return all_results
+
+    def _plot_one_date(self, measurement, rad_channels, fit_flag):
         # Calculate subplot rows, cols
-        n = n * len(meas)
-        col = math.ceil(n / 2)
-        row = min(2, n)
-        print(n)
+        inner_dfs = measurement["dataframes"]
+        title = measurement["label"]
+        n = len(inner_dfs)
+        n_cols = math.ceil(n / 2)
+        n_rows = min(2, n)
 
         self.fig.clear()
         axes = []
 
         # Generate subplots
-        for i, (cav_num, df) in enumerate(selected.items(), start=1):
+        for i, (cav_num, df) in enumerate(inner_dfs.items(), start=1):
             print(f"CAVITY {cav_num}")  # debug line
-            ax = self.fig.add_subplot(row, col, i)
-            plot_amp_vs_rad(df, ax, r_channels, fit)
+            ax = self.fig.add_subplot(n_rows, n_cols, i)
+            plot_amp_vs_rad(df, ax, rad_channels, fit_flag)
             ax.set_title(f"Cavity {cav_num}")
             axes.append(ax)
+        return axes, title
 
+    def _unify_legends(self, axes):
         # Build summary legend
         all_handles = []
         all_labels = []
@@ -413,15 +460,7 @@ class FieldEmission(Display):
                 if l not in all_labels:
                     all_handles.append(h)
                     all_labels.append(l)
-
-        self.fig.legend(
-            all_handles, all_labels, fontsize="x-small", loc="upper right"
-        )
-        self.fig.suptitle(label)
-        self.fig.supxlabel("Amplitude (MV)")
-        self.fig.supylabel("Radiation (mR/hr)")
-        self._unify_axes(axes)
-        self.canvas.draw()
+        return all_handles, all_labels
 
     def _unify_axes(self, axes):
         if not axes:

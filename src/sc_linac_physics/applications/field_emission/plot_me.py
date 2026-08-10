@@ -3,16 +3,19 @@ import matplotlib.pyplot as plt
 
 from datetime import datetime
 from scipy.optimize import curve_fit
-from sc_linac_physics.applications.field_emission.measurements import find_dataframes, get_columns
+from sc_linac_physics.applications.field_emission.measurements import (
+    find_dataframes,
+    get_columns,
+)
 
 
 def plot_amp_vs_rad(df, ax, r_channels, fit):
     """plot amplitude on x-axis and radiation on y-axis, locking colors to channels"""
     x_amplitude, rad_cols = get_columns(df, r_channels)
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    for i, col in enumerate(rad_cols.columns):
+    for col in rad_cols.columns:
         print(f"channel {col}")  # debug line
-        color = color_cycle[i % len(color_cycle)]
+        color = color_cycle[(col - 1) % len(color_cycle)]
         y_rad = rad_cols[col]
         ax.scatter(
             x_amplitude, y_rad, label=f"Ch {col}", marker=".", color=color

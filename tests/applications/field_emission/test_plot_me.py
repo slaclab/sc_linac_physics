@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
 import pytest
-import matplotlib
+
+# Use a non-interactive backend so tests never try to open a window.
+# import matplotlib
+# matplotlib.use("Agg")   # set backend before pyplot imports
 import matplotlib.pyplot as plt
 from unittest.mock import patch, MagicMock
 
 from sc_linac_physics.applications.field_emission import plot_me
-# Use a non-interactive backend so tests never try to open a window.
-matplotlib.use("Agg")
 
 
 # ---------------------------------------------------------------------------
@@ -15,12 +16,14 @@ matplotlib.use("Agg")
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def sample_df():
-    return pd.DataFrame({
-        "amps": [3.0, 7.0, 5.0, 2.0],
-        "ch1": [0.0, 0.4, 1.6, 2.4],
-        "ch2": [0.4, 0.4, 0.8, 1.6],
-        "ch3": [0.8, 2.4, 1.6, 1.2],
-    })
+    return pd.DataFrame(
+        {
+            "amps": [3.0, 7.0, 5.0, 2.0],
+            "ch1": [0.0, 0.4, 1.6, 2.4],
+            "ch2": [0.4, 0.4, 0.8, 1.6],
+            "ch3": [0.8, 2.4, 1.6, 1.2],
+        }
+    )
 
 
 @pytest.fixture
@@ -54,13 +57,13 @@ class TestFitEquation:
         # y = c1 * amp^2.5 * exp(-c2/amp)
         amp = np.array([4.0])
         c1, c2 = 2.0, 3.0
-        expected = c1 * (amp ** 2.5) * np.exp(-c2 / amp)
+        expected = c1 * (amp**2.5) * np.exp(-c2 / amp)
         out = plot_me.fit_equation(amp, c1, c2)
         np.testing.assert_allclose(out, expected, rtol=1e-12)
 
     def test_scalar_input(self):
         val = plot_me.fit_equation(5.0, 1.0, 1.0)
-        expected = 1.0 * (5.0 ** 2.5) * np.exp(-1.0 / 5.0)
+        expected = 1.0 * (5.0**2.5) * np.exp(-1.0 / 5.0)
         assert np.isclose(val, expected)
 
     def test_zero_c1_gives_zeros(self):
@@ -111,8 +114,9 @@ class TestAddPolyFit:
         fig, ax = plt.subplots()
         amp = np.array([1.0, 2.0, 3.0])
         rad = np.array([1.0, 2.0, 3.0])
-        with patch.object(plot_me, "curve_fit",
-                          side_effect=RuntimeError("no convergence")):
+        with patch.object(
+            plot_me, "curve_fit", side_effect=RuntimeError("no convergence")
+        ):
             result = plot_me.add_poly_fit(amp, rad, ax, "blue")
         assert result == (None, None)
         assert len(ax.lines) == 0
@@ -123,8 +127,9 @@ class TestAddPolyFit:
         rad = np.array([1.0, 2.0, 3.0])
         fake_param = np.array([1.0, 1.0])
         fake_covar = np.eye(2)
-        with patch.object(plot_me, "curve_fit",
-                          return_value=(fake_param, fake_covar)) as mock_fit:
+        with patch.object(
+            plot_me, "curve_fit", return_value=(fake_param, fake_covar)
+        ) as mock_fit:
             plot_me.add_poly_fit(amp, rad, ax, "blue")
         assert mock_fit.called
         # maxfev is passed as a keyword in the source
@@ -200,9 +205,14 @@ class TestPlotAmpVsRadMockedColumns:
             [1.0, 2.0, 3.0],
             {"ch1": [0.1, 0.2, 0.3], "ch2": [0.5, 0.6, 0.7]},
         )
-        with patch.object(plot_me, "get_columns", return_value=(x, rad)), \
-             patch.object(plot_me, "add_poly_fit",
-                          return_value=(np.array([1, 1]), np.eye(2))) as mock_fit:
+        with (
+            patch.object(plot_me, "get_columns", return_value=(x, rad)),
+            patch.object(
+                plot_me,
+                "add_poly_fit",
+                return_value=(np.array([1, 1]), np.eye(2)),
+            ) as mock_fit,
+        ):
             plot_me.plot_amp_vs_rad(MagicMock(), ax, [True] * 10, fit=True)
         assert mock_fit.call_count == 2
 
@@ -212,8 +222,10 @@ class TestPlotAmpVsRadMockedColumns:
             [1.0, 2.0, 3.0],
             {"ch1": [0.1, 0.2, 0.3]},
         )
-        with patch.object(plot_me, "get_columns", return_value=(x, rad)), \
-             patch.object(plot_me, "add_poly_fit") as mock_fit:
+        with (
+            patch.object(plot_me, "get_columns", return_value=(x, rad)),
+            patch.object(plot_me, "add_poly_fit") as mock_fit,
+        ):
             plot_me.plot_amp_vs_rad(MagicMock(), ax, [True] * 10, fit=False)
         mock_fit.assert_not_called()
 
@@ -225,9 +237,12 @@ class TestPlotAmpVsRadMockedColumns:
         fig, ax = plt.subplots()
         x = pd.Series([1.0, 2.0, np.nan, 4.0, 5.0])
         rad = pd.DataFrame({"ch1": [0.0, 3.0, 4.0, np.nan, 6.0]})
-        with patch.object(plot_me, "get_columns", return_value=(x, rad)), \
-             patch.object(plot_me, "add_poly_fit",
-                          return_value=(None, None)) as mock_fit:
+        with (
+            patch.object(plot_me, "get_columns", return_value=(x, rad)),
+            patch.object(
+                plot_me, "add_poly_fit", return_value=(None, None)
+            ) as mock_fit,
+        ):
             plot_me.plot_amp_vs_rad(MagicMock(), ax, [True] * 10, fit=True)
 
         # Inspect the filtered arrays passed into add_poly_fit
@@ -277,5 +292,5 @@ class TestPlotIntegration:
         fig, ax = plt.subplots()
         plot_me.plot_amp_vs_rad(df, ax, mask, fit=True)
         assert len(ax.collections) == 1  # scatter
-        assert len(ax.lines) == 1        # fit line
+        assert len(ax.lines) == 1  # fit line
         plt.close(fig)
