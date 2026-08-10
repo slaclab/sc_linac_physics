@@ -10,17 +10,6 @@ from unittest.mock import patch, MagicMock
 from sc_linac_physics.applications.field_emission.field_emission_gui import FieldEmission
 from sc_linac_physics.applications.field_emission import field_emission_gui as feg
 
-"""
-Unit tests for the FieldEmission PyDM Display.
-
-Run with:  pytest -q test_field_emission.py
-
-Requirements:
-    pytest
-    pytest-qt
-    PyQt5
-    matplotlib
-"""
 
 # ---------------------------------------------------------------------------
 # Sample data used to fake the external "measurements" module
