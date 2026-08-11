@@ -17,41 +17,50 @@ from PyQt5.QtWidgets import (
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    BG_PANEL,
+    BORDER,
+    COLOR_SUCCESS,
+    RADIUS_MD,
+    TEXT_PRIMARY,
+)
 
 
 class _NotesPanelMixin:
     def _build_enhanced_notes_panel(self) -> QWidget:
         """Build always-accessible notes panel with better UX."""
         widget = QWidget()
-        widget.setStyleSheet("""
-                                QWidget {
-                                    background-color: #2a2a2a;
-                                    border-top: 1px solid #444;
-                                }
-                            """)
+        widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {BG_PANEL};
+                border-top: 1px solid {BORDER};
+            }}
+        """)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
 
         header = QHBoxLayout()
         title = QLabel("📝 Notes")
-        title.setStyleSheet("font-weight: bold; font-size: 14px; color: #ddd;")
+        title.setStyleSheet(
+            f"font-weight: bold; font-size: 14px; color: {TEXT_PRIMARY};"
+        )
         header.addWidget(title)
         header.addStretch()
 
         quick_add = QPushButton("+ Quick Note")
-        quick_add.setStyleSheet("""
-                                QPushButton {
-                                    background-color: #4CAF50;
-                                    color: white;
-                                    border-radius: 3px;
-                                    padding: 5px 15px;
-                                    font-weight: bold;
-                                }
-                                QPushButton:hover {
-                                    background-color: #45a049;
-                                }
-                            """)
+        quick_add.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_SUCCESS};
+                color: white;
+                border-radius: {RADIUS_MD};
+                padding: 5px 15px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #3da870;
+            }}
+        """)
         quick_add.clicked.connect(self._quick_add_note)
         header.addWidget(quick_add)
 

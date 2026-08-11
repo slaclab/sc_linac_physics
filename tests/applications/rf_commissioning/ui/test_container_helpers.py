@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 from PyQt5.QtCore import QPoint
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
@@ -203,7 +204,11 @@ def test_tab_state_icon_and_update_paths(host_stub):
     assert host_stub.tabs.enabled[0] is True
     assert host_stub.tabs.enabled[1] is True
     assert host_stub.tabs.enabled[2] is True
-    assert host_stub.tabs.tabBar().colors[2] == Qt.red
+    from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+        COLOR_ERROR,
+    )
+
+    assert host_stub.tabs.tabBar().colors[2] == QColor(COLOR_ERROR)
 
 
 def test_tab_state_on_tab_changed_handles_conflict(host_stub):

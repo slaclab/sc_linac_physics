@@ -2,6 +2,48 @@
 
 <!-- version list -->
 
+## v9.33.0 (2026-08-11)
+
+### Bug Fixes
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#279](https://github.com/slaclab/sc_linac_physics/pull/279),
+  [`e8d949e`](https://github.com/slaclab/sc_linac_physics/commit/e8d949e2598f498ffbf9622da297e69f7c156b10))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#279](https://github.com/slaclab/sc_linac_physics/pull/279),
+  [`e8d949e`](https://github.com/slaclab/sc_linac_physics/commit/e8d949e2598f498ffbf9622da297e69f7c156b10))
+
+### Chores
+
+- Remove superpowers spec and plan docs
+  ([#279](https://github.com/slaclab/sc_linac_physics/pull/279),
+  [`e8d949e`](https://github.com/slaclab/sc_linac_physics/commit/e8d949e2598f498ffbf9622da297e69f7c156b10))
+
+### Continuous Integration
+
+- Trigger CI after rebase ([#279](https://github.com/slaclab/sc_linac_physics/pull/279),
+  [`e8d949e`](https://github.com/slaclab/sc_linac_physics/commit/e8d949e2598f498ffbf9622da297e69f7c156b10))
+
+### Features
+
+- **rf-commissioning**: Add theme module and ActivityFeedWidget
+  ([#279](https://github.com/slaclab/sc_linac_physics/pull/279),
+  [`e8d949e`](https://github.com/slaclab/sc_linac_physics/commit/e8d949e2598f498ffbf9622da297e69f7c156b10))
+
+- **rf-commissioning**: Apply muted dark theme across all UI layers
+  ([#279](https://github.com/slaclab/sc_linac_physics/pull/279),
+  [`e8d949e`](https://github.com/slaclab/sc_linac_physics/commit/e8d949e2598f498ffbf9622da297e69f7c156b10))
+
+- **rf-commissioning**: UI polish and tab readability improvements
+  ([#279](https://github.com/slaclab/sc_linac_physics/pull/279),
+  [`e8d949e`](https://github.com/slaclab/sc_linac_physics/commit/e8d949e2598f498ffbf9622da297e69f7c156b10))
+
+- **rf-commissioning**: Visual redesign — muted dark palette, activity feed, centralized theme
+  ([#279](https://github.com/slaclab/sc_linac_physics/pull/279),
+  [`e8d949e`](https://github.com/slaclab/sc_linac_physics/commit/e8d949e2598f498ffbf9622da297e69f7c156b10))
+
+
 ## v9.32.0 (2026-07-27)
 
 ### Bug Fixes
