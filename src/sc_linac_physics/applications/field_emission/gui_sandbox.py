@@ -48,7 +48,6 @@ class FieldEmission(Display):
         self._current_measurements = [None]
         self._selected_rows = [None]
         self.meas_list_widget = None
-        # self.meas_dropdown = None
         self.meas_date_label = None
         self.meas_start_label = None
         self.meas_end_label = None
@@ -109,7 +108,6 @@ class FieldEmission(Display):
             checkbox.toggled.connect(self.on_cb_clicked)
         self.sel_all_cav_btn.clicked.connect(self.on_sel_all_cav_btn_clicked)
         self.meas_list_widget.itemClicked.connect(self.on_measurement_updated)
-        # self.meas_dropdown.currentTextChanged.connect(self.on_measurement_updated)
         for checkbox in self.rad_chan_cb:
             checkbox.toggled.connect(self.update_sel_all_rad_btn_label)
             checkbox.toggled.connect(self.on_cb_clicked)
@@ -266,7 +264,6 @@ class FieldEmission(Display):
             self.meas_list_widget.row(item)
             for item in self.meas_list_widget.selectedItems()
         ]
-        print(f"selected rows: {self._selected_rows}")
         if not self._selected_rows:
             self.clear_metadata_labels()
             return
@@ -391,18 +388,7 @@ class FieldEmission(Display):
             axes_list, plot_title = self._plot_multiple_dates(
                 plot_dfs, r_channels, fit
             )
-
-        #    def _configure_plot_canvas(self, axes, title):
-        all_handles, all_labels = self._unify_legends(axes_list)
-        if all_handles:
-            self.fig.legend(
-                all_handles, all_labels, fontsize="x-small", loc="upper right"
-            )
-        self.fig.suptitle(plot_title)
-        self.fig.supxlabel("Amplitude (MV)")
-        self.fig.supylabel("Radiation (mR/hr)")
-        self._unify_axes(axes_list)
-        self.canvas.draw()
+        self._configure_plot_canvas(axes_list, plot_title)
 
     def _fetch_plot_data(self, cavity, measurement, readout_type):
         if not measurement or not any(cavity):
@@ -436,7 +422,6 @@ class FieldEmission(Display):
 
         # Generate subplots
         for i, (cav_num, df) in enumerate(inner_dfs.items(), start=1):
-            print(f"CAVITY {cav_num}")  # debug line
             ax = self.fig.add_subplot(n_rows, n_cols, i)
             plot_amp_vs_rad(df, ax, rad_channels, fit_flag)
             ax.set_title(f"Cavity {cav_num}")
@@ -490,6 +475,18 @@ class FieldEmission(Display):
                 # Keep subplots from overlapping super titles
                 self.fig.tight_layout(rect=[0.03, 0.03, 0.97, 0.97])
         return axes, title
+
+    def _configure_plot_canvas(self, axes, title):
+        all_handles, all_labels = self._unify_legends(axes)
+        if all_handles:
+            self.fig.legend(
+                all_handles, all_labels, fontsize="x-small", loc="upper right"
+            )
+        self.fig.suptitle(title)
+        self.fig.supxlabel("Amplitude (MV)")
+        self.fig.supylabel("Radiation (mR/hr)")
+        self._unify_axes(axes)
+        self.canvas.draw()
 
     def _unify_legends(self, axes):
         # Build summary legend
