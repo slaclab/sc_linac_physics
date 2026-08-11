@@ -6,6 +6,15 @@ from PyQt5.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    BG_DEEP,
+    BORDER,
+    COLOR_ERROR,
+    COLOR_PRIMARY,
+    COLOR_SUCCESS,
+    TEXT_MUTED,
+    TEXT_SECONDARY,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.container.progress import (
     build_progress_phases,
 )
@@ -16,11 +25,11 @@ class _ProgressMixin:
         """Build a compact horizontal progress indicator."""
         widget = QWidget()
         widget.setMaximumHeight(100)
-        widget.setStyleSheet("""
-            QWidget {
-                background-color: #1e1e1e;
-                border-bottom: 1px solid #333;
-            }
+        widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {BG_DEEP};
+                border-bottom: 1px solid {BORDER};
+            }}
         """)
 
         main_layout = QVBoxLayout()
@@ -28,7 +37,9 @@ class _ProgressMixin:
         main_layout.setSpacing(8)
 
         title = QLabel("Commissioning Progress")
-        title.setStyleSheet("color: #aaa; font-size: 11px; font-weight: bold;")
+        title.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 11px; font-weight: bold;"
+        )
         main_layout.addWidget(title)
 
         progress_container = QWidget()
@@ -51,9 +62,9 @@ class _ProgressMixin:
             circle = QLabel("●")
             circle.setAlignment(Qt.AlignCenter)
             circle.setMinimumSize(32, 32)
-            circle.setStyleSheet("""
+            circle.setStyleSheet(f"""
                 font-size: 28px;
-                color: #444;
+                color: {TEXT_MUTED};
                 background-color: transparent;
             """)
             self.phase_indicators[phase] = circle
@@ -61,7 +72,7 @@ class _ProgressMixin:
             text = QLabel(label)
             text.setAlignment(Qt.AlignCenter)
             text.setStyleSheet(
-                "font-size: 9px; color: #888; background-color: transparent;"
+                f"font-size: 11px; color: {TEXT_SECONDARY}; background-color: transparent;"
             )
             text.setWordWrap(True)
             text.setFixedWidth(60)
@@ -75,8 +86,8 @@ class _ProgressMixin:
             if i < len(phases) - 1:
                 connector = QLabel("━━━━")
                 connector.setAlignment(Qt.AlignCenter)
-                connector.setStyleSheet("""
-                    color: #444;
+                connector.setStyleSheet(f"""
+                    color: {TEXT_MUTED};
                     font-size: 16px;
                     padding: 0px;
                     margin: 0px 4px 24px 4px;
@@ -109,47 +120,47 @@ class _ProgressMixin:
             status = phase_status.get(phase)
             if status is not None and status.value in {"complete", "skipped"}:
                 indicator.setText("✔")
-                indicator.setStyleSheet("""
+                indicator.setStyleSheet(f"""
                     font-size: 28px;
-                    color: #4CAF50;
+                    color: {COLOR_SUCCESS};
                     font-weight: bold;
-                    background-color: rgba(76, 175, 80, 0.2);
+                    background-color: rgba(74, 183, 130, 0.15);
                     border-radius: 16px;
-                    border: 2px solid #4CAF50;
+                    border: 2px solid {COLOR_SUCCESS};
                 """)
             elif status is not None and status.value == "failed":
                 indicator.setText("✖")
-                indicator.setStyleSheet("""
+                indicator.setStyleSheet(f"""
                     font-size: 24px;
-                    color: #ef5350;
+                    color: {COLOR_ERROR};
                     font-weight: bold;
-                    background-color: rgba(239, 83, 80, 0.2);
+                    background-color: rgba(192, 84, 74, 0.15);
                     border-radius: 16px;
-                    border: 2px solid #ef5350;
+                    border: 2px solid {COLOR_ERROR};
                 """)
             elif idx == current_idx:
                 indicator.setText("▶")
-                indicator.setStyleSheet("""
+                indicator.setStyleSheet(f"""
                     font-size: 24px;
-                    color: #2196F3;
+                    color: {COLOR_PRIMARY};
                     font-weight: bold;
-                    background-color: rgba(33, 150, 243, 0.3);
+                    background-color: rgba(123, 140, 222, 0.2);
                     border-radius: 16px;
-                    border: 2px solid #2196F3;
+                    border: 2px solid {COLOR_PRIMARY};
                 """)
             else:
                 indicator.setText("○")
-                indicator.setStyleSheet("""
+                indicator.setStyleSheet(f"""
                     font-size: 28px;
-                    color: #444;
+                    color: {TEXT_MUTED};
                     background-color: transparent;
                     border-radius: 16px;
                 """)
 
         for i, connector in enumerate(self.phase_connectors):
             if i < current_idx:
-                connector.setStyleSheet("""
-                    color: #4CAF50;
+                connector.setStyleSheet(f"""
+                    color: {COLOR_SUCCESS};
                     font-size: 16px;
                     font-weight: bold;
                     padding: 0px;
@@ -157,8 +168,8 @@ class _ProgressMixin:
                     background-color: transparent;
                 """)
             else:
-                connector.setStyleSheet("""
-                    color: #444;
+                connector.setStyleSheet(f"""
+                    color: {TEXT_MUTED};
                     font-size: 16px;
                     padding: 0px;
                     margin: 0px 4px 24px 4px;
