@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QLabel,
+    QListWidget,
     QPushButton,
     QRadioButton,
     QSizePolicy,
@@ -14,6 +15,7 @@ from PyQt5.QtWidgets import (
     QSpacerItem,
     QScrollArea,
     QWidget,
+    QAbstractItemView,
 )
 from pydm import Display, PyDMApplication
 from matplotlib.figure import Figure
@@ -44,7 +46,8 @@ class FieldEmission(Display):
         self.sel_all_cav_btn = None
         self.cavity_dropdown = None
         self._current_measurements = [None]
-        self.meas_dropdown = None
+        self._selected_rows = [None]
+        self.meas_list_widget = None
         self.meas_date_label = None
         self.meas_start_label = None
         self.meas_end_label = None
@@ -104,9 +107,7 @@ class FieldEmission(Display):
             checkbox.toggled.connect(self.update_sel_all_cav_btn_label)
             checkbox.toggled.connect(self.on_cb_clicked)
         self.sel_all_cav_btn.clicked.connect(self.on_sel_all_cav_btn_clicked)
-        self.meas_dropdown.currentTextChanged.connect(
-            self.on_measurement_updated
-        )
+        self.meas_list_widget.itemClicked.connect(self.on_measurement_updated)
         for checkbox in self.rad_chan_cb:
             checkbox.toggled.connect(self.update_sel_all_rad_btn_label)
             checkbox.toggled.connect(self.on_cb_clicked)
@@ -139,8 +140,8 @@ class FieldEmission(Display):
         cav_checked = any(cb.isChecked() for cb in self.cavity_cb)
         rad_checked = any(cb.isChecked() for cb in self.rad_chan_cb)
         cm_idx = self.cryo_dropdown.currentIndex()
-        meas_idx = self.meas_dropdown.currentIndex()
-        if cav_checked and rad_checked and cm_idx > -1 and meas_idx > -1:
+        has_measurement = self.meas_list_widget.count() > 0
+        if cav_checked and rad_checked and cm_idx > -1 and has_measurement:
             self.plot_btn.setEnabled(True)
         else:
             self.plot_btn.setEnabled(False)
@@ -183,31 +184,19 @@ class FieldEmission(Display):
     def on_sel_all_cav_btn_clicked(self):
         self._on_btn_clicked_helper(self.cavity_cb)
 
-    def on_cryomodule_updated(self):
-        cm = self.cryo_dropdown.currentText()
-        self._current_measurements = match_measurement_dates(str(cm))
-
-        self.meas_dropdown.blockSignals(True)
-        self.meas_dropdown.clear()
-        self.meas_dropdown.setCurrentIndex(
-            0 if self._current_measurements else -1
-        )
-        self.meas_dropdown.addItems(
-            meas["display"] for meas in self._current_measurements
-        )
-        self.meas_dropdown.blockSignals(False)
-
-        self.on_measurement_updated()
-        self.on_cb_clicked()
-
     def build_meas_selection(self):
         # Measurement Selection
         measurement_selection = QGroupBox("Available Measurements")
         measurement_layout = QVBoxLayout()
         measurement_selection.setLayout(measurement_layout)
 
-        self.meas_dropdown = QComboBox()
-        measurement_layout.addWidget(self.meas_dropdown)
+        self.meas_list_widget = QListWidget()
+        self.meas_list_widget.setFixedHeight(70)
+        self.meas_list_widget.setAlternatingRowColors(True)
+        self.meas_list_widget.setSelectionMode(
+            QAbstractItemView.ExtendedSelection
+        )
+        measurement_layout.addWidget(self.meas_list_widget)
 
         # Measurement Metadata Section
         meta_data = QGroupBox("Measurement Information")
@@ -253,11 +242,34 @@ class FieldEmission(Display):
         measurement_layout.addWidget(meta_data)
         return measurement_selection
 
-    def on_measurement_updated(self):
-        measurement = self.meas_dropdown.currentText()
-        idx = self.meas_dropdown.currentIndex()
+    def on_cryomodule_updated(self):
+        cm = self.cryo_dropdown.currentText()
+        self._current_measurements = match_measurement_dates(str(cm))
 
-        if idx < 0 or not measurement or not self._current_measurements:
+        self.meas_list_widget.blockSignals(True)
+        self.meas_list_widget.clear()
+        self.meas_list_widget.addItems(
+            meas["display"] for meas in self._current_measurements
+        )
+        self.meas_list_widget.setCurrentRow(
+            0 if self._current_measurements else -1
+        )
+        self.meas_list_widget.blockSignals(False)
+
+        self.on_measurement_updated()
+        self.on_cb_clicked()
+
+    def on_measurement_updated(self):
+        self._selected_rows = [
+            self.meas_list_widget.row(item)
+            for item in self.meas_list_widget.selectedItems()
+        ]
+        if not self._selected_rows:
+            self.clear_metadata_labels()
+            return
+
+        idx = self._selected_rows[-1]
+        if idx < 0 or idx >= len(self._current_measurements):
             self.clear_metadata_labels()
             return
 
@@ -362,27 +374,121 @@ class FieldEmission(Display):
 
     def on_plot_btn_clicked(self):
         cav = [cb.isChecked() for cb in self.cavity_cb]
-        idx = self.meas_dropdown.currentIndex()
-        m = self._current_measurements[idx]
+        meas = [self._current_measurements[row] for row in self._selected_rows]
         readout = self.readout_dropdown.currentText()
         r_channels = [cb.isChecked() for cb in self.rad_chan_cb]
         fit = self.radio_fit_btn.isChecked()
-        selected, label, n = find_dataframes(m["cm"], m["date"], cav, readout)
 
+        plot_dfs = self._fetch_plot_data(cav, meas, readout)
+        if len(plot_dfs) == 1:
+            axes_list, plot_title = self._plot_one_date(
+                plot_dfs[0], r_channels, fit
+            )
+        else:
+            axes_list, plot_title = self._plot_multiple_dates(
+                plot_dfs, r_channels, fit
+            )
+        self._configure_plot_canvas(axes_list, plot_title)
+
+    def _fetch_plot_data(self, cavity, measurement, readout_type):
+        if not measurement or not any(cavity):
+            return {}
+
+        # Fetch data for every measurement
+        all_results = []
+        for m in measurement:
+            selected, label, n = find_dataframes(
+                m["cm"], m["date"], cavity, readout_type
+            )
+            all_results.append(
+                {
+                    "measurement": m,
+                    "dataframes": selected,
+                    "label": label,
+                }
+            )
+        return all_results
+
+    def _plot_one_date(self, measurement, rad_channels, fit_flag):
         # Calculate subplot rows, cols
-        col = math.ceil(n / 2)
-        row = min(2, n)
+        inner_dfs = measurement["dataframes"]
+        title = measurement["label"]
+        n = len(inner_dfs)
+        n_cols = math.ceil(n / 2)
+        n_rows = min(2, n)
 
         self.fig.clear()
         axes = []
 
         # Generate subplots
-        for i, (cav_num, df) in enumerate(selected.items(), start=1):
-            ax = self.fig.add_subplot(row, col, i)
-            plot_amp_vs_rad(df, ax, r_channels, fit)
+        for i, (cav_num, df) in enumerate(inner_dfs.items(), start=1):
+            ax = self.fig.add_subplot(n_rows, n_cols, i)
+            plot_amp_vs_rad(df, ax, rad_channels, fit_flag)
             ax.set_title(f"Cavity {cav_num}")
             axes.append(ax)
+        return axes, title
 
+    def _plot_multiple_dates(self, measurements, rad_channels, fit_flag):
+        # Calculate subplot rows, cols
+        title = measurements[0]["label"]
+        selected_cavities = sorted(
+            {
+                cav
+                for measurement in measurements
+                for cav in measurement["dataframes"].keys()
+            }
+        )
+        n_cols = len(measurements)
+        n_rows = len(selected_cavities)
+
+        self.fig.clear()
+        axes = []
+
+        # Generate subplots
+        for row_idx, cav_num in enumerate(selected_cavities):
+            for col_idx, result in enumerate(measurements):
+                position = row_idx * n_cols + col_idx + 1
+                ax = self.fig.add_subplot(n_rows, n_cols, position)
+
+                # Get the DataFrame for this cavity in this measurement (if it exists)
+                df = result["dataframes"].get(cav_num)
+                if df is not None and not df.empty:
+                    plot_amp_vs_rad(df, ax, rad_channels, fit_flag)
+                else:
+                    ax.text(
+                        0.5,
+                        0.5,
+                        "no data",
+                        ha="center",
+                        va="center",
+                        transform=ax.transAxes,
+                        fontsize=8,
+                        color="gray",
+                    )
+
+                # Title: cavity, date so each subplot self-identifies
+                meas_date = result["measurement"]["date"].strftime(
+                    "%m/%d %H:%M"
+                )
+                ax.set_title(f"Cavity {cav_num} - {meas_date}", fontsize=9)
+                axes.append(ax)
+                # Keep subplots from overlapping super titles
+                self.fig.tight_layout(rect=[0.03, 0.03, 0.97, 0.97])
+        return axes, title
+
+    def _configure_plot_canvas(self, axes, title):
+        all_handles, all_labels = self._unify_legends(axes)
+        if all_handles:
+            self.fig.legend(
+                all_handles, all_labels, fontsize="x-small", loc="upper right"
+            )
+        self.fig.suptitle(title)
+        self.fig.supxlabel("Amplitude (MV)")
+        self.fig.supylabel("Radiation (mR/hr)")
+        self._unify_axes(axes)
+        self.canvas.draw()
+
+    def _unify_legends(self, axes):
         # Build summary legend
         all_handles = []
         all_labels = []
@@ -392,15 +498,7 @@ class FieldEmission(Display):
                 if l not in all_labels:
                     all_handles.append(h)
                     all_labels.append(l)
-
-        self.fig.legend(
-            all_handles, all_labels, fontsize="x-small", loc="upper right"
-        )
-        self.fig.suptitle(label)
-        self.fig.supxlabel("Amplitude (MV)")
-        self.fig.supylabel("Radiation (mR/hr)")
-        self._unify_axes(axes)
-        self.canvas.draw()
+        return all_handles, all_labels
 
     def _unify_axes(self, axes):
         if not axes:
