@@ -103,13 +103,13 @@ class TestPhaseDisplayBase:
         assert w.get_current_cavity() is None
 
     def test_log_message_with_history_widget(self, qtbot):
-        from PyQt5.QtWidgets import QTextEdit
-
         w = PhaseDisplayBase()
         qtbot.addWidget(w)
-        w.history_text = QTextEdit()
+        w.history_text = MagicMock()
         w.log_message("hello")
-        assert "hello" in w.history_text.toPlainText()
+        w.history_text.append.assert_called_once_with(
+            "hello", entry_type="info"
+        )
 
     def test_log_message_without_history_widget(self, qtbot):
         w = PhaseDisplayBase()

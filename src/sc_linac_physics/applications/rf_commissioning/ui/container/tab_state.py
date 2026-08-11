@@ -1,10 +1,16 @@
 """Tab initialization and state helpers for multi-phase commissioning."""
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QVBoxLayout, QWidget
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    COLOR_ERROR,
+    COLOR_PRIMARY,
+    COLOR_SUCCESS,
+    TEXT_SECONDARY,
 )
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     RecordConflictError,
@@ -95,13 +101,13 @@ class _TabsMixin:
             self.tabs.setTabText(i, f"{icon} {spec.title}")
 
             if status is not None and status.value == "failed":
-                self.tabs.tabBar().setTabTextColor(i, Qt.red)
+                self.tabs.tabBar().setTabTextColor(i, QColor(COLOR_ERROR))
             elif phase_index == current_index:
-                self.tabs.tabBar().setTabTextColor(i, Qt.blue)
+                self.tabs.tabBar().setTabTextColor(i, QColor(COLOR_PRIMARY))
             elif phase_index < current_index:
-                self.tabs.tabBar().setTabTextColor(i, Qt.darkGreen)
+                self.tabs.tabBar().setTabTextColor(i, QColor(COLOR_SUCCESS))
             else:
-                self.tabs.tabBar().setTabTextColor(i, Qt.gray)
+                self.tabs.tabBar().setTabTextColor(i, QColor(TEXT_SECONDARY))
 
     def _on_tab_changed(self, index: int) -> None:
         """Handle tab changes by auto-saving current work."""

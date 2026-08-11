@@ -7,6 +7,9 @@ import pytest
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QLabel, QPushButton
 
+from sc_linac_physics.applications.rf_commissioning.ui.builders.activity_feed import (
+    ActivityFeedWidget,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.builders.base import (
     PhaseUIBase,
 )
@@ -103,14 +106,13 @@ def test_update_toolbar_state_sets_buttons_and_status(
     assert base.widgets["status_indicator"].text() == status_text
 
 
-def test_build_history_creates_readonly_bounded_text_widget(base):
+def test_build_history_creates_activity_feed(base):
     group = base._build_history()
-    history_text = base.widgets["history_text"]
+    history_widget = base.widgets["history_text"]
 
     assert group.title() == "Phase History"
-    assert history_text.isReadOnly() is True
-    assert history_text.minimumHeight() == 60
-    assert history_text.maximumHeight() == 180
+    assert isinstance(history_widget, ActivityFeedWidget)
+    assert history_widget.count() == 0
 
 
 def test_build_basic_results_section_registers_labels(base):
