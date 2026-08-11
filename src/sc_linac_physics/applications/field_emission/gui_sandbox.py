@@ -192,10 +192,9 @@ class FieldEmission(Display):
         measurement_layout = QVBoxLayout()
         measurement_selection.setLayout(measurement_layout)
 
-        # TODO - listwidget
         self.meas_list_widget = QListWidget()
-        # TODO - make height larger? idk
         self.meas_list_widget.setFixedHeight(70)
+        self.meas_list_widget.setAlternatingRowColors(True)
         self.meas_list_widget.setSelectionMode(
             QAbstractItemView.ExtendedSelection
         )
@@ -388,18 +387,12 @@ class FieldEmission(Display):
             axes_list, plot_title = self._plot_one_date(
                 plot_dfs[0], r_channels, fit
             )
+        else:
+            axes_list, plot_title = self._plot_multiple_dates(
+                plot_dfs, r_channels, fit
+            )
 
-        #        # Calculate subplot rows, cols
-        #        if len(all_results) > 1:
-        #            selected_cavities = sorted(
-        #                {
-        #                    cav
-        #                    for result in all_results
-        #                    for cav in result["dataframes"].keys()
-        #                }
-        #            )
-        #            n_cols = len(meas)
-        #            n_rows = len(selected_cavities)
+        #    def _configure_plot_canvas(self, axes, title):
         all_handles, all_labels = self._unify_legends(axes_list)
         if all_handles:
             self.fig.legend(
@@ -408,7 +401,7 @@ class FieldEmission(Display):
         self.fig.suptitle(plot_title)
         self.fig.supxlabel("Amplitude (MV)")
         self.fig.supylabel("Radiation (mR/hr)")
-        #        self._unify_axes(axes_list)
+        self._unify_axes(axes_list)
         self.canvas.draw()
 
     def _fetch_plot_data(self, cavity, measurement, readout_type):
@@ -448,6 +441,54 @@ class FieldEmission(Display):
             plot_amp_vs_rad(df, ax, rad_channels, fit_flag)
             ax.set_title(f"Cavity {cav_num}")
             axes.append(ax)
+        return axes, title
+
+    def _plot_multiple_dates(self, measurements, rad_channels, fit_flag):
+        # Calculate subplot rows, cols
+        title = measurements[0]["label"]
+        selected_cavities = sorted(
+            {
+                cav
+                for measurement in measurements
+                for cav in measurement["dataframes"].keys()
+            }
+        )
+        n_cols = len(measurements)
+        n_rows = len(selected_cavities)
+
+        self.fig.clear()
+        axes = []
+
+        # Generate subplots
+        for row_idx, cav_num in enumerate(selected_cavities):
+            for col_idx, result in enumerate(measurements):
+                position = row_idx * n_cols + col_idx + 1
+                ax = self.fig.add_subplot(n_rows, n_cols, position)
+
+                # Get the DataFrame for this cavity in this measurement (if it exists)
+                df = result["dataframes"].get(cav_num)
+                if df is not None and not df.empty:
+                    plot_amp_vs_rad(df, ax, rad_channels, fit_flag)
+                else:
+                    ax.text(
+                        0.5,
+                        0.5,
+                        "no data",
+                        ha="center",
+                        va="center",
+                        transform=ax.transAxes,
+                        fontsize=8,
+                        color="gray",
+                    )
+
+                # Title: cavity, date so each subplot self-identifies
+                meas_date = result["measurement"]["date"].strftime(
+                    "%m/%d %H:%M"
+                )
+                ax.set_title(f"Cavity {cav_num} - {meas_date}", fontsize=9)
+                axes.append(ax)
+                # Keep subplots from overlapping super titles
+                self.fig.tight_layout(rect=[0.03, 0.03, 0.97, 0.97])
         return axes, title
 
     def _unify_legends(self, axes):
