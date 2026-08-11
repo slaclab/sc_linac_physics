@@ -1,11 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-
-# Use a non-interactive backend so tests never try to open a window.
-# import matplotlib
-# matplotlib.use("Agg")   # set backend before pyplot imports
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatch
 from unittest.mock import patch, MagicMock
 
 from sc_linac_physics.applications.field_emission import plot_me
@@ -16,12 +13,14 @@ from sc_linac_physics.applications.field_emission import plot_me
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def sample_df():
+    # NOTE: the new plot code treats column names as integers (col - 1),
+    # so radiation channels must be integer-labeled columns.
     return pd.DataFrame(
         {
             "amps": [3.0, 7.0, 5.0, 2.0],
-            "ch1": [0.0, 0.4, 1.6, 2.4],
-            "ch2": [0.4, 0.4, 0.8, 1.6],
-            "ch3": [0.8, 2.4, 1.6, 1.2],
+            1: [0.0, 0.4, 1.6, 2.4],
+            2: [0.4, 0.4, 0.8, 1.6],
+            3: [0.8, 2.4, 1.6, 1.2],
         }
     )
 
@@ -76,49 +75,53 @@ class TestFitEquation:
 # add_poly_fit
 # ===========================================================================
 class TestAddPolyFit:
-    def test_empty_dataset_returns_none_none(self):
+    def test_empty_dataset_returns_none(self):
         fig, ax = plt.subplots()
-        result = plot_me.add_poly_fit(np.array([]), np.array([]), ax, "blue")
-        assert result == (None, None)
+        result = plot_me.add_poly_fit(
+            np.array([]), np.array([]), ax, "Title", color="blue"
+        )
+        assert result is None
         assert len(ax.lines) == 0
 
-    def test_successful_fit_returns_params_and_covariance(self):
+    def test_successful_fit_returns_line_and_patch(self):
         fig, ax = plt.subplots()
         # Generate data that follows the fit equation exactly -> guaranteed convergence
         amp = np.linspace(2.0, 10.0, 30)
         rad = plot_me.fit_equation(amp, 1.5, 4.0)
-        param, covar = plot_me.add_poly_fit(amp, rad, ax, "red")
-        assert param is not None
-        assert covar is not None
-        assert len(param) == 2
-        # recovered coefficients should be close to the ones we generated with
-        np.testing.assert_allclose(param, [1.5, 4.0], rtol=1e-2)
+        result = plot_me.add_poly_fit(amp, rad, ax, "Title", color="red")
+        assert result is not None
+        line, patch = result
+        # line should be a Matplotlib Line2D that was added to the axis
+        assert line in ax.lines
+        # patch should be a Matplotlib Patch carrying the fit-coefficient label
+        assert isinstance(patch, mpatch.Patch)
+        assert "C1" in patch.get_label() and "C2" in patch.get_label()
 
     def test_successful_fit_draws_one_line(self):
         fig, ax = plt.subplots()
         amp = np.linspace(2.0, 10.0, 30)
         rad = plot_me.fit_equation(amp, 1.5, 4.0)
-        plot_me.add_poly_fit(amp, rad, ax, "green")
+        plot_me.add_poly_fit(amp, rad, ax, "Title", color="green")
         assert len(ax.lines) == 1
 
     def test_fit_line_has_250_points(self):
         fig, ax = plt.subplots()
         amp = np.linspace(2.0, 10.0, 30)
         rad = plot_me.fit_equation(amp, 1.0, 2.0)
-        plot_me.add_poly_fit(amp, rad, ax, "blue")
+        plot_me.add_poly_fit(amp, rad, ax, "Title", color="blue")
         xdata = ax.lines[0].get_xdata()
         assert len(xdata) == 250
 
-    def test_runtime_error_returns_none_none(self):
-        """If curve_fit raises RuntimeError (no convergence), gracefully return."""
+    def test_runtime_error_returns_none(self):
+        """If curve_fit raises RuntimeError (no convergence), gracefully return None."""
         fig, ax = plt.subplots()
         amp = np.array([1.0, 2.0, 3.0])
         rad = np.array([1.0, 2.0, 3.0])
         with patch.object(
             plot_me, "curve_fit", side_effect=RuntimeError("no convergence")
         ):
-            result = plot_me.add_poly_fit(amp, rad, ax, "blue")
-        assert result == (None, None)
+            result = plot_me.add_poly_fit(amp, rad, ax, "Title", color="blue")
+        assert result is None
         assert len(ax.lines) == 0
 
     def test_curve_fit_called_with_maxfev(self):
@@ -130,7 +133,7 @@ class TestAddPolyFit:
         with patch.object(
             plot_me, "curve_fit", return_value=(fake_param, fake_covar)
         ) as mock_fit:
-            plot_me.add_poly_fit(amp, rad, ax, "blue")
+            plot_me.add_poly_fit(amp, rad, ax, "Title", color="blue")
         assert mock_fit.called
         # maxfev is passed as a keyword in the source
         _, kwargs = mock_fit.call_args
@@ -141,10 +144,6 @@ class TestAddPolyFit:
 # plot_amp_vs_rad  (using the real get_columns via a real DataFrame)
 # ===========================================================================
 class TestPlotAmpVsRadRealColumns:
-    """
-    These mirror your original tests and exercise the real get_columns path.
-    """
-
     def test_one_scatter_per_channel(self, sample_df, three_channel_mask):
         fig, ax = plt.subplots()
         plot_me.plot_amp_vs_rad(sample_df, ax, three_channel_mask, False)
@@ -173,20 +172,17 @@ class TestPlotAmpVsRadRealColumns:
     def test_scatter_labels_present(self, sample_df, three_channel_mask):
         fig, ax = plt.subplots()
         plot_me.plot_amp_vs_rad(sample_df, ax, three_channel_mask, False)
-        handles, labels = ax.get_legend_handles_labels()
-        assert len(labels) == 3
-        assert all(label.startswith("Ch ") for label in labels)
+        # With fit=False no legend is set via ax.legend(handles=...),
+        # so pull labels directly from the scatter collections instead.
+        scatter_labels = [c.get_label() for c in ax.collections]
+        assert len(scatter_labels) == 3
+        assert all(label.startswith("Ch ") for label in scatter_labels)
 
 
 # ===========================================================================
 # plot_amp_vs_rad  (mocking get_columns to isolate plotting logic)
 # ===========================================================================
 class TestPlotAmpVsRadMockedColumns:
-    """
-    Mock get_columns so we control exactly what x/y data plot_amp_vs_rad sees.
-    Contract assumed: get_columns(df, r_channels) -> (x_amplitude_Series, rad_DataFrame)
-    """
-
     def _mock_columns(self, x_vals, rad_dict):
         x = pd.Series(x_vals)
         rad = pd.DataFrame(rad_dict)
@@ -203,14 +199,17 @@ class TestPlotAmpVsRadMockedColumns:
         fig, ax = plt.subplots()
         x, rad = self._mock_columns(
             [1.0, 2.0, 3.0],
-            {"ch1": [0.1, 0.2, 0.3], "ch2": [0.5, 0.6, 0.7]},
+            {1: [0.1, 0.2, 0.3], 2: [0.5, 0.6, 0.7]},
         )
+        # add_poly_fit now returns (line, patch); provide a real line + patch
+        fake_line = plt.Line2D([0, 1], [0, 1])
+        fake_patch = mpatch.Patch(color="blue", label="C1: 1    C2: 1.0")
         with (
             patch.object(plot_me, "get_columns", return_value=(x, rad)),
             patch.object(
                 plot_me,
                 "add_poly_fit",
-                return_value=(np.array([1, 1]), np.eye(2)),
+                return_value=(fake_line, fake_patch),
             ) as mock_fit,
         ):
             plot_me.plot_amp_vs_rad(MagicMock(), ax, [True] * 10, fit=True)
@@ -220,7 +219,7 @@ class TestPlotAmpVsRadMockedColumns:
         fig, ax = plt.subplots()
         x, rad = self._mock_columns(
             [1.0, 2.0, 3.0],
-            {"ch1": [0.1, 0.2, 0.3]},
+            {1: [0.1, 0.2, 0.3]},
         )
         with (
             patch.object(plot_me, "get_columns", return_value=(x, rad)),
@@ -236,11 +235,11 @@ class TestPlotAmpVsRadMockedColumns:
         """
         fig, ax = plt.subplots()
         x = pd.Series([1.0, 2.0, np.nan, 4.0, 5.0])
-        rad = pd.DataFrame({"ch1": [0.0, 3.0, 4.0, np.nan, 6.0]})
+        rad = pd.DataFrame({1: [0.0, 3.0, 4.0, np.nan, 6.0]})
         with (
             patch.object(plot_me, "get_columns", return_value=(x, rad)),
             patch.object(
-                plot_me, "add_poly_fit", return_value=(None, None)
+                plot_me, "add_poly_fit", return_value=None
             ) as mock_fit,
         ):
             plot_me.plot_amp_vs_rad(MagicMock(), ax, [True] * 10, fit=True)
@@ -258,20 +257,21 @@ class TestPlotAmpVsRadMockedColumns:
         np.testing.assert_array_equal(y_passed, np.array([3.0, 6.0]))
 
     def test_colors_cycle_and_repeat(self):
-        """More channels than colors -> colors wrap using modulo."""
+        """More channels than colors -> colors wrap using modulo (col - 1)."""
         fig, ax = plt.subplots()
         color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         n = len(color_cycle) + 2  # force wraparound
-        rad_dict = {f"ch{i}": list(np.random.rand(3)) for i in range(n)}
+        # Integer column names starting at 1; color index is (col - 1) % len
+        rad_dict = {i + 1: list(np.random.rand(3)) for i in range(n)}
         x, rad = pd.Series([1.0, 2.0, 3.0]), pd.DataFrame(rad_dict)
 
         with patch.object(plot_me, "get_columns", return_value=(x, rad)):
             plot_me.plot_amp_vs_rad(MagicMock(), ax, [True] * 10, fit=False)
 
         assert len(ax.collections) == n
+        # col=1 uses color_cycle[0]; col=len(color_cycle)+1 uses color_cycle[0] too
         first = ax.collections[0].get_facecolor()[0]
         wrapped = ax.collections[len(color_cycle)].get_facecolor()[0]
-        # channel 0 and channel len(color_cycle) should share the same color
         np.testing.assert_allclose(first, wrapped, atol=1e-6)
 
 
@@ -279,14 +279,15 @@ class TestPlotAmpVsRadMockedColumns:
 # Integration-ish: fit line actually overlays scatter for real data
 # ===========================================================================
 class TestPlotIntegration:
-    def test_fit_line_within_plot_when_convergent(self, sample_df):
+    def test_fit_line_within_plot_when_convergent(self):
         """
         Use a single channel that follows the fit model so curve_fit converges,
         then confirm a fit line was drawn on top of the scatter.
         """
         amp = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
         rad = plot_me.fit_equation(amp, 1.0, 3.0)
-        df = pd.DataFrame({"amps": amp, "ch1": rad})
+        # Integer column name for the radiation channel (col - 1 indexing).
+        df = pd.DataFrame({"amps": amp, 1: rad})
         mask = [True] + [False] * 9
 
         fig, ax = plt.subplots()
