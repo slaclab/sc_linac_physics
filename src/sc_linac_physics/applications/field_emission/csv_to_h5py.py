@@ -4,7 +4,9 @@ import glob
 import h5py
 import pandas as pd
 from pathlib import Path
-from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (file_handling)
+from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (
+    file_handling,
+)
 
 """
 07/13/26 - Kvetta Q
@@ -33,8 +35,8 @@ def main():
             if match:
                 cm = match.group(1)
                 raw_date = match.group(2)
-                yy, mm, dd, hh, ss = raw_date.split("_")
-                date = f"20{yy}-{mm}-{dd}_{hh}{ss}"
+                yy, mm, dd, hh, mn = raw_date.split("_")
+                date = f"20{yy}-{mm}-{dd}_{hh}{mn}"
                 cav = match.group(3)
                 readout_type = match.group(4)
 
@@ -50,7 +52,7 @@ def main():
                     f"{readout_type}",
                     shape=values.shape,
                     dtype=values.dtype,
-                    compression="gzip"
+                    compression="gzip",
                 )
                 dset[...] = values
                 no_time_df = df.drop(columns="timestamps")
