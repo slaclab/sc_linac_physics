@@ -10,6 +10,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     COLOR_ERROR,
     COLOR_PRIMARY,
     COLOR_SUCCESS,
+    TEXT_MUTED,
     TEXT_SECONDARY,
 )
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
@@ -37,6 +38,7 @@ class _TabsMixin:
                 tab_widget,
                 self._get_phase_icon(spec.phase) + " " + spec.title,
             )
+            self.tabs.tabBar().setTabTextColor(i, QColor(TEXT_MUTED))
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
 

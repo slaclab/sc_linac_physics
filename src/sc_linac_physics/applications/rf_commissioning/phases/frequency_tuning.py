@@ -127,9 +127,12 @@ class FrequencyTuningPhase(PhaseBase):
         step_methods = {
             "verify_initial_state": self._verify_initial_state,
             "record_cold_landing": self._record_cold_landing,
+            "check_state_for_stage_2": self._check_state_for_stage_2,
             "probe_stepper_direction": self._probe_stepper_direction,
+            "check_state_for_stage_3": self._check_state_for_stage_3,
             "apply_hz_per_step": self._apply_hz_per_step,
             "tune_to_resonance": self._tune_to_resonance,
+            "check_state_for_stage_4": self._check_state_for_stage_4,
             "measure_pi_modes": self._measure_pi_modes,
             "record_results": self._record_results,
         }
@@ -189,6 +192,136 @@ class FrequencyTuningPhase(PhaseBase):
                 ),
             )
         return None
+
+    # ------------------------------------------------------------------
+    # Prerequisite-check steps (read-only, no hardware mutations)
+    # ------------------------------------------------------------------
+
+    def _check_motor_and_cavity(self) -> "PhaseStepResult | None":
+        """Read stepper/cavity state without touching hardware.
+
+        Returns a FAILED result if the hardware is not ready for stepper
+        moves, or None if everything looks fine.
+        """
+        try:
+            motor_moving = self.cavity.stepper_tuner.motor_moving
+            on_limit_switch = self.cavity.stepper_tuner.on_limit_switch
+            is_online = self.cavity.is_online
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read stepper/cavity state: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        if motor_moving:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Stepper motor already moving — abort or wait for it to stop",
+            )
+        if on_limit_switch:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Stepper motor is on a limit switch — manual intervention required",
+            )
+        if not is_online:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Cavity is not online — run Stage 1 to prepare it for tuning",
+            )
+        return None
+
+    def _check_state_for_stage_2(self) -> PhaseStepResult:
+        """Verify hardware is ready for stepper probing (Stage 2).
+
+        Checks motor idle, not on limit switch, cavity online.  Does NOT
+        prepare the cavity — run Stage 1 first if these checks fail.
+        """
+        bad = self._check_motor_and_cavity()
+        if bad is not None:
+            return bad
+
+        try:
+            temp = self._read_temp()
+            detune = self.cavity.detune_chirp
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read cavity detune/temperature: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=(
+                f"Cavity ready for probing — temp {temp:.1f} °C, "
+                f"detune {detune:.0f} Hz"
+            ),
+        )
+
+    def _check_state_for_stage_3(self) -> PhaseStepResult:
+        """Verify hardware and data are ready for tune-to-resonance (Stage 3).
+
+        In addition to the motor/online checks, confirms that the operator
+        has pushed DF_COLD so the tuning target is set.
+        """
+        bad = self._check_motor_and_cavity()
+        if bad is not None:
+            return bad
+
+        df_cold_bad = self._check_df_cold_recorded()
+        if df_cold_bad is not None:
+            return df_cold_bad
+
+        try:
+            temp = self._read_temp()
+            detune = self.cavity.detune_chirp
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read cavity detune/temperature: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=(
+                f"Cavity ready for tuning — temp {temp:.1f} °C, "
+                f"detune {detune:.0f} Hz"
+            ),
+        )
+
+    def _check_state_for_stage_4(self) -> PhaseStepResult:
+        """Verify the cavity is online before running FSCAN (Stage 4).
+
+        FSCAN does not require chirp mode, so only basic online/motor
+        checks are needed.
+        """
+        try:
+            motor_moving = self.cavity.stepper_tuner.motor_moving
+            is_online = self.cavity.is_online
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read cavity state: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        if motor_moving:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Stepper motor still moving — wait for it to stop before scanning",
+            )
+        if not is_online:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Cavity is not online — cannot run FSCAN",
+            )
+
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message="Cavity online and stepper idle — ready for FSCAN",
+        )
 
     # ------------------------------------------------------------------
     # Step implementations
@@ -519,15 +652,9 @@ class FrequencyTuningPhase(PhaseBase):
         """
         if self.context.is_abort_requested():
             raise linac_utils.CavityAbortError("Abort requested during tuning")
-        tuning_cb = self.context.parameters.get("tuning_update_callback")
-        if tuning_cb:
-            try:
-                signed = round(
-                    self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
-                )
-                tuning_cb(signed, self.cavity.detune_chirp)
-            except Exception:
-                pass
+        self._emit_tuning_point(
+            self.context.parameters.get("tuning_update_callback")
+        )
 
     def _tune_to_resonance(self) -> PhaseStepResult:
         if self.context.dry_run:
@@ -550,10 +677,48 @@ class FrequencyTuningPhase(PhaseBase):
             ack_ceiling if ack_ceiling is not None else self.limits.temp_limit_c
         )
 
+        # Pre-seed the plot with the current state before the tuning loop
+        # starts.  The 500 ms live-refresh timer requires _live_steps to be
+        # non-empty before it will emit a cursor update; without this, the
+        # timer bails on every tick during the first (often large) stepper
+        # move and the live detune appears frozen until the second iteration
+        # hook fires.
+        self._emit_tuning_point(
+            self.context.parameters.get("tuning_update_callback")
+        )
+
         bridged = self._run_auto_tune(max_temp)
         if bridged is not None:
             return bridged
 
+        return self._finalize_after_auto_tune(ack_ceiling)
+
+    def _emit_tuning_point(
+        self, callback, step_count: int | None = None
+    ) -> None:
+        """Emit one (signed_steps, detune) plot point via the tuning callback.
+
+        Reads the step register from hardware when step_count is None.
+        Silently ignores all errors so a plot glitch never stops tuning.
+        """
+        if callback is None:
+            return
+        try:
+            steps = (
+                step_count
+                if step_count is not None
+                else round(
+                    self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
+                )
+            )
+            callback(steps, self.cavity.detune_chirp)
+        except Exception:
+            pass
+
+    def _finalize_after_auto_tune(
+        self, ack_ceiling: float | None
+    ) -> PhaseStepResult:
+        """Read final step count, emit the at-resonance plot point, persist results."""
         # NSTEPS_COLD is the return trip: negation of the accumulated signed
         # steps (read once from the hardware register _auto_tune drove).
         try:
@@ -566,6 +731,13 @@ class FrequencyTuningPhase(PhaseBase):
                 message=f"Could not read signed step count after tuning: {exc}",
                 retry_delay_seconds=3.0,
             )
+
+        # Emit the final at-resonance data point. The iteration hook fires
+        # before each move, so the last move's post-state is never
+        # automatically emitted — this fills that gap.
+        self._emit_tuning_point(
+            self.context.parameters.get("tuning_update_callback"), signed_total
+        )
 
         err = self._write_cold_landing_steps(signed_total)
         if err is not None:
@@ -822,6 +994,17 @@ class FrequencyTuningPhase(PhaseBase):
         tune = self._get_checkpoint_data("tune_to_resonance")
         pi = self._get_checkpoint_data("measure_pi_modes")
 
+        # When a single stage is re-run (e.g. Stage 4 only), checkpoints for
+        # earlier stages won't appear in this phase's history window.  Fall
+        # back to whatever was already stored on the record so those fields
+        # are preserved rather than overwritten with None.
+        prev = self.context.record.frequency_tuning
+
+        def _fallback(new_val, attr: str):
+            if new_val is not None:
+                return new_val
+            return getattr(prev, attr, None) if prev else None
+
         initial_ts_raw = cold.get("initial_timestamp")
         initial_ts = (
             datetime.fromisoformat(initial_ts_raw) if initial_ts_raw else None
@@ -832,12 +1015,22 @@ class FrequencyTuningPhase(PhaseBase):
         )
 
         self.context.record.frequency_tuning = FrequencyTuningData(
-            df_cold_hz=cold.get("df_cold_hz"),
-            initial_timestamp=initial_ts,
-            steps_to_resonance=tune.get("total_steps"),
-            final_timestamp=final_ts,
-            hz_per_microstep=probe.get("hz_per_microstep"),
-            cold_landing_steps=tune.get("cold_landing_steps"),
-            mode_8pi_9_frequency=pi.get("mode_8pi_9_hz"),
-            mode_7pi_9_frequency=pi.get("mode_7pi_9_hz"),
+            df_cold_hz=_fallback(cold.get("df_cold_hz"), "df_cold_hz"),
+            initial_timestamp=_fallback(initial_ts, "initial_timestamp"),
+            steps_to_resonance=_fallback(
+                tune.get("total_steps"), "steps_to_resonance"
+            ),
+            final_timestamp=_fallback(final_ts, "final_timestamp"),
+            hz_per_microstep=_fallback(
+                probe.get("hz_per_microstep"), "hz_per_microstep"
+            ),
+            cold_landing_steps=_fallback(
+                tune.get("cold_landing_steps"), "cold_landing_steps"
+            ),
+            mode_8pi_9_frequency=_fallback(
+                pi.get("mode_8pi_9_hz"), "mode_8pi_9_frequency"
+            ),
+            mode_7pi_9_frequency=_fallback(
+                pi.get("mode_7pi_9_hz"), "mode_7pi_9_frequency"
+            ),
         )

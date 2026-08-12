@@ -3,14 +3,13 @@
 import signal
 import sys
 
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QLabel,
     QLineEdit,
     QMessageBox,
-    QSplitter,
     QTabWidget,
     QVBoxLayout,
 )
@@ -32,7 +31,6 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     PhaseTabSpec,
     build_default_phase_specs,
     _HeaderMixin,
-    _ProgressMixin,
     _RecordSelectorMixin,
     _TabsMixin,
     _NotesPanelMixin,
@@ -48,8 +46,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     BORDER,
     COLOR_PRIMARY,
     SANS_FONT_STACK,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
+    TEXT_MUTED,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.magnet_checkout_dialog import (
     MagnetCheckoutDialog,
@@ -68,7 +65,6 @@ class MultiPhaseCommissioningDisplay(
     _RecordSelectorMixin,
     _NotesPanelMixin,
     _NoteActionsMixin,
-    _ProgressMixin,
     _HeaderMixin,
     Display,
 ):
@@ -115,14 +111,7 @@ class MultiPhaseCommissioningDisplay(
 
         # Banner will be inserted at position 1 when needed
 
-        # 2. COMPACT CAVITY PHASE PROGRESS (always visible)
-        progress = self._build_compact_progress_bar()
-        main_layout.addWidget(progress)
-
-        # 4. MAIN CONTENT AREA (scrollable)
-        content_splitter = QSplitter(Qt.Vertical)
-
-        # Phase tabs
+        # 2. MAIN CONTENT AREA: phase tabs fill all remaining space
         self.tabs = QTabWidget()
         self.tabs.setTabPosition(QTabWidget.North)
         self.tabs.setStyleSheet(f"""
@@ -133,7 +122,6 @@ class MultiPhaseCommissioningDisplay(
             }}
             QTabBar::tab {{
                 background-color: {BG_PANEL};
-                color: {TEXT_SECONDARY};
                 padding: 6px 14px;
                 border: 1px solid {BORDER};
                 border-bottom: none;
@@ -144,29 +132,20 @@ class MultiPhaseCommissioningDisplay(
             }}
             QTabBar::tab:selected {{
                 background-color: {BG_DEEP};
-                color: {TEXT_PRIMARY};
                 border-bottom: 2px solid {COLOR_PRIMARY};
             }}
             QTabBar::tab:hover:!selected {{
                 background-color: {BG_INTERACTIVE};
-                color: {TEXT_PRIMARY};
             }}
             QTabBar::tab:disabled {{
-                color: {BORDER};
+                color: {TEXT_MUTED};
+                font-style: italic;
             }}
         """)
-        content_splitter.addWidget(self.tabs)
+        main_layout.addWidget(self.tabs, stretch=1)
 
-        # Notes panel (collapsible but always accessible)
-        notes_panel = self._build_enhanced_notes_panel()
-        content_splitter.addWidget(notes_panel)
-
-        # Initial sizes: 70% tabs, 30% notes
-        content_splitter.setSizes([700, 300])
-        content_splitter.setCollapsible(0, False)  # Tabs can't collapse
-        content_splitter.setCollapsible(1, True)  # Notes can collapse
-
-        main_layout.addWidget(content_splitter)
+        # 5. NOTES PANEL (collapsible, below tabs)
+        main_layout.addWidget(self._build_enhanced_notes_panel())
 
         self.setLayout(main_layout)
 
@@ -189,7 +168,7 @@ class MultiPhaseCommissioningDisplay(
         linac = self.linac_combo.currentText()
         self.cryomodule_combo.blockSignals(True)
         self.cryomodule_combo.clear()
-        self.cryomodule_combo.addItem("CM...", "")
+        self.cryomodule_combo.addItem("...", "")
         if linac == "All":
             self.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
         else:
@@ -197,8 +176,8 @@ class MultiPhaseCommissioningDisplay(
             if linac_idx is not None:
                 self.cryomodule_combo.addItems(LINAC_CM_MAP[linac_idx])
         self.cryomodule_combo.blockSignals(False)
-        self._refresh_magnet_badge("CM...")
-        self._refresh_cavity_completion_label("CM...")
+        self._refresh_magnet_badge("...")
+        self._refresh_cavity_completion_label("...")
 
     def _on_cavity_selection_changed(self) -> None:
         """Update CM status on CM change; load cavity record only when cavity is selected."""
@@ -206,22 +185,23 @@ class MultiPhaseCommissioningDisplay(
         cavity = self.cavity_combo.currentText()
 
         # CM-level status is independent of cavity selection
-        if cryomodule and cryomodule != "CM...":
+        if cryomodule and cryomodule != "...":
             linac = get_linac_for_cryomodule(cryomodule)
             if linac:
                 self._refresh_magnet_badge(cryomodule, linac)
                 self._refresh_cavity_completion_label(cryomodule, linac)
         else:
-            self._refresh_magnet_badge("CM...")
-            self._refresh_cavity_completion_label("CM...")
+            self._refresh_magnet_badge("...")
+            self._refresh_cavity_completion_label("...")
 
-        # Skip if no valid selection
+        # Skip if no valid selection — reset prompt
         if (
-            cryomodule == "CM..."
-            or cavity == "Cav..."
+            cryomodule == "..."
+            or cavity == "..."
             or not cryomodule
             or not cavity
         ):
+            self._reset_sync_status_prompt()
             return
 
         created = self.start_new_record(cryomodule, cavity)
@@ -233,7 +213,7 @@ class MultiPhaseCommissioningDisplay(
         self, cryomodule: str, linac: str | None = None
     ) -> None:
         """Refresh header magnet badge for the selected cryomodule."""
-        if not cryomodule or cryomodule == "CM...":
+        if not cryomodule or cryomodule == "...":
             self.magnet_status_badge.set_status("PENDING")
             return
 
@@ -256,13 +236,13 @@ class MultiPhaseCommissioningDisplay(
         self, cryomodule: str, linac: str | None = None
     ) -> None:
         """Update header cavity completion counter for the selected cryomodule."""
-        if not cryomodule or cryomodule == "CM...":
-            self.cavity_completion_label.setText("0/8 Complete")
+        if not cryomodule or cryomodule == "...":
+            self.cavity_completion_label.setText("0/8")
             return
 
         effective_linac = linac or get_linac_for_cryomodule(cryomodule)
         if not effective_linac:
-            self.cavity_completion_label.setText("0/8 Complete")
+            self.cavity_completion_label.setText("0/8")
             return
 
         linac_index = int(effective_linac[1])
@@ -274,12 +254,12 @@ class MultiPhaseCommissioningDisplay(
             for record in cavity_records
             if record.current_phase and record.current_phase.value == "complete"
         )
-        self.cavity_completion_label.setText(f"{completed}/8 Complete")
+        self.cavity_completion_label.setText(f"{completed}/8")
 
     def _open_magnet_checkout_screen(self) -> None:
         """Open modal dialog for CM magnet checkout status and notes."""
         cryomodule = self.cryomodule_combo.currentText()
-        if not cryomodule or cryomodule == "CM...":
+        if not cryomodule or cryomodule == "...":
             QMessageBox.information(
                 self,
                 "Select Cryomodule",

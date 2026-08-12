@@ -50,17 +50,6 @@ class StepperPVGroup(PVGroup):
     step_signed: PvpropertyInteger = pvproperty(value=0, name="REG_TOTSGN")
     reset_tot = pvproperty(name="TOTABS_RESET")
     reset_signed = pvproperty(name="TOTSGN_RESET")
-
-    @reset_tot.putter
-    async def reset_tot(self, instance, value):
-        await self.step_tot.write(0)
-        return value
-
-    @reset_signed.putter
-    async def reset_signed(self, instance, value):
-        await self.step_signed.write(0)
-        return value
-
     steps_cold_landing = pvproperty(name="NSTEPS_COLD")
     nsteps_park = pvproperty(name="NSTEPS_PARK", value=5000000)
     push_signed_cold = pvproperty(name="PUSH_NSTEPS_COLD.PROC")
@@ -96,7 +85,7 @@ class StepperPVGroup(PVGroup):
         enum_strings=("not at limit", "at limit"),
     )
     hz_per_microstep = pvproperty(
-        value=0.0,
+        value=1 / ESTIMATED_MICROSTEPS_PER_HZ,
         name="SCALE",
         dtype=ChannelType.FLOAT,
     )
@@ -108,7 +97,11 @@ class StepperPVGroup(PVGroup):
             if self.cavity_group.is_hl
             else 1 / ESTIMATED_MICROSTEPS_PER_HZ
         )
-        await instance.write(uniform(0.8 * nominal, 1.2 * nominal))
+        # Skip the putter (which reverts direct writes) — this is the
+        # internal initial-value seed, not a client write to SCALE.
+        await instance.write(
+            uniform(0.8 * nominal, 1.2 * nominal), verify_value=False
+        )
 
     @hz_per_microstep.putter
     async def hz_per_microstep(self, instance, value):
@@ -129,37 +122,43 @@ class StepperPVGroup(PVGroup):
 
     @hz_per_step_calc.putter
     async def hz_per_step_calc(self, instance, value):
-        await self.hz_per_microstep.write(value / MICROSTEPS_PER_STEP)
+        # Skip the SCALE putter (which reverts direct client writes) — this
+        # is the derived-field update path, the only legitimate way to
+        # change SCALE.
+        await self.hz_per_microstep.write(
+            value / MICROSTEPS_PER_STEP, verify_value=False
+        )
         return value
 
     def __init__(self, prefix, cavity_group, piezo_group):
         super().__init__(prefix)
         self.cavity_group: CavityPVGroup = cavity_group
         self.piezo_group: PiezoPVGroup = piezo_group
+        if not self.cavity_group.is_hl:
+            self.steps_per_hertz = 256 / 1.4
+        else:
+            self.steps_per_hertz = 256 / 18.3
 
     async def move(self, move_sign_des: int):
         await self.motor_moving.write("Moving")
-        # Snapshot speed and step_des once — restore_defaults() on the hardware
-        # thread can overwrite these PVs while this coroutine is suspended at
-        # each `await sleep(1)`, causing the loop to run with the wrong speed
-        # and accumulate excess detune updates that trip _auto_tune's tolerance.
-        speed_val = int(self.speed.value)
-        step_des_val = int(self.step_des.value)
         steps = 0
-        step_change = move_sign_des * speed_val
+        step_change = move_sign_des * self.speed.value
         freq_move_sign = (
             move_sign_des if self.cavity_group.is_hl else -move_sign_des
         )
         starting_detune = self.cavity_group.detune.value
 
-        while step_des_val - steps >= speed_val and self.abort.value != 1:
-            await self.step_tot.write(self.step_tot.value + speed_val)
+        while (
+            self.step_des.value - steps >= self.speed.value
+            and self.abort.value != 1
+        ):
+            await self.step_tot.write(self.step_tot.value + self.speed.value)
             await self.step_signed.write(self.step_signed.value + step_change)
 
-            steps += speed_val
-            delta = speed_val * self.hz_per_microstep.value
-            new_detune = round(
-                self.cavity_group.detune.value + freq_move_sign * delta
+            steps += self.speed.value
+            delta = self.speed.value / self.steps_per_hertz
+            new_detune = self.cavity_group.detune.value + (
+                freq_move_sign * delta
             )
 
             await self.cavity_group.detune.write(new_detune)
@@ -172,15 +171,13 @@ class StepperPVGroup(PVGroup):
             await self.abort.write(0)
             return
 
-        remainder = step_des_val - steps
+        remainder = self.step_des.value - steps
         await self.step_tot.write(self.step_tot.value + remainder)
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = remainder * self.hz_per_microstep.value
-        new_detune = round(
-            self.cavity_group.detune.value + freq_move_sign * delta
-        )
+        delta = remainder / self.steps_per_hertz
+        new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
 
         enable_int = _enum_to_int(
             self.piezo_group.enable_stat.value,
@@ -192,10 +189,6 @@ class StepperPVGroup(PVGroup):
         )
         if enable_int == 1 and feedback_int == 1:
             freq_change = new_detune - starting_detune
-            # HL: issue_move_command inverts steps (tuner moves opposite direction),
-            # so the SELA feedback voltage response is also opposite to freq_change.
-            if self.cavity_group.is_hl:
-                freq_change = -freq_change
             voltage_change = freq_change * (1 / PIEZO_HZ_PER_VOLT)
             await self.piezo_group.voltage.write(
                 self.piezo_group.voltage.value + voltage_change

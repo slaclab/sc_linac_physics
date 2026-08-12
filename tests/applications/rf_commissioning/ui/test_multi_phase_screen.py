@@ -49,18 +49,17 @@ def display_stub():
         _update_sync_status=Mock(),
         _refresh_magnet_badge=Mock(),
         _refresh_cavity_completion_label=Mock(),
+        _reset_sync_status_prompt=Mock(),
     )
 
 
 def test_on_cavity_selection_changed_skips_when_selection_invalid(display_stub):
-    display_stub.cryomodule_combo = _StaticCombo("CM...")
+    display_stub.cryomodule_combo = _StaticCombo("...")
 
     MultiPhaseCommissioningDisplay._on_cavity_selection_changed(display_stub)
 
-    display_stub._refresh_magnet_badge.assert_called_once_with("CM...")
-    display_stub._refresh_cavity_completion_label.assert_called_once_with(
-        "CM..."
-    )
+    display_stub._refresh_magnet_badge.assert_called_once_with("...")
+    display_stub._refresh_cavity_completion_label.assert_called_once_with("...")
     display_stub.start_new_record.assert_not_called()
 
 
@@ -90,7 +89,7 @@ def test_on_linac_selection_changed_all_populates_all_cryomodules(display_stub):
         display_stub.cryomodule_combo.itemText(i)
         for i in range(display_stub.cryomodule_combo.count())
     ]
-    assert combo_items[0] == "CM..."
+    assert combo_items[0] == "..."
     assert combo_items[1:] == sorted(ALL_CRYOMODULES)
 
 
@@ -104,7 +103,7 @@ def test_on_linac_selection_changed_linac_uses_shared_mapping(display_stub):
         display_stub.cryomodule_combo.itemText(i)
         for i in range(display_stub.cryomodule_combo.count())
     ]
-    assert combo_items[0] == "CM..."
+    assert combo_items[0] == "..."
     assert combo_items[1:] == LINAC_CM_MAP[1]
 
 
@@ -165,7 +164,7 @@ def test_refresh_cavity_completion_label_counts_complete_records(display_stub):
         display_stub, "01", "L1B"
     )
 
-    assert display_stub.cavity_completion_label.text() == "1/8 Complete"
+    assert display_stub.cavity_completion_label.text() == "1/8"
 
 
 def test_populate_operator_combo_adds_placeholder_and_restore(display_stub):
@@ -216,7 +215,7 @@ def test_add_new_operator_cancel_resets_selection(display_stub, monkeypatch):
 def test_open_magnet_checkout_screen_requires_cryomodule(
     display_stub, monkeypatch
 ):
-    display_stub.cryomodule_combo = _StaticCombo("CM...")
+    display_stub.cryomodule_combo = _StaticCombo("...")
     info = Mock()
     monkeypatch.setattr(multi_phase_screen.QMessageBox, "information", info)
 

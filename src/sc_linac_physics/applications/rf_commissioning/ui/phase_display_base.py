@@ -51,7 +51,6 @@ class PhaseDisplayBase(Display):
             message: Status message for sync indicator
         """
         _CONTAINER_METHODS = (
-            "update_progress_indicator",
             "_update_tab_states",
             "_load_notes",
             "_update_sync_status",
@@ -59,8 +58,6 @@ class PhaseDisplayBase(Display):
         parent = self.parent()
         while parent:
             if any(hasattr(parent, m) for m in _CONTAINER_METHODS):
-                if hasattr(parent, "update_progress_indicator"):
-                    parent.update_progress_indicator(record)
                 if hasattr(parent, "_update_tab_states"):
                     parent._update_tab_states()
                 if hasattr(parent, "_load_notes"):
@@ -113,8 +110,13 @@ class PhaseDisplayBase(Display):
 
     def _on_step_progress(self, step_name: str, progress: int):
         """Handle step progress updates."""
+        from sc_linac_physics.applications.rf_commissioning.ui.controllers.frequency_tuning_controller import (
+            _step_label,
+        )
+
+        label = _step_label(step_name)
         if hasattr(self, "local_current_step"):
-            self.local_current_step.setText(step_name)
+            self.local_current_step.setText(label)
         if hasattr(self, "local_progress_bar"):
             self.local_progress_bar.setValue(progress)
-        self.log_message(f"Executing step: {step_name}")
+        self.log_message(f"▶ {label}...")

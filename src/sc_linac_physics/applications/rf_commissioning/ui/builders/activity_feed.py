@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -62,6 +62,9 @@ class ActivityFeedWidget(QWidget):
         self._feed_layout.addStretch()
 
         self._scroll.setWidget(self._container)
+        self._scroll.verticalScrollBar().rangeChanged.connect(
+            lambda _min, max_: self._scroll.verticalScrollBar().setValue(max_)
+        )
 
         self._placeholder = QLabel("Activity will appear here when a test runs")
         self._placeholder.setAlignment(Qt.AlignCenter)
@@ -86,7 +89,6 @@ class ActivityFeedWidget(QWidget):
         if self._count == 1:
             self._placeholder.hide()
             self._scroll.show()
-        QTimer.singleShot(0, self._scroll_to_bottom)
 
     def clear(self) -> None:
         """Remove all entries from the feed."""

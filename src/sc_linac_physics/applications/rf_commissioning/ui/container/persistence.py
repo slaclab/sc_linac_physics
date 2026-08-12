@@ -68,7 +68,6 @@ class _PersistenceMixin:
             success = self.session.save_active_record()
             if success:
                 self._update_sync_status(True, "Saved")
-                self.update_progress_indicator(self.session.get_active_record())
                 self._update_tab_states()
 
             return success

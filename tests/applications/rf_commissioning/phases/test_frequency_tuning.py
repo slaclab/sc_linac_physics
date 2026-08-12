@@ -851,3 +851,121 @@ def test_measure_pi_modes_read_frequency_error(phase, mock_cavity):
     )
     result = phase._measure_pi_modes()
     assert result.result == PhaseResult.RETRY
+
+
+# ---------------------------------------------------------------------------
+# check_state_for_stage_2
+# ---------------------------------------------------------------------------
+
+
+def test_check_state_stage2_success(phase, mock_cavity, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    mock_cavity.stepper_temp_pv_obj.get.return_value = 22.0
+    mock_cavity.detune_chirp = 1500.0
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.SUCCESS
+    assert "22.0" in result.message
+    assert "1500" in result.message
+
+
+def test_check_state_stage2_motor_moving(phase, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    mock_stepper.motor_moving = True
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.FAILED
+    assert "moving" in result.message.lower()
+
+
+def test_check_state_stage2_on_limit_switch(phase, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    mock_stepper.on_limit_switch = True
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.FAILED
+    assert "limit switch" in result.message.lower()
+
+
+def test_check_state_stage2_cavity_offline(phase, mock_cavity):
+    _setup_phase(phase, seed_cold=False)
+    mock_cavity.is_online = False
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.FAILED
+    assert "online" in result.message.lower()
+
+
+def test_check_state_stage2_read_exception_retries(phase, mock_cavity):
+    _setup_phase(phase, seed_cold=False)
+    mock_cavity.detune_chirp = property(
+        lambda self: (_ for _ in ()).throw(RuntimeError("timeout"))
+    )
+    type(mock_cavity).detune_chirp = property(
+        lambda self: (_ for _ in ()).throw(RuntimeError("timeout"))
+    )
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.RETRY
+
+
+# ---------------------------------------------------------------------------
+# check_state_for_stage_3
+# ---------------------------------------------------------------------------
+
+
+def test_check_state_stage3_success(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.stepper_temp_pv_obj.get.return_value = 22.0
+    mock_cavity.detune_chirp = 100.0
+    result = phase._check_state_for_stage_3()
+    assert result.result == PhaseResult.SUCCESS
+    assert "22.0" in result.message
+
+
+def test_check_state_stage3_motor_moving(phase, mock_stepper):
+    _setup_phase(phase)
+    mock_stepper.motor_moving = True
+    result = phase._check_state_for_stage_3()
+    assert result.result == PhaseResult.FAILED
+    assert "moving" in result.message.lower()
+
+
+def test_check_state_stage3_df_cold_not_recorded(phase, mock_cavity):
+    # No cold-landing checkpoint in history → df_cold check fails.
+    _setup_phase(phase, seed_cold=False)
+    result = phase._check_state_for_stage_3()
+    assert result.result == PhaseResult.FAILED
+    assert "cold" in result.message.lower()
+
+
+def test_check_state_stage3_df_cold_mismatch(phase, mock_cavity):
+    _setup_phase(phase)
+    # DF_COLD PV reads a value far from the recorded cold-landing.
+    mock_cavity.df_cold_pv_obj.get.return_value = 9999.0
+    result = phase._check_state_for_stage_3()
+    assert result.result == PhaseResult.FAILED
+    assert "df_cold" in result.message.lower()
+
+
+# ---------------------------------------------------------------------------
+# check_state_for_stage_4
+# ---------------------------------------------------------------------------
+
+
+def test_check_state_stage4_success(phase, mock_cavity, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    result = phase._check_state_for_stage_4()
+    assert result.result == PhaseResult.SUCCESS
+    assert "ready" in result.message.lower()
+
+
+def test_check_state_stage4_motor_moving(phase, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    mock_stepper.motor_moving = True
+    result = phase._check_state_for_stage_4()
+    assert result.result == PhaseResult.FAILED
+    assert "moving" in result.message.lower()
+
+
+def test_check_state_stage4_cavity_offline(phase, mock_cavity):
+    _setup_phase(phase, seed_cold=False)
+    mock_cavity.is_online = False
+    result = phase._check_state_for_stage_4()
+    assert result.result == PhaseResult.FAILED
+    assert "online" in result.message.lower()

@@ -25,7 +25,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.displays.registry import 
     PHASE_DISPLAY_MAP,
     get_phase_display_class,
 )
-from sc_linac_physics.applications.rf_commissioning.ui.displays.standard import (
+from sc_linac_physics.applications.rf_commissioning.ui.displays.frequency_tuning import (
     FrequencyTuningDisplay,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.displays.ssa_char import (
@@ -137,7 +137,7 @@ class TestPhaseDisplayBase:
         w.local_progress_bar = bar
         w.log_message = MagicMock()
         w._on_step_progress("tuning", 42)
-        assert w.local_current_step.text() == "tuning"
+        assert w.local_current_step.text() == "Tuning"
         assert bar.value() == 42
 
     def test_on_step_progress_without_widgets(self, qtbot):
