@@ -7,7 +7,6 @@ from datetime import datetime
 
 from sc_linac_physics.applications.field_emission import measurements
 
-
 # Convenience: the fully-qualified module path for patching.
 MOD = "sc_linac_physics.applications.field_emission.measurements"
 
@@ -18,9 +17,27 @@ MOD = "sc_linac_physics.applications.field_emission.measurements"
 class TestMatchMeasurementDates:
     def test_returns_matching_records(self):
         fake_rows = [
-            ("34", "1", datetime(2025, 5, 1, 16, 33), datetime(2025, 5, 1, 17, 33), "stamp1"),
-            ("34", "2", datetime(2025, 5, 2, 10, 0), datetime(2025, 5, 2, 11, 0), "stamp2"),
-            ("35", "1", datetime(2025, 5, 3, 9, 0), datetime(2025, 5, 3, 10, 0), "stamp3"),
+            (
+                "34",
+                "1",
+                datetime(2025, 5, 1, 16, 33),
+                datetime(2025, 5, 1, 17, 33),
+                "stamp1",
+            ),
+            (
+                "34",
+                "2",
+                datetime(2025, 5, 2, 10, 0),
+                datetime(2025, 5, 2, 11, 0),
+                "stamp2",
+            ),
+            (
+                "35",
+                "1",
+                datetime(2025, 5, 3, 9, 0),
+                datetime(2025, 5, 3, 10, 0),
+                "stamp3",
+            ),
         ]
         with patch(f"{MOD}.read_from_csv", return_value=fake_rows):
             result = measurements.match_measurement_dates("34")
@@ -29,7 +46,13 @@ class TestMatchMeasurementDates:
 
     def test_display_starts_with_cm(self):
         fake_rows = [
-            ("34", "1", datetime(2025, 5, 1, 16, 33), datetime(2025, 5, 1, 17, 33), "stamp"),
+            (
+                "34",
+                "1",
+                datetime(2025, 5, 1, 16, 33),
+                datetime(2025, 5, 1, 17, 33),
+                "stamp",
+            ),
         ]
         with patch(f"{MOD}.read_from_csv", return_value=fake_rows):
             result = measurements.match_measurement_dates("34")
@@ -178,6 +201,7 @@ class FakeDataset(np.ndarray):
     Mimics an h5py dataset: it *is* a real ndarray (so pd.DataFrame(dataset)
     works), and it carries an .attrs dict like a real h5py dataset.
     """
+
     def __new__(cls, data, columns):
         obj = np.asarray(data).view(cls)
         obj.attrs = {"columns": columns}
@@ -194,6 +218,7 @@ class FakeH5File:
     Fakes h5py.File so we can use it as a context manager and index into it.
     `datasets` maps the internal filepath string -> FakeDataset.
     """
+
     def __init__(self, datasets):
         self._datasets = datasets
 
@@ -259,7 +284,16 @@ class TestFindDataframes:
     def test_multiple_cavities(self, fixed_date, stamp):
         columns = ["ACCL:L1B:0310:AMP", "CH1"]
         datasets = {}
-        cav = [True, False, True, True, False, False, False, False]  # cavs 1,3,4
+        cav = [
+            True,
+            False,
+            True,
+            True,
+            False,
+            False,
+            False,
+            False,
+        ]  # cavs 1,3,4
         for c in (1, 3, 4):
             datasets[f"CM34/{stamp}/CAV{c}/average"] = FakeDataset(
                 [[5.0, 0.1], [7.0, 0.2]], columns
@@ -336,12 +370,14 @@ class TestFindDataframes:
 class TestGetColumns:
     @pytest.fixture
     def dset(self):
-        return pd.DataFrame({
-            "amps": [3.0, 7.0, 5.0, 2.0],
-            "ch1": [0.0, 0.4, 1.6, 2.4],
-            "ch2": [0.4, 0.4, 0.8, 1.6],
-            "ch3": [0.8, 2.4, 1.6, 1.2],
-        })
+        return pd.DataFrame(
+            {
+                "amps": [3.0, 7.0, 5.0, 2.0],
+                "ch1": [0.0, 0.4, 1.6, 2.4],
+                "ch2": [0.4, 0.4, 0.8, 1.6],
+                "ch3": [0.8, 2.4, 1.6, 1.2],
+            }
+        )
 
     def test_masks_by_threshold(self, dset):
         r_chan = [False, True, False, False, False, False, False, False]
@@ -391,5 +427,5 @@ class TestGetColumns:
         df = pd.DataFrame({"amps": [4.0, 3.9], "ch1": [1.0, 2.0]})
         r_chan = [True] + [False] * 7
         amp, rad = measurements.get_columns(df, r_chan)
-        assert amp.iloc[0] == 4.0       # exactly 4 -> kept
-        assert np.isnan(amp.iloc[1])    # 3.9 -> masked
+        assert amp.iloc[0] == 4.0  # exactly 4 -> kept
+        assert np.isnan(amp.iloc[1])  # 3.9 -> masked

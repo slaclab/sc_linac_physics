@@ -2,7 +2,9 @@ import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
-from sc_linac_physics.applications.field_emission.csv_reader import read_from_csv
+from sc_linac_physics.applications.field_emission.csv_reader import (
+    read_from_csv,
+)
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     build_cavity_pv_prefix,
     LINAC_TUPLES,
@@ -127,14 +129,20 @@ def plot_amp_vs_rad(aligned_data):
 def file_handling(summary_str):
     """establish input and output folders"""
     parser = argparse.ArgumentParser(summary_str)
-    parser.add_argument("-i", "--input",
-                        type=Path,
-                        default=DEFAULT_INPUT_CSV,
-                        help="Path to the input file(s)")
-    parser.add_argument("-o", "--output",
-                        type=Path,
-                        default=DEFAULT_OUTPUT_FOLDER,
-                        help="Path to the output folder")
+    parser.add_argument(
+        "-i",
+        "--input",
+        type=Path,
+        default=DEFAULT_INPUT_CSV,
+        help="Path to the input file(s)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT_FOLDER,
+        help="Path to the output folder",
+    )
     args = parser.parse_args()
     if not args.input.exists():
         raise FileNotFoundError(f"Input file not found at {args.input}")
@@ -167,7 +175,10 @@ def main():
             cav_num = i + 1
             dataframes = fetch_pv_data(p_list, start, end)
             aligned_time_data = align_pvs_to_common_time(dataframes)
-            csv_path = arg.output / f"cm{cryomod}_{stamp}_cavity{cav_num}_{rad_readout}.csv"
+            csv_path = (
+                arg.output
+                / f"cm{cryomod}_{stamp}_cavity{cav_num}_{rad_readout}.csv"
+            )
             aligned_time_data.to_csv(csv_path)
     #        plot_amp_vs_rad(aligned_time_data)
 

@@ -35,8 +35,8 @@ def main():
             if match:
                 cm = match.group(1)
                 raw_date = match.group(2)
-                yy, mm, dd, hh, mn = raw_date.split("_")
-                date = f"20{yy}-{mm}-{dd}_{hh}{mn}"
+                yy, mo, dd, hh, mn = raw_date.split("_")
+                date = f"20{yy}-{mo}-{dd}_{hh}{mn}"
                 cav = match.group(3)
                 readout_type = match.group(4)
 

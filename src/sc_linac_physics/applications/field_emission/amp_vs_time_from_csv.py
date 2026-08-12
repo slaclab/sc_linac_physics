@@ -1,7 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from sc_linac_physics.applications.field_emission.csv_reader import read_from_csv
+from sc_linac_physics.applications.field_emission.csv_reader import (
+    read_from_csv,
+)
 from sc_linac_physics.applications.field_emission.amp_vs_radiation_from_csv import (
     build_amplitude_pvs,
     fetch_pv_data,
@@ -69,9 +71,7 @@ def plot_cavity_data(cavity_data, cryomodule, timestamp, output_path):
         fig.autofmt_xdate()
         ax.legend(loc="lower right")
         #   plt.show()
-        fig.savefig(
-            f"/{output_path}/amp_plot_cm{cryomodule}_{timestamp}.png"
-        )
+        fig.savefig(f"/{output_path}/amp_plot_cm{cryomodule}_{timestamp}.png")
         plt.close(fig)
     return
 
