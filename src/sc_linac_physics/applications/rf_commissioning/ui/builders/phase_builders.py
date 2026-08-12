@@ -21,7 +21,16 @@ from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
-from .theme import BG_PANEL, BORDER, COLOR_PRIMARY, RADIUS_LG, SANS_FONT_STACK
+from .theme import (
+    BG_INSET,
+    BG_PANEL,
+    BORDER,
+    COLOR_PRIMARY,
+    RADIUS_LG,
+    RADIUS_SM,
+    SANS_FONT_STACK,
+    TEXT_MUTED,
+)
 
 
 class PiezoPreRFUI(PhaseUIBase):
@@ -681,19 +690,19 @@ class FrequencyTuningUI(PhaseUIBase):
 
     def _build_checklist_panel(self) -> QGroupBox:
         group = QGroupBox("Commissioning Stages")
-        group.setStyleSheet("""
-            QGroupBox {
-                border: 1px solid #334155;
-                border-radius: 4px;
+        group.setStyleSheet(f"""
+            QGroupBox {{
+                border: 1px solid {BORDER};
+                border-radius: {RADIUS_LG};
                 margin-top: 6px;
-                color: #94a3b8;
+                color: {TEXT_MUTED};
                 font-weight: bold;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 8px;
                 padding: 0 4px;
-            }
+            }}
         """)
         layout = QVBoxLayout()
         layout.setContentsMargins(6, 8, 6, 6)
@@ -763,12 +772,12 @@ class FrequencyTuningUI(PhaseUIBase):
         extra_widgets,
     ) -> QFrame:
         frame = QFrame()
-        frame.setStyleSheet("""
-            QFrame {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 4px;
-            }
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {BG_INSET};
+                border: 1px solid {BORDER};
+                border-radius: {RADIUS_SM};
+            }}
         """)
         layout = QVBoxLayout()
         layout.setContentsMargins(8, 8, 8, 8)
@@ -831,6 +840,9 @@ class FrequencyTuningUI(PhaseUIBase):
         df_cold_lbl.precisionFromPV = False
         df_cold_lbl.precision = 0
         df_cold_row.addWidget(df_cold_lbl)
+        df_cold_row.addStretch()
+        layout.addLayout(df_cold_row)
+
         push_btn = self._register(
             "push_df_cold_button", QPushButton("Save Cold Landing Frequency")
         )
@@ -845,8 +857,7 @@ class FrequencyTuningUI(PhaseUIBase):
             QPushButton:disabled { background-color: #1f2937; color: #6b7280; }
         """)
         self._connect(push_btn, "on_push_to_df_cold")
-        df_cold_row.addWidget(push_btn)
-        layout.addLayout(df_cold_row)
+        layout.addWidget(push_btn)
 
     def _build_stage2_extra(self, layout: QVBoxLayout) -> None:
         calc_row = QHBoxLayout()
