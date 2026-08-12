@@ -144,8 +144,8 @@ class MultiPhaseCommissioningDisplay(
         """)
         main_layout.addWidget(self.tabs, stretch=1)
 
-        # 5. NOTES PANEL (collapsible, below tabs)
-        main_layout.addWidget(self._build_enhanced_notes_panel())
+        # 5. COMPACT NOTES FOOTER (always visible, opens dialog on demand)
+        main_layout.addWidget(self._build_compact_notes_bar())
 
         self.setLayout(main_layout)
 
