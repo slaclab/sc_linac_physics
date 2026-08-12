@@ -68,7 +68,7 @@ class FieldEmission(Display):
         outer = QHBoxLayout()
         self.setLayout(outer)
 
-        # Configure main panels as widgets
+        # Configure main panels as widgets so they can be resized
         left_side = QWidget()
         left_side_layout = QVBoxLayout()
         left_side_layout.setContentsMargins(0, 0, 0, 0)
@@ -152,7 +152,7 @@ class FieldEmission(Display):
         linac_layout = QVBoxLayout()
         linac_config.setLayout(linac_layout)
 
-        # Cryomodule Selection
+        # Cryomodule selection dropdown
         cryo_sel_layout = QHBoxLayout()
         cryo_sel_layout.addWidget(QLabel("Cryomodule"))
         self.cryo_dropdown = QComboBox()
@@ -163,7 +163,7 @@ class FieldEmission(Display):
         cryo_sel_layout.addWidget(self.cryo_dropdown)
         linac_layout.addLayout(cryo_sel_layout)
 
-        # Cavity Selection
+        # Cavity selection checkboxes
         cav_channels = QGroupBox("Cavity Selection")
         cav_layout, self.cavity_cb = self._checkbox_helper(
             [f"Cavity {i}" for i in range(1, 9)], 4
@@ -185,7 +185,7 @@ class FieldEmission(Display):
         self._on_btn_clicked_helper(self.cavity_cb)
 
     def build_meas_selection(self):
-        # Measurement Selection
+        # Measurement selection list widget
         measurement_selection = QGroupBox("Available Measurements")
         measurement_layout = QVBoxLayout()
         measurement_selection.setLayout(measurement_layout)
@@ -198,7 +198,7 @@ class FieldEmission(Display):
         )
         measurement_layout.addWidget(self.meas_list_widget)
 
-        # Measurement Metadata Section
+        # Measurement metadata section
         meta_data = QGroupBox("Measurement Information")
         container_layout = QVBoxLayout()
         meta_data.setLayout(container_layout)
@@ -308,12 +308,12 @@ class FieldEmission(Display):
         self.meas_notes_label.setText("-")
 
     def build_decarad_configuration(self):
-        # Decarad Configuration
+        # Decarad configuration section
         decarad_config = QGroupBox("Decarad Configuration")
         decarad_config_layout = QVBoxLayout()
         decarad_config.setLayout(decarad_config_layout)
 
-        # Radiation Readout Selection
+        # Radiation readout selection dropdown
         readout_layout = QHBoxLayout()
         readout_layout.addWidget(QLabel("Readout Type:"))
         self.readout_dropdown = QComboBox()
@@ -329,7 +329,7 @@ class FieldEmission(Display):
         return decarad_config
 
     def build_rad_channels(self):
-        # Decarad Channel Selection
+        # Decarad channel selection checkboxes
         rad_channels = QGroupBox("Channel Selection")
         rad_channel_layout, self.rad_chan_cb = self._checkbox_helper(
             [f"Ch {i}" for i in range(1, 11)], 5
@@ -449,8 +449,6 @@ class FieldEmission(Display):
             for col_idx, result in enumerate(measurements):
                 position = row_idx * n_cols + col_idx + 1
                 ax = self.fig.add_subplot(n_rows, n_cols, position)
-
-                # Get the DataFrame for this cavity in this measurement (if it exists)
                 df = result["dataframes"].get(cav_num)
                 if df is not None and not df.empty:
                     plot_amp_vs_rad(df, ax, rad_channels, fit_flag)
@@ -517,7 +515,6 @@ class FieldEmission(Display):
         x_range = (min(x_mins), max(x_maxs))
         y_range = (min(y_mins), max(y_maxs))
 
-        # Apply to every subplot
         for ax in axes:
             ax.set_xlim(x_range)
             ax.set_ylim(y_range)
