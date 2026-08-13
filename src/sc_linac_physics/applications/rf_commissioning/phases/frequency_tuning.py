@@ -41,6 +41,15 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 
+def _emit_status(cb, msg: str) -> None:
+    """Call a status callback, swallowing any exception."""
+    if cb:
+        try:
+            cb(msg)
+        except Exception:
+            pass
+
+
 @dataclass
 class FrequencyTuningLimits:
     """Configurable limits for the frequency tuning phase."""
@@ -335,6 +344,8 @@ class FrequencyTuningPhase(PhaseBase):
                 data={"dry_run": True},
             )
 
+        status_cb = self.context.parameters.get("status_update_callback")
+        _emit_status(status_cb, "Reading stepper and cavity state...")
         try:
             motor_moving = self.cavity.stepper_tuner.motor_moving
             on_limit_switch = self.cavity.stepper_tuner.on_limit_switch
@@ -364,7 +375,10 @@ class FrequencyTuningPhase(PhaseBase):
                 message="Cavity is not online — cannot prepare it for tuning",
             )
 
-        prepared = self._prepare_and_read()
+        _emit_status(
+            status_cb, "✓ Stepper idle, cavity online — preparing cavity..."
+        )
+        prepared = self._prepare_and_read(status_cb)
         if isinstance(prepared, PhaseStepResult):
             return prepared
         temp, detune = prepared
@@ -388,7 +402,9 @@ class FrequencyTuningPhase(PhaseBase):
             },
         )
 
-    def _prepare_and_read(self) -> "PhaseStepResult | tuple[float, float]":
+    def _prepare_and_read(
+        self, status_cb=None
+    ) -> "PhaseStepResult | tuple[float, float]":
         """Read temp, prepare the cavity, read detune.
 
         Returns (temp_c, detune_hz) on success, or a FAILED/RETRY
@@ -396,7 +412,7 @@ class FrequencyTuningPhase(PhaseBase):
         """
         try:
             temp = self._read_temp()
-            self._prepare_cavity_for_tuning()
+            self._prepare_cavity_for_tuning(status_cb)
             return temp, self.cavity.detune_chirp
         except linac_utils.DetuneError as exc:
             return PhaseStepResult(
@@ -426,19 +442,24 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=3.0,
             )
 
-    def _prepare_cavity_for_tuning(self) -> None:
+    def _prepare_cavity_for_tuning(self, status_cb=None) -> None:
         """Prepare the cavity for chirp tuning, mirroring the production path.
 
         RF off first so a latched interlock clears even if RF was requested on,
         then SSA on, reset interlocks, and set up chirp tuning — the same
         sequence as SetupCavity.setup + Cavity.setup_tuning.
         """
+
+        _emit_status(status_cb, "Turning RF off...")
         self.cavity.turn_off()
+        _emit_status(status_cb, "Turning SSA on...")
         self.cavity.ssa.turn_on()
+        _emit_status(status_cb, "Resetting interlocks...")
         self.cavity.reset_interlocks()
         # setup_tuning(use_sela=False) puts the cavity in chirp mode (piezo
         # feedback off, RF driven by the chirp generator rather than SELA)
         # so detune can be read via CHIRP:DF while the stepper is moved.
+        _emit_status(status_cb, "Setting up chirp mode...")
         self.cavity.setup_tuning()
 
     def _tune_config_warning(self) -> str | None:
