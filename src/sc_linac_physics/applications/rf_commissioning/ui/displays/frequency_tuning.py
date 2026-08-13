@@ -219,6 +219,9 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         if self._probe_fit_curve is None:
             return
         self._probe_fit_curve.setData([s_d0, s_d1], [d0_hz, d1_hz])
+        pw: pg.PlotWidget | None = getattr(self, "tuning_plot", None)
+        if pw is not None:
+            pw.autoRange()
 
     def clear_probe_fit(self) -> None:
         if self._probe_fit_curve is not None:
