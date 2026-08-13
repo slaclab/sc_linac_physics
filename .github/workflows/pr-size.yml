@@ -48,14 +48,34 @@ jobs:
           WARN=400
           HARD=800
 
-          # Refuse to report rather than report zero. If either SHA is missing
-          # — shallow clone, or a force-push landing mid-run — the diff below
-          # yields nothing and the report reads "0 lines, within target", which
-          # is the one wrong answer this check must never give.
+          mkdir -p pr-size
+
+          # pr-size-comment.yml cannot read the PR number from its own event:
+          # `workflow_run.pull_requests` is empty for runs originating in a
+          # fork, so it has to travel with the artifact.
+          echo "$PR_NUMBER" > pr-size/pr-number
+
+          # Say "unavailable" rather than either failing or reporting zero. If
+          # a SHA does not resolve — shallow clone, or a force-push landing
+          # mid-run — the diff below yields nothing, which would render as a
+          # green "0 lines, within target": a false pass on the check whose
+          # whole purpose is catching oversized PRs. Exiting non-zero would
+          # avoid that but turn the check red, and this workflow promises never
+          # to gate a merge. An explicit "unavailable" report keeps both.
           for sha in "$BASE_SHA" "$HEAD_SHA"; do
             if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
-              echo "cannot resolve $sha; refusing to report a size" >&2
-              exit 1
+              {
+                echo "### ⚪ PR size: unavailable"
+                echo
+                echo "Could not resolve \`${sha}\`, so no size was measured."
+                echo "Usually a force-push landing while this ran — pushing"
+                echo "again will produce a report."
+                echo
+                echo "<sub>Advisory only; this check never fails the build.</sub>"
+              } > pr-size/comment.md
+              cat pr-size/comment.md >> "$GITHUB_STEP_SUMMARY"
+              echo "could not resolve $sha; reported size as unavailable" >&2
+              exit 0
             fi
           done
 
@@ -76,13 +96,6 @@ jobs:
           else                                STATE="within target";                    ICON="🟢"
           fi
 
-          mkdir -p pr-size
-
-          # pr-size-comment.yml cannot read the PR number from its own event:
-          # `workflow_run.pull_requests` is empty for runs originating in a
-          # fork, so it has to travel with the artifact.
-          echo "$PR_NUMBER" > pr-size/pr-number
-
           # Rendered here rather than in the commenting workflow so that PR
           # filenames never need to pass through a $GITHUB_OUTPUT delimiter.
           {
@@ -93,9 +106,13 @@ jobs:
             echo
             echo "| Largest files | Change |"
             echo "|---|---|"
+            # Same two exclusions as the total above. Without the asset line, a
+            # large regenerated .ui or lockfile tops this table while counting
+            # zero toward the reported size.
             git diff --numstat "$BASE_SHA...$HEAD_SHA" \
               | awk -F'\t' '
                   $3 ~ /(^|\/)(tests?)\// { next }
+                  $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { next }
                   { printf "%d\t+%s/-%s\t%s\n", $1+$2, $1, $2, $3 }' \
               | sort -rn | head -5 \
               | awk -F'\t' '{ printf "| `%s` | %s |\n", $3, $2 }'
