@@ -12,6 +12,8 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     LOCAL_LABEL_STYLE,
     SSACharUI,
+    STATUS_LABEL_FAIL,
+    STATUS_LABEL_PASS,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller import (
     SSACharController,
@@ -82,14 +84,8 @@ class SSACharDisplay(BasePlaceholderDisplay):
             parent = parent.parent()
 
     def _update_local_results(self, result: SSACharacterization) -> None:
-        pass_style = (
-            LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
-            + "color: #90ee90; font-weight: bold;"
-        )
-        fail_style = (
-            LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
-            + "color: #ff6b6b; font-weight: bold;"
-        )
+        pass_style = STATUS_LABEL_PASS
+        fail_style = STATUS_LABEL_FAIL
 
         if hasattr(self, "local_phase_status"):
             passed = result.calibration_passed

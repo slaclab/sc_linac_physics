@@ -26,6 +26,14 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    COLOR_ERROR,
+    COLOR_PRIMARY,
+    COLOR_SUCCESS,
+    COLOR_WARNING,
+    TEXT_MUTED,
+    TEXT_SECONDARY,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.batch_piezo_pre_rf_controller import (
     BatchPiezoPreRFController,
     CavitySpec,
@@ -38,14 +46,14 @@ from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_MAP
 _LINAC_NAMES = ["L0B", "L1B", "L2B", "L3B", "L4B"]
 
 _STATUS_COLORS: dict[str, str] = {
-    "PENDING": "#888888",
-    "TRIGGERING": "#4fc3f7",
-    "TRIGGERED": "#29b6f6",
-    "COLLECTING": "#ffa726",
-    "PASSED": "#66bb6a",
-    "FAILED": "#ef5350",
-    "ERROR": "#ab47bc",
-    "SKIPPED": "#78909c",
+    "PENDING": TEXT_MUTED,
+    "TRIGGERING": COLOR_PRIMARY,
+    "TRIGGERED": COLOR_PRIMARY,
+    "COLLECTING": COLOR_WARNING,
+    "PASSED": COLOR_SUCCESS,
+    "FAILED": COLOR_ERROR,
+    "ERROR": "#8b7cde",  # Muted violet — distinct from FAILED
+    "SKIPPED": TEXT_SECONDARY,
 }
 
 _TABLE_COLS = [

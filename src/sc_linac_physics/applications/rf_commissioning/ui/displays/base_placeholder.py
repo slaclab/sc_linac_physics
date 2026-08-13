@@ -16,6 +16,9 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     GenericPhaseUI,
     LOCAL_LABEL_STYLE,
+    STATUS_LABEL_FAIL,
+    STATUS_LABEL_INCOMPLETE,
+    STATUS_LABEL_PASS,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.phase_display_base import (
     PhaseDisplayBase,
@@ -168,23 +171,11 @@ class BasePlaceholderDisplay(PhaseDisplayBase):
         """Choose the stored-data status text and styling."""
         if hasattr(phase_data, "is_complete"):
             if not phase_data.is_complete:
-                return (
-                    "INCOMPLETE",
-                    LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c4b1a")
-                    + "color: #ffd166;",
-                )
+                return "INCOMPLETE", STATUS_LABEL_INCOMPLETE
             passed = getattr(phase_data, "passed", True)
             if passed:
-                return (
-                    "PASS",
-                    LOCAL_LABEL_STYLE.replace("#2a2a1a", "#2d5016")
-                    + "color: #90ee90;",
-                )
-            return (
-                "FAIL",
-                LOCAL_LABEL_STYLE.replace("#2a2a1a", "#5c1a1a")
-                + "color: #ff6b6b;",
-            )
+                return "PASS", STATUS_LABEL_PASS
+            return "FAIL", STATUS_LABEL_FAIL
 
         return "AVAILABLE", LOCAL_LABEL_STYLE
 

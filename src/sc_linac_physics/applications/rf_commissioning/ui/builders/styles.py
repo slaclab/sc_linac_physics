@@ -1,53 +1,75 @@
 """Shared style constants for RF commissioning UI builders."""
 
-import sys
+from .theme import (
+    ACCENT_LOCAL,
+    ACCENT_PV,
+    BG_INSET,
+    BG_LOCAL,
+    BORDER,
+    BG_STATUS_FAIL,
+    BG_STATUS_INCOMPLETE,
+    BG_STATUS_PASS,
+    COLOR_STATUS_FAIL,
+    COLOR_STATUS_INCOMPLETE,
+    COLOR_STATUS_PASS,
+    MONO_FONT_STACK,
+    RADIUS_SM,
+    SANS_FONT_STACK,
+)
 
-if sys.platform == "darwin":
-    MONO_FONT_STACK = (
-        "'Menlo', 'Monaco', 'Consolas', 'DejaVu Sans Mono', "
-        "'Liberation Mono', 'Noto Sans Mono'"
-    )
-elif sys.platform.startswith("linux"):
-    MONO_FONT_STACK = (
-        "'DejaVu Sans Mono', 'Liberation Mono', 'Noto Sans Mono', "
-        "'Consolas', 'Menlo', 'Monaco'"
-    )
-else:
-    MONO_FONT_STACK = (
-        "'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', "
-        "'Noto Sans Mono', 'Menlo', 'Monaco'"
-    )
+__all__ = [
+    "LOCAL_CAP_STYLE",
+    "LOCAL_LABEL_STYLE",
+    "MONO_FONT_STACK",
+    "PV_CAP_STYLE",
+    "PV_LABEL_STYLE",
+    "SANS_FONT_STACK",
+    "STATUS_LABEL_FAIL",
+    "STATUS_LABEL_INCOMPLETE",
+    "STATUS_LABEL_PASS",
+]
 
-PV_LABEL_STYLE = """
-    background: #1a2a3a;
-    padding: 2px 6px;
-    border: 1px solid #4a9eff;
-    border-left: 3px solid #4a9eff;
-    font-size: 11px;
-"""
+PV_LABEL_STYLE = (
+    f"background: {BG_INSET}; padding: 2px 6px; "
+    f"border: 1px solid {ACCENT_PV}; border-left: 3px solid {ACCENT_PV}; "
+    f"font-size: 11px; border-radius: {RADIUS_SM};"
+)
 
-PV_CAP_STYLE = """
-    background-color: #1a2a00;
-    padding: 2px 6px;
-    border: 1px solid #4a9eff;
-    border-left: 3px solid #4a9eff;
-    font-family: %s;
-    font-size: 11px;
-""" % MONO_FONT_STACK
+PV_CAP_STYLE = (
+    f"background-color: {BG_INSET}; padding: 2px 6px; "
+    f"border: 1px solid {ACCENT_PV}; border-left: 3px solid {ACCENT_PV}; "
+    f"font-family: {MONO_FONT_STACK}; font-size: 11px; border-radius: {RADIUS_SM};"
+)
 
-LOCAL_LABEL_STYLE = """
-    background: #2a2a1a;
-    padding: 2px 6px;
-    border: 1px solid #ff9a4a;
-    border-left: 3px solid #ff9a4a;
-    font-size: 11px;
-"""
+LOCAL_LABEL_STYLE = (
+    f"background: {BG_LOCAL}; padding: 2px 6px; "
+    f"border: 1px solid {BORDER}; border-left: 3px solid {ACCENT_LOCAL}; "
+    f"font-size: 11px; border-radius: {RADIUS_SM};"
+)
 
-LOCAL_CAP_STYLE = """
-    background-color: #2a2a00;
-    padding: 2px 6px;
-    border: 1px solid #ff9a4a;
-    border-left: 3px solid #ff9a4a;
-    font-family: %s;
-    font-size: 11px;
-""" % MONO_FONT_STACK
+LOCAL_CAP_STYLE = (
+    f"background-color: {BG_LOCAL}; padding: 2px 6px; "
+    f"border: 1px solid {BORDER}; border-left: 3px solid {ACCENT_LOCAL}; "
+    f"font-family: {MONO_FONT_STACK}; font-size: 11px; border-radius: {RADIUS_SM};"
+)
+
+STATUS_LABEL_PASS = (
+    f"background: {BG_STATUS_PASS}; padding: 2px 6px; "
+    f"border: 1px solid {ACCENT_LOCAL}; border-left: 3px solid {ACCENT_LOCAL}; "
+    f"font-size: 11px; border-radius: {RADIUS_SM}; "
+    f"color: {COLOR_STATUS_PASS}; font-weight: bold;"
+)
+
+STATUS_LABEL_FAIL = (
+    f"background: {BG_STATUS_FAIL}; padding: 2px 6px; "
+    f"border: 1px solid {ACCENT_LOCAL}; border-left: 3px solid {ACCENT_LOCAL}; "
+    f"font-size: 11px; border-radius: {RADIUS_SM}; "
+    f"color: {COLOR_STATUS_FAIL}; font-weight: bold;"
+)
+
+STATUS_LABEL_INCOMPLETE = (
+    f"background: {BG_STATUS_INCOMPLETE}; padding: 2px 6px; "
+    f"border: 1px solid {ACCENT_LOCAL}; border-left: 3px solid {ACCENT_LOCAL}; "
+    f"font-size: 11px; border-radius: {RADIUS_SM}; "
+    f"color: {COLOR_STATUS_INCOMPLETE};"
+)

@@ -10,6 +10,15 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    COLOR_SUCCESS,
+    COLOR_SUCCESS_BG,
+    COLOR_SUCCESS_BORDER,
+    COLOR_WARNING,
+    COLOR_WARNING_BG,
+    RADIUS_MD,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,27 +27,28 @@ class _SyncMixin:
         """Update the global sync status indicator."""
         if is_synced:
             self.sync_status.setText("● Synced")
-            self.sync_status.setStyleSheet("""
-                            QLabel {
-                                color: #4CAF50;
-                                font-weight: bold;
-                                padding: 5px 10px;
-                                background-color: rgba(76, 175, 80, 0.15);
-                                border-radius: 3px;
-                            }
-                        """)
+            self.sync_status.setStyleSheet(f"""
+                QLabel {{
+                    color: {COLOR_SUCCESS};
+                    font-weight: bold;
+                    padding: 5px 10px;
+                    background-color: {COLOR_SUCCESS_BG};
+                    border: 1px solid {COLOR_SUCCESS_BORDER};
+                    border-radius: {RADIUS_MD};
+                }}
+            """)
         else:
             self.sync_status.setText(f"⚠ {message or 'Out of Sync'}")
-            self.sync_status.setStyleSheet("""
-                            QLabel {
-                                color: #FF9800;
-                                font-weight: bold;
-                                padding: 5px 10px;
-                                background-color: rgba(255, 152, 0, 0.15);
-                                border-radius: 3px;
-                                border: 1px solid #FF9800;
-                            }
-                        """)
+            self.sync_status.setStyleSheet(f"""
+                QLabel {{
+                    color: {COLOR_WARNING};
+                    font-weight: bold;
+                    padding: 5px 10px;
+                    background-color: {COLOR_WARNING_BG};
+                    border-radius: {RADIUS_MD};
+                    border: 1px solid {COLOR_WARNING};
+                }}
+            """)
 
     def _check_for_external_changes(self) -> None:
         """Enhanced change detection with visible notification."""
@@ -69,29 +79,29 @@ class _SyncMixin:
             return
 
         self._update_banner = QWidget()
-        self._update_banner.setStyleSheet("""
-                        QWidget {
-                            background-color: #FF9800;
-                            border: 2px solid #F57C00;
-                            border-left: 5px solid #F57C00;
-                        }
-                        QLabel {
-                            color: white;
-                            font-weight: bold;
-                            padding: 5px;
-                        }
-                        QPushButton {
-                            background-color: white;
-                            color: #F57C00;
-                            font-weight: bold;
-                            padding: 8px 16px;
-                            border-radius: 4px;
-                            border: none;
-                        }
-                        QPushButton:hover {
-                            background-color: #f5f5f5;
-                        }
-                    """)
+        self._update_banner.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLOR_WARNING};
+                border: 2px solid rgba(180, 120, 80, 0.8);
+                border-left: 5px solid rgba(180, 120, 80, 0.8);
+            }}
+            QLabel {{
+                color: white;
+                font-weight: bold;
+                padding: 5px;
+            }}
+            QPushButton {{
+                background-color: white;
+                color: {COLOR_WARNING};
+                font-weight: bold;
+                padding: 8px 16px;
+                border-radius: {RADIUS_MD};
+                border: none;
+            }}
+            QPushButton:hover {{
+                background-color: #f5f5f5;
+            }}
+        """)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(15, 10, 15, 10)

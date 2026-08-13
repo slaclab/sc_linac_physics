@@ -13,11 +13,31 @@ from PyQt5.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSizePolicy,
-    QTextEdit,
     QVBoxLayout,
 )
 
-from .styles import LOCAL_LABEL_STYLE, MONO_FONT_STACK
+from .activity_feed import ActivityFeedWidget
+from .styles import LOCAL_LABEL_STYLE
+from .theme import (
+    ACCENT_LOCAL,
+    BG_LOCAL,
+    BG_PANEL,
+    BORDER,
+    BORDER_EMPHASIS,
+    COLOR_DISABLED,
+    COLOR_ERROR,
+    COLOR_PRIMARY,
+    COLOR_SUCCESS,
+    COLOR_WARNING,
+    MONO_FONT_STACK,
+    RADIUS_LG,
+    RADIUS_MD,
+    SANS_FONT_STACK,
+    TEXT_DISABLED,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+)
 
 
 class PhaseUIBase:
@@ -55,70 +75,76 @@ class PhaseUIBase:
         primary_group.setSpacing(4)
 
         run_button = self._register("run_button", QPushButton("▶ Start Test"))
-        run_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2563eb;
+        run_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_PRIMARY};
                 color: white;
                 font-weight: bold;
                 padding: 10px 20px;
-                border-radius: 4px;
+                border-radius: {RADIUS_MD};
                 border: none;
                 font-size: 11pt;
-            }
-            QPushButton:hover {
-                background-color: #1d4ed8;
-            }
-            QPushButton:pressed {
-                background-color: #1e40af;
-            }
-            QPushButton:disabled {
-                background-color: #475569;
-                color: #94a3b8;
-            }
+                font-family: {SANS_FONT_STACK};
+            }}
+            QPushButton:hover {{
+                background-color: #6a7bce;
+            }}
+            QPushButton:pressed {{
+                background-color: #5a6abf;
+            }}
+            QPushButton:disabled {{
+                background-color: {COLOR_DISABLED};
+                color: {TEXT_DISABLED};
+            }}
         """)
         run_button.setFixedHeight(40)
         run_button.setMinimumWidth(120)
         self._connect(run_button, "on_run_automated_test")
 
         pause_button = self._register("pause_button", QPushButton("⏸ Pause"))
-        pause_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f59e0b;
-                color: white;
+        pause_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {TEXT_SECONDARY};
                 font-weight: bold;
                 padding: 10px 16px;
-                border-radius: 4px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #d97706;
-            }
-            QPushButton:disabled {
-                background-color: #475569;
-                color: #94a3b8;
-            }
+                border-radius: {RADIUS_MD};
+                border: 1px solid {BORDER_EMPHASIS};
+                font-family: {SANS_FONT_STACK};
+            }}
+            QPushButton:hover {{
+                background-color: {BORDER_EMPHASIS};
+                color: {TEXT_PRIMARY};
+            }}
+            QPushButton:disabled {{
+                background-color: transparent;
+                color: {TEXT_DISABLED};
+                border-color: {BORDER};
+            }}
         """)
         pause_button.setFixedHeight(40)
         pause_button.setEnabled(False)
         self._connect(pause_button, "on_pause_test")
 
         abort_button = self._register("abort_button", QPushButton("⏹ Abort"))
-        abort_button.setStyleSheet("""
-            QPushButton {
-                background-color: #dc2626;
-                color: white;
+        abort_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLOR_ERROR};
                 font-weight: bold;
                 padding: 10px 16px;
-                border-radius: 4px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #b91c1c;
-            }
-            QPushButton:disabled {
-                background-color: #475569;
-                color: #94a3b8;
-            }
+                border-radius: {RADIUS_MD};
+                border: 1px solid {COLOR_ERROR};
+                font-family: {SANS_FONT_STACK};
+            }}
+            QPushButton:hover {{
+                background-color: rgba(192, 84, 74, 0.12);
+            }}
+            QPushButton:disabled {{
+                background-color: transparent;
+                color: {TEXT_DISABLED};
+                border-color: {BORDER};
+            }}
         """)
         abort_button.setFixedHeight(40)
         abort_button.setEnabled(False)
@@ -131,7 +157,7 @@ class PhaseUIBase:
         sep1 = QFrame()
         sep1.setFrameShape(QFrame.VLine)
         sep1.setFrameShadow(QFrame.Sunken)
-        sep1.setStyleSheet("QFrame { color: #4a4a4a; }")
+        sep1.setStyleSheet(f"QFrame {{ color: {BORDER}; }}")
 
         secondary_group = QHBoxLayout()
         secondary_group.setSpacing(4)
@@ -140,38 +166,40 @@ class PhaseUIBase:
             "step_mode_btn", QPushButton("Step Mode")
         )
         step_mode_btn.setCheckable(True)
-        step_mode_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #374151;
-                color: #d1d5db;
+        step_mode_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {BORDER_EMPHASIS};
+                color: {TEXT_SECONDARY};
                 padding: 8px 12px;
-                border-radius: 4px;
-                border: 1px solid #4b5563;
-            }
-            QPushButton:checked {
-                background-color: #059669;
+                border-radius: {RADIUS_MD};
+                border: 1px solid {BORDER_EMPHASIS};
+                font-family: {SANS_FONT_STACK};
+            }}
+            QPushButton:checked {{
+                background-color: {COLOR_SUCCESS};
                 color: white;
-                border: 1px solid #047857;
-            }
-            QPushButton:hover {
-                background-color: #4b5563;
-            }
+                border: 1px solid {COLOR_SUCCESS};
+            }}
+            QPushButton:hover {{
+                background-color: {BORDER};
+            }}
         """)
         step_mode_btn.setFixedHeight(40)
         self._connect(step_mode_btn, "on_toggle_step_mode")
 
         next_step_btn = self._register("next_step_btn", QPushButton("Next →"))
-        next_step_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6366f1;
+        next_step_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_PRIMARY};
                 color: white;
                 padding: 8px 12px;
-                border-radius: 4px;
-            }
-            QPushButton:disabled {
-                background-color: #374151;
-                color: #6b7280;
-            }
+                border-radius: {RADIUS_MD};
+                font-family: {SANS_FONT_STACK};
+            }}
+            QPushButton:disabled {{
+                background-color: {BORDER_EMPHASIS};
+                color: {TEXT_MUTED};
+            }}
         """)
         next_step_btn.setFixedHeight(40)
         next_step_btn.setEnabled(False)
@@ -184,24 +212,25 @@ class PhaseUIBase:
         status_section.setSpacing(2)
 
         status_indicator = self._register("status_indicator", QLabel("● READY"))
-        status_indicator.setStyleSheet("""
-            QLabel {
-                color: #10b981;
+        status_indicator.setStyleSheet(f"""
+            QLabel {{
+                color: {COLOR_SUCCESS};
                 font-weight: bold;
                 font-size: 10pt;
-            }
+                font-family: {SANS_FONT_STACK};
+            }}
         """)
         status_indicator.setAlignment(Qt.AlignRight)
 
         timestamp_label = self._register("timestamp_label", QLabel("--:--:--"))
         timestamp_label.setAlignment(Qt.AlignRight)
-        timestamp_label.setStyleSheet("""
-            QLabel {
-                color: #9ca3af;
+        timestamp_label.setStyleSheet(f"""
+            QLabel {{
+                color: {TEXT_MUTED};
                 font-size: 9pt;
-                font-family: %s;
-            }
-            """ % MONO_FONT_STACK)
+                font-family: {MONO_FONT_STACK};
+            }}
+        """)
 
         status_section.addWidget(status_indicator)
         status_section.addWidget(timestamp_label)
@@ -213,13 +242,13 @@ class PhaseUIBase:
         toolbar.addLayout(status_section)
 
         frame = QFrame()
-        frame.setStyleSheet("""
-            QFrame {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 6px;
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {BG_PANEL};
+                border: 1px solid {BORDER};
+                border-radius: {RADIUS_LG};
                 padding: 4px;
-            }
+            }}
         """)
         frame.setLayout(toolbar)
 
@@ -242,24 +271,26 @@ class PhaseUIBase:
                 "completed; one or more toolbar widgets are not registered."
             )
 
+        def _make_status_style(color: str) -> str:
+            return (
+                f"QLabel {{ color: {color}; font-weight: bold; "
+                f"font-size: 10pt; font-family: {SANS_FONT_STACK}; }}"
+            )
+
         if state == "idle":
             run_btn.setEnabled(True)
             run_btn.setText("▶ Start Test")
             pause_btn.setEnabled(False)
             abort_btn.setEnabled(False)
             status_ind.setText("● READY")
-            status_ind.setStyleSheet(
-                "QLabel { color: #10b981; font-weight: bold; font-size: 10pt; }"
-            )
+            status_ind.setStyleSheet(_make_status_style(COLOR_SUCCESS))
 
         elif state == "running":
             run_btn.setEnabled(False)
             pause_btn.setEnabled(True)
             abort_btn.setEnabled(True)
             status_ind.setText("● RUNNING")
-            status_ind.setStyleSheet(
-                "QLabel { color: #3b82f6; font-weight: bold; font-size: 10pt; }"
-            )
+            status_ind.setStyleSheet(_make_status_style(COLOR_PRIMARY))
 
         elif state == "paused":
             run_btn.setEnabled(True)
@@ -267,9 +298,7 @@ class PhaseUIBase:
             pause_btn.setEnabled(False)
             abort_btn.setEnabled(True)
             status_ind.setText("● PAUSED")
-            status_ind.setStyleSheet(
-                "QLabel { color: #f59e0b; font-weight: bold; font-size: 10pt; }"
-            )
+            status_ind.setStyleSheet(_make_status_style(COLOR_WARNING))
 
         elif state == "complete":
             run_btn.setEnabled(True)
@@ -277,9 +306,7 @@ class PhaseUIBase:
             pause_btn.setEnabled(False)
             abort_btn.setEnabled(False)
             status_ind.setText("✓ COMPLETE")
-            status_ind.setStyleSheet(
-                "QLabel { color: #10b981; font-weight: bold; font-size: 10pt; }"
-            )
+            status_ind.setStyleSheet(_make_status_style(COLOR_SUCCESS))
 
         elif state == "error":
             run_btn.setEnabled(True)
@@ -287,31 +314,22 @@ class PhaseUIBase:
             pause_btn.setEnabled(False)
             abort_btn.setEnabled(False)
             status_ind.setText("✗ ERROR")
-            status_ind.setStyleSheet(
-                "QLabel { color: #dc2626; font-weight: bold; font-size: 10pt; }"
-            )
+            status_ind.setStyleSheet(_make_status_style(COLOR_ERROR))
 
     def _build_history(self) -> QGroupBox:
-        """Build a space-efficient phase history section."""
+        """Build the phase activity feed section."""
         group = QGroupBox("Phase History")
 
         layout = QVBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(3)
 
-        history_text = self._register("history_text", QTextEdit())
-        history_text.setReadOnly(True)
-        history_text.setStyleSheet(
-            "QTextEdit { background-color: #1a1a1a; color: #00ff00; "
-            f"font-family: {MONO_FONT_STACK}; "
-            "font-size: 10pt; }"
-        )
+        feed = self._register("history_text", ActivityFeedWidget())
+        feed.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        feed.setMinimumHeight(60)
+        feed.setMaximumHeight(180)
 
-        history_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        history_text.setMinimumHeight(60)
-        history_text.setMaximumHeight(180)
-
-        layout.addWidget(history_text)
+        layout.addWidget(feed)
         group.setLayout(layout)
         return group
 
@@ -375,10 +393,10 @@ class PhaseUIBase:
         grid.addWidget(QLabel("Progress:"), row, 0)
         progress_bar = self._register("local_progress_bar", QProgressBar())
         progress_bar.setStyleSheet(
-            "QProgressBar { border: 1px solid #ff9a4a; border-radius: 3px; "
-            "background-color: #2a2a1a; text-align: center; color: white; "
-            "min-height: 20px; max-height: 20px; } "
-            "QProgressBar::chunk { background-color: #ff9a4a; }"
+            f"QProgressBar {{ border: 1px solid {ACCENT_LOCAL}; border-radius: 3px; "
+            f"background-color: {BG_LOCAL}; text-align: center; color: white; "
+            f"min-height: 20px; max-height: 20px; }} "
+            f"QProgressBar::chunk {{ background-color: {ACCENT_LOCAL}; }}"
         )
         grid.addWidget(progress_bar, row, 1)
         row += 1

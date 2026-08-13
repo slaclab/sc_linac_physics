@@ -16,6 +16,7 @@ from pydm.widgets import PyDMEnumComboBox, PyDMLabel, PyDMSpinbox
 
 from .base import PhaseUIBase
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
+from .theme import COLOR_PRIMARY, SANS_FONT_STACK
 
 
 class PiezoPreRFUI(PhaseUIBase):
@@ -209,7 +210,8 @@ class PiezoPreRFUI(PhaseUIBase):
 
         pv_header = QLabel("Live (EPICS)")
         pv_header.setStyleSheet(
-            "font-weight: bold; color: #4a9eff; font-size: 11pt;"
+            f"color: {COLOR_PRIMARY}; font-size: 10px; "
+            f"font-family: {SANS_FONT_STACK}; font-weight: 600;"
         )
         pv_header.setAlignment(Qt.AlignCenter)
         grid.addWidget(pv_header, 0, 1)
