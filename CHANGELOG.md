@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.33.1 (2026-08-13)
+
+### Bug Fixes
+
+- **ci**: Keep the size check non-gating and exclude assets from both views
+  ([#281](https://github.com/slaclab/sc_linac_physics/pull/281),
+  [`998e768`](https://github.com/slaclab/sc_linac_physics/commit/998e768abf1d3828faf65f4fb3cca3d22e6ac4ff))
+
+### Chores
+
+- **repo**: Add PR size, review routing, and operator-note tooling
+  ([#281](https://github.com/slaclab/sc_linac_physics/pull/281),
+  [`998e768`](https://github.com/slaclab/sc_linac_physics/commit/998e768abf1d3828faf65f4fb3cca3d22e6ac4ff))
+
+
 ## v9.33.0 (2026-08-11)
 
 ### Bug Fixes
