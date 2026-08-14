@@ -74,7 +74,7 @@ with h5py.File(h5_filename, "a") as h5f:
                 date_group.attrs["date"] = row[2]
                 date_group.attrs["time_start"] = row[3]
                 if row[4]:
-                    date_group["date_end"] = row[4]
+                    date_group.attrs["date_end"] = row[4]
                 date_group.attrs["time_end"] = row[5]
                 date_group.attrs["decarad"] = row[6]
                 date_group.attrs["elog"] = row[7]
