@@ -21,6 +21,16 @@ from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 
+def _to_float(value):
+    """Best-effort float from a caproto channel value (may be a sequence)."""
+    if isinstance(value, (list, tuple)):
+        value = value[0] if value else None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _enum_to_int(value, enum_strings):
     """Best-effort conversion for caproto enum values to integer index."""
     if isinstance(value, int):
@@ -134,10 +144,28 @@ class StepperPVGroup(PVGroup):
         super().__init__(prefix)
         self.cavity_group: CavityPVGroup = cavity_group
         self.piezo_group: PiezoPVGroup = piezo_group
+        # Same values as the former literal 256/1.4 and 256/18.3, via the
+        # shared constants so the nominal slope cannot drift from linac_utils.
         if not self.cavity_group.is_hl:
-            self.steps_per_hertz = 256 / 1.4
+            self.steps_per_hertz = ESTIMATED_MICROSTEPS_PER_HZ
         else:
-            self.steps_per_hertz = 256 / 18.3
+            self.steps_per_hertz = ESTIMATED_MICROSTEPS_PER_HZ_HL
+
+    def _hz_per_microstep_now(self) -> float:
+        """Hz of detune per microstep, taken from the SCALE PV.
+
+        SCALE is the single source of truth for how the simulated cavity
+        responds to the stepper. Deriving the response from a separate constant
+        instead let the two disagree: SCALE is seeded to a random value within
+        ±20% of nominal, so a probe measuring the true response could never
+        match the SCALE readback, and pushing a freshly measured value to SCALE
+        changed nothing about how the simulation behaved.
+        """
+        scale = _to_float(self.hz_per_microstep.value)
+        if scale is None or scale == 0.0:
+            # Fall back to the nominal slope rather than freezing the tuner.
+            return 1.0 / self.steps_per_hertz
+        return abs(scale)
 
     async def move(self, move_sign_des: int):
         await self.motor_moving.write("Moving")
@@ -156,7 +184,7 @@ class StepperPVGroup(PVGroup):
             await self.step_signed.write(self.step_signed.value + step_change)
 
             steps += self.speed.value
-            delta = self.speed.value / self.steps_per_hertz
+            delta = self.speed.value * self._hz_per_microstep_now()
             new_detune = self.cavity_group.detune.value + (
                 freq_move_sign * delta
             )
@@ -176,7 +204,7 @@ class StepperPVGroup(PVGroup):
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = remainder / self.steps_per_hertz
+        delta = remainder * self._hz_per_microstep_now()
         new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
 
         enable_int = _enum_to_int(
@@ -358,8 +386,16 @@ class PiezoPVGroup(PVGroup):
 
         await self.enable_stat.write(1 if is_enabled else 0)
         if not is_enabled:  # Disabled
-            # Optionally reset feedback mode to manual
+            # Dropping to Manual on disable has to move the *commanded* mode as
+            # well as the status. Writing MODESTAT alone leaves MODECTRL saying
+            # "Feedback" with no way to reconcile: Piezo.disable_feedback() is a
+            # guard-first loop on MODESTAT, so once the status reads Manual it
+            # never writes MODECTRL again, and the pair stays split for the rest
+            # of the session. Real IOCs keep status following control; the
+            # simulator has to model that or every commissioning screen that
+            # shows both PVs reports a mismatch that hardware would never have.
             await self.feedback_mode_stat.write(0)
+            await self.feedback_mode.write(0, verify_value=False)
         return value
 
     @prerf_test_start.putter
@@ -470,7 +506,15 @@ class PiezoPVGroup(PVGroup):
     @feedback_mode.putter
     async def feedback_mode(self, instance, value):
         """Update feedback mode status."""
-        if self.enable_stat.value == 0:
+        # Must go through _enum_to_int: caproto reports this enum as the int 0
+        # only while untouched, and as the string "Disabled" once it has been
+        # written. A bare `== 0` therefore passes on a fresh IOC and silently
+        # stops matching afterwards, letting a disabled piezo accept mode
+        # commands it should refuse.
+        enable_int = _enum_to_int(
+            self.enable_stat.value, self.enable_stat.enum_strings
+        )
+        if enable_int == 0:
             print("Warning: Cannot change feedback mode while disabled")
             return instance.value  # Don't change if disabled
         await self.feedback_mode_stat.write(value)
