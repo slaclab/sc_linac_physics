@@ -753,8 +753,9 @@ class FrequencyTuningPhase(PhaseBase):
         self, ack_ceiling: float | None
     ) -> PhaseStepResult:
         """Read final step count, emit the at-resonance plot point, persist results."""
-        # NSTEPS_COLD is the return trip: negation of the accumulated signed
-        # steps (read once from the hardware register _auto_tune drove).
+        # Read the accumulated signed step count once, from the hardware
+        # register _auto_tune drove. This is the outbound trip; the negation
+        # into NSTEPS_COLD happens in _write_cold_landing_steps().
         try:
             signed_total = round(
                 self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
