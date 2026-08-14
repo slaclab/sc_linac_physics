@@ -26,6 +26,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     DetuneError,
     FSCANError,
     StepperError,
+    SAFE_PULSED_DRIVE_LEVEL,
     StepperTempError,
     TUNE_CONFIG_COLD_VALUE,
     TUNE_CONFIG_RESONANCE_VALUE,
@@ -65,6 +66,12 @@ def mock_cavity(mock_stepper):
     cavity.detune_invalid = False
     cavity.detune_chirp = 5000.0
     cavity.is_online = True
+    cavity.is_on = True
+    # setup_tuning() leaves the piezo enabled in Manual and the drive
+    # clamped to SAFE_PULSED_DRIVE_LEVEL.
+    cavity.piezo.is_enabled = True
+    cavity.piezo.in_manual = True
+    cavity.drive_level = SAFE_PULSED_DRIVE_LEVEL
     # Cavities launch at cold landing (COLD == 1).
     cavity.tune_config_pv_obj.get.return_value = TUNE_CONFIG_COLD_VALUE
     return cavity
@@ -247,6 +254,138 @@ class TestColdLandingSurvivesRestart:
         assert result is not None
         assert result.result == PhaseResult.FAILED
         assert "DF_COLD does not match" in result.message
+
+
+class TestTuningSetupIsReAppliedBetweenStages:
+    """Stages 2 and 3 re-prepare a cavity that drifted out of tuning state.
+
+    setup_tuning() runs only in Stage 1, whose Run button is disabled once it
+    succeeds — so an operator who turns the cavity off mid-workflow previously
+    had no way back, and nothing noticed: is_online is hw_mode ("in service"),
+    not RF state, so Stage 2 would move the stepper against a detune that was
+    no longer tracking. Re-preparing is safe because it does not touch the
+    recorded cold landing, the one Stage 1 action that must not repeat.
+    """
+
+    @pytest.mark.parametrize(
+        "attr, value",
+        [
+            ("is_on", False),
+            ("detune_invalid", True),
+        ],
+    )
+    def test_stage_2_re_prepares_the_cavity(
+        self, phase, mock_cavity, attr, value
+    ):
+        _setup_phase(phase)
+        setattr(mock_cavity, attr, value)
+        # setup_tuning() restores the condition, as it would on hardware.
+        mock_cavity.setup_tuning.side_effect = lambda *a, **k: setattr(
+            mock_cavity, attr, not value
+        )
+
+        result = phase._check_state_for_stage_2()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    @pytest.mark.parametrize(
+        "attr, value",
+        [
+            ("is_enabled", False),
+            ("in_manual", False),
+        ],
+    )
+    def test_stage_2_re_prepares_a_drifted_piezo(
+        self, phase, mock_cavity, attr, value
+    ):
+        _setup_phase(phase)
+        setattr(mock_cavity.piezo, attr, value)
+        mock_cavity.setup_tuning.side_effect = lambda *a, **k: setattr(
+            mock_cavity.piezo, attr, not value
+        )
+
+        result = phase._check_state_for_stage_2()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_stage_3_re_prepares_the_cavity(self, phase, mock_cavity):
+        _setup_phase(phase)
+        mock_cavity.is_on = False
+        mock_cavity.setup_tuning.side_effect = lambda *a, **k: setattr(
+            mock_cavity, "is_on", True
+        )
+
+        result = phase._check_state_for_stage_3()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_over_drive_is_re_prepared(self, phase, mock_cavity):
+        _setup_phase(phase)
+        mock_cavity.drive_level = SAFE_PULSED_DRIVE_LEVEL + 5
+        mock_cavity.setup_tuning.side_effect = lambda *a, **k: setattr(
+            mock_cavity, "drive_level", SAFE_PULSED_DRIVE_LEVEL
+        )
+
+        result = phase._check_state_for_stage_2()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_drive_below_safe_level_does_not_trigger_a_re_prepare(
+        self, phase, mock_cavity
+    ):
+        """Running under the safe level is the operator's call, not a fault."""
+        _setup_phase(phase)
+        mock_cavity.drive_level = SAFE_PULSED_DRIVE_LEVEL - 2
+
+        result = phase._check_state_for_stage_2()
+
+        assert not mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_already_set_up_cavity_is_not_re_prepared(self, phase, mock_cavity):
+        """No latency cost on the normal path."""
+        _setup_phase(phase)
+
+        result = phase._check_state_for_stage_2()
+
+        assert not mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_fails_when_re_preparing_does_not_fix_it(self, phase, mock_cavity):
+        """setup_tuning() ran but the cavity is still not tuning-ready."""
+        _setup_phase(phase)
+        mock_cavity.is_on = False  # setup_tuning is a no-op Mock, so it stays
+
+        result = phase._check_state_for_stage_2()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.FAILED
+        assert "still not ready" in result.message.lower()
+        assert "rf is off" in result.message.lower()
+
+    def test_hard_blockers_are_not_re_prepared(self, phase, mock_stepper):
+        """A limit switch needs hands on hardware, not another setup_tuning()."""
+        _setup_phase(phase)
+        mock_stepper.on_limit_switch = True
+
+        result = phase._check_state_for_stage_2()
+
+        assert result.result == PhaseResult.FAILED
+        assert "limit switch" in result.message.lower()
+
+    def test_stage_4_does_not_re_prepare(self, phase, mock_cavity):
+        """FSCAN does not need chirp mode, so it must not gain this behaviour."""
+        _setup_phase(phase)
+        mock_cavity.is_on = False
+
+        result = phase._check_state_for_stage_4()
+
+        assert not mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
 
 
 def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0, seed_cold=True):
