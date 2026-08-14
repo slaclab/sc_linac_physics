@@ -81,7 +81,6 @@ class _ViewStub:
         self.stage2_status_label = _ButtonStub()
         self.stage3_status_label = _ButtonStub()
         self.stage4_status_label = _ButtonStub()
-        self.confirm_save_button = _ButtonStub()
         self.confirm_probe_fit_button = _ButtonStub()
         self.hz_per_step_spinbox = _SpinboxStub()
         self.speed_spinbox = _SpinboxStub(value=2.0)
@@ -1227,7 +1226,6 @@ def test_on_stage4_done() -> None:
 
     controller._on_stage4_done()
 
-    assert view.confirm_save_button.enabled is True
     assert view.stage4_run_btn.enabled is True
 
 
@@ -1973,7 +1971,6 @@ def test_reset_all_stages() -> None:
     assert controller.phase is None
     assert controller.context is None
     assert view.hz_per_step_spinbox.enabled is False
-    assert view.confirm_save_button.enabled is False
 
 
 def test_restore_stage1_rebuilds_context() -> None:
@@ -2079,7 +2076,6 @@ def test_restore_stage4_sets_pi_modes() -> None:
     controller._restore_stage4({"mode_8pi_9_hz": 100.0, "mode_7pi_9_hz": 80.0})
 
     assert controller._pi_mode_data["mode_8pi_9_hz"] == 100.0
-    assert view.confirm_save_button.enabled is True
     view.local_phase_status.setText.assert_called_with("PI MODES DONE")
 
 

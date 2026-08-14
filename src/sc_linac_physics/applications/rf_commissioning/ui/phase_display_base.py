@@ -9,6 +9,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.step_labels import (
+    step_label,
+)
 
 
 class PhaseDisplayBase(Display):
@@ -127,11 +130,7 @@ class PhaseDisplayBase(Display):
 
     def _on_step_progress(self, step_name: str, progress: int):
         """Handle step progress updates."""
-        from sc_linac_physics.applications.rf_commissioning.ui.controllers.frequency_tuning_controller import (
-            _step_label,
-        )
-
-        label = _step_label(step_name)
+        label = step_label(step_name)
         if hasattr(self, "local_current_step"):
             self.local_current_step.setText(label)
         if hasattr(self, "local_progress_bar"):

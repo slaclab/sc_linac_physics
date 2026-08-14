@@ -151,6 +151,21 @@ class StepperPVGroup(PVGroup):
         else:
             self.steps_per_hertz = ESTIMATED_MICROSTEPS_PER_HZ_HL
 
+    # Restored: these were dropped while the PVs stayed defined, which made
+    # StepperTuner.reset_signed_steps() a silent no-op in simulation. The
+    # tuning phase calls it at the head of every probe move, so REG_TOTSGN
+    # kept accumulating and both the plotted step axis and the NSTEPS_COLD
+    # written after tuning came out wrong against sc-sim.
+    @reset_tot.putter
+    async def reset_tot(self, instance, value):
+        await self.step_tot.write(0)
+        return value
+
+    @reset_signed.putter
+    async def reset_signed(self, instance, value):
+        await self.step_signed.write(0)
+        return value
+
     def _hz_per_microstep_now(self) -> float:
         """Hz of detune per microstep, taken from the SCALE PV.
 

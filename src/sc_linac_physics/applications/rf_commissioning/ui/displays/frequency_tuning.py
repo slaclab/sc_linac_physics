@@ -54,6 +54,7 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         self._probe_fit_curve: pg.PlotDataItem | None = None
         self._cursor_curve: pg.PlotDataItem | None = None
         self._cursor_visible: bool = True
+        self._live_read_in_flight: bool = False
         self._setup_plot_curves()
 
         self._detune_refresh_timer = QTimer(self)
@@ -81,7 +82,6 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             "on_run_stage_2": self._controller.run_stage_2,
             "on_run_stage_3": self._controller.run_stage_3,
             "on_run_stage_4": self._controller.run_stage_4,
-            "on_confirm_and_save": self._controller.confirm_and_save,
             "on_pause_test": self._controller.on_pause_test,
             "on_abort_test": self._controller.on_abort,
             "on_move_left": self._controller.on_move_left,
@@ -298,9 +298,15 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
 
     @pyqtSlot()
     def _refresh_live_detune(self) -> None:
-        """Kick off a background read; the GUI update runs back on the main thread."""
-        if not self._live_steps:
+        """Kick off a background read; the GUI update runs back on the main thread.
+
+        Skips the tick if the previous read has not returned. The timer fires
+        every 500 ms regardless of how long an EPICS read takes, so without
+        this a slow IOC would pile up one thread per tick indefinitely.
+        """
+        if not self._live_steps or self._live_read_in_flight:
             return
+        self._live_read_in_flight = True
         Thread(target=self._fetch_and_update_live_detune, daemon=True).start()
 
     def _fetch_and_update_live_detune(self) -> None:
@@ -312,6 +318,10 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             live_steps = self._controller.get_live_steps()
         except Exception:
             return
+        finally:
+            # Cleared here rather than in the slot: the slot only runs on a
+            # successful read, and an early return would strand the flag.
+            self._live_read_in_flight = False
         self._live_detune_ready.emit(detune, live_steps)
 
     def _apply_live_detune(self, detune: float, live_steps) -> None:

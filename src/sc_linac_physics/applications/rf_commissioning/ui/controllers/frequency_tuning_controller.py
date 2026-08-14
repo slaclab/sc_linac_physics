@@ -33,6 +33,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status imp
     STAGE_STATUS_STYLE_NOT_STARTED,
     STAGE_STATUS_STYLE_RUNNING,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.step_labels import (
+    step_label,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
     format_pv_update_message,
@@ -45,22 +48,10 @@ _STAGE_PROBE_DIRECTION = "probe_direction"
 _STAGE_TUNE_TO_RESONANCE = "tune_to_resonance"
 _STAGE_PI_MODES = "pi_modes"
 
-_STEP_LABELS: dict[str, str] = {
-    "verify_initial_state": "Verifying cavity state",
-    "record_cold_landing": "Recording cold landing frequency",
-    "check_state_for_stage_2": "Checking prerequisites",
-    "probe_stepper_direction": "Probing stepper direction",
-    "check_state_for_stage_3": "Checking prerequisites",
-    "apply_hz_per_step": "Applying Hz/step calibration",
-    "tune_to_resonance": "Tuning to resonance",
-    "check_state_for_stage_4": "Checking prerequisites",
-    "measure_pi_modes": "Measuring pi modes",
-    "record_results": "Saving results",
-}
-
-
-def _step_label(step_name: str) -> str:
-    return _STEP_LABELS.get(step_name, step_name.replace("_", " ").title())
+# Kept as a module-level alias so existing call sites read unchanged; the
+# table itself lives in ui.step_labels so non-controller callers can format
+# a label without importing this module (and therefore linac.MACHINE).
+_step_label = step_label
 
 
 _STAGE1_STEPS = ["verify_initial_state", "record_cold_landing"]
@@ -1079,10 +1070,6 @@ class FrequencyTuningController(QObject):
             self.view.local_progress_bar.setValue(100)
         self._update_toolbar_state("complete")
 
-        confirm_btn = getattr(self.view, "confirm_save_button", None)
-        if confirm_btn is not None:
-            confirm_btn.setEnabled(False)
-
         try:
             if self.context and self.context.record.frequency_tuning:
                 instance_id = (
@@ -1444,10 +1431,6 @@ class FrequencyTuningController(QObject):
             spinbox.setValue(0.0)
             spinbox.blockSignals(False)
             spinbox.setEnabled(False)
-
-        confirm_btn = getattr(self.view, "confirm_save_button", None)
-        if confirm_btn is not None:
-            confirm_btn.setEnabled(False)
 
         confirm_probe_btn = getattr(self.view, "confirm_probe_fit_button", None)
         if confirm_probe_btn is not None:
