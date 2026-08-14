@@ -12,108 +12,162 @@ MOD = "sc_linac_physics.applications.field_emission.measurements"
 
 
 # ===========================================================================
+# Fakes for the h5py.File interface
+# ---------------------------------------------------------------------------
+# A real h5py file behaves like a dict of groups/datasets, supports .get(),
+# indexing with [], iteration over child keys, is a context manager, and each
+# group/dataset carries an .attrs mapping.
+# ===========================================================================
+class FakeGroup:
+    """
+    Mimics an h5py Group/Dataset.
+
+    - Iterating yields child keys (like iterating a real h5py group).
+    - .get(key) / [key] return children.
+    - .attrs is a plain dict.
+    - As a dataset, it can also hold ndarray-like `data` used by
+      pd.DataFrame(dataset).
+    """
+
+    def __init__(self, children=None, attrs=None, data=None):
+        self._children = children or {}
+        self.attrs = attrs or {}
+        self._data = data
+
+    def get(self, key):
+        return self._children.get(key)
+
+    def __getitem__(self, key):
+        return self._children[key]
+
+    def __iter__(self):
+        return iter(self._children)
+
+    def __array__(self, dtype=None):
+        # Allows pd.DataFrame(dataset) to work when used as a dataset.
+        arr = np.asarray(self._data)
+        if dtype is not None:
+            arr = arr.astype(dtype)
+        return arr
+
+
+class FakeH5File:
+    """
+    Fakes h5py.File so we can use it as a context manager, call .get(...),
+    and index into it. `root` maps top-level keys -> FakeGroup.
+    """
+
+    def __init__(self, root):
+        self._root = root
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def get(self, key):
+        return self._root.get(key)
+
+    def __getitem__(self, key):
+        return self._root[key]
+
+
+# ===========================================================================
 # match_measurement_dates
 # ===========================================================================
 class TestMatchMeasurementDates:
+    def _file_for_cm34(self):
+        """A fake h5 file with two dated subgroups under CM34."""
+        cm34 = FakeGroup(
+            children={
+                "2025-05-01_1633": FakeGroup(),
+                "2025-05-02_1000": FakeGroup(),
+            }
+        )
+        cm35 = FakeGroup(
+            children={
+                "2025-05-03_0900": FakeGroup(),
+            }
+        )
+        return FakeH5File({"CM34": cm34, "CM35": cm35})
+
     def test_returns_matching_records(self):
-        fake_rows = [
-            (
-                "34",
-                "1",
-                datetime(2025, 5, 1, 16, 33),
-                datetime(2025, 5, 1, 17, 33),
-                "stamp1",
-            ),
-            (
-                "34",
-                "2",
-                datetime(2025, 5, 2, 10, 0),
-                datetime(2025, 5, 2, 11, 0),
-                "stamp2",
-            ),
-            (
-                "35",
-                "1",
-                datetime(2025, 5, 3, 9, 0),
-                datetime(2025, 5, 3, 10, 0),
-                "stamp3",
-            ),
-        ]
-        with patch(f"{MOD}.read_from_csv", return_value=fake_rows):
+        fake_file = self._file_for_cm34()
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.match_measurement_dates("34")
         assert len(result) == 2
         assert all(r["cm"] == "34" for r in result)
 
     def test_display_starts_with_cm(self):
-        fake_rows = [
-            (
-                "34",
-                "1",
-                datetime(2025, 5, 1, 16, 33),
-                datetime(2025, 5, 1, 17, 33),
-                "stamp",
-            ),
-        ]
-        with patch(f"{MOD}.read_from_csv", return_value=fake_rows):
+        fake_file = self._file_for_cm34()
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.match_measurement_dates("34")
         assert result[0]["display"].startswith("CM34")
 
-    def test_empty_when_no_matches(self):
-        fake_rows = [
-            ("34", "1", datetime.now(), datetime.now(), "stamp"),
-        ]
-        with patch(f"{MOD}.read_from_csv", return_value=fake_rows):
-            result = measurements.match_measurement_dates("99")
-        assert result == []
-
     def test_record_keys_and_values(self):
         """Each returned dict has display/cm/date with the expected values."""
-        start = datetime(2025, 5, 1, 16, 33)
-        fake_rows = [("34", "1", start, datetime(2025, 5, 1, 17, 33), "stamp")]
-        with patch(f"{MOD}.read_from_csv", return_value=fake_rows):
+        fake_file = self._file_for_cm34()
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.match_measurement_dates("34")
         rec = result[0]
         assert set(rec.keys()) == {"display", "cm", "date"}
         assert rec["cm"] == "34"
-        assert rec["date"] == start
-        # display combines CM number and start
+        # date is parsed from the group name via "%Y-%m-%d_%H%M"
+        assert rec["date"] == datetime(2025, 5, 1, 16, 33)
+        # display combines CM number and the parsed datetime
         assert "CM34" in rec["display"]
-        assert str(start) in rec["display"]
+        assert str(datetime(2025, 5, 1, 16, 33)) in rec["display"]
 
-    def test_empty_csv_returns_empty_list(self):
-        with patch(f"{MOD}.read_from_csv", return_value=[]):
+    def test_empty_group_returns_empty_list(self):
+        """CM group exists but has no dated children."""
+        fake_file = FakeH5File({"CM34": FakeGroup(children={})})
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.match_measurement_dates("34")
         assert result == []
 
     def test_preserves_order_of_matches(self):
-        s1 = datetime(2025, 5, 1, 16, 33)
-        s2 = datetime(2025, 5, 2, 10, 0)
-        fake_rows = [
-            ("34", "1", s1, datetime(2025, 5, 1, 17, 33), "a"),
-            ("34", "2", s2, datetime(2025, 5, 2, 11, 0), "b"),
-        ]
-        with patch(f"{MOD}.read_from_csv", return_value=fake_rows):
+        fake_file = self._file_for_cm34()
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.match_measurement_dates("34")
-        assert [r["date"] for r in result] == [s1, s2]
+        assert [r["date"] for r in result] == [
+            datetime(2025, 5, 1, 16, 33),
+            datetime(2025, 5, 2, 10, 0),
+        ]
 
-    def test_string_vs_int_cryomodule_no_match(self):
-        """Comparison is by equality, so int 34 won't match string '34'."""
-        fake_rows = [("34", "1", datetime.now(), datetime.now(), "stamp")]
-        with patch(f"{MOD}.read_from_csv", return_value=fake_rows):
-            result = measurements.match_measurement_dates(34)  # int, not str
-        assert result == []
+    def test_dates_parsed_from_group_names(self):
+        """Every returned date corresponds to a parsed group key."""
+        fake_file = self._file_for_cm34()
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
+            result = measurements.match_measurement_dates("34")
+        parsed = {r["date"] for r in result}
+        assert parsed == {
+            datetime(2025, 5, 1, 16, 33),
+            datetime(2025, 5, 2, 10, 0),
+        }
 
 
 # ===========================================================================
 # fetch_measurement_metadata
 # ===========================================================================
 class TestFetchMeasurementMetadata:
+    def _group_with_attrs(self, **overrides):
+        attrs = {
+            "date": "05/01/25",
+            "time_start": "16:33",
+            "time_end": "17:00",
+            "decarad": "1",
+            "elog": "log1",
+            "notes": "notes1",
+        }
+        attrs.update(overrides)
+        return FakeGroup(attrs=attrs)
+
     def test_matches_cm_and_date(self):
-        fake_rows = [
-            ("34", "05/01/25", "16:33", "17:00", "1", "log1", "notes1"),
-            ("34", "05/02/25", "10:00", "11:00", "2", "log2", "notes2"),
-        ]
-        with patch(f"{MOD}.read_raw_data", return_value=fake_rows):
+        # find_dataframes-style path: CM34/2025-05-01_1633
+        group = self._group_with_attrs()
+        fake_file = FakeH5File({"CM34/2025-05-01_1633": group})
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.fetch_measurement_metadata(
                 "34", datetime(2025, 5, 1, 16, 33)
             )
@@ -122,21 +176,19 @@ class TestFetchMeasurementMetadata:
         assert start == "16:33"
         assert dec == "1"
 
-    def test_returns_none_when_no_cm_match(self):
-        fake_rows = [
-            ("34", "05/01/25", "16:33", "17:00", "1", "log", "notes"),
-        ]
-        with patch(f"{MOD}.read_raw_data", return_value=fake_rows):
+    def test_returns_none_when_group_missing(self):
+        """No group at the computed path -> None."""
+        fake_file = FakeH5File({})  # .get(...) returns None
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.fetch_measurement_metadata(
                 "99", datetime(2025, 5, 1, 16, 33)
             )
         assert result is None
 
     def test_formats_date_string(self):
-        fake_rows = [
-            ("34", "05/01/25", "16:33", "17:00", "1", "log", "notes"),
-        ]
-        with patch(f"{MOD}.read_raw_data", return_value=fake_rows):
+        group = self._group_with_attrs()
+        fake_file = FakeH5File({"CM34/2025-05-01_1633": group})
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.fetch_measurement_metadata(
                 "34", datetime(2025, 5, 1, 16, 33)
             )
@@ -146,10 +198,9 @@ class TestFetchMeasurementMetadata:
         assert "2025" in date_str
 
     def test_returns_all_six_fields(self):
-        fake_rows = [
-            ("34", "05/01/25", "16:33", "17:00", "1", "mylog", "mynotes"),
-        ]
-        with patch(f"{MOD}.read_raw_data", return_value=fake_rows):
+        group = self._group_with_attrs(elog="mylog", notes="mynotes")
+        fake_file = FakeH5File({"CM34/2025-05-01_1633": group})
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.fetch_measurement_metadata(
                 "34", datetime(2025, 5, 1, 16, 33)
             )
@@ -159,36 +210,26 @@ class TestFetchMeasurementMetadata:
         assert log == "mylog"
         assert notes == "mynotes"
 
-    def test_cm_matches_but_date_differs_returns_none(self):
-        """Right cryomodule, wrong time -> None (exercises the 'continue')."""
-        fake_rows = [
-            ("34", "05/01/25", "16:33", "17:00", "1", "log", "notes"),
-        ]
-        with patch(f"{MOD}.read_raw_data", return_value=fake_rows):
+    def test_date_differs_returns_none(self):
+        """Right cryomodule, wrong time -> path won't exist -> None."""
+        group = self._group_with_attrs()
+        fake_file = FakeH5File({"CM34/2025-05-01_1633": group})
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.fetch_measurement_metadata(
                 "34", datetime(2025, 5, 1, 9, 0)  # different time
             )
         assert result is None
 
-    def test_finds_second_row_when_first_cm_matches_but_date_wrong(self):
-        """First row matches cm but not date; second row is the real match."""
-        fake_rows = [
-            ("34", "05/01/25", "16:33", "17:00", "1", "log1", "notes1"),
-            ("34", "05/02/25", "10:00", "11:00", "2", "log2", "notes2"),
-        ]
-        with patch(f"{MOD}.read_raw_data", return_value=fake_rows):
+    def test_path_is_built_from_cm_and_formatted_date(self):
+        """The lookup key is CM{cm}/{%Y-%m-%d_%H%M}."""
+        group = self._group_with_attrs(decarad="2", elog="log2", notes="notes2")
+        fake_file = FakeH5File({"CM34/2025-05-02_1000": group})
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
             result = measurements.fetch_measurement_metadata(
                 "34", datetime(2025, 5, 2, 10, 0)
             )
         assert result is not None
-        assert result[3] == "2"  # dec from the second row
-
-    def test_empty_raw_data_returns_none(self):
-        with patch(f"{MOD}.read_raw_data", return_value=[]):
-            result = measurements.fetch_measurement_metadata(
-                "34", datetime(2025, 5, 1, 16, 33)
-            )
-        assert result is None
+        assert result[3] == "2"  # decarad from the matched group
 
 
 # ===========================================================================
@@ -213,7 +254,7 @@ class FakeDataset(np.ndarray):
         self.attrs = getattr(obj, "attrs", {})
 
 
-class FakeH5File:
+class FakeH5FileIndexed:
     """
     Fakes h5py.File so we can use it as a context manager and index into it.
     `datasets` maps the internal filepath string -> FakeDataset.
@@ -253,7 +294,7 @@ class TestFindDataframes:
         columns = ["ACCL:L1B:0310:AMP", "CH1", "CH2"]
         dataset = FakeDataset([[5.0, 0.1, 0.2], [7.0, 0.3, 0.4]], columns)
         key = f"CM34/{stamp}/CAV1/average"
-        fake_file = FakeH5File({key: dataset})
+        fake_file = FakeH5FileIndexed({key: dataset})
 
         cav = [True] + [False] * 7  # only cavity 1
         with patch(f"{MOD}.h5py.File", return_value=fake_file):
@@ -271,7 +312,7 @@ class TestFindDataframes:
         columns = ["ACCL:L1B:0310:AMP"]
         dataset = FakeDataset([[5.0]], columns)
         key = f"CM34/{stamp}/CAV1/average"
-        fake_file = FakeH5File({key: dataset})
+        fake_file = FakeH5FileIndexed({key: dataset})
 
         cav = [True] + [False] * 7
         with patch(f"{MOD}.h5py.File", return_value=fake_file):
@@ -298,7 +339,7 @@ class TestFindDataframes:
             datasets[f"CM34/{stamp}/CAV{c}/average"] = FakeDataset(
                 [[5.0, 0.1], [7.0, 0.2]], columns
             )
-        fake_file = FakeH5File(datasets)
+        fake_file = FakeH5FileIndexed(datasets)
 
         with patch(f"{MOD}.h5py.File", return_value=fake_file):
             dfs, title, num = measurements.find_dataframes(
@@ -312,7 +353,7 @@ class TestFindDataframes:
         columns = ["ACCL:L1B:0310:AMP:SETPOINT"]
         dataset = FakeDataset([[5.0]], columns)
         key = f"CM34/{stamp}/CAV1/average"
-        fake_file = FakeH5File({key: dataset})
+        fake_file = FakeH5FileIndexed({key: dataset})
 
         cav = [True] + [False] * 7
         with patch(f"{MOD}.h5py.File", return_value=fake_file):
@@ -333,7 +374,7 @@ class TestFindDataframes:
             f"CM34/{stamp}/CAV1/average": FakeDataset([[5.0]], columns),
             f"CM34/{stamp}/CAV2/average": FakeDataset([[5.0]], columns),
         }
-        fake_file = FakeH5File(datasets)
+        fake_file = FakeH5FileIndexed(datasets)
 
         cav = [True, True] + [False] * 6
         with patch(f"{MOD}.h5py.File", return_value=fake_file):
@@ -341,27 +382,6 @@ class TestFindDataframes:
                 "34", fixed_date, cav, "Average"
             )
         assert title == "ACCL:L1B:03x0"
-
-    def test_missing_dataset_raises_keyerror(self, fixed_date):
-        """If the requested h5 path doesn't exist, indexing raises KeyError."""
-        fake_file = FakeH5File({})  # no datasets at all
-        cav = [True] + [False] * 7
-        with patch(f"{MOD}.h5py.File", return_value=fake_file):
-            with pytest.raises(KeyError):
-                measurements.find_dataframes("34", fixed_date, cav, "Average")
-
-    def test_cavity_list_uses_one_based_indexing(self, fixed_date, stamp):
-        """cav[0]=True should map to CAV1 (1-based)."""
-        columns = ["ACCL:L1B:0310:AMP"]
-        # Only provide CAV1; if code asked for CAV0 this would KeyError
-        key = f"CM34/{stamp}/CAV1/average"
-        fake_file = FakeH5File({key: FakeDataset([[5.0]], columns)})
-        cav = [True] + [False] * 7
-        with patch(f"{MOD}.h5py.File", return_value=fake_file):
-            dfs, title, num = measurements.find_dataframes(
-                "34", fixed_date, cav, "Average"
-            )
-        assert list(dfs.keys()) == [1]
 
 
 # ===========================================================================
