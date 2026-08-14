@@ -9,6 +9,7 @@ import pytest
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
+    FrequencyTuningData,
     PhaseCheckpoint,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.frequency_tuning import (
@@ -100,8 +101,16 @@ def phase(context, fast_limits):
 
 
 def _seed_cold_landing(phase, df_cold_hz=5000.0):
-    """Record a cold-landing checkpoint and make DF_COLD read back matching it,
-    so the DF_COLD gate in _tune_to_resonance is satisfied."""
+    """Record a cold landing the way _record_cold_landing does, and make DF_COLD
+    read back matching it, so the DF_COLD gate in _tune_to_resonance is
+    satisfied.
+
+    The frequency goes on the record rather than into a phase_history
+    checkpoint: the record is the single source the gate reads, precisely so
+    that it survives a relaunch. The checkpoint is still appended because
+    finalize_phase() reads checkpoints to assemble the final result.
+    """
+    phase._store_df_cold_hz(df_cold_hz)
     phase.context.record.phase_history.append(
         PhaseCheckpoint(
             phase=phase.phase_type,
@@ -113,6 +122,131 @@ def _seed_cold_landing(phase, df_cold_hz=5000.0):
         )
     )
     phase.cavity.df_cold_pv_obj.get.return_value = df_cold_hz
+
+
+class TestColdLandingSurvivesRestart:
+    """The tuning gate must not depend on in-memory phase_history.
+
+    record.phase_history has no table or column behind it, so quitting mid-phase
+    empties it. While the gate read that checkpoint, tuning failed with "Cold
+    landing frequency was not recorded" on every relaunch, with no way forward
+    short of re-running stage 1. The record is now the single source.
+    """
+
+    def test_gate_passes_from_stored_record_with_no_checkpoints(self, phase):
+        phase.validate_prerequisites()  # binds phase.cavity
+        phase.context.record.frequency_tuning = FrequencyTuningData(
+            df_cold_hz=9196.0
+        )
+        phase.cavity.df_cold_pv_obj.get.return_value = 9196.0
+        assert phase.context.record.phase_history == []
+
+        assert phase._check_df_cold_recorded() is None
+
+    def test_gate_still_fails_when_nothing_recorded_anywhere(self, phase):
+        phase.validate_prerequisites()
+        phase.context.record.frequency_tuning = None
+        phase.cavity.df_cold_pv_obj.get.return_value = 0.0
+
+        result = phase._check_df_cold_recorded()
+
+        assert result is not None
+        assert result.result == PhaseResult.FAILED
+        assert "not recorded" in result.message
+
+    def test_record_cold_landing_stores_the_frequency_on_the_record(
+        self, phase
+    ):
+        """The step itself makes the value durable, so no fallback is needed."""
+        phase.validate_prerequisites()
+        phase.cavity.detune_chirp = 2222.0
+
+        result = phase._record_cold_landing()
+
+        assert result.result == PhaseResult.SUCCESS
+        assert phase.context.record.frequency_tuning.df_cold_hz == 2222.0
+
+    def test_record_cold_landing_preserves_other_phase_fields(self, phase):
+        """Storing one field must not wipe data another stage already saved."""
+        phase.validate_prerequisites()
+        phase.context.record.frequency_tuning = FrequencyTuningData(
+            hz_per_microstep=0.0055
+        )
+        phase.cavity.detune_chirp = 2222.0
+
+        phase._record_cold_landing()
+
+        data = phase.context.record.frequency_tuning
+        assert data.df_cold_hz == 2222.0
+        assert data.hz_per_microstep == 0.0055
+
+    def test_finalize_is_complete_with_every_checkpoint_lost(self, phase):
+        """A run split across launches must still finalize as complete.
+
+        Every stage stores its own result on the record, so finalize_phase()
+        does not depend on phase_history surviving. Previously a phase whose
+        stages spanned two launches finalized with five of six fields None and
+        passed=False, silently recording a fully commissioned cavity as failed.
+        """
+        phase.validate_prerequisites()
+        phase.cavity.detune_chirp = 9196.0
+        phase.cavity.fscan_8pi9_mode_pv_obj.get.return_value = -800000.0
+        phase.cavity.fscan_7pi9_mode_pv_obj.get.return_value = -900000.0
+
+        phase._record_cold_landing()
+        phase._store_phase_fields(hz_per_microstep=0.0055)
+        phase._tuning_success_result(signed_total=-984108, ack_ceiling=None)
+        phase._read_mode_frequencies()
+
+        # Every launch boundary drops the in-memory checkpoints.
+        phase.context.record.phase_history.clear()
+        phase.finalize_phase()
+
+        data = phase.context.record.frequency_tuning
+        assert data.df_cold_hz == 9196.0
+        assert data.hz_per_microstep == 0.0055
+        assert data.cold_landing_steps == 984108
+        assert data.steps_to_resonance == 984108
+        assert data.mode_8pi_9_frequency == -800000.0
+        assert data.mode_7pi_9_frequency == -900000.0
+        assert data.initial_timestamp is not None
+        assert data.final_timestamp is not None
+        assert data.is_complete is True
+        assert data.passed is True
+
+    def test_probe_stores_hz_per_microstep_on_the_record(self, phase):
+        _setup_phase(phase)
+        phase.cavity.stepper_tuner.move = Mock()
+        type(phase.cavity).detune_chirp = property(lambda _s: 5000.0)
+
+        phase._store_phase_fields(hz_per_microstep=-0.0055)
+
+        assert phase.context.record.frequency_tuning.hz_per_microstep == -0.0055
+
+    def test_store_phase_fields_ignores_none_and_keeps_existing(self, phase):
+        """A None from one stage must not erase a value another stage stored."""
+        phase.validate_prerequisites()
+        phase._store_phase_fields(df_cold_hz=9196.0)
+
+        phase._store_phase_fields(df_cold_hz=None, hz_per_microstep=0.0055)
+
+        data = phase.context.record.frequency_tuning
+        assert data.df_cold_hz == 9196.0
+        assert data.hz_per_microstep == 0.0055
+
+    def test_stored_value_still_enforces_df_cold_match(self, phase):
+        """Reading from the record must not skip the DF_COLD agreement check."""
+        phase.validate_prerequisites()
+        phase.context.record.frequency_tuning = FrequencyTuningData(
+            df_cold_hz=9196.0
+        )
+        phase.cavity.df_cold_pv_obj.get.return_value = 0.0
+
+        result = phase._check_df_cold_recorded()
+
+        assert result is not None
+        assert result.result == PhaseResult.FAILED
+        assert "DF_COLD does not match" in result.message
 
 
 def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0, seed_cold=True):

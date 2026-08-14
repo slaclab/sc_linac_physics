@@ -171,8 +171,11 @@ class FrequencyTuningPhase(PhaseBase):
         reliable reference: DF_COLD defaults to a valid 0, so there is no
         INVALID severity to key off — we require DF_COLD to match it.
         """
-        cold = self._get_checkpoint_data("record_cold_landing")
-        recorded = cold.get("df_cold_hz")
+        # One source: the record. _record_cold_landing writes the frequency
+        # there, so this holds within a single run and equally after a relaunch.
+        # Reading the step's phase_history checkpoint instead would only work
+        # in-session — that list is in memory, with no table behind it.
+        recorded = self._persisted_df_cold_hz()
         if recorded is None:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
@@ -501,13 +504,22 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=3.0,
             )
 
+        # Record it on the record, not only in the step's returned data. The
+        # record is the one copy that outlives both the step's checkpoint (in
+        # memory) and the session, so it is what later steps and later launches
+        # both read. See _check_df_cold_recorded.
+        initial_timestamp = datetime.now()
+        self._store_phase_fields(
+            df_cold_hz=df_cold_hz, initial_timestamp=initial_timestamp
+        )
+
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=f"Cold landing frequency recorded: detune={df_cold_hz:.0f} Hz. "
             "Push to DF_COLD when satisfied.",
             data={
                 "df_cold_hz": df_cold_hz,
-                "initial_timestamp": datetime.now().isoformat(),
+                "initial_timestamp": initial_timestamp.isoformat(),
             },
         )
 
@@ -632,6 +644,7 @@ class FrequencyTuningPhase(PhaseBase):
         # delta = d(CHIRP:DF) for +probe microsteps, so SCALE = -delta/probe.
         signed_hz_per_microstep = -delta / probe
         self._hz_per_microstep = signed_hz_per_microstep
+        self._store_phase_fields(hz_per_microstep=signed_hz_per_microstep)
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
@@ -823,11 +836,17 @@ class FrequencyTuningPhase(PhaseBase):
     def _tuning_success_result(
         self, signed_total: int, ack_ceiling: float | None
     ) -> PhaseStepResult:
+        final_timestamp = datetime.now()
         data = {
             "total_steps": abs(signed_total),
             "cold_landing_steps": -signed_total,
-            "final_timestamp": datetime.now().isoformat(),
+            "final_timestamp": final_timestamp.isoformat(),
         }
+        self._store_phase_fields(
+            steps_to_resonance=abs(signed_total),
+            cold_landing_steps=-signed_total,
+            final_timestamp=final_timestamp,
+        )
         # Audit trail: if the operator authorized proceeding over the temp
         # limit, record the ceiling and who authorized it.
         if ack_ceiling is not None and ack_ceiling > self.limits.temp_limit_c:
@@ -976,6 +995,10 @@ class FrequencyTuningPhase(PhaseBase):
                     retry_delay_seconds=3.0,
                 )
         results["timestamp"] = datetime.now().isoformat()
+        self._store_phase_fields(
+            mode_8pi_9_frequency=results["mode_8pi_9_hz"],
+            mode_7pi_9_frequency=results["mode_7pi_9_hz"],
+        )
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
@@ -995,6 +1018,38 @@ class FrequencyTuningPhase(PhaseBase):
     # ------------------------------------------------------------------
     # Finalization
     # ------------------------------------------------------------------
+
+    def _persisted_df_cold_hz(self) -> float | None:
+        """Return the cold-landing detune stored on the record, if any."""
+        record = getattr(self.context, "record", None)
+        data = getattr(record, "frequency_tuning", None) if record else None
+        return getattr(data, "df_cold_hz", None) if data else None
+
+    def _store_phase_fields(self, **fields) -> None:
+        """Merge step results onto the record as each step produces them.
+
+        Each step stores its own contribution so the record is complete even
+        when the phase is run across more than one launch. Without this, the
+        only copy of a step's result is its phase_history checkpoint, which is
+        in-memory — so finalize_phase() would write None for every stage
+        completed in an earlier session and mark the phase not-complete.
+
+        Only the named fields are touched, so a later stage cannot wipe an
+        earlier one. Persisting to the database is the session's job; the phase
+        layer deliberately has no database dependency.
+        """
+        record = getattr(self.context, "record", None)
+        if record is None:
+            return
+        data = record.frequency_tuning or FrequencyTuningData()
+        for name, value in fields.items():
+            if value is not None:
+                setattr(data, name, value)
+        record.frequency_tuning = data
+
+    def _store_df_cold_hz(self, df_cold_hz: float) -> None:
+        """Store the cold-landing detune on the record."""
+        self._store_phase_fields(df_cold_hz=df_cold_hz)
 
     def _get_checkpoint_data(self, step_name: str) -> dict:
         checkpoint = next(
