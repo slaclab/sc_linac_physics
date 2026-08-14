@@ -2,10 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatch
 
-from datetime import datetime
 from scipy.optimize import curve_fit
 from sc_linac_physics.applications.field_emission.measurements import (
-    find_dataframes,
     get_columns,
 )
 
@@ -62,19 +60,3 @@ def add_poly_fit(amp, rad, axis, label, color):
         color=color, label=f"C1: {param[0]:.1g}    C2: {param[1]:.1f}"
     )
     return line, patch
-
-
-if __name__ == "__main__":
-    cryo = 34
-    day = datetime(2025, 5, 1, 16, 33)
-    cav = [True, False, True, True, True, True, True, True]
-    reads = "Average"
-    r_chan = [True, False, False, False, False, False, False, False]
-    fit_line = True
-
-    data, label0, num0 = find_dataframes(cryo, day, cav, reads)
-    for dat in data.values():
-        x_axis, columns = get_columns(dat, r_chan)
-        fig, axes = plt.subplots(1, 1, figsize=(5, 4))
-        plot_amp_vs_rad(dat, axes, r_chan, fit_line)
-        plt.show()

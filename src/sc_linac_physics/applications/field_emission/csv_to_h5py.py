@@ -12,12 +12,10 @@ READOUT/INSTANT READOUT hierarchy for a folder of .CSVs with specific naming con
 ex: cm08_23_10_06_08_42_cavity7_average.csv.
 """
 
-
 input_path = "/Users/kvetta/Desktop/combined_data/"
 input_csvs = glob.glob(os.path.join(input_path, "*.csv"))
 h5_filename = "field_emission_data.hdf5"
 all_cm_csv = "All FE measurements by CM.csv"
-
 
 metadata_lookup = {}  # key: (cm, month, day, year, hour, minute) -> row
 with open(all_cm_csv) as csvfile:

@@ -83,19 +83,3 @@ def get_columns(df, r_channels):
     x_amplitude = df2.iloc[:, 0]
     rad_cols = df2.iloc[:, idx_list]
     return x_amplitude, rad_cols
-
-
-if __name__ == "__main__":
-    cryo_str = "34"
-    cryo = 34
-    day = datetime(2025, 5, 1, 16, 33)
-    cavi = [True, False, True, True, True, True, True, True]
-    # cavi =[True, False, False, False, False, False, False, False]
-    reads = "Average"
-    r_chan = [True, False, False, False, False, False, False, False]
-
-    data, label, n = find_dataframes(cryo, day, cavi, reads)
-    for dat in data.values():
-        x_axis, cols = get_columns(dat, r_chan)
-        print(x_axis)
-        print(cols)

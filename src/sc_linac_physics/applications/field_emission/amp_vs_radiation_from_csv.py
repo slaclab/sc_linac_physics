@@ -19,7 +19,6 @@ is not listed in .csv, time is start date listed in .csv file + 24 hours. Most h
 after start and stop times for cavities are known (or after running amp_vs_time).
 """
 
-
 _DATA_DIR = Path(__file__).resolve().parent
 DEFAULT_INPUT_CSV = _DATA_DIR / "All FE measurements by CM.csv"
 DEFAULT_OUTPUT_FOLDER = _DATA_DIR

@@ -19,7 +19,6 @@ is not listed in .csv, time is start date listed in .csv file + 24 hours. Attemp
 data to closest cavity activity window. Not yet perfect trimming.
 """
 
-
 _DATA_DIR = Path(__file__).resolve().parent
 DEFAULT_INPUT_CSV = _DATA_DIR / "All FE measurements by CM.csv"
 DEFAULT_OUTPUT_FOLDER = _DATA_DIR
@@ -79,23 +78,6 @@ def plot_cavity_data(cavity_data, cryomodule, timestamp, output_path):
 def main():
     summary = "Plot amplitude vs time from .csv file"
     arg = file_handling(summary)
-
-    # INDIVIDUAL CASE
-    # cr = 8
-    # cryo = f"{cr:02d}"
-    # start = datetime(2023, 10, 6, 8, 0)
-    # end = datetime(2023, 10, 6, 9, 30)
-    # stamp = start.strftime("%y_%m_%d")
-    #
-    # read_from_csv(input_csv)
-    # print(f"Processing CM{cryo} {start} -> {end}")
-    # amplitude_pvs = build_amplitude_pvs(cryo)
-    # dataframes = fetch_pv_data(amplitude_pvs, start, end)
-    # aligned_data = align_pvs_to_common_time(dataframes)
-    # aligned_data = trim_ends(aligned_data, 0.8)
-    # csv_path = args.output / f"amplitudes_{cryo}_{stamp}.csv"
-    # aligned_data.to_csv(csv_path)
-    # plot_cavity_data(aligned_data, cryo, stamp, args.output)
 
     # Process
     for cryo, _, start, end, stamp in read_from_csv(arg.input):
