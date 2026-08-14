@@ -3,59 +3,48 @@ import re
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from .csv_reader import read_from_csv, read_raw_data
 
 _DATA_DIR = Path(__file__).resolve().parent
 input_csv = _DATA_DIR / "All FE measurements by CM.csv"
-h5_filename = _DATA_DIR / "field_emission_data.hdf5"
+h5_filename = _DATA_DIR / "field_emission_data_no1.hdf5"
 
 
 def match_measurement_dates(cryomodule):
-    """match cryomodule to available measurement dates"""
+    """match cryomodule str to available measurement dates in h5 file"""
     measurements = []
-    for csv_cryo, csv_dec, csv_start, csv_end, csv_stamp in read_from_csv(
-        input_csv
-    ):
-        if cryomodule == csv_cryo:
-            display_str = f"CM{csv_cryo}    {csv_start}"
+    with h5py.File(h5_filename, "r") as h5f:
+        h5_cryo = h5f.get(f"CM{cryomodule}")
+        for date in h5_cryo:
+            h5_date = datetime.strptime(date, "%Y-%m-%d_%H%M")
+            display_str = f"CM{cryomodule}    {h5_date}"
             measurements.append(
                 {
                     "display": display_str,
-                    "cm": csv_cryo,
-                    "date": csv_start,
+                    "cm": cryomodule,
+                    "date": h5_date,
                 }
             )
     return measurements
 
 
 def fetch_measurement_metadata(cm, date):
-    """use measurement to find metadata about selected measurement date"""
-    for (
-        csv_cryo,
-        csv_date,
-        csv_start,
-        csv_stop,
-        csv_dec,
-        csv_log,
-        csv_notes,
-    ) in read_raw_data(input_csv):
-        if cm == csv_cryo:
-            csv_date_fmt = datetime.strptime(
-                f"{csv_date} {csv_start}", "%m/%d/%y %H:%M"
-            )
-            if csv_date_fmt == date:
-                date_str = csv_date_fmt.strftime("%A, %B %d, %Y")
-                return (
-                    date_str,
-                    csv_start,
-                    csv_stop,
-                    csv_dec,
-                    csv_log,
-                    csv_notes,
-                )
-            else:
-                continue
-    return None
+    """use measurement to find metadata about selected measurement date from h5 file"""
+    formatted_date = datetime.strftime(date, "%Y-%m-%d_%H%M")
+    with h5py.File(h5_filename, "r") as h5f:
+        h5f_date_group = h5f.get(f"CM{cm}/{formatted_date}")
+        if h5f_date_group is None:
+            return None
+        date = h5f_date_group.attrs["date"]
+        formatted_date = datetime.strptime(date, "%m/%d/%y")
+        date_str = formatted_date.strftime("%A, %B %d, %Y")
+        return (
+            date_str,
+            h5f_date_group.attrs["time_start"],
+            h5f_date_group.attrs["time_end"],
+            h5f_date_group.attrs["decarad"],
+            h5f_date_group.attrs["elog"],
+            h5f_date_group.attrs["notes"],
+        )
 
 
 def find_dataframes(cm, date, cav, read):
@@ -97,6 +86,7 @@ def get_columns(df, r_channels):
 
 
 if __name__ == "__main__":
+    cryo_str = "34"
     cryo = 34
     day = datetime(2025, 5, 1, 16, 33)
     cavi = [True, False, True, True, True, True, True, True]
