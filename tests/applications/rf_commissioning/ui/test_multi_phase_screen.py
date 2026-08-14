@@ -164,7 +164,7 @@ def test_refresh_cavity_completion_label_counts_complete_records(display_stub):
         display_stub, "01", "L1B"
     )
 
-    assert display_stub.cavity_completion_label.text() == "1/8"
+    assert display_stub.cavity_completion_label.text() == "1/8 done"
 
 
 def test_populate_operator_combo_adds_placeholder_and_restore(display_stub):

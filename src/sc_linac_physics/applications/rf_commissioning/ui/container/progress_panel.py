@@ -25,6 +25,22 @@ _CONN_STYLE = (
     f"color: {TEXT_MUTED}; font-size: 10px; background-color: transparent;"
 )
 
+# Glyph + word, never glyph alone — see _PHASE_STATUS_WORDS in tab_state.py for
+# the operator feedback behind this. The word goes on a second line so the
+# single-row strip still fits every phase across the window width.
+_NODE_STATUS_WORDS = {
+    "○": "",  # not started — the empty circle needs no gloss
+    "▶": "Running",
+    "✔": "Done",
+    "✖": "Failed",
+}
+
+
+def _node_text(glyph: str, label: str) -> str:
+    """Render one progress node as 'glyph label' plus a spelled-out status."""
+    word = _NODE_STATUS_WORDS.get(glyph, "")
+    return f"{glyph} {label}\n{word}" if word else f"{glyph} {label}"
+
 
 class _ProgressMixin:
     def _build_compact_progress_bar(self) -> QWidget:
@@ -51,7 +67,7 @@ class _ProgressMixin:
             short = label.replace("\n", " ")
             self._phase_labels[phase] = short
 
-            node = QLabel(f"○ {short}")
+            node = QLabel(_node_text("○", short))
             node.setAlignment(Qt.AlignCenter)
             node.setStyleSheet(f"{_NODE_BASE} color: {TEXT_MUTED};")
             self.phase_indicators[phase] = node
@@ -84,24 +100,24 @@ class _ProgressMixin:
             lbl = self._phase_labels.get(phase, "")
 
             if status is not None and status.value in {"complete", "skipped"}:
-                node.setText(f"✔ {lbl}")
+                node.setText(_node_text("✔", lbl))
                 node.setStyleSheet(
                     f"{_NODE_BASE} color: {COLOR_SUCCESS}; font-weight: bold;"
                 )
             elif status is not None and status.value == "failed":
-                node.setText(f"✖ {lbl}")
+                node.setText(_node_text("✖", lbl))
                 node.setStyleSheet(
                     f"{_NODE_BASE} color: {COLOR_ERROR}; font-weight: bold;"
                 )
             elif idx == current_idx:
-                node.setText(f"▶ {lbl}")
+                node.setText(_node_text("▶", lbl))
                 node.setStyleSheet(
                     f"{_NODE_BASE} color: {COLOR_PRIMARY}; font-weight: bold;"
                     f" background-color: rgba(123,140,222,0.15);"
                     f" border-radius: {RADIUS_MD};"
                 )
             else:
-                node.setText(f"○ {lbl}")
+                node.setText(_node_text("○", lbl))
                 node.setStyleSheet(
                     f"{_NODE_BASE} color: {TEXT_SECONDARY};"
                     if idx < current_idx

@@ -3,7 +3,7 @@
 import signal
 import sys
 
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -45,6 +45,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     BG_PANEL,
     BORDER,
     COLOR_PRIMARY,
+    FONT_SIZE_TAB,
     SANS_FONT_STACK,
     TEXT_MUTED,
 )
@@ -114,6 +115,21 @@ class MultiPhaseCommissioningDisplay(
         # 2. MAIN CONTENT AREA: phase tabs fill all remaining space
         self.tabs = QTabWidget()
         self.tabs.setTabPosition(QTabWidget.North)
+        # Never elide or truncate tab text: the status word appended by
+        # _TabsMixin._format_tab_text() is the point of the label, so overflow
+        # has to become scroll buttons rather than a clipped "Runnin".
+        self.tabs.setElideMode(Qt.ElideNone)
+        self.tabs.tabBar().setUsesScrollButtons(True)
+        # Two deliberate omissions below:
+        #  - no `color:` on QTabBar::tab — a stylesheet color takes precedence
+        #    over QTabBar.setTabTextColor(), which is how
+        #    _TabsMixin._update_tab_states() encodes per-phase status. Enabled
+        #    tab text color is owned there; only :disabled is set here.
+        #  - no state-dependent `font-weight`/`font-size` (e.g. bold on
+        #    :selected). Qt sizes every tab from the tab bar's base font, so a
+        #    heavier font in one state renders wider than the width it was
+        #    allotted and the text clips. The selected tab is distinguished by
+        #    background and underline instead.
         self.tabs.setStyleSheet(f"""
             QTabWidget::pane {{
                 background-color: {BG_DEEP};
@@ -122,17 +138,17 @@ class MultiPhaseCommissioningDisplay(
             }}
             QTabBar::tab {{
                 background-color: {BG_PANEL};
-                padding: 6px 14px;
+                padding: 7px 14px;
                 border: 1px solid {BORDER};
                 border-bottom: none;
                 border-radius: 0px;
                 font-family: {SANS_FONT_STACK};
-                font-size: 11px;
+                font-size: {FONT_SIZE_TAB};
                 min-width: 80px;
             }}
             QTabBar::tab:selected {{
                 background-color: {BG_DEEP};
-                border-bottom: 2px solid {COLOR_PRIMARY};
+                border-bottom: 3px solid {COLOR_PRIMARY};
             }}
             QTabBar::tab:hover:!selected {{
                 background-color: {BG_INTERACTIVE};
@@ -237,12 +253,12 @@ class MultiPhaseCommissioningDisplay(
     ) -> None:
         """Update header cavity completion counter for the selected cryomodule."""
         if not cryomodule or cryomodule == "...":
-            self.cavity_completion_label.setText("0/8")
+            self.cavity_completion_label.setText("0/8 done")
             return
 
         effective_linac = linac or get_linac_for_cryomodule(cryomodule)
         if not effective_linac:
-            self.cavity_completion_label.setText("0/8")
+            self.cavity_completion_label.setText("0/8 done")
             return
 
         linac_index = int(effective_linac[1])
@@ -254,7 +270,7 @@ class MultiPhaseCommissioningDisplay(
             for record in cavity_records
             if record.current_phase and record.current_phase.value == "complete"
         )
-        self.cavity_completion_label.setText(f"{completed}/8")
+        self.cavity_completion_label.setText(f"{completed}/8 done")
 
     def _open_magnet_checkout_screen(self) -> None:
         """Open modal dialog for CM magnet checkout status and notes."""

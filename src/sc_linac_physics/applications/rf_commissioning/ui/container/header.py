@@ -16,6 +16,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     BG_PANEL,
     BORDER,
     BORDER_EMPHASIS,
+    COLOR_PRIMARY,
     RADIUS_MD,
     TEXT_MUTED,
     TEXT_PRIMARY,
@@ -76,6 +77,33 @@ _GHOST_BTN = (
 
 _MUTED_LABEL_STYLE = f"QLabel {{ color: {TEXT_MUTED}; font-size: 9pt; }}"
 
+# Which cavity is selected is the single most consequential piece of context in
+# the window — everything the phase displays command goes to this cavity — but
+# it was rendering in the same pale secondary text as the surrounding chrome.
+# Operator feedback on PR #270: "Which cavity is chosen seems small/pale. Bold
+# text?"  The CM and cavity combos therefore get primary-text, bold, and a step
+# up in size relative to the rest of the header.
+_SELECTION_COMBO_STYLE = f"""
+    QComboBox {{
+        background-color: {BG_INTERACTIVE};
+        color: {TEXT_PRIMARY};
+        font-weight: bold;
+        font-size: 11pt;
+        border: 1px solid {BORDER_EMPHASIS};
+        border-radius: {RADIUS_MD};
+        padding: 2px 6px 2px 8px;
+        min-height: 26px;
+    }}
+    QComboBox:hover {{
+        background-color: rgba(151, 165, 232, 0.15);
+        border-color: {COLOR_PRIMARY};
+    }}
+    QComboBox::drop-down {{
+        border: none;
+        width: 18px;
+    }}
+"""
+
 
 def _vline() -> QFrame:
     sep = QFrame()
@@ -86,10 +114,12 @@ def _vline() -> QFrame:
 
 
 def _make_combo(
-    fixed_width: int | None = None, popup_min_width: int = 120
+    fixed_width: int | None = None,
+    popup_min_width: int = 120,
+    emphasized: bool = False,
 ) -> QComboBox:
     combo = QComboBox()
-    combo.setStyleSheet(_COMBO_STYLE)
+    combo.setStyleSheet(_SELECTION_COMBO_STYLE if emphasized else _COMBO_STYLE)
     if fixed_width is not None:
         combo.setFixedWidth(fixed_width)
     combo.view().setStyleSheet(_POPUP_STYLE)
@@ -128,7 +158,9 @@ class _HeaderMixin:
         cm_lbl = QLabel("CM")
         cm_lbl.setStyleSheet(_MUTED_LABEL_STYLE)
         row.addWidget(cm_lbl)
-        self.cryomodule_combo = _make_combo(fixed_width=80, popup_min_width=100)
+        self.cryomodule_combo = _make_combo(
+            fixed_width=92, popup_min_width=100, emphasized=True
+        )
         self.cryomodule_combo.addItem("...", "")
         self.cryomodule_combo.addItems(sorted(ALL_CRYOMODULES))
         self.cryomodule_combo.setToolTip("Cryomodule")
@@ -137,13 +169,17 @@ class _HeaderMixin:
         cav_lbl = QLabel("Cav")
         cav_lbl.setStyleSheet(_MUTED_LABEL_STYLE)
         row.addWidget(cav_lbl)
-        self.cavity_combo = _make_combo(fixed_width=48, popup_min_width=60)
+        self.cavity_combo = _make_combo(
+            fixed_width=58, popup_min_width=60, emphasized=True
+        )
         self.cavity_combo.addItem("...", "")
         self.cavity_combo.addItems([str(i) for i in range(1, 9)])
         self.cavity_combo.setToolTip("Cavity number")
         row.addWidget(self.cavity_combo)
 
-        self.cavity_completion_label = QLabel("0/8")
+        # Carries its own "done" label: a bare "0/8" beside the cavity picker
+        # reads as an unexplained fraction unless you hover for the tooltip.
+        self.cavity_completion_label = QLabel("0/8 done")
         self.cavity_completion_label.setToolTip(
             "Cavities in this cryomodule that have completed commissioning"
         )
