@@ -478,6 +478,7 @@ _REPEATER_POLL_S = 0.05
 
 def main():
     import faulthandler
+    import sys
 
     try:
         faulthandler.enable()
@@ -485,6 +486,7 @@ def main():
         pass  # pytest in-process runner captures stderr without a real fd
     os.environ.setdefault("EPICS_CAS_AUTO_BEACON_ADDR_LIST", "no")
     os.environ.setdefault("EPICS_CAS_BEACON_ADDR_LIST", "127.0.0.1")
+
     service = SCLinacPhysicsService()
     _, run_options = ioc_arg_parser(
         default_prefix="", desc="Simulated CM Cavity Service"

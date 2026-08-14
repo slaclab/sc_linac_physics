@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from time import time
 from typing import DefaultDict, Optional, Dict, List, Tuple
 
-from lcls_tools.common.data.archiver import (
+from sc_linac_physics.utils.archiver import (
     get_values_over_time_range,
     ArchiveDataHandler,
 )
