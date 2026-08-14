@@ -93,10 +93,27 @@ class PhaseDisplayBase(Display):
             return (record.short_cavity_name, record.cryomodule)
         return None
 
-    def log_message(self, message: str, entry_type: str = "info") -> None:
-        """Add a message to the phase activity feed."""
+    def log_message(
+        self,
+        message: str,
+        entry_type: str = "info",
+        key: str | None = None,
+    ) -> None:
+        """Add a message to the phase activity feed.
+
+        A ``key`` marks the entry as resolvable in place by
+        ``resolve_log_message`` — used for steps that log on start and again on
+        completion, so the pair shares one row.
+        """
         if hasattr(self, "history_text"):
-            self.history_text.append(message, entry_type=entry_type)
+            self.history_text.append(message, entry_type=entry_type, key=key)
+
+    def resolve_log_message(
+        self, key: str, message: str, entry_type: str = "success"
+    ) -> None:
+        """Rewrite the feed entry previously logged under ``key``."""
+        if hasattr(self, "history_text"):
+            self.history_text.resolve(key, message, entry_type=entry_type)
 
     def show_error(self, message):
         """Show error message dialog."""
@@ -119,4 +136,6 @@ class PhaseDisplayBase(Display):
             self.local_current_step.setText(label)
         if hasattr(self, "local_progress_bar"):
             self.local_progress_bar.setValue(progress)
-        self.log_message(f"▶ {label}...")
+        # Keyed on the step so the controller's success/failure log rewrites
+        # this row rather than appending a second entry for the same step.
+        self.log_message(f"▶ {label}...", entry_type="progress", key=step_name)

@@ -21,6 +21,18 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status import (
+    STAGE_CARD_STYLE_IDLE,
+    STAGE_CARD_STYLE_RUNNING,
+    STAGE_STATUS_DONE,
+    STAGE_STATUS_FAILED,
+    STAGE_STATUS_NOT_STARTED,
+    STAGE_STATUS_RUNNING,
+    STAGE_STATUS_STYLE_DONE,
+    STAGE_STATUS_STYLE_FAILED,
+    STAGE_STATUS_STYLE_NOT_STARTED,
+    STAGE_STATUS_STYLE_RUNNING,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
     format_pv_update_message,
@@ -80,6 +92,8 @@ class FrequencyTuningController(QObject):
     phase_completed = pyqtSignal(object)
     phase_run_finished = pyqtSignal(bool, str)
     _log_signal = pyqtSignal(str)
+    # (key, message, entry_type) — resolves the step's in-progress feed row.
+    _resolve_log_signal = pyqtSignal(str, str, str)
     hz_per_step_updated = pyqtSignal(float)
     _stage_done = pyqtSignal(int)  # 1, 2, 3, or 4 (=finalize)
 
@@ -89,6 +103,8 @@ class FrequencyTuningController(QObject):
         self.session = session
         if hasattr(self.view, "log_message"):
             self._log_signal.connect(self.view.log_message)
+        if hasattr(self.view, "resolve_log_message"):
+            self._resolve_log_signal.connect(self.view.resolve_log_message)
 
         self.context: PhaseContext | None = None
         self.phase: FrequencyTuningPhase | None = None
@@ -153,6 +169,7 @@ class FrequencyTuningController(QObject):
 
     def _apply_stepper_pv_mapping(self, cavity) -> None:
         stepper = cavity.stepper_tuner
+        piezo = cavity.piezo
         pv_map = {}
         for widget_name, pv_addr in (
             ("steps_spinbox", stepper.step_des_pv),
@@ -164,6 +181,14 @@ class FrequencyTuningController(QObject):
             ("fscan_stat_readback", cavity.rack.pv_prefix + "FSCAN:STAT"),
             ("stage4_8pi9_label", cavity.pv_addr("FSCAN:8PI9MODE")),
             ("stage4_7pi9_label", cavity.pv_addr("FSCAN:7PI9MODE")),
+            # Piezo state and RF drive level — visible during tuning so that
+            # piezo feedback fighting the stepper is diagnosable, and
+            # correctable, without leaving this tab.
+            ("piezo_enable_stat_readback", piezo.enable_stat_pv),
+            ("piezo_enable_ctrl", piezo.enable_pv),
+            ("piezo_mode_stat_readback", piezo.feedback_stat_pv),
+            ("piezo_mode_ctrl", piezo.feedback_control_pv),
+            ("drive_level_readback", cavity.drive_level_pv),
         ):
             if hasattr(self.view, widget_name):
                 pv_map[getattr(self.view, widget_name)] = pv_addr
@@ -191,8 +216,17 @@ class FrequencyTuningController(QObject):
             )
             return
 
+        # Flip the stage card to "Running" on the button press itself, before
+        # _resolve_target() touches the database. Operator feedback on PR #270
+        # was that the status change was easy to miss because it landed after
+        # record creation and prerequisite validation, by which time the Run
+        # button had already greyed out and nothing else had visibly changed.
+        # Reverted below if we never actually get the stage started.
+        self._set_stage_status_running(1)
+
         target = self._resolve_target()
         if target is None:
+            self._set_stage_status_not_started(1)
             return
 
         cavity_name, cm, cav = target
@@ -218,6 +252,7 @@ class FrequencyTuningController(QObject):
         except Exception as exc:
             import traceback
 
+            self._set_stage_status_not_started(1)
             self.view.show_error(f"Failed to start Stage 1: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
 
@@ -443,18 +478,63 @@ class FrequencyTuningController(QObject):
     # UI state helpers
     # ------------------------------------------------------------------
 
+    def _set_stage_status(self, stage: int, text: str, style: str) -> None:
+        """Set one stage card's status label text and style together."""
+        status_lbl = getattr(self.view, f"stage{stage}_status_label", None)
+        if status_lbl is not None:
+            status_lbl.setText(text)
+            status_lbl.setStyleSheet(style)
+
+    def _set_stage_status_running(self, stage: int) -> None:
+        """Mark a stage card as running and highlight the card itself."""
+        self._set_stage_status(
+            stage, STAGE_STATUS_RUNNING, STAGE_STATUS_STYLE_RUNNING
+        )
+        self._highlight_stage_card(stage, running=True)
+
+    def _set_stage_status_not_started(self, stage: int) -> None:
+        """Return a stage card to its resting state."""
+        self._set_stage_status(
+            stage, STAGE_STATUS_NOT_STARTED, STAGE_STATUS_STYLE_NOT_STARTED
+        )
+        self._highlight_stage_card(stage, running=False)
+
+    def _highlight_stage_card(self, stage: int, running: bool) -> None:
+        """Swap a stage card's frame styling to mark it as the active stage.
+
+        The Run button greys out while a stage executes, so the card border and
+        tint are what keep the running stage identifiable (operator feedback on
+        PR #270).
+        """
+        card = getattr(self.view, f"stage{stage}_card", None)
+        if card is None:
+            return
+        card.setStyleSheet(
+            STAGE_CARD_STYLE_RUNNING if running else STAGE_CARD_STYLE_IDLE
+        )
+
+    def _clear_all_stage_highlights(self) -> None:
+        for stage in (1, 2, 3, 4):
+            self._highlight_stage_card(stage, running=False)
+
+    def _show_stage_description(self, stage: int, visible: bool) -> None:
+        """Show or hide a stage card's instructional description.
+
+        Hidden once the stage is Done — the text explains what the stage is
+        about to do, so afterwards it is just occupying vertical space that the
+        remaining stages need.
+        """
+        desc = getattr(self.view, f"stage{stage}_description", None)
+        if desc is not None:
+            desc.setVisible(visible)
+
     def _set_stage_running_ui(self, stage: int | None) -> None:
         self._stage_running = True
         if stage is not None:
             btn = getattr(self.view, f"stage{stage}_run_btn", None)
             if btn is not None:
                 btn.setEnabled(False)
-            status_lbl = getattr(self.view, f"stage{stage}_status_label", None)
-            if status_lbl is not None:
-                status_lbl.setText("⟳ Running...")
-                status_lbl.setStyleSheet(
-                    "QLabel { color: #3b82f6; font-weight: bold; }"
-                )
+            self._set_stage_status_running(stage)
 
         pause_btn = getattr(self.view, "pause_button", None)
         if pause_btn:
@@ -467,18 +547,18 @@ class FrequencyTuningController(QObject):
         self._update_toolbar_state("running")
 
     def _set_stage_done_ui(self, stage: int, success: bool) -> None:
-        status_lbl = getattr(self.view, f"stage{stage}_status_label", None)
-        if status_lbl is not None:
-            if success:
-                status_lbl.setText("✓ Done")
-                status_lbl.setStyleSheet(
-                    "QLabel { color: #10b981; font-weight: bold; }"
-                )
-            else:
-                status_lbl.setText("✗ Failed")
-                status_lbl.setStyleSheet(
-                    "QLabel { color: #dc2626; font-weight: bold; }"
-                )
+        if success:
+            self._set_stage_status(
+                stage, STAGE_STATUS_DONE, STAGE_STATUS_STYLE_DONE
+            )
+        else:
+            self._set_stage_status(
+                stage, STAGE_STATUS_FAILED, STAGE_STATUS_STYLE_FAILED
+            )
+        self._highlight_stage_card(stage, running=False)
+        # A finished stage no longer needs its "here is what this does" blurb;
+        # a failed one still does, since the operator is about to retry it.
+        self._show_stage_description(stage, visible=not success)
         btn = getattr(self.view, f"stage{stage}_run_btn", None)
         if btn is not None:
             btn.setEnabled(not success)
@@ -490,6 +570,7 @@ class FrequencyTuningController(QObject):
 
     def _clear_running_ui(self) -> None:
         self._stage_running = False
+        self._clear_all_stage_highlights()
         pause_btn = getattr(self.view, "pause_button", None)
         if pause_btn:
             pause_btn.setEnabled(False)
@@ -582,10 +663,22 @@ class FrequencyTuningController(QObject):
             self._on_stage4_done()
 
     def _on_stage1_done(self) -> None:
+        # Stage 1 exists to capture the cold landing frequency, so completing
+        # the steps without one is a failure, not a success. Reporting it as
+        # Done is what persisted records that unlock stage 2 and then fail on it.
+        if self._df_cold_hz is None:
+            self._set_stage_done_ui(1, success=False)
+            self.view.log_message(
+                "✗ Stage 1 finished without recording a cold landing "
+                "frequency — check the cavity detune readback and re-run."
+            )
+            return
+
         saved = self._save_stage_to_history(
             _STAGE_COLD_LANDING,
             {"df_cold_hz": self._df_cold_hz},
         )
+        self._persist_df_cold_to_record()
         self._set_stage_done_ui(1, success=saved)
         if not saved:
             return
@@ -641,6 +734,8 @@ class FrequencyTuningController(QObject):
 
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("Stage 2 — Awaiting Confirm")
+        # Not idle — the run is blocked on the operator confirming the fit.
+        self._update_toolbar_state("awaiting")
         self._log_signal.emit(
             f"Stage 2 complete: {abs(signed_hz):.4f} Hz/step measured. "
             "Review the fit on the plot, adjust Hz/step if needed, "
@@ -738,6 +833,34 @@ class FrequencyTuningController(QObject):
         # the operator wants to re-scan with different results.
         self.confirm_and_save()
 
+    def _persist_df_cold_to_record(self) -> None:
+        """Write the cold-landing detune onto the record and save it.
+
+        measurement_history alone is not enough: the phase gates stage 2 on
+        FrequencyTuningPhase._check_df_cold_recorded(), which can only see the
+        record (phase_history checkpoints are in-memory and do not survive a
+        restart). Without this, quitting between stage 1 and stage 2 left the
+        frequency recorded in history but invisible to the phase, and stage 2
+        failed with "Cold landing frequency was not recorded".
+        """
+        if self._df_cold_hz is None:
+            return
+        record = self.session.get_active_record()
+        if record is None:
+            return
+        existing = getattr(record.frequency_tuning, "df_cold_hz", None)
+        if existing == self._df_cold_hz:
+            return  # already durable; don't bump the record version for nothing
+        try:
+            data = record.frequency_tuning or FrequencyTuningData()
+            data.df_cold_hz = self._df_cold_hz
+            record.frequency_tuning = data
+            self.session.save_active_record()
+        except Exception as exc:
+            self._log_signal.emit(
+                f"Warning: could not persist cold landing to record: {exc}"
+            )
+
     def _update_partial_results(self) -> None:
         """Populate Stored Data panel with whatever fields are known so far."""
         partial = FrequencyTuningData(
@@ -794,7 +917,9 @@ class FrequencyTuningController(QObject):
                 self._create_step_checkpoint(step_name, result)
 
                 if result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP):
-                    self._log_signal.emit(f"✓ {_step_label(step_name)}")
+                    self._resolve_log_signal.emit(
+                        step_name, f"✓ {_step_label(step_name)}", "success"
+                    )
                     self._on_step_succeeded(step_name, result.data or {})
                     return True
 
@@ -813,8 +938,10 @@ class FrequencyTuningController(QObject):
                     )
                     return False
 
-                self._log_signal.emit(
-                    f"✗ {_step_label(step_name)}: {result.message}"
+                self._resolve_log_signal.emit(
+                    step_name,
+                    f"✗ {_step_label(step_name)}: {result.message}",
+                    "error",
                 )
                 return False
 
@@ -920,6 +1047,28 @@ class FrequencyTuningController(QObject):
         else:
             self.on_phase_failed(error_msg or "Phase execution failed")
 
+    def _find_open_phase_instance_id(self) -> int | None:
+        """Return the still-running frequency tuning instance for this record.
+
+        Only Stage 1 opens a phase instance, so a session that resumes an
+        existing record has no _active_phase_instance_id — finishing the phase
+        would then leave the instance stuck at in_progress. The tab row is
+        derived from instance status, not from record.set_phase_status, so a
+        stuck instance means the tab keeps reading "In progress" after Stage 4.
+        """
+        try:
+            instances = self.session.get_active_phase_instances()
+        except Exception:
+            return None
+        for instance in reversed(instances or []):
+            if (
+                instance.get("phase")
+                == CommissioningPhase.FREQUENCY_TUNING.value
+                and instance.get("status") == "in_progress"
+            ):
+                return instance.get("id")
+        return None
+
     def on_phase_completed(self) -> None:
         self._paused = False
         self._clear_running_ui()
@@ -936,9 +1085,13 @@ class FrequencyTuningController(QObject):
 
         try:
             if self.context and self.context.record.frequency_tuning:
-                if self._active_phase_instance_id is not None:
+                instance_id = (
+                    self._active_phase_instance_id
+                    or self._find_open_phase_instance_id()
+                )
+                if instance_id is not None:
                     self.session.complete_active_phase_instance(
-                        phase_instance_id=self._active_phase_instance_id,
+                        phase_instance_id=instance_id,
                         phase=CommissioningPhase.FREQUENCY_TUNING,
                         artifact_payload=self.context.record.frequency_tuning.to_dict(),
                     )
@@ -1278,12 +1431,9 @@ class FrequencyTuningController(QObject):
 
     def _reset_all_stages(self) -> None:
         """Return all stage widgets to their initial 'Not started' state."""
-        not_started_style = "QLabel { color: #9ca3af; }"
         for stage in (1, 2, 3, 4):
-            lbl = getattr(self.view, f"stage{stage}_status_label", None)
-            if lbl is not None:
-                lbl.setText("Not started")
-                lbl.setStyleSheet(not_started_style)
+            self._set_stage_status_not_started(stage)
+            self._show_stage_description(stage, visible=True)
             btn = getattr(self.view, f"stage{stage}_run_btn", None)
             if btn is not None:
                 btn.setEnabled(stage == 1)
@@ -1326,12 +1476,37 @@ class FrequencyTuningController(QObject):
         self._update_toolbar_state("idle")
 
     def _restore_stage1(self, data: dict, record, has_probe: bool) -> None:
+        # The stage-1 history row can exist while carrying a null df_cold_hz,
+        # so the row's presence alone is not proof the cold landing was
+        # recorded. Fall back to the record blob, and if the frequency is
+        # genuinely absent leave stage 1 runnable rather than marking it Done —
+        # otherwise reopening the cavity unlocks stage 2, which then fails
+        # immediately with "Cold landing not recorded" and no way forward.
+        df_cold_hz = data.get("df_cold_hz")
+        if df_cold_hz is None:
+            ft = getattr(record, "frequency_tuning", None)
+            df_cold_hz = getattr(ft, "df_cold_hz", None) if ft else None
+
+        if df_cold_hz is None:
+            self._df_cold_hz = None
+            self._set_stage_status_not_started(1)
+            self._enable_stage_btn(1)
+            self.view.log_message(
+                "Stage 1 was recorded without a cold landing frequency — "
+                "re-run Stage 1 before probing the stepper."
+            )
+            return
+
         self._set_stage_done_ui(1, success=True)
         btn = getattr(self.view, "stage1_run_btn", None)
         if btn is not None:
             btn.setEnabled(False)
 
-        self._df_cold_hz = data.get("df_cold_hz")
+        self._df_cold_hz = df_cold_hz
+        # Backfill records written before the frequency was persisted onto the
+        # record itself. Without this, a record whose cold landing only ever
+        # reached measurement_history still fails the phase's stage-2 gate.
+        self._persist_df_cold_to_record()
         self._rebuild_phase_context(record)
 
         if not has_probe:

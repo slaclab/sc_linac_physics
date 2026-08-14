@@ -20,16 +20,24 @@ from pydm.widgets import PyDMEnumComboBox, PyDMLabel, PyDMSpinbox
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
+from .stage_status import (
+    STAGE_CARD_STYLE_IDLE,
+    STAGE_STATUS_NOT_STARTED,
+    STAGE_STATUS_STYLE_NOT_STARTED,
+)
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
 from .theme import (
     BG_INSET,
     BG_PANEL,
     BORDER,
+    BORDER_EMPHASIS,
     COLOR_PRIMARY,
     RADIUS_LG,
     RADIUS_SM,
     SANS_FONT_STACK,
     TEXT_MUTED,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
 )
 
 
@@ -572,11 +580,22 @@ class FrequencyTuningUI(PhaseUIBase):
         checklist_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         main.addWidget(checklist_scroll, stretch=2)
 
-        # Center: plot + stepper settings
+        # Center: plot, then the two tuner-control panels side by side.
+        # Stepper and piezo sit in one row rather than stacked so both stay
+        # visible without pushing the plot up, and because they are read
+        # together — the piezo state is context for what the stepper is doing.
         center = QVBoxLayout()
         center.setSpacing(4)
         center.addWidget(self._build_tuning_plot(), stretch=1)
-        center.addWidget(self._build_motor_settings())
+
+        settings_row = QHBoxLayout()
+        settings_row.setSpacing(6)
+        # Stepper carries a 4-column grid against the piezo panel's 3, so it
+        # gets the larger share of the width.
+        settings_row.addWidget(self._build_motor_settings(), stretch=3)
+        settings_row.addWidget(self._build_piezo_settings(), stretch=2)
+        center.addLayout(settings_row)
+
         main.addLayout(center, stretch=4)
 
         # Right: phase history (expandable) + stored data
@@ -606,10 +625,15 @@ class FrequencyTuningUI(PhaseUIBase):
         if abort_btn:
             abort_btn.setEnabled(active)
 
+        # "awaiting" exists so the indicator cannot read IDLE while the phase is
+        # actually blocked on an operator decision (e.g. Stage 2 measured its
+        # Hz/step and is waiting on Confirm Fit). Nothing is executing, but idle
+        # is the wrong word for "your turn".
         _status_map = {
             "idle": ("● IDLE", "#10b981"),
             "running": ("● RUNNING", "#3b82f6"),
             "paused": ("● PAUSED", "#f59e0b"),
+            "awaiting": ("◆ NEEDS CONFIRM", "#f59e0b"),
             "complete": ("✓ COMPLETE", "#10b981"),
             "error": ("✗ ERROR", "#dc2626"),
         }
@@ -665,6 +689,29 @@ class FrequencyTuningUI(PhaseUIBase):
         abort_button.setEnabled(False)
         self._connect(abort_button, "on_abort_test")
         layout.addWidget(abort_button)
+
+        # Phase-level progress: which step is executing, and how the phase as a
+        # whole stands. These belong here rather than beside the stepper
+        # controls, which are only one of the things a stage drives.
+        step_cap = QLabel("Step:")
+        step_cap.setStyleSheet(
+            f"QLabel {{ color: {TEXT_MUTED}; font-size: 9pt; }}"
+        )
+        layout.addWidget(step_cap)
+        # Sized to its text rather than stretched: these labels carry an accent
+        # border, and an expanding one renders as a mostly-empty box.
+        layout.addWidget(
+            self._register("local_current_step", self._make_local_label("-"))
+        )
+
+        phase_cap = QLabel("Phase:")
+        phase_cap.setStyleSheet(
+            f"QLabel {{ color: {TEXT_MUTED}; font-size: 9pt; }}"
+        )
+        layout.addWidget(phase_cap)
+        layout.addWidget(
+            self._register("local_phase_status", self._make_local_label("-"))
+        )
 
         layout.addStretch()
 
@@ -771,14 +818,9 @@ class FrequencyTuningUI(PhaseUIBase):
         initially_enabled: bool,
         extra_widgets,
     ) -> QFrame:
-        frame = QFrame()
-        frame.setStyleSheet(f"""
-            QFrame {{
-                background-color: {BG_INSET};
-                border: 1px solid {BORDER};
-                border-radius: {RADIUS_SM};
-            }}
-        """)
+        frame = self._register(f"stage{stage}_card", QFrame())
+        frame.setObjectName("stageCard")
+        frame.setStyleSheet(STAGE_CARD_STYLE_IDLE)
         layout = QVBoxLayout()
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(5)
@@ -791,14 +833,20 @@ class FrequencyTuningUI(PhaseUIBase):
         hdr.addWidget(title_lbl)
         hdr.addStretch()
         status_lbl = self._register(
-            f"stage{stage}_status_label", QLabel("⬜ Not started")
+            f"stage{stage}_status_label", QLabel(STAGE_STATUS_NOT_STARTED)
         )
-        status_lbl.setStyleSheet("QLabel { color: #6b7280; font-size: 9pt; }")
+        status_lbl.setStyleSheet(STAGE_STATUS_STYLE_NOT_STARTED)
         hdr.addWidget(status_lbl)
         layout.addLayout(hdr)
 
-        desc = QLabel(description)
-        desc.setStyleSheet("QLabel { color: #94a3b8; font-size: 9pt; }")
+        # Registered so the controller can hide it once the stage is Done: the
+        # description tells you what a stage is about to do, which is noise
+        # afterwards. Reclaiming those lines is what lets all four cards fit in
+        # the left column without a scrollbar.
+        desc = self._register(f"stage{stage}_description", QLabel(description))
+        desc.setStyleSheet(
+            f"QLabel {{ color: {TEXT_SECONDARY}; font-size: 9pt; }}"
+        )
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
@@ -876,7 +924,8 @@ class FrequencyTuningUI(PhaseUIBase):
         )
         hz_spinbox.setFixedWidth(120)
         calc_row.addWidget(hz_spinbox)
-        calc_row.addWidget(QLabel("Hz/step"))
+        # No trailing unit label — the row caption is already "Hz/step:", and
+        # repeating it read as "Hz/step: [0.0055] Hz/step".
         calc_row.addStretch()
         layout.addLayout(calc_row)
 
@@ -961,9 +1010,10 @@ class FrequencyTuningUI(PhaseUIBase):
         layout = QGridLayout()
         layout.setSpacing(4)
         layout.setContentsMargins(8, 6, 8, 6)
-        layout.setColumnStretch(1, 1)
-        layout.setColumnStretch(2, 1)
-        layout.setColumnStretch(3, 1)
+        # Controls pack to the left against a single trailing spacer column.
+        # Stretching columns 1-3 instead spread four widgets across the full
+        # panel width, which read as unrelated rather than as one control group.
+        layout.setColumnStretch(4, 1)
 
         # Row 0: Speed | Max Steps
         layout.addWidget(QLabel("Speed (steps/s):"), 0, 0)
@@ -997,7 +1047,7 @@ class FrequencyTuningUI(PhaseUIBase):
         sep.setFrameShape(QFrame.HLine)
         sep.setFrameShadow(QFrame.Sunken)
         sep.setStyleSheet("QFrame { color: #3a3a3a; }")
-        layout.addWidget(sep, 1, 0, 1, 4)
+        layout.addWidget(sep, 1, 0, 1, 5)
 
         # Row 2: Manual steps spinbox | directional buttons
         layout.addWidget(QLabel("Steps:"), 2, 0)
@@ -1039,25 +1089,104 @@ class FrequencyTuningUI(PhaseUIBase):
         self._connect(move_right_btn, "on_move_right")
         layout.addWidget(move_right_btn, 2, 3)
 
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.HLine)
-        sep2.setFrameShadow(QFrame.Sunken)
-        sep2.setStyleSheet("QFrame { color: #3a3a3a; }")
-        layout.addWidget(sep2, 3, 0, 1, 4)
+        # Current step and phase status deliberately live in the status bar at
+        # the top of the display, not here — they describe the phase as a whole
+        # (which stage is running, whether the phase passed), not the stepper.
 
-        # Row 4: Step | Status
-        layout.addWidget(QLabel("Step:"), 4, 0)
-        layout.addWidget(
-            self._register("local_current_step", self._make_local_label("-")),
-            4,
-            1,
+        group.setLayout(layout)
+        return group
+
+    def _build_piezo_settings(self) -> QGroupBox:
+        """Piezo enable/mode state and RF drive level, with manual override.
+
+        cavity.setup_tuning() sets all three of these automatically at the top
+        of a tuning run (piezo enabled, feedback off, drive level clamped to
+        SAFE_PULSED_DRIVE_LEVEL), so this panel is normally just confirmation.
+        It exists because piezo feedback fighting the stepper is a real failure
+        mode mid-tune, and the operator needs to both see that state and be able
+        to correct it without leaving the tuning tab (review feedback from
+        @hmarts9 on PR #270).
+        """
+        group = QGroupBox("Piezo && RF Drive")
+        layout = QGridLayout()
+        layout.setSpacing(4)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(2, 1)
+
+        def _readback(name: str) -> PyDMLabel:
+            lbl = self._register(name, PyDMLabel(parent=self.parent))
+            lbl.setStyleSheet(PV_CAP_STYLE)
+            lbl.setAlignment(Qt.AlignCenter)
+            return lbl
+
+        def _control(name: str) -> PyDMEnumComboBox:
+            combo = self._register(name, PyDMEnumComboBox(parent=self.parent))
+            # The ::drop-down rule is load-bearing: without an explicit arrow
+            # width and matching right padding, Qt lays the arrow over the tail
+            # of the current item's text and the value reads as cut off.
+            combo.setStyleSheet(
+                f"QComboBox {{ background-color: {BG_INSET}; "
+                f"color: {TEXT_PRIMARY}; border: 1px solid {BORDER_EMPHASIS}; "
+                f"border-radius: {RADIUS_SM}; font-size: 9pt; "
+                f"padding: 3px 22px 3px 6px; min-height: 20px; }}"
+                f"QComboBox::drop-down {{ border: none; width: 18px; "
+                f"subcontrol-origin: padding; subcontrol-position: center "
+                f"right; }}"
+            )
+            combo.setMinimumWidth(96)
+            return combo
+
+        # Commanded state (the writable CTRL combo, live on its own channel) sits
+        # directly beside actual state (the read-only STAT label), because
+        # "did the piezo accept what I asked for?" is a row-local comparison —
+        # ENABLE/MODECTRL and ENABLESTAT/MODESTAT are different PVs and
+        # Piezo.enable() / enable_feedback() poll the STAT pair in a retry loop
+        # precisely because the two can disagree. Pairing them per row is what
+        # makes a disagreement visible at a glance; the STAT label is styled
+        # subordinate so the control still reads as the thing you act on.
+        col_hint_style = f"QLabel {{ color: {TEXT_MUTED}; font-size: 8pt; }}"
+        commanded_hint = QLabel("commanded")
+        commanded_hint.setStyleSheet(col_hint_style)
+        commanded_hint.setAlignment(Qt.AlignCenter)
+        layout.addWidget(commanded_hint, 0, 1)
+        actual_hint = QLabel("actual")
+        actual_hint.setStyleSheet(col_hint_style)
+        actual_hint.setAlignment(Qt.AlignCenter)
+        actual_hint.setToolTip(
+            "State the piezo itself reports (ENABLESTAT / MODESTAT). If this "
+            "disagrees with the commanded column, the piezo did not accept the "
+            "commanded state."
         )
-        layout.addWidget(QLabel("Status:"), 4, 2)
-        layout.addWidget(
-            self._register("local_phase_status", self._make_local_label("-")),
-            4,
-            3,
+        layout.addWidget(actual_hint, 0, 2)
+
+        layout.addWidget(QLabel("Piezo enable:"), 1, 0)
+        layout.addWidget(_control("piezo_enable_ctrl"), 1, 1)
+        layout.addWidget(_readback("piezo_enable_stat_readback"), 1, 2)
+
+        layout.addWidget(QLabel("Piezo mode:"), 2, 0)
+        layout.addWidget(_control("piezo_mode_ctrl"), 2, 1)
+        layout.addWidget(_readback("piezo_mode_stat_readback"), 2, 2)
+
+        layout.addWidget(QLabel("Drive level:"), 3, 0)
+        expected = QLabel(f"expect {linac_utils.SAFE_PULSED_DRIVE_LEVEL}")
+        expected.setStyleSheet(
+            f"QLabel {{ color: {TEXT_MUTED}; font-size: 9pt; }}"
         )
+        expected.setAlignment(Qt.AlignCenter)
+        layout.addWidget(expected, 3, 1)
+        drive_lbl = _readback("drive_level_readback")
+        drive_lbl.showUnits = True
+        drive_lbl.precisionFromPV = False
+        drive_lbl.precision = 1
+        layout.addWidget(drive_lbl, 3, 2)
+
+        note = QLabel(
+            "Set by stage 1 — override only if feedback fights the stepper."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet(f"QLabel {{ color: {TEXT_MUTED}; font-size: 8pt; }}")
+        layout.addWidget(note, 5, 0, 1, 3)
 
         group.setLayout(layout)
         return group
@@ -1135,18 +1264,33 @@ class FrequencyTuningUI(PhaseUIBase):
 
         pw = pg.PlotWidget()
         pw.setBackground("#1a1a2e")
+        # Title is set on the plot itself (not just the group box) so the
+        # cryomodule/cavity identifier is inside the pixels an operator
+        # screengrabs into the elog. It is filled in by
+        # FrequencyTuningDisplay.set_plot_subject() once a record is loaded.
+        pw.setTitle(
+            "Detune vs. Steps — no cavity selected",
+            color=TEXT_SECONDARY,
+            size="10pt",
+        )
         pw.showGrid(x=True, y=True, alpha=0.3)
         pw.setLabel("left", "Detune", units="Hz")
         pw.setLabel("bottom", "Net Steps")
         pw.addLegend(offset=(10, 10))
         pw.setMinimumHeight(180)
 
+        # ignoreBounds=True is essential, not cosmetic: without it the y=0
+        # reference line is counted in the autorange bounds, so the view is
+        # always forced to include zero. A probe leg that drifts 55 Hz around a
+        # 3.7 kHz detune then occupies ~1% of the plot height and the fitted
+        # slope is invisible — the plot looks like it never autoscaled.
         pw.addItem(
             pg.InfiniteLine(
                 pos=0,
                 angle=0,
                 pen=pg.mkPen(color="#555555", width=1, style=Qt.DashLine),
-            )
+            ),
+            ignoreBounds=True,
         )
 
         self._register("tuning_plot", pw)

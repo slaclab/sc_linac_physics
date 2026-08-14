@@ -18,6 +18,10 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     FrequencyTuningUI,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+)
 
 from .base_placeholder import BasePlaceholderDisplay
 
@@ -93,6 +97,14 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         # Widgets are now registered — safe to connect PVs for the active record.
         self._controller.setup_pv_connections()
 
+        # Tell the container when the phase finishes so it can refresh the tab
+        # row. Without this the tab keeps rendering this phase as the current
+        # one — "▶ Frequency Tuning · In progress" — after Stage 4 has saved.
+        # PiezoPreRFDisplay and SSACharDisplay already wire this up; frequency
+        # tuning was the one phase display that did not.
+        self._controller.phase_completed.connect(
+            self._on_controller_phase_completed
+        )
         self._controller.hz_per_step_updated.connect(
             self._on_hz_per_step_updated
         )
@@ -119,6 +131,40 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             return
         probe_steps = FrequencyTuningLimits().probe_steps
         pw.setXRange(0, probe_steps, padding=0.05)
+
+    def _on_controller_phase_completed(self, record) -> None:
+        """Walk up to the container so it can re-render tabs and pick the next."""
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, "on_phase_advanced"):
+                parent.on_phase_advanced(record)
+                break
+            parent = parent.parent()
+
+    def set_plot_subject(self, cryomodule: str, cavity_number) -> None:
+        """Stamp the CM/cavity identifier onto the plot title.
+
+        Operators screengrab this plot straight into the elog, so the subject
+        has to live inside the image rather than only in the surrounding GUI
+        chrome (operator feedback on PR #270).  Rendered in the ``CM01-5`` form
+        the control room already uses in logbook entries.
+        """
+        pw: pg.PlotWidget | None = getattr(self, "tuning_plot", None)
+        if pw is None:
+            return
+        if not cryomodule or cavity_number in (None, ""):
+            pw.setTitle(
+                "Detune vs. Steps — no cavity selected",
+                color=TEXT_SECONDARY,
+                size="10pt",
+            )
+            return
+        pw.setTitle(
+            f"CM{cryomodule}-{cavity_number}  ·  Detune vs. Steps",
+            color=TEXT_PRIMARY,
+            size="11pt",
+            bold=True,
+        )
 
     def _setup_plot_curves(self) -> None:
         pw: pg.PlotWidget | None = getattr(self, "tuning_plot", None)
@@ -369,6 +415,7 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         self._controller.update_pv_addresses(
             record.cryomodule, str(record.cavity_number)
         )
+        self.set_plot_subject(record.cryomodule, record.cavity_number)
         self._controller.restore_from_record(record)
 
     def refresh_from_record(self, record) -> None:
@@ -377,6 +424,7 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         self._controller.update_pv_addresses(
             record.cryomodule, str(record.cavity_number)
         )
+        self.set_plot_subject(record.cryomodule, record.cavity_number)
         self._controller.restore_from_record(record)
 
     # ------------------------------------------------------------------

@@ -108,8 +108,31 @@ class TestPhaseDisplayBase:
         w.history_text = MagicMock()
         w.log_message("hello")
         w.history_text.append.assert_called_once_with(
-            "hello", entry_type="info"
+            "hello", entry_type="info", key=None
         )
+
+    def test_log_message_forwards_resolvable_key(self, qtbot):
+        w = PhaseDisplayBase()
+        qtbot.addWidget(w)
+        w.history_text = MagicMock()
+        w.log_message("▶ Probing...", entry_type="progress", key="probe")
+        w.history_text.append.assert_called_once_with(
+            "▶ Probing...", entry_type="progress", key="probe"
+        )
+
+    def test_resolve_log_message_rewrites_keyed_entry(self, qtbot):
+        w = PhaseDisplayBase()
+        qtbot.addWidget(w)
+        w.history_text = MagicMock()
+        w.resolve_log_message("probe", "✓ Probing")
+        w.history_text.resolve.assert_called_once_with(
+            "probe", "✓ Probing", entry_type="success"
+        )
+
+    def test_resolve_log_message_without_history_widget(self, qtbot):
+        w = PhaseDisplayBase()
+        qtbot.addWidget(w)
+        w.resolve_log_message("probe", "✓ Probing")
 
     def test_log_message_without_history_widget(self, qtbot):
         w = PhaseDisplayBase()
@@ -212,6 +235,71 @@ class TestBasePlaceholderDisplay:
 
     def test_clear_results(self, freq_display):
         freq_display.clear_results()
+
+    def test_set_plot_subject_stamps_cm_and_cavity_on_plot(self, freq_display):
+        """The CM/cavity has to be inside the plot image, not just beside it.
+
+        Operators screengrab this plot straight into the elog, so the title is
+        the only thing that carries provenance once it leaves the GUI.
+        """
+        freq_display.set_plot_subject("01", 5)
+
+        title = freq_display.tuning_plot.plotItem.titleLabel.text
+        assert "CM01-5" in title
+
+    def test_set_plot_subject_handles_no_selection(self, freq_display):
+        freq_display.set_plot_subject("", None)
+
+        title = freq_display.tuning_plot.plotItem.titleLabel.text
+        assert "no cavity selected" in title
+
+    def test_phase_completion_notifies_the_container(self, freq_display):
+        """The container has to be told, or the tab keeps saying In progress.
+
+        Tab text is derived from workflow phase-instance status, so nothing
+        refreshes it on its own after Stage 4 saves. PiezoPreRF and SSAChar
+        already wired this signal; frequency tuning did not.
+        """
+        container = MagicMock()
+        container.on_phase_advanced = MagicMock()
+        freq_display.parent = lambda: container
+        record = object()
+
+        freq_display._controller.phase_completed.emit(record)
+
+        container.on_phase_advanced.assert_called_once_with(record)
+
+    def test_phase_completion_without_a_container_is_safe(self, freq_display):
+        freq_display.parent = lambda: None
+        freq_display._controller.phase_completed.emit(object())
+
+    def test_zero_line_does_not_dominate_autoscale(self, freq_display):
+        """Autorange must follow the detune data, not the y=0 reference line.
+
+        A probe leg drifting ~55 Hz around a 3.7 kHz detune has to fill the
+        plot. While the y=0 InfiniteLine was counted in the autorange bounds,
+        the view was forced to span 0..3900 Hz and the fitted slope occupied
+        about 1% of the plot height, which read as "the probe never autoscaled".
+        """
+        freq_display.reset_plot()
+        for i in range(11):
+            freq_display._on_tuning_data_point(i * 100, 3739.0 - i * 5.5)
+        freq_display.show_probe_fit(0, 3739.0, 1000, 3684.0)
+
+        y_min, y_max = freq_display.tuning_plot.viewRange()[1]
+        data_span = 55.0
+
+        assert y_min > 0, "view should not be dragged down to the zero line"
+        # Generous bound: the point is order-of-magnitude, not exact padding.
+        assert (y_max - y_min) < data_span * 3
+
+    def test_on_record_loaded_sets_plot_subject(self, freq_display, record):
+        record.cryomodule = "02"
+        record.cavity_number = 3
+        freq_display.on_record_loaded(record, 1)
+
+        title = freq_display.tuning_plot.plotItem.titleLabel.text
+        assert "CM02-3" in title
 
     def test_get_phase_stored_field_specs_with_model(self, freq_display):
         specs = FrequencyTuningDisplay.get_phase_stored_field_specs()

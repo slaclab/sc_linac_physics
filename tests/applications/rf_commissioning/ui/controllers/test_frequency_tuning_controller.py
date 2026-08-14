@@ -25,6 +25,7 @@ class _ButtonStub:
         self.enabled = True
         self.text = ""
         self.style = ""
+        self.visible = True
 
     def setEnabled(self, enabled: bool) -> None:
         self.enabled = enabled
@@ -34,6 +35,9 @@ class _ButtonStub:
 
     def setStyleSheet(self, style: str) -> None:
         self.style = style
+
+    def setVisible(self, visible: bool) -> None:
+        self.visible = visible
 
 
 class _SpinboxStub:
@@ -281,6 +285,47 @@ def test_apply_stepper_pv_mapping_builds_map(monkeypatch) -> None:
     assert view.net_steps_label in captured["mapping"]
 
 
+def test_apply_stepper_pv_mapping_wires_piezo_and_drive(monkeypatch) -> None:
+    """Piezo enable/mode and RF drive level are reachable from the tuning tab.
+
+    setup_tuning() sets these automatically, but piezo feedback fighting the
+    stepper is a real mid-tune failure mode, so the operator needs the state
+    visible and the controls writable without switching tabs.
+    """
+    captured = {}
+    monkeypatch.setattr(
+        controller_module,
+        "apply_pv_mapping",
+        lambda mapping: captured.update({"mapping": mapping}),
+    )
+    view = _ViewStub()
+    view.piezo_enable_stat_readback = _ButtonStub()
+    view.piezo_enable_ctrl = _ButtonStub()
+    view.piezo_mode_stat_readback = _ButtonStub()
+    view.piezo_mode_ctrl = _ButtonStub()
+    view.drive_level_readback = _ButtonStub()
+    controller = _make_controller(view=view)
+
+    cavity = Mock()
+    cavity.rack.pv_prefix = "ACCL:L0B:0100:"
+    cavity.detune_chirp_pv = "PV:CHIRP"
+    cavity.pv_addr.return_value = "PV:ADDR"
+    cavity.drive_level_pv = "PV:SEL_ASET"
+    cavity.piezo.enable_pv = "PV:PZT:ENABLE"
+    cavity.piezo.enable_stat_pv = "PV:PZT:ENABLESTAT"
+    cavity.piezo.feedback_control_pv = "PV:PZT:MODECTRL"
+    cavity.piezo.feedback_stat_pv = "PV:PZT:MODESTAT"
+
+    controller._apply_stepper_pv_mapping(cavity)
+
+    mapping = captured["mapping"]
+    assert mapping[view.piezo_enable_stat_readback] == "PV:PZT:ENABLESTAT"
+    assert mapping[view.piezo_enable_ctrl] == "PV:PZT:ENABLE"
+    assert mapping[view.piezo_mode_stat_readback] == "PV:PZT:MODESTAT"
+    assert mapping[view.piezo_mode_ctrl] == "PV:PZT:MODECTRL"
+    assert mapping[view.drive_level_readback] == "PV:SEL_ASET"
+
+
 def test_get_machine_cavity_builds_machine(monkeypatch) -> None:
     class _MachineStub:
         def __init__(self):
@@ -385,6 +430,263 @@ def test_run_stage_1_target_none_stops() -> None:
     controller.run_stage_1()
 
     controller._start_stage.assert_not_called()
+
+
+def test_run_stage_1_marks_running_before_resolving_target() -> None:
+    """The status flips on the button press, not after record setup.
+
+    Operators reported missing the state change entirely because it landed
+    after _resolve_target() had done its database work, by which point the Run
+    button had already greyed out with nothing else visibly changing.
+    """
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    status_at_resolve_time = {}
+
+    def _resolve():
+        status_at_resolve_time["text"] = view.stage1_status_label.text
+        return ("CM02_CAV1", 2, 1)
+
+    controller._resolve_target = _resolve
+    controller._start_stage = Mock()
+
+    controller.run_stage_1()
+
+    assert "Running" in status_at_resolve_time["text"]
+
+
+def test_run_stage_1_reverts_status_when_target_unresolved() -> None:
+    """A stage that never starts must not be left showing "Running"."""
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._resolve_target = Mock(return_value=None)
+    controller._start_stage = Mock()
+
+    controller.run_stage_1()
+
+    assert "Not started" in view.stage1_status_label.text
+
+
+def test_run_stage_1_reverts_status_when_start_raises() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._start_stage = Mock(side_effect=RuntimeError("boom"))
+
+    controller.run_stage_1()
+
+    assert "Not started" in view.stage1_status_label.text
+
+
+def test_stage_done_hides_description_but_failure_keeps_it() -> None:
+    """A finished stage drops its blurb; a failed one keeps it for the retry."""
+    view = _ViewStub()
+    view.stage1_description = _ButtonStub()
+    view.stage2_description = _ButtonStub()
+    controller = _make_controller(view=view)
+
+    controller._set_stage_done_ui(1, success=True)
+    assert view.stage1_description.visible is False
+
+    controller._set_stage_done_ui(2, success=False)
+    assert view.stage2_description.visible is True
+
+
+def test_reset_all_stages_restores_descriptions() -> None:
+    view = _ViewStub()
+    view.stage1_description = _ButtonStub()
+    controller = _make_controller(view=view)
+    controller._set_stage_done_ui(1, success=True)
+
+    controller._reset_all_stages()
+
+    assert view.stage1_description.visible is True
+
+
+def _history_session(rows):
+    session = Mock()
+    session.get_measurement_history.return_value = rows
+    return session
+
+
+def test_restore_recovers_cold_landing_from_record_blob() -> None:
+    """A history row missing df_cold_hz falls back to the record blob."""
+    view = _ViewStub()
+    session = _history_session(
+        [{"measurement_data": {"step": "cold_landing", "df_cold_hz": None}}]
+    )
+    controller = _make_controller(view=view, session=session)
+    controller._rebuild_phase_context = Mock()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=3739.0)
+
+    controller.restore_from_record(record)
+
+    assert controller._df_cold_hz == 3739.0
+    assert view.stage2_run_btn.enabled is True
+
+
+def test_restore_without_any_cold_landing_keeps_stage_2_locked() -> None:
+    """Reopening a cavity whose cold landing never persisted must not dead-end.
+
+    The stage-1 history row can exist with df_cold_hz null. Marking stage 1
+    Done and unlocking stage 2 on that basis let the operator click Run Stage 2
+    and get an immediate "Cold landing not recorded" error with no way forward.
+    Stage 1 has to stay runnable instead.
+    """
+    view = _ViewStub()
+    session = _history_session(
+        [{"measurement_data": {"step": "cold_landing", "df_cold_hz": None}}]
+    )
+    controller = _make_controller(view=view, session=session)
+    controller._rebuild_phase_context = Mock()
+    record = _record()
+    record.frequency_tuning = None
+
+    controller.restore_from_record(record)
+
+    assert controller._df_cold_hz is None
+    assert view.stage2_run_btn.enabled is False
+    assert view.stage1_run_btn.enabled is True
+    assert "Not started" in view.stage1_status_label.text
+    assert any("cold landing" in m.lower() for m in view.logs)
+
+
+def test_stage_1_without_a_cold_landing_is_not_reported_done() -> None:
+    """Don't persist a stage 1 'success' that stage 2 can never build on."""
+    view = _ViewStub()
+    # Mirror the real initial state: stage 2 is locked until stage 1 succeeds.
+    view.stage2_run_btn.setEnabled(False)
+    controller = _make_controller(view=view)
+    controller._save_stage_to_history = Mock(return_value=True)
+    controller._df_cold_hz = None
+
+    controller._on_stage1_done()
+
+    assert "Failed" in view.stage1_status_label.text
+    assert view.stage2_run_btn.enabled is False
+    controller._save_stage_to_history.assert_not_called()
+
+
+def test_stage_1_persists_cold_landing_onto_the_record() -> None:
+    """measurement_history alone is not enough to survive a restart.
+
+    The phase gates stage 2 on the record, since phase_history checkpoints are
+    in-memory only. Writing the frequency to history but not the record left
+    stage 2 failing after a relaunch with "Cold landing frequency was not
+    recorded".
+    """
+    view = _ViewStub()
+    session = Mock()
+    record = _record()
+    record.frequency_tuning = None
+    session.get_active_record.return_value = record
+    controller = _make_controller(view=view, session=session)
+    controller._save_stage_to_history = Mock(return_value=True)
+    controller._update_partial_results = Mock()
+    controller._df_cold_hz = 9196.0
+
+    controller._on_stage1_done()
+
+    assert record.frequency_tuning.df_cold_hz == 9196.0
+    session.save_active_record.assert_called_once()
+
+
+def test_persist_cold_landing_skips_redundant_save() -> None:
+    """Don't bump the record version when the value is already durable."""
+    view = _ViewStub()
+    session = Mock()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=9196.0)
+    session.get_active_record.return_value = record
+    controller = _make_controller(view=view, session=session)
+    controller._df_cold_hz = 9196.0
+
+    controller._persist_df_cold_to_record()
+
+    session.save_active_record.assert_not_called()
+
+
+def test_restore_backfills_cold_landing_onto_older_records() -> None:
+    """Records whose frequency only reached history get healed on load."""
+    view = _ViewStub()
+    session = _history_session(
+        [{"measurement_data": {"step": "cold_landing", "df_cold_hz": 9196.0}}]
+    )
+    record = _record()
+    record.frequency_tuning = None
+    session.get_active_record.return_value = record
+    controller = _make_controller(view=view, session=session)
+    controller._rebuild_phase_context = Mock()
+
+    controller.restore_from_record(record)
+
+    assert record.frequency_tuning.df_cold_hz == 9196.0
+
+
+def test_completion_closes_an_instance_opened_in_an_earlier_session() -> None:
+    """Only Stage 1 opens a phase instance, so a resumed run has no id cached.
+
+    Leaving the instance at in_progress means the workflow never advances and
+    the tab keeps reading "In progress" after Stage 4, because tab state comes
+    from instance status rather than from record.set_phase_status.
+    """
+    view = _ViewStub()
+    session = Mock()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=9196.0)
+    session.get_active_record.return_value = record
+    session.save_active_record.return_value = True
+    session.get_active_phase_instances.return_value = [
+        {"id": 8, "phase": "frequency_tuning", "status": "in_progress"},
+        {"id": 3, "phase": "ssa_char", "status": "complete"},
+    ]
+    controller = _make_controller(view=view, session=session)
+    controller.context = SimpleNamespace(record=record)
+    controller._active_phase_instance_id = None
+
+    controller.on_phase_completed()
+
+    _, kwargs = session.complete_active_phase_instance.call_args
+    assert kwargs["phase_instance_id"] == 8
+
+
+def test_completion_ignores_already_finished_instances() -> None:
+    view = _ViewStub()
+    session = Mock()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=9196.0)
+    session.get_active_record.return_value = record
+    session.get_active_phase_instances.return_value = [
+        {"id": 8, "phase": "frequency_tuning", "status": "complete"},
+    ]
+    controller = _make_controller(view=view, session=session)
+    controller.context = SimpleNamespace(record=record)
+    controller._active_phase_instance_id = None
+
+    controller.on_phase_completed()
+
+    session.complete_active_phase_instance.assert_not_called()
+
+
+def test_stage_2_awaiting_confirm_is_not_reported_as_idle() -> None:
+    """Blocked-on-operator must not read IDLE in the status bar.
+
+    Nothing is executing once Stage 2 measures its Hz/step, but the run is
+    waiting on Confirm Fit, so "idle" would contradict the phase status.
+    """
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller.phase = SimpleNamespace(
+        _hz_per_microstep=0.0055, limits=SimpleNamespace(probe_steps=1000)
+    )
+    controller._probe_s_d0 = None
+    states: list[str] = []
+    controller._update_toolbar_state = lambda state: states.append(state)
+
+    controller._on_stage2_done()
+
+    assert states[-1] == "awaiting"
 
 
 def test_run_stage_1_success_calls_start_stage() -> None:
