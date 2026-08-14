@@ -1,0 +1,135 @@
+name: PR size
+
+# Measures how large a PR is, excluding tests and generated assets, and renders
+# the report. Advisory only — never gates a merge.
+#
+# This is half of a two-workflow pair. A `pull_request` run triggered from a
+# fork gets a read-only GITHUB_TOKEN no matter what `permissions:` requests, and
+# nearly every PR to this repo comes from a fork, so this half cannot post a
+# comment. It measures and uploads the rendered comment as an artifact instead;
+# pr-size-comment.yml collects that via `workflow_run` and posts it with a
+# writable token.
+#
+# Keeping the measurement here — where the token is read-only and no secret is
+# reachable — means the half that touches PR content has nothing worth stealing.
+#
+# Thresholds (400 warn / 800 hard) are duplicated from the "Scope and shipping"
+# section of CLAUDE.md — change them together. Some maintainers also run an
+# equivalent pre-commit check locally; that copy is untracked, so this workflow
+# is the authoritative one.
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Measure and render
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          WARN=400
+          HARD=800
+
+          mkdir -p pr-size
+
+          # pr-size-comment.yml cannot read the PR number from its own event:
+          # `workflow_run.pull_requests` is empty for runs originating in a
+          # fork, so it has to travel with the artifact.
+          echo "$PR_NUMBER" > pr-size/pr-number
+
+          # Say "unavailable" rather than either failing or reporting zero. If
+          # a SHA does not resolve — shallow clone, or a force-push landing
+          # mid-run — the diff below yields nothing, which would render as a
+          # green "0 lines, within target": a false pass on the check whose
+          # whole purpose is catching oversized PRs. Exiting non-zero would
+          # avoid that but turn the check red, and this workflow promises never
+          # to gate a merge. An explicit "unavailable" report keeps both.
+          for sha in "$BASE_SHA" "$HEAD_SHA"; do
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              {
+                echo "### ⚪ PR size: unavailable"
+                echo
+                echo "Could not resolve \`${sha}\`, so no size was measured."
+                echo "Usually a force-push landing while this ran — pushing"
+                echo "again will produce a report."
+                echo
+                echo "<sub>Advisory only; this check never fails the build.</sub>"
+              } > pr-size/comment.md
+              cat pr-size/comment.md >> "$GITHUB_STEP_SUMMARY"
+              echo "could not resolve $sha; reported size as unavailable" >&2
+              exit 0
+            fi
+          done
+
+          # numstat is "<add> <del> <path>", so filter on $3 rather than the
+          # whole line. Binary files show "-" and contribute 0.
+          read -r ADD DEL SKIPPED < <(
+            git diff --numstat "$BASE_SHA...$HEAD_SHA" \
+            | awk -F'\t' '
+                $3 ~ /(^|\/)(tests?)\// { s++; next }
+                $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { s++; next }
+                { a += $1; d += $2 }
+                END { printf "%d %d %d\n", a+0, d+0, s+0 }'
+          )
+          TOTAL=$((ADD + DEL))
+
+          if   [ "$TOTAL" -ge "$HARD" ]; then STATE="over the ${HARD}-line hard limit"; ICON="🔴"
+          elif [ "$TOTAL" -ge "$WARN" ]; then STATE="over the ${WARN}-line target";     ICON="🟡"
+          else                                STATE="within target";                    ICON="🟢"
+          fi
+
+          # Rendered here rather than in the commenting workflow so that PR
+          # filenames never need to pass through a $GITHUB_OUTPUT delimiter.
+          {
+            echo "### ${ICON} PR size: ${TOTAL} lines — ${STATE}"
+            echo
+            echo "\`+${ADD}\` / \`-${DEL}\` in production code."
+            echo "${SKIPPED} test and asset files excluded."
+            echo
+            echo "| Largest files | Change |"
+            echo "|---|---|"
+            # Same two exclusions as the total above. Without the asset line, a
+            # large regenerated .ui or lockfile tops this table while counting
+            # zero toward the reported size.
+            git diff --numstat "$BASE_SHA...$HEAD_SHA" \
+              | awk -F'\t' '
+                  $3 ~ /(^|\/)(tests?)\// { next }
+                  $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { next }
+                  { printf "%d\t+%s/-%s\t%s\n", $1+$2, $1, $2, $3 }' \
+              | sort -rn | head -5 \
+              | awk -F'\t' '{ printf "| `%s` | %s |\n", $3, $2 }'
+            echo
+            echo "<sub>Target is 400 lines excluding tests, hard stop around 800 — see"
+            echo "\"Scope and shipping\" in \`CLAUDE.md\`. If this PR is over, the description"
+            echo "should say why it could not be split. Advisory only; this check never"
+            echo "fails the build.</sub>"
+          } > pr-size/comment.md
+
+          # Also on the run summary, so the number is visible even when the
+          # commenting workflow has not run.
+          cat pr-size/comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-size
+          path: pr-size/
+          retention-days: 1
