@@ -1061,7 +1061,7 @@ def test_check_state_stage3_motor_moving(phase, mock_stepper):
 
 
 def test_check_state_stage3_df_cold_not_recorded(phase, mock_cavity):
-    # No cold-landing checkpoint in history → df_cold check fails.
+    # No cold-landing frequency stored on the record → the df_cold gate fails.
     _setup_phase(phase, seed_cold=False)
     result = phase._check_state_for_stage_3()
     assert result.result == PhaseResult.FAILED
