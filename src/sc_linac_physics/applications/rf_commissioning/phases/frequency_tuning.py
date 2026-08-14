@@ -50,6 +50,10 @@ def _emit_status(cb, msg: str) -> None:
             pass
 
 
+# Small slack on the drive-level gate so PV rounding does not trip it.
+_DRIVE_TOLERANCE = 0.5
+
+
 @dataclass
 class FrequencyTuningLimits:
     """Configurable limits for the frequency tuning phase."""
@@ -210,10 +214,10 @@ class FrequencyTuningPhase(PhaseBase):
     # ------------------------------------------------------------------
 
     def _check_motor_and_cavity(self) -> "PhaseStepResult | None":
-        """Read stepper/cavity state without touching hardware.
+        """Blockers that no amount of re-preparation can clear.
 
-        Returns a FAILED result if the hardware is not ready for stepper
-        moves, or None if everything looks fine.
+        Returns a FAILED result if the stepper cannot safely move, or None.
+        Conditions the phase can fix itself live in _check_tuning_setup().
         """
         try:
             motor_moving = self.cavity.stepper_tuner.motor_moving
@@ -243,15 +247,93 @@ class FrequencyTuningPhase(PhaseBase):
             )
         return None
 
+    def _check_tuning_setup(self) -> str | None:
+        """Return why the cavity is not set up for tuning, or None if it is.
+
+        Everything setup_tuning() establishes: RF on in chirp mode with a valid
+        detune, piezo enabled and in Manual, drive clamped to the safe pulsed
+        level. is_online is hw_mode ("in service") and notices none of this, so
+        without this check a cavity switched off after Stage 1 sailed through
+        and Stage 2 moved the stepper against a detune that was not tracking.
+
+        Returns a reason string rather than a PhaseStepResult because the
+        caller re-prepares the cavity and retries before surfacing anything.
+        """
+        try:
+            if not self.cavity.is_on:
+                return "RF is off"
+            # detune_invalid branches on rf_mode: outside chirp mode it inspects
+            # DFBEST rather than the CHIRP:DF the tuning stages read, so treat
+            # it as a strong signal rather than a complete one.
+            if self.cavity.detune_invalid:
+                return "detune readback is invalid"
+            if not self.cavity.piezo.is_enabled:
+                return "piezo is disabled"
+            # Feedback actively counteracts the stepper rather than merely
+            # invalidating a reading, so it matters even though tuning could
+            # technically proceed.
+            if not self.cavity.piezo.in_manual:
+                return "piezo is in Feedback mode and would fight the stepper"
+            drive = float(self.cavity.drive_level)
+        except Exception as exc:
+            return f"could not read cavity setup state ({exc})"
+
+        # Only an over-drive is unsafe; running below the safe level is a
+        # legitimate operator choice and must not trigger a re-prepare.
+        if drive > linac_utils.SAFE_PULSED_DRIVE_LEVEL + _DRIVE_TOLERANCE:
+            return (
+                f"drive level is {drive:.1f}, above the "
+                f"{linac_utils.SAFE_PULSED_DRIVE_LEVEL} used for chirp tuning"
+            )
+        return None
+
+    def _ensure_tuning_setup(self) -> "PhaseStepResult | None":
+        """Re-apply setup_tuning() if the cavity drifted out of tuning state.
+
+        Stage 1 is the only stage that prepares the cavity, and its Run button
+        is disabled once it succeeds — so an operator who turns the cavity off
+        mid-workflow has no way back. Rather than failing with an instruction
+        they cannot follow, stages 2 and 3 re-prepare and carry on. Safe to
+        repeat: setup_tuning() does not touch the recorded cold landing, which
+        is the one thing in Stage 1 that must not run twice.
+        """
+        reason = self._check_tuning_setup()
+        if reason is None:
+            return None
+
+        status_cb = self.context.parameters.get("status_update_callback")
+        _emit_status(
+            status_cb, f"Cavity not set up for tuning ({reason}) — re-preparing"
+        )
+        prepared = self._prepare_and_read(status_cb)
+        if isinstance(prepared, PhaseStepResult):
+            return prepared
+
+        reason = self._check_tuning_setup()
+        if reason is not None:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    f"Cavity is still not ready for tuning after re-preparing: "
+                    f"{reason}"
+                ),
+            )
+        _emit_status(status_cb, "✓ Cavity re-prepared for tuning")
+        return None
+
     def _check_state_for_stage_2(self) -> PhaseStepResult:
         """Verify hardware is ready for stepper probing (Stage 2).
 
-        Checks motor idle, not on limit switch, cavity online.  Does NOT
-        prepare the cavity — run Stage 1 first if these checks fail.
+        Checks motor idle, not on limit switch, cavity online, then
+        re-applies setup_tuning() if the cavity drifted out of tuning state.
         """
         bad = self._check_motor_and_cavity()
         if bad is not None:
             return bad
+
+        not_ready = self._ensure_tuning_setup()
+        if not_ready is not None:
+            return not_ready
 
         try:
             temp = self._read_temp()
@@ -280,6 +362,10 @@ class FrequencyTuningPhase(PhaseBase):
         bad = self._check_motor_and_cavity()
         if bad is not None:
             return bad
+
+        not_ready = self._ensure_tuning_setup()
+        if not_ready is not None:
+            return not_ready
 
         df_cold_bad = self._check_df_cold_recorded()
         if df_cold_bad is not None:
