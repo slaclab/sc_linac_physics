@@ -1,0 +1,88 @@
+name: Stale PR reminder
+
+# Weekly list of open PRs that have been waiting on review, posted to Slack.
+#
+# Runs on GitHub's infrastructure, so it has the API access that a local or
+# sandboxed tool does not — review state and requested reviewers are only
+# visible through the API, not through git refs.
+#
+# Advisory. It posts a list; it does not nag reviewers directly, comment on
+# PRs, or close anything. Whether to chase someone stays a human decision.
+#
+# Needs a SLACK_STALE_PR_WEBHOOK repo secret. Point it wherever the nudge is
+# most useful — a DM to yourself keeps you as the one who asks; #srf-software
+# makes it visible to reviewers. Without the secret the job prints the list to
+# the run log and exits clean, so this is safe to merge before wiring it up.
+#
+# PR titles are untrusted input. They reach Slack only through the `NOTE`
+# environment variable below, never interpolated into a `run:` block.
+
+on:
+  schedule:
+    # Mondays 16:00 UTC = 09:00 America/Los_Angeles during PDT.
+    # GitHub cron is UTC only, so this drifts an hour in winter. Harmless.
+    - cron: '0 16 * * 1'
+  workflow_dispatch:
+
+# Read-only. stale_prs.py only ever calls `gh pr list`; nothing here writes to
+# a PR. `contents: read` is for the checkout that fetches the script itself.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Find PRs awaiting review
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        # A PR is listed once it has gone this many days without an approving
+        # review. Five working days is roughly a week of real time.
+        run: python .github/scripts/stale_prs.py --days 5
+
+      # Mirrors the release.yml notifier. Without the secret this prints the
+      # note to the job log and exits cleanly, so the workflow is safe to
+      # merge before the webhook exists.
+      #
+      # The channel is fixed by whichever channel SLACK_STALE_PR_WEBHOOK was
+      # created against, not by anything here. Named in the step title so the
+      # target is visible in the Actions UI rather than buried in a secret.
+      # Quoted: an unquoted '#' starts a YAML comment, which would truncate
+      # this step's name to "Post to" in the Actions UI.
+      - name: "Post to #srf-software"
+        if: steps.find.outputs.has_stale == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_STALE_PR_WEBHOOK }}
+          NOTE: ${{ steps.find.outputs.note }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+
+          url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+          note = os.environ.get("NOTE", "").strip()
+
+          if not note:
+              print("nothing to post")
+              raise SystemExit(0)
+
+          if not url:
+              print("SLACK_STALE_PR_WEBHOOK not set — would have posted:\n")
+              print(note)
+              raise SystemExit(0)
+
+          req = urllib.request.Request(
+              url,
+              data=json.dumps({"text": note}).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req, timeout=15) as r:
+              print("slack responded", r.status)
+          PY
+        continue-on-error: true
