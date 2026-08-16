@@ -324,8 +324,9 @@ class FrequencyTuningPhase(PhaseBase):
     def _check_state_for_stage_2(self) -> PhaseStepResult:
         """Verify hardware is ready for stepper probing (Stage 2).
 
-        Checks motor idle, not on limit switch, cavity online, then
-        re-applies setup_tuning() if the cavity drifted out of tuning state.
+        Checks motor idle, not on limit switch, cavity online, re-applies
+        setup_tuning() if the cavity drifted out of tuning state, and requires
+        the cold landing to be committed to DF_COLD first.
         """
         bad = self._check_motor_and_cavity()
         if bad is not None:
@@ -334,6 +335,17 @@ class FrequencyTuningPhase(PhaseBase):
         not_ready = self._ensure_tuning_setup()
         if not_ready is not None:
             return not_ready
+
+        # Stage 2 is the first step that moves the stepper, and moving it
+        # destroys the ability to measure the cold landing: once the cavity has
+        # been tuned away, the resting frequency is gone from the hardware.
+        # DF_COLD must therefore hold the agreed value before any motion, not
+        # merely before Stage 3. Deliberately a gate and not an automatic write
+        # — which value belongs in DF_COLD is an operator judgment, and may be a
+        # number from a partner lab rather than the one measured here.
+        df_cold_bad = self._check_df_cold_recorded()
+        if df_cold_bad is not None:
+            return df_cold_bad
 
         try:
             temp = self._read_temp()
