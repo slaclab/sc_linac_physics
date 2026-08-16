@@ -22,6 +22,10 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status import (
+    COLD_LANDING_TOOLTIP_NEEDED,
+    COLD_LANDING_TOOLTIP_SET,
+    PUSH_DF_COLD_ATTENTION,
+    PUSH_DF_COLD_NEUTRAL,
     STAGE_CARD_STYLE_IDLE,
     STAGE_CARD_STYLE_RUNNING,
     STAGE_STATUS_DONE,
@@ -32,6 +36,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status imp
     STAGE_STATUS_STYLE_FAILED,
     STAGE_STATUS_STYLE_NOT_STARTED,
     STAGE_STATUS_STYLE_RUNNING,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.cold_landing_dialog import (
+    ask_for_cold_landing,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.step_labels import (
     step_label,
@@ -85,6 +92,9 @@ class FrequencyTuningController(QObject):
     _log_signal = pyqtSignal(str)
     # (key, message, entry_type) — resolves the step's in-progress feed row.
     _resolve_log_signal = pyqtSignal(str, str, str)
+    # Emitted from the DF_COLD write thread so the button restyles on the
+    # GUI thread once the PV has actually taken the value.
+    _df_cold_committed_signal = pyqtSignal()
     hz_per_step_updated = pyqtSignal(float)
     _stage_done = pyqtSignal(int)  # 1, 2, 3, or 4 (=finalize)
 
@@ -96,6 +106,7 @@ class FrequencyTuningController(QObject):
             self._log_signal.connect(self.view.log_message)
         if hasattr(self.view, "resolve_log_message"):
             self._resolve_log_signal.connect(self.view.resolve_log_message)
+        self._df_cold_committed_signal.connect(self.refresh_cold_landing_prompt)
 
         self.context: PhaseContext | None = None
         self.phase: FrequencyTuningPhase | None = None
@@ -675,6 +686,7 @@ class FrequencyTuningController(QObject):
             return
 
         self._enable_stage_btn(2)
+        self.refresh_cold_landing_prompt()
         self._update_partial_results()
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("Stage 1 Done")
@@ -1256,28 +1268,92 @@ class FrequencyTuningController(QObject):
         Thread(target=_do_push, daemon=True).start()
 
     def push_detune_to_df_cold(self) -> None:
-        """Write the current live detune reading to the DF_COLD PV."""
+        """Ask which cold landing to commit, then write PV and record together.
+
+        Always writes DF_COLD *and* the record's df_cold_hz to the same number.
+        The previous version pushed whatever the live detune happened to be when
+        the button was clicked, which could differ from the value Stage 1
+        recorded — producing exactly the DF_COLD/record mismatch that the tuning
+        gates reject at 1 Hz.
+        """
         if self._cavity is None:
             self.view.log_message(
                 "No cavity selected — cannot push to DF_COLD."
             )
             return
-        detune = self.get_live_detune()
-        if detune is None:
-            self.view.log_message("Could not read current detune.")
+
+        choice = ask_for_cold_landing(
+            self.view,
+            measured_hz=self._df_cold_hz,
+            live_hz=self.get_live_detune(),
+        )
+        if choice is None:
             return
+
+        self._commit_cold_landing(choice)
+
+    def _commit_cold_landing(self, choice) -> None:
+        """Write the chosen value to DF_COLD and store it on the record."""
+        value = choice.value_hz
+        self._df_cold_hz = value
+        self._persist_df_cold_to_record()
+        self._save_stage_to_history(
+            _STAGE_COLD_LANDING,
+            {
+                "df_cold_hz": value,
+                "source": choice.source,
+                "justification": choice.justification,
+            },
+        )
+        self.view.log_message(
+            f"Cold landing committed: {choice.provenance()}", "success"
+        )
+
+        cavity = self._cavity
 
         def _do_push() -> None:
             try:
                 from sc_linac_physics.utils.epics import PV
 
-                pv = PV(self._cavity.pv_addr("DF_COLD"))
-                pv.put(detune)
-                self._log_signal.emit(f"Pushed {detune:.0f} Hz to DF_COLD.")
+                PV(cavity.pv_addr("DF_COLD")).put(value)
+                self._log_signal.emit(f"Pushed {value:.0f} Hz to DF_COLD.")
             except Exception as exc:
                 self._log_signal.emit(f"Failed to push to DF_COLD: {exc}")
+            finally:
+                self._df_cold_committed_signal.emit()
 
         Thread(target=_do_push, daemon=True).start()
+
+    def refresh_cold_landing_prompt(self) -> None:
+        """Highlight the save button while a cold landing is waiting to commit.
+
+        Stage 2 will not run until DF_COLD holds the agreed value, so the button
+        has to look like the next thing to do rather than an optional extra —
+        the affordance an operator reviewing the screen read as "this is not
+        always needed".
+        """
+        btn = getattr(self.view, "push_df_cold_button", None)
+        if btn is None:
+            return
+        needed = self._df_cold_hz is not None and not self._df_cold_matches_pv()
+        btn.setStyleSheet(
+            PUSH_DF_COLD_ATTENTION if needed else PUSH_DF_COLD_NEUTRAL
+        )
+        btn.setToolTip(
+            COLD_LANDING_TOOLTIP_NEEDED if needed else COLD_LANDING_TOOLTIP_SET
+        )
+
+    def _df_cold_matches_pv(self) -> bool:
+        """True if DF_COLD already agrees with the recorded cold landing."""
+        if self._cavity is None or self._df_cold_hz is None:
+            return False
+        try:
+            current = self._cavity.df_cold_pv_obj.get()
+        except Exception:
+            return False
+        if current is None:
+            return False
+        return abs(float(current) - float(self._df_cold_hz)) <= 1.0
 
     def on_move_left(self) -> None:
         if self._cavity is None:
@@ -1490,6 +1566,7 @@ class FrequencyTuningController(QObject):
         # record itself. Without this, a record whose cold landing only ever
         # reached measurement_history still fails the phase's stage-2 gate.
         self._persist_df_cold_to_record()
+        self.refresh_cold_landing_prompt()
         self._rebuild_phase_context(record)
 
         if not has_probe:

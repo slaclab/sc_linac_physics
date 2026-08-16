@@ -10,6 +10,15 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     FrequencyTuningData,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status import (
+    PUSH_DF_COLD_ATTENTION,
+    PUSH_DF_COLD_NEUTRAL,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.cold_landing_dialog import (
+    ColdLandingChoice,
+    SOURCE_ENTERED,
+    SOURCE_MEASURED,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
     PhaseResult,
@@ -38,6 +47,9 @@ class _ButtonStub:
 
     def setVisible(self, visible: bool) -> None:
         self.visible = visible
+
+    def setToolTip(self, tip: str) -> None:
+        self.tooltip = tip
 
 
 class _SpinboxStub:
@@ -100,7 +112,10 @@ class _ViewStub:
     def get_current_cavity(self):
         return self._cavity
 
-    def log_message(self, message: str) -> None:
+    def log_message(
+        self, message: str, entry_type: str = "info", key: str | None = None
+    ) -> None:
+        # Mirrors PhaseDisplayBase.log_message, which takes entry_type/key.
         self.logs.append(message)
 
     def show_error(self, message: str) -> None:
@@ -1764,21 +1779,15 @@ def test_push_detune_to_df_cold_no_cavity() -> None:
     assert any("No cavity selected" in m for m in view.logs)
 
 
-def test_push_detune_to_df_cold_no_reading() -> None:
+def test_push_detune_to_df_cold_cancelled_does_nothing(monkeypatch) -> None:
+    """Committing is never automatic — cancelling must not touch DF_COLD."""
     view = _ViewStub()
     controller = _make_controller(view=view)
     controller._cavity = Mock()
-    controller.get_live_detune = Mock(return_value=None)
-    controller.push_detune_to_df_cold()
-    assert any("Could not read current detune" in m for m in view.logs)
-
-
-def test_push_detune_to_df_cold_puts(monkeypatch) -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller._cavity = Mock()
-    controller._cavity.pv_addr.return_value = "PV:DFCOLD"
     controller.get_live_detune = Mock(return_value=12.0)
+    monkeypatch.setattr(
+        controller_module, "ask_for_cold_landing", lambda *_a, **_k: None
+    )
     fake_pv = Mock()
     monkeypatch.setattr(
         "sc_linac_physics.utils.epics.PV", lambda *_a, **_k: fake_pv
@@ -1786,15 +1795,81 @@ def test_push_detune_to_df_cold_puts(monkeypatch) -> None:
 
     controller.push_detune_to_df_cold()
 
-    fake_pv.put.assert_called_once_with(12.0)
-    assert any("DF_COLD" in m for m in view.logs)
+    fake_pv.put.assert_not_called()
 
 
-def test_push_detune_to_df_cold_exception(monkeypatch) -> None:
+def test_commit_writes_pv_and_record_to_the_same_value(monkeypatch) -> None:
+    """The PV and the record must never disagree.
+
+    The old button pushed whatever the live detune happened to be, which could
+    differ from the value Stage 1 recorded — producing the exact DF_COLD/record
+    mismatch the tuning gates reject at 1 Hz.
+    """
     view = _ViewStub()
-    controller = _make_controller(view=view)
+    session = Mock()
+    record = _record()
+    record.frequency_tuning = None
+    session.get_active_record.return_value = record
+    controller = _make_controller(view=view, session=session)
     controller._cavity = Mock()
-    controller.get_live_detune = Mock(return_value=12.0)
+    controller._cavity.pv_addr.return_value = "PV:DFCOLD"
+    controller._df_cold_hz = 3739.0
+    controller.get_live_detune = Mock(return_value=3800.0)
+
+    choice = ColdLandingChoice(value_hz=3739.0, source=SOURCE_MEASURED)
+    monkeypatch.setattr(
+        controller_module, "ask_for_cold_landing", lambda *_a, **_k: choice
+    )
+    fake_pv = Mock()
+    monkeypatch.setattr(
+        "sc_linac_physics.utils.epics.PV", lambda *_a, **_k: fake_pv
+    )
+
+    controller.push_detune_to_df_cold()
+
+    fake_pv.put.assert_called_once_with(3739.0)
+    assert record.frequency_tuning.df_cold_hz == 3739.0
+    assert controller._df_cold_hz == 3739.0
+
+
+def test_commit_records_provenance_for_an_entered_value(monkeypatch) -> None:
+    """A value that was not measured here has to explain itself."""
+    view = _ViewStub()
+    controller = _make_controller(view=view, session=Mock())
+    controller._cavity = Mock()
+    controller._persist_df_cold_to_record = Mock()
+    saved: list = []
+    controller._save_stage_to_history = lambda step, data: saved.append(data)
+    monkeypatch.setattr(
+        "sc_linac_physics.utils.epics.PV", lambda *_a, **_k: Mock()
+    )
+    choice = ColdLandingChoice(
+        value_hz=1234.0,
+        source=SOURCE_ENTERED,
+        justification="measured at JLab during VTS",
+    )
+    monkeypatch.setattr(
+        controller_module, "ask_for_cold_landing", lambda *_a, **_k: choice
+    )
+
+    controller.push_detune_to_df_cold()
+
+    assert saved[0]["source"] == SOURCE_ENTERED
+    assert saved[0]["justification"] == "measured at JLab during VTS"
+    assert any("JLab" in m for m in view.logs)
+
+
+def test_commit_logs_pv_failure(monkeypatch) -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view, session=Mock())
+    controller._cavity = Mock()
+    controller._persist_df_cold_to_record = Mock()
+    controller._save_stage_to_history = Mock(return_value=True)
+    monkeypatch.setattr(
+        controller_module,
+        "ask_for_cold_landing",
+        lambda *_a, **_k: ColdLandingChoice(1.0, SOURCE_MEASURED),
+    )
     monkeypatch.setattr(
         "sc_linac_physics.utils.epics.PV",
         Mock(side_effect=RuntimeError("pv fail")),
@@ -1803,6 +1878,40 @@ def test_push_detune_to_df_cold_exception(monkeypatch) -> None:
     controller.push_detune_to_df_cold()
 
     assert any("Failed to push to DF_COLD" in m for m in view.logs)
+
+
+def test_cold_landing_prompt_highlights_until_df_cold_matches() -> None:
+    """The button must look like the next required action, not an extra."""
+    view = _ViewStub()
+    view.push_df_cold_button = _ButtonStub()
+    controller = _make_controller(view=view)
+    controller._cavity = Mock()
+    controller._df_cold_hz = 3739.0
+    controller._cavity.df_cold_pv_obj.get.return_value = 0.0
+
+    controller.refresh_cold_landing_prompt()
+    assert (
+        PUSH_DF_COLD_ATTENTION.strip() == view.push_df_cold_button.style.strip()
+    )
+
+    controller._cavity.df_cold_pv_obj.get.return_value = 3739.0
+    controller.refresh_cold_landing_prompt()
+    assert (
+        PUSH_DF_COLD_NEUTRAL.strip() == view.push_df_cold_button.style.strip()
+    )
+
+
+def test_cold_landing_prompt_neutral_before_stage_1() -> None:
+    """Nothing recorded yet means nothing to prompt for."""
+    view = _ViewStub()
+    view.push_df_cold_button = _ButtonStub()
+    controller = _make_controller(view=view)
+
+    controller.refresh_cold_landing_prompt()
+
+    assert (
+        PUSH_DF_COLD_NEUTRAL.strip() == view.push_df_cold_button.style.strip()
+    )
 
 
 def test_on_move_left_no_cavity() -> None:

@@ -21,6 +21,8 @@ from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
 from .stage_status import (
+    COLD_LANDING_TOOLTIP_NEEDED,
+    PUSH_DF_COLD_NEUTRAL,
     STAGE_CARD_STYLE_IDLE,
     STAGE_STATUS_NOT_STARTED,
     STAGE_STATUS_STYLE_NOT_STARTED,
@@ -895,15 +897,8 @@ class FrequencyTuningUI(PhaseUIBase):
             "push_df_cold_button", QPushButton("Save Cold Landing Frequency")
         )
         push_btn.setFixedHeight(24)
-        push_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #374151; color: #e2e8f0;
-                font-size: 9pt; padding: 2px 8px;
-                border-radius: 3px; border: 1px solid #4b5563;
-            }
-            QPushButton:hover { background-color: #4b5563; }
-            QPushButton:disabled { background-color: #1f2937; color: #6b7280; }
-        """)
+        push_btn.setStyleSheet(PUSH_DF_COLD_NEUTRAL)
+        push_btn.setToolTip(COLD_LANDING_TOOLTIP_NEEDED)
         self._connect(push_btn, "on_push_to_df_cold")
         layout.addWidget(push_btn)
 
