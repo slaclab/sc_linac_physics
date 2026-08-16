@@ -1132,7 +1132,7 @@ def test_measure_pi_modes_read_frequency_error(phase, mock_cavity):
 
 
 def test_check_state_stage2_success(phase, mock_cavity, mock_stepper):
-    _setup_phase(phase, seed_cold=False)
+    _setup_phase(phase, seed_cold=True)
     mock_cavity.stepper_temp_pv_obj.get.return_value = 22.0
     mock_cavity.detune_chirp = 1500.0
     result = phase._check_state_for_stage_2()
@@ -1165,8 +1165,34 @@ def test_check_state_stage2_cavity_offline(phase, mock_cavity):
     assert "online" in result.message.lower()
 
 
-def test_check_state_stage2_read_exception_retries(phase, mock_cavity):
+def test_check_state_stage2_requires_cold_landing_committed(phase):
+    """Stage 2 moves the stepper, which destroys the cold landing.
+
+    Once the cavity is tuned away its resting frequency is gone from the
+    hardware, so DF_COLD has to hold the agreed value before any motion — not
+    merely before Stage 3, which was the only gate that checked.
+    """
     _setup_phase(phase, seed_cold=False)
+
+    result = phase._check_state_for_stage_2()
+
+    assert result.result == PhaseResult.FAILED
+    assert "cold landing" in result.message.lower()
+
+
+def test_check_state_stage2_blocked_when_df_cold_disagrees(phase, mock_cavity):
+    """A DF_COLD that does not match the record is not good enough either."""
+    _setup_phase(phase)
+    mock_cavity.df_cold_pv_obj.get.return_value = 9999.0
+
+    result = phase._check_state_for_stage_2()
+
+    assert result.result == PhaseResult.FAILED
+    assert "df_cold does not match" in result.message.lower()
+
+
+def test_check_state_stage2_read_exception_retries(phase, mock_cavity):
+    _setup_phase(phase, seed_cold=True)
     mock_cavity.detune_chirp = property(
         lambda self: (_ for _ in ()).throw(RuntimeError("timeout"))
     )
