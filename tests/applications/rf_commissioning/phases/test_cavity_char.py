@@ -45,7 +45,9 @@ def mock_cavity():
     cavity.measured_loaded_q_in_tolerance = True
     cavity.loaded_q_lower_limit = 2.5e7
     cavity.loaded_q_upper_limit = 5.1e7
-    cavity.probe_q = 2.0e9
+    # Deliberately does NOT set probe_q: the real Cavity has no such
+    # attribute and no probe-Q readback PV. Setting it on the Mock is what
+    # previously made this suite pass against an API that does not exist.
     return cavity
 
 
@@ -163,8 +165,32 @@ def test_results_are_stored_on_the_record_as_they_are_read(phase, record):
     data = record.cavity_char
     assert data.loaded_q == 4.0e7
     assert data.scale_factor == 30.0
-    assert data.probe_q == 2.0e9
     assert data.loaded_q_in_tolerance is True
+
+
+def test_probe_q_is_not_invented_when_no_readback_exists(phase, record):
+    """QPROBE_CALC1.PROC triggers the calculation; nothing reads it back.
+
+    There is no probe-Q value PV and no push PV for it anywhere in the codebase.
+    The record must be left empty rather than carrying a fabricated number — an
+    earlier version of this suite passed only because the Mock supplied a
+    probe_q attribute the real Cavity does not have.
+    """
+    phase.execute_step("read_results")
+
+    assert record.cavity_char.probe_q is None
+
+
+def test_real_cavity_has_no_probe_q_readback():
+    """Pins the gap, so this fails the day the PV is added and can be wired up."""
+    from sc_linac_physics.utils.sc_linac.linac import Machine
+
+    cavity = Machine().cryomodules["37"].cavities[1]
+
+    assert not hasattr(cavity, "probe_q")
+    assert not hasattr(cavity, "measured_probe_q")
+    # The trigger does exist; only the readback is missing.
+    assert hasattr(cavity, "calc_probe_q_pv")
 
 
 def test_out_of_tolerance_is_recorded_as_not_passed(phase, record, mock_cavity):

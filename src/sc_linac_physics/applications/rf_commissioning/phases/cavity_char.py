@@ -19,6 +19,12 @@ Commissioning needs an operator to see the loaded Q, scale factor and probe Q
 *before* anything is written to the cavity, so this phase drives the same code at
 a lower level and stops between measuring and pushing.
 
+Known gap: probe Q. QPROBE_CALC1.PROC triggers the calculation and is the only
+probe-Q PV that exists — there is no value record to read the result from and no
+push PV for it. Ryan's outline asks for probe Q to be displayed and pushed, so
+those PVs presumably exist on the machine and are missing from the model. Until
+they are added, probe_q stays None on the record rather than being invented.
+
 Sequence:
   1. verify_initial_state    – stepper idle, cavity online, RF/SSA ready; warn if
                                SSA calibration or tuning are stale
@@ -26,11 +32,11 @@ Sequence:
                                override the default)
   3. start_characterization  – kick off PROBECALSTRT
   4. wait_for_completion     – poll the status until it settles or crashes
-  5. read_results            – read loaded Q, scale factor; trigger the probe-Q
-                               calc and read it back; flag out-of-tolerance
-                               loaded Q. Nothing is pushed.
-  6. push_results            – operator-confirmed: push loaded Q, scale factor
-                               and probe Q to the cavity
+  5. read_results            – read loaded Q and scale factor, trigger the
+                               probe-Q calculation, flag out-of-tolerance loaded
+                               Q. Nothing is pushed.
+  6. push_results            – operator-confirmed: push loaded Q and scale
+                               factor to the cavity
   7. record_results          – write CavityCharacterization onto the record
 """
 
@@ -371,14 +377,18 @@ class CavityCharPhase(PhaseBase):
         )
 
     def _read_probe_q(self) -> float | None:
-        """Read back the calculated probe Q, or None if it is unavailable."""
-        for attr in ("probe_q", "measured_probe_q"):
-            value = getattr(self.cavity, attr, None)
-            if value is not None and not callable(value):
-                try:
-                    return float(value)
-                except (TypeError, ValueError):
-                    return None
+        """Always None today: there is no probe-Q readback PV.
+
+        `calculate_probe_q()` processes QPROBE_CALC1.PROC, which triggers the
+        calculation, and that is the only probe-Q PV in the codebase — there is
+        no value record to read the result from, and no PUSH_QPROBE to push it
+        with (only PUSH_QLOADED and PUSH_CAV_SCALE exist).
+
+        Ryan's outline asks for probe Q to be displayed and pushed, so the PV
+        names are presumably known to the SRF group and simply absent from the
+        hardware model. Returning None keeps the record honest until they are
+        added: better an empty field than a fabricated number.
+        """
         return None
 
     def _push_results(self) -> PhaseStepResult:
