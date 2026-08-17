@@ -111,9 +111,9 @@ PUSH_DF_COLD_ATTENTION = f"""
 
 COLD_LANDING_TOOLTIP_NEEDED = (
     "Commit the cavity's resting frequency to the DF_COLD PV.\n\n"
-    "Required before Stage 2: moving the stepper makes the cold landing "
-    "impossible to measure afterwards, so the reference has to be stored "
-    "first.\n\n"
+    "The cold landing is only measurable after a cool down and before the "
+    "stepper motors move, so it has to be stored before Stage 2 — "
+    "commissioning cannot continue until it is set.\n\n"
     "You choose which value goes in — the one Stage 1 measured, the current "
     "live detune, or a value entered by hand (a partner-lab measurement, for "
     "example, which needs a justification)."

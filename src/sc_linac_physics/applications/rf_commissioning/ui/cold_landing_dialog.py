@@ -83,9 +83,13 @@ class ColdLandingDialog(QDialog):
         layout.setSpacing(8)
 
         blurb = QLabel(
-            "DF_COLD is the cavity's reference resting frequency. Tuning will "
-            "not start until it is set — moving the stepper makes the cold "
-            "landing impossible to measure afterwards."
+            # Wording from Janice Nelson (AOSD), who found the previous version
+            # confusing. Her one word changed: "cannot continue" rather than
+            # "cannot occur", since Piezo Pre-RF and SSA Calibration have
+            # already happened by the time this dialog appears.
+            "DF_COLD is the cavity's reference resting frequency, and is only "
+            "measurable after a cool down and before the stepper motors move. "
+            "Commissioning cannot continue until it is set."
         )
         blurb.setWordWrap(True)
         # A word-wrapped QLabel reports the height of a single line, so in a
