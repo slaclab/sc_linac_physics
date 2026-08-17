@@ -83,6 +83,10 @@ def make_rack(is_hl=False):
     rack.cryomodule.name = choice(ALL_CRYOMODULES)
     rack.cryomodule.is_harmonic_linearizer = is_hl
     rack.cryomodule.linac.name = f"L{randint(0, 3)}B"
+    # Set explicitly: the cryomodule is a Mock, so any unset property returns a
+    # truthy Mock and would select the HE loaded-Q window. The linac name above
+    # is always L0B-L3B, so this fixture is never a high-energy cavity.
+    rack.cryomodule.is_high_energy = False
     return rack
 
 
@@ -902,3 +906,80 @@ def test_walk_amp(cavity):
 def test_is_offline(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_OFFLINE_VALUE)
     assert cavity.is_offline
+
+
+class TestLoadedQLimitsByCavityClass:
+    """Three cavity classes, three loaded-Q windows.
+
+    HE (all of L4B) accepts a wider window than the original LCLS-II cavities
+    at both ends — a different cavity design, not a looser standard. Using the
+    standard limits there would flag correctly-performing HE cavities.
+    """
+
+    @staticmethod
+    def _cavity(cm_name, number=1):
+        from sc_linac_physics.utils.sc_linac.linac import Machine
+
+        return Machine().cryomodules[cm_name].cavities[number]
+
+    def test_high_energy_cavities_use_the_he_window(self):
+        from sc_linac_physics.utils.sc_linac import linac_utils
+
+        for cm_name in ("37", "48", "59"):
+            cavity = self._cavity(cm_name)
+            assert (
+                cavity.loaded_q_lower_limit
+                == linac_utils.LOADED_Q_LOWER_LIMIT_HE
+            )
+            assert (
+                cavity.loaded_q_upper_limit
+                == linac_utils.LOADED_Q_UPPER_LIMIT_HE
+            )
+
+    def test_standard_cavities_are_unchanged(self):
+        from sc_linac_physics.utils.sc_linac import linac_utils
+
+        cavity = self._cavity("01")
+        assert cavity.loaded_q_lower_limit == linac_utils.LOADED_Q_LOWER_LIMIT
+        assert cavity.loaded_q_upper_limit == linac_utils.LOADED_Q_UPPER_LIMIT
+
+    def test_harmonic_linearizer_cavities_are_unchanged(self):
+        from sc_linac_physics.utils.sc_linac import linac_utils
+
+        cavity = self._cavity("H1")
+        assert (
+            cavity.loaded_q_lower_limit == linac_utils.LOADED_Q_LOWER_LIMIT_HL
+        )
+        assert (
+            cavity.loaded_q_upper_limit == linac_utils.LOADED_Q_UPPER_LIMIT_HL
+        )
+
+    def test_he_cavities_keep_standard_scale_factor_limits(self):
+        """No separate HE scale-factor limits were specified."""
+        from sc_linac_physics.utils.sc_linac import linac_utils
+
+        cavity = self._cavity("37")
+        assert (
+            cavity.scale_factor_lower_limit
+            == linac_utils.CAVITY_SCALE_LOWER_LIMIT
+        )
+        assert (
+            cavity.scale_factor_upper_limit
+            == linac_utils.CAVITY_SCALE_UPPER_LIMIT
+        )
+
+    def test_he_tolerance_check_accepts_a_q_the_standard_window_rejects(self):
+        """The behavioural consequence: 6e7 passes on L4B, fails on L0B."""
+        from unittest.mock import PropertyMock, patch
+
+        he = self._cavity("37")
+        standard = self._cavity("01")
+
+        for cavity, expected in ((he, True), (standard, False)):
+            with patch.object(
+                type(cavity),
+                "measured_loaded_q",
+                new_callable=PropertyMock,
+                return_value=6e7,
+            ):
+                assert cavity.measured_loaded_q_in_tolerance is expected
