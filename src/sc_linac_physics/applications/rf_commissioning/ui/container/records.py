@@ -35,14 +35,14 @@ class _RecordSelectorMixin:
         cryomodule = self.cryomodule_combo.currentText()
         cavity = self.cavity_combo.currentText()
 
-        if cryomodule == "CM..." or not cryomodule:
+        if cryomodule == "..." or not cryomodule:
             QMessageBox.warning(
                 self, "Cryomodule Required", "Please select a cryomodule."
             )
             self.cryomodule_combo.setFocus()
             return
 
-        if cavity == "Cav..." or not cavity:
+        if cavity == "..." or not cavity:
             QMessageBox.warning(
                 self, "Cavity Required", "Please select a cavity number."
             )

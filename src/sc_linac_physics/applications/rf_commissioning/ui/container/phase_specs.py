@@ -23,34 +23,23 @@ class PhaseTabSpec:
     phase: CommissioningPhase | None = None
 
 
-DEFAULT_BETA_VISIBLE_PHASES: tuple[CommissioningPhase, ...] = (
-    CommissioningPhase.PIEZO_PRE_RF,
-    CommissioningPhase.SSA_CHAR,
+DEFAULT_BETA_VISIBLE_PHASES: tuple[CommissioningPhase, ...] = tuple(
+    CommissioningPhase
 )
 
 
 def build_default_phase_specs(
     *,
-    include_placeholder_phases: bool = False,
     visible_phases: (
         tuple[CommissioningPhase, ...] | list[CommissioningPhase] | None
     ) = None,
 ) -> list[PhaseTabSpec]:
     """Build phase tab specs from ``PHASE_REGISTRY``.
 
-    The RF commissioning app is still beta and only the Piezo Pre-RF phase is
-    fully implemented end-to-end. To keep the default UI clean and simple, the
-    default tab set includes only implemented phases.
-
-    Set ``include_placeholder_phases=True`` to surface the placeholder tabs for
-    development work, or pass ``visible_phases`` to explicitly control the tab
-    list while preserving registry order.
+    All commissioning phases are shown by default. Pass ``visible_phases`` to
+    restrict which phases appear, preserving registry order.
     """
-    requested_phases = (
-        {phase for phase in PHASE_REGISTRY if PHASE_REGISTRY[phase].record_attr}
-        if include_placeholder_phases
-        else set(visible_phases or DEFAULT_BETA_VISIBLE_PHASES)
-    )
+    requested_phases = set(visible_phases or DEFAULT_BETA_VISIBLE_PHASES)
 
     return [
         PhaseTabSpec(

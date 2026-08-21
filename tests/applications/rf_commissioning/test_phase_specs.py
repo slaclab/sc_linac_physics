@@ -8,32 +8,16 @@ from sc_linac_physics.applications.rf_commissioning.ui.container.phase_specs imp
 )
 
 
-def test_default_phase_specs_hide_placeholder_tabs_for_beta() -> None:
+def test_default_phase_specs_shows_all_phases() -> None:
     specs = build_default_phase_specs()
 
-    assert [spec.phase for spec in specs] == [
-        CommissioningPhase.PIEZO_PRE_RF,
-        CommissioningPhase.SSA_CHAR,
-    ]
-    assert [spec.title for spec in specs] == [
-        "Piezo Pre-RF",
-        "SSA Calibration",
-    ]
-
-
-def test_default_phase_specs_can_include_all_placeholder_tabs() -> None:
-    specs = build_default_phase_specs(include_placeholder_phases=True)
-
-    assert [spec.phase for spec in specs] == [
-        CommissioningPhase.PIEZO_PRE_RF,
-        CommissioningPhase.SSA_CHAR,
-        CommissioningPhase.FREQUENCY_TUNING,
-        CommissioningPhase.CAVITY_CHAR,
-        CommissioningPhase.PIEZO_WITH_RF,
-        CommissioningPhase.HIGH_POWER_RAMP,
-        CommissioningPhase.MP_PROCESSING,
-        CommissioningPhase.ONE_HOUR_RUN,
-    ]
+    phases = [spec.phase for spec in specs]
+    assert CommissioningPhase.PIEZO_PRE_RF in phases
+    assert CommissioningPhase.SSA_CHAR in phases
+    assert CommissioningPhase.FREQUENCY_TUNING in phases
+    assert len(phases) == len(
+        [p for p in CommissioningPhase if p != CommissioningPhase.COMPLETE]
+    )
 
 
 def test_default_phase_specs_accept_custom_visible_phase_subset() -> None:

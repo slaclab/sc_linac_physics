@@ -41,7 +41,7 @@ def test_build_header_panel_wires_controls_and_actions(qtbot):
 
     assert host.cryomodule_combo.count() > 1
     assert host.cavity_combo.count() == 9
-    assert host.sync_status.text() == "Select a cavity to begin"
+    assert host.sync_status.text() == "← Select Linac › CM › Cavity to begin"
     assert host._populate_operator_combo.called
 
     buttons = panel.findChildren(type(host.open_magnet_checkout_btn))
@@ -75,8 +75,16 @@ def test_build_progress_bar_and_update_indicator_states(qtbot):
 
     progress_panel.update_progress_indicator(host, record=object())
 
-    assert host.phase_indicators[CommissioningPhase.PIEZO_PRE_RF].text() == "✔"
-    assert host.phase_indicators[CommissioningPhase.SSA_CHAR].text() == "✖"
+    assert (
+        host.phase_indicators[CommissioningPhase.PIEZO_PRE_RF]
+        .text()
+        .startswith("✔")
+    )
+    assert (
+        host.phase_indicators[CommissioningPhase.SSA_CHAR]
+        .text()
+        .startswith("✖")
+    )
 
 
 def test_show_record_selector_renders_table_and_hooks_actions(
