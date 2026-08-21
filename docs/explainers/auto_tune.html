@@ -139,7 +139,87 @@
     lists how it fails.
   </p>
 
-  <section id="actuators"><h2>1. What tuning moves, and with what</h2></section>
+  <section id="actuators">
+    <h2>1. What tuning moves, and with what</h2>
+
+    <p>
+      Detune is the difference between the cavity's frequency and the frequency
+      we want. Tuning is the act of driving it to zero.
+    </p>
+
+    <p>Two actuators, with a clear division of labour:</p>
+
+    <table>
+      <thead><tr><th></th><th>Stepper tuner</th><th>Piezo</th></tr></thead>
+      <tbody>
+        <tr><td>Speed</td><td>Slow — seconds to minutes per move</td>
+            <td>Fast — closes a feedback loop</td></tr>
+        <tr><td>Range</td><td>Enormous; tens of millions of microsteps to cold
+            landing</td><td>Narrow, centred at 25 V
+            <span class="cite">PIEZO_CENTER_VOLTAGE, linac_utils.py:142</span>
+            </td></tr>
+        <tr><td>Role</td><td>Gets the cavity to resonance and holds the coarse
+            position</td><td>Rejects microphonics once you are there</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Where Hz-per-step comes from</h3>
+
+    <p>
+      This is the detail most likely to mislead someone reading the source.
+      <code>linac_utils.py</code> contains <code>HZ_PER_STEP = 1.4</code> and
+      <code>HL_HZ_PER_STEP = 18.3</code>
+      <span class="cite">linac_utils.py:147-148</span>, and it is natural to
+      assume the tuning code uses them. It does not.
+    </p>
+
+    <p>
+      Those two are <em>estimates</em>. Nothing in <code>utils/sc_linac/</code>
+      or <code>applications/</code> reads either one. Their only consumers are
+      the two derived constants declared immediately below them
+      <span class="cite">ESTIMATED_MICROSTEPS_PER_HZ, linac_utils.py:151-152</span>,
+      and the only thing that imports <em>those</em> is the simulation IOC
+      <span class="cite">utils/simulation/tuner_service.py:104-111</span>. It
+      seeds each simulated cavity's <code>SCALE</code> PV at startup, picking
+      the 1.3&nbsp;GHz or 3.9&nbsp;GHz estimate according to the cryomodule and
+      then jittering it uniformly by &plusmn;20&nbsp;%.
+    </p>
+
+    <p>
+      Live tuning ignores all of that and reads a measured, per-cavity number
+      from the <code>SCALE</code> PV:
+    </p>
+
+    <div class="panel">
+      <pre>Cavity.microsteps_per_hz = 1 / StepperTuner.hz_per_microstep   # reads SCALE</pre>
+      <p class="cite">cavity.py:339, stepper.py:96</p>
+    </div>
+
+    <p>Two consequences worth carrying into the rest of this page:</p>
+
+    <ul>
+      <li>
+        The conversion factor is a measured property of one cavity. Two
+        cavities in the same cryomodule can legitimately disagree, and a stale
+        or wrong <code>SCALE</code> is a live failure mode — it is the
+        <em>calibration error</em> slider in section 2.
+      </li>
+      <li>
+        <code>hz_per_microstep</code> returns <code>abs()</code> of the PV
+        <span class="cite">stepper.py:96</span>. RF commissioning measures a
+        <em>signed</em> Hz/microstep
+        <span class="cite">frequency_tuning.py:479</span> and writes it to
+        <code>SCALE_CALC.B</code>
+        <span class="cite">_apply_hz_per_step, frequency_tuning.py:360</span>,
+        but the loop only ever sees the magnitude. Direction of travel comes
+        from the sign of the detune, plus the harmonic-linearizer inversion
+        applied inside <code>issue_move_command()</code>
+        <span class="cite">stepper.py:355-356</span>. So the probe's sign is
+        information for the operator and the commissioning record — not an
+        input to the loop.
+      </li>
+    </ul>
+  </section>
   <section id="the-loop">
     <h2>2. The loop</h2>
 
