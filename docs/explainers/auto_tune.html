@@ -568,7 +568,99 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
       </tbody>
     </table>
   </section>
-  <section id="failures"><h2>5. How it fails</h2></section>
+  <section id="commissioning">
+    <h2>5. The commissioning stages</h2>
+
+    <p>
+      RF commissioning wraps the same loop in a gated, operator-supervised
+      sequence <span class="cite">phases/frequency_tuning.py:110-119</span>.
+      Seven steps:
+    </p>
+
+    <table>
+      <thead><tr><th>#</th><th>Step</th><th>What it does to the machine</th>
+        </tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>verify_initial_state</code></td>
+            <td>Confirms the stepper is idle, then prepares the cavity: SSA on,
+            interlocks reset, <code>setup_tuning()</code> into chirp
+            mode</td></tr>
+        <tr><td>2</td><td><code>record_cold_landing</code></td>
+            <td>Records the cold-landing detune; the operator pushes it to
+            <code>DF_COLD</code> from the UI</td></tr>
+        <tr><td>3</td><td><code>probe_stepper_direction</code></td>
+            <td>Moves &plusmn;50,000 microsteps and measures the detune
+            response</td></tr>
+        <tr><td>4</td><td><code>apply_hz_per_step</code></td>
+            <td>Writes the confirmed Hz/full-step to
+            <code>SCALE_CALC.B</code></td></tr>
+        <tr><td>5</td><td><code>tune_to_resonance</code></td>
+            <td>Delegates to <code>_auto_tune</code> with a temperature guard,
+            then writes <code>NSTEPS_COLD</code></td></tr>
+        <tr><td>6</td><td><code>measure_pi_modes</code></td>
+            <td>Single-cavity FSCAN for the 8&pi;/9 and 7&pi;/9 parasitic
+            modes</td></tr>
+        <tr><td>7</td><td><code>record_results</code></td>
+            <td>Writes the phase record to the commissioning database</td></tr>
+      </tbody>
+    </table>
+
+    <h3>What this path does that <code>move_to_resonance</code> does not</h3>
+
+    <ul>
+      <li>
+        <strong>Measures Hz/microstep instead of inheriting it.</strong> A
+        50,000-microstep probe move must produce at least 100 Hz of detune
+        change <span class="cite">min_probe_delta_hz,
+        frequency_tuning.py:59, enforced :462</span>. Below that it fails and
+        points at the two physical causes: the stepper is not mechanically
+        connected, or the cavity is not at 2 K.
+      </li>
+      <li>
+        <strong>Applies an explicit sign convention.</strong>
+        <code>SCALE = -&Delta;(CHIRP:DF) / &Delta;(microstep)</code>: a positive
+        number of microsteps <em>decreases</em> <code>CHIRP:DF</code>
+        <span class="cite">frequency_tuning.py:472</span>.
+      </li>
+      <li>
+        <strong>Waits for the operator before writing.</strong> And it writes
+        <code>SCALE_CALC.B</code>, not <code>SCALE</code> — <code>SCALE</code>
+        is a read-only calc output the IOC recomputes from it
+        (<code>SCALE = SCALE_CALC.B / 256</code>), so writing <code>SCALE</code>
+        directly is silently reverted
+        <span class="cite">stepper.py:105-116, frequency_tuning.py:363-365</span>.
+      </li>
+      <li>
+        <strong>Refuses to tune until <code>DF_COLD</code> is pushed</strong>
+        and matches the recorded cold-landing frequency within 1 Hz
+        <span class="cite">frequency_tuning.py:154, tolerance at :152</span>.
+        The reason it compares against the record rather than checking validity:
+        <code>DF_COLD</code> defaults to a perfectly valid 0, so there is no
+        INVALID severity to key off.
+      </li>
+      <li>
+        <strong>Guards the stepper temperature</strong> at
+        <code>STEPPER_TEMP_LIMIT</code> = 70 &deg;C
+        <span class="cite">frequency_tuning.py:53</span>, raisable for a re-run
+        by an explicit operator acknowledgement
+        <span class="cite">over_temp_ack_c, :548</span>. The raised ceiling is
+        passed straight into <code>_auto_tune</code>'s
+        <code>max_stepper_temp</code>, which still fails hard on a breach — the
+        acknowledgement moves the line, it does not add a retry.
+      </li>
+    </ul>
+
+    <div class="caveat">
+      <strong>Not covered here: the operator controls.</strong> This section
+      describes the backend phase logic. The screen that drives it — the
+      per-stage re-run gates, and what the Abort button commands — is documented
+      separately once that work merges. Section 6 covers the abort
+      <em>mechanism</em> at the stepper and cavity level, which is what
+      <code>_auto_tune</code> itself sees.
+    </div>
+
+  </section>
+  <section id="failures"><h2>6. How it fails</h2></section>
 </main>
 <script>
 "use strict";
@@ -1534,13 +1626,13 @@ function buildControls(host) {
   grid.appendChild(faultSelect);
   grid.appendChild(el("span", { class: "val", text: "" }));
   grid.appendChild(el("div", { class: "cite note",
-    text: "Fires on move 2. Each one is explained in section 5 — leave it on " +
+    text: "Fires on move 2. Each one is explained in section 6 — leave it on " +
           "\"none\" for now if you have not read that yet." }));
 
   host.appendChild(grid);
 }
 
-// Exposed as a function rather than an assignment so section 5 can drive the
+// Exposed as a function rather than an assignment so section 6 can drive the
 // simulator from its own controls without duplicating the reset bookkeeping.
 function setFault(fault) {
   activeFault = fault;
