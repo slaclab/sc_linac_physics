@@ -874,12 +874,13 @@ class Cavity(linac_utils.SCLinacObject):
             est_steps = int(0.9 * delta_hz * microsteps_per_hz)
 
             # A zero step estimate commands no motion, so the detune cannot
-            # change and steps_moved cannot grow -- neither the runaway guard
-            # below nor the temperature guard above can ever fire. Bail out
-            # instead of spinning forever. This means the scale factor
-            # relating Hz to microsteps is implausibly large (the stepper
-            # SCALE PV, and for the piezo-centering pass the piezo SCALE PV
-            # that sets both delta_hz and tolerance).
+            # change and steps_moved cannot grow -- so the runaway guard below
+            # can never fire, and the temperature guard above will not either
+            # unless the stepper was already hot on entry (an idle motor does
+            # not heat up). Bail out instead of spinning forever. This means
+            # the scale factor relating Hz to microsteps is implausibly large
+            # (the stepper SCALE PV, and for the piezo-centering pass the
+            # piezo SCALE PV that sets both delta_hz and tolerance).
             if est_steps == 0:
                 hz_per_microstep = 1 / microsteps_per_hz
                 self.set_status_message(
