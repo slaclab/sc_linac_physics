@@ -1,7 +1,5 @@
 """Base display interface for commissioning phases."""
 
-from datetime import datetime
-
 from PyQt5.QtWidgets import QMessageBox
 from pydm import Display
 
@@ -98,11 +96,10 @@ class PhaseDisplayBase(Display):
             return (record.short_cavity_name, record.cryomodule)
         return None
 
-    def log_message(self, message):
-        """Add a message to the history log."""
+    def log_message(self, message: str, entry_type: str = "info") -> None:
+        """Add a message to the phase activity feed."""
         if hasattr(self, "history_text"):
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            self.history_text.append(f"[{timestamp}] {message}")
+            self.history_text.append(message, entry_type=entry_type)
 
     def show_error(self, message):
         """Show error message dialog."""

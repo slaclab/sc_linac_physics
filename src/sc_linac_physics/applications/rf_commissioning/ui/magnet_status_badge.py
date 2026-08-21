@@ -54,19 +54,21 @@ class MagnetStatusBadge(QWidget):
 
     def update_display(self):
         """Refresh badge appearance based on current status."""
-        # Format status string
         if self.status == "PASS":
             display_text = "✓ PASS"
-            bg_color = QColor(0, 128, 0)  # Green
-            text_color = QColor(255, 255, 255)  # White
+            # Muted sage green background
+            bg_color = QColor(47, 130, 93)
+            text_color = QColor(255, 255, 255)
         elif self.status == "FAIL":
             display_text = "✗ FAIL"
-            bg_color = QColor(255, 0, 0)  # Red
-            text_color = QColor(255, 255, 255)  # White
+            # Muted terracotta red background
+            bg_color = QColor(157, 62, 56)
+            text_color = QColor(255, 255, 255)
         else:  # PENDING
             display_text = "? PENDING"
-            bg_color = QColor(192, 192, 192)  # Light gray
-            text_color = QColor(0, 0, 0)  # Black
+            # Neutral slate background
+            bg_color = QColor(69, 76, 94)
+            text_color = QColor(201, 205, 214)
 
         self.label.setText(display_text)
 

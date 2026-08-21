@@ -41,6 +41,16 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     _PersistenceMixin,
     _RecordLifecycleMixin,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    BG_DEEP,
+    BG_INTERACTIVE,
+    BG_PANEL,
+    BORDER,
+    COLOR_PRIMARY,
+    SANS_FONT_STACK,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.magnet_checkout_dialog import (
     MagnetCheckoutDialog,
 )
@@ -115,6 +125,36 @@ class MultiPhaseCommissioningDisplay(
         # Phase tabs
         self.tabs = QTabWidget()
         self.tabs.setTabPosition(QTabWidget.North)
+        self.tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                background-color: {BG_DEEP};
+                border: 1px solid {BORDER};
+                border-top: none;
+            }}
+            QTabBar::tab {{
+                background-color: {BG_PANEL};
+                color: {TEXT_SECONDARY};
+                padding: 6px 14px;
+                border: 1px solid {BORDER};
+                border-bottom: none;
+                border-radius: 0px;
+                font-family: {SANS_FONT_STACK};
+                font-size: 11px;
+                min-width: 80px;
+            }}
+            QTabBar::tab:selected {{
+                background-color: {BG_DEEP};
+                color: {TEXT_PRIMARY};
+                border-bottom: 2px solid {COLOR_PRIMARY};
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: {BG_INTERACTIVE};
+                color: {TEXT_PRIMARY};
+            }}
+            QTabBar::tab:disabled {{
+                color: {BORDER};
+            }}
+        """)
         content_splitter.addWidget(self.tabs)
 
         # Notes panel (collapsible but always accessible)
