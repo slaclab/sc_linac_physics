@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How auto-tune works — SC Linac</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --ink: #e6e8ec;
+    --dim: #9aa3b2;
+    --line: #2b303a;
+    --accent: #6ea8fe;
+    --warn: #e0a458;
+    --bad: #e06c75;
+    --ok: #7fb069;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 62rem; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .5rem; }
+  h2 {
+    font-size: 1.35rem;
+    margin: 3.5rem 0 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+  .lede { color: var(--dim); font-size: 1.05rem; }
+  code, .mono, pre { font-family: var(--mono); font-size: .9em; }
+  pre { overflow-x: auto; margin: 0; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .cite { font-family: var(--mono); font-size: .78rem; color: var(--dim); }
+  .caveat {
+    border-left: 3px solid var(--warn);
+    padding: .5rem 0 .5rem 1rem;
+    margin: 1.25rem 0;
+    color: var(--dim);
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; }
+  th, td {
+    text-align: left;
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--line);
+    font-size: .92rem;
+    vertical-align: top;
+  }
+  th { color: var(--dim); font-weight: 600; }
+  button {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: .35rem .8rem;
+    font: inherit;
+    font-size: .88rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  canvas { width: 100%; height: auto; display: block; margin: 1rem 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>How auto-tune works</h1>
+  <p class="lede">
+    Every frequency-tuning path in <code>sc_linac_physics</code> — auto setup,
+    the tuning GUI, and RF commissioning — converges through one loop:
+    <code>Cavity._auto_tune()</code>. This page explains what that loop
+    commands the hardware to do, lets you drive a simulated copy of it, and
+    lists how it fails.
+  </p>
+
+  <section id="s1"><h2>1. What tuning moves, and with what</h2></section>
+  <section id="s2"><h2>2. The loop</h2></section>
+  <section id="s3"><h2>3. Where the detune number comes from</h2></section>
+  <section id="s4"><h2>4. Tune states</h2></section>
+  <section id="s5"><h2>5. The commissioning stages</h2></section>
+  <section id="s6"><h2>6. How it fails</h2></section>
+</main>
+<script>
+"use strict";
+</script>
+</body>
+</html>
