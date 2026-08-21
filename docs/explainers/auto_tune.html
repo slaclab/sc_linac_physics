@@ -1,0 +1,2172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How auto-tune works — SC Linac</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --ink: #e6e8ec;
+    --dim: #9aa3b2;
+    --line: #2b303a;
+    /* Interactive-control border. --line is only 1.25:1 against --panel, which
+       leaves buttons with no visible edge until hover. --edge is 3.25:1
+       against --panel (WCAG non-text contrast minimum is 3:1). */
+    --edge: #656f7e;
+    --accent: #6ea8fe;
+    --warn: #e0a458;
+    --bad: #e06c75;
+    --ok: #7fb069;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 62rem; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .5rem; }
+  h2 {
+    font-size: 1.35rem;
+    margin: 3.5rem 0 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+  .lede { color: var(--dim); font-size: 1.05rem; }
+  code, .mono, pre { font-family: var(--mono); font-size: .9em; }
+  pre { overflow-x: auto; margin: 0; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .cite { font-family: var(--mono); font-size: .78rem; color: var(--dim); }
+  .caveat {
+    border-left: 3px solid var(--warn);
+    padding: .5rem 0 .5rem 1rem;
+    margin: 1.25rem 0;
+    color: var(--dim);
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; }
+  th, td {
+    text-align: left;
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--line);
+    font-size: .92rem;
+    vertical-align: top;
+  }
+  th { color: var(--dim); font-weight: 600; }
+  /* Wrapper for tables too wide for the viewport, so they scroll on their own
+     instead of forcing the whole page sideways. */
+  .scroll { overflow-x: auto; }
+  button {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    padding: .35rem .8rem;
+    font: inherit;
+    font-size: .88rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  /* This rule sets the CSS (layout) size only. The simulator task must also set
+     the backing store to width*devicePixelRatio / height*devicePixelRatio and
+     ctx.scale(dpr, dpr), or the canvas renders blurry on HiDPI displays. */
+  canvas { width: 100%; height: auto; display: block; margin: 1rem 0 0; }
+
+  /* ---- Section 2 simulator ---- */
+  /* label / control / live value. Collapses to one column on narrow screens. */
+  .ctl {
+    display: grid;
+    /* Third column has to hold "0.0055 Hz/microstep" without clipping. */
+    grid-template-columns: 15rem 1fr 11rem;
+    gap: .3rem .9rem;
+    align-items: center;
+  }
+  .ctl > label { font-size: .92rem; }
+  .ctl > .val {
+    font-family: var(--mono);
+    font-size: .85rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  /* Notes sit under their own row, spanning the whole grid. */
+  .ctl > .note { grid-column: 1 / -1; margin: -.2rem 0 .5rem; }
+  @media (max-width: 44rem) {
+    .ctl { grid-template-columns: 1fr; gap: .15rem; }
+    .ctl > .val { text-align: left; }
+    .ctl > .note { margin: 0 0 .75rem; }
+  }
+  input[type="range"] { width: 100%; margin: 0; accent-color: var(--accent); }
+  select {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    padding: .25rem .4rem;
+    font: inherit;
+    font-size: .85rem;
+    max-width: 100%;
+  }
+  .bar {
+    height: .8rem;
+    border: 1px solid var(--edge);
+    border-radius: 4px;
+    background: var(--bg);
+    overflow: hidden;
+    margin: .4rem 0 .3rem;
+  }
+  .bar > div { height: 100%; }
+  .verdict { font-weight: 600; margin: 1rem 0 .25rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>How auto-tune works</h1>
+  <p class="lede">
+    Every frequency-tuning path in <code>sc_linac_physics</code> — auto setup,
+    the tuning GUI, and RF commissioning — converges through one loop:
+    <code>Cavity._auto_tune()</code>. This page explains what that loop
+    commands the hardware to do, lets you drive a simulated copy of it, and
+    lists how it fails.
+  </p>
+
+  <section id="actuators">
+    <h2>1. What tuning moves, and with what</h2>
+
+    <p>
+      Detune is the difference between the cavity's frequency and the frequency
+      we want. Tuning is the act of driving it to zero.
+    </p>
+
+    <p>Two actuators, with a clear division of labour:</p>
+
+    <table>
+      <thead><tr><th></th><th>Stepper tuner</th><th>Piezo</th></tr></thead>
+      <tbody>
+        <tr><td>Speed</td><td>Slow — seconds to minutes per move</td>
+            <td>Fast — closes a feedback loop</td></tr>
+        <tr><td>Range</td><td>Enormous; tens of millions of microsteps to cold
+            landing</td><td>Narrow, centred at 25 V
+            <span class="cite">PIEZO_CENTER_VOLTAGE, linac_utils.py:142</span>
+            </td></tr>
+        <tr><td>Role</td><td>Gets the cavity to resonance and holds the coarse
+            position</td><td>Rejects microphonics once you are there</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Where Hz-per-step comes from</h3>
+
+    <p>
+      This is the detail most likely to mislead someone reading the source.
+      <code>linac_utils.py</code> contains <code>HZ_PER_STEP = 1.4</code> and
+      <code>HL_HZ_PER_STEP = 18.3</code>
+      <span class="cite">linac_utils.py:147-148</span>, and it is natural to
+      assume the tuning code uses them. It does not.
+    </p>
+
+    <p>
+      Those two are <em>estimates</em>. Nothing in <code>utils/sc_linac/</code>
+      or <code>applications/</code> reads either one. Their only consumers are
+      the two derived constants declared immediately below them
+      <span class="cite">ESTIMATED_MICROSTEPS_PER_HZ, linac_utils.py:151-152</span>,
+      and the only thing that imports <em>those</em> is the simulation IOC
+      <span class="cite">utils/simulation/tuner_service.py:104-111</span>. It
+      seeds each simulated cavity's <code>SCALE</code> PV at startup, picking
+      the 1.3&nbsp;GHz or 3.9&nbsp;GHz estimate according to the cryomodule and
+      then jittering it uniformly by &plusmn;20&nbsp;%.
+    </p>
+
+    <p>
+      Live tuning ignores all of that and reads a measured, per-cavity number
+      from the <code>SCALE</code> PV:
+    </p>
+
+    <div class="panel">
+      <pre>Cavity.microsteps_per_hz = 1 / StepperTuner.hz_per_microstep   # reads SCALE</pre>
+      <p class="cite">cavity.py:339, stepper.py:96</p>
+    </div>
+
+    <p>Two consequences worth carrying into the rest of this page:</p>
+
+    <ul>
+      <li>
+        The conversion factor is a measured property of one cavity. Two
+        cavities in the same cryomodule can legitimately disagree, and a stale
+        or wrong <code>SCALE</code> is a live failure mode — it is the
+        <em>calibration error</em> slider in section 2.
+      </li>
+      <li>
+        <code>hz_per_microstep</code> returns <code>abs()</code> of the PV
+        <span class="cite">stepper.py:96</span>. RF commissioning measures a
+        <em>signed</em> Hz/microstep
+        <span class="cite">frequency_tuning.py:743</span> and writes it to
+        <code>SCALE_CALC.B</code>
+        <span class="cite">_apply_hz_per_step, frequency_tuning.py:624</span>,
+        but the loop only ever sees the magnitude. Direction of travel comes
+        from the sign of the detune, plus the harmonic-linearizer inversion
+        applied inside <code>issue_move_command()</code>
+        <span class="cite">stepper.py:355-356</span>. So the probe's sign is
+        information for the operator and the commissioning record — not an
+        input to the loop.
+      </li>
+    </ul>
+  </section>
+  <section id="the-loop">
+    <h2>2. The loop</h2>
+
+    <p>
+      Read the detune, convert Hz to microsteps, move most of the way, read
+      again, repeat until you are inside tolerance. That is the entire
+      algorithm. Everything else in <code>_auto_tune</code> is a guard against
+      it going wrong.
+    </p>
+
+    <div class="panel">
+      <pre>
+delta_hz = delta_hz_func()                      # read the machine
+expected_steps = |delta_hz * microsteps_per_hz|
+tol_factor     = stepper_tol_factor(expected_steps)
+tune_config    = OTHER                          # "mid-tune, do not trust me"
+
+while |delta_hz| &gt; tolerance:
+    check_abort()
+    if stepper_temp &gt; max_stepper_temp:  raise StepperTempError
+    iteration_callback()                        # abort flag + live plot
+    est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+    stepper_tuner.move(est_steps,
+                       max_steps = |est_steps| * 1.1,
+                       speed     = MAX_STEPPER_SPEED)
+    if steps_moved &gt; expected_steps * tol_factor:  raise DetuneError
+    check_detune()                              # may widen the chirp range
+    delta_hz = delta_hz_func()                  # read the machine again</pre>
+      <p class="cite">cavity.py:825-948</p>
+    </div>
+
+    <h3>Drive it</h3>
+
+    <div class="panel">
+      <div id="controls"></div>
+      <p>
+        <button id="run">Run</button>
+        <button id="step">Step once</button>
+        <button id="reset">Reset</button>
+      </p>
+      <canvas id="plot" width="900" height="260"></canvas>
+      <div id="budget"></div>
+      <div id="verdict"></div>
+      <div id="log"></div>
+      <div class="scroll">
+        <table id="iters">
+          <thead><tr>
+            <th>#</th><th>&Delta;f before (Hz)</th><th>est_steps</th>
+            <th>max_steps arg</th><th>cumulative</th>
+            <th>&Delta;f after (Hz)</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <h3>Two things the trace will not tell you</h3>
+
+    <p>
+      <strong>Truncation means a perfect cavity lands a hair outside
+      tolerance.</strong> <code>est_steps</code> is an <code>int(...)</code>,
+      and 0.9 leaves a tenth of the detune behind — so a perfectly calibrated
+      cavity starting at exactly ten times tolerance is aimed precisely at the
+      tolerance boundary, and the truncated step always drops it just outside.
+      Set the starting detune to <span id="fig-example-detune"></span>&nbsp;Hz
+      with tolerance 50 and calibration error 1.0: the exact aim is
+      <span id="fig-exact-aim"></span> microsteps, which would leave the detune
+      sitting exactly on the tolerance and end the loop. <code>int()</code>
+      hands the motor <span id="fig-truncated-aim"></span> instead, and the
+      <span id="fig-dropped-microsteps"></span> of a microstep it drops leaves
+      <span id="fig-residual"></span>&nbsp;Hz — still <code>&gt; 50</code>, so a
+      second move runs. At the nominal
+      <code>HZ_PER_STEP / MICROSTEPS_PER_STEP</code> scale of 1.4/256
+      (linac_utils.py:145-147) the same arithmetic leaves
+      <span id="fig-residual-nominal"></span>&nbsp;Hz. A
+      well-calibrated cavity at ten times tolerance therefore costs two moves,
+      never one.
+    </p>
+
+    <p>
+      <strong>Converging is not the same as being allowed to finish, and the
+      headroom shrinks as detune grows.</strong> Each move multiplies the
+      remaining detune by <code>|1 - gain|</code>, so the loop's total travel is
+      a geometric series — and it is scale-free:
+    </p>
+
+    <div class="panel">
+      <pre>travel / expectedSteps = undershoot / (1 - |1 - gain|)     &lt;- no detune in it
+budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as detune grows</pre>
+    </div>
+
+    <p>
+      The travel a given miscalibration demands does not care how far out of
+      tune you started. The budget does. At the page defaults,
+      <span id="fig-example-detune-b"></span>&nbsp;Hz is
+      <span id="fig-example-expected"></span> expected steps and buys a
+      <span id="fig-example-tol-factor"></span>&times; budget, while the
+      <span id="fig-opened-detune"></span>&nbsp;Hz the page opens on is
+      <span id="fig-opened-expected"></span> steps and buys only
+      <span id="fig-opened-tol-factor"></span>&times;. (At the nominal 1.4/256
+      scale those same two figures are
+      <span id="fig-example-tol-factor-nominal"></span>&times; and
+      <span id="fig-opened-tol-factor-nominal"></span>&times;.) So the further
+      out of tune a cavity starts, the less calibration error the loop
+      tolerates. From that opening detune, undershoot 0.9 survives a
+      true/believed scale ratio up to about
+      <span id="fig-window-undershoot"></span>&times; and undershoot 1.0 only to
+      about <span id="fig-window-unity"></span>&times;. That is what the 0.9 is
+      really buying: budget headroom, not just mathematical stability. From the
+      same detune a gain of 1.8 converges in principle —
+      <code>|1 - 1.8| &lt; 1</code> — and still trips the runaway guard at
+      every undershoot the slider offers.
+    </p>
+
+    <p>
+      Check it above: at the opening detune, calibration error 1.35 converges
+      at undershoot 0.9 and runs away at 1.0 — it sits inside the first window
+      and outside the second. Same hardware, same miscalibration; the only
+      difference is that one factor.
+    </p>
+
+    <div class="caveat">
+      <strong>What this simulator is not.</strong> The modelled cavity responds
+      linearly and without noise. Real cavities have mechanical hysteresis and
+      dead zones — which is exactly why <code>stepper_tol_factor()</code> allows
+      5&times; the estimated steps below 10,000 steps and only 1.01&times; near
+      cold landing. Trust the loop structure here; do not trust the smoothness.
+    </div>
+  </section>
+  <section id="detune-source">
+    <h2>3. Where the detune number comes from</h2>
+
+    <p>
+      <code>_auto_tune</code> does not read the machine itself — it calls a
+      <code>delta_hz_func</code> handed to it, and is indifferent to where the
+      number came from. There are two sources.
+    </p>
+
+    <table>
+      <thead><tr><th></th><th>Chirp mode</th><th>SELA mode</th></tr></thead>
+      <tbody>
+        <tr><td>Detune PV</td><td><code>CHIRP:DF</code></td>
+            <td><code>DFBEST</code></td></tr>
+        <tr><td>Piezo feedback</td><td>Disabled, DC setpoint 0 V</td>
+            <td>Enabled</td></tr>
+        <tr><td>Drive level</td>
+            <td><code>SAFE_PULSED_DRIVE_LEVEL</code> = 10</td>
+            <td>Unchanged</td></tr>
+        <tr><td>Settling</td><td>RF on, 5 s wait, then find a valid chirp
+            range</td><td>RF on</td></tr>
+        <tr><td>Used by</td><td>Tuning GUI, RF commissioning</td>
+            <td><strong>Auto setup only</strong></td></tr>
+      </tbody>
+    </table>
+    <p class="cite">setup_tuning(), cavity.py:1159-1190</p>
+
+    <p>
+      <strong>SELA tuning has exactly one caller.</strong>
+      <code>move_to_resonance(use_sela=True)</code> is invoked from
+      <code>applications/auto_setup/backend/setup_cavity.py:219</code> and
+      nowhere else. The tuning GUI and the RF commissioning phase both tune in
+      chirp mode. SELA appears on this page because it explains the
+      piezo-centring pass below — not because you will meet it in
+      commissioning.
+    </p>
+
+    <h3>The second pass (SELA only)</h3>
+
+    <p>
+      After converging on detune, <code>move_to_resonance</code> runs
+      <code>_auto_tune</code> a <em>second</em> time — against
+      <code>delta_piezo</code> rather than detune, with tolerance
+      <code>5 &times; hz_per_v</code>
+      <span class="cite">cavity.py:739-745</span>.
+    </p>
+
+    <p>
+      The purpose: the piezo has drifted away from its 25 V centre absorbing
+      slow frequency changes, so it no longer has symmetric authority to reject
+      microphonics. The second pass uses the stepper to take over that DC
+      offset, handing the piezo back its full &plusmn; range. Note the
+      harmonic-linearizer sign flip — <code>delta_piezo</code> negates its
+      result for HLs <span class="cite">cavity.py:711-715</span>.
+    </p>
+
+    <h3>Tolerances</h3>
+
+    <p>
+      50 Hz, or 500 Hz for harmonic linearizers
+      <span class="cite">cavity.py:735</span>. The HL figure is looser in
+      proportion to their coarser per-step response.
+    </p>
+
+    <h3>Yes, the chirp range gets re-adjusted mid-tune</h3>
+
+    <p>
+      Worth knowing, because it means the chirp range at the end of a tune is
+      not necessarily the one <code>setup_tuning</code> established.
+      <code>_auto_tune</code> calls <code>check_detune()</code> after
+      <em>every</em> stepper move. If the detune has gone invalid and the cavity
+      is in chirp mode, that widens the sweep by 1.1&times; and retries
+      <span class="cite">cavity.py:943, 950-956</span>. In SELA there is no
+      range to widen, so it fails hard instead.
+    </p>
+
+    <p>
+      Both entry points are safe. <code>find_chirp_range</code> normalizes its
+      argument with <code>abs(int(...))</code> before doing anything else
+      <span class="cite">cavity.py:1196</span>, so the negative value that
+      <code>check_detune()</code> passes in — <code>chirp_freq_start</code> is
+      negative by construction
+      <span class="cite">set_chirp_range, cavity.py:669-677</span> — is folded
+      to a magnitude first. The recursion therefore widens and caps on the same
+      number, stopping at &plusmn;400 kHz whether it was entered from
+      <code>setup_tuning()</code> or from inside the tuning loop, and raising
+      <code>DetuneError</code> if no valid detune turned up by then
+      <span class="cite">cavity.py:1192-1223</span>.
+    </p>
+  </section>
+  <section id="tune-states">
+    <h2>4. Tune states</h2>
+
+    <p>
+      Every cavity carries a <code>TUNE_CONFIG</code> PV asserting what its
+      frequency currently means
+      <span class="cite">linac_utils.py:154-157</span>.
+    </p>
+
+    <!-- Colours below are the literal :root token values (--panel, --ink,
+         --dim, --ok, --warn, --accent) rather than var() references. SVG
+         presentation attributes resolve var() less reliably than CSS does, and
+         this page is opened offline on control-room browsers of unknown
+         vintage. The cost is that a theme change must be mirrored here. -->
+    <svg viewBox="0 0 720 210" width="100%" role="img"
+         aria-label="Tune config state diagram">
+      <defs>
+        <marker id="arw" markerWidth="9" markerHeight="9" refX="8" refY="3"
+                orient="auto">
+          <path d="M0,0 L0,6 L9,3 z" fill="#9aa3b2"/>
+        </marker>
+      </defs>
+      <g font-family="ui-monospace, monospace" font-size="13">
+        <rect x="20" y="20" width="150" height="52" rx="6"
+              fill="#1c1f25" stroke="#7fb069"/>
+        <text x="95" y="42" fill="#e6e8ec" text-anchor="middle">RESONANCE</text>
+        <text x="95" y="60" fill="#9aa3b2" text-anchor="middle">0</text>
+
+        <rect x="285" y="20" width="150" height="52" rx="6"
+              fill="#1c1f25" stroke="#e0a458"/>
+        <text x="360" y="42" fill="#e6e8ec" text-anchor="middle">OTHER</text>
+        <text x="360" y="60" fill="#9aa3b2" text-anchor="middle">3</text>
+
+        <rect x="550" y="20" width="150" height="52" rx="6"
+              fill="#1c1f25" stroke="#6ea8fe"/>
+        <text x="625" y="42" fill="#e6e8ec" text-anchor="middle">COLD</text>
+        <text x="625" y="60" fill="#9aa3b2" text-anchor="middle">1</text>
+
+        <rect x="285" y="135" width="150" height="52" rx="6"
+              fill="#1c1f25" stroke="#6ea8fe"/>
+        <text x="360" y="157" fill="#e6e8ec" text-anchor="middle">PARKED</text>
+        <text x="360" y="175" fill="#9aa3b2" text-anchor="middle">2</text>
+
+        <line x1="170" y1="38" x2="278" y2="38" stroke="#9aa3b2"
+              marker-end="url(#arw)"/>
+        <text x="224" y="30" fill="#9aa3b2" text-anchor="middle"
+              font-size="11">_auto_tune entry</text>
+
+        <line x1="278" y1="58" x2="172" y2="58" stroke="#9aa3b2"
+              marker-end="url(#arw)"/>
+        <text x="224" y="76" fill="#9aa3b2" text-anchor="middle"
+              font-size="11">move_to_resonance exit</text>
+
+        <line x1="435" y1="46" x2="543" y2="46" stroke="#9aa3b2"
+              marker-end="url(#arw)"/>
+        <line x1="360" y1="72" x2="360" y2="128" stroke="#9aa3b2"
+              marker-end="url(#arw)"/>
+      </g>
+    </svg>
+
+    <table>
+      <thead><tr><th>State</th><th>What it asserts</th>
+        <th>Written by</th></tr></thead>
+      <tbody>
+        <tr><td><code>RESONANCE</code> (0)</td>
+            <td>On resonance, ready for beam</td>
+            <td><code>move_to_resonance()</code> on success
+            <span class="cite">cavity.py:747</span></td></tr>
+        <tr><td><code>COLD</code> (1)</td>
+            <td>At the cold landing frequency</td>
+            <td>Cold-landing tooling</td></tr>
+        <tr><td><code>PARKED</code> (2)</td>
+            <td>Stepper parked at a defined reference</td>
+            <td>Parking tooling</td></tr>
+        <tr><td><code>OTHER</code> (3)</td>
+            <td>Mid-transition or unknown — do not trust the frequency</td>
+            <td><code>_auto_tune()</code> on entry
+            <span class="cite">cavity.py:851</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="caveat">
+      <strong>A cavity that dies mid-tune is left in <code>OTHER</code>, and
+      that is correct.</strong> <code>_auto_tune</code> writes
+      <code>OTHER</code> as its first act, but only
+      <code>move_to_resonance</code> writes <code>RESONANCE</code> on the way
+      out. Any failure in between — runaway, over temp, abort, invalid detune —
+      leaves the state at <code>OTHER</code>, which is an honest report that
+      nobody knows where the cavity is.
+    </div>
+
+    <h3>Two cold-landing numbers, easily conflated</h3>
+
+    <table>
+      <tbody>
+        <tr><td><code>DF_COLD</code></td>
+            <td>The reference <em>detune</em>, in Hz, at cold landing
+            <span class="cite">cavity.py:164</span></td></tr>
+        <tr><td><code>NSTEPS_COLD</code></td>
+            <td>The stepper <em>position</em>, in microsteps, that reached it
+            <span class="cite">stepper.py:55</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section id="commissioning">
+    <h2>5. The commissioning stages</h2>
+
+    <p>
+      RF commissioning wraps the same loop in a gated, operator-supervised
+      sequence <span class="cite">phases/frequency_tuning.py:123-132</span>.
+      Seven steps:
+    </p>
+
+    <table>
+      <thead><tr><th>#</th><th>Step</th><th>What it does to the machine</th>
+        </tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>verify_initial_state</code></td>
+            <td>Confirms the stepper is idle, then prepares the cavity: SSA on,
+            interlocks reset, <code>setup_tuning()</code> into chirp
+            mode</td></tr>
+        <tr><td>2</td><td><code>record_cold_landing</code></td>
+            <td>Records the cold-landing detune; the operator pushes it to
+            <code>DF_COLD</code> from the UI</td></tr>
+        <tr><td>3</td><td><code>probe_stepper_direction</code></td>
+            <td>Moves &plusmn;50,000 microsteps and measures the detune
+            response</td></tr>
+        <tr><td>4</td><td><code>apply_hz_per_step</code></td>
+            <td>Writes the confirmed Hz/full-step to
+            <code>SCALE_CALC.B</code></td></tr>
+        <tr><td>5</td><td><code>tune_to_resonance</code></td>
+            <td>Delegates to <code>_auto_tune</code> with a temperature guard,
+            then writes <code>NSTEPS_COLD</code></td></tr>
+        <tr><td>6</td><td><code>measure_pi_modes</code></td>
+            <td>Single-cavity FSCAN for the 8&pi;/9 and 7&pi;/9 parasitic
+            modes</td></tr>
+        <tr><td>7</td><td><code>record_results</code></td>
+            <td>Writes the phase record to the commissioning database</td></tr>
+      </tbody>
+    </table>
+
+    <h3>What this path does that <code>move_to_resonance</code> does not</h3>
+
+    <ul>
+      <li>
+        <strong>Measures Hz/microstep instead of inheriting it.</strong> A
+        50,000-microstep probe move must produce at least 100 Hz of detune
+        change <span class="cite">min_probe_delta_hz,
+        frequency_tuning.py:72, enforced :726</span>. Below that it fails and
+        points at the two physical causes: the stepper is not mechanically
+        connected, or the cavity is not at 2 K.
+      </li>
+      <li>
+        <strong>Applies an explicit sign convention.</strong>
+        <code>SCALE = -&Delta;(CHIRP:DF) / &Delta;(microstep)</code>: a positive
+        number of microsteps <em>decreases</em> <code>CHIRP:DF</code>
+        <span class="cite">frequency_tuning.py:736</span>.
+      </li>
+      <li>
+        <strong>Waits for the operator before writing.</strong> And it writes
+        <code>SCALE_CALC.B</code>, not <code>SCALE</code> — <code>SCALE</code>
+        is a read-only calc output the IOC recomputes from it
+        (<code>SCALE = SCALE_CALC.B / 256</code>), so writing <code>SCALE</code>
+        directly is silently reverted
+        <span class="cite">stepper.py:105-116, frequency_tuning.py:627-629</span>.
+      </li>
+      <li>
+        <strong>Refuses to tune until <code>DF_COLD</code> is pushed</strong>
+        and matches the recorded cold-landing frequency within 1 Hz
+        <span class="cite">frequency_tuning.py:170, tolerance at :168</span>.
+        The reason it compares against the record rather than checking validity:
+        <code>DF_COLD</code> defaults to a perfectly valid 0, so there is no
+        INVALID severity to key off.
+      </li>
+      <li>
+        <strong>Guards the stepper temperature</strong> at
+        <code>STEPPER_TEMP_LIMIT</code> = 70 &deg;C
+        <span class="cite">frequency_tuning.py:66</span>, raisable for a re-run
+        by an explicit operator acknowledgement
+        <span class="cite">over_temp_ack_c, :807</span>. The raised ceiling is
+        passed straight into <code>_auto_tune</code>'s
+        <code>max_stepper_temp</code>, which still fails hard on a breach — the
+        acknowledgement moves the line, it does not add a retry.
+      </li>
+    </ul>
+
+    <div class="caveat">
+      <strong>Not covered here: the operator controls.</strong> This section
+      describes the backend phase logic only. The screen that drives it now
+      exists — a 1,700-line controller
+      <span class="cite">ui/controllers/frequency_tuning_controller.py</span>
+      plus three re-run gates that re-establish cavity state before stages 2, 3
+      and 4 <span class="cite">_check_state_for_stage_2/3/4,
+      frequency_tuning.py:324, 368, 404</span> — and it is deliberately out of
+      scope for a page about the convergence loop. Section 6 covers the abort
+      <em>mechanism</em> at the stepper and cavity level, which is what
+      <code>_auto_tune</code> itself sees.
+    </div>
+
+  </section>
+  <section id="failures">
+    <h2>6. How it fails</h2>
+
+    <p>
+      Each row below has a button that injects that fault into the simulator in
+      section 2 and scrolls you back to it, so you can watch the loop react.
+    </p>
+
+    <table>
+      <thead><tr><th>Failure</th><th>Raises</th><th>Cause and what to do</th>
+        <th></th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Step budget exceeded</td>
+          <td class="mono">DetuneError</td>
+          <td><code>SCALE</code> is miscalibrated, or the tuner is slipping
+          mechanically. The loop asked for more steps than
+          <code>stepper_tol_factor</code> allows for the detune it started
+          with. If the reported detune never changed across the whole run, the
+          message says so — that distinguishes a tuner that is mechanically
+          stuck while still reporting motion from honest over-travel.</td>
+          <td><button data-fault="slip">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Step estimate rounds to zero</td>
+          <td class="mono">DetuneError</td>
+          <td><code>SCALE</code> is implausibly large, so
+          <code>int(0.9 &times; delta_hz &times; microsteps_per_hz)</code>
+          truncates to 0 while the detune is still outside tolerance. A zero
+          step commands no motion, so nothing would ever change. The loop
+          raises immediately and names <code>SCALE</code> and the offending
+          <code>hz_per_microstep</code>
+          <span class="cite">cavity.py:884-900</span>. The injection rewrites
+          <code>SCALE</code> mid-tune, which is the real route in: the loop
+          re-reads it every iteration, so a bad value written by
+          <code>_apply_hz_per_step</code> takes effect on the next move.</td>
+          <td><button data-fault="bad_scale">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Detune invalid at entry</td>
+          <td class="mono">DetuneError</td>
+          <td>Cavity off, or the chirp range is wrong before the loop even
+          starts. Checked once, before the first move
+          <span class="cite">cavity.py:834</span>.</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Detune invalid mid-loop, chirp</td>
+          <td>&mdash; recovers</td>
+          <td><code>check_detune()</code> widens the chirp range 1.1&times; and
+          carries on. See section 3 on the cap.</td>
+          <td><button data-fault="detune_invalid_chirp">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Detune invalid mid-loop, SELA</td>
+          <td class="mono">DetuneError</td>
+          <td>No range to widen, so it fails hard
+          <span class="cite">cavity.py:957-968</span>. Auto setup only.</td>
+          <td><button data-fault="detune_invalid_sela">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Stepper over temperature</td>
+          <td class="mono">StepperTempError</td>
+          <td><strong>There is no cool-down and no retry.</strong> The loop
+          raises and stops; a human has to let the motor cool and re-run
+          tuning <span class="cite">cavity.py:856-867</span>.</td>
+          <td><button data-fault="hot_motor">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Limit switch hit</td>
+          <td class="mono">StepperError</td>
+          <td>Checked after every completed move — the motor stopped for a bad
+          reason rather than because it arrived
+          <span class="cite">stepper.py:419-431</span>.</td>
+          <td><button data-fault="limit_switch">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Operator abort, stepper</td>
+          <td class="mono">StepperAbortError</td>
+          <td>Setting <code>stepper_tuner.abort_flag</code> stops a move
+          <em>already in progress</em>: the polling loop in
+          <code>issue_move_command</code> checks it every 5 s while the motor
+          runs, writes 1 to <code>ABORT_REQ</code>, and raises. Worst case about
+          10 s from the request — a 5 s settle sleep before polling starts, plus
+          the 5 s interval <span class="cite">stepper.py:129-147, 388-392</span>.
+          </td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Operator abort, cavity</td>
+          <td class="mono">CavityAbortError</td>
+          <td>Setting <code>cavity.abort_flag</code> is the path that also turns
+          the RF <em>off</em> — <code>check_abort()</code> calls
+          <code>turn_off()</code> before it raises
+          <span class="cite">cavity.py:1096-1103</span>. A caller that stops the
+          stepper without setting this leaves the cavity powered.</td>
+          <td><button data-fault="abort">Inject</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Constants transcribed from
+// src/sc_linac_physics/utils/sc_linac/linac_utils.py.
+//
+// Every value below is a hand-copy, so it can silently drift from the source.
+// selfCheck() at the bottom of this file only proves this page is internally
+// consistent. What actually proves it matches the machine code is
+// tests/docs/test_auto_tune_explainer.py, which parses TOL_ORACLE out of this
+// file and re-derives every row from the real imported stepper_tol_factor on
+// each pytest run. If linac_utils.py changes, that test fails.
+// ---------------------------------------------------------------------------
+
+// The tolerance breakpoints, `step_tol_des` (linac_utils.py:243-250).
+const STEP_TOL_DES = {
+  10e3: 5, 100e3: 2.5, 1e6: 1.25, 5e6: 1.1, 10e6: 1.05, 50e6: 1.01,
+};
+
+// The interpolation ranges, `ranges` (linac_utils.py:251). Note this list
+// never references the 10e6 breakpoint above — see the QUIRK note below.
+const TOL_RANGES = [[10e3, 100e3], [100e3, 1e6], [1e6, 5e6], [5e6, 50e6]];
+
+// Expected stepper_tol_factor outputs, printed from the real Python function.
+// Held at 6 decimal places on purpose — these are meant to be eyeball-checked
+// against the Python output, so they are compared with a 1e-5 tolerance
+// rather than being padded out to full float precision.
+const TOL_ORACLE = [
+  [0, 5.0], [5000, 5.0], [10000, 5.0], [10001, 4.999972],
+  [50000, 3.888889], [100000, 2.5], [500000, 1.944444],
+  [1000000, 1.25], [3000000, 1.175], [5000000, 1.1],
+  [10000000, 1.09], [50000000, 1.01], [60000000, 1.01],
+  // Negative detunes drive the stepper the other way; both implementations
+  // take the absolute value first, so -50000 must match +50000.
+  [-50000, 3.888889],
+];
+
+// Traced from Cavity._auto_tune (cavity.py:825-948) against a Python
+// reference that reuses the real stepper_tol_factor. Every count below was
+// produced by that trace, not by hand arithmetic — see the note on case 1 for
+// why hand arithmetic gets this wrong.
+//
+// Unless stated otherwise a case uses the nominal 1.4/256 Hz-per-microstep
+// scale (182.857 microsteps/Hz) and a 50 Hz tolerance, and varies only the
+// starting detune, the undershoot factor, and the calibration error.
+//
+// THE HEADROOM RULE. This is the most portable thing on the page. Write
+// gain = undershoot * (true scale / believed scale) and q = |1 - gain|. Each
+// move multiplies the remaining detune by q, so the loop's total travel is a
+// geometric series:
+//
+//     total travel / expected_steps  =  undershoot / (1 - q)
+//
+// The left side is what the runaway guard measures, and the right side has no
+// detune in it at all — it is scale-free. But the budget it is measured
+// against, the tol factor, SHRINKS as the starting detune grows: 2.738 at
+// 500 Hz (91,428 expected steps), only 1.369 at 5000 Hz (914,285). So the
+// same calibration error that is comfortably survivable from 500 Hz is fatal
+// from 5000 Hz. Concretely, at 5000 Hz the loop tolerates a true/believed
+// scale ratio up to about 1.49 at undershoot 0.9, but only about 1.27 at
+// undershoot 1.0 — verified numerically, the flip happens between 1.49/1.50
+// and 1.27/1.30 respectively.
+//
+// Read that backwards and it is the operational lesson: the further out of
+// tune the cavity starts, the better your stepper calibration has to be.
+const LOOP_ORACLE = [
+  {
+    name: "converges in two moves when calibration is perfect",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // TWO moves, not one, and the reason is the truncation. With perfect
+    // calibration the first move is meant to remove exactly 90% of 500 Hz and
+    // leave exactly 50.0 Hz, which would NOT be > tolerance -- the loop would
+    // exit after one move. But est_steps = int(0.9 * 500 * 182.857) =
+    // int(82285.714) = 82285, and dropping that 0.714 of a microstep removes
+    // only 449.996 Hz. What is left is 50.0039 Hz, which IS > 50, so the
+    // while condition holds and a second move runs (8,229 steps, landing at
+    // 5.0 Hz).
+    //
+    // So the hard-coded 0.9 aims a perfectly-tuned cavity at precisely the
+    // tolerance boundary, and truncation always leaves it a hair outside.
+    // A well-calibrated cavity at 10x tolerance therefore costs two moves,
+    // never one.
+    expect: { outcome: "converged", moves: 2 },
+  },
+  {
+    name: "already inside tolerance, so the loop never runs",
+    input: {
+      detune0: 10, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // `while abs(delta_hz) > tolerance` is checked before the first move, so a
+    // cavity already in tolerance is a no-op: zero moves, zero steps, and the
+    // stepper is never commanded at all. Worth pinning because Task 4's UI has
+    // to render an empty move list without falling over.
+    expect: { outcome: "converged", moves: 0 },
+  },
+  {
+    name: "negative detune is symmetric",
+    input: {
+      detune0: -500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // Direction lives in the sign of delta_hz, never in the scale (the
+    // hz_per_microstep getter takes abs()). int() truncates toward zero on
+    // both sides, so -500 Hz mirrors +500 Hz exactly: 2 moves, same counts.
+    expect: { outcome: "converged", moves: 2 },
+  },
+  {
+    name: "diverges at undershoot 1.0 with 2.5x calibration error",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 2.5 * 1.4 / 256, tolerance: 50, undershoot: 1.0,
+    },
+    // |1 - 1.0 * 2.5| = 1.5 > 1, so |detune| grows every move: 500 -> -750
+    // -> 1125 -> -1687. The budget trips on move 3 at 434,280 steps.
+    // gain = 2.5 sits outside the 0 < gain < 2 convergence window entirely.
+    expect: { outcome: "runaway", moves: 3 },
+  },
+  {
+    name: "converges at undershoot 0.9 with 1.8x calibration error",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.8 * 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // |1 - 0.9 * 1.8| = 0.62, so each move cuts |detune| to 62% of the
+    // previous one, alternating sign: 500 -> -310 -> 192 -> -119 -> 74 ->
+    // -45.8, inside tolerance on move 5 having spent 196,694 of the 250,340
+    // available steps. This is the undershoot factor earning its keep --
+    // compare the next case, which is the same 1.8x error at undershoot 1.0.
+    expect: { outcome: "converged", moves: 5 },
+  },
+  {
+    name: "same 1.8x error runs away once undershoot is 1.0",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.8 * 1.4 / 256, tolerance: 50, undershoot: 1.0,
+    },
+    // |1 - 1.0 * 1.8| = 0.8, so it still shrinks, but only 20% per move
+    // instead of 38%, and each move costs more steps because it is not
+    // scaled down by 0.9. The budget trips on move 4. Identical hardware
+    // miscalibration to the case above -- the only difference is the 0.9.
+    //
+    // By the headroom rule: 1.0/(1-0.8) = 5.0x expected steps wanted, against
+    // a 2.738x budget. The case above wanted 0.9/(1-0.62) = 2.37x, which fits.
+    expect: { outcome: "runaway", moves: 4 },
+  },
+  {
+    name: "convergent in principle, still over budget at 2.0x",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 2.0 * 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // |1 - 0.9 * 2.0| = 0.8 < 1, so this iteration DOES converge
+    // mathematically -- but it needs 11 moves to bring 500 Hz under 50 Hz,
+    // travelling about 376,000 microsteps to do it, against a 250,340 budget.
+    // (The headroom rule's 0.9/(1-0.8) = 4.5x, or ~411,000 steps, is the
+    // infinite sum; the loop stops at tolerance, so it would have spent
+    // somewhat less than that. Either way it is over budget.) The runaway
+    // guard trips on move 5.
+    //
+    // Worth internalizing: "the loop converges" and "the loop is allowed to
+    // finish" are different questions. The tol factor is a budget measured
+    // against what a CORRECTLY calibrated cavity would have needed, so a
+    // badly calibrated one gets cut off even when it is heading the right way.
+    //
+    // Note this case has the SAME loop gain as the one above -- 1.0 x 1.8 and
+    // 0.9 x 2.0 are both 1.8 -- so both trace an identical detune trajectory
+    // in Hz (500 -> -400 -> 320 -> ...). Kept as a pair on purpose: it
+    // isolates step cost from trajectory. Same path, but the 0.9 case buys
+    // each step of progress 10% cheaper, which is exactly why it survives to
+    // move 5 instead of dying on move 4.
+    expect: { outcome: "runaway", moves: 5 },
+  },
+
+  // ---- The 5000 Hz regime, where the tol factor is only 1.369 ----
+  // Task 4's UI opens at detune0 = 5000, so these pin the defaults a reader
+  // will actually see. expected_steps = int(5000 * 182.857) = 914,285, the tol
+  // factor is 1.36905, and the budget is 1,251,701 microsteps.
+  {
+    name: "5000 Hz start needs three moves even when calibration is perfect",
+    input: {
+      detune0: 5000, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // Three, where 500 Hz took two: undershoot 0.9 removes a fixed FRACTION
+    // per move, so the number of moves scales with how many factors of 10
+    // separate the starting detune from the tolerance, not with the detune.
+    expect: { outcome: "converged", moves: 3 },
+  },
+  {
+    name: "2.0x error is fatal from 5000 Hz even at undershoot 0.9",
+    input: {
+      detune0: 5000, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 2.0 * 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // The same 2.0x error and the same undershoot as the case above this
+    // block, which survived to move 5 from 500 Hz. From 5000 Hz it trips on
+    // move 2, because the budget multiplier has halved from 2.738 to 1.369
+    // while the travel it needs (4.5x expected steps) has not changed at all.
+    // This is the headroom rule at work, and it is the regime the UI defaults
+    // to.
+    expect: { outcome: "runaway", moves: 2 },
+  },
+  {
+    name: "1.35x error converges from 5000 Hz at undershoot 0.9",
+    input: {
+      detune0: 5000, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.35 * 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // gain = 1.215, q = 0.215, so travel wants 0.9/0.785 = 1.146x expected
+    // steps against the 1.369x budget -- it fits, with room to spare. Lands
+    // at -49.7 Hz on move 3 having spent 1,037,807 steps. 1.35 was chosen
+    // because it sits cleanly inside the undershoot-0.9 window (which closes
+    // between 1.49 and 1.50) and cleanly outside the undershoot-1.0 window
+    // (which closes between 1.27 and 1.30) -- see the next case.
+    expect: { outcome: "converged", moves: 3 },
+  },
+  {
+    name: "the same 1.35x error runs away at undershoot 1.0",
+    input: {
+      detune0: 5000, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.35 * 1.4 / 256, tolerance: 50, undershoot: 1.0,
+    },
+    // gain = 1.35, q = 0.35, travel wants 1.0/0.65 = 1.538x against the same
+    // 1.369x budget, and it trips on move 3 at 1,346,283 steps. This pair is
+    // the cleanest statement of what the hard-coded 0.9 buys: identical
+    // hardware, identical miscalibration, and the only difference between
+    // converging and a DetuneError is that one factor.
+    expect: { outcome: "runaway", moves: 3 },
+  },
+  {
+    name: "est_steps truncating to zero raises rather than spinning",
+    input: {
+      // A believed scale of 100 Hz/microstep is wildly wrong (nominal is
+      // 0.0055), but it is the cleanest way to reach this state.
+      detune0: 60, scaleHzPerMicrostep: 100,
+      trueHzPerMicrostep: 100, tolerance: 50, undershoot: 0.9,
+    },
+    // microsteps_per_hz = 0.01, so est_steps = int(0.9 * 60 * 0.01)
+    // = int(0.54) = 0.
+    //
+    // A zero-step move changes nothing: delta_hz would be re-read as the same
+    // 60 Hz, still > 50, and because steps_moved += abs(0) never grows the
+    // runaway guard could never fire either -- expected_steps is 0 here too,
+    // so the budget is 0 and `0 > 0` is false forever. Nothing in the loop
+    // body would bound the iteration count.
+    //
+    // That was a real hang until the guard at cavity.py:884-900 landed. It now
+    // raises DetuneError naming the suspect SCALE instead of spinning.
+    //
+    // The precondition is a believed scale above 0.9 * tolerance
+    // (45 Hz/microstep at the default 50 Hz tolerance), i.e. a SCALE PV about
+    // four orders of magnitude too large -- so it needs a badly wrong
+    // calibration to reach at all.
+    expect: { outcome: "zero-step", moves: 0 },
+  },
+];
+
+// The six fault injections, pinned because Task 4's UI is built directly on
+// them. All six run against a perfectly calibrated 5000 Hz start (3 moves
+// clean) and fire at move 2, so the expected outcome is entirely down to the
+// fault. `moves` counts recorded moves, which is one less than faultIteration
+// for the faults that break before the move completes.
+const FAULT_ORACLE = [
+  // Breaks at the top of move 2, before any stepping.
+  { fault: "abort", outcome: "abort", moves: 1 },
+  { fault: "hot_motor", outcome: "temp", moves: 1 },
+  // Breaks after the move is commanded but before it is recorded.
+  { fault: "limit_switch", outcome: "limit", moves: 1 },
+  // Degrades the response to 10% from move 2 on, so gain collapses to 0.09
+  // and the travel the loop needs (0.9/0.91 ~ 10x expected steps) blows
+  // through the 1.369x budget. Move 1 lands normally at 500 Hz; from there
+  // each move removes only 9% of what is left, grinding 500 -> 258 Hz over
+  // seven more moves while burning ~46k-82k steps each, and tripping the
+  // budget on move 8 at 1,264,673 steps. The instructive part is that it
+  // looks like it is working -- the detune really is falling -- and the guard
+  // still stops it, because it is falling far too slowly per step spent.
+  { fault: "slip", outcome: "runaway", moves: 8 },
+  // Recoverable: widens the chirp range and carries on to a normal finish.
+  { fault: "detune_invalid_chirp", outcome: "converged", moves: 3 },
+  // Checked at the END of the loop body, so move 2 is completed and recorded
+  // before this breaks -- hence 2 moves, not 1.
+  { fault: "detune_invalid_sela", outcome: "sela-invalid", moves: 2 },
+  // Move 1 lands normally at 500 Hz. The rewritten SCALE then truncates move
+  // 2's estimate to zero, and the guard breaks before the move is recorded --
+  // hence 1 move. Without the guard this is where the loop used to hang.
+  { fault: "bad_scale", outcome: "zero-step", moves: 1 },
+];
+
+// Shared input for FAULT_ORACLE, kept separate so the faults vary one thing.
+const FAULT_BASE = {
+  detune0: 5000, scaleHzPerMicrostep: 1.4 / 256,
+  trueHzPerMicrostep: 1.4 / 256, tolerance: 50, undershoot: 0.9,
+  faultAtIteration: 2,
+};
+
+// Port of linac_utils.stepper_tol_factor (linac_utils.py:224).
+//
+// How many times the estimated step count the loop is allowed to actually move
+// before it declares the motor is running away. Generous at small step counts,
+// where mechanical dead zones and hysteresis make the estimate rough, and tight
+// at large ones (1.01x near cold landing, tens of millions of steps, where a 1%
+// overrun is already enormous).
+//
+// Read the plateau carefully. The flat 5x holds only at or below 10,000 steps,
+// which is roughly where a 3.9 GHz harmonic linearizer sits at resonance — the
+// docstring calls those "about an order of magnitude lower at resonance" than
+// the 1.3 GHz cavities' empirical ~50,000 steps. A 1.3 GHz cavity at that
+// ~50,000 steps gets 3.89x, NOT 5x.
+//
+// Worth knowing if you read that docstring: it states the intent as 5x around
+// resonance, and "(roughly) triple" for the 3.9 GHz cavities. The linear
+// interpolation from the 10e3 -> 5 anchor delivers those the other way round —
+// 3.89x at the 1.3 GHz resonance figure, 5x at the 3.9 GHz one. The numbers on
+// this page are what the code computes, not what the docstring intends.
+//
+// QUIRK, faithfully reproduced: step_tol_des defines a breakpoint at
+// 10e6 -> 1.05, but `ranges` jumps from (5e6, 50e6) and never uses it.
+// So stepperTolFactor(10e6) is 1.09, interpolated on the 5e6..50e6 line,
+// not 1.05. Do not "fix" this here — the page documents what the code does.
+function stepperTolFactor(numSteps) {
+  const n = Math.abs(numSteps);
+  if (n <= 10000) return 5;
+
+  for (const [start, end] of TOL_RANGES) {
+    if (n > start && n <= end) {
+      // polyfit(x, y, 1) through exactly two points is the line through them.
+      const m = (STEP_TOL_DES[end] - STEP_TOL_DES[start]) / (end - start);
+      const b = STEP_TOL_DES[start] - m * start;
+      return m * n + b;
+    }
+  }
+  return 1.01;
+}
+
+// Port of Cavity._auto_tune (cavity.py:825).
+//
+// The real loop, per iteration:
+//   1. check_abort()
+//   2. if max_stepper_temp is set and the stepper is hotter -> StepperTempError
+//   3. iteration_callback() (commissioning uses it for abort + the live plot)
+//   4. est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+//   5. stepper_tuner.move(est_steps, max_steps=|est_steps|*1.1, MAX SPEED)
+//   6. if cumulative steps > expected * tol_factor -> DetuneError (runaway)
+//   7. check_detune()  <- this is where the chirp range gets widened
+//   8. delta_hz = delta_hz_func()   (re-read from the machine)
+//
+// Step 7 is not the whole story, and the simplification is worth naming.
+// _auto_tune calls move() without check_detune, which defaults to True
+// (stepper.py:253), and move()'s motor-moving poll loop calls
+// cavity.check_detune() every ~5 s while the motor is turning
+// (stepper.py:387-391). So the chirp range can be widened SEVERAL TIMES
+// during a single move, not just once per iteration as modelled here.
+//
+// Also not modelled: the pre-loop `if self.detune_invalid` guard
+// (cavity.py:834), which raises DetuneError before the first move ever
+// happens. Deliberate — this port starts from a valid detune reading, and the
+// detune_invalid_* faults below cover the in-loop check_detune() path instead.
+//
+// The one thing the real loop does NOT do: bound its own iteration count. It
+// exits on tolerance, on the step budget, on a temp breach, or on an abort —
+// and none of those is guaranteed to happen.
+//
+// MAX_ITERATIONS is a simulator guard, and it is NOT there to catch divergence:
+// a divergent setting grows |delta_hz| every move, so it blows the step budget
+// within a handful of moves and reports "runaway" on its own. The state that
+// actually reaches MAX_ITERATIONS is est_steps truncating to 0 while
+// |delta_hz| is still outside tolerance. Then the motor never moves, delta_hz
+// never changes, and steps_moved never grows, so the runaway guard can never
+// fire either. In the real Python that is an unbounded hang. See the
+// "est_steps truncating to zero" case in LOOP_ORACLE.
+const MAX_ITERATIONS = 500;
+
+function runAutoTune(opts) {
+  const {
+    detune0,
+    scaleHzPerMicrostep,   // believed, from the SCALE PV
+    trueHzPerMicrostep,    // actual cavity response
+    tolerance,
+    undershoot = 0.9,
+    fault = null,
+    faultAtIteration = 2,
+  } = opts;
+
+  // Cavity.microsteps_per_hz = 1 / StepperTuner.hz_per_microstep, and that
+  // getter returns abs() of SCALE (stepper.py:96) — the loop only ever sees
+  // the magnitude. Direction comes from the sign of delta_hz.
+  const microstepsPerHz = 1 / Math.abs(scaleHzPerMicrostep);
+
+  let deltaHz = detune0;
+  const expectedSteps = Math.abs(Math.trunc(deltaHz * microstepsPerHz));
+  const tolFactor = stepperTolFactor(expectedSteps);
+  const budget = expectedSteps * tolFactor;
+
+  let stepsMoved = 0;
+  const iterations = [];
+  const log = [];
+  let outcome = "converged";
+  let error = null;
+  // Which move the fault landed on. Needed because the abort, temp and
+  // limit-switch paths break before pushing their iteration record, so
+  // iterations.length is one short of the move that actually failed.
+  let faultIteration = null;
+  // Effective response, degraded by the mechanical-slip fault.
+  let responseHz = trueHzPerMicrostep;
+  // Effective believed scale. Separate from microstepsPerHz because the real
+  // loop re-reads SCALE every iteration while expected_steps and the step
+  // budget above are computed ONCE, before the first move -- so a mid-tune
+  // SCALE change moves the estimate without moving the budget.
+  let effMicrostepsPerHz = microstepsPerHz;
+
+  while (Math.abs(deltaHz) > tolerance) {
+    if (iterations.length >= MAX_ITERATIONS) {
+      outcome = "no-converge";
+      error = `Did not converge in ${MAX_ITERATIONS} iterations`;
+      break;
+    }
+
+    const i = iterations.length + 1;
+    const firing = fault && i >= faultAtIteration;
+    if (firing && faultIteration === null) faultIteration = i;
+
+    // check_abort() is the FIRST thing in the real loop body, ahead of the
+    // temperature guard, so it is first here too. Only one fault fires at a
+    // time on this page, so the order is not observable — it is matched so
+    // the page does not teach the wrong precedence.
+    //
+    // There are TWO abort paths and they behave differently. This models the
+    // loop-top one: Cavity.check_abort (cavity.py:1096), reached at
+    // cavity.py:854 between moves, which calls turn_off() and raises
+    // CavityAbortError. No move is in flight, so it stops promptly — and it
+    // TURNS RF OFF.
+    //
+    // The other path is StepperTuner.check_abort (stepper.py:129), reached
+    // from inside move()'s poll loop. That one writes ABORT_REQ to stop a move
+    // already in progress and raises StepperAbortError, taking up to ~10 s to
+    // land (5 s start-up settle + 5 s poll interval) and leaving RF on. That
+    // is where the "~10 s, RF stays on" behaviour belongs; it is not what this
+    // fault does.
+    if (firing && fault === "abort") {
+      outcome = "abort";
+      error = "CavityAbortError: Abort requested";
+      log.push("Loop-top Cavity.check_abort(), between moves, so there is no " +
+               "move to interrupt. It calls turn_off() first: RF ends up OFF, " +
+               "not just untuned. (An abort landing mid-move instead goes " +
+               "through the stepper's ABORT_REQ path, which takes up to ~10 s " +
+               "and leaves RF on.)");
+      break;
+    }
+
+    if (firing && fault === "hot_motor") {
+      outcome = "temp";
+      error = "StepperTempError: stepper motor temp 72.4 °C exceeds " +
+              "limit 70 °C";
+      log.push("Temp is read before the move, so this move never starts. " +
+               "No cool-down, no retry — the caller must intervene.");
+      break;
+    }
+
+    // The real loop re-reads microsteps_per_hz from the SCALE PV on every
+    // iteration (cavity.py:873), so a SCALE write that lands mid-tune takes
+    // effect on the next move. That is the plausible route into the zero-step
+    // state: RF commissioning writes SCALE_CALC.B from a measured probe
+    // (_apply_hz_per_step), so a bad probe or a bad manual entry is picked up
+    // here rather than at setup. 1e6 Hz/microstep is the value #287's
+    // regression test uses.
+    if (firing && fault === "bad_scale") {
+      effMicrostepsPerHz = 1 / 1e6;
+      if (i === faultAtIteration) {
+        log.push("SCALE was rewritten mid-tune to an implausible " +
+                 "1e6 Hz/microstep. The loop re-reads it every iteration, so " +
+                 "the next step estimate truncates to zero.");
+      }
+    }
+
+    if (firing && fault === "slip") {
+      responseHz = trueHzPerMicrostep * 0.1;
+      // Annotated once, on the move where it starts. The degraded response
+      // persists for every later move, but repeating the note per move would
+      // just fill Task 4's log panel with identical lines.
+      if (i === faultAtIteration) {
+        log.push("Mechanical slip: the motor turns but the cavity barely " +
+                 "responds, so the loop keeps asking for more steps.");
+      }
+    }
+
+    const estSteps = Math.trunc(undershoot * deltaHz * effMicrostepsPerHz);
+
+    // A zero step estimate commands no motion, so the detune cannot change and
+    // steps_moved cannot grow -- the runaway guard can never fire. The loop
+    // would otherwise spin forever doing nothing. Bails out instead
+    // (cavity.py:884-900). Placed here, right after est_steps and before the
+    // move, exactly where the real guard sits.
+    if (estSteps === 0) {
+      outcome = "zero-step";
+      const hzPerMicrostep = 1 / effMicrostepsPerHz;
+      error = `DetuneError: step estimate rounded to zero with detune ` +
+              `${deltaHz} Hz outside tolerance ${tolerance} Hz; ` +
+              `check SCALE (hz_per_microstep=${hzPerMicrostep})`;
+      log.push("The believed SCALE is so large that 0.9 x detune x " +
+               "microsteps_per_hz truncates to zero microsteps. No motion is " +
+               "commanded, so nothing can change -- the loop raises rather " +
+               "than spinning.");
+      break;
+    }
+
+    // int(abs(est_steps) * 1.1), the max_steps argument handed to
+    // StepperTuner.move(). Recorded for display only, and deliberately NOT
+    // applied to the simulated move, because it never limits anything at this
+    // call site: move() splits a request into chunks only when
+    // abs(num_steps) > max_steps, and 1.1 * abs(est_steps) is always larger
+    // than abs(est_steps). So the split branch (stepper.py:311) is unreachable
+    // from _auto_tune, and the argument's only real effect is writing the
+    // stepper's NSTEPS.DRVH drive-high limit on the IOC (stepper.py:41, setter
+    // at stepper.py:216).
+    const maxStepsArg = Math.trunc(Math.abs(estSteps) * 1.1);
+
+    // Raised from inside move() (stepper.py:419) once the motor stops. It sits
+    // here, after est_steps is computed but before this iteration's state is
+    // recorded, because the real exception propagates out of move() before
+    // `steps_moved += abs(est_steps)` and before delta_hz is re-read. The
+    // cavity physically moved; the loop's bookkeeping never learns about it.
+    if (firing && fault === "limit_switch") {
+      outcome = "limit";
+      error = "StepperError: stepper motor on limit switch";
+      log.push("Checked after the move completes — the motor stopped for a " +
+               "bad reason, not because it arrived.");
+      break;
+    }
+
+    const before = deltaHz;
+    deltaHz = deltaHz - estSteps * responseHz;
+    stepsMoved += Math.abs(estSteps);
+
+    iterations.push({
+      i, deltaHzBefore: before, estSteps, maxStepsArg,
+      stepsMoved, deltaHzAfter: deltaHz,
+    });
+
+    if (stepsMoved > budget) {
+      outcome = "runaway";
+      error = "DetuneError: motor moved more steps than expected";
+      log.push(
+        `Moved ${stepsMoved.toLocaleString()} microsteps against a budget ` +
+        `of ${Math.round(budget).toLocaleString()} ` +
+        `(${expectedSteps.toLocaleString()} expected x ` +
+        `${tolFactor.toFixed(3)} tol factor).`
+      );
+      break;
+    }
+
+    // Annotated once, on the move where it starts, for the same reason as the
+    // slip note above.
+    if (firing && fault === "detune_invalid_chirp" && i === faultAtIteration) {
+      log.push("check_detune(): detune invalid in chirp mode, so " +
+               "find_chirp_range widens the sweep 1.1x and the loop " +
+               "carries on. In the real loop this can happen repeatedly " +
+               "WITHIN one move, not just once after it.");
+    }
+    if (firing && fault === "detune_invalid_sela") {
+      outcome = "sela-invalid";
+      error = "DetuneError: Cannot tune in SELA with invalid detune";
+      log.push("No recovery path in SELA — there is no chirp range to widen.");
+      break;
+    }
+  }
+
+  return {
+    outcome, error, iterations, log,
+    expectedSteps, tolFactor, budget, stepsMoved,
+    faultIteration,
+
+    // The loop's own view of the detune, i.e. what delta_hz holds when it
+    // exits. On "converged", "runaway" and "no-converge" this is post-move
+    // truth: the runaway guard fires AFTER delta_hz has been updated, so the
+    // reported value deliberately includes the move that broke the budget.
+    //
+    // On "limit" it is stale by a full move — the simulated cavity moved but
+    // the exception propagates out of move() before delta_hz is re-read, so
+    // the loop never learns the new value. On "abort", "temp" and "zero-step"
+    // nothing moved, so it is current — "zero-step" breaks before the move is
+    // commanded at all. On "sela-invalid" it is a number, but the entire
+    // meaning of that state is that the machine's detune reading is INVALID,
+    // so the value should be presented as unavailable rather than precise.
+    finalDetuneHz: deltaHz,
+    detuneIsStale: outcome === "limit",
+
+    // Loop gain. Each move multiplies the remaining detune by (1 - gain), so
+    // the fixed-point iteration converges exactly when |1 - gain| < 1, i.e.
+    //
+    //     0 < gain < 2
+    //
+    // Spell that out wherever this is displayed: gain = 1 is a perfect
+    // single-move landing, and gain = 1.8 is still INSIDE the window despite
+    // being greater than 1 — it converges, just slowly and by overshooting
+    // and alternating sign. gain >= 2 (or <= 0) is what actually diverges.
+    // Converging is necessary but not sufficient; the step budget can still
+    // cut a slow convergence off, which is what the headroom rule above is
+    // about.
+    //
+    // CAVEAT: computed from trueHzPerMicrostep, so with the `slip` fault
+    // active this describes only the moves BEFORE the slip. The trajectory
+    // actually drawn after that point runs at a tenth of this gain.
+    gain: undershoot * (trueHzPerMicrostep / Math.abs(scaleHzPerMicrostep)),
+  };
+}
+
+// Puts the failure list where the reader will actually see it. The audience
+// double-clicks this file and never opens devtools, so a console-only failure
+// would render identically to a healthy page.
+function showFailureBanner(failures) {
+  const main = document.querySelector("main");
+  if (!main) return;
+
+  const box = document.createElement("div");
+  box.style.border = "2px solid var(--bad)";
+  box.style.borderRadius = "8px";
+  box.style.padding = "1rem 1.25rem";
+  box.style.margin = "0 0 2rem";
+
+  const head = document.createElement("strong");
+  head.style.color = "var(--bad)";
+  head.textContent =
+    "This page's arithmetic no longer matches the source. " +
+    "Do not trust the numbers below.";
+  box.appendChild(head);
+
+  const list = document.createElement("ul");
+  list.className = "mono";
+  list.style.margin = ".75rem 0 0";
+  for (const failure of failures) {
+    const item = document.createElement("li");
+    item.textContent = failure;
+    list.appendChild(item);
+  }
+  box.appendChild(list);
+
+  main.prepend(box);
+}
+
+function selfCheck() {
+  const failures = [];
+  for (const [n, want] of TOL_ORACLE) {
+    const got = stepperTolFactor(n);
+    if (Math.abs(got - want) > 1e-5) {
+      failures.push(`stepperTolFactor(${n}) = ${got}, expected ${want}`);
+    }
+  }
+  for (const c of LOOP_ORACLE) {
+    const got = runAutoTune(c.input);
+    if (got.outcome !== c.expect.outcome) {
+      failures.push(
+        `${c.name}: outcome ${got.outcome}, expected ${c.expect.outcome}`
+      );
+    }
+    if (c.expect.moves !== undefined &&
+        got.iterations.length !== c.expect.moves) {
+      failures.push(
+        `${c.name}: ${got.iterations.length} moves, ` +
+        `expected ${c.expect.moves}`
+      );
+    }
+  }
+  for (const c of FAULT_ORACLE) {
+    const got = runAutoTune({ ...FAULT_BASE, fault: c.fault });
+    if (got.outcome !== c.outcome) {
+      failures.push(
+        `fault ${c.fault}: outcome ${got.outcome}, expected ${c.outcome}`
+      );
+    }
+    if (got.iterations.length !== c.moves) {
+      failures.push(
+        `fault ${c.fault}: ${got.iterations.length} moves, ` +
+        `expected ${c.moves}`
+      );
+    }
+    if (got.faultIteration !== FAULT_BASE.faultAtIteration) {
+      failures.push(
+        `fault ${c.fault}: fired on move ${got.faultIteration}, ` +
+        `expected ${FAULT_BASE.faultAtIteration}`
+      );
+    }
+    // Every fault must say something, or Task 4 renders an empty panel.
+    if (!got.log.length) {
+      failures.push(`fault ${c.fault}: produced no log lines`);
+    }
+    // The annotation-only faults are the ones that could duplicate, since
+    // they do not break out of the loop.
+    if (new Set(got.log).size !== got.log.length) {
+      failures.push(`fault ${c.fault}: duplicate log lines`);
+    }
+  }
+
+  // Every Inject button must sit on a row whose "Raises" column names the same
+  // exception the simulator actually reports. This was a real defect: the abort
+  // button sat on the StepperAbortError row while the fault it injects is the
+  // cavity path, which raises CavityAbortError and turns RF off -- the exact
+  // distinction section 6 exists to draw. A reader clicking that row was shown
+  // the other path's outcome. Cheap to check, so it is checked.
+  for (const tr of document.querySelectorAll("#failures tbody tr")) {
+    const btn = tr.querySelector("button[data-fault]");
+    if (!btn) continue;
+    const raises = tr.children[1].textContent.trim();
+    // "— recovers" rows raise nothing, so there is no class to match.
+    if (raises.startsWith("\u2014")) continue;
+    const got = runAutoTune({ ...FAULT_BASE, fault: btn.dataset.fault });
+    const label = (OUTCOMES[got.outcome] || {}).label || "";
+    if (!label.includes(raises)) {
+      failures.push(
+        `fault ${btn.dataset.fault}: row says ${raises}, verdict says ${label}`
+      );
+    }
+  }
+  if (failures.length) {
+    console.error("SELF-CHECK FAILED\n" + failures.join("\n"));
+  } else {
+    console.log(
+      `SELF-CHECK PASSED (${TOL_ORACLE.length} tol-factor cases, ` +
+      `${LOOP_ORACLE.length} loop cases, ${FAULT_ORACLE.length} fault cases)`
+    );
+  }
+  return failures;
+}
+
+// ---------------------------------------------------------------------------
+// Section 2: the simulator UI. Everything below is presentation on top of
+// runAutoTune() — no arithmetic of its own, so the page cannot disagree with
+// the port it is displaying.
+// ---------------------------------------------------------------------------
+
+// Minimal element builder. Deliberately not HTML-string assignment — a repo
+// hook rejects that, tests/docs/test_auto_tune_explainer.py greps for it, and
+// building nodes keeps the rendering code below shorter anyway.
+function el(tag, props, children) {
+  const node = document.createElement(tag);
+  if (props) {
+    for (const key of Object.keys(props)) {
+      const val = props[key];
+      if (key === "class") node.className = val;
+      else if (key === "text") node.textContent = val;
+      else if (key === "style") node.style.cssText = val;
+      else node.setAttribute(key, val);
+    }
+  }
+  for (const child of children || []) {
+    node.appendChild(
+      typeof child === "string" ? document.createTextNode(child) : child
+    );
+  }
+  return node;
+}
+
+function clear(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+// Plot colours are read back out of the stylesheet rather than hard-coded a
+// second time, so the canvas can never drift from the rest of the page.
+function cssVar(name) {
+  const value =
+    getComputedStyle(document.documentElement).getPropertyValue(name);
+  return value.trim() || "#888888";
+}
+
+const SLIDERS = [
+  // Range is deliberately wide and asymmetric. A cavity coming off cooldown
+  // can sit hundreds of kHz high, so a +/-50 kHz slider understated the real
+  // envelope; the upper bound is what tuning actually has to walk in from.
+  // 400 kHz is the most that would ever be worth offering, because that is
+  // where find_chirp_range's cap stops widening (see section 3) -- past it the
+  // detune cannot be measured, so the loop never sees it.
+  { id: "detune0", label: "Starting detune", unit: "Hz",
+    min: -50000, max: 200000, step: 100, value: 5000,
+    note: "Hundreds of kHz is normal off cooldown; beyond ~400 kHz the " +
+          "chirp cannot measure it at all" },
+  { id: "tolerance", label: "Tolerance", unit: "Hz",
+    min: 5, max: 1000, step: 5, value: 50,
+    note: "50 Hz standard, 500 Hz for harmonic linearizers (cavity.py:735)" },
+  // step is 0.0005, not 0.001, because a range input snaps an off-grid value
+  // onto the step grid: with step 0.001 the 0.0055 default would land on
+  // 0.005 or 0.006 and the page would open on a scale no cavity has.
+  { id: "scaleHz", label: "SCALE (believed)", unit: "Hz/microstep",
+    min: 0.001, max: 0.1, step: 0.0005, value: 0.0055,
+    note: "Per-cavity, measured, read from the SCALE PV — not a constant" },
+  { id: "calibError", label: "Calibration error (true / believed)", unit: "x",
+    min: 0.2, max: 3, step: 0.05, value: 1,
+    note: "1.0 means SCALE is exactly right" },
+  { id: "undershoot", label: "Undershoot factor", unit: "",
+    min: 0.5, max: 1.3, step: 0.05, value: 0.9,
+    note: "Hard-coded 0.9 in the real loop (cavity.py:874)" },
+];
+
+// Option text for the fault picker. Keyed off FAULT_ORACLE so a fault added to
+// the port shows up here even without a label, rather than silently vanishing
+// from the UI.
+const FAULT_LABELS = {
+  abort: "abort — check_abort() between moves",
+  hot_motor: "hot_motor — stepper over temperature",
+  limit_switch: "limit_switch — motor stopped on a limit",
+  slip: "slip — motor turns, cavity barely responds",
+  detune_invalid_chirp: "detune_invalid_chirp — recoverable, widens the chirp",
+  detune_invalid_sela: "detune_invalid_sela — fatal, no chirp to widen",
+  bad_scale: "bad_scale — SCALE rewritten mid-tune, step estimate hits zero",
+};
+
+// Outcome -> what a human should read, and which of the three status colours
+// it earns. Aborts are --warn: nothing broke, someone asked it to stop.
+const OUTCOMES = {
+  converged: { label: "Converged — inside tolerance", color: "--ok" },
+  runaway: {
+    label: "DetuneError — the runaway guard tripped", color: "--bad",
+  },
+  temp: { label: "StepperTempError — motor too hot to move", color: "--bad" },
+  limit: { label: "StepperError — motor stopped on a limit switch",
+           color: "--bad" },
+  "sela-invalid": { label: "DetuneError — invalid detune in SELA",
+                    color: "--bad" },
+  "no-converge": { label: "Never terminated — hit the iteration ceiling",
+                   color: "--bad" },
+  "zero-step": { label: "DetuneError — step estimate rounded to zero",
+                 color: "--bad" },
+  abort: { label: "CavityAbortError — aborted, and RF is now off",
+           color: "--warn" },
+};
+
+// How many completed moves the display reveals. Infinity means "all of them";
+// "Step once" walks it up from 0 so a reader can watch one move at a time.
+let shownMoves = Infinity;
+let activeFault = null;
+
+const inputs = {};
+let faultSelect = null;
+
+function sliderDecimals(step) {
+  return (String(step).split(".")[1] || "").length;
+}
+
+function fmtSlider(spec, value) {
+  const dec = sliderDecimals(spec.step);
+  const text = dec ? value.toFixed(dec) : String(value);
+  return spec.unit ? text + " " + spec.unit : text;
+}
+
+// Detunes are printed to 4 decimals below 100 Hz on purpose: the whole point of
+// the truncation lesson is the 50.0010 Hz that "50.0" would hide.
+function fmtHz(value) {
+  const magnitude = Math.abs(value);
+  if (magnitude >= 1000) return value.toFixed(1);
+  if (magnitude >= 100) return value.toFixed(2);
+  return value.toFixed(4);
+}
+
+// ---- Figures quoted in this section's prose --------------------------------
+// Anything in the prose that is a CONSEQUENCE of the port, rather than a
+// constant lifted from the Python, is written into the page from the shipped
+// functions below. That way the words cannot drift from the code by
+// construction, and no test has to police them.
+//
+// Sourced constants stay as literals with their citations — the 50 Hz
+// tolerance, the 0.9, the 1.1, 1.4/256. Those are facts about the source, not
+// arithmetic this page performs.
+
+// HZ_PER_STEP / MICROSTEPS_PER_STEP (linac_utils.py:145-147): what a 1.3 GHz
+// cavity's SCALE is nominally expected to be, before the per-cavity
+// measurement lands in the PV.
+const NOMINAL_HZ_PER_MICROSTEP = 1.4 / 256;
+
+// The truncation example is stated as "ten times tolerance", so the 10 lives
+// here and the prose reads the resulting detune back out of it.
+const EXAMPLE_TOLERANCE_MULTIPLE = 10;
+
+// Resolution of the convergence-window scan. The prose says "about"; this is
+// what "about" means.
+const RATIO_SCAN_STEP = 0.01;
+
+// Read defaults out of SLIDERS rather than re-typing them, so the prose and
+// the controls cannot disagree about what "the page defaults" are.
+function sliderDefault(id) {
+  for (const spec of SLIDERS) {
+    if (spec.id === id) return spec.value;
+  }
+  throw new Error("no slider named " + id);
+}
+
+// A perfectly calibrated run: believed scale is the true scale.
+function perfectRun(detune0, hzPerMicrostep) {
+  return runAutoTune({
+    detune0: detune0,
+    scaleHzPerMicrostep: hzPerMicrostep,
+    trueHzPerMicrostep: hzPerMicrostep,
+    tolerance: sliderDefault("tolerance"),
+    undershoot: sliderDefault("undershoot"),
+  });
+}
+
+// The largest true/believed scale ratio that still converges from the detune
+// the page opens on — the same experiment as dragging the calibration slider,
+// just at finer resolution. Returns null if even a perfect scale fails, which
+// would mean something far more basic is broken.
+function lastConvergingRatio(undershoot) {
+  const scale = sliderDefault("scaleHz");
+  const detune0 = sliderDefault("detune0");
+  const tolerance = sliderDefault("tolerance");
+  let last = null;
+  for (let k = 0; ; k++) {
+    const ratio = 1 + k * RATIO_SCAN_STEP;
+    // No wider than the calibration slider itself goes.
+    if (ratio > 3) break;
+    const result = runAutoTune({
+      detune0: detune0,
+      scaleHzPerMicrostep: scale,
+      trueHzPerMicrostep: scale * ratio,
+      tolerance: tolerance,
+      undershoot: undershoot,
+    });
+    if (result.outcome !== "converged") break;
+    last = ratio;
+  }
+  return last;
+}
+
+function derivedFigures() {
+  const scale = sliderDefault("scaleHz");
+  const tolerance = sliderDefault("tolerance");
+  const undershoot = sliderDefault("undershoot");
+  const example = EXAMPLE_TOLERANCE_MULTIPLE * tolerance;
+  const opened = sliderDefault("detune0");
+
+  const exampleRun = perfectRun(example, scale);
+  const exampleNominal = perfectRun(example, NOMINAL_HZ_PER_MICROSTEP);
+  const openedRun = perfectRun(opened, scale);
+  const openedNominal = perfectRun(opened, NOMINAL_HZ_PER_MICROSTEP);
+
+  const exactAim = undershoot * example / scale;
+  const firstMove = exampleRun.iterations[0];
+
+  const windowAtDefault = lastConvergingRatio(undershoot);
+  // 1 is "no undershoot at all", the comparison the paragraph is built on.
+  const windowAtUnity = lastConvergingRatio(1);
+  if (windowAtDefault === null || windowAtUnity === null) {
+    throw new Error("no calibration ratio converges");
+  }
+
+  const steps = (n) => Math.round(n).toLocaleString();
+  // Three decimals, the same precision the budget readout prints, so the prose
+  // and the simulator quote the tol factor identically.
+  const factor = (f) => f.toFixed(3);
+
+  return {
+    "fig-example-detune": String(example),
+    "fig-example-detune-b": String(example),
+    // Two decimals because the whole point is the fraction int() throws away;
+    // one would hide it.
+    "fig-exact-aim": exactAim.toLocaleString(undefined,
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    "fig-truncated-aim": firstMove.estSteps.toLocaleString(),
+    "fig-dropped-microsteps": (exactAim - Math.trunc(exactAim)).toFixed(2),
+    "fig-residual": fmtHz(firstMove.deltaHzAfter),
+    "fig-residual-nominal": fmtHz(exampleNominal.iterations[0].deltaHzAfter),
+    "fig-example-expected": steps(exampleRun.expectedSteps),
+    "fig-example-tol-factor": factor(exampleRun.tolFactor),
+    "fig-example-tol-factor-nominal": factor(exampleNominal.tolFactor),
+    "fig-opened-detune": String(opened),
+    "fig-opened-expected": steps(openedRun.expectedSteps),
+    "fig-opened-tol-factor": factor(openedRun.tolFactor),
+    "fig-opened-tol-factor-nominal": factor(openedNominal.tolFactor),
+    "fig-window-undershoot": windowAtDefault.toFixed(2),
+    "fig-window-unity": windowAtUnity.toFixed(2),
+  };
+}
+
+// A blank figure is recoverable by reading the code; a wrong one is not, and a
+// dead simulator is worse than either. So the arithmetic is guarded as a whole,
+// every write is guarded individually, and nothing here can escape into
+// mountSimulator().
+function fillDerivedFigures() {
+  let figures;
+  try {
+    figures = derivedFigures();
+  } catch (err) {
+    console.error("derived prose figures failed: " + err);
+    return;
+  }
+  for (const id of Object.keys(figures)) {
+    const node = document.getElementById(id);
+    if (!node) {
+      console.error("derived prose figure has no element: #" + id);
+      continue;
+    }
+    node.textContent = figures[id];
+  }
+}
+
+function buildControls(host) {
+  const grid = el("div", { class: "ctl" });
+
+  for (const spec of SLIDERS) {
+    const input = el("input", {
+      type: "range", id: spec.id, min: spec.min, max: spec.max,
+      step: spec.step, value: spec.value,
+    });
+    const readout = el("span", {
+      class: "val", id: spec.id + "-val",
+      text: fmtSlider(spec, spec.value),
+    });
+    input.addEventListener("input", render);
+    inputs[spec.id] = input;
+
+    grid.appendChild(el("label", { for: spec.id, text: spec.label }));
+    grid.appendChild(input);
+    grid.appendChild(readout);
+    if (spec.note) {
+      grid.appendChild(el("div", { class: "cite note", text: spec.note }));
+    }
+  }
+
+  faultSelect = el("select", { id: "fault" }, [
+    el("option", { value: "", text: "none" }),
+  ]);
+  for (const entry of FAULT_ORACLE) {
+    faultSelect.appendChild(el("option", {
+      value: entry.fault,
+      text: FAULT_LABELS[entry.fault] || entry.fault,
+    }));
+  }
+  faultSelect.addEventListener("change", function () {
+    setFault(faultSelect.value || null);
+  });
+
+  grid.appendChild(el("label", { for: "fault",
+    text: "Inject a fault (optional)" }));
+  grid.appendChild(faultSelect);
+  grid.appendChild(el("span", { class: "val", text: "" }));
+  grid.appendChild(el("div", { class: "cite note",
+    text: "Fires on move 2. Each one is explained in section 6 — leave it on " +
+          "\"none\" for now if you have not read that yet." }));
+
+  host.appendChild(grid);
+}
+
+// Exposed as a function rather than an assignment so section 6 can drive the
+// simulator from its own controls without duplicating the reset bookkeeping.
+function setFault(fault) {
+  activeFault = fault;
+  if (faultSelect) faultSelect.value = fault || "";
+  render();
+}
+
+// The canvas is laid out at width:100%, so its CSS size changes with the
+// window. Re-derive the backing store from devicePixelRatio on every render or
+// it renders blurry on HiDPI displays and stale after a resize.
+function sizeCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth || 900;
+  const cssH = Math.round(cssW * 260 / 900);
+  cv.style.height = cssH + "px";
+  cv.width = Math.round(cssW * dpr);
+  cv.height = Math.round(cssH * dpr);
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, W: cssW, H: cssH };
+}
+
+function drawPlot(values, shown) {
+  const cv = document.getElementById("plot");
+  const { ctx, W, H } = sizeCanvas(cv);
+  ctx.clearRect(0, 0, W, H);
+
+  // Iteration 0 is the starting detune; every later point is one completed
+  // move, which is what the loop's delta_hz re-read actually reports.
+  const points = [values.detune0].concat(shown.map((it) => it.deltaHzAfter));
+  const tol = values.tolerance;
+
+  // padB holds two stacked lines: the move-number ticks and the axis caption.
+  const padL = 62, padR = 104, padT = 20, padB = 46;
+  const plotW = Math.max(W - padL - padR, 10);
+  const plotH = Math.max(H - padT - padB, 10);
+
+  let peak = tol;
+  for (const point of points) peak = Math.max(peak, Math.abs(point));
+  const yMax = peak * 1.2 || 1;
+  const lastIndex = Math.max(points.length - 1, 1);
+  const X = (i) => padL + (plotW * i) / lastIndex;
+  const Y = (hz) => padT + plotH / 2 - (hz / yMax) * (plotH / 2);
+  const crisp = (y) => Math.round(y) + 0.5;
+
+  const dim = cssVar("--dim");
+  const lineColor = cssVar("--line");
+  const ok = cssVar("--ok");
+  const accent = cssVar("--accent");
+
+  // Tolerance band: inside this, the while condition is false and the loop is
+  // done. Everything the loop does is an attempt to get into this stripe.
+  ctx.globalAlpha = 0.16;
+  ctx.fillStyle = ok;
+  ctx.fillRect(padL, Y(tol), plotW, Y(-tol) - Y(tol));
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = ok;
+  ctx.setLineDash([4, 4]);
+  for (const edge of [tol, -tol]) {
+    ctx.beginPath();
+    ctx.moveTo(padL, crisp(Y(edge)));
+    ctx.lineTo(padL + plotW, crisp(Y(edge)));
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = lineColor;
+  ctx.beginPath();
+  ctx.moveTo(padL, crisp(Y(0)));
+  ctx.lineTo(padL + plotW, crisp(Y(0)));
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(crisp(padL), padT);
+  ctx.lineTo(crisp(padL), padT + plotH);
+  ctx.stroke();
+
+  if (points.length > 1) {
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach((hz, i) => {
+      if (i === 0) ctx.moveTo(X(i), Y(hz));
+      else ctx.lineTo(X(i), Y(hz));
+    });
+    ctx.stroke();
+  }
+  ctx.fillStyle = accent;
+  points.forEach((hz, i) => {
+    ctx.beginPath();
+    ctx.arc(X(i), Y(hz), 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.font = "12px " + "ui-monospace, Menlo, Consolas, monospace";
+  ctx.fillStyle = dim;
+
+  // Peak first, then the zero line, then the tolerance edges, dropping any
+  // label that would collide with one already drawn.
+  let peakHz = points[0];
+  for (const point of points) {
+    if (Math.abs(point) > Math.abs(peakHz)) peakHz = point;
+  }
+  const drawn = [];
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (const [hz, text] of [
+    [peakHz, fmtHz(peakHz)],
+    [0, "0"],
+    [tol, "+" + tol],
+    [-tol, "-" + tol],
+  ]) {
+    const y = Y(hz);
+    if (drawn.some((other) => Math.abs(other - y) < 12)) continue;
+    drawn.push(y);
+    ctx.fillText(text, padL - 8, y);
+  }
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = ok;
+  ctx.fillText("tolerance", padL + plotW + 8, Y(0) - 7);
+  ctx.fillText("+/-" + tol + " Hz", padL + plotW + 8, Y(0) + 8);
+
+  ctx.fillStyle = dim;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const every = Math.ceil(lastIndex / 12);
+  for (let i = 0; i <= lastIndex && i < points.length; i += every) {
+    ctx.fillText(String(i), X(i), padT + plotH + 8);
+  }
+  // On its own line under the ticks: in the right margin it reads as part of
+  // the last tick number ("3 move #").
+  ctx.textAlign = "center";
+  ctx.fillText("move #", padL + plotW / 2, padT + plotH + 24);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("delta f (Hz)", 4, padT - 8);
+}
+
+function renderBudget(result, shown) {
+  const host = document.getElementById("budget");
+  clear(host);
+
+  const used = shown.length ? shown[shown.length - 1].stepsMoved : 0;
+  // Exactly the guard's own condition (steps_moved > expected * tol_factor),
+  // so the colour cannot say something the loop would not.
+  const over = result.budget > 0 && used > result.budget;
+  const fraction = result.budget > 0
+    ? Math.min(used / result.budget, 1)
+    : (used > 0 ? 1 : 0);
+
+  host.appendChild(el("p", { class: "cite", style: "margin:1rem 0 0",
+    text: "Step budget" }));
+  host.appendChild(el("div", { class: "bar" }, [
+    el("div", {
+      style: "width:" + (fraction * 100).toFixed(2) + "%;background:var(" +
+             (over ? "--bad" : "--accent") + ")",
+    }),
+  ]));
+  host.appendChild(el("p", { style: "margin:.15rem 0 0",
+    text: used.toLocaleString() + " microsteps moved of " +
+          Math.round(result.budget).toLocaleString() + " allowed" +
+          (over ? " — over budget, so DetuneError." : "") }));
+  host.appendChild(el("p", { class: "cite", style: "margin:.15rem 0 0",
+    text: "budget = " + result.expectedSteps.toLocaleString() +
+          " expected steps x " + result.tolFactor.toFixed(3) +
+          " tol factor" +
+          (result.budget === 0 ? " (zero — nothing to move)" : "") }));
+}
+
+function renderVerdict(values, result, shown, complete) {
+  const host = document.getElementById("verdict");
+  clear(host);
+
+  const total = result.iterations.length;
+
+  if (!complete) {
+    host.appendChild(el("p", {
+      class: "verdict", style: "color:var(--dim)",
+      text: "Mid-run: showing " + shown.length + " of " + total +
+            " completed moves. Keep stepping, or press Run, for the outcome.",
+    }));
+    const at = shown.length
+      ? shown[shown.length - 1].deltaHzAfter
+      : values.detune0;
+    host.appendChild(el("p", {
+      text: shown.length
+        ? "delta f after move " + shown.length + ": " + fmtHz(at) + " Hz"
+        : "delta f before the first move: " + fmtHz(at) + " Hz",
+    }));
+    return;
+  }
+
+  const outcome = OUTCOMES[result.outcome] ||
+    { label: result.outcome, color: "--bad" };
+  host.appendChild(el("p", {
+    class: "verdict", style: "color:var(" + outcome.color + ")",
+    text: outcome.label,
+  }));
+  if (result.error) {
+    host.appendChild(el("p", { class: "cite", text: result.error }));
+  }
+
+  // faultIteration, not iterations.length: the abort, temp and limit paths
+  // break before the move is recorded, so the failing move has no table row.
+  let moveText = total + (total === 1 ? " move" : " moves") + " recorded";
+  if (result.faultIteration !== null) {
+    moveText += total < result.faultIteration
+      ? "; the fault hit move " + result.faultIteration +
+        ", which has no row — the loop broke before that move was recorded"
+      : "; the fault hit move " + result.faultIteration;
+  }
+  host.appendChild(el("p", { text: moveText + "." }));
+
+  if (result.detuneIsStale) {
+    host.appendChild(el("p", {
+      text: "Last detune reading: " + fmtHz(result.finalDetuneHz) +
+            " Hz — but that reading predates the failed move. The cavity " +
+            "moved; the exception left move() before delta_hz was re-read, " +
+            "so the loop never learned where it ended up.",
+    }));
+  } else if (result.outcome === "sela-invalid") {
+    host.appendChild(el("p", {
+      text: "Final delta f: unavailable. An invalid detune reading is the " +
+            "whole content of this failure, so there is no number to quote.",
+    }));
+  } else {
+    host.appendChild(el("p", {
+      text: "Final delta f: " + fmtHz(result.finalDetuneHz) +
+            " Hz against a " + values.tolerance + " Hz tolerance.",
+    }));
+  }
+
+  // Print the window, not just the number: "gain 1.8" next to "converges"
+  // reads as a contradiction until you see that the test is |1 - gain| < 1.
+  const inWindow = result.gain > 0 && result.gain < 2;
+  let gainText = "Loop gain = undershoot x (true / believed scale) = " +
+    result.gain.toFixed(3) + ". Each move multiplies the remaining detune by " +
+    "|1 - gain|, so the iteration converges exactly when 0 < gain < 2 — this " +
+    "one is " + (inWindow ? "inside" : "outside") + " that window";
+  // The headroom lesson only applies when the plotted gain is the gain that
+  // actually drove the trajectory, which the slip fault breaks.
+  if (inWindow && result.outcome === "runaway" && activeFault !== "slip") {
+    gainText += ", and it still tripped the runaway guard: converging and " +
+      "being allowed to finish are different questions";
+  } else if (!inWindow) {
+    gainText += ", so |delta f| grows every move";
+  }
+  host.appendChild(el("p", { text: gainText + "." }));
+
+  if (activeFault === "slip") {
+    host.appendChild(el("p", { class: "cite",
+      text: "That gain is computed from the undegraded response. The slip " +
+            "fault cuts the response to a tenth from move 2 on, so the gain " +
+            "above does not describe the trajectory plotted here.",
+    }));
+  }
+}
+
+function renderLog(result, complete) {
+  const host = document.getElementById("log");
+  clear(host);
+  // Log lines explain how the run ENDED, so showing them mid-step would
+  // announce a failure the reader has not reached yet.
+  if (!complete) return;
+  for (const line of result.log) {
+    host.appendChild(el("p", { class: "caveat", text: line }));
+  }
+}
+
+function renderTable(shown) {
+  const body = document.querySelector("#iters tbody");
+  clear(body);
+  for (const it of shown) {
+    body.appendChild(el("tr", null, [
+      el("td", { class: "mono", text: String(it.i) }),
+      el("td", { class: "mono", text: fmtHz(it.deltaHzBefore) }),
+      el("td", { class: "mono", text: it.estSteps.toLocaleString() }),
+      el("td", { class: "mono", text: it.maxStepsArg.toLocaleString() }),
+      el("td", { class: "mono", text: it.stepsMoved.toLocaleString() }),
+      el("td", { class: "mono", text: fmtHz(it.deltaHzAfter) }),
+    ]));
+  }
+}
+
+function currentValues() {
+  const values = {};
+  for (const spec of SLIDERS) {
+    values[spec.id] = Number(inputs[spec.id].value);
+  }
+  return values;
+}
+
+function currentResult(values) {
+  return runAutoTune({
+    detune0: values.detune0,
+    tolerance: values.tolerance,
+    // The believed scale drives the arithmetic; the true one drives the
+    // cavity. Their ratio is the whole subject of this section.
+    scaleHzPerMicrostep: values.scaleHz,
+    trueHzPerMicrostep: values.scaleHz * values.calibError,
+    undershoot: values.undershoot,
+    fault: activeFault,
+    faultAtIteration: 2,
+  });
+}
+
+function render() {
+  const values = currentValues();
+  for (const spec of SLIDERS) {
+    const readout = document.getElementById(spec.id + "-val");
+    if (readout) readout.textContent = fmtSlider(spec, values[spec.id]);
+  }
+
+  const result = currentResult(values);
+  const total = result.iterations.length;
+  const shown = result.iterations.slice(0, Math.min(shownMoves, total));
+  const complete = shown.length === total;
+
+  drawPlot(values, shown);
+  renderBudget(result, shown);
+  renderVerdict(values, result, shown, complete);
+  renderLog(result, complete);
+  renderTable(shown);
+
+  return result;
+}
+
+function mountSimulator() {
+  const host = document.getElementById("controls");
+  if (!host) return;
+  buildControls(host);
+
+  document.getElementById("run").addEventListener("click", function () {
+    shownMoves = Infinity;
+    render();
+  });
+  document.getElementById("step").addEventListener("click", function () {
+    // From "all shown" there is nothing left to reveal, so min() pins it.
+    const total = currentResult(currentValues()).iterations.length;
+    const from = shownMoves === Infinity ? total : shownMoves;
+    shownMoves = Math.min(from + 1, total);
+    render();
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    shownMoves = 0;
+    activeFault = null;
+    if (faultSelect) faultSelect.value = "";
+    render();
+  });
+
+  // The canvas is sized from its CSS width, which changes with the window.
+  window.addEventListener("resize", render);
+
+  render();
+}
+
+// Section 6's Inject buttons drive the section 2 simulator through setFault(),
+// which owns the fault state and keeps the §2 picker in sync. No second copy of
+// that state lives here -- these buttons are just another way to call it.
+function mountFailureInjectors() {
+  const buttons = document.querySelectorAll("#failures button[data-fault]");
+  for (const btn of buttons) {
+    btn.addEventListener("click", function () {
+      setFault(btn.dataset.fault);
+      document.getElementById("the-loop")
+        .scrollIntoView({ behavior: "smooth" });
+    });
+  }
+}
+
+const failures = selfCheck();
+if (failures.length) {
+  showFailureBanner(failures);
+}
+// Independent of each other on purpose: a prose figure that cannot be computed
+// must not cost the reader the simulator.
+fillDerivedFigures();
+mountSimulator();
+// After mountSimulator, so faultSelect exists and setFault can sync it.
+mountFailureInjectors();
+</script>
+</body>
+</html>
