@@ -208,9 +208,9 @@
         <code>hz_per_microstep</code> returns <code>abs()</code> of the PV
         <span class="cite">stepper.py:96</span>. RF commissioning measures a
         <em>signed</em> Hz/microstep
-        <span class="cite">frequency_tuning.py:479</span> and writes it to
+        <span class="cite">frequency_tuning.py:743</span> and writes it to
         <code>SCALE_CALC.B</code>
-        <span class="cite">_apply_hz_per_step, frequency_tuning.py:360</span>,
+        <span class="cite">_apply_hz_per_step, frequency_tuning.py:624</span>,
         but the loop only ever sees the magnitude. Direction of travel comes
         from the sign of the detune, plus the harmonic-linearizer inversion
         applied inside <code>issue_move_command()</code>
@@ -248,7 +248,7 @@ while |delta_hz| &gt; tolerance:
     if steps_moved &gt; expected_steps * tol_factor:  raise DetuneError
     check_detune()                              # may widen the chirp range
     delta_hz = delta_hz_func()                  # read the machine again</pre>
-      <p class="cite">cavity.py:825-906</p>
+      <p class="cite">cavity.py:825-948</p>
     </div>
 
     <h3>Drive it</h3>
@@ -374,7 +374,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
             <td><strong>Auto setup only</strong></td></tr>
       </tbody>
     </table>
-    <p class="cite">setup_tuning(), cavity.py:1117-1148</p>
+    <p class="cite">setup_tuning(), cavity.py:1159-1190</p>
 
     <p>
       <strong>SELA tuning has exactly one caller.</strong>
@@ -421,48 +421,23 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
       <code>_auto_tune</code> calls <code>check_detune()</code> after
       <em>every</em> stepper move. If the detune has gone invalid and the cavity
       is in chirp mode, that widens the sweep by 1.1&times; and retries
-      <span class="cite">cavity.py:904, 908-914</span>. In SELA there is no
+      <span class="cite">cavity.py:943, 950-956</span>. In SELA there is no
       range to widen, so it fails hard instead.
     </p>
 
     <p>
-      There are two entry points into <code>find_chirp_range</code>, and they do
-      not behave the same:
+      Both entry points are safe. <code>find_chirp_range</code> normalizes its
+      argument with <code>abs(int(...))</code> before doing anything else
+      <span class="cite">cavity.py:1196</span>, so the negative value that
+      <code>check_detune()</code> passes in — <code>chirp_freq_start</code> is
+      negative by construction
+      <span class="cite">set_chirp_range, cavity.py:669-677</span> — is folded
+      to a magnitude first. The recursion therefore widens and caps on the same
+      number, stopping at &plusmn;400 kHz whether it was entered from
+      <code>setup_tuning()</code> or from inside the tuning loop, and raising
+      <code>DetuneError</code> if no valid detune turned up by then
+      <span class="cite">cavity.py:1192-1223</span>.
     </p>
-
-    <table>
-      <thead><tr><th>Entry point</th><th>Argument</th>
-        <th>&plusmn;400 kHz cap enforced?</th></tr></thead>
-      <tbody>
-        <tr>
-          <td><code>setup_tuning()</code></td>
-          <td>positive (<code>50000</code>)</td>
-          <td style="color:var(--ok)">Yes</td>
-        </tr>
-        <tr>
-          <td><code>_auto_tune()</code> &rarr; <code>check_detune()</code></td>
-          <td>negative (<code>chirp_freq_start * 1.1</code>)</td>
-          <td style="color:var(--bad)">No</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="caveat">
-      <strong>Known defect, documented as it behaves.</strong>
-      <code>set_chirp_range</code> normalizes with <code>abs()</code> and then
-      writes <code>chirp_freq_start = -offset</code>
-      <span class="cite">cavity.py:669-677</span>, so the in-loop call passes a
-      negative number back in. The widening itself still lands on a correct
-      &plusmn; range, because that <code>abs()</code> runs on every write — but
-      <code>find_chirp_range</code>'s recursion guard tests the raw signed
-      value: <code>if chirp_range &lt; 400000</code>
-      <span class="cite">cavity.py:1155</span>, which a negative number always
-      satisfies. On that path the cap never trips, and the range keeps growing
-      1.1&times; per level until the detune goes valid or Python raises
-      <code>RecursionError</code>. Tracked as a separate fix; this page
-      describes today's behaviour, because someone chasing a runaway chirp range
-      is exactly who reads this section.
-    </div>
   </section>
   <section id="tune-states">
     <h2>4. Tune states</h2>
@@ -541,7 +516,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
         <tr><td><code>OTHER</code> (3)</td>
             <td>Mid-transition or unknown — do not trust the frequency</td>
             <td><code>_auto_tune()</code> on entry
-            <span class="cite">cavity.py:846</span></td></tr>
+            <span class="cite">cavity.py:851</span></td></tr>
       </tbody>
     </table>
 
@@ -573,7 +548,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
 
     <p>
       RF commissioning wraps the same loop in a gated, operator-supervised
-      sequence <span class="cite">phases/frequency_tuning.py:110-119</span>.
+      sequence <span class="cite">phases/frequency_tuning.py:123-132</span>.
       Seven steps:
     </p>
 
@@ -612,7 +587,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
         <strong>Measures Hz/microstep instead of inheriting it.</strong> A
         50,000-microstep probe move must produce at least 100 Hz of detune
         change <span class="cite">min_probe_delta_hz,
-        frequency_tuning.py:59, enforced :462</span>. Below that it fails and
+        frequency_tuning.py:72, enforced :726</span>. Below that it fails and
         points at the two physical causes: the stepper is not mechanically
         connected, or the cavity is not at 2 K.
       </li>
@@ -620,7 +595,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
         <strong>Applies an explicit sign convention.</strong>
         <code>SCALE = -&Delta;(CHIRP:DF) / &Delta;(microstep)</code>: a positive
         number of microsteps <em>decreases</em> <code>CHIRP:DF</code>
-        <span class="cite">frequency_tuning.py:472</span>.
+        <span class="cite">frequency_tuning.py:736</span>.
       </li>
       <li>
         <strong>Waits for the operator before writing.</strong> And it writes
@@ -628,12 +603,12 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
         is a read-only calc output the IOC recomputes from it
         (<code>SCALE = SCALE_CALC.B / 256</code>), so writing <code>SCALE</code>
         directly is silently reverted
-        <span class="cite">stepper.py:105-116, frequency_tuning.py:363-365</span>.
+        <span class="cite">stepper.py:105-116, frequency_tuning.py:627-629</span>.
       </li>
       <li>
         <strong>Refuses to tune until <code>DF_COLD</code> is pushed</strong>
         and matches the recorded cold-landing frequency within 1 Hz
-        <span class="cite">frequency_tuning.py:154, tolerance at :152</span>.
+        <span class="cite">frequency_tuning.py:170, tolerance at :168</span>.
         The reason it compares against the record rather than checking validity:
         <code>DF_COLD</code> defaults to a perfectly valid 0, so there is no
         INVALID severity to key off.
@@ -641,9 +616,9 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
       <li>
         <strong>Guards the stepper temperature</strong> at
         <code>STEPPER_TEMP_LIMIT</code> = 70 &deg;C
-        <span class="cite">frequency_tuning.py:53</span>, raisable for a re-run
+        <span class="cite">frequency_tuning.py:66</span>, raisable for a re-run
         by an explicit operator acknowledgement
-        <span class="cite">over_temp_ack_c, :548</span>. The raised ceiling is
+        <span class="cite">over_temp_ack_c, :807</span>. The raised ceiling is
         passed straight into <code>_auto_tune</code>'s
         <code>max_stepper_temp</code>, which still fails hard on a breach — the
         acknowledgement moves the line, it does not add a retry.
@@ -652,9 +627,13 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
 
     <div class="caveat">
       <strong>Not covered here: the operator controls.</strong> This section
-      describes the backend phase logic. The screen that drives it — the
-      per-stage re-run gates, and what the Abort button commands — is documented
-      separately once that work merges. Section 6 covers the abort
+      describes the backend phase logic only. The screen that drives it now
+      exists — a 1,700-line controller
+      <span class="cite">ui/controllers/frequency_tuning_controller.py</span>
+      plus three re-run gates that re-establish cavity state before stages 2, 3
+      and 4 <span class="cite">_check_state_for_stage_2/3/4,
+      frequency_tuning.py:324, 368, 404</span> — and it is deliberately out of
+      scope for a page about the convergence loop. Section 6 covers the abort
       <em>mechanism</em> at the stepper and cavity level, which is what
       <code>_auto_tune</code> itself sees.
     </div>
@@ -686,7 +665,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
           <td class="mono">DetuneError</td>
           <td>Cavity off, or the chirp range is wrong before the loop even
           starts. Checked once, before the first move
-          <span class="cite">cavity.py:833</span>.</td>
+          <span class="cite">cavity.py:834</span>.</td>
           <td></td>
         </tr>
         <tr>
@@ -700,7 +679,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
           <td>Detune invalid mid-loop, SELA</td>
           <td class="mono">DetuneError</td>
           <td>No range to widen, so it fails hard
-          <span class="cite">cavity.py:915-926</span>. Auto setup only.</td>
+          <span class="cite">cavity.py:957-968</span>. Auto setup only.</td>
           <td><button data-fault="detune_invalid_sela">Inject</button></td>
         </tr>
         <tr>
@@ -708,7 +687,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
           <td class="mono">StepperTempError</td>
           <td><strong>There is no cool-down and no retry.</strong> The loop
           raises and stops; a human has to let the motor cool and re-run
-          tuning <span class="cite">cavity.py:851-862</span>.</td>
+          tuning <span class="cite">cavity.py:856-867</span>.</td>
           <td><button data-fault="hot_motor">Inject</button></td>
         </tr>
         <tr>
@@ -737,7 +716,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
           <td>Setting <code>cavity.abort_flag</code> is the path that also turns
           the RF <em>off</em> — <code>check_abort()</code> calls
           <code>turn_off()</code> before it raises
-          <span class="cite">cavity.py:1054-1061</span>. A caller that stops the
+          <span class="cite">cavity.py:1096-1103</span>. A caller that stops the
           stepper without setting this leaves the cavity powered.</td>
           <td><button data-fault="abort">Inject</button></td>
         </tr>
@@ -783,7 +762,7 @@ const TOL_ORACLE = [
   [-50000, 3.888889],
 ];
 
-// Traced from Cavity._auto_tune (cavity.py:825-906) against a Python
+// Traced from Cavity._auto_tune (cavity.py:825-948) against a Python
 // reference that reuses the real stepper_tol_factor. Every count below was
 // produced by that trace, not by hand arithmetic — see the note on case 1 for
 // why hand arithmetic gets this wrong.
@@ -980,32 +959,30 @@ const LOOP_ORACLE = [
     expect: { outcome: "runaway", moves: 3 },
   },
   {
-    name: "est_steps truncating to zero never terminates",
+    name: "est_steps truncating to zero raises rather than spinning",
     input: {
       // A believed scale of 100 Hz/microstep is wildly wrong (nominal is
       // 0.0055), but it is the cleanest way to reach this state.
       detune0: 60, scaleHzPerMicrostep: 100,
       trueHzPerMicrostep: 100, tolerance: 50, undershoot: 0.9,
     },
-    // THIS CASE DOCUMENTS A REAL BUG IN THE PYTHON LOOP, not a quirk of the
-    // simulator. microsteps_per_hz = 0.01, so
-    // est_steps = int(0.9 * 60 * 0.01) = int(0.54) = 0.
+    // microsteps_per_hz = 0.01, so est_steps = int(0.9 * 60 * 0.01)
+    // = int(0.54) = 0.
     //
-    // A zero-step move changes nothing: delta_hz is re-read as the same
-    // 60 Hz, which is still > 50, so the loop goes around again. And because
-    // steps_moved += abs(0) never grows, the runaway guard can never fire --
-    // expected_steps is 0 here too, so the budget is 0 and `0 > 0` is false
-    // forever. Nothing bounds the iteration count. In the real Python this
-    // spins indefinitely, doing nothing, until something outside it aborts.
+    // A zero-step move changes nothing: delta_hz would be re-read as the same
+    // 60 Hz, still > 50, and because steps_moved += abs(0) never grows the
+    // runaway guard could never fire either -- expected_steps is 0 here too,
+    // so the budget is 0 and `0 > 0` is false forever. Nothing in the loop
+    // body would bound the iteration count.
+    //
+    // That was a real hang until the guard at cavity.py:884-900 landed. It now
+    // raises DetuneError naming the suspect SCALE instead of spinning.
     //
     // The precondition is a believed scale above 0.9 * tolerance
     // (45 Hz/microstep at the default 50 Hz tolerance), i.e. a SCALE PV about
-    // four orders of magnitude too large. So it needs a badly wrong
-    // calibration to reach -- but nothing in the loop stops it.
-    //
-    // MAX_ITERATIONS is what turns it into a reported outcome here. Filed
-    // separately; deliberately not fixed in the Python from this page.
-    expect: { outcome: "no-converge" },
+    // four orders of magnitude too large -- so it needs a badly wrong
+    // calibration to reach at all.
+    expect: { outcome: "zero-step", moves: 0 },
   },
 ];
 
@@ -1102,7 +1079,7 @@ function stepperTolFactor(numSteps) {
 // during a single move, not just once per iteration as modelled here.
 //
 // Also not modelled: the pre-loop `if self.detune_invalid` guard
-// (cavity.py:833), which raises DetuneError before the first move ever
+// (cavity.py:834), which raises DetuneError before the first move ever
 // happens. Deliberate — this port starts from a valid detune reading, and the
 // detune_invalid_* faults below cover the in-loop check_detune() path instead.
 //
@@ -1170,8 +1147,8 @@ function runAutoTune(opts) {
     // the page does not teach the wrong precedence.
     //
     // There are TWO abort paths and they behave differently. This models the
-    // loop-top one: Cavity.check_abort (cavity.py:1054), reached at
-    // cavity.py:849 between moves, which calls turn_off() and raises
+    // loop-top one: Cavity.check_abort (cavity.py:1096), reached at
+    // cavity.py:854 between moves, which calls turn_off() and raises
     // CavityAbortError. No move is in flight, so it stops promptly — and it
     // TURNS RF OFF.
     //
@@ -1213,6 +1190,24 @@ function runAutoTune(opts) {
     }
 
     const estSteps = Math.trunc(undershoot * deltaHz * microstepsPerHz);
+
+    // A zero step estimate commands no motion, so the detune cannot change and
+    // steps_moved cannot grow -- the runaway guard can never fire. The loop
+    // would otherwise spin forever doing nothing. Bails out instead
+    // (cavity.py:884-900). Placed here, right after est_steps and before the
+    // move, exactly where the real guard sits.
+    if (estSteps === 0) {
+      outcome = "zero-step";
+      const hzPerMicrostep = 1 / microstepsPerHz;
+      error = `DetuneError: step estimate rounded to zero with detune ` +
+              `${deltaHz} Hz outside tolerance ${tolerance} Hz; ` +
+              `check SCALE (hz_per_microstep=${hzPerMicrostep})`;
+      log.push("The believed SCALE is so large that 0.9 x detune x " +
+               "microsteps_per_hz truncates to zero microsteps. No motion is " +
+               "commanded, so nothing can change -- the loop raises rather " +
+               "than spinning.");
+      break;
+    }
 
     // int(abs(est_steps) * 1.1), the max_steps argument handed to
     // StepperTuner.move(). Recorded for display only, and deliberately NOT
@@ -1287,8 +1282,9 @@ function runAutoTune(opts) {
     //
     // On "limit" it is stale by a full move — the simulated cavity moved but
     // the exception propagates out of move() before delta_hz is re-read, so
-    // the loop never learns the new value. On "abort" and "temp" nothing moved,
-    // so it is current. On "sela-invalid" it is a number, but the entire
+    // the loop never learns the new value. On "abort", "temp" and "zero-step"
+    // nothing moved, so it is current — "zero-step" breaks before the move is
+    // commanded at all. On "sela-invalid" it is a number, but the entire
     // meaning of that state is that the machine's detune reading is INVALID,
     // so the value should be presented as unavailable rather than precise.
     finalDetuneHz: deltaHz,
@@ -1467,7 +1463,7 @@ const SLIDERS = [
     note: "1.0 means SCALE is exactly right" },
   { id: "undershoot", label: "Undershoot factor", unit: "",
     min: 0.5, max: 1.3, step: 0.05, value: 0.9,
-    note: "Hard-coded 0.9 in the real loop (cavity.py:868)" },
+    note: "Hard-coded 0.9 in the real loop (cavity.py:874)" },
 ];
 
 // Option text for the fault picker. Keyed off FAULT_ORACLE so a fault added to
@@ -1494,8 +1490,10 @@ const OUTCOMES = {
            color: "--bad" },
   "sela-invalid": { label: "DetuneError — invalid detune in SELA",
                     color: "--bad" },
-  "no-converge": { label: "Never terminated — see the truncation case",
+  "no-converge": { label: "Never terminated — hit the iteration ceiling",
                    color: "--bad" },
+  "zero-step": { label: "DetuneError — step estimate rounded to zero",
+                 color: "--bad" },
   abort: { label: "CavityAbortError — aborted, and RF is now off",
            color: "--warn" },
 };
