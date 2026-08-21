@@ -2,6 +2,97 @@
 
 <!-- version list -->
 
+## v9.34.0 (2026-08-21)
+
+### Bug Fixes
+
+- Remove redundant signed/direction fields from UI controller
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- Store hz_per_microstep as signed, remove redundant direction field
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#287](https://github.com/slaclab/sc_linac_physics/pull/287),
+  [`d5b1b2d`](https://github.com/slaclab/sc_linac_physics/commit/d5b1b2d547cd270d2e309f5289e30c91ae4da927))
+
+- **platform_paths**: Scope macOS paths under ~/.sc_linac_physics
+  ([#286](https://github.com/slaclab/sc_linac_physics/pull/286),
+  [`ed8c13e`](https://github.com/slaclab/sc_linac_physics/commit/ed8c13eab817247739976f411dad0f80372e833e))
+
+- **rf-commissioning**: Address review feedback on frequency tuning phase
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- **rf-commissioning**: Align tuning UI controller with updated backend
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- **rf-commissioning**: Raise probe sanity floor to 100 Hz
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- **rf-commissioning**: Write stepper scale to SCALE_CALC.B, not derived SCALE
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- **sc-linac**: Raise instead of hanging when tuner step estimate rounds to zero
+  ([#287](https://github.com/slaclab/sc_linac_physics/pull/287),
+  [`d5b1b2d`](https://github.com/slaclab/sc_linac_physics/commit/d5b1b2d547cd270d2e309f5289e30c91ae4da927))
+
+- **sc_linac**: Cap chirp range on magnitude in find_chirp_range
+  ([#286](https://github.com/slaclab/sc_linac_physics/pull/286),
+  [`ed8c13e`](https://github.com/slaclab/sc_linac_physics/commit/ed8c13eab817247739976f411dad0f80372e833e))
+
+- **sc_linac**: Report actual chirp magnitude in detune status message
+  ([#286](https://github.com/slaclab/sc_linac_physics/pull/286),
+  [`ed8c13e`](https://github.com/slaclab/sc_linac_physics/commit/ed8c13eab817247739976f411dad0f80372e833e))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#287](https://github.com/slaclab/sc_linac_physics/pull/287),
+  [`d5b1b2d`](https://github.com/slaclab/sc_linac_physics/commit/d5b1b2d547cd270d2e309f5289e30c91ae4da927))
+
+- **tests**: Update macOS path assertions and add ssa_cal coverage
+  ([#286](https://github.com/slaclab/sc_linac_physics/pull/286),
+  [`ed8c13e`](https://github.com/slaclab/sc_linac_physics/commit/ed8c13eab817247739976f411dad0f80372e833e))
+
+### Features
+
+- Frequency tuning phase backend logic
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- Frequency tuning UI — builders, controller, and displays
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- **rf-commissioning**: Add frequency tuning UI
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- **rf-commissioning**: Gate frequency tuning on DF_COLD, manage tune_config
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+- **rf-commissioning**: Require operator ack on stepper over-temp, drop auto cool-down
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+### Refactoring
+
+- **rf-commissioning**: Drop unused df_cold_khz computed field
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+### Testing
+
+- **rf-commissioning**: Add frequency tuning controller tests, omit display from coverage
+  ([#270](https://github.com/slaclab/sc_linac_physics/pull/270),
+  [`ca62991`](https://github.com/slaclab/sc_linac_physics/commit/ca629914ea6d6669be1ef9db34516f82ee39971d))
+
+
 ## v9.33.1 (2026-08-13)
 
 ### Bug Fixes
