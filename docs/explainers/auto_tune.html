@@ -660,7 +660,90 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
     </div>
 
   </section>
-  <section id="failures"><h2>6. How it fails</h2></section>
+  <section id="failures">
+    <h2>6. How it fails</h2>
+
+    <p>
+      Each row below has a button that injects that fault into the simulator in
+      section 2 and scrolls you back to it, so you can watch the loop react.
+    </p>
+
+    <table>
+      <thead><tr><th>Failure</th><th>Raises</th><th>Cause and what to do</th>
+        <th></th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Step budget exceeded</td>
+          <td class="mono">DetuneError</td>
+          <td><code>SCALE</code> is miscalibrated, or the tuner is slipping
+          mechanically. The loop asked for more steps than
+          <code>stepper_tol_factor</code> allows for the detune it started
+          with.</td>
+          <td><button data-fault="slip">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Detune invalid at entry</td>
+          <td class="mono">DetuneError</td>
+          <td>Cavity off, or the chirp range is wrong before the loop even
+          starts. Checked once, before the first move
+          <span class="cite">cavity.py:833</span>.</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Detune invalid mid-loop, chirp</td>
+          <td>&mdash; recovers</td>
+          <td><code>check_detune()</code> widens the chirp range 1.1&times; and
+          carries on. See section 3 on the cap.</td>
+          <td><button data-fault="detune_invalid_chirp">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Detune invalid mid-loop, SELA</td>
+          <td class="mono">DetuneError</td>
+          <td>No range to widen, so it fails hard
+          <span class="cite">cavity.py:915-926</span>. Auto setup only.</td>
+          <td><button data-fault="detune_invalid_sela">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Stepper over temperature</td>
+          <td class="mono">StepperTempError</td>
+          <td><strong>There is no cool-down and no retry.</strong> The loop
+          raises and stops; a human has to let the motor cool and re-run
+          tuning <span class="cite">cavity.py:851-862</span>.</td>
+          <td><button data-fault="hot_motor">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Limit switch hit</td>
+          <td class="mono">StepperError</td>
+          <td>Checked after every completed move — the motor stopped for a bad
+          reason rather than because it arrived
+          <span class="cite">stepper.py:419-431</span>.</td>
+          <td><button data-fault="limit_switch">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Operator abort, stepper</td>
+          <td class="mono">StepperAbortError</td>
+          <td>Setting <code>stepper_tuner.abort_flag</code> stops a move
+          <em>already in progress</em>: the polling loop in
+          <code>issue_move_command</code> checks it every 5 s while the motor
+          runs, writes 1 to <code>ABORT_REQ</code>, and raises. Worst case about
+          10 s from the request — a 5 s settle sleep before polling starts, plus
+          the 5 s interval <span class="cite">stepper.py:129-147, 388-392</span>.
+          </td>
+          <td><button data-fault="abort">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Operator abort, cavity</td>
+          <td class="mono">CavityAbortError</td>
+          <td>Setting <code>cavity.abort_flag</code> is the path that also turns
+          the RF <em>off</em> — <code>check_abort()</code> calls
+          <code>turn_off()</code> before it raises
+          <span class="cite">cavity.py:1054-1061</span>. A caller that stops the
+          stepper without setting this leaves the cavity powered.</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
 </main>
 <script>
 "use strict";
@@ -1990,6 +2073,20 @@ function mountSimulator() {
   render();
 }
 
+// Section 6's Inject buttons drive the section 2 simulator through setFault(),
+// which owns the fault state and keeps the §2 picker in sync. No second copy of
+// that state lives here -- these buttons are just another way to call it.
+function mountFailureInjectors() {
+  const buttons = document.querySelectorAll("#failures button[data-fault]");
+  for (const btn of buttons) {
+    btn.addEventListener("click", function () {
+      setFault(btn.dataset.fault);
+      document.getElementById("the-loop")
+        .scrollIntoView({ behavior: "smooth" });
+    });
+  }
+}
+
 const failures = selfCheck();
 if (failures.length) {
   showFailureBanner(failures);
@@ -1998,6 +2095,8 @@ if (failures.length) {
 // must not cost the reader the simulator.
 fillDerivedFigures();
 mountSimulator();
+// After mountSimulator, so faultSelect exists and setFault can sync it.
+mountFailureInjectors();
 </script>
 </body>
 </html>
