@@ -1168,7 +1168,8 @@ class Cavity(linac_utils.SCLinacObject):
                 self.find_chirp_range(int(chirp_range * 1.1))
             else:
                 self.set_status_message(
-                    "No valid detune found within +/-400000Hz chirp range",
+                    f"No valid detune found within "
+                    f"+/-{chirp_range}Hz chirp range",
                     logging.ERROR,
                     extra_data={
                         "final_chirp_range": chirp_range,
