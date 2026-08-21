@@ -464,7 +464,110 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
       is exactly who reads this section.
     </div>
   </section>
-  <section id="tune-states"><h2>4. Tune states</h2></section>
+  <section id="tune-states">
+    <h2>4. Tune states</h2>
+
+    <p>
+      Every cavity carries a <code>TUNE_CONFIG</code> PV asserting what its
+      frequency currently means
+      <span class="cite">linac_utils.py:154-157</span>.
+    </p>
+
+    <!-- Colours below are the literal :root token values (--panel, --ink,
+         --dim, --ok, --warn, --accent) rather than var() references. SVG
+         presentation attributes resolve var() less reliably than CSS does, and
+         this page is opened offline on control-room browsers of unknown
+         vintage. The cost is that a theme change must be mirrored here. -->
+    <svg viewBox="0 0 720 210" width="100%" role="img"
+         aria-label="Tune config state diagram">
+      <defs>
+        <marker id="arw" markerWidth="9" markerHeight="9" refX="8" refY="3"
+                orient="auto">
+          <path d="M0,0 L0,6 L9,3 z" fill="#9aa3b2"/>
+        </marker>
+      </defs>
+      <g font-family="ui-monospace, monospace" font-size="13">
+        <rect x="20" y="20" width="150" height="52" rx="6"
+              fill="#1c1f25" stroke="#7fb069"/>
+        <text x="95" y="42" fill="#e6e8ec" text-anchor="middle">RESONANCE</text>
+        <text x="95" y="60" fill="#9aa3b2" text-anchor="middle">0</text>
+
+        <rect x="285" y="20" width="150" height="52" rx="6"
+              fill="#1c1f25" stroke="#e0a458"/>
+        <text x="360" y="42" fill="#e6e8ec" text-anchor="middle">OTHER</text>
+        <text x="360" y="60" fill="#9aa3b2" text-anchor="middle">3</text>
+
+        <rect x="550" y="20" width="150" height="52" rx="6"
+              fill="#1c1f25" stroke="#6ea8fe"/>
+        <text x="625" y="42" fill="#e6e8ec" text-anchor="middle">COLD</text>
+        <text x="625" y="60" fill="#9aa3b2" text-anchor="middle">1</text>
+
+        <rect x="285" y="135" width="150" height="52" rx="6"
+              fill="#1c1f25" stroke="#6ea8fe"/>
+        <text x="360" y="157" fill="#e6e8ec" text-anchor="middle">PARKED</text>
+        <text x="360" y="175" fill="#9aa3b2" text-anchor="middle">2</text>
+
+        <line x1="170" y1="38" x2="278" y2="38" stroke="#9aa3b2"
+              marker-end="url(#arw)"/>
+        <text x="224" y="30" fill="#9aa3b2" text-anchor="middle"
+              font-size="11">_auto_tune entry</text>
+
+        <line x1="278" y1="58" x2="172" y2="58" stroke="#9aa3b2"
+              marker-end="url(#arw)"/>
+        <text x="224" y="76" fill="#9aa3b2" text-anchor="middle"
+              font-size="11">move_to_resonance exit</text>
+
+        <line x1="435" y1="46" x2="543" y2="46" stroke="#9aa3b2"
+              marker-end="url(#arw)"/>
+        <line x1="360" y1="72" x2="360" y2="128" stroke="#9aa3b2"
+              marker-end="url(#arw)"/>
+      </g>
+    </svg>
+
+    <table>
+      <thead><tr><th>State</th><th>What it asserts</th>
+        <th>Written by</th></tr></thead>
+      <tbody>
+        <tr><td><code>RESONANCE</code> (0)</td>
+            <td>On resonance, ready for beam</td>
+            <td><code>move_to_resonance()</code> on success
+            <span class="cite">cavity.py:747</span></td></tr>
+        <tr><td><code>COLD</code> (1)</td>
+            <td>At the cold landing frequency</td>
+            <td>Cold-landing tooling</td></tr>
+        <tr><td><code>PARKED</code> (2)</td>
+            <td>Stepper parked at a defined reference</td>
+            <td>Parking tooling</td></tr>
+        <tr><td><code>OTHER</code> (3)</td>
+            <td>Mid-transition or unknown — do not trust the frequency</td>
+            <td><code>_auto_tune()</code> on entry
+            <span class="cite">cavity.py:846</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="caveat">
+      <strong>A cavity that dies mid-tune is left in <code>OTHER</code>, and
+      that is correct.</strong> <code>_auto_tune</code> writes
+      <code>OTHER</code> as its first act, but only
+      <code>move_to_resonance</code> writes <code>RESONANCE</code> on the way
+      out. Any failure in between — runaway, over temp, abort, invalid detune —
+      leaves the state at <code>OTHER</code>, which is an honest report that
+      nobody knows where the cavity is.
+    </div>
+
+    <h3>Two cold-landing numbers, easily conflated</h3>
+
+    <table>
+      <tbody>
+        <tr><td><code>DF_COLD</code></td>
+            <td>The reference <em>detune</em>, in Hz, at cold landing
+            <span class="cite">cavity.py:164</span></td></tr>
+        <tr><td><code>NSTEPS_COLD</code></td>
+            <td>The stepper <em>position</em>, in microsteps, that reached it
+            <span class="cite">stepper.py:55</span></td></tr>
+      </tbody>
+    </table>
+  </section>
   <section id="failures"><h2>5. How it fails</h2></section>
 </main>
 <script>
