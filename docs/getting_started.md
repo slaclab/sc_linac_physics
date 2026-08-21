@@ -5,7 +5,7 @@ By the end you will have written three working displays from scratch, each build
 
 ## Prerequisites
 
-Follow the installation steps in [README.md](../README.md)
+Follow the installation steps in [README.md](https://github.com/slaclab/sc_linac_physics/blob/main/README.md)
 
 ## Background
 

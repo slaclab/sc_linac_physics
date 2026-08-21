@@ -14,6 +14,7 @@ exclude .flake8
 exclude requirements.txt
 exclude *.sh
 exclude Makefile
+exclude mkdocs.yml
 recursive-exclude tests *
 recursive-exclude .github *
 global-exclude __pycache__

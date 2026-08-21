@@ -46,6 +46,10 @@ dev = [
     "twine",
     "check-manifest",
 ]
+# For previewing the docs site locally: `mkdocs serve`. CI installs these two
+# directly rather than through this extra, to avoid pulling the whole runtime
+# in just to render markdown -- see .github/workflows/docs.yml.
+docs = ["mkdocs", "mkdocs-material"]
 
 [tool.black]
 line-length = 80
@@ -232,6 +236,7 @@ ignore = [
     "requirements.txt",
     "*.sh",
     "Makefile",
+    "mkdocs.yml",
     ".git*",
     ".pre-commit-config.yaml",
     # Test data (in git but not in distribution)
