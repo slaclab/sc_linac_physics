@@ -1149,6 +1149,9 @@ class Cavity(linac_utils.SCLinacObject):
 
     def find_chirp_range(self, chirp_range=50000):
         self.check_abort()
+        # check_detune() widens from chirp_freq_start, which is negative, so
+        # both the widening and the 400 kHz cap have to work on magnitude
+        chirp_range = abs(int(chirp_range))
         self.set_chirp_range(chirp_range)
         time.sleep(1)
         if self.detune_invalid:
@@ -1165,7 +1168,8 @@ class Cavity(linac_utils.SCLinacObject):
                 self.find_chirp_range(int(chirp_range * 1.1))
             else:
                 self.set_status_message(
-                    "No valid detune found within +/-400000Hz chirp range",
+                    f"No valid detune found within "
+                    f"+/-{chirp_range}Hz chirp range",
                     logging.ERROR,
                     extra_data={
                         "final_chirp_range": chirp_range,
@@ -1173,8 +1177,8 @@ class Cavity(linac_utils.SCLinacObject):
                     },
                 )
                 raise linac_utils.DetuneError(
-                    f"{self}: No valid detune found within"
-                    f"+/-400000Hz chirp range"
+                    f"{self}: No valid detune found within "
+                    f"+/-{chirp_range}Hz chirp range"
                 )
 
     def reset_interlocks(self, wait: int = 3, attempt: int = 0):
