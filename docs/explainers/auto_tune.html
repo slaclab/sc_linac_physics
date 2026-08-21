@@ -657,8 +657,25 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
           <td><code>SCALE</code> is miscalibrated, or the tuner is slipping
           mechanically. The loop asked for more steps than
           <code>stepper_tol_factor</code> allows for the detune it started
-          with.</td>
+          with. If the reported detune never changed across the whole run, the
+          message says so — that distinguishes a tuner that is mechanically
+          stuck while still reporting motion from honest over-travel.</td>
           <td><button data-fault="slip">Inject</button></td>
+        </tr>
+        <tr>
+          <td>Step estimate rounds to zero</td>
+          <td class="mono">DetuneError</td>
+          <td><code>SCALE</code> is implausibly large, so
+          <code>int(0.9 &times; delta_hz &times; microsteps_per_hz)</code>
+          truncates to 0 while the detune is still outside tolerance. A zero
+          step commands no motion, so nothing would ever change. The loop
+          raises immediately and names <code>SCALE</code> and the offending
+          <code>hz_per_microstep</code>
+          <span class="cite">cavity.py:884-900</span>. The injection rewrites
+          <code>SCALE</code> mid-tune, which is the real route in: the loop
+          re-reads it every iteration, so a bad value written by
+          <code>_apply_hz_per_step</code> takes effect on the next move.</td>
+          <td><button data-fault="bad_scale">Inject</button></td>
         </tr>
         <tr>
           <td>Detune invalid at entry</td>
@@ -1011,6 +1028,10 @@ const FAULT_ORACLE = [
   // Checked at the END of the loop body, so move 2 is completed and recorded
   // before this breaks -- hence 2 moves, not 1.
   { fault: "detune_invalid_sela", outcome: "sela-invalid", moves: 2 },
+  // Move 1 lands normally at 500 Hz. The rewritten SCALE then truncates move
+  // 2's estimate to zero, and the guard breaks before the move is recorded --
+  // hence 1 move. Without the guard this is where the loop used to hang.
+  { fault: "bad_scale", outcome: "zero-step", moves: 1 },
 ];
 
 // Shared input for FAULT_ORACLE, kept separate so the faults vary one thing.
@@ -1129,6 +1150,11 @@ function runAutoTune(opts) {
   let faultIteration = null;
   // Effective response, degraded by the mechanical-slip fault.
   let responseHz = trueHzPerMicrostep;
+  // Effective believed scale. Separate from microstepsPerHz because the real
+  // loop re-reads SCALE every iteration while expected_steps and the step
+  // budget above are computed ONCE, before the first move -- so a mid-tune
+  // SCALE change moves the estimate without moving the budget.
+  let effMicrostepsPerHz = microstepsPerHz;
 
   while (Math.abs(deltaHz) > tolerance) {
     if (iterations.length >= MAX_ITERATIONS) {
@@ -1178,6 +1204,22 @@ function runAutoTune(opts) {
       break;
     }
 
+    // The real loop re-reads microsteps_per_hz from the SCALE PV on every
+    // iteration (cavity.py:873), so a SCALE write that lands mid-tune takes
+    // effect on the next move. That is the plausible route into the zero-step
+    // state: RF commissioning writes SCALE_CALC.B from a measured probe
+    // (_apply_hz_per_step), so a bad probe or a bad manual entry is picked up
+    // here rather than at setup. 1e6 Hz/microstep is the value #287's
+    // regression test uses.
+    if (firing && fault === "bad_scale") {
+      effMicrostepsPerHz = 1 / 1e6;
+      if (i === faultAtIteration) {
+        log.push("SCALE was rewritten mid-tune to an implausible " +
+                 "1e6 Hz/microstep. The loop re-reads it every iteration, so " +
+                 "the next step estimate truncates to zero.");
+      }
+    }
+
     if (firing && fault === "slip") {
       responseHz = trueHzPerMicrostep * 0.1;
       // Annotated once, on the move where it starts. The degraded response
@@ -1189,7 +1231,7 @@ function runAutoTune(opts) {
       }
     }
 
-    const estSteps = Math.trunc(undershoot * deltaHz * microstepsPerHz);
+    const estSteps = Math.trunc(undershoot * deltaHz * effMicrostepsPerHz);
 
     // A zero step estimate commands no motion, so the detune cannot change and
     // steps_moved cannot grow -- the runaway guard can never fire. The loop
@@ -1198,7 +1240,7 @@ function runAutoTune(opts) {
     // move, exactly where the real guard sits.
     if (estSteps === 0) {
       outcome = "zero-step";
-      const hzPerMicrostep = 1 / microstepsPerHz;
+      const hzPerMicrostep = 1 / effMicrostepsPerHz;
       error = `DetuneError: step estimate rounded to zero with detune ` +
               `${deltaHz} Hz outside tolerance ${tolerance} Hz; ` +
               `check SCALE (hz_per_microstep=${hzPerMicrostep})`;
@@ -1395,6 +1437,27 @@ function selfCheck() {
       failures.push(`fault ${c.fault}: duplicate log lines`);
     }
   }
+
+  // Every Inject button must sit on a row whose "Raises" column names the same
+  // exception the simulator actually reports. This was a real defect: the abort
+  // button sat on the StepperAbortError row while the fault it injects is the
+  // cavity path, which raises CavityAbortError and turns RF off -- the exact
+  // distinction section 6 exists to draw. A reader clicking that row was shown
+  // the other path's outcome. Cheap to check, so it is checked.
+  for (const tr of document.querySelectorAll("#failures tbody tr")) {
+    const btn = tr.querySelector("button[data-fault]");
+    if (!btn) continue;
+    const raises = tr.children[1].textContent.trim();
+    // "— recovers" rows raise nothing, so there is no class to match.
+    if (raises.startsWith("\u2014")) continue;
+    const got = runAutoTune({ ...FAULT_BASE, fault: btn.dataset.fault });
+    const label = (OUTCOMES[got.outcome] || {}).label || "";
+    if (!label.includes(raises)) {
+      failures.push(
+        `fault ${btn.dataset.fault}: row says ${raises}, verdict says ${label}`
+      );
+    }
+  }
   if (failures.length) {
     console.error("SELF-CHECK FAILED\n" + failures.join("\n"));
   } else {
@@ -1447,8 +1510,16 @@ function cssVar(name) {
 }
 
 const SLIDERS = [
+  // Range is deliberately wide and asymmetric. A cavity coming off cooldown
+  // can sit hundreds of kHz high, so a +/-50 kHz slider understated the real
+  // envelope; the upper bound is what tuning actually has to walk in from.
+  // 400 kHz is the most that would ever be worth offering, because that is
+  // where find_chirp_range's cap stops widening (see section 3) -- past it the
+  // detune cannot be measured, so the loop never sees it.
   { id: "detune0", label: "Starting detune", unit: "Hz",
-    min: -50000, max: 50000, step: 100, value: 5000 },
+    min: -50000, max: 200000, step: 100, value: 5000,
+    note: "Hundreds of kHz is normal off cooldown; beyond ~400 kHz the " +
+          "chirp cannot measure it at all" },
   { id: "tolerance", label: "Tolerance", unit: "Hz",
     min: 5, max: 1000, step: 5, value: 50,
     note: "50 Hz standard, 500 Hz for harmonic linearizers (cavity.py:735)" },
@@ -1476,6 +1547,7 @@ const FAULT_LABELS = {
   slip: "slip — motor turns, cavity barely responds",
   detune_invalid_chirp: "detune_invalid_chirp — recoverable, widens the chirp",
   detune_invalid_sela: "detune_invalid_sela — fatal, no chirp to widen",
+  bad_scale: "bad_scale — SCALE rewritten mid-tune, step estimate hits zero",
 };
 
 // Outcome -> what a human should read, and which of the three status colours
