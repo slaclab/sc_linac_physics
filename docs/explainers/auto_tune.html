@@ -81,6 +81,51 @@
      the backing store to width*devicePixelRatio / height*devicePixelRatio and
      ctx.scale(dpr, dpr), or the canvas renders blurry on HiDPI displays. */
   canvas { width: 100%; height: auto; display: block; margin: 1rem 0 0; }
+
+  /* ---- Section 2 simulator ---- */
+  /* label / control / live value. Collapses to one column on narrow screens. */
+  .ctl {
+    display: grid;
+    /* Third column has to hold "0.0055 Hz/microstep" without clipping. */
+    grid-template-columns: 15rem 1fr 11rem;
+    gap: .3rem .9rem;
+    align-items: center;
+  }
+  .ctl > label { font-size: .92rem; }
+  .ctl > .val {
+    font-family: var(--mono);
+    font-size: .85rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  /* Notes sit under their own row, spanning the whole grid. */
+  .ctl > .note { grid-column: 1 / -1; margin: -.2rem 0 .5rem; }
+  @media (max-width: 44rem) {
+    .ctl { grid-template-columns: 1fr; gap: .15rem; }
+    .ctl > .val { text-align: left; }
+    .ctl > .note { margin: 0 0 .75rem; }
+  }
+  input[type="range"] { width: 100%; margin: 0; accent-color: var(--accent); }
+  select {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    padding: .25rem .4rem;
+    font: inherit;
+    font-size: .85rem;
+    max-width: 100%;
+  }
+  .bar {
+    height: .8rem;
+    border: 1px solid var(--edge);
+    border-radius: 4px;
+    background: var(--bg);
+    overflow: hidden;
+    margin: .4rem 0 .3rem;
+  }
+  .bar > div { height: 100%; }
+  .verdict { font-weight: 600; margin: 1rem 0 .25rem; }
 </style>
 </head>
 <body>
@@ -95,7 +140,123 @@
   </p>
 
   <section id="actuators"><h2>1. What tuning moves, and with what</h2></section>
-  <section id="the-loop"><h2>2. The loop</h2></section>
+  <section id="the-loop">
+    <h2>2. The loop</h2>
+
+    <p>
+      Read the detune, convert Hz to microsteps, move most of the way, read
+      again, repeat until you are inside tolerance. That is the entire
+      algorithm. Everything else in <code>_auto_tune</code> is a guard against
+      it going wrong.
+    </p>
+
+    <div class="panel">
+      <pre>
+delta_hz = delta_hz_func()                      # read the machine
+expected_steps = |delta_hz * microsteps_per_hz|
+tol_factor     = stepper_tol_factor(expected_steps)
+tune_config    = OTHER                          # "mid-tune, do not trust me"
+
+while |delta_hz| &gt; tolerance:
+    check_abort()
+    if stepper_temp &gt; max_stepper_temp:  raise StepperTempError
+    iteration_callback()                        # abort flag + live plot
+    est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+    stepper_tuner.move(est_steps,
+                       max_steps = |est_steps| * 1.1,
+                       speed     = MAX_STEPPER_SPEED)
+    if steps_moved &gt; expected_steps * tol_factor:  raise DetuneError
+    check_detune()                              # may widen the chirp range
+    delta_hz = delta_hz_func()                  # read the machine again</pre>
+      <p class="cite">cavity.py:825-906</p>
+    </div>
+
+    <h3>Drive it</h3>
+
+    <div class="panel">
+      <div id="controls"></div>
+      <p>
+        <button id="run">Run</button>
+        <button id="step">Step once</button>
+        <button id="reset">Reset</button>
+      </p>
+      <canvas id="plot" width="900" height="260"></canvas>
+      <div id="budget"></div>
+      <div id="verdict"></div>
+      <div id="log"></div>
+      <div class="scroll">
+        <table id="iters">
+          <thead><tr>
+            <th>#</th><th>&Delta;f before (Hz)</th><th>est_steps</th>
+            <th>max_steps arg</th><th>cumulative</th>
+            <th>&Delta;f after (Hz)</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <h3>Two things the trace will not tell you</h3>
+
+    <p>
+      <strong>Truncation means a perfect cavity lands a hair outside
+      tolerance.</strong> <code>est_steps</code> is an <code>int(...)</code>,
+      and 0.9 leaves a tenth of the detune behind — so a perfectly calibrated
+      cavity starting at exactly ten times tolerance is aimed precisely at the
+      tolerance boundary, and the truncated step always drops it just outside.
+      Set the starting
+      detune to 500&nbsp;Hz with tolerance 50 and calibration error 1.0: the
+      exact aim is 81,818.18 microsteps, which would leave exactly
+      50.000&nbsp;Hz and end the loop. <code>int()</code> hands the motor
+      81,818 instead, and the 0.18 of a microstep it drops leaves
+      50.0010&nbsp;Hz — still <code>&gt; 50</code>, so a second move runs. At
+      the nominal 1.4/256 Hz-per-microstep scale the same arithmetic leaves
+      50.0039&nbsp;Hz. A
+      well-calibrated cavity at ten times tolerance therefore costs two moves,
+      never one.
+    </p>
+
+    <p>
+      <strong>Converging is not the same as being allowed to finish, and the
+      headroom shrinks as detune grows.</strong> Each move multiplies the
+      remaining detune by <code>|1 - gain|</code>, so the loop's total travel is
+      a geometric series — and it is scale-free:
+    </p>
+
+    <div class="panel">
+      <pre>travel / expectedSteps = undershoot / (1 - |1 - gain|)     &lt;- no detune in it
+budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as detune grows</pre>
+    </div>
+
+    <p>
+      The travel a given miscalibration demands does not care how far out of
+      tune you started. The budget does. At the page defaults, 500&nbsp;Hz is
+      90,909 expected steps and buys a 2.75&times; budget; 5000&nbsp;Hz is
+      909,090 steps and buys only 1.376&times;. (At the nominal 1.4/256 scale
+      those same two figures are 2.738&times; and 1.369&times;.) So the further
+      out of tune a cavity starts, the less calibration error the loop
+      tolerates. From 5000&nbsp;Hz, undershoot 0.9 survives a true/believed
+      scale ratio up to about 1.49&times; and undershoot 1.0 only to about
+      1.27&times;. That is what the 0.9 is really buying: budget headroom, not
+      just mathematical stability. From 5000&nbsp;Hz a gain of 1.8 converges in
+      principle — <code>|1 - 1.8| &lt; 1</code> — and still trips the runaway
+      guard at every undershoot the slider offers.
+    </p>
+
+    <p>
+      Check it above: at the 5000&nbsp;Hz default, calibration error 1.35
+      converges at undershoot 0.9 and runs away at 1.0. Same hardware, same
+      miscalibration; the only difference is that one factor.
+    </p>
+
+    <div class="caveat">
+      <strong>What this simulator is not.</strong> The modelled cavity responds
+      linearly and without noise. Real cavities have mechanical hysteresis and
+      dead zones — which is exactly why <code>stepper_tol_factor()</code> allows
+      5&times; the estimated steps below 10,000 steps and only 1.01&times; near
+      cold landing. Trust the loop structure here; do not trust the smoothness.
+    </div>
+  </section>
   <section id="detune-source"><h2>3. Where the detune number comes from</h2></section>
   <section id="tune-states"><h2>4. Tune states</h2></section>
   <section id="failures"><h2>5. How it fails</h2></section>
@@ -765,10 +926,531 @@ function selfCheck() {
   return failures;
 }
 
+// ---------------------------------------------------------------------------
+// Section 2: the simulator UI. Everything below is presentation on top of
+// runAutoTune() — no arithmetic of its own, so the page cannot disagree with
+// the port it is displaying.
+// ---------------------------------------------------------------------------
+
+// Minimal element builder. Deliberately not HTML-string assignment — a repo
+// hook rejects that, tests/docs/test_auto_tune_explainer.py greps for it, and
+// building nodes keeps the rendering code below shorter anyway.
+function el(tag, props, children) {
+  const node = document.createElement(tag);
+  if (props) {
+    for (const key of Object.keys(props)) {
+      const val = props[key];
+      if (key === "class") node.className = val;
+      else if (key === "text") node.textContent = val;
+      else if (key === "style") node.style.cssText = val;
+      else node.setAttribute(key, val);
+    }
+  }
+  for (const child of children || []) {
+    node.appendChild(
+      typeof child === "string" ? document.createTextNode(child) : child
+    );
+  }
+  return node;
+}
+
+function clear(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+// Plot colours are read back out of the stylesheet rather than hard-coded a
+// second time, so the canvas can never drift from the rest of the page.
+function cssVar(name) {
+  const value =
+    getComputedStyle(document.documentElement).getPropertyValue(name);
+  return value.trim() || "#888888";
+}
+
+const SLIDERS = [
+  { id: "detune0", label: "Starting detune", unit: "Hz",
+    min: -50000, max: 50000, step: 100, value: 5000 },
+  { id: "tolerance", label: "Tolerance", unit: "Hz",
+    min: 5, max: 1000, step: 5, value: 50,
+    note: "50 Hz standard, 500 Hz for harmonic linearizers (cavity.py:735)" },
+  // step is 0.0005, not 0.001, because a range input snaps an off-grid value
+  // onto the step grid: with step 0.001 the 0.0055 default would land on
+  // 0.005 or 0.006 and the page would open on a scale no cavity has.
+  { id: "scaleHz", label: "SCALE (believed)", unit: "Hz/microstep",
+    min: 0.001, max: 0.1, step: 0.0005, value: 0.0055,
+    note: "Per-cavity, measured, read from the SCALE PV — not a constant" },
+  { id: "calibError", label: "Calibration error (true / believed)", unit: "x",
+    min: 0.2, max: 3, step: 0.05, value: 1,
+    note: "1.0 means SCALE is exactly right" },
+  { id: "undershoot", label: "Undershoot factor", unit: "",
+    min: 0.5, max: 1.3, step: 0.05, value: 0.9,
+    note: "Hard-coded 0.9 in the real loop (cavity.py:868)" },
+];
+
+// Option text for the fault picker. Keyed off FAULT_ORACLE so a fault added to
+// the port shows up here even without a label, rather than silently vanishing
+// from the UI.
+const FAULT_LABELS = {
+  abort: "abort — check_abort() between moves",
+  hot_motor: "hot_motor — stepper over temperature",
+  limit_switch: "limit_switch — motor stopped on a limit",
+  slip: "slip — motor turns, cavity barely responds",
+  detune_invalid_chirp: "detune_invalid_chirp — recoverable, widens the chirp",
+  detune_invalid_sela: "detune_invalid_sela — fatal, no chirp to widen",
+};
+
+// Outcome -> what a human should read, and which of the three status colours
+// it earns. Aborts are --warn: nothing broke, someone asked it to stop.
+const OUTCOMES = {
+  converged: { label: "Converged — inside tolerance", color: "--ok" },
+  runaway: {
+    label: "DetuneError — the runaway guard tripped", color: "--bad",
+  },
+  temp: { label: "StepperTempError — motor too hot to move", color: "--bad" },
+  limit: { label: "StepperError — motor stopped on a limit switch",
+           color: "--bad" },
+  "sela-invalid": { label: "DetuneError — invalid detune in SELA",
+                    color: "--bad" },
+  "no-converge": { label: "Never terminated — see the truncation case",
+                   color: "--bad" },
+  abort: { label: "CavityAbortError — aborted, and RF is now off",
+           color: "--warn" },
+};
+
+// How many completed moves the display reveals. Infinity means "all of them";
+// "Step once" walks it up from 0 so a reader can watch one move at a time.
+let shownMoves = Infinity;
+let activeFault = null;
+
+const inputs = {};
+let faultSelect = null;
+
+function sliderDecimals(step) {
+  return (String(step).split(".")[1] || "").length;
+}
+
+function fmtSlider(spec, value) {
+  const dec = sliderDecimals(spec.step);
+  const text = dec ? value.toFixed(dec) : String(value);
+  return spec.unit ? text + " " + spec.unit : text;
+}
+
+// Detunes are printed to 4 decimals below 100 Hz on purpose: the whole point of
+// the truncation lesson is the 50.0010 Hz that "50.0" would hide.
+function fmtHz(value) {
+  const magnitude = Math.abs(value);
+  if (magnitude >= 1000) return value.toFixed(1);
+  if (magnitude >= 100) return value.toFixed(2);
+  return value.toFixed(4);
+}
+
+function buildControls(host) {
+  const grid = el("div", { class: "ctl" });
+
+  for (const spec of SLIDERS) {
+    const input = el("input", {
+      type: "range", id: spec.id, min: spec.min, max: spec.max,
+      step: spec.step, value: spec.value,
+    });
+    const readout = el("span", {
+      class: "val", id: spec.id + "-val",
+      text: fmtSlider(spec, spec.value),
+    });
+    input.addEventListener("input", render);
+    inputs[spec.id] = input;
+
+    grid.appendChild(el("label", { for: spec.id, text: spec.label }));
+    grid.appendChild(input);
+    grid.appendChild(readout);
+    if (spec.note) {
+      grid.appendChild(el("div", { class: "cite note", text: spec.note }));
+    }
+  }
+
+  faultSelect = el("select", { id: "fault" }, [
+    el("option", { value: "", text: "none" }),
+  ]);
+  for (const entry of FAULT_ORACLE) {
+    faultSelect.appendChild(el("option", {
+      value: entry.fault,
+      text: FAULT_LABELS[entry.fault] || entry.fault,
+    }));
+  }
+  faultSelect.addEventListener("change", function () {
+    setFault(faultSelect.value || null);
+  });
+
+  grid.appendChild(el("label", { for: "fault", text: "Injected fault" }));
+  grid.appendChild(faultSelect);
+  grid.appendChild(el("span", { class: "val", text: "" }));
+  grid.appendChild(el("div", { class: "cite note",
+    text: "Fires on move 2. Section 5 covers what each one means." }));
+
+  host.appendChild(grid);
+}
+
+// Exposed as a function rather than an assignment so section 5 can drive the
+// simulator from its own controls without duplicating the reset bookkeeping.
+function setFault(fault) {
+  activeFault = fault;
+  if (faultSelect) faultSelect.value = fault || "";
+  render();
+}
+
+// The canvas is laid out at width:100%, so its CSS size changes with the
+// window. Re-derive the backing store from devicePixelRatio on every render or
+// it renders blurry on HiDPI displays and stale after a resize.
+function sizeCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth || 900;
+  const cssH = Math.round(cssW * 260 / 900);
+  cv.style.height = cssH + "px";
+  cv.width = Math.round(cssW * dpr);
+  cv.height = Math.round(cssH * dpr);
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, W: cssW, H: cssH };
+}
+
+function drawPlot(values, shown) {
+  const cv = document.getElementById("plot");
+  const { ctx, W, H } = sizeCanvas(cv);
+  ctx.clearRect(0, 0, W, H);
+
+  // Iteration 0 is the starting detune; every later point is one completed
+  // move, which is what the loop's delta_hz re-read actually reports.
+  const points = [values.detune0].concat(shown.map((it) => it.deltaHzAfter));
+  const tol = values.tolerance;
+
+  // padB holds two stacked lines: the move-number ticks and the axis caption.
+  const padL = 62, padR = 104, padT = 20, padB = 46;
+  const plotW = Math.max(W - padL - padR, 10);
+  const plotH = Math.max(H - padT - padB, 10);
+
+  let peak = tol;
+  for (const point of points) peak = Math.max(peak, Math.abs(point));
+  const yMax = peak * 1.2 || 1;
+  const lastIndex = Math.max(points.length - 1, 1);
+  const X = (i) => padL + (plotW * i) / lastIndex;
+  const Y = (hz) => padT + plotH / 2 - (hz / yMax) * (plotH / 2);
+  const crisp = (y) => Math.round(y) + 0.5;
+
+  const dim = cssVar("--dim");
+  const lineColor = cssVar("--line");
+  const ok = cssVar("--ok");
+  const accent = cssVar("--accent");
+
+  // Tolerance band: inside this, the while condition is false and the loop is
+  // done. Everything the loop does is an attempt to get into this stripe.
+  ctx.globalAlpha = 0.16;
+  ctx.fillStyle = ok;
+  ctx.fillRect(padL, Y(tol), plotW, Y(-tol) - Y(tol));
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = ok;
+  ctx.setLineDash([4, 4]);
+  for (const edge of [tol, -tol]) {
+    ctx.beginPath();
+    ctx.moveTo(padL, crisp(Y(edge)));
+    ctx.lineTo(padL + plotW, crisp(Y(edge)));
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = lineColor;
+  ctx.beginPath();
+  ctx.moveTo(padL, crisp(Y(0)));
+  ctx.lineTo(padL + plotW, crisp(Y(0)));
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(crisp(padL), padT);
+  ctx.lineTo(crisp(padL), padT + plotH);
+  ctx.stroke();
+
+  if (points.length > 1) {
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach((hz, i) => {
+      if (i === 0) ctx.moveTo(X(i), Y(hz));
+      else ctx.lineTo(X(i), Y(hz));
+    });
+    ctx.stroke();
+  }
+  ctx.fillStyle = accent;
+  points.forEach((hz, i) => {
+    ctx.beginPath();
+    ctx.arc(X(i), Y(hz), 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.font = "12px " + "ui-monospace, Menlo, Consolas, monospace";
+  ctx.fillStyle = dim;
+
+  // Peak first, then the zero line, then the tolerance edges, dropping any
+  // label that would collide with one already drawn.
+  let peakHz = points[0];
+  for (const point of points) {
+    if (Math.abs(point) > Math.abs(peakHz)) peakHz = point;
+  }
+  const drawn = [];
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (const [hz, text] of [
+    [peakHz, fmtHz(peakHz)],
+    [0, "0"],
+    [tol, "+" + tol],
+    [-tol, "-" + tol],
+  ]) {
+    const y = Y(hz);
+    if (drawn.some((other) => Math.abs(other - y) < 12)) continue;
+    drawn.push(y);
+    ctx.fillText(text, padL - 8, y);
+  }
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = ok;
+  ctx.fillText("tolerance", padL + plotW + 8, Y(0) - 7);
+  ctx.fillText("+/-" + tol + " Hz", padL + plotW + 8, Y(0) + 8);
+
+  ctx.fillStyle = dim;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const every = Math.ceil(lastIndex / 12);
+  for (let i = 0; i <= lastIndex && i < points.length; i += every) {
+    ctx.fillText(String(i), X(i), padT + plotH + 8);
+  }
+  // On its own line under the ticks: in the right margin it reads as part of
+  // the last tick number ("3 move #").
+  ctx.textAlign = "center";
+  ctx.fillText("move #", padL + plotW / 2, padT + plotH + 24);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("delta f (Hz)", 4, padT - 8);
+}
+
+function renderBudget(result, shown) {
+  const host = document.getElementById("budget");
+  clear(host);
+
+  const used = shown.length ? shown[shown.length - 1].stepsMoved : 0;
+  // Exactly the guard's own condition (steps_moved > expected * tol_factor),
+  // so the colour cannot say something the loop would not.
+  const over = result.budget > 0 && used > result.budget;
+  const fraction = result.budget > 0
+    ? Math.min(used / result.budget, 1)
+    : (used > 0 ? 1 : 0);
+
+  host.appendChild(el("p", { class: "cite", style: "margin:1rem 0 0",
+    text: "Step budget" }));
+  host.appendChild(el("div", { class: "bar" }, [
+    el("div", {
+      style: "width:" + (fraction * 100).toFixed(2) + "%;background:var(" +
+             (over ? "--bad" : "--accent") + ")",
+    }),
+  ]));
+  host.appendChild(el("p", { style: "margin:.15rem 0 0",
+    text: used.toLocaleString() + " microsteps moved of " +
+          Math.round(result.budget).toLocaleString() + " allowed" +
+          (over ? " — over budget, so DetuneError." : "") }));
+  host.appendChild(el("p", { class: "cite", style: "margin:.15rem 0 0",
+    text: "budget = " + result.expectedSteps.toLocaleString() +
+          " expected steps x " + result.tolFactor.toFixed(3) +
+          " tol factor" +
+          (result.budget === 0 ? " (zero — nothing to move)" : "") }));
+}
+
+function renderVerdict(values, result, shown, complete) {
+  const host = document.getElementById("verdict");
+  clear(host);
+
+  const total = result.iterations.length;
+
+  if (!complete) {
+    host.appendChild(el("p", {
+      class: "verdict", style: "color:var(--dim)",
+      text: "Mid-run: showing " + shown.length + " of " + total +
+            " completed moves. Keep stepping, or press Run, for the outcome.",
+    }));
+    const at = shown.length
+      ? shown[shown.length - 1].deltaHzAfter
+      : values.detune0;
+    host.appendChild(el("p", {
+      text: shown.length
+        ? "delta f after move " + shown.length + ": " + fmtHz(at) + " Hz"
+        : "delta f before the first move: " + fmtHz(at) + " Hz",
+    }));
+    return;
+  }
+
+  const outcome = OUTCOMES[result.outcome] ||
+    { label: result.outcome, color: "--bad" };
+  host.appendChild(el("p", {
+    class: "verdict", style: "color:var(" + outcome.color + ")",
+    text: outcome.label,
+  }));
+  if (result.error) {
+    host.appendChild(el("p", { class: "cite", text: result.error }));
+  }
+
+  // faultIteration, not iterations.length: the abort, temp and limit paths
+  // break before the move is recorded, so the failing move has no table row.
+  let moveText = total + (total === 1 ? " move" : " moves") + " recorded";
+  if (result.faultIteration !== null) {
+    moveText += total < result.faultIteration
+      ? "; the fault hit move " + result.faultIteration +
+        ", which has no row — the loop broke before that move was recorded"
+      : "; the fault hit move " + result.faultIteration;
+  }
+  host.appendChild(el("p", { text: moveText + "." }));
+
+  if (result.detuneIsStale) {
+    host.appendChild(el("p", {
+      text: "Last detune reading: " + fmtHz(result.finalDetuneHz) +
+            " Hz — but that reading predates the failed move. The cavity " +
+            "moved; the exception left move() before delta_hz was re-read, " +
+            "so the loop never learned where it ended up.",
+    }));
+  } else if (result.outcome === "sela-invalid") {
+    host.appendChild(el("p", {
+      text: "Final delta f: unavailable. An invalid detune reading is the " +
+            "whole content of this failure, so there is no number to quote.",
+    }));
+  } else {
+    host.appendChild(el("p", {
+      text: "Final delta f: " + fmtHz(result.finalDetuneHz) +
+            " Hz against a " + values.tolerance + " Hz tolerance.",
+    }));
+  }
+
+  // Print the window, not just the number: "gain 1.8" next to "converges"
+  // reads as a contradiction until you see that the test is |1 - gain| < 1.
+  const inWindow = result.gain > 0 && result.gain < 2;
+  let gainText = "Loop gain = undershoot x (true / believed scale) = " +
+    result.gain.toFixed(3) + ". Each move multiplies the remaining detune by " +
+    "|1 - gain|, so the iteration converges exactly when 0 < gain < 2 — this " +
+    "one is " + (inWindow ? "inside" : "outside") + " that window";
+  // The headroom lesson only applies when the plotted gain is the gain that
+  // actually drove the trajectory, which the slip fault breaks.
+  if (inWindow && result.outcome === "runaway" && activeFault !== "slip") {
+    gainText += ", and it still tripped the runaway guard: converging and " +
+      "being allowed to finish are different questions";
+  } else if (!inWindow) {
+    gainText += ", so |delta f| grows every move";
+  }
+  host.appendChild(el("p", { text: gainText + "." }));
+
+  if (activeFault === "slip") {
+    host.appendChild(el("p", { class: "cite",
+      text: "That gain is computed from the undegraded response. The slip " +
+            "fault cuts the response to a tenth from move 2 on, so the gain " +
+            "above does not describe the trajectory plotted here.",
+    }));
+  }
+}
+
+function renderLog(result, complete) {
+  const host = document.getElementById("log");
+  clear(host);
+  // Log lines explain how the run ENDED, so showing them mid-step would
+  // announce a failure the reader has not reached yet.
+  if (!complete) return;
+  for (const line of result.log) {
+    host.appendChild(el("p", { class: "caveat", text: line }));
+  }
+}
+
+function renderTable(shown) {
+  const body = document.querySelector("#iters tbody");
+  clear(body);
+  for (const it of shown) {
+    body.appendChild(el("tr", null, [
+      el("td", { class: "mono", text: String(it.i) }),
+      el("td", { class: "mono", text: fmtHz(it.deltaHzBefore) }),
+      el("td", { class: "mono", text: it.estSteps.toLocaleString() }),
+      el("td", { class: "mono", text: it.maxStepsArg.toLocaleString() }),
+      el("td", { class: "mono", text: it.stepsMoved.toLocaleString() }),
+      el("td", { class: "mono", text: fmtHz(it.deltaHzAfter) }),
+    ]));
+  }
+}
+
+function currentValues() {
+  const values = {};
+  for (const spec of SLIDERS) {
+    values[spec.id] = Number(inputs[spec.id].value);
+  }
+  return values;
+}
+
+function currentResult(values) {
+  return runAutoTune({
+    detune0: values.detune0,
+    tolerance: values.tolerance,
+    // The believed scale drives the arithmetic; the true one drives the
+    // cavity. Their ratio is the whole subject of this section.
+    scaleHzPerMicrostep: values.scaleHz,
+    trueHzPerMicrostep: values.scaleHz * values.calibError,
+    undershoot: values.undershoot,
+    fault: activeFault,
+    faultAtIteration: 2,
+  });
+}
+
+function render() {
+  const values = currentValues();
+  for (const spec of SLIDERS) {
+    const readout = document.getElementById(spec.id + "-val");
+    if (readout) readout.textContent = fmtSlider(spec, values[spec.id]);
+  }
+
+  const result = currentResult(values);
+  const total = result.iterations.length;
+  const shown = result.iterations.slice(0, Math.min(shownMoves, total));
+  const complete = shown.length === total;
+
+  drawPlot(values, shown);
+  renderBudget(result, shown);
+  renderVerdict(values, result, shown, complete);
+  renderLog(result, complete);
+  renderTable(shown);
+
+  return result;
+}
+
+function mountSimulator() {
+  const host = document.getElementById("controls");
+  if (!host) return;
+  buildControls(host);
+
+  document.getElementById("run").addEventListener("click", function () {
+    shownMoves = Infinity;
+    render();
+  });
+  document.getElementById("step").addEventListener("click", function () {
+    // From "all shown" there is nothing left to reveal, so min() pins it.
+    const total = currentResult(currentValues()).iterations.length;
+    const from = shownMoves === Infinity ? total : shownMoves;
+    shownMoves = Math.min(from + 1, total);
+    render();
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    shownMoves = 0;
+    activeFault = null;
+    if (faultSelect) faultSelect.value = "";
+    render();
+  });
+
+  // The canvas is sized from its CSS width, which changes with the window.
+  window.addEventListener("resize", render);
+
+  render();
+}
+
 const failures = selfCheck();
 if (failures.length) {
   showFailureBanner(failures);
 }
+mountSimulator();
 </script>
 </body>
 </html>
