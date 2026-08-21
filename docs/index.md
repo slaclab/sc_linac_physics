@@ -35,6 +35,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 | [Microphonics](applications/microphonics.md) | Mechanical vibration noise acquisition and analysis |
 | [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection |
 | [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence |
+| [How auto-tune works](explainers/auto_tune.html) | Interactive explainer: the `_auto_tune` convergence loop, its guards, and how it fails |
 
 ### Displays
 
