@@ -784,6 +784,39 @@ def test_find_chirp_range_valid(cavity):
     cavity.set_chirp_range.assert_called_with(50000)
 
 
+def test_find_chirp_range_negative_at_cap(cavity):
+    """A negative range at the cap must raise, not recurse.
+
+    check_detune() passes chirp_freq_start * 1.1, and chirp_freq_start is
+    negative, so the guard has to compare magnitudes.
+    """
+    cavity.set_chirp_range = MagicMock()
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_INVALID_VAL)
+
+    with pytest.raises(DetuneError):
+        cavity.find_chirp_range(-400000)
+
+    cavity.set_chirp_range.assert_called_once_with(400000)
+
+
+def test_find_chirp_range_negative_widens_to_cap(cavity):
+    """A negative range below the cap widens by magnitude and then stops."""
+    cavity.set_chirp_range = MagicMock()
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_INVALID_VAL)
+
+    with pytest.raises(DetuneError):
+        cavity.find_chirp_range(-50000)
+
+    ranges = [call.args[0] for call in cavity.set_chirp_range.call_args_list]
+    assert all(r > 0 for r in ranges)
+    assert ranges[0] == 50000
+    assert ranges[-1] >= 400000
+    # 50000 * 1.1**n first reaches 400000 at n == 22
+    assert len(ranges) == 23
+
+
 def test_reset_interlocks(cavity):
     cavity._interlock_reset_pv_obj = make_mock_pv()
     cavity._rf_permit_pv_obj = make_mock_pv(get_val=0)
