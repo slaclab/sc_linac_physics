@@ -9,6 +9,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.step_labels import (
+    step_label,
+)
 
 
 class PhaseDisplayBase(Display):
@@ -51,7 +54,6 @@ class PhaseDisplayBase(Display):
             message: Status message for sync indicator
         """
         _CONTAINER_METHODS = (
-            "update_progress_indicator",
             "_update_tab_states",
             "_load_notes",
             "_update_sync_status",
@@ -59,8 +61,6 @@ class PhaseDisplayBase(Display):
         parent = self.parent()
         while parent:
             if any(hasattr(parent, m) for m in _CONTAINER_METHODS):
-                if hasattr(parent, "update_progress_indicator"):
-                    parent.update_progress_indicator(record)
                 if hasattr(parent, "_update_tab_states"):
                     parent._update_tab_states()
                 if hasattr(parent, "_load_notes"):
@@ -96,10 +96,27 @@ class PhaseDisplayBase(Display):
             return (record.short_cavity_name, record.cryomodule)
         return None
 
-    def log_message(self, message: str, entry_type: str = "info") -> None:
-        """Add a message to the phase activity feed."""
+    def log_message(
+        self,
+        message: str,
+        entry_type: str = "info",
+        key: str | None = None,
+    ) -> None:
+        """Add a message to the phase activity feed.
+
+        A ``key`` marks the entry as resolvable in place by
+        ``resolve_log_message`` — used for steps that log on start and again on
+        completion, so the pair shares one row.
+        """
         if hasattr(self, "history_text"):
-            self.history_text.append(message, entry_type=entry_type)
+            self.history_text.append(message, entry_type=entry_type, key=key)
+
+    def resolve_log_message(
+        self, key: str, message: str, entry_type: str = "success"
+    ) -> None:
+        """Rewrite the feed entry previously logged under ``key``."""
+        if hasattr(self, "history_text"):
+            self.history_text.resolve(key, message, entry_type=entry_type)
 
     def show_error(self, message):
         """Show error message dialog."""
@@ -113,8 +130,11 @@ class PhaseDisplayBase(Display):
 
     def _on_step_progress(self, step_name: str, progress: int):
         """Handle step progress updates."""
+        label = step_label(step_name)
         if hasattr(self, "local_current_step"):
-            self.local_current_step.setText(step_name)
+            self.local_current_step.setText(label)
         if hasattr(self, "local_progress_bar"):
             self.local_progress_bar.setValue(progress)
-        self.log_message(f"Executing step: {step_name}")
+        # Keyed on the step so the controller's success/failure log rewrites
+        # this row rather than appending a second entry for the same step.
+        self.log_message(f"▶ {label}...", entry_type="progress", key=step_name)

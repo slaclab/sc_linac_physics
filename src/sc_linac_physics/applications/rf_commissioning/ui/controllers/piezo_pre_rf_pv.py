@@ -26,7 +26,7 @@ def resolve_cavity_selection(
         ):
             selected_cm = parent.cryomodule_combo.currentText()
             selected_cavity = parent.cavity_combo.currentText()
-            if selected_cm == "CM..." or selected_cavity == "Cav...":
+            if selected_cm == "..." or selected_cavity == "...":
                 return None, None
             return selected_cm, selected_cavity
         parent = parent.parent()

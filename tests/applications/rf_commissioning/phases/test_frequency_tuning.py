@@ -9,6 +9,7 @@ import pytest
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
+    FrequencyTuningData,
     PhaseCheckpoint,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.frequency_tuning import (
@@ -25,6 +26,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     DetuneError,
     FSCANError,
     StepperError,
+    SAFE_PULSED_DRIVE_LEVEL,
     StepperTempError,
     TUNE_CONFIG_COLD_VALUE,
     TUNE_CONFIG_RESONANCE_VALUE,
@@ -64,6 +66,12 @@ def mock_cavity(mock_stepper):
     cavity.detune_invalid = False
     cavity.detune_chirp = 5000.0
     cavity.is_online = True
+    cavity.is_on = True
+    # setup_tuning() leaves the piezo enabled in Manual and the drive
+    # clamped to SAFE_PULSED_DRIVE_LEVEL.
+    cavity.piezo.is_enabled = True
+    cavity.piezo.in_manual = True
+    cavity.drive_level = SAFE_PULSED_DRIVE_LEVEL
     # Cavities launch at cold landing (COLD == 1).
     cavity.tune_config_pv_obj.get.return_value = TUNE_CONFIG_COLD_VALUE
     return cavity
@@ -100,8 +108,16 @@ def phase(context, fast_limits):
 
 
 def _seed_cold_landing(phase, df_cold_hz=5000.0):
-    """Record a cold-landing checkpoint and make DF_COLD read back matching it,
-    so the DF_COLD gate in _tune_to_resonance is satisfied."""
+    """Record a cold landing the way _record_cold_landing does, and make DF_COLD
+    read back matching it, so the DF_COLD gate in _tune_to_resonance is
+    satisfied.
+
+    The frequency goes on the record rather than into a phase_history
+    checkpoint: the record is the single source the gate reads, precisely so
+    that it survives a relaunch. The checkpoint is still appended because
+    finalize_phase() reads checkpoints to assemble the final result.
+    """
+    phase._store_df_cold_hz(df_cold_hz)
     phase.context.record.phase_history.append(
         PhaseCheckpoint(
             phase=phase.phase_type,
@@ -113,6 +129,263 @@ def _seed_cold_landing(phase, df_cold_hz=5000.0):
         )
     )
     phase.cavity.df_cold_pv_obj.get.return_value = df_cold_hz
+
+
+class TestColdLandingSurvivesRestart:
+    """The tuning gate must not depend on in-memory phase_history.
+
+    record.phase_history has no table or column behind it, so quitting mid-phase
+    empties it. While the gate read that checkpoint, tuning failed with "Cold
+    landing frequency was not recorded" on every relaunch, with no way forward
+    short of re-running stage 1. The record is now the single source.
+    """
+
+    def test_gate_passes_from_stored_record_with_no_checkpoints(self, phase):
+        phase.validate_prerequisites()  # binds phase.cavity
+        phase.context.record.frequency_tuning = FrequencyTuningData(
+            df_cold_hz=9196.0
+        )
+        phase.cavity.df_cold_pv_obj.get.return_value = 9196.0
+        assert phase.context.record.phase_history == []
+
+        assert phase._check_df_cold_recorded() is None
+
+    def test_gate_still_fails_when_nothing_recorded_anywhere(self, phase):
+        phase.validate_prerequisites()
+        phase.context.record.frequency_tuning = None
+        phase.cavity.df_cold_pv_obj.get.return_value = 0.0
+
+        result = phase._check_df_cold_recorded()
+
+        assert result is not None
+        assert result.result == PhaseResult.FAILED
+        assert "not recorded" in result.message
+
+    def test_record_cold_landing_stores_the_frequency_on_the_record(
+        self, phase
+    ):
+        """The step itself makes the value durable, so no fallback is needed."""
+        phase.validate_prerequisites()
+        phase.cavity.detune_chirp = 2222.0
+
+        result = phase._record_cold_landing()
+
+        assert result.result == PhaseResult.SUCCESS
+        assert phase.context.record.frequency_tuning.df_cold_hz == 2222.0
+
+    def test_record_cold_landing_preserves_other_phase_fields(self, phase):
+        """Storing one field must not wipe data another stage already saved."""
+        phase.validate_prerequisites()
+        phase.context.record.frequency_tuning = FrequencyTuningData(
+            hz_per_microstep=0.0055
+        )
+        phase.cavity.detune_chirp = 2222.0
+
+        phase._record_cold_landing()
+
+        data = phase.context.record.frequency_tuning
+        assert data.df_cold_hz == 2222.0
+        assert data.hz_per_microstep == 0.0055
+
+    def test_finalize_is_complete_with_every_checkpoint_lost(self, phase):
+        """A run split across launches must still finalize as complete.
+
+        Every stage stores its own result on the record, so finalize_phase()
+        does not depend on phase_history surviving. Previously a phase whose
+        stages spanned two launches finalized with five of six fields None and
+        passed=False, silently recording a fully commissioned cavity as failed.
+        """
+        phase.validate_prerequisites()
+        phase.cavity.detune_chirp = 9196.0
+        phase.cavity.fscan_8pi9_mode_pv_obj.get.return_value = -800000.0
+        phase.cavity.fscan_7pi9_mode_pv_obj.get.return_value = -900000.0
+
+        phase._record_cold_landing()
+        phase._store_phase_fields(hz_per_microstep=0.0055)
+        phase._tuning_success_result(signed_total=-984108, ack_ceiling=None)
+        phase._read_mode_frequencies()
+
+        # Every launch boundary drops the in-memory checkpoints.
+        phase.context.record.phase_history.clear()
+        phase.finalize_phase()
+
+        data = phase.context.record.frequency_tuning
+        assert data.df_cold_hz == 9196.0
+        assert data.hz_per_microstep == 0.0055
+        assert data.cold_landing_steps == 984108
+        assert data.steps_to_resonance == 984108
+        assert data.mode_8pi_9_frequency == -800000.0
+        assert data.mode_7pi_9_frequency == -900000.0
+        assert data.initial_timestamp is not None
+        assert data.final_timestamp is not None
+        assert data.is_complete is True
+        assert data.passed is True
+
+    def test_probe_stores_hz_per_microstep_on_the_record(self, phase):
+        _setup_phase(phase)
+        phase.cavity.stepper_tuner.move = Mock()
+        type(phase.cavity).detune_chirp = property(lambda _s: 5000.0)
+
+        phase._store_phase_fields(hz_per_microstep=-0.0055)
+
+        assert phase.context.record.frequency_tuning.hz_per_microstep == -0.0055
+
+    def test_store_phase_fields_ignores_none_and_keeps_existing(self, phase):
+        """A None from one stage must not erase a value another stage stored."""
+        phase.validate_prerequisites()
+        phase._store_phase_fields(df_cold_hz=9196.0)
+
+        phase._store_phase_fields(df_cold_hz=None, hz_per_microstep=0.0055)
+
+        data = phase.context.record.frequency_tuning
+        assert data.df_cold_hz == 9196.0
+        assert data.hz_per_microstep == 0.0055
+
+    def test_stored_value_still_enforces_df_cold_match(self, phase):
+        """Reading from the record must not skip the DF_COLD agreement check."""
+        phase.validate_prerequisites()
+        phase.context.record.frequency_tuning = FrequencyTuningData(
+            df_cold_hz=9196.0
+        )
+        phase.cavity.df_cold_pv_obj.get.return_value = 0.0
+
+        result = phase._check_df_cold_recorded()
+
+        assert result is not None
+        assert result.result == PhaseResult.FAILED
+        assert "DF_COLD does not match" in result.message
+
+
+class TestTuningSetupIsReAppliedBetweenStages:
+    """Stages 2 and 3 re-prepare a cavity that drifted out of tuning state.
+
+    setup_tuning() runs only in Stage 1, whose Run button is disabled once it
+    succeeds — so an operator who turns the cavity off mid-workflow previously
+    had no way back, and nothing noticed: is_online is hw_mode ("in service"),
+    not RF state, so Stage 2 would move the stepper against a detune that was
+    no longer tracking. Re-preparing is safe because it does not touch the
+    recorded cold landing, the one Stage 1 action that must not repeat.
+    """
+
+    @pytest.mark.parametrize(
+        "attr, value",
+        [
+            ("is_on", False),
+            ("detune_invalid", True),
+        ],
+    )
+    def test_stage_2_re_prepares_the_cavity(
+        self, phase, mock_cavity, attr, value
+    ):
+        _setup_phase(phase)
+        setattr(mock_cavity, attr, value)
+        # setup_tuning() restores the condition, as it would on hardware.
+        mock_cavity.setup_tuning.side_effect = lambda *a, **k: setattr(
+            mock_cavity, attr, not value
+        )
+
+        result = phase._check_state_for_stage_2()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    @pytest.mark.parametrize(
+        "attr, value",
+        [
+            ("is_enabled", False),
+            ("in_manual", False),
+        ],
+    )
+    def test_stage_2_re_prepares_a_drifted_piezo(
+        self, phase, mock_cavity, attr, value
+    ):
+        _setup_phase(phase)
+        setattr(mock_cavity.piezo, attr, value)
+        mock_cavity.setup_tuning.side_effect = lambda *a, **k: setattr(
+            mock_cavity.piezo, attr, not value
+        )
+
+        result = phase._check_state_for_stage_2()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_stage_3_re_prepares_the_cavity(self, phase, mock_cavity):
+        _setup_phase(phase)
+        mock_cavity.is_on = False
+        mock_cavity.setup_tuning.side_effect = lambda *a, **k: setattr(
+            mock_cavity, "is_on", True
+        )
+
+        result = phase._check_state_for_stage_3()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_over_drive_is_re_prepared(self, phase, mock_cavity):
+        _setup_phase(phase)
+        mock_cavity.drive_level = SAFE_PULSED_DRIVE_LEVEL + 5
+        mock_cavity.setup_tuning.side_effect = lambda *a, **k: setattr(
+            mock_cavity, "drive_level", SAFE_PULSED_DRIVE_LEVEL
+        )
+
+        result = phase._check_state_for_stage_2()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_drive_below_safe_level_does_not_trigger_a_re_prepare(
+        self, phase, mock_cavity
+    ):
+        """Running under the safe level is the operator's call, not a fault."""
+        _setup_phase(phase)
+        mock_cavity.drive_level = SAFE_PULSED_DRIVE_LEVEL - 2
+
+        result = phase._check_state_for_stage_2()
+
+        assert not mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_already_set_up_cavity_is_not_re_prepared(self, phase, mock_cavity):
+        """No latency cost on the normal path."""
+        _setup_phase(phase)
+
+        result = phase._check_state_for_stage_2()
+
+        assert not mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
+
+    def test_fails_when_re_preparing_does_not_fix_it(self, phase, mock_cavity):
+        """setup_tuning() ran but the cavity is still not tuning-ready."""
+        _setup_phase(phase)
+        mock_cavity.is_on = False  # setup_tuning is a no-op Mock, so it stays
+
+        result = phase._check_state_for_stage_2()
+
+        assert mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.FAILED
+        assert "still not ready" in result.message.lower()
+        assert "rf is off" in result.message.lower()
+
+    def test_hard_blockers_are_not_re_prepared(self, phase, mock_stepper):
+        """A limit switch needs hands on hardware, not another setup_tuning()."""
+        _setup_phase(phase)
+        mock_stepper.on_limit_switch = True
+
+        result = phase._check_state_for_stage_2()
+
+        assert result.result == PhaseResult.FAILED
+        assert "limit switch" in result.message.lower()
+
+    def test_stage_4_does_not_re_prepare(self, phase, mock_cavity):
+        """FSCAN does not need chirp mode, so it must not gain this behaviour."""
+        _setup_phase(phase)
+        mock_cavity.is_on = False
+
+        result = phase._check_state_for_stage_4()
+
+        assert not mock_cavity.setup_tuning.called
+        assert result.result == PhaseResult.SUCCESS
 
 
 def _setup_phase(phase, temp_c=25.0, initial_signed_steps=0, seed_cold=True):
@@ -851,3 +1124,147 @@ def test_measure_pi_modes_read_frequency_error(phase, mock_cavity):
     )
     result = phase._measure_pi_modes()
     assert result.result == PhaseResult.RETRY
+
+
+# ---------------------------------------------------------------------------
+# check_state_for_stage_2
+# ---------------------------------------------------------------------------
+
+
+def test_check_state_stage2_success(phase, mock_cavity, mock_stepper):
+    _setup_phase(phase, seed_cold=True)
+    mock_cavity.stepper_temp_pv_obj.get.return_value = 22.0
+    mock_cavity.detune_chirp = 1500.0
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.SUCCESS
+    assert "22.0" in result.message
+    assert "1500" in result.message
+
+
+def test_check_state_stage2_motor_moving(phase, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    mock_stepper.motor_moving = True
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.FAILED
+    assert "moving" in result.message.lower()
+
+
+def test_check_state_stage2_on_limit_switch(phase, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    mock_stepper.on_limit_switch = True
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.FAILED
+    assert "limit switch" in result.message.lower()
+
+
+def test_check_state_stage2_cavity_offline(phase, mock_cavity):
+    _setup_phase(phase, seed_cold=False)
+    mock_cavity.is_online = False
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.FAILED
+    assert "online" in result.message.lower()
+
+
+def test_check_state_stage2_requires_cold_landing_committed(phase):
+    """Stage 2 moves the stepper, which destroys the cold landing.
+
+    Once the cavity is tuned away its resting frequency is gone from the
+    hardware, so DF_COLD has to hold the agreed value before any motion — not
+    merely before Stage 3, which was the only gate that checked.
+    """
+    _setup_phase(phase, seed_cold=False)
+
+    result = phase._check_state_for_stage_2()
+
+    assert result.result == PhaseResult.FAILED
+    assert "cold landing" in result.message.lower()
+
+
+def test_check_state_stage2_blocked_when_df_cold_disagrees(phase, mock_cavity):
+    """A DF_COLD that does not match the record is not good enough either."""
+    _setup_phase(phase)
+    mock_cavity.df_cold_pv_obj.get.return_value = 9999.0
+
+    result = phase._check_state_for_stage_2()
+
+    assert result.result == PhaseResult.FAILED
+    assert "df_cold does not match" in result.message.lower()
+
+
+def test_check_state_stage2_read_exception_retries(phase, mock_cavity):
+    _setup_phase(phase, seed_cold=True)
+    mock_cavity.detune_chirp = property(
+        lambda self: (_ for _ in ()).throw(RuntimeError("timeout"))
+    )
+    type(mock_cavity).detune_chirp = property(
+        lambda self: (_ for _ in ()).throw(RuntimeError("timeout"))
+    )
+    result = phase._check_state_for_stage_2()
+    assert result.result == PhaseResult.RETRY
+
+
+# ---------------------------------------------------------------------------
+# check_state_for_stage_3
+# ---------------------------------------------------------------------------
+
+
+def test_check_state_stage3_success(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.stepper_temp_pv_obj.get.return_value = 22.0
+    mock_cavity.detune_chirp = 100.0
+    result = phase._check_state_for_stage_3()
+    assert result.result == PhaseResult.SUCCESS
+    assert "22.0" in result.message
+
+
+def test_check_state_stage3_motor_moving(phase, mock_stepper):
+    _setup_phase(phase)
+    mock_stepper.motor_moving = True
+    result = phase._check_state_for_stage_3()
+    assert result.result == PhaseResult.FAILED
+    assert "moving" in result.message.lower()
+
+
+def test_check_state_stage3_df_cold_not_recorded(phase, mock_cavity):
+    # No cold-landing frequency stored on the record → the df_cold gate fails.
+    _setup_phase(phase, seed_cold=False)
+    result = phase._check_state_for_stage_3()
+    assert result.result == PhaseResult.FAILED
+    assert "cold" in result.message.lower()
+
+
+def test_check_state_stage3_df_cold_mismatch(phase, mock_cavity):
+    _setup_phase(phase)
+    # DF_COLD PV reads a value far from the recorded cold-landing.
+    mock_cavity.df_cold_pv_obj.get.return_value = 9999.0
+    result = phase._check_state_for_stage_3()
+    assert result.result == PhaseResult.FAILED
+    assert "df_cold" in result.message.lower()
+
+
+# ---------------------------------------------------------------------------
+# check_state_for_stage_4
+# ---------------------------------------------------------------------------
+
+
+def test_check_state_stage4_success(phase, mock_cavity, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    result = phase._check_state_for_stage_4()
+    assert result.result == PhaseResult.SUCCESS
+    assert "ready" in result.message.lower()
+
+
+def test_check_state_stage4_motor_moving(phase, mock_stepper):
+    _setup_phase(phase, seed_cold=False)
+    mock_stepper.motor_moving = True
+    result = phase._check_state_for_stage_4()
+    assert result.result == PhaseResult.FAILED
+    assert "moving" in result.message.lower()
+
+
+def test_check_state_stage4_cavity_offline(phase, mock_cavity):
+    _setup_phase(phase, seed_cold=False)
+    mock_cavity.is_online = False
+    result = phase._check_state_for_stage_4()
+    assert result.result == PhaseResult.FAILED
+    assert "online" in result.message.lower()

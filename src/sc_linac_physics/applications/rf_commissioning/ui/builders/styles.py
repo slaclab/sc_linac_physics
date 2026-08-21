@@ -41,10 +41,12 @@ PV_CAP_STYLE = (
     f"font-family: {MONO_FONT_STACK}; font-size: 11px; border-radius: {RADIUS_SM};"
 )
 
+# 12px, not 11: these carry the live step and phase text in the status bar, which
+# an operator reads mid-run from console distance. Raised on operator feedback.
 LOCAL_LABEL_STYLE = (
     f"background: {BG_LOCAL}; padding: 2px 6px; "
     f"border: 1px solid {BORDER}; border-left: 3px solid {ACCENT_LOCAL}; "
-    f"font-size: 11px; border-radius: {RADIUS_SM};"
+    f"font-size: 12px; border-radius: {RADIUS_SM};"
 )
 
 LOCAL_CAP_STYLE = (

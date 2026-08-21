@@ -41,6 +41,19 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 
+def _emit_status(cb, msg: str) -> None:
+    """Call a status callback, swallowing any exception."""
+    if cb:
+        try:
+            cb(msg)
+        except Exception:
+            pass
+
+
+# Small slack on the drive-level gate so PV rounding does not trip it.
+_DRIVE_TOLERANCE = 0.5
+
+
 @dataclass
 class FrequencyTuningLimits:
     """Configurable limits for the frequency tuning phase."""
@@ -127,9 +140,12 @@ class FrequencyTuningPhase(PhaseBase):
         step_methods = {
             "verify_initial_state": self._verify_initial_state,
             "record_cold_landing": self._record_cold_landing,
+            "check_state_for_stage_2": self._check_state_for_stage_2,
             "probe_stepper_direction": self._probe_stepper_direction,
+            "check_state_for_stage_3": self._check_state_for_stage_3,
             "apply_hz_per_step": self._apply_hz_per_step,
             "tune_to_resonance": self._tune_to_resonance,
+            "check_state_for_stage_4": self._check_state_for_stage_4,
             "measure_pi_modes": self._measure_pi_modes,
             "record_results": self._record_results,
         }
@@ -159,8 +175,11 @@ class FrequencyTuningPhase(PhaseBase):
         reliable reference: DF_COLD defaults to a valid 0, so there is no
         INVALID severity to key off — we require DF_COLD to match it.
         """
-        cold = self._get_checkpoint_data("record_cold_landing")
-        recorded = cold.get("df_cold_hz")
+        # One source: the record. _record_cold_landing writes the frequency
+        # there, so this holds within a single run and equally after a relaunch.
+        # Reading the step's phase_history checkpoint instead would only work
+        # in-session — that list is in memory, with no table behind it.
+        recorded = self._persisted_df_cold_hz()
         if recorded is None:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
@@ -191,6 +210,230 @@ class FrequencyTuningPhase(PhaseBase):
         return None
 
     # ------------------------------------------------------------------
+    # Prerequisite-check steps (read-only, no hardware mutations)
+    # ------------------------------------------------------------------
+
+    def _check_motor_and_cavity(self) -> "PhaseStepResult | None":
+        """Blockers that no amount of re-preparation can clear.
+
+        Returns a FAILED result if the stepper cannot safely move, or None.
+        Conditions the phase can fix itself live in _check_tuning_setup().
+        """
+        try:
+            motor_moving = self.cavity.stepper_tuner.motor_moving
+            on_limit_switch = self.cavity.stepper_tuner.on_limit_switch
+            is_online = self.cavity.is_online
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read stepper/cavity state: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        if motor_moving:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Stepper motor already moving — abort or wait for it to stop",
+            )
+        if on_limit_switch:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Stepper motor is on a limit switch — manual intervention required",
+            )
+        if not is_online:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Cavity is not online — run Stage 1 to prepare it for tuning",
+            )
+        return None
+
+    def _check_tuning_setup(self) -> str | None:
+        """Return why the cavity is not set up for tuning, or None if it is.
+
+        Everything setup_tuning() establishes: RF on in chirp mode with a valid
+        detune, piezo enabled and in Manual, drive clamped to the safe pulsed
+        level. is_online is hw_mode ("in service") and notices none of this, so
+        without this check a cavity switched off after Stage 1 sailed through
+        and Stage 2 moved the stepper against a detune that was not tracking.
+
+        Returns a reason string rather than a PhaseStepResult because the
+        caller re-prepares the cavity and retries before surfacing anything.
+        """
+        try:
+            if not self.cavity.is_on:
+                return "RF is off"
+            # detune_invalid branches on rf_mode: outside chirp mode it inspects
+            # DFBEST rather than the CHIRP:DF the tuning stages read, so treat
+            # it as a strong signal rather than a complete one.
+            if self.cavity.detune_invalid:
+                return "detune readback is invalid"
+            if not self.cavity.piezo.is_enabled:
+                return "piezo is disabled"
+            # Feedback actively counteracts the stepper rather than merely
+            # invalidating a reading, so it matters even though tuning could
+            # technically proceed.
+            if not self.cavity.piezo.in_manual:
+                return "piezo is in Feedback mode and would fight the stepper"
+            drive = float(self.cavity.drive_level)
+        except Exception as exc:
+            return f"could not read cavity setup state ({exc})"
+
+        # Only an over-drive is unsafe; running below the safe level is a
+        # legitimate operator choice and must not trigger a re-prepare.
+        if drive > linac_utils.SAFE_PULSED_DRIVE_LEVEL + _DRIVE_TOLERANCE:
+            return (
+                f"drive level is {drive:.1f}, above the "
+                f"{linac_utils.SAFE_PULSED_DRIVE_LEVEL} used for chirp tuning"
+            )
+        return None
+
+    def _ensure_tuning_setup(self) -> "PhaseStepResult | None":
+        """Re-apply setup_tuning() if the cavity drifted out of tuning state.
+
+        Stage 1 is the only stage that prepares the cavity, and its Run button
+        is disabled once it succeeds — so an operator who turns the cavity off
+        mid-workflow has no way back. Rather than failing with an instruction
+        they cannot follow, stages 2 and 3 re-prepare and carry on. Safe to
+        repeat: setup_tuning() does not touch the recorded cold landing, which
+        is the one thing in Stage 1 that must not run twice.
+        """
+        reason = self._check_tuning_setup()
+        if reason is None:
+            return None
+
+        status_cb = self.context.parameters.get("status_update_callback")
+        _emit_status(
+            status_cb, f"Cavity not set up for tuning ({reason}) — re-preparing"
+        )
+        prepared = self._prepare_and_read(status_cb)
+        if isinstance(prepared, PhaseStepResult):
+            return prepared
+
+        reason = self._check_tuning_setup()
+        if reason is not None:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    f"Cavity is still not ready for tuning after re-preparing: "
+                    f"{reason}"
+                ),
+            )
+        _emit_status(status_cb, "✓ Cavity re-prepared for tuning")
+        return None
+
+    def _check_state_for_stage_2(self) -> PhaseStepResult:
+        """Verify hardware is ready for stepper probing (Stage 2).
+
+        Checks motor idle, not on limit switch, cavity online, re-applies
+        setup_tuning() if the cavity drifted out of tuning state, and requires
+        the cold landing to be committed to DF_COLD first.
+        """
+        bad = self._check_motor_and_cavity()
+        if bad is not None:
+            return bad
+
+        not_ready = self._ensure_tuning_setup()
+        if not_ready is not None:
+            return not_ready
+
+        # Stage 2 is the first step that moves the stepper, and moving it
+        # destroys the ability to measure the cold landing: once the cavity has
+        # been tuned away, the resting frequency is gone from the hardware.
+        # DF_COLD must therefore hold the agreed value before any motion, not
+        # merely before Stage 3. Deliberately a gate and not an automatic write
+        # — which value belongs in DF_COLD is an operator judgment, and may be a
+        # number from a partner lab rather than the one measured here.
+        df_cold_bad = self._check_df_cold_recorded()
+        if df_cold_bad is not None:
+            return df_cold_bad
+
+        try:
+            temp = self._read_temp()
+            detune = self.cavity.detune_chirp
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read cavity detune/temperature: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=(
+                f"Cavity ready for probing — temp {temp:.1f} °C, "
+                f"detune {detune:.0f} Hz"
+            ),
+        )
+
+    def _check_state_for_stage_3(self) -> PhaseStepResult:
+        """Verify hardware and data are ready for tune-to-resonance (Stage 3).
+
+        In addition to the motor/online checks, confirms that the operator
+        has pushed DF_COLD so the tuning target is set.
+        """
+        bad = self._check_motor_and_cavity()
+        if bad is not None:
+            return bad
+
+        not_ready = self._ensure_tuning_setup()
+        if not_ready is not None:
+            return not_ready
+
+        df_cold_bad = self._check_df_cold_recorded()
+        if df_cold_bad is not None:
+            return df_cold_bad
+
+        try:
+            temp = self._read_temp()
+            detune = self.cavity.detune_chirp
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read cavity detune/temperature: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=(
+                f"Cavity ready for tuning — temp {temp:.1f} °C, "
+                f"detune {detune:.0f} Hz"
+            ),
+        )
+
+    def _check_state_for_stage_4(self) -> PhaseStepResult:
+        """Verify the cavity is online before running FSCAN (Stage 4).
+
+        FSCAN does not require chirp mode, so only basic online/motor
+        checks are needed.
+        """
+        try:
+            motor_moving = self.cavity.stepper_tuner.motor_moving
+            is_online = self.cavity.is_online
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read cavity state: {exc}",
+                retry_delay_seconds=3.0,
+            )
+
+        if motor_moving:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Stepper motor still moving — wait for it to stop before scanning",
+            )
+        if not is_online:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message="Cavity is not online — cannot run FSCAN",
+            )
+
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message="Cavity online and stepper idle — ready for FSCAN",
+        )
+
+    # ------------------------------------------------------------------
     # Step implementations
     # ------------------------------------------------------------------
 
@@ -202,6 +445,8 @@ class FrequencyTuningPhase(PhaseBase):
                 data={"dry_run": True},
             )
 
+        status_cb = self.context.parameters.get("status_update_callback")
+        _emit_status(status_cb, "Reading stepper and cavity state...")
         try:
             motor_moving = self.cavity.stepper_tuner.motor_moving
             on_limit_switch = self.cavity.stepper_tuner.on_limit_switch
@@ -231,7 +476,10 @@ class FrequencyTuningPhase(PhaseBase):
                 message="Cavity is not online — cannot prepare it for tuning",
             )
 
-        prepared = self._prepare_and_read()
+        _emit_status(
+            status_cb, "✓ Stepper idle, cavity online — preparing cavity..."
+        )
+        prepared = self._prepare_and_read(status_cb)
         if isinstance(prepared, PhaseStepResult):
             return prepared
         temp, detune = prepared
@@ -255,7 +503,9 @@ class FrequencyTuningPhase(PhaseBase):
             },
         )
 
-    def _prepare_and_read(self) -> "PhaseStepResult | tuple[float, float]":
+    def _prepare_and_read(
+        self, status_cb=None
+    ) -> "PhaseStepResult | tuple[float, float]":
         """Read temp, prepare the cavity, read detune.
 
         Returns (temp_c, detune_hz) on success, or a FAILED/RETRY
@@ -263,7 +513,7 @@ class FrequencyTuningPhase(PhaseBase):
         """
         try:
             temp = self._read_temp()
-            self._prepare_cavity_for_tuning()
+            self._prepare_cavity_for_tuning(status_cb)
             return temp, self.cavity.detune_chirp
         except linac_utils.DetuneError as exc:
             return PhaseStepResult(
@@ -293,19 +543,24 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=3.0,
             )
 
-    def _prepare_cavity_for_tuning(self) -> None:
+    def _prepare_cavity_for_tuning(self, status_cb=None) -> None:
         """Prepare the cavity for chirp tuning, mirroring the production path.
 
         RF off first so a latched interlock clears even if RF was requested on,
         then SSA on, reset interlocks, and set up chirp tuning — the same
         sequence as SetupCavity.setup + Cavity.setup_tuning.
         """
+
+        _emit_status(status_cb, "Turning RF off...")
         self.cavity.turn_off()
+        _emit_status(status_cb, "Turning SSA on...")
         self.cavity.ssa.turn_on()
+        _emit_status(status_cb, "Resetting interlocks...")
         self.cavity.reset_interlocks()
         # setup_tuning(use_sela=False) puts the cavity in chirp mode (piezo
         # feedback off, RF driven by the chirp generator rather than SELA)
         # so detune can be read via CHIRP:DF while the stepper is moved.
+        _emit_status(status_cb, "Setting up chirp mode...")
         self.cavity.setup_tuning()
 
     def _tune_config_warning(self) -> str | None:
@@ -347,13 +602,22 @@ class FrequencyTuningPhase(PhaseBase):
                 retry_delay_seconds=3.0,
             )
 
+        # Record it on the record, not only in the step's returned data. The
+        # record is the one copy that outlives both the step's checkpoint (in
+        # memory) and the session, so it is what later steps and later launches
+        # both read. See _check_df_cold_recorded.
+        initial_timestamp = datetime.now()
+        self._store_phase_fields(
+            df_cold_hz=df_cold_hz, initial_timestamp=initial_timestamp
+        )
+
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=f"Cold landing frequency recorded: detune={df_cold_hz:.0f} Hz. "
             "Push to DF_COLD when satisfied.",
             data={
                 "df_cold_hz": df_cold_hz,
-                "initial_timestamp": datetime.now().isoformat(),
+                "initial_timestamp": initial_timestamp.isoformat(),
             },
         )
 
@@ -478,6 +742,7 @@ class FrequencyTuningPhase(PhaseBase):
         # delta = d(CHIRP:DF) for +probe microsteps, so SCALE = -delta/probe.
         signed_hz_per_microstep = -delta / probe
         self._hz_per_microstep = signed_hz_per_microstep
+        self._store_phase_fields(hz_per_microstep=signed_hz_per_microstep)
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
@@ -519,15 +784,9 @@ class FrequencyTuningPhase(PhaseBase):
         """
         if self.context.is_abort_requested():
             raise linac_utils.CavityAbortError("Abort requested during tuning")
-        tuning_cb = self.context.parameters.get("tuning_update_callback")
-        if tuning_cb:
-            try:
-                signed = round(
-                    self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
-                )
-                tuning_cb(signed, self.cavity.detune_chirp)
-            except Exception:
-                pass
+        self._emit_tuning_point(
+            self.context.parameters.get("tuning_update_callback")
+        )
 
     def _tune_to_resonance(self) -> PhaseStepResult:
         if self.context.dry_run:
@@ -550,12 +809,51 @@ class FrequencyTuningPhase(PhaseBase):
             ack_ceiling if ack_ceiling is not None else self.limits.temp_limit_c
         )
 
+        # Pre-seed the plot with the current state before the tuning loop
+        # starts.  The 500 ms live-refresh timer requires _live_steps to be
+        # non-empty before it will emit a cursor update; without this, the
+        # timer bails on every tick during the first (often large) stepper
+        # move and the live detune appears frozen until the second iteration
+        # hook fires.
+        self._emit_tuning_point(
+            self.context.parameters.get("tuning_update_callback")
+        )
+
         bridged = self._run_auto_tune(max_temp)
         if bridged is not None:
             return bridged
 
-        # NSTEPS_COLD is the return trip: negation of the accumulated signed
-        # steps (read once from the hardware register _auto_tune drove).
+        return self._finalize_after_auto_tune(ack_ceiling)
+
+    def _emit_tuning_point(
+        self, callback, step_count: int | None = None
+    ) -> None:
+        """Emit one (signed_steps, detune) plot point via the tuning callback.
+
+        Reads the step register from hardware when step_count is None.
+        Silently ignores all errors so a plot glitch never stops tuning.
+        """
+        if callback is None:
+            return
+        try:
+            steps = (
+                step_count
+                if step_count is not None
+                else round(
+                    self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
+                )
+            )
+            callback(steps, self.cavity.detune_chirp)
+        except Exception:
+            pass
+
+    def _finalize_after_auto_tune(
+        self, ack_ceiling: float | None
+    ) -> PhaseStepResult:
+        """Read final step count, emit the at-resonance plot point, persist results."""
+        # Read the accumulated signed step count once, from the hardware
+        # register _auto_tune drove. This is the outbound trip; the negation
+        # into NSTEPS_COLD happens in _write_cold_landing_steps().
         try:
             signed_total = round(
                 self.cavity.stepper_tuner.step_signed_pv_obj.get() or 0
@@ -566,6 +864,13 @@ class FrequencyTuningPhase(PhaseBase):
                 message=f"Could not read signed step count after tuning: {exc}",
                 retry_delay_seconds=3.0,
             )
+
+        # Emit the final at-resonance data point. The iteration hook fires
+        # before each move, so the last move's post-state is never
+        # automatically emitted — this fills that gap.
+        self._emit_tuning_point(
+            self.context.parameters.get("tuning_update_callback"), signed_total
+        )
 
         err = self._write_cold_landing_steps(signed_total)
         if err is not None:
@@ -630,11 +935,17 @@ class FrequencyTuningPhase(PhaseBase):
     def _tuning_success_result(
         self, signed_total: int, ack_ceiling: float | None
     ) -> PhaseStepResult:
+        final_timestamp = datetime.now()
         data = {
             "total_steps": abs(signed_total),
             "cold_landing_steps": -signed_total,
-            "final_timestamp": datetime.now().isoformat(),
+            "final_timestamp": final_timestamp.isoformat(),
         }
+        self._store_phase_fields(
+            steps_to_resonance=abs(signed_total),
+            cold_landing_steps=-signed_total,
+            final_timestamp=final_timestamp,
+        )
         # Audit trail: if the operator authorized proceeding over the temp
         # limit, record the ceiling and who authorized it.
         if ack_ceiling is not None and ack_ceiling > self.limits.temp_limit_c:
@@ -783,6 +1094,10 @@ class FrequencyTuningPhase(PhaseBase):
                     retry_delay_seconds=3.0,
                 )
         results["timestamp"] = datetime.now().isoformat()
+        self._store_phase_fields(
+            mode_8pi_9_frequency=results["mode_8pi_9_hz"],
+            mode_7pi_9_frequency=results["mode_7pi_9_hz"],
+        )
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
@@ -803,6 +1118,38 @@ class FrequencyTuningPhase(PhaseBase):
     # Finalization
     # ------------------------------------------------------------------
 
+    def _persisted_df_cold_hz(self) -> float | None:
+        """Return the cold-landing detune stored on the record, if any."""
+        record = getattr(self.context, "record", None)
+        data = getattr(record, "frequency_tuning", None) if record else None
+        return getattr(data, "df_cold_hz", None) if data else None
+
+    def _store_phase_fields(self, **fields) -> None:
+        """Merge step results onto the record as each step produces them.
+
+        Each step stores its own contribution so the record is complete even
+        when the phase is run across more than one launch. Without this, the
+        only copy of a step's result is its phase_history checkpoint, which is
+        in-memory — so finalize_phase() would write None for every stage
+        completed in an earlier session and mark the phase not-complete.
+
+        Only the named fields are touched, so a later stage cannot wipe an
+        earlier one. Persisting to the database is the session's job; the phase
+        layer deliberately has no database dependency.
+        """
+        record = getattr(self.context, "record", None)
+        if record is None:
+            return
+        data = record.frequency_tuning or FrequencyTuningData()
+        for name, value in fields.items():
+            if value is not None:
+                setattr(data, name, value)
+        record.frequency_tuning = data
+
+    def _store_df_cold_hz(self, df_cold_hz: float) -> None:
+        """Store the cold-landing detune on the record."""
+        self._store_phase_fields(df_cold_hz=df_cold_hz)
+
     def _get_checkpoint_data(self, step_name: str) -> dict:
         checkpoint = next(
             (
@@ -822,6 +1169,17 @@ class FrequencyTuningPhase(PhaseBase):
         tune = self._get_checkpoint_data("tune_to_resonance")
         pi = self._get_checkpoint_data("measure_pi_modes")
 
+        # When a single stage is re-run (e.g. Stage 4 only), checkpoints for
+        # earlier stages won't appear in this phase's history window.  Fall
+        # back to whatever was already stored on the record so those fields
+        # are preserved rather than overwritten with None.
+        prev = self.context.record.frequency_tuning
+
+        def _fallback(new_val, attr: str):
+            if new_val is not None:
+                return new_val
+            return getattr(prev, attr, None) if prev else None
+
         initial_ts_raw = cold.get("initial_timestamp")
         initial_ts = (
             datetime.fromisoformat(initial_ts_raw) if initial_ts_raw else None
@@ -832,12 +1190,22 @@ class FrequencyTuningPhase(PhaseBase):
         )
 
         self.context.record.frequency_tuning = FrequencyTuningData(
-            df_cold_hz=cold.get("df_cold_hz"),
-            initial_timestamp=initial_ts,
-            steps_to_resonance=tune.get("total_steps"),
-            final_timestamp=final_ts,
-            hz_per_microstep=probe.get("hz_per_microstep"),
-            cold_landing_steps=tune.get("cold_landing_steps"),
-            mode_8pi_9_frequency=pi.get("mode_8pi_9_hz"),
-            mode_7pi_9_frequency=pi.get("mode_7pi_9_hz"),
+            df_cold_hz=_fallback(cold.get("df_cold_hz"), "df_cold_hz"),
+            initial_timestamp=_fallback(initial_ts, "initial_timestamp"),
+            steps_to_resonance=_fallback(
+                tune.get("total_steps"), "steps_to_resonance"
+            ),
+            final_timestamp=_fallback(final_ts, "final_timestamp"),
+            hz_per_microstep=_fallback(
+                probe.get("hz_per_microstep"), "hz_per_microstep"
+            ),
+            cold_landing_steps=_fallback(
+                tune.get("cold_landing_steps"), "cold_landing_steps"
+            ),
+            mode_8pi_9_frequency=_fallback(
+                pi.get("mode_8pi_9_hz"), "mode_8pi_9_frequency"
+            ),
+            mode_7pi_9_frequency=_fallback(
+                pi.get("mode_7pi_9_hz"), "mode_7pi_9_frequency"
+            ),
         )
