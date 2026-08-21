@@ -729,7 +729,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
           10 s from the request — a 5 s settle sleep before polling starts, plus
           the 5 s interval <span class="cite">stepper.py:129-147, 388-392</span>.
           </td>
-          <td><button data-fault="abort">Inject</button></td>
+          <td></td>
         </tr>
         <tr>
           <td>Operator abort, cavity</td>
@@ -739,7 +739,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
           <code>turn_off()</code> before it raises
           <span class="cite">cavity.py:1054-1061</span>. A caller that stops the
           stepper without setting this leaves the cavity powered.</td>
-          <td></td>
+          <td><button data-fault="abort">Inject</button></td>
         </tr>
       </tbody>
     </table>
