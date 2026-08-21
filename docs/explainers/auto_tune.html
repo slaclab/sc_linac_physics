@@ -138,6 +138,93 @@ const TOL_ORACLE = [
   [-50000, 3.888889],
 ];
 
+// Traced from Cavity._auto_tune (cavity.py:825-906) against a Python
+// reference that reuses the real stepper_tol_factor. Every count below was
+// produced by that trace, not by hand arithmetic — see the note on case 1 for
+// why hand arithmetic gets this wrong.
+//
+// All five cases share a 500 Hz start, a 50 Hz tolerance, and the nominal
+// 1.4/256 Hz-per-microstep scale, which gives 182.857 microsteps/Hz. So
+// expected_steps = int(500 * 182.857) = 91,428, the tol factor at that count
+// is 2.738, and every case gets the same 250,340-microstep budget. The only
+// things that vary are the undershoot factor and the calibration error.
+const LOOP_ORACLE = [
+  {
+    name: "converges in two moves when calibration is perfect",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // TWO moves, not one, and the reason is the truncation. With perfect
+    // calibration the first move is meant to remove exactly 90% of 500 Hz and
+    // leave exactly 50.0 Hz, which would NOT be > tolerance -- the loop would
+    // exit after one move. But est_steps = int(0.9 * 500 * 182.857) =
+    // int(82285.714) = 82285, and dropping that 0.714 of a microstep removes
+    // only 449.996 Hz. What is left is 50.0039 Hz, which IS > 50, so the
+    // while condition holds and a second move runs (8,229 steps, landing at
+    // 5.0 Hz).
+    //
+    // So the hard-coded 0.9 aims a perfectly-tuned cavity at precisely the
+    // tolerance boundary, and truncation always leaves it a hair outside.
+    // A well-calibrated cavity at 10x tolerance therefore costs two moves,
+    // never one.
+    expect: { outcome: "converged", iterations: 2 },
+  },
+  {
+    name: "diverges at undershoot 1.0 with 2.5x calibration error",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 2.5 * 1.4 / 256, tolerance: 50, undershoot: 1.0,
+    },
+    // |1 - 1.0 * 2.5| = 1.5 > 1, so |detune| grows every move: 500 -> -750
+    // -> 1125 -> -1687. The budget trips on move 3 at 434,280 steps.
+    expect: { outcome: "runaway", iterations: 3 },
+  },
+  {
+    name: "converges at undershoot 0.9 with 1.8x calibration error",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.8 * 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // |1 - 0.9 * 1.8| = 0.62, so each move cuts |detune| to 62% of the
+    // previous one, alternating sign: 500 -> -310 -> 192 -> -119 -> 74 ->
+    // -45.8, inside tolerance on move 5 having spent 196,694 of the 250,340
+    // available steps. This is the undershoot factor earning its keep --
+    // compare the next case, which is the same 1.8x error at undershoot 1.0.
+    expect: { outcome: "converged", iterations: 5 },
+  },
+  {
+    name: "same 1.8x error runs away once undershoot is 1.0",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 1.8 * 1.4 / 256, tolerance: 50, undershoot: 1.0,
+    },
+    // |1 - 1.0 * 1.8| = 0.8, so it still shrinks, but only 20% per move
+    // instead of 38%, and each move costs more steps because it is not
+    // scaled down by 0.9. The budget trips on move 4. Identical hardware
+    // miscalibration to the case above -- the only difference is the 0.9.
+    expect: { outcome: "runaway", iterations: 4 },
+  },
+  {
+    name: "convergent in principle, still over budget at 2.0x",
+    input: {
+      detune0: 500, scaleHzPerMicrostep: 1.4 / 256,
+      trueHzPerMicrostep: 2.0 * 1.4 / 256, tolerance: 50, undershoot: 0.9,
+    },
+    // |1 - 0.9 * 2.0| = 0.8 < 1, so this iteration DOES converge
+    // mathematically -- but it needs ~11 moves to get 500 Hz under 50 Hz, and
+    // the cumulative step count is a geometric series summing to roughly
+    // 411,000 microsteps against a 250,340 budget. The runaway guard trips on
+    // move 5.
+    //
+    // Worth internalizing: "the loop converges" and "the loop is allowed to
+    // finish" are different questions. The tol factor is a budget measured
+    // against what a CORRECTLY calibrated cavity would have needed, so a
+    // badly calibrated one gets cut off even when it is heading the right way.
+    expect: { outcome: "runaway", iterations: 5 },
+  },
+];
+
 // Port of linac_utils.stepper_tol_factor (linac_utils.py:224).
 //
 // How many times the estimated step count the loop is allowed to actually move
@@ -175,6 +262,160 @@ function stepperTolFactor(numSteps) {
     }
   }
   return 1.01;
+}
+
+// Port of Cavity._auto_tune (cavity.py:825).
+//
+// The real loop, per iteration:
+//   1. check_abort()
+//   2. if max_stepper_temp is set and the stepper is hotter -> StepperTempError
+//   3. iteration_callback() (commissioning uses it for abort + the live plot)
+//   4. est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+//   5. stepper_tuner.move(est_steps, max_steps=|est_steps|*1.1, MAX SPEED)
+//   6. if cumulative steps > expected * tol_factor -> DetuneError (runaway)
+//   7. check_detune()  <- this is where the chirp range gets widened
+//   8. delta_hz = delta_hz_func()   (re-read from the machine)
+//
+// The one thing the real loop does NOT do: bound its own iteration count. It
+// exits on tolerance, on the step budget, on a temp breach, or on an abort.
+// MAX_ITERATIONS here is a simulator guard only, so a divergent setting shows
+// as "did not converge" instead of hanging the browser.
+const MAX_ITERATIONS = 500;
+
+function runAutoTune(opts) {
+  const {
+    detune0,
+    scaleHzPerMicrostep,   // believed, from the SCALE PV
+    trueHzPerMicrostep,    // actual cavity response
+    tolerance,
+    undershoot = 0.9,
+    fault = null,
+    faultAtIteration = 2,
+  } = opts;
+
+  // Cavity.microsteps_per_hz = 1 / StepperTuner.hz_per_microstep, and that
+  // getter returns abs() of SCALE (stepper.py:96) — the loop only ever sees
+  // the magnitude. Direction comes from the sign of delta_hz.
+  const microstepsPerHz = 1 / Math.abs(scaleHzPerMicrostep);
+
+  let deltaHz = detune0;
+  const expectedSteps = Math.abs(Math.trunc(deltaHz * microstepsPerHz));
+  const tolFactor = stepperTolFactor(expectedSteps);
+  const budget = expectedSteps * tolFactor;
+
+  let stepsMoved = 0;
+  const iterations = [];
+  const log = [];
+  let outcome = "converged";
+  let error = null;
+  // Effective response, degraded by the mechanical-slip fault.
+  let responseHz = trueHzPerMicrostep;
+
+  while (Math.abs(deltaHz) > tolerance) {
+    if (iterations.length >= MAX_ITERATIONS) {
+      outcome = "no-converge";
+      error = `Did not converge in ${MAX_ITERATIONS} iterations`;
+      break;
+    }
+
+    const i = iterations.length + 1;
+    const firing = fault && i >= faultAtIteration;
+
+    // check_abort() is the FIRST thing in the real loop body, ahead of the
+    // temperature guard, so it is first here too. Only one fault fires at a
+    // time on this page, so the order is not observable — it is matched so
+    // the page does not teach the wrong precedence.
+    if (firing && fault === "abort") {
+      outcome = "abort";
+      error = "StepperAbortError: Abort requested";
+      log.push("ABORT_REQ written to the stepper; the move in progress " +
+               "stops. Up to ~10 s from the request (5 s settle + 5 s " +
+               "poll interval). RF is left on.");
+      break;
+    }
+
+    if (firing && fault === "hot_motor") {
+      outcome = "temp";
+      error = "StepperTempError: stepper motor temp 72.4 °C exceeds " +
+              "limit 70 °C";
+      log.push("Temp is read before the move, so this move never starts. " +
+               "No cool-down, no retry — the caller must intervene.");
+      break;
+    }
+
+    if (firing && fault === "slip") {
+      responseHz = trueHzPerMicrostep * 0.1;
+      log.push("Mechanical slip: the motor turns but the cavity barely " +
+               "responds, so the loop keeps asking for more steps.");
+    }
+
+    const estSteps = Math.trunc(undershoot * deltaHz * microstepsPerHz);
+
+    // int(abs(est_steps) * 1.1), the max_steps argument handed to
+    // StepperTuner.move(). Recorded for display only, and deliberately not
+    // applied to the simulated move, because it never limits anything at THIS
+    // call site: move() splits a request into chunks only when
+    // abs(num_steps) > max_steps, and 1.1 * abs(est_steps) is always larger
+    // than abs(est_steps). So the split branch (stepper.py:311) is unreachable
+    // from _auto_tune, and max_steps only ends up writing the STEP_MAX PV
+    // limit on the IOC.
+    const maxStepsClamp = Math.trunc(Math.abs(estSteps) * 1.1);
+
+    // Raised from inside move() (stepper.py:419) once the motor stops. It sits
+    // here, after est_steps is computed but before this iteration's state is
+    // recorded, because the real exception propagates out of move() before
+    // `steps_moved += abs(est_steps)` and before delta_hz is re-read. The
+    // cavity physically moved; the loop's bookkeeping never learns about it.
+    if (firing && fault === "limit_switch") {
+      outcome = "limit";
+      error = "StepperError: stepper motor on limit switch";
+      log.push("Checked after the move completes — the motor stopped for a " +
+               "bad reason, not because it arrived.");
+      break;
+    }
+
+    const before = deltaHz;
+    deltaHz = deltaHz - estSteps * responseHz;
+    stepsMoved += Math.abs(estSteps);
+
+    iterations.push({
+      i, deltaHzBefore: before, estSteps, maxStepsClamp,
+      stepsMoved, deltaHzAfter: deltaHz,
+    });
+
+    if (stepsMoved > budget) {
+      outcome = "runaway";
+      error = "DetuneError: motor moved more steps than expected";
+      log.push(
+        `Moved ${stepsMoved.toLocaleString()} microsteps against a budget ` +
+        `of ${Math.round(budget).toLocaleString()} ` +
+        `(${expectedSteps.toLocaleString()} expected x ` +
+        `${tolFactor.toFixed(3)} tol factor).`
+      );
+      break;
+    }
+
+    if (firing && fault === "detune_invalid_chirp") {
+      log.push("check_detune(): detune invalid in chirp mode, so " +
+               "find_chirp_range widens the sweep 1.1x and the loop " +
+               "carries on.");
+    }
+    if (firing && fault === "detune_invalid_sela") {
+      outcome = "sela-invalid";
+      error = "DetuneError: Cannot tune in SELA with invalid detune";
+      log.push("No recovery path in SELA — there is no chirp range to widen.");
+      break;
+    }
+  }
+
+  return {
+    outcome, error, iterations, log,
+    expectedSteps, tolFactor, budget, stepsMoved,
+    finalDetuneHz: deltaHz,
+    // |1 - undershoot * ratio| < 1 is the convergence condition for the
+    // fixed-point iteration this loop performs.
+    gain: undershoot * (trueHzPerMicrostep / Math.abs(scaleHzPerMicrostep)),
+  };
 }
 
 // Puts the failure list where the reader will actually see it. The audience
@@ -218,10 +459,28 @@ function selfCheck() {
       failures.push(`stepperTolFactor(${n}) = ${got}, expected ${want}`);
     }
   }
+  for (const c of LOOP_ORACLE) {
+    const got = runAutoTune(c.input);
+    if (got.outcome !== c.expect.outcome) {
+      failures.push(
+        `${c.name}: outcome ${got.outcome}, expected ${c.expect.outcome}`
+      );
+    }
+    if (c.expect.iterations !== undefined &&
+        got.iterations.length !== c.expect.iterations) {
+      failures.push(
+        `${c.name}: ${got.iterations.length} iterations, ` +
+        `expected ${c.expect.iterations}`
+      );
+    }
+  }
   if (failures.length) {
     console.error("SELF-CHECK FAILED\n" + failures.join("\n"));
   } else {
-    console.log(`SELF-CHECK PASSED (${TOL_ORACLE.length} tol-factor cases)`);
+    console.log(
+      `SELF-CHECK PASSED (${TOL_ORACLE.length} tol-factor cases, ` +
+      `${LOOP_ORACLE.length} loop cases)`
+    );
   }
   return failures;
 }
