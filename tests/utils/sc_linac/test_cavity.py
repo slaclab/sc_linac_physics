@@ -41,6 +41,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     QuenchError,
     ALL_CRYOMODULES,
     StepperTempError,
+    PIEZO_CENTER_VOLTAGE,
 )
 from sc_linac_physics.utils.sc_linac.piezo import Piezo
 from tests.mock_utils import mock_func
@@ -618,6 +619,106 @@ def test__auto_tune_iteration_callback_invoked(cavity):
         max_stepper_temp=70,
     )
     assert len(calls) >= 1
+
+
+class BoundedDetune:
+    """
+    Wraps a detune source and raises once ``limit`` calls are exceeded, so a
+    missing no-progress guard surfaces as a test failure rather than a hung
+    test.
+    """
+
+    def __init__(self, source, limit=25):
+        self.source = source if callable(source) else lambda: source
+        self.limit = limit
+        self.num_calls = 0
+
+    def __call__(self):
+        self.num_calls += 1
+        if self.num_calls > self.limit:
+            raise RuntimeError(
+                f"_auto_tune looped {self.num_calls}x without escaping"
+            )
+        return self.source()
+
+
+def test__auto_tune_zero_step_estimate_raises(cavity):
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    # A SCALE three orders of magnitude too large (e.g. a defaulted or
+    # mis-measured SCALE_CALC.B) makes 0.9 * delta_hz * microsteps_per_hz
+    # truncate to zero, so the motor is commanded no motion and the detune
+    # never changes.
+    cavity.stepper_tuner.hz_per_microstep = 1e6
+    detune = BoundedDetune(1000)
+
+    with pytest.raises(DetuneError, match="rounded to zero"):
+        cavity._auto_tune(delta_hz_func=detune)
+
+    # No point commanding a zero-step move.
+    cavity.stepper_tuner.move.assert_not_called()
+
+
+def test__auto_tune_zero_step_estimate_message_names_scale(cavity):
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    cavity.stepper_tuner.hz_per_microstep = 5000.0
+
+    with pytest.raises(DetuneError) as exc_info:
+        cavity._auto_tune(delta_hz_func=BoundedDetune(200))
+
+    message = str(exc_info.value)
+    assert "SCALE" in message
+    assert "5000" in message
+
+
+def test__auto_tune_zero_step_estimate_raises_for_piezo_pass(cavity):
+    """
+    The piezo-centering pass scales both delta_hz and tolerance by
+    piezo.hz_per_v, so a degenerate piezo SCALE reaches the same dead loop
+    even with a healthy stepper SCALE.
+    """
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_SELA)
+    cavity._detune_best_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    cavity.stepper_tuner.hz_per_microstep = 0.00540801
+
+    hz_per_v = 1e-5
+    cavity.piezo._hz_per_v_pv_obj = make_mock_pv(get_val=hz_per_v)
+    # 50 V off centre, which is well outside the 5 V equivalent tolerance,
+    # but only 5e-4 Hz of detune -- far below one microstep.
+    cavity.piezo._voltage_pv_obj = make_mock_pv(
+        get_val=PIEZO_CENTER_VOLTAGE + 50
+    )
+
+    with pytest.raises(DetuneError, match="rounded to zero"):
+        cavity._auto_tune(
+            delta_hz_func=BoundedDetune(cavity.delta_piezo),
+            tolerance=5 * hz_per_v,
+        )
+
+    cavity.stepper_tuner.move.assert_not_called()
+
+
+def test__auto_tune_runaway_error_reports_unchanged_detune(cavity):
+    """
+    A mechanically stuck tuner that reports motion still trips the existing
+    runaway-steps guard; the error should say the detune never moved.
+    """
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+
+    with pytest.raises(DetuneError) as exc_info:
+        cavity._auto_tune(delta_hz_func=BoundedDetune(500))
+
+    assert "detune never changed" in str(exc_info.value)
 
 
 def test_check_detune(cavity):
