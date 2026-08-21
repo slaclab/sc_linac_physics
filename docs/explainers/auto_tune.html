@@ -204,14 +204,17 @@ while |delta_hz| &gt; tolerance:
       and 0.9 leaves a tenth of the detune behind — so a perfectly calibrated
       cavity starting at exactly ten times tolerance is aimed precisely at the
       tolerance boundary, and the truncated step always drops it just outside.
-      Set the starting
-      detune to 500&nbsp;Hz with tolerance 50 and calibration error 1.0: the
-      exact aim is 81,818.18 microsteps, which would leave exactly
-      50.000&nbsp;Hz and end the loop. <code>int()</code> hands the motor
-      81,818 instead, and the 0.18 of a microstep it drops leaves
-      50.0010&nbsp;Hz — still <code>&gt; 50</code>, so a second move runs. At
-      the nominal 1.4/256 Hz-per-microstep scale the same arithmetic leaves
-      50.0039&nbsp;Hz. A
+      Set the starting detune to <span id="fig-example-detune"></span>&nbsp;Hz
+      with tolerance 50 and calibration error 1.0: the exact aim is
+      <span id="fig-exact-aim"></span> microsteps, which would leave the detune
+      sitting exactly on the tolerance and end the loop. <code>int()</code>
+      hands the motor <span id="fig-truncated-aim"></span> instead, and the
+      <span id="fig-dropped-microsteps"></span> of a microstep it drops leaves
+      <span id="fig-residual"></span>&nbsp;Hz — still <code>&gt; 50</code>, so a
+      second move runs. At the nominal
+      <code>HZ_PER_STEP / MICROSTEPS_PER_STEP</code> scale of 1.4/256
+      (linac_utils.py:145-147) the same arithmetic leaves
+      <span id="fig-residual-nominal"></span>&nbsp;Hz. A
       well-calibrated cavity at ten times tolerance therefore costs two moves,
       never one.
     </p>
@@ -230,23 +233,32 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
 
     <p>
       The travel a given miscalibration demands does not care how far out of
-      tune you started. The budget does. At the page defaults, 500&nbsp;Hz is
-      90,909 expected steps and buys a 2.75&times; budget; 5000&nbsp;Hz is
-      909,090 steps and buys only 1.376&times;. (At the nominal 1.4/256 scale
-      those same two figures are 2.738&times; and 1.369&times;.) So the further
+      tune you started. The budget does. At the page defaults,
+      <span id="fig-example-detune-b"></span>&nbsp;Hz is
+      <span id="fig-example-expected"></span> expected steps and buys a
+      <span id="fig-example-tol-factor"></span>&times; budget, while the
+      <span id="fig-opened-detune"></span>&nbsp;Hz the page opens on is
+      <span id="fig-opened-expected"></span> steps and buys only
+      <span id="fig-opened-tol-factor"></span>&times;. (At the nominal 1.4/256
+      scale those same two figures are
+      <span id="fig-example-tol-factor-nominal"></span>&times; and
+      <span id="fig-opened-tol-factor-nominal"></span>&times;.) So the further
       out of tune a cavity starts, the less calibration error the loop
-      tolerates. From 5000&nbsp;Hz, undershoot 0.9 survives a true/believed
-      scale ratio up to about 1.49&times; and undershoot 1.0 only to about
-      1.27&times;. That is what the 0.9 is really buying: budget headroom, not
-      just mathematical stability. From 5000&nbsp;Hz a gain of 1.8 converges in
-      principle — <code>|1 - 1.8| &lt; 1</code> — and still trips the runaway
-      guard at every undershoot the slider offers.
+      tolerates. From that opening detune, undershoot 0.9 survives a
+      true/believed scale ratio up to about
+      <span id="fig-window-undershoot"></span>&times; and undershoot 1.0 only to
+      about <span id="fig-window-unity"></span>&times;. That is what the 0.9 is
+      really buying: budget headroom, not just mathematical stability. From the
+      same detune a gain of 1.8 converges in principle —
+      <code>|1 - 1.8| &lt; 1</code> — and still trips the runaway guard at
+      every undershoot the slider offers.
     </p>
 
     <p>
-      Check it above: at the 5000&nbsp;Hz default, calibration error 1.35
-      converges at undershoot 0.9 and runs away at 1.0. Same hardware, same
-      miscalibration; the only difference is that one factor.
+      Check it above: at the opening detune, calibration error 1.35 converges
+      at undershoot 0.9 and runs away at 1.0 — it sits inside the first window
+      and outside the second. Same hardware, same miscalibration; the only
+      difference is that one factor.
     </p>
 
     <div class="caveat">
@@ -1043,6 +1055,147 @@ function fmtHz(value) {
   return value.toFixed(4);
 }
 
+// ---- Figures quoted in this section's prose --------------------------------
+// Anything in the prose that is a CONSEQUENCE of the port, rather than a
+// constant lifted from the Python, is written into the page from the shipped
+// functions below. That way the words cannot drift from the code by
+// construction, and no test has to police them.
+//
+// Sourced constants stay as literals with their citations — the 50 Hz
+// tolerance, the 0.9, the 1.1, 1.4/256. Those are facts about the source, not
+// arithmetic this page performs.
+
+// HZ_PER_STEP / MICROSTEPS_PER_STEP (linac_utils.py:145-147): what a 1.3 GHz
+// cavity's SCALE is nominally expected to be, before the per-cavity
+// measurement lands in the PV.
+const NOMINAL_HZ_PER_MICROSTEP = 1.4 / 256;
+
+// The truncation example is stated as "ten times tolerance", so the 10 lives
+// here and the prose reads the resulting detune back out of it.
+const EXAMPLE_TOLERANCE_MULTIPLE = 10;
+
+// Resolution of the convergence-window scan. The prose says "about"; this is
+// what "about" means.
+const RATIO_SCAN_STEP = 0.01;
+
+// Read defaults out of SLIDERS rather than re-typing them, so the prose and
+// the controls cannot disagree about what "the page defaults" are.
+function sliderDefault(id) {
+  for (const spec of SLIDERS) {
+    if (spec.id === id) return spec.value;
+  }
+  throw new Error("no slider named " + id);
+}
+
+// A perfectly calibrated run: believed scale is the true scale.
+function perfectRun(detune0, hzPerMicrostep) {
+  return runAutoTune({
+    detune0: detune0,
+    scaleHzPerMicrostep: hzPerMicrostep,
+    trueHzPerMicrostep: hzPerMicrostep,
+    tolerance: sliderDefault("tolerance"),
+    undershoot: sliderDefault("undershoot"),
+  });
+}
+
+// The largest true/believed scale ratio that still converges from the detune
+// the page opens on — the same experiment as dragging the calibration slider,
+// just at finer resolution. Returns null if even a perfect scale fails, which
+// would mean something far more basic is broken.
+function lastConvergingRatio(undershoot) {
+  const scale = sliderDefault("scaleHz");
+  const detune0 = sliderDefault("detune0");
+  const tolerance = sliderDefault("tolerance");
+  let last = null;
+  for (let k = 0; ; k++) {
+    const ratio = 1 + k * RATIO_SCAN_STEP;
+    // No wider than the calibration slider itself goes.
+    if (ratio > 3) break;
+    const result = runAutoTune({
+      detune0: detune0,
+      scaleHzPerMicrostep: scale,
+      trueHzPerMicrostep: scale * ratio,
+      tolerance: tolerance,
+      undershoot: undershoot,
+    });
+    if (result.outcome !== "converged") break;
+    last = ratio;
+  }
+  return last;
+}
+
+function derivedFigures() {
+  const scale = sliderDefault("scaleHz");
+  const tolerance = sliderDefault("tolerance");
+  const undershoot = sliderDefault("undershoot");
+  const example = EXAMPLE_TOLERANCE_MULTIPLE * tolerance;
+  const opened = sliderDefault("detune0");
+
+  const exampleRun = perfectRun(example, scale);
+  const exampleNominal = perfectRun(example, NOMINAL_HZ_PER_MICROSTEP);
+  const openedRun = perfectRun(opened, scale);
+  const openedNominal = perfectRun(opened, NOMINAL_HZ_PER_MICROSTEP);
+
+  const exactAim = undershoot * example / scale;
+  const firstMove = exampleRun.iterations[0];
+
+  const windowAtDefault = lastConvergingRatio(undershoot);
+  // 1 is "no undershoot at all", the comparison the paragraph is built on.
+  const windowAtUnity = lastConvergingRatio(1);
+  if (windowAtDefault === null || windowAtUnity === null) {
+    throw new Error("no calibration ratio converges");
+  }
+
+  const steps = (n) => Math.round(n).toLocaleString();
+  // Three decimals, the same precision the budget readout prints, so the prose
+  // and the simulator quote the tol factor identically.
+  const factor = (f) => f.toFixed(3);
+
+  return {
+    "fig-example-detune": String(example),
+    "fig-example-detune-b": String(example),
+    // Two decimals because the whole point is the fraction int() throws away;
+    // one would hide it.
+    "fig-exact-aim": exactAim.toLocaleString(undefined,
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    "fig-truncated-aim": firstMove.estSteps.toLocaleString(),
+    "fig-dropped-microsteps": (exactAim - Math.trunc(exactAim)).toFixed(2),
+    "fig-residual": fmtHz(firstMove.deltaHzAfter),
+    "fig-residual-nominal": fmtHz(exampleNominal.iterations[0].deltaHzAfter),
+    "fig-example-expected": steps(exampleRun.expectedSteps),
+    "fig-example-tol-factor": factor(exampleRun.tolFactor),
+    "fig-example-tol-factor-nominal": factor(exampleNominal.tolFactor),
+    "fig-opened-detune": String(opened),
+    "fig-opened-expected": steps(openedRun.expectedSteps),
+    "fig-opened-tol-factor": factor(openedRun.tolFactor),
+    "fig-opened-tol-factor-nominal": factor(openedNominal.tolFactor),
+    "fig-window-undershoot": windowAtDefault.toFixed(2),
+    "fig-window-unity": windowAtUnity.toFixed(2),
+  };
+}
+
+// A blank figure is recoverable by reading the code; a wrong one is not, and a
+// dead simulator is worse than either. So the arithmetic is guarded as a whole,
+// every write is guarded individually, and nothing here can escape into
+// mountSimulator().
+function fillDerivedFigures() {
+  let figures;
+  try {
+    figures = derivedFigures();
+  } catch (err) {
+    console.error("derived prose figures failed: " + err);
+    return;
+  }
+  for (const id of Object.keys(figures)) {
+    const node = document.getElementById(id);
+    if (!node) {
+      console.error("derived prose figure has no element: #" + id);
+      continue;
+    }
+    node.textContent = figures[id];
+  }
+}
+
 function buildControls(host) {
   const grid = el("div", { class: "ctl" });
 
@@ -1079,11 +1232,13 @@ function buildControls(host) {
     setFault(faultSelect.value || null);
   });
 
-  grid.appendChild(el("label", { for: "fault", text: "Injected fault" }));
+  grid.appendChild(el("label", { for: "fault",
+    text: "Inject a fault (optional)" }));
   grid.appendChild(faultSelect);
   grid.appendChild(el("span", { class: "val", text: "" }));
   grid.appendChild(el("div", { class: "cite note",
-    text: "Fires on move 2. Section 5 covers what each one means." }));
+    text: "Fires on move 2. Each one is explained in section 5 — leave it on " +
+          "\"none\" for now if you have not read that yet." }));
 
   host.appendChild(grid);
 }
@@ -1450,6 +1605,9 @@ const failures = selfCheck();
 if (failures.length) {
   showFailureBanner(failures);
 }
+// Independent of each other on purpose: a prose figure that cannot be computed
+// must not cost the reader the simulator.
+fillDerivedFigures();
 mountSimulator();
 </script>
 </body>

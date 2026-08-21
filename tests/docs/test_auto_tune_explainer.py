@@ -31,7 +31,15 @@ def _oracle_rows():
 
 
 def test_oracle_row_count():
-    assert len(_oracle_rows()) == 14
+    """Guard the regex, not the oracle's size.
+
+    A range, not a pin: adding a legitimate oracle row is good behaviour and
+    must not fail here. The lower bound catches the regex silently matching
+    nothing (renamed const, reformatted block); the upper bound catches it
+    matching far too much, e.g. a greedy match that swallowed the array
+    literals in the rest of the script.
+    """
+    assert 14 <= len(_oracle_rows()) < 100
 
 
 @pytest.mark.parametrize("num_steps,expected", _oracle_rows())
