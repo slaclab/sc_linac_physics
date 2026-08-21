@@ -349,7 +349,121 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
       cold landing. Trust the loop structure here; do not trust the smoothness.
     </div>
   </section>
-  <section id="detune-source"><h2>3. Where the detune number comes from</h2></section>
+  <section id="detune-source">
+    <h2>3. Where the detune number comes from</h2>
+
+    <p>
+      <code>_auto_tune</code> does not read the machine itself — it calls a
+      <code>delta_hz_func</code> handed to it, and is indifferent to where the
+      number came from. There are two sources.
+    </p>
+
+    <table>
+      <thead><tr><th></th><th>Chirp mode</th><th>SELA mode</th></tr></thead>
+      <tbody>
+        <tr><td>Detune PV</td><td><code>CHIRP:DF</code></td>
+            <td><code>DFBEST</code></td></tr>
+        <tr><td>Piezo feedback</td><td>Disabled, DC setpoint 0 V</td>
+            <td>Enabled</td></tr>
+        <tr><td>Drive level</td>
+            <td><code>SAFE_PULSED_DRIVE_LEVEL</code> = 10</td>
+            <td>Unchanged</td></tr>
+        <tr><td>Settling</td><td>RF on, 5 s wait, then find a valid chirp
+            range</td><td>RF on</td></tr>
+        <tr><td>Used by</td><td>Tuning GUI, RF commissioning</td>
+            <td><strong>Auto setup only</strong></td></tr>
+      </tbody>
+    </table>
+    <p class="cite">setup_tuning(), cavity.py:1117-1148</p>
+
+    <p>
+      <strong>SELA tuning has exactly one caller.</strong>
+      <code>move_to_resonance(use_sela=True)</code> is invoked from
+      <code>applications/auto_setup/backend/setup_cavity.py:219</code> and
+      nowhere else. The tuning GUI and the RF commissioning phase both tune in
+      chirp mode. SELA appears on this page because it explains the
+      piezo-centring pass below — not because you will meet it in
+      commissioning.
+    </p>
+
+    <h3>The second pass (SELA only)</h3>
+
+    <p>
+      After converging on detune, <code>move_to_resonance</code> runs
+      <code>_auto_tune</code> a <em>second</em> time — against
+      <code>delta_piezo</code> rather than detune, with tolerance
+      <code>5 &times; hz_per_v</code>
+      <span class="cite">cavity.py:739-745</span>.
+    </p>
+
+    <p>
+      The purpose: the piezo has drifted away from its 25 V centre absorbing
+      slow frequency changes, so it no longer has symmetric authority to reject
+      microphonics. The second pass uses the stepper to take over that DC
+      offset, handing the piezo back its full &plusmn; range. Note the
+      harmonic-linearizer sign flip — <code>delta_piezo</code> negates its
+      result for HLs <span class="cite">cavity.py:711-715</span>.
+    </p>
+
+    <h3>Tolerances</h3>
+
+    <p>
+      50 Hz, or 500 Hz for harmonic linearizers
+      <span class="cite">cavity.py:735</span>. The HL figure is looser in
+      proportion to their coarser per-step response.
+    </p>
+
+    <h3>Yes, the chirp range gets re-adjusted mid-tune</h3>
+
+    <p>
+      Worth knowing, because it means the chirp range at the end of a tune is
+      not necessarily the one <code>setup_tuning</code> established.
+      <code>_auto_tune</code> calls <code>check_detune()</code> after
+      <em>every</em> stepper move. If the detune has gone invalid and the cavity
+      is in chirp mode, that widens the sweep by 1.1&times; and retries
+      <span class="cite">cavity.py:904, 908-914</span>. In SELA there is no
+      range to widen, so it fails hard instead.
+    </p>
+
+    <p>
+      There are two entry points into <code>find_chirp_range</code>, and they do
+      not behave the same:
+    </p>
+
+    <table>
+      <thead><tr><th>Entry point</th><th>Argument</th>
+        <th>&plusmn;400 kHz cap enforced?</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>setup_tuning()</code></td>
+          <td>positive (<code>50000</code>)</td>
+          <td style="color:var(--ok)">Yes</td>
+        </tr>
+        <tr>
+          <td><code>_auto_tune()</code> &rarr; <code>check_detune()</code></td>
+          <td>negative (<code>chirp_freq_start * 1.1</code>)</td>
+          <td style="color:var(--bad)">No</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="caveat">
+      <strong>Known defect, documented as it behaves.</strong>
+      <code>set_chirp_range</code> normalizes with <code>abs()</code> and then
+      writes <code>chirp_freq_start = -offset</code>
+      <span class="cite">cavity.py:669-677</span>, so the in-loop call passes a
+      negative number back in. The widening itself still lands on a correct
+      &plusmn; range, because that <code>abs()</code> runs on every write — but
+      <code>find_chirp_range</code>'s recursion guard tests the raw signed
+      value: <code>if chirp_range &lt; 400000</code>
+      <span class="cite">cavity.py:1155</span>, which a negative number always
+      satisfies. On that path the cap never trips, and the range keeps growing
+      1.1&times; per level until the detune goes valid or Python raises
+      <code>RecursionError</code>. Tracked as a separate fix; this page
+      describes today's behaviour, because someone chasing a runaway chirp range
+      is exactly who reads this section.
+    </div>
+  </section>
   <section id="tune-states"><h2>4. Tune states</h2></section>
   <section id="failures"><h2>5. How it fails</h2></section>
 </main>
