@@ -93,6 +93,66 @@
 </main>
 <script>
 "use strict";
+
+// Reference values printed from the real Python functions. See
+// utils/sc_linac/linac_utils.py. If these ever disagree with the source,
+// the page is lying and must be corrected.
+const TOL_ORACLE = [
+  [0, 5.0], [5000, 5.0], [10000, 5.0], [10001, 4.999972],
+  [50000, 3.888889], [100000, 2.5], [500000, 1.944444],
+  [1000000, 1.25], [3000000, 1.175], [5000000, 1.1],
+  [10000000, 1.09], [50000000, 1.01], [60000000, 1.01],
+];
+
+// Port of linac_utils.stepper_tol_factor (linac_utils.py:224).
+//
+// How many times the estimated step count the loop is allowed to actually
+// move before it declares the motor is running away. Generous at small step
+// counts (5x near resonance, where mechanical dead zones and hysteresis mean
+// the estimate is rough) and tight at large ones (1.01x near cold landing,
+// tens of millions of steps, where a 1% overrun is already enormous).
+//
+// QUIRK, faithfully reproduced: step_tol_des defines a breakpoint at
+// 10e6 -> 1.05, but `ranges` jumps from (5e6, 50e6) and never uses it.
+// So stepperTolFactor(10e6) is 1.09, interpolated on the 5e6..50e6 line,
+// not 1.05. Do not "fix" this here — the page documents what the code does.
+function stepperTolFactor(numSteps) {
+  const n = Math.abs(numSteps);
+  if (n <= 10000) return 5;
+
+  const tol = {
+    10e3: 5, 100e3: 2.5, 1e6: 1.25, 5e6: 1.1, 10e6: 1.05, 50e6: 1.01,
+  };
+  const ranges = [[10e3, 100e3], [100e3, 1e6], [1e6, 5e6], [5e6, 50e6]];
+
+  for (const [start, end] of ranges) {
+    if (n > start && n <= end) {
+      // polyfit(x, y, 1) through exactly two points is the line through them.
+      const m = (tol[end] - tol[start]) / (end - start);
+      const b = tol[start] - m * start;
+      return m * n + b;
+    }
+  }
+  return 1.01;
+}
+
+function selfCheck() {
+  const failures = [];
+  for (const [n, want] of TOL_ORACLE) {
+    const got = stepperTolFactor(n);
+    if (Math.abs(got - want) > 1e-6) {
+      failures.push(`stepperTolFactor(${n}) = ${got}, expected ${want}`);
+    }
+  }
+  if (failures.length) {
+    console.error("SELF-CHECK FAILED\n" + failures.join("\n"));
+  } else {
+    console.log(`SELF-CHECK PASSED (${TOL_ORACLE.length} tol-factor cases)`);
+  }
+  return failures;
+}
+
+selfCheck();
 </script>
 </body>
 </html>
