@@ -1,0 +1,72 @@
+name: docs
+
+# Builds the MkDocs site from docs/ and publishes it to GitHub Pages.
+#
+# The build job runs on every PR that touches docs so a broken link fails
+# review rather than the deploy. Only pushes to main deploy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  # Allows a manual redeploy without pushing a docs change.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize deploys. Do not cancel in progress: a half-finished Pages deploy
+# leaves the live site in whatever state it got to.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Deliberately not `pip install -e ".[docs]"`. That extra exists for local
+      # previews, but installing the package here would drag in PyQt5, pydm and
+      # pyepics to render markdown. The two names are kept in sync by hand; if
+      # they drift, this job still builds the same site.
+      - name: Install MkDocs
+        run: pip install mkdocs mkdocs-material
+
+      # --strict turns a broken internal link into a failed build. The docs
+      # cross-reference each other with relative .md paths, so this is the
+      # check that actually matters.
+      - name: Build
+        run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    # PRs build but do not publish.
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
