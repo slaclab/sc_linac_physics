@@ -84,6 +84,56 @@ jobs:
           TAG=$(git describe --tags --abbrev=0)
           gh release upload "$TAG" dist/*.whl dist/*.tar.gz --clobber
 
+      # Collect the `## Operator-visible` sections from the PRs in this release
+      # so operators hear about behavior changes instead of discovering them at
+      # launch. Silent when nothing operator-visible shipped.
+      - name: Collect operator-visible notes
+        id: notes
+        if: steps.release.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+        run: |
+          TAG=$(git describe --tags --abbrev=0)
+          python .github/scripts/operator_notes.py --tag "$TAG"
+
+      # Requires a SLACK_RELEASE_WEBHOOK repo secret. Without it this step
+      # prints the note to the job log and exits cleanly, so the workflow is
+      # safe to merge before the webhook exists.
+      # Quoted: an unquoted '#' starts a YAML comment, which would truncate
+      # this step's name to "Post to" in the Actions UI.
+      - name: "Post to #srf-software"
+        if: >-
+          steps.release.outputs.released == 'true' &&
+          steps.notes.outputs.has_notes == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_WEBHOOK }}
+          NOTE: ${{ steps.notes.outputs.note }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+
+          url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+          note = os.environ.get("NOTE", "").strip()
+
+          if not note:
+              print("no operator-visible notes; nothing to post")
+              raise SystemExit(0)
+
+          if not url:
+              print("SLACK_RELEASE_WEBHOOK not set — would have posted:\n")
+              print(note)
+              raise SystemExit(0)
+
+          req = urllib.request.Request(
+              url,
+              data=json.dumps({"text": note}).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req, timeout=15) as r:
+              print("slack responded", r.status)
+          PY
+        continue-on-error: true
+
       - name: No release needed
         if: steps.release.outputs.released == 'false'
         run: echo "No new release — no qualifying commits since ${{ steps.release.outputs.version }}"

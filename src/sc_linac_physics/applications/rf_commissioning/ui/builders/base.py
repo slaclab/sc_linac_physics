@@ -65,8 +65,8 @@ class PhaseUIBase:
         if callback:
             widget.clicked.connect(callback)
 
-    def _build_main_toolbar(self) -> QVBoxLayout:
-        """Create an enhanced toolbar with better controls and visual hierarchy."""
+    def _build_toolbar_content_row(self) -> QHBoxLayout:
+        """Build the standard toolbar buttons row (without frame wrapping)."""
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
         toolbar.setContentsMargins(4, 4, 4, 4)
@@ -97,7 +97,7 @@ class PhaseUIBase:
                 color: {TEXT_DISABLED};
             }}
         """)
-        run_button.setFixedHeight(40)
+        run_button.setFixedHeight(34)
         run_button.setMinimumWidth(120)
         self._connect(run_button, "on_run_automated_test")
 
@@ -122,7 +122,7 @@ class PhaseUIBase:
                 border-color: {BORDER};
             }}
         """)
-        pause_button.setFixedHeight(40)
+        pause_button.setFixedHeight(34)
         pause_button.setEnabled(False)
         self._connect(pause_button, "on_pause_test")
 
@@ -146,7 +146,7 @@ class PhaseUIBase:
                 border-color: {BORDER};
             }}
         """)
-        abort_button.setFixedHeight(40)
+        abort_button.setFixedHeight(34)
         abort_button.setEnabled(False)
         self._connect(abort_button, "on_abort_test")
 
@@ -184,7 +184,7 @@ class PhaseUIBase:
                 background-color: {BORDER};
             }}
         """)
-        step_mode_btn.setFixedHeight(40)
+        step_mode_btn.setFixedHeight(34)
         self._connect(step_mode_btn, "on_toggle_step_mode")
 
         next_step_btn = self._register("next_step_btn", QPushButton("Next →"))
@@ -201,7 +201,7 @@ class PhaseUIBase:
                 color: {TEXT_MUTED};
             }}
         """)
-        next_step_btn.setFixedHeight(40)
+        next_step_btn.setFixedHeight(34)
         next_step_btn.setEnabled(False)
         self._connect(next_step_btn, "on_next_step")
 
@@ -241,6 +241,10 @@ class PhaseUIBase:
         toolbar.addStretch()
         toolbar.addLayout(status_section)
 
+        return toolbar
+
+    def _build_main_toolbar(self) -> QVBoxLayout:
+        """Create toolbar wrapped in a styled frame."""
         frame = QFrame()
         frame.setStyleSheet(f"""
             QFrame {{
@@ -250,7 +254,7 @@ class PhaseUIBase:
                 padding: 4px;
             }}
         """)
-        frame.setLayout(toolbar)
+        frame.setLayout(self._build_toolbar_content_row())
 
         wrapper = QVBoxLayout()
         wrapper.setContentsMargins(0, 0, 0, 0)
@@ -325,9 +329,8 @@ class PhaseUIBase:
         layout.setSpacing(3)
 
         feed = self._register("history_text", ActivityFeedWidget())
-        feed.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        feed.setMinimumHeight(60)
-        feed.setMaximumHeight(180)
+        feed.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        feed.setMinimumHeight(36)
 
         layout.addWidget(feed)
         group.setLayout(layout)
@@ -362,7 +365,6 @@ class PhaseUIBase:
         phase_status.setAlignment(Qt.AlignCenter)
         layout.addWidget(phase_status)
 
-        layout.addStretch()
         group.setLayout(layout)
         return group
 
@@ -432,7 +434,6 @@ class PhaseUIBase:
         grid.addWidget(notes_label, row, 1)
 
         layout.addLayout(grid)
-        layout.addStretch()
         group.setLayout(layout)
         return group
 

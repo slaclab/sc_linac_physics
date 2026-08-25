@@ -78,6 +78,7 @@ class _Tabs:
     def __init__(self):
         self.enabled = {}
         self.text = {}
+        self.tooltips = {}
         self.current = None
         self._bar = _TabBar()
         self.currentChanged = _Signal()
@@ -86,6 +87,9 @@ class _Tabs:
     def addTab(self, _widget, text):
         self.text[self._count] = text
         self._count += 1
+
+    def setTabToolTip(self, idx, value):
+        self.tooltips[idx] = value
 
     def count(self):
         return self._count
@@ -209,6 +213,56 @@ def test_tab_state_icon_and_update_paths(host_stub):
     )
 
     assert host_stub.tabs.tabBar().colors[2] == QColor(COLOR_ERROR)
+
+
+def test_tab_text_spells_out_urgent_statuses(host_stub):
+    """Current and Failed carry the word inline; settled states stay compact.
+
+    Glyph-only tabs were ambiguous to operators, but nine tabs have to fit
+    across the window, so only the two states worth the horizontal space get
+    the word on the tab itself.
+    """
+    host_stub.phase_specs = [
+        SimpleNamespace(phase=CommissioningPhase.PIEZO_PRE_RF, title="Piezo"),
+        SimpleNamespace(phase=CommissioningPhase.SSA_CHAR, title="SSA"),
+    ]
+    host_stub.tabs.addTab(QWidget(), "Piezo")
+    host_stub.tabs.addTab(QWidget(), "SSA")
+
+    host_stub.session.get_active_phase_projection.return_value = {
+        "current_phase": CommissioningPhase.SSA_CHAR,
+        "phase_status": {
+            CommissioningPhase.PIEZO_PRE_RF: SimpleNamespace(value="complete"),
+        },
+    }
+    tab_state.update_tab_states(host_stub)
+
+    # Completed phase: glyph only on the tab, word in the tooltip.
+    assert host_stub.tabs.text[0] == "✓ Piezo"
+    assert host_stub.tabs.tooltips[0] == "Piezo — Done"
+
+    # Current phase: word inline as well, because that is the one an operator
+    # needs to spot without hovering. "In progress" rather than "Running" —
+    # the phase can be current while nothing is executing.
+    assert host_stub.tabs.text[1] == "▶ SSA · In progress"
+    assert host_stub.tabs.tooltips[1] == "SSA — In progress"
+
+
+def test_tab_text_spells_out_failure(host_stub):
+    host_stub.phase_specs = [
+        SimpleNamespace(phase=CommissioningPhase.SSA_CHAR, title="SSA"),
+    ]
+    host_stub.tabs.addTab(QWidget(), "SSA")
+    host_stub.session.get_active_phase_projection.return_value = {
+        "current_phase": CommissioningPhase.SSA_CHAR,
+        "phase_status": {
+            CommissioningPhase.SSA_CHAR: SimpleNamespace(value="failed"),
+        },
+    }
+    tab_state.update_tab_states(host_stub)
+
+    assert host_stub.tabs.text[0] == "✗ SSA · Failed"
+    assert host_stub.tabs.tooltips[0] == "SSA — Failed"
 
 
 def test_tab_state_on_tab_changed_handles_conflict(host_stub):

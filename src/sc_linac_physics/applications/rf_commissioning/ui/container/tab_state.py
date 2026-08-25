@@ -10,11 +10,34 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     COLOR_ERROR,
     COLOR_PRIMARY,
     COLOR_SUCCESS,
+    TEXT_MUTED,
     TEXT_SECONDARY,
 )
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
     RecordConflictError,
 )
+
+# Every status glyph is paired with a word.  Operator feedback on PR #270 was
+# that the glyphs alone were ambiguous ("a triangle means that step is running
+# and checkmark is done?"), so the symbol is decoration and the word carries the
+# meaning.  The word is appended to the tab tooltip rather than the tab label
+# for the settled states, because nine tabs have to fit across the window; the
+# running phase is the one an operator needs to spot at a glance, so it — and a
+# failure — also get the word inline on the tab itself.
+# "In progress", not "Running": ▶ is returned for phase == current_phase, which
+# means "this is where you are in the workflow", not "a stage is executing right
+# now". Calling it Running contradicted the status bar, which legitimately reads
+# IDLE while the current phase sits waiting for an operator confirmation.
+_PHASE_STATUS_WORDS = {
+    "○": "Not started",
+    "✓": "Done",
+    "✗": "Failed",
+    "▶": "In progress",
+    "●": "Overview",
+}
+
+# Statuses urgent enough to spend horizontal tab space on.
+_INLINE_STATUS_GLYPHS = ("▶", "✗")
 
 
 class _TabsMixin:
@@ -33,12 +56,30 @@ class _TabsMixin:
             tab_layout.addWidget(display)
             tab_widget.setLayout(tab_layout)
 
+            icon = self._get_phase_icon(spec.phase)
             self.tabs.addTab(
-                tab_widget,
-                self._get_phase_icon(spec.phase) + " " + spec.title,
+                tab_widget, self._format_tab_text(icon, spec.title)
             )
+            self.tabs.setTabToolTip(
+                i, self._format_tab_tooltip(icon, spec.title)
+            )
+            self.tabs.tabBar().setTabTextColor(i, QColor(TEXT_MUTED))
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
+
+    @staticmethod
+    def _format_tab_text(icon: str, title: str) -> str:
+        """Build tab label text, spelling out the status for urgent states."""
+        word = _PHASE_STATUS_WORDS.get(icon)
+        if word and icon in _INLINE_STATUS_GLYPHS:
+            return f"{icon} {title} · {word}"
+        return f"{icon} {title}"
+
+    @staticmethod
+    def _format_tab_tooltip(icon: str, title: str) -> str:
+        """Build the tab tooltip, which always spells the status out in words."""
+        word = _PHASE_STATUS_WORDS.get(icon, "Not started")
+        return f"{title} — {word}"
 
     def _get_phase_icon(self, phase: CommissioningPhase | None) -> str:
         """Get status icon for a phase."""
@@ -98,7 +139,10 @@ class _TabsMixin:
             self.tabs.setTabEnabled(i, is_accessible)
 
             icon = self._get_phase_icon(spec.phase)
-            self.tabs.setTabText(i, f"{icon} {spec.title}")
+            self.tabs.setTabText(i, self._format_tab_text(icon, spec.title))
+            self.tabs.setTabToolTip(
+                i, self._format_tab_tooltip(icon, spec.title)
+            )
 
             if status is not None and status.value == "failed":
                 self.tabs.tabBar().setTabTextColor(i, QColor(COLOR_ERROR))

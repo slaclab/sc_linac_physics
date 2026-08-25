@@ -96,6 +96,81 @@ Long-running operations use `Worker(QThread)` from `utils/qt.py`, which emits `f
 - `pytest-asyncio` is configured with `asyncio_mode = auto`.
 - The 80% coverage threshold is enforced by CI — check coverage before opening a PR.
 
+## Scope and shipping
+
+These rules exist because AI-assisted development makes it easy to produce more
+change per PR than a reviewer can absorb. They are about reviewability, not
+about slowing down.
+
+### Split at planning time, not review time
+
+Before starting a piece of work, state how it will be split into PRs. Splitting
+is a planning decision — once the code is written, splitting becomes a chore and
+gets skipped. If a task can't be described as a sequence of independently
+mergeable changes, say so and explain why before starting.
+
+### Target PR size
+
+Aim for **under 400 changed lines** excluding tests and generated files. Past
+~800, split it. Large mechanical changes (renames, formatting, generated code)
+are exempt but should be their own PR, never mixed with logic changes.
+
+When a change is growing past the target mid-work, stop and propose a split
+rather than continuing.
+
+### Flag operator-visible changes
+
+If a change alters what a user sees or how an application behaves by default —
+new or reordered UI, changed defaults, renamed commands, altered PV usage,
+different launch behavior — say so explicitly in the PR description under the
+`## Operator-visible` heading, in one or two sentences of plain language.
+
+These need a short note to `#srf-software` when released. Changes that hide
+inside a large commit and surprise people at launch are the specific failure
+mode this prevents.
+
+The PR template (`.github/pull_request_template.md`) has sections for this, for
+split rationale, for decisions worth recording, and for tagging a learning
+reviewer. Fill them in rather than deleting them.
+
+### Record decisions with reasoning
+
+When choosing between real alternatives — reusing production code vs.
+reimplementing, staging a rollout, deferring a migration — write down the
+reasoning, not just the outcome. A comment at the decision point is enough for
+small calls; anything architectural goes in `docs/`.
+
+The reasoning is what nobody can reconstruct later. The code shows what was
+chosen; it never shows what was rejected or why.
+
+### Write for the physicist reading it
+
+Two reviewers are auto-requested by `.github/CODEOWNERS`, and they read for
+different things. Sebastian reads software design — framework structure, phase
+sequencing, threading, persistence. Ryan reads machine behavior, and as area
+physicist he needs to know exactly what the code commands the hardware to do and
+how it derives the numbers people act on.
+
+That second audience shapes how hardware-facing code should be written:
+
+- **Make PV writes obvious.** Any code path that puts a value to the machine
+  should be readable without tracing three layers of indirection. Name the PV,
+  state the units, and say what physically happens.
+- **State hardware assumptions where they're relied on.** The code encodes
+  expectations about tuner behavior, limit switches, piezo state, and cavity
+  frequency response that are obvious to whoever wrote the phase and invisible
+  to everyone else.
+- **Show the physics in analysis code.** In `q0/`, `quench_processing/`,
+  `microphonics/`, and anywhere else a fit or threshold produces a number: cite
+  the relationship being used and where the constants came from. A silent change
+  to a fit is a silent change to a physics conclusion.
+- **Flag anything that changes what the machine does**, even when the code
+  change looks cosmetic. Reordered writes, changed defaults, adjusted timeouts.
+
+`applications/rf_commissioning/` remains single-maintainer. Non-trivial changes
+there should be readable by someone who did not write them — favor explicit
+naming and docstrings on phase logic over compact code.
+
 ## Conventions
 
 - Black 80-character line length; Flake8 allows up to 120 (the two tools have different limits — this is intentional).

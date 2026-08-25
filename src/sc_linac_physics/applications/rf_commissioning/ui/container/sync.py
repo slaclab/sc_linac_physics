@@ -17,6 +17,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     COLOR_WARNING,
     COLOR_WARNING_BG,
     RADIUS_MD,
+    TEXT_SECONDARY,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,10 +32,11 @@ class _SyncMixin:
                 QLabel {{
                     color: {COLOR_SUCCESS};
                     font-weight: bold;
-                    padding: 5px 10px;
+                    padding: 4px 10px;
                     background-color: {COLOR_SUCCESS_BG};
                     border: 1px solid {COLOR_SUCCESS_BORDER};
                     border-radius: {RADIUS_MD};
+                    font-size: 11px;
                 }}
             """)
         else:
@@ -43,12 +45,24 @@ class _SyncMixin:
                 QLabel {{
                     color: {COLOR_WARNING};
                     font-weight: bold;
-                    padding: 5px 10px;
+                    padding: 4px 10px;
                     background-color: {COLOR_WARNING_BG};
                     border-radius: {RADIUS_MD};
-                    border: 1px solid {COLOR_WARNING};
+                    border: 1px solid rgba(212, 149, 106, 0.3);
+                    font-size: 11px;
                 }}
             """)
+
+    def _reset_sync_status_prompt(self) -> None:
+        """Reset sync indicator to the empty-state 'select a cavity' prompt."""
+        self.sync_status.setText("← Select Linac › CM › Cavity to begin")
+        self.sync_status.setStyleSheet(f"""
+            QLabel {{
+                color: {TEXT_SECONDARY};
+                font-style: italic;
+                padding: 2px 6px;
+            }}
+        """)
 
     def _check_for_external_changes(self) -> None:
         """Enhanced change detection with visible notification."""

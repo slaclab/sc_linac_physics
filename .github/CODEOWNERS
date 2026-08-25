@@ -1,0 +1,58 @@
+# Code owners for sc_linac_physics.
+#
+# GitHub requests review automatically from the owners listed here. The point is
+# coverage, not gatekeeping: every area should have someone besides its author
+# who can competently read changes to it.
+#
+# Two kinds of reviewer are listed:
+#
+#   @s-aderhold  — software design: framework structure, phase sequencing,
+#                  architecture, threading, persistence.
+#
+#   @RDPorter    — machine behavior: as area physicist he needs to know exactly
+#                  what this code commands the hardware to do and how it derives
+#                  the numbers people act on. He is listed on everything that
+#                  writes to a PV or analyzes measurement data, regardless of
+#                  which application it lives in.
+#
+# Engineers still learning an area are deliberately NOT listed here. CODEOWNERS
+# makes review a gate, and a gate someone cannot yet act on either blocks the PR
+# or produces approvals that mean nothing. Add them as additional reviewers on
+# individual PRs instead — see "Learning reviewer" in the PR template.
+
+# Default
+*                                                       @lisazacarias
+
+# ── Hardware command paths ───────────────────────────────────────────────────
+# These modules issue the actual writes to the machine. A wrong value here moves
+# a tuner, drives a piezo, or turns on an SSA.
+/src/sc_linac_physics/utils/sc_linac/                   @lisazacarias @s-aderhold @RDPorter
+/src/sc_linac_physics/utils/epics/                      @lisazacarias @s-aderhold
+
+# ── Applications that command hardware ───────────────────────────────────────
+/src/sc_linac_physics/applications/auto_setup/          @lisazacarias @s-aderhold @RDPorter
+/src/sc_linac_physics/applications/rf_commissioning/    @lisazacarias @s-aderhold @RDPorter
+/src/sc_linac_physics/applications/tuning/              @lisazacarias @RDPorter
+/src/sc_linac_physics/applications/sel_phase_optimizer/ @lisazacarias @RDPorter
+/src/sc_linac_physics/displays/cavity_display/backend/  @lisazacarias @RDPorter
+
+# ── Applications that produce numbers people act on ──────────────────────────
+# Analysis and fitting. A quiet change to a fit or a threshold silently changes
+# the physics conclusion.
+/src/sc_linac_physics/applications/q0/                  @lisazacarias @RDPorter
+/src/sc_linac_physics/applications/quench_processing/   @lisazacarias @RDPorter
+/src/sc_linac_physics/applications/microphonics/        @hmarts9 @lisazacarias @RDPorter
+
+# ── Constants and PV naming ──────────────────────────────────────────────────
+# Topology, PV name construction, and hardware constants. Everything downstream
+# inherits whatever is wrong here.
+/src/sc_linac_physics/utils/sc_linac/linac_utils.py     @lisazacarias @s-aderhold @RDPorter
+
+# ── Tests for hardware-facing code ───────────────────────────────────────────
+/tests/applications/rf_commissioning/                   @lisazacarias @s-aderhold
+/tests/utils/sc_linac/                                  @lisazacarias @s-aderhold
+
+# ── Infrastructure ───────────────────────────────────────────────────────────
+# Release and packaging config — changes here can break deployment silently.
+/.github/workflows/                                     @lisazacarias
+/pyproject.toml                                         @lisazacarias
