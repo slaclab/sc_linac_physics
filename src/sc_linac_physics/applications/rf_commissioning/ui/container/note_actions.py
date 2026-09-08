@@ -48,7 +48,8 @@ class _NoteActionsMixin:
             try:
                 if self.session.append_general_note(operator, note.strip()):
                     self._load_notes()
-                    self.notes_table.scrollToTop()
+                    if hasattr(self, "notes_table"):
+                        self.notes_table.scrollToTop()
             except RecordConflictError as conflict:
                 self._handle_note_conflict(conflict)
 

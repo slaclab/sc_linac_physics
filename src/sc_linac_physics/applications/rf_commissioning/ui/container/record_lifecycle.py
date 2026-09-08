@@ -16,7 +16,6 @@ class _RecordLifecycleMixin:
                     cryomodule, str(cavity_number)
                 )
 
-        self.update_progress_indicator(record)
         self._update_tab_states()
         self._update_cm_status_panel(record)
         self._load_notes()
@@ -38,7 +37,6 @@ class _RecordLifecycleMixin:
             return False
 
         self._sync_cavity_selection_from_record(record)
-        self.update_progress_indicator(record)
 
         for display in self._phase_displays:
             display.on_record_loaded(record, record_id)
@@ -69,7 +67,6 @@ class _RecordLifecycleMixin:
 
     def on_phase_advanced(self, record) -> None:
         """Handle notification that a phase has advanced."""
-        self.update_progress_indicator(record)
         self._update_tab_states()
         self._update_sync_status(True, "Phase completed")
         self._update_cm_status_panel(record)

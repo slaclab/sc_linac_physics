@@ -1,0 +1,62 @@
+site_name: SC Linac Physics
+site_description: Controls, displays, and analysis tools for the SLAC SC Linac
+site_url: https://slaclab.github.io/sc_linac_physics/
+repo_url: https://github.com/slaclab/sc_linac_physics
+repo_name: slaclab/sc_linac_physics
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+# Fail the build on a broken internal link or a nav entry that does not resolve.
+# The docs cross-reference each other heavily with relative .md paths, so a
+# silent 404 is the most likely way this site rots.
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - Infrastructure:
+      - Linac Hardware Model: utils/linac_model.md
+      - Shared Utilities: utils/shared_utilities.md
+  - Applications:
+      - Auto Setup: applications/auto_setup.md
+      - RF Commissioning: applications/rf_commissioning.md
+      - Q0 Measurement: applications/q0.md
+      - Microphonics: applications/microphonics.md
+      - Quench Processing: applications/quench_processing.md
+      - Tuning: applications/tuning.md
+  - Displays:
+      - Cavity Display: displays/cavity_display.md
+      - Fault Heatmap: displays/fault_heatmap.md
+      - SRF Home: displays/srf_home.md

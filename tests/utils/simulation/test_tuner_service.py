@@ -91,6 +91,63 @@ class TestPiezoPVGroup:
         assert piezo_group.prerf_cha_status.value == 2
         assert piezo_group.prerf_chb_status.value == 2
 
+    @staticmethod
+    def _enum_int(prop):
+        value = prop.value
+        if isinstance(value, str):
+            return list(prop.enum_strings).index(value)
+        return int(value)
+
+    @pytest.mark.asyncio
+    async def test_disable_drops_commanded_mode_with_status(self, piezo_group):
+        """Disabling must move MODECTRL to Manual, not only MODESTAT.
+
+        Writing the status alone left MODECTRL reading "Feedback" forever:
+        Piezo.disable_feedback() guards on MODESTAT, so once the status reads
+        Manual it never writes MODECTRL again and the pair stays split for the
+        rest of the session. Real IOCs keep status following control, and any
+        screen showing both PVs would otherwise report a mismatch that could
+        not happen on hardware.
+        """
+        await piezo_group.enable.write(0)
+
+        assert self._enum_int(piezo_group.enable_stat) == 0
+        assert self._enum_int(piezo_group.feedback_mode_stat) == 0
+        assert self._enum_int(piezo_group.feedback_mode) == 0
+
+    @pytest.mark.asyncio
+    async def test_mode_stays_coherent_after_disable_then_enable(
+        self, piezo_group
+    ):
+        """The sequence stage 1 actually performs must not leave a mismatch."""
+        await piezo_group.enable.write(0)
+        await piezo_group.enable.write(1)
+
+        assert self._enum_int(piezo_group.enable_stat) == 1
+        assert self._enum_int(piezo_group.feedback_mode) == self._enum_int(
+            piezo_group.feedback_mode_stat
+        )
+
+    @pytest.mark.asyncio
+    async def test_mode_change_while_enabled_propagates_to_status(
+        self, piezo_group
+    ):
+        """Guard against the fix breaking the normal enabled-write path."""
+        await piezo_group.enable.write(1)
+        await piezo_group.feedback_mode.write(1)
+
+        assert self._enum_int(piezo_group.feedback_mode) == 1
+        assert self._enum_int(piezo_group.feedback_mode_stat) == 1
+
+    @pytest.mark.asyncio
+    async def test_mode_change_while_disabled_is_rejected(self, piezo_group):
+        """A disabled piezo still refuses mode commands from clients."""
+        await piezo_group.enable.write(0)
+        await piezo_group.feedback_mode.write(1)
+
+        assert self._enum_int(piezo_group.feedback_mode) == 0
+        assert self._enum_int(piezo_group.feedback_mode_stat) == 0
+
     # In test_tuner_service.py, fix line 89:
     @pytest.mark.asyncio
     async def test_piezo_voltage_change(
@@ -174,6 +231,110 @@ class TestPiezoPVGroup:
         if hasattr(piezo_group, "enabled"):
             # Enabled could be boolean or integer
             assert isinstance(piezo_group.enabled.value, (int, bool))
+
+
+class _RecordingChannel:
+    """Minimal stand-in for a caproto channel that remembers what was written."""
+
+    def __init__(self, value=0.0):
+        self.value = value
+
+    async def write(self, value, **_kwargs):
+        self.value = value
+
+
+@pytest.fixture
+def detune_cavity_group():
+    """Cavity group whose detune channels actually record writes.
+
+    The shared mock_cavity_group stubs detune.write with an AsyncMock, so the
+    value never moves — no good for measuring a slope. is_hl is set explicitly
+    because a bare Mock attribute is truthy, which would silently select the
+    high-luminosity branch and invert the movement sign.
+    """
+    cavity = Mock()
+    cavity.is_hl = False
+    cavity.detune = _RecordingChannel()
+    cavity.detune_rfs = _RecordingChannel()
+    cavity.detune_chirp = _RecordingChannel()
+    return cavity
+
+
+@pytest.fixture
+def scale_stepper(detune_cavity_group):
+    piezo = PiezoPVGroup("TEST:PZT:", detune_cavity_group)
+    return StepperPVGroup("TEST:STEP:", detune_cavity_group, piezo)
+
+
+class TestScaleDrivesDetuneResponse:
+    """SCALE must be the only source of truth for the simulated slope.
+
+    The detune response used to come from a hardcoded constant while SCALE was
+    seeded to a random value within ±20% of nominal. A probe measuring the real
+    response therefore never matched the SCALE readback, and pushing a measured
+    value to SCALE changed nothing about how the simulation behaved.
+    """
+
+    @staticmethod
+    async def _measure_hz_per_microstep(stepper, cavity_group, microsteps):
+        """Move +microsteps and return the slope the probe step would compute."""
+        for name in ("detune", "detune_rfs", "detune_chirp"):
+            getattr(cavity_group, name).value = 0.0
+        await stepper.step_des.write(microsteps)
+        # One chunk, so move() takes the remainder path and skips its sleep.
+        await stepper.speed.write(microsteps)
+        before = cavity_group.detune_chirp.value
+        await stepper.move(1)
+        after = cavity_group.detune_chirp.value
+        # Mirrors _probe_stepper_direction: SCALE = -delta / probe_microsteps.
+        return -(after - before) / microsteps
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("scale", [0.00546875, 0.0043, 0.0065])
+    async def test_probe_recovers_the_scale_readback(
+        self, scale_stepper, detune_cavity_group, scale
+    ):
+        await scale_stepper.hz_per_microstep.write(scale, verify_value=False)
+
+        measured = await self._measure_hz_per_microstep(
+            scale_stepper, detune_cavity_group, 10_000
+        )
+
+        assert measured == pytest.approx(scale, rel=1e-9)
+
+    @pytest.mark.asyncio
+    async def test_pushing_a_new_scale_changes_the_response(
+        self, scale_stepper, detune_cavity_group
+    ):
+        """Stage 2's 'Push -> Scale' has to actually affect the simulation."""
+        await scale_stepper.hz_per_microstep.write(0.004, verify_value=False)
+        first = await self._measure_hz_per_microstep(
+            scale_stepper, detune_cavity_group, 10_000
+        )
+
+        # SCALE is derived on real IOCs, so it is written via SCALE_CALC.B.
+        await scale_stepper.hz_per_step_calc.write(0.008 * 256)
+        second = await self._measure_hz_per_microstep(
+            scale_stepper, detune_cavity_group, 10_000
+        )
+
+        assert first == pytest.approx(0.004, rel=1e-9)
+        assert second == pytest.approx(0.008, rel=1e-9)
+
+    @pytest.mark.asyncio
+    async def test_zero_scale_falls_back_to_nominal_slope(
+        self, scale_stepper, detune_cavity_group
+    ):
+        """A zero SCALE must not freeze the tuner at no movement."""
+        await scale_stepper.hz_per_microstep.write(0.0, verify_value=False)
+
+        measured = await self._measure_hz_per_microstep(
+            scale_stepper, detune_cavity_group, 10_000
+        )
+
+        assert measured == pytest.approx(
+            1.0 / scale_stepper.steps_per_hertz, rel=1e-9
+        )
 
 
 class TestStepperPVGroup:

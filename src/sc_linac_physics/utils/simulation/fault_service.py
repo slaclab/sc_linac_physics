@@ -148,6 +148,9 @@ class CavFaultPVGroup(PVGroup):
     detune_feedback: PvpropertyDouble = pvproperty(
         name="FBSTATSUM", value=0, dtype=ChannelType.DOUBLE
     )
+    non_zero_pdes: PvpropertyDouble = pvproperty(
+        name="FBPDESSUM", value=0, dtype=ChannelType.DOUBLE
+    )
 
 
 class PPSPVGroup(PVGroup):
