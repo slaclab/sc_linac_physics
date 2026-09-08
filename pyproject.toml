@@ -37,7 +37,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-qt", "pytest-cov", "pytest-asyncio", "pytest-console-scripts", "importlib-metadata"]
+test = [
+    "pytest",
+    "pytest-qt",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-console-scripts",
+    "importlib-metadata",
+    # Parallel test execution in CI. Safe here only with `--dist loadfile`,
+    # because of the import-time Machine singletons — see _test.yml.
+    "pytest-xdist",
+]
 dev = [
     "black",
     "flake8",

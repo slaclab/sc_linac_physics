@@ -12,6 +12,14 @@ on:
         type: boolean
         default: false
         description: Whether test failures should be allowed (for experimental versions)
+      coverage-python:
+        required: false
+        type: string
+        default: ''
+        description: >-
+          The single Python version that should measure coverage and enforce the
+          threshold. Other legs run with --no-cov. Leave empty to skip coverage
+          on every leg (what the experimental matrix wants).
 
 jobs:
   test:
@@ -44,6 +52,7 @@ jobs:
           pip install -e ".[test]"
 
       - name: Run tests
+        id: tests
         env:
           QT_QPA_PLATFORM: offscreen
           QT_OPENGL: software
@@ -52,14 +61,47 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: 1
           PYTEST_ADDOPTS: -vv -ra --durations=10 --tb=long -l
           COVERAGE_FILE: .coverage.${{ matrix.python-version }}
+          MATRIX_PYTHON: ${{ matrix.python-version }}
+          COVERAGE_PYTHON: ${{ inputs.coverage-python }}
         run: |
-          xvfb-run -a pytest \
-            --cov=sc_linac_physics \
-            --cov-branch \
-            --cov-report=xml \
-            --cov-fail-under=80
+          set -euo pipefail
+
+          # `--dist loadfile`, not xdist's default `--dist load`: several modules
+          # construct a Machine at import time (SETUP_MACHINE in
+          # auto_setup/backend/setup_machine.py, QUENCH_MACHINE, TUNE_MACHINE,
+          # MACHINE in utils/sc_linac/linac.py). Those are per-process module
+          # globals, so tests that mutate one have to land in the same worker.
+          # Grouping by file guarantees that; `load` would scatter a module's
+          # tests across workers and make singleton state order-dependent.
+          ARGS=(-n auto --dist loadfile)
+
+          # Coverage runs once, on the production interpreter. Measuring it on
+          # every leg spends ~10% extra wall clock per leg recomputing the same
+          # number and creates three independent --cov-fail-under gates over
+          # identical code. --no-cov is what switches it off, not an empty
+          # --cov-report: addopts in pyproject.toml enables coverage for local
+          # runs, and extra --cov-report values append to that list rather than
+          # replacing it (verified: an empty value still wrote htmlcov/).
+          if [ -n "$COVERAGE_PYTHON" ] && [ "$MATRIX_PYTHON" = "$COVERAGE_PYTHON" ]; then
+            ARGS+=(
+              --cov=sc_linac_physics
+              --cov-branch
+              --cov-report=xml
+              --cov-fail-under=80
+            )
+            # The upload step below gates on this rather than re-deriving the
+            # comparison as a GitHub expression, so "which leg measures
+            # coverage" is decided in exactly one place.
+            echo "measured-coverage=true" >>"$GITHUB_OUTPUT"
+          else
+            ARGS+=(--no-cov)
+            echo "measured-coverage=false" >>"$GITHUB_OUTPUT"
+          fi
+
+          xvfb-run -a pytest "${ARGS[@]}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.tests.outputs.measured-coverage == 'true'
         with:
           name: coverage-${{ matrix.python-version }}
           path: coverage.xml

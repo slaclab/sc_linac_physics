@@ -22,6 +22,7 @@ jobs:
     uses: ./.github/workflows/_test.yml
     with:
       python-versions: ${{ needs.get-versions.outputs.required }}
+      coverage-python: ${{ vars.PRODUCTION_PYTHON || '3.12' }}
 
   test-experimental:
     needs: [get-versions]
