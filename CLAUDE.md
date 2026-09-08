@@ -151,25 +151,99 @@ sequencing, threading, persistence. Ryan reads machine behavior, and as area
 physicist he needs to know exactly what the code commands the hardware to do and
 how it derives the numbers people act on.
 
-That second audience shapes how hardware-facing code should be written:
+#### Say what the code does. Do not explain what the hardware does.
+
+This is the rule that matters most, and it is the one an earlier version of this
+section got backwards by asking for "what physically happens."
+
+Every written review comment Sebastian left over July–August — five, across
+#284 and #288 — corrected an explanation of the hardware. None corrected the
+code.
+#284 stated the LCLS-II-HE loaded-Q window correctly, then explained it as the
+same cavity "held to a looser standard" when it follows from a different default
+Qext. #288 claimed active microphonics compensation the machine does not have
+(it is slow drift feedback, cutoff a few Hz), and described cold landing as
+recorded after the stepper moves rather than before.
+
+Fluent wrong physics is worse than no physics: it reads authoritative, so it
+costs the reviewer a fact-check instead of a read, and it is indistinguishable
+from not having looked at the change at all.
+
+Two categories, treated differently:
+
+**Derivable from this repo — assert it.** Which PV is written, in what units,
+in what order, what value, what the code branches on, where a constant lives.
+Checkable against the source by whoever is reading. This is most of what the
+area physicist actually needs.
+
+**A fact about the physical machine — cite it or flag it.** Why the hardware
+behaves that way, feedback bandwidths, what happens inside the cavity, the
+ordering of physical events the code does not itself control. If a source exists
+in-repo, point at it. If not, write the claim as a question instead of a
+sentence:
+
+```python
+# CHECK: is DF_COLD recorded before the stepper moves, or after?
+```
+
+Reviewers can grep `CHECK:` and clear them in one pass. Three flagged questions
+make a better PR than three confident sentences that turn out to be wrong —
+and flagging them *is* the "pre-digest before sending it for review" that has
+now been asked for two years running.
+
+#### The rest
 
 - **Make PV writes obvious.** Any code path that puts a value to the machine
   should be readable without tracing three layers of indirection. Name the PV,
-  state the units, and say what physically happens.
-- **State hardware assumptions where they're relied on.** The code encodes
-  expectations about tuner behavior, limit switches, piezo state, and cavity
-  frequency response that are obvious to whoever wrote the phase and invisible
-  to everyone else.
-- **Show the physics in analysis code.** In `q0/`, `quench_processing/`,
-  `microphonics/`, and anywhere else a fit or threshold produces a number: cite
-  the relationship being used and where the constants came from. A silent change
-  to a fit is a silent change to a physics conclusion.
+  the units, and the value.
+- **State hardware assumptions as assumptions.** The code encodes expectations
+  about tuner behavior, limit switches, piezo state, and cavity frequency
+  response. Name the expectation and where it is relied on. Do not justify it.
+- **Cite the arithmetic in analysis code.** In `q0/`, `quench_processing/`,
+  `microphonics/`: name the relationship and where the constants came from, with
+  a source. A silent change to a fit is a silent change to a physics conclusion.
+  Cite rather than re-derive.
 - **Flag anything that changes what the machine does**, even when the code
   change looks cosmetic. Reordered writes, changed defaults, adjusted timeouts.
 
 `applications/rf_commissioning/` remains single-maintainer. Non-trivial changes
 there should be readable by someone who did not write them — favor explicit
 naming and docstrings on phase logic over compact code.
+
+### How to write it
+
+This governs PR descriptions, docs, and comments. The audience is a physicist
+and a manager, both reading between other things. Aim at what you would type in
+Slack, not at a technical report.
+
+The failure mode is measurable and it runs backwards: the smallest PRs get the
+longest descriptions, because a small diff leaves room to explain. #292 is 66
+lines of CI config and 580 words. #284 is 132 lines and 702 words, and is one of
+only two PRs to draw written review comments.
+
+**Budgets.** *What this changes*: 60 words. Each recorded decision: 80. If a
+section needs more, the PR is probably too big — check the size comment.
+
+**Register.** Lead with the verdict: "CI PR, no code touched." "Simple PR, just
+colors and buttons." Say what the reader should do. Short sentences — if one
+needs a comma to survive, split it. Hedge honestly ("my best guess is") rather
+than elaborately.
+
+**Cut on sight.** Restating what the diff already shows. Explaining at length
+why a rejected alternative was rejected. Implementation detail nobody will act
+on. Empty template headings — delete the heading rather than writing "None
+tagged."
+
+**Vocabulary: if it names something in the code, use it.** Cavity, detune,
+cryomodule, piezo, SSA, chirp, `NSTEPS_COLD` — identifiers, PV names and
+constants the reader can grep. No gloss needed. Jargon is the opposite: words
+that exist only in prose. Orthogonal, idempotent, invariant, semantics,
+pre-flight — none of them name anything in `src/`.
+
+The test is grep, not taste, and it separates cleanly: each domain term above
+appears in 10–217 files, each prose term in zero. It has to be identifiers
+rather than any text match, or the jargon launders itself — write "source of
+truth" into one docstring and it has "appeared in the code."
 
 ## Conventions
 

@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v9.35.0 (2026-09-08)
+
+### Features
+
+- **cavity-display**: Addressing SCLP-216 to add FBPDESSUM to faults
+  ([#290](https://github.com/slaclab/sc_linac_physics/pull/290),
+  [`415dcbc`](https://github.com/slaclab/sc_linac_physics/commit/415dcbcfc44696c379f3e3f52ffcad16c6249387))
+
+
+## v9.34.1 (2026-09-03)
+
+### Bug Fixes
+
+- Mock data_loader in status panel reset test
+  ([#277](https://github.com/slaclab/sc_linac_physics/pull/277),
+  [`557b7ea`](https://github.com/slaclab/sc_linac_physics/commit/557b7ea121953fa2a38eb0a8de4f1a0c0aca2a36))
+
+- Reset cavity status panel when loading new data
+  ([#277](https://github.com/slaclab/sc_linac_physics/pull/277),
+  [`557b7ea`](https://github.com/slaclab/sc_linac_physics/commit/557b7ea121953fa2a38eb0a8de4f1a0c0aca2a36))
+
+### Continuous Integration
+
+- **docs**: Publish docs/ to GitHub Pages with MkDocs Material
+  ([#289](https://github.com/slaclab/sc_linac_physics/pull/289),
+  [`13141ff`](https://github.com/slaclab/sc_linac_physics/commit/13141ffeb410cb8eb5c96dc08b7ad0efa03813c0))
+
+
 ## v9.34.0 (2026-08-21)
 
 ### Bug Fixes
