@@ -148,8 +148,8 @@ chosen; it never shows what was rejected or why.
 Two reviewers are auto-requested by `.github/CODEOWNERS`, and they read for
 different things. Sebastian reads software design — framework structure, phase
 sequencing, threading, persistence. Ryan reads machine behavior, and as area
-physicist he needs to know exactly what the code commands the hardware to do and
-how it derives the numbers people act on.
+physicist they need to know exactly what the code commands the hardware to do
+and how it derives the numbers people act on.
 
 #### Say what the code does. Do not explain what the hardware does.
 

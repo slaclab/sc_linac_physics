@@ -9,11 +9,11 @@
 #   @s-aderhold  — software design: framework structure, phase sequencing,
 #                  architecture, threading, persistence.
 #
-#   @RDPorter    — machine behavior: as area physicist he needs to know exactly
-#                  what this code commands the hardware to do and how it derives
-#                  the numbers people act on. He is listed on everything that
-#                  writes to a PV or analyzes measurement data, regardless of
-#                  which application it lives in.
+#   @RDPorter    — machine behavior: as area physicist they need to know
+#                  exactly what this code commands the hardware to do and how
+#                  it derives the numbers people act on. They are listed on
+#                  everything that writes to a PV or analyzes measurement data,
+#                  regardless of which application it lives in.
 #
 # Engineers still learning an area are deliberately NOT listed here. CODEOWNERS
 # makes review a gate, and a gate someone cannot yet act on either blocks the PR
