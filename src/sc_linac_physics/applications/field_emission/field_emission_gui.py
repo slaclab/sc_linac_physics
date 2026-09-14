@@ -84,8 +84,8 @@ class SingleInputDialog(QDialog):
         self.line_decarad = QLineEdit(self)
         self.line_elog = QLineEdit(self)
         self.line_notes = QLineEdit(self)
-        self.line_filter_m = QLineEdit(self)
         self.line_filter_r = QLineEdit(self)
+        self.line_filter_m = QLineEdit(self)
         self.line_filter_c = QLineEdit(self)
         button_box = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
@@ -100,8 +100,8 @@ class SingleInputDialog(QDialog):
         layout.addRow("Decarad", self.line_decarad)
         layout.addRow("eLog link", self.line_elog)
         layout.addRow("Notes", self.line_notes)
-        layout.addRow("Multipacting (Y/N)", self.line_filter_m)
         layout.addRow("Recharacterization (Y/N)", self.line_filter_r)
+        layout.addRow("Multipacting (Y/N)", self.line_filter_m)
         layout.addRow("Commissioning (Y/N)", self.line_filter_c)
 
         layout.addWidget(button_box)
@@ -118,8 +118,8 @@ class SingleInputDialog(QDialog):
             self.line_decarad.text(),
             self.line_elog.text(),
             self.line_notes.text(),
-            self.line_filter_m.text(),
             self.line_filter_r.text(),
+            self.line_filter_m.text(),
             self.line_filter_c.text(),
         )
 
