@@ -234,14 +234,13 @@ class FieldEmission(Display):
             cb.setChecked(any_unchecked)
 
     def _refresh_plot_button_state(self):
-        cav_checked = any(cb.isChecked() for cb in self.cavity_cb)
-        rad_checked = any(cb.isChecked() for cb in self.rad_chan_cb)
-        cm_idx = self.cryo_dropdown.currentIndex()
-        has_measurement = bool(self._selected_rows)
-        if cav_checked and rad_checked and cm_idx > -1 and has_measurement:
-            self.plot_btn.setEnabled(True)
-        else:
-            self.plot_btn.setEnabled(False)
+        can_plot = (
+            any(cb.isChecked() for cb in self.cavity_cb)
+            and (cb.isChecked() for cb in self.rad_chan_cb)
+            and self.cryo_dropdown.currentIndex() > -1
+            and bool(self._selected_rows)
+        )
+        self.plot_btn.setEnabled(can_plot)
 
     def build_linac_configuration(self):
         # Linac configuration groupbox
