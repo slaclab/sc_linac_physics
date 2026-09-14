@@ -49,7 +49,7 @@ def fit_equation(amp, c1, c2):
 
 def add_poly_fit(amp, rad, axis, label, color):
     """overlay amp vs rad plot with polynomial fit"""
-    if rad.size == 0:
+    if rad.size < 2:  # skip fitting when less than two samples are available
         return None
     try:
         param, param_covar = curve_fit(
