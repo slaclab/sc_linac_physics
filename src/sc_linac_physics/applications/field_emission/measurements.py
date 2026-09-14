@@ -18,6 +18,8 @@ def match_measurement_dates(cryomodule):
     measurements = []
     with h5py.File(H5_PATH, "r") as h5f:
         h5_cryo = h5f.get(f"CM{cryomodule}")
+        if h5_cryo is None:
+            return []
         for date in h5_cryo:
             h5_date = datetime.strptime(date, H5_DATE_FORMAT)
             display_str = f"CM{cryomodule}    {h5_date}"
