@@ -236,7 +236,7 @@ class FieldEmission(Display):
     def _refresh_plot_button_state(self):
         can_plot = (
             any(cb.isChecked() for cb in self.cavity_cb)
-            and (cb.isChecked() for cb in self.rad_chan_cb)
+            and any(cb.isChecked() for cb in self.rad_chan_cb)
             and self.cryo_dropdown.currentIndex() > -1
             and bool(self._selected_rows)
         )
