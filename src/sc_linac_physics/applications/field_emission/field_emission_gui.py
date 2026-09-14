@@ -3,10 +3,14 @@ import math
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QHBoxLayout,
     QGridLayout,
     QGroupBox,
     QLabel,
+    QLineEdit,
     QListWidget,
     QPushButton,
     QRadioButton,
@@ -28,12 +32,116 @@ from sc_linac_physics.applications.field_emission.measurements import (
     fetch_measurement_metadata,
     find_dataframes,
 )
-from sc_linac_physics.applications.field_emission.plot_me import plot_amp_vs_rad
 from sc_linac_physics.applications.field_emission.constants import (
     VALID_CMS_LIST,
     CAV_RANGE,
     RAD_CHAN_RANGE,
 )
+from sc_linac_physics.applications.field_emission.plot_me import plot_amp_vs_rad
+from sc_linac_physics.applications.field_emission.gui_updater import (
+    single_update,
+    multi_update,
+)
+
+
+class UpdateButtons(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setFixedSize(195, 125)
+        layout = QVBoxLayout(self)
+
+        self.single_btn = QPushButton("Single CM")
+        self.single_btn.clicked.connect(self.update_in_single_mode)
+        layout.addWidget(self.single_btn)
+
+        self.multi_btn = QPushButton("Multi CMs from CSV")
+        self.multi_btn.clicked.connect(self.update_in_multi_mode)
+        layout.addWidget(self.multi_btn)
+
+    def update_in_single_mode(self):
+        dialog = SingleInputDialog()
+        if dialog.exec():
+            single_update(dialog.get_inputs())
+            self.accept()
+
+    def update_in_multi_mode(self):
+        dialog = MultiInputDialog()
+        if dialog.exec():
+            multi_update(dialog.get_input())
+            self.accept()
+
+
+class SingleInputDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.line_cryo = QLineEdit(self)
+        self.line_date_s = QLineEdit(self)
+        self.line_time_s = QLineEdit(self)
+        self.line_date_e = QLineEdit(self)
+        self.line_time_e = QLineEdit(self)
+        self.line_decarad = QLineEdit(self)
+        self.line_elog = QLineEdit(self)
+        self.line_notes = QLineEdit(self)
+        self.line_filter_m = QLineEdit(self)
+        self.line_filter_r = QLineEdit(self)
+        self.line_filter_c = QLineEdit(self)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
+        )
+
+        layout = QFormLayout(self)
+        layout.addRow("Cryomodule #", self.line_cryo)
+        layout.addRow("Start Date (mm/dd/yy)", self.line_date_s)
+        layout.addRow("Start Time (24 hr hh:mm)", self.line_time_s)
+        layout.addRow("End Date (optional)", self.line_date_e)
+        layout.addRow("End Time (24 hr hh:mm)", self.line_time_e)
+        layout.addRow("Decarad", self.line_decarad)
+        layout.addRow("eLog link", self.line_elog)
+        layout.addRow("Notes", self.line_notes)
+        layout.addRow("Multipacting (Y/N)", self.line_filter_m)
+        layout.addRow("Recharacterization (Y/N)", self.line_filter_r)
+        layout.addRow("Commissioning (Y/N)", self.line_filter_c)
+
+        layout.addWidget(button_box)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+    def get_inputs(self):
+        return (
+            self.line_cryo.text(),
+            self.line_date_s.text(),
+            self.line_time_s.text(),
+            self.line_date_e.text(),
+            self.line_time_e.text(),
+            self.line_decarad.text(),
+            self.line_elog.text(),
+            self.line_notes.text(),
+            self.line_filter_m.text(),
+            self.line_filter_r.text(),
+            self.line_filter_c.text(),
+        )
+
+
+class MultiInputDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.line_csv = QLineEdit(self)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
+        )
+
+        layout = QFormLayout(self)
+        layout.addRow("CSV path", self.line_csv)
+        layout.addWidget(button_box)
+
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+    def get_input(self):
+        return self.line_csv.text()
 
 
 class FieldEmission(Display):
@@ -62,6 +170,7 @@ class FieldEmission(Display):
         self.radio_fit_btn = None
         self.plot_btn = None
         self.fig = None
+        self.update_btn = None
         self.toolbar = None
         self.canvas = None
 
@@ -91,7 +200,7 @@ class FieldEmission(Display):
             QSpacerItem(0, 15, QSizePolicy.Minimum, QSizePolicy.Minimum)
         )
         canvas_build = self.build_plot_canvas()
-        right_side_layout.addWidget(self.build_toolbar())
+        right_side_layout.addLayout(self.build_toolbar())
         right_side_layout.addWidget(canvas_build)
 
         outer.addWidget(left_side, stretch=3)  # 30% width
@@ -113,6 +222,7 @@ class FieldEmission(Display):
             checkbox.toggled.connect(self.on_cb_clicked)
         self.sel_all_rad_btn.clicked.connect(self.on_sel_all_rad_btn_clicked)
         self.plot_btn.clicked.connect(self.on_plot_btn_clicked)
+        self.update_btn.clicked.connect(self.open_update_dialogue)
 
     def _checkbox_helper(self, labels, cols):
         grid_layout = QGridLayout()
@@ -353,10 +463,21 @@ class FieldEmission(Display):
         radio_btn_layout.addWidget(self.radio_fit_btn)
         return radio_btn_layout
 
+    def build_update_button(self):
+        self.update_btn = QPushButton("Add New Data")
+        return self.update_btn
+
     def build_toolbar(self):
         # Embed provided matplotlib toolbar into Qt layout
+        toolbar_layout = QHBoxLayout()
         self.toolbar = NavigationToolbar(self.canvas, self)
-        return self.toolbar
+        toolbar_layout.addWidget(self.toolbar)
+        toolbar_layout.addWidget(self.build_update_button())
+        return toolbar_layout
+
+    def open_update_dialogue(self):
+        dialog = UpdateButtons()
+        dialog.exec()
 
     def build_plot_canvas(self):
         # Embed canvas into Qt layout
@@ -447,6 +568,8 @@ class FieldEmission(Display):
             for col_idx, result in enumerate(measurements):
                 position = row_idx * n_cols + col_idx + 1
                 ax = self.fig.add_subplot(n_rows, n_cols, position)
+
+                # Get the DataFrame for this cavity in this measurement
                 df = result["dataframes"].get(cav_num)
                 if df is not None and not df.empty:
                     plot_amp_vs_rad(df, ax, rad_channels, fit_flag)
