@@ -45,7 +45,7 @@ def receive_metadata_input(input_row):
     """build metadata lookup table (row) from singular row input"""
     metadata_lookup = {}  # key: (cm, month, day, year, hour, minute) -> row
 
-    cm_str = input_row[0].strip()
+    cm_str = input_row[0].strip().upper()
     try:
         key = _format_metadata_lookup_key(cm_str, input_row[1], input_row[2])
         metadata_lookup[key] = input_row
