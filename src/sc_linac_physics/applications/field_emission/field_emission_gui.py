@@ -73,55 +73,37 @@ class UpdateButtons(QDialog):
 
 
 class SingleInputDialog(QDialog):
+    FIELDS = [
+        ("cryo", "Cryomodule #"),
+        ("date_s", "Start Date (mm/dd/yy)"),
+        ("time_s", "Start Time (24 hr hh:mm)"),
+        ("date_e", "End Date (optional)"),
+        ("time_e", "End Time (24 hr hh:mm)"),
+        ("decarad", "Decarad"),
+        ("elog", "eLog link"),
+        ("notes", "Notes"),
+        ("filter_r", "Recharacterization (Y/N)"),
+        ("filter_m", "Multipacting (Y/N)"),
+        ("filter_c", "Commissioning (Y/N)"),
+    ]
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.line_cryo = QLineEdit(self)
-        self.line_date_s = QLineEdit(self)
-        self.line_time_s = QLineEdit(self)
-        self.line_date_e = QLineEdit(self)
-        self.line_time_e = QLineEdit(self)
-        self.line_decarad = QLineEdit(self)
-        self.line_elog = QLineEdit(self)
-        self.line_notes = QLineEdit(self)
-        self.line_filter_r = QLineEdit(self)
-        self.line_filter_m = QLineEdit(self)
-        self.line_filter_c = QLineEdit(self)
+        self.lines = {}
+        layout = QFormLayout(self)
+        for label, field in self.FIELDS:
+            self.lines[label] = QLineEdit(self)
+            layout.addRow(field, self.lines[label])
         button_box = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
         )
-
-        layout = QFormLayout(self)
-        layout.addRow("Cryomodule #", self.line_cryo)
-        layout.addRow("Start Date (mm/dd/yy)", self.line_date_s)
-        layout.addRow("Start Time (24 hr hh:mm)", self.line_time_s)
-        layout.addRow("End Date (optional)", self.line_date_e)
-        layout.addRow("End Time (24 hr hh:mm)", self.line_time_e)
-        layout.addRow("Decarad", self.line_decarad)
-        layout.addRow("eLog link", self.line_elog)
-        layout.addRow("Notes", self.line_notes)
-        layout.addRow("Recharacterization (Y/N)", self.line_filter_r)
-        layout.addRow("Multipacting (Y/N)", self.line_filter_m)
-        layout.addRow("Commissioning (Y/N)", self.line_filter_c)
-
         layout.addWidget(button_box)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
 
     def get_inputs(self):
-        return (
-            self.line_cryo.text(),
-            self.line_date_s.text(),
-            self.line_time_s.text(),
-            self.line_date_e.text(),
-            self.line_time_e.text(),
-            self.line_decarad.text(),
-            self.line_elog.text(),
-            self.line_notes.text(),
-            self.line_filter_r.text(),
-            self.line_filter_m.text(),
-            self.line_filter_c.text(),
-        )
+        return tuple(self.lines[label].text() for label, _ in self.FIELDS)
 
 
 class MultiInputDialog(QDialog):
