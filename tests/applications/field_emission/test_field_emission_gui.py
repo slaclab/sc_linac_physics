@@ -258,19 +258,19 @@ class TestPlotButtonEnableLogic:
         )  # triggers on_cryomodule_updated
 
     def test_disabled_when_nothing_selected(self, display):
-        display.on_cb_clicked()
+        display._refresh_plot_button_state()
         assert display.plot_btn.isEnabled() is False
 
     def test_disabled_when_only_cavity_checked(self, display):
         self._prime_selection(display)
         display.cavity_cb[0].setChecked(True)
-        display.on_cb_clicked()
+        display._refresh_plot_button_state()
         assert display.plot_btn.isEnabled() is False
 
     def test_disabled_when_only_channel_checked(self, display):
         self._prime_selection(display)
         display.rad_chan_cb[0].setChecked(True)
-        display.on_cb_clicked()
+        display._refresh_plot_button_state()
         assert display.plot_btn.isEnabled() is False
 
     def test_disabled_when_no_cryomodule(self, display):
@@ -278,14 +278,14 @@ class TestPlotButtonEnableLogic:
         display.cryo_dropdown.setCurrentIndex(-1)
         display.cavity_cb[0].setChecked(True)
         display.rad_chan_cb[0].setChecked(True)
-        display.on_cb_clicked()
+        display._refresh_plot_button_state()
         assert display.plot_btn.isEnabled() is False
 
     def test_enabled_when_all_conditions_met(self, display):
         self._prime_selection(display)
         display.cavity_cb[0].setChecked(True)
         display.rad_chan_cb[0].setChecked(True)
-        display.on_cb_clicked()
+        display._refresh_plot_button_state()
         assert display.plot_btn.isEnabled() is True
 
 

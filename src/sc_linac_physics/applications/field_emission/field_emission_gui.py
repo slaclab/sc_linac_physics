@@ -214,12 +214,17 @@ class FieldEmission(Display):
         )
         for checkbox in self.cavity_cb:
             checkbox.toggled.connect(self.update_sel_all_cav_btn_label)
-            checkbox.toggled.connect(self.on_cb_clicked)
+            checkbox.toggled.connect(self._refresh_plot_button_state)
         self.sel_all_cav_btn.clicked.connect(self.on_sel_all_cav_btn_clicked)
-        self.meas_list_widget.itemClicked.connect(self.on_measurement_updated)
+        self.meas_list_widget.itemSelectionChanged.connect(
+            self.on_measurement_updated
+        )
+        self.meas_list_widget.itemSelectionChanged.connect(
+            self._refresh_plot_button_state
+        )
         for checkbox in self.rad_chan_cb:
             checkbox.toggled.connect(self.update_sel_all_rad_btn_label)
-            checkbox.toggled.connect(self.on_cb_clicked)
+            checkbox.toggled.connect(self._refresh_plot_button_state)
         self.sel_all_rad_btn.clicked.connect(self.on_sel_all_rad_btn_clicked)
         self.plot_btn.clicked.connect(self.on_plot_btn_clicked)
         self.update_btn.clicked.connect(self.open_update_dialogue)
@@ -246,11 +251,12 @@ class FieldEmission(Display):
         for cb in cb_list:
             cb.setChecked(any_unchecked)
 
-    def on_cb_clicked(self):
+    def _refresh_plot_button_state(self):
         cav_checked = any(cb.isChecked() for cb in self.cavity_cb)
         rad_checked = any(cb.isChecked() for cb in self.rad_chan_cb)
         cm_idx = self.cryo_dropdown.currentIndex()
         has_measurement = bool(self._selected_rows)
+        if cav_checked and rad_checked and cm_idx > -1 and has_measurement:
             self.plot_btn.setEnabled(True)
         else:
             self.plot_btn.setEnabled(False)
@@ -364,7 +370,7 @@ class FieldEmission(Display):
         self.meas_list_widget.blockSignals(False)
 
         self.on_measurement_updated()
-        self.on_cb_clicked()
+        self._refresh_plot_button_state()
 
     def on_measurement_updated(self):
         self._selected_rows = [
@@ -491,6 +497,8 @@ class FieldEmission(Display):
         return self.plot_btn
 
     def on_plot_btn_clicked(self):
+        if not self._selected_rows:
+            return
         cav = [cb.isChecked() for cb in self.cavity_cb]
         meas = [self._current_measurements[row] for row in self._selected_rows]
         readout = self.readout_dropdown.currentText()
