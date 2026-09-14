@@ -141,9 +141,4 @@ def read_from_csv(filepath):
                 )
             timestamp = start_date.strftime(CSV_DATE_FORMAT)
             decarad = row[5] if row[5] is not None else ""
-            print(cm, start_date, end_date, decarad, timestamp)
-            # yield cm, start_date, end_date, decarad, timestamp
-
-
-if __name__ == "__main__":
-    read_from_csv("All FE measurements by CM.csv")
+            yield cm, start_date, end_date, decarad, timestamp
