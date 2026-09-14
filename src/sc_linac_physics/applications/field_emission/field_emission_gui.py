@@ -250,8 +250,7 @@ class FieldEmission(Display):
         cav_checked = any(cb.isChecked() for cb in self.cavity_cb)
         rad_checked = any(cb.isChecked() for cb in self.rad_chan_cb)
         cm_idx = self.cryo_dropdown.currentIndex()
-        has_measurement = self.meas_list_widget.count() > 0
-        if cav_checked and rad_checked and cm_idx > -1 and has_measurement:
+        has_measurement = bool(self._selected_rows)
             self.plot_btn.setEnabled(True)
         else:
             self.plot_btn.setEnabled(False)
