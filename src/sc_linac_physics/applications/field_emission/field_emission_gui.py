@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QRadioButton,
     QSizePolicy,
@@ -62,7 +63,10 @@ class UpdateButtons(QDialog):
     def update_in_single_mode(self):
         dialog = SingleInputDialog()
         if dialog.exec():
-            single_update(dialog.get_inputs())
+            try:
+                single_update(dialog.get_inputs())
+            except ValueError as e:
+                QMessageBox.warning(self, "Invalid input", str(e))
             self.accept()
 
     def update_in_multi_mode(self):
