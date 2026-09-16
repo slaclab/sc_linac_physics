@@ -357,6 +357,12 @@ class CavityCharacterization:
         widget_name="cavity_scale_factor",
         format_spec=".6f",
     )
+    # Whether the measured loaded Q fell inside the window for this cavity's
+    # class, which differs between standard, harmonic-linearizer and HE
+    # cavities. Recorded rather than recomputed because the limits live on the
+    # Cavity object and the record has no access to one. None means the check
+    # was never made — records written before this field existed.
+    loaded_q_in_tolerance: bool | None = None
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -367,7 +373,15 @@ class CavityCharacterization:
 
     @property
     def passed(self) -> bool:
-        return self.is_complete
+        """Complete, and not known to be out of tolerance.
+
+        A characterization that measured an out-of-range loaded Q is complete but
+        has not passed — recording it as passed would make flagging the value
+        pointless. Written as "is not False" so records predating
+        loaded_q_in_tolerance (None) keep their previous result rather than
+        retroactively failing.
+        """
+        return self.is_complete and self.loaded_q_in_tolerance is not False
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
