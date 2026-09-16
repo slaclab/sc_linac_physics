@@ -7,10 +7,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PyQt5.QtWidgets import QLabel, QProgressBar
 
+from sc_linac_physics.applications.rf_commissioning import ui as ui_pkg
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
     FrequencyTuningData,
+)
+from sc_linac_physics.applications.rf_commissioning.ui import (
+    displays as displays_pkg,
 )
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
@@ -479,3 +483,22 @@ class TestDisplayRegistry:
         ]
         for phase in standard_phases:
             assert phase in PHASE_DISPLAY_MAP
+
+    @pytest.mark.parametrize("phase", sorted(PHASE_DISPLAY_MAP, key=str))
+    def test_package_export_matches_registry(self, phase):
+        """The package export and the registry must be the same class.
+
+        A phase display starts as a placeholder in ``displays.standard`` and
+        later gets a real module of its own. If the registry is repointed at
+        the real class but ``displays/__init__.py`` still re-exports the
+        placeholder, ``from ... .ui.displays import XDisplay`` silently hands
+        callers the dead placeholder while the app runs the real one.
+        """
+        registry_cls = PHASE_DISPLAY_MAP[phase]
+        exported = getattr(displays_pkg, registry_cls.__name__, None)
+        assert exported is not None, (
+            f"{registry_cls.__name__} is in PHASE_DISPLAY_MAP but is not "
+            f"exported from {displays_pkg.__name__}"
+        )
+        assert exported is registry_cls
+        assert getattr(ui_pkg, registry_cls.__name__, exported) is registry_cls

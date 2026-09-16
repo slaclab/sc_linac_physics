@@ -2,7 +2,6 @@
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CavityCharacterization,
-    FrequencyTuningData,
     HighPowerRampData,
     MPProcessingData,
     OneHourRunData,
@@ -14,14 +13,8 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
 
 from .base_placeholder import BasePlaceholderDisplay
 
-
-class FrequencyTuningDisplay(BasePlaceholderDisplay):
-    """Display for Frequency Tuning phase (combines cold landing and pi-mode)."""
-
-    UI_CLASS = GenericPhaseUI
-    PHASE_NAME = "Frequency Tuning"
-    DATA_ATTR = "frequency_tuning"
-    DATA_MODEL = FrequencyTuningData
+# FrequencyTuningDisplay used to live here as a GenericPhaseUI placeholder.
+# The real one is in frequency_tuning.py (PR #270); the placeholder is gone.
 
 
 class CavityCharDisplay(BasePlaceholderDisplay):
