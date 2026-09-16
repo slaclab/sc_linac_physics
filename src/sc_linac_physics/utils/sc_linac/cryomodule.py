@@ -2,6 +2,7 @@ from typing import Type, Dict, List, TYPE_CHECKING, Optional
 
 from sc_linac_physics.utils.epics import PV
 from sc_linac_physics.utils.sc_linac.linac_utils import (
+    L4B,
     SCLinacObject,
     L1BHL,
     CRYO_NAME_MAP,
@@ -132,6 +133,11 @@ class Cryomodule(SCLinacObject):
     @property
     def is_harmonic_linearizer(self):
         return self.name in L1BHL
+
+    @property
+    def is_high_energy(self):
+        """True for the LCLS-II-HE cryomodules, i.e. everything in L4B."""
+        return self.name in L4B
 
     @property
     def pv_prefix(self):
