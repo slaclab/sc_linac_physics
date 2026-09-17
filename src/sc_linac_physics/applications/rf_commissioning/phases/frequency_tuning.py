@@ -734,7 +734,7 @@ class FrequencyTuningPhase(PhaseBase):
                 message=(
                     f"Probe move of {probe} steps produced only {abs(delta):.1f} Hz change "
                     f"(minimum {self.limits.min_probe_delta_hz:.1f} Hz required). "
-                    "Check that the stepper is mechanically connected and the cavity is at 2 K."
+                    "Check that the stepper is mechanically connected to the tuner."
                 ),
             )
 
