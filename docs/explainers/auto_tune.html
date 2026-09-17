@@ -238,9 +238,9 @@
         <code>hz_per_microstep</code> returns <code>abs()</code> of the PV
         <span class="cite">stepper.py:96</span>. RF commissioning measures a
         <em>signed</em> Hz/microstep
-        <span class="cite">frequency_tuning.py:743</span> and writes it to
+        <span class="cite">phases/frequency_tuning.py:743</span> and writes it to
         <code>SCALE_CALC.B</code>
-        <span class="cite">_apply_hz_per_step, frequency_tuning.py:624</span>,
+        <span class="cite">_apply_hz_per_step, phases/frequency_tuning.py:624</span>,
         but the loop only ever sees the magnitude. Direction of travel comes
         from the sign of the detune, plus the harmonic-linearizer inversion
         applied inside <code>issue_move_command()</code>
@@ -575,7 +575,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
             <td>The signed <em>step count</em> for the return trip, resonance
             back to cold landing — a distance, not a position
             <span class="cite">stepper.py:55,
-            frequency_tuning.py:967-971</span></td></tr>
+            phases/frequency_tuning.py:967-971</span></td></tr>
       </tbody>
     </table>
   </section>
@@ -631,7 +631,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
         <strong>Applies an explicit sign convention.</strong>
         <code>SCALE = -&Delta;(CHIRP:DF) / &Delta;(microstep)</code>: a positive
         number of microsteps <em>decreases</em> <code>CHIRP:DF</code>
-        <span class="cite">frequency_tuning.py:736</span>.
+        <span class="cite">phases/frequency_tuning.py:736</span>.
       </li>
       <li>
         <strong>Waits for the operator before writing.</strong> And it writes
@@ -639,7 +639,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
         is a read-only calc output the IOC recomputes from it
         (<code>SCALE = SCALE_CALC.B / 256</code>), so writing <code>SCALE</code>
         directly is silently reverted
-        <span class="cite">stepper.py:105-116, frequency_tuning.py:627-629</span>.
+        <span class="cite">stepper.py:105-116, phases/frequency_tuning.py:627-629</span>.
       </li>
       <li>
         <strong>Refuses to tune until <code>DF_COLD</code> is pushed</strong>
