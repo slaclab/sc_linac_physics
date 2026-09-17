@@ -150,6 +150,22 @@ def _describe(c):
     return f"{c['origin']} cites {c['path']}:{span}"
 
 
+def unambiguous(citations, sources):
+    """Pair each citation that resolves to exactly one file with that file.
+
+    The bounds and symbol checks run only against these. A citation matching
+    several files belongs to the ambiguity check, and running the other checks
+    on it reports one root cause once per candidate, naming files the writer
+    never meant.
+    """
+    pairs = []
+    for c in citations:
+        matches = resolve(c["path"], sources)
+        if len(matches) == 1:
+            pairs.append((c, matches[0]))
+    return pairs
+
+
 def test_cited_files_exist():
     """A citation naming a file that is not in the tree is stale on its face."""
     citations, sources = collect()
@@ -160,18 +176,20 @@ def test_cited_files_exist():
 
 
 def test_cited_lines_are_in_bounds():
-    """The cited line must exist in the file it names."""
+    """The cited line must exist in the file it names.
+
+    Ambiguous citations are skipped so one missing path prefix does not also
+    surface here as an out-of-bounds error against a file nobody meant.
+    """
     citations, sources = collect()
     bad = []
-    for c in citations:
-        for path in resolve(c["path"], sources):
-            length = len(path.read_text(errors="replace").split("\n"))
-            hi = c["end"] or c["start"]
-            if hi > length:
-                bad.append(
-                    f"  {_describe(c)} but "
-                    f"{_label(path)} has {length} lines"
-                )
+    for c, path in unambiguous(citations, sources):
+        length = len(path.read_text(errors="replace").split("\n"))
+        hi = c["end"] or c["start"]
+        if hi > length:
+            bad.append(
+                f"  {_describe(c)} but {_label(path)} has {length} lines"
+            )
     assert not bad, "citations past the end of the cited file:\n" + "\n".join(
         bad
     )
@@ -180,21 +198,17 @@ def test_cited_lines_are_in_bounds():
 def test_ambiguous_citations_are_path_qualified():
     """A bare basename matching two source files does not identify one.
 
-    Ambiguity is only a problem when the line is valid in more than one
-    candidate — `frequency_tuning.py:743` names the only copy long enough to
-    have a line 743, so it is unambiguous in practice.
+    Enough path is required to pick one even when a single candidate is long
+    enough to hold the cited line. Resolving `frequency_tuning.py:743` by
+    noticing the other copy stops at 448 lines is not what a reader does, and
+    it breaks silently as soon as the short copy grows past the cited line.
     """
     citations, sources = collect()
     ambiguous = []
     for c in citations:
-        plausible = [
-            p
-            for p in resolve(c["path"], sources)
-            if (c["end"] or c["start"])
-            <= len(p.read_text(errors="replace").split("\n"))
-        ]
-        if len(plausible) > 1:
-            options = ", ".join(_label(p) for p in plausible)
+        matches = resolve(c["path"], sources)
+        if len(matches) > 1:
+            options = ", ".join(_label(p) for p in matches)
             ambiguous.append(f"  {_describe(c)} — could be any of: {options}")
     assert not ambiguous, (
         "citations that do not identify one file; add enough path to "
@@ -210,18 +224,17 @@ def test_named_symbols_appear_near_their_citation():
     """
     citations, sources = collect()
     drifted = []
-    for c in citations:
+    for c, path in unambiguous(citations, sources):
         if not c["symbol"]:
             continue
-        for path in resolve(c["path"], sources):
-            length = len(path.read_text(errors="replace").split("\n"))
-            if (c["end"] or c["start"]) > length:
-                continue  # reported by the bounds test
-            if not symbol_near(path, c["start"], c["end"], c["symbol"]):
-                drifted.append(
-                    f"  {_describe(c)} — {c['symbol']!r} is not within "
-                    f"{SYMBOL_WINDOW} lines of there"
-                )
+        length = len(path.read_text(errors="replace").split("\n"))
+        if (c["end"] or c["start"]) > length:
+            continue  # reported by the bounds test
+        if not symbol_near(path, c["start"], c["end"], c["symbol"]):
+            drifted.append(
+                f"  {_describe(c)} — {c['symbol']!r} is not within "
+                f"{SYMBOL_WINDOW} lines of there"
+            )
     assert (
         not drifted
     ), "cited symbols not found near the line cited:\n" + "\n".join(drifted)
@@ -306,18 +319,31 @@ def test_out_of_bounds_line_is_detectable(tmp_path, tree):
     assert citations[0]["start"] > length
 
 
-def test_ambiguity_needs_a_line_valid_in_both(tmp_path, tree):
-    """Line 10 exists in both copies; line 150 only in the long one."""
+@pytest.mark.parametrize("text", ["thing.py:10", "thing.py:150"])
+def test_bare_basename_is_ambiguous_whatever_the_line(tmp_path, tree, text):
+    """Both copies are named `thing.py`, so a path prefix is required.
 
-    def plausible(text):
-        citations, sources = collect(_cite(tmp_path, text), tree)
-        c = citations[0]
-        return [
-            p
-            for p in resolve(c["path"], sources)
-            if (c["end"] or c["start"]) <= len(p.read_text().split("\n"))
-        ]
+    Line 10 exists in both. Line 150 exists only in the 200-line copy, which
+    makes it resolvable by elimination rather than unambiguous — the check
+    asks for the prefix either way.
+    """
+    citations, sources = collect(_cite(tmp_path, text), tree)
+    assert len(resolve(citations[0]["path"], sources)) == 2
+    assert unambiguous(citations, sources) == []
 
-    assert len(plausible("thing.py:10")) == 2
-    assert len(plausible("thing.py:150")) == 1
-    assert len(plausible("phases/thing.py:10")) == 1
+
+def test_path_qualified_citation_resolves_to_one_file(tmp_path, tree):
+    citations, sources = collect(_cite(tmp_path, "phases/thing.py:150"), tree)
+    pairs = unambiguous(citations, sources)
+    assert len(pairs) == 1
+    assert pairs[0][1].parts[-2:] == ("phases", "thing.py")
+
+
+def test_ambiguous_citation_is_not_also_reported_out_of_bounds(tmp_path, tree):
+    """One missing prefix is one failure, not two.
+
+    `thing.py:150` is past the end of the 20-line copy, but that is a
+    consequence of the ambiguity, not a separate defect.
+    """
+    citations, sources = collect(_cite(tmp_path, "thing.py:150"), tree)
+    assert unambiguous(citations, sources) == []
