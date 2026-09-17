@@ -16,25 +16,11 @@ from sc_linac_physics.applications.field_emission.constants import (
     STANDARD_DATE_FORMAT,
     CSV_DATE_FORMAT,
 )
-
-
-def single_update(input_row):
-    valid = validate_emission_data(input_row)
-    generate_amp_vs_rad_csvs(
-        valid["cryomodule"], valid["start"], valid["end"], valid["decarad"]
-    )
-    lookup = receive_metadata_input(input_row)
-    convert_to_h5(lookup)
-
-
-def multi_update(input_csv):
-    for cryo, date_s, date_e, rad, stamp in read_from_csv(input_csv):
-        generate_amp_vs_rad_csvs(cryo, date_s, date_e, rad)
-    lookup = parse_csv(input_csv)
-    convert_to_h5(lookup)
+from PyQt5.QtCore import QObject, pyqtSignal
 
 
 def validate_emission_data(input_row):
+    """validation of dialog entries for single cryomodule emission data"""
     cm = _validate_cryomodule(input_row[0])
     d_start, d_end = _validate_dates(
         input_row[1], input_row[2], input_row[3], input_row[4]
@@ -141,4 +127,45 @@ def read_from_csv(filepath):
                 )
             timestamp = start_date.strftime(CSV_DATE_FORMAT)
             decarad = row[5] if row[5] is not None else ""
+            # print(cm, start_date, end_date, decarad, timestamp)
             yield cm, start_date, end_date, decarad, timestamp
+
+
+class UpdateWorker(QObject):
+    error = pyqtSignal(str)
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(str)
+
+    def __init__(self, mode, *args):
+        super().__init__()
+        self.mode = mode
+        self.args = args
+
+    def run(self):
+        """ "modes (single vs multiple by csv) of new dat entry"""
+        try:
+            if self.mode == "single":
+                self.single_update(*self.args)
+            elif self.mode == "multi":
+                self.multi_update(*self.args)
+        except Exception as e:
+            self.error.emit(str(e))
+            return
+        self.finished.emit("File successfully updated!")
+
+    def single_update(self, valid, input_row):
+        self.progress.emit("Creating CSVs...")
+        generate_amp_vs_rad_csvs(
+            valid["cryomodule"], valid["start"], valid["end"], valid["decarad"]
+        )
+        self.progress.emit("Updating hdf5...")
+        lookup = receive_metadata_input(input_row)
+        convert_to_h5(lookup)
+
+    def multi_update(self, input_csv):
+        self.progress.emit("Creating CSVs...")
+        for cryo, date_s, date_e, rad, stamp in read_from_csv(input_csv):
+            generate_amp_vs_rad_csvs(cryo, date_s, date_e, rad)
+        self.progress.emit("Updating hdf5...")
+        lookup = parse_csv(input_csv)
+        convert_to_h5(lookup)
