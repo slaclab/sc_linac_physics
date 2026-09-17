@@ -5,11 +5,17 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QHBoxLayout,
     QGridLayout,
     QGroupBox,
     QLabel,
+    QLineEdit,
     QListWidget,
+    QMessageBox,
+    QProgressDialog,
     QPushButton,
     QRadioButton,
     QSizePolicy,
@@ -18,6 +24,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QWidget,
 )
+from PyQt5.QtCore import Qt, QThread
 from pydm import Display, PyDMApplication
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -35,6 +42,138 @@ from sc_linac_physics.applications.field_emission.constants import (
     RAD_CHAN_RANGE,
 )
 from sc_linac_physics.applications.field_emission.plot_me import plot_amp_vs_rad
+from sc_linac_physics.applications.field_emission.gui_updater import (
+    UpdateWorker,
+    validate_emission_data,
+)
+
+
+class UpdateButtons(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setFixedSize(195, 125)
+        layout = QVBoxLayout(self)
+
+        self.single_btn = QPushButton("Single CM")
+        self.single_btn.clicked.connect(self.update_in_single_mode)
+        layout.addWidget(self.single_btn)
+
+        self.multi_btn = QPushButton("Multi CMs from CSV")
+        self.multi_btn.clicked.connect(self.update_in_multi_mode)
+        layout.addWidget(self.multi_btn)
+
+    def update_in_single_mode(self):
+        dialog = SingleInputDialog()
+        if dialog.exec():
+            input_row = dialog.get_inputs()
+            try:
+                valid = validate_emission_data(input_row)
+            except ValueError as e:
+                QMessageBox.warning(self, "Invalid input", str(e))
+                return
+            self._do_background_task("single", valid, input_row)
+
+    def update_in_multi_mode(self):
+        dialog = MultiInputDialog()
+        if dialog.exec():
+            input_csv = dialog.get_input()
+            self._do_background_task("multi", input_csv)
+
+    def _do_background_task(self, mode, *args):
+        # Make new thread, establish worker, move worker to thread
+        self.thread = QThread()
+        self.worker = UpdateWorker(mode, *args)
+        self.worker.moveToThread(self.thread)
+
+        self.progress_dialog = self._build_progress_dialog()
+
+        # Make connections to helper methods
+        self.thread.started.connect(self.worker.run)
+        self.worker.error.connect(self._on_worker_error)
+        self.worker.progress.connect(self.progress_dialog.setLabelText)
+        self.worker.finished.connect(self._on_worker_finished)
+
+        # Clean up worker and thread when complete
+        self.worker.error.connect(self.thread.quit)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.thread.start()
+
+    def _build_progress_dialog(self):
+        self.progress_dialog = QProgressDialog(
+            "Working on it...", None, 0, 0, self
+        )
+        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self.progress_dialog.setMinimumDuration(0)
+        self.progress_dialog.setWindowTitle("Updating")
+        self.progress_dialog.show()
+        return self.progress_dialog
+
+    def _on_worker_error(self, message):
+        self.progress_dialog.close()
+        QMessageBox.warning(self, "Update failed", message)
+
+    def _on_worker_finished(self, message):
+        QMessageBox.information(self, "Update Complete", message)
+        self.progress_dialog.close()
+        self.accept()
+
+
+class SingleInputDialog(QDialog):
+    FIELDS = [
+        ("cryo", "Cryomodule #"),
+        ("date_s", "Start Date (mm/dd/yy)"),
+        ("time_s", "Start Time (24 hr hh:mm)"),
+        ("date_e", "End Date (optional)"),
+        ("time_e", "End Time (24 hr hh:mm)"),
+        ("decarad", "Decarad"),
+        ("elog", "eLog link"),
+        ("notes", "Notes"),
+        ("filter_r", "Recharacterization (Y/N)"),
+        ("filter_m", "Multipacting (Y/N)"),
+        ("filter_c", "Commissioning (Y/N)"),
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.lines = {}
+        layout = QFormLayout(self)
+        for label, field in self.FIELDS:
+            self.lines[label] = QLineEdit(self)
+            layout.addRow(field, self.lines[label])
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
+        )
+        layout.addWidget(button_box)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+    def get_inputs(self):
+        return tuple(self.lines[label].text() for label, _ in self.FIELDS)
+
+
+class MultiInputDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.line_csv = QLineEdit(self)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
+        )
+
+        layout = QFormLayout(self)
+        layout.addRow("CSV path", self.line_csv)
+        layout.addWidget(button_box)
+
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+    def get_input(self):
+        return self.line_csv.text()
 
 
 class FieldEmission(Display):
@@ -93,7 +232,7 @@ class FieldEmission(Display):
             QSpacerItem(0, 15, QSizePolicy.Minimum, QSizePolicy.Minimum)
         )
         canvas_build = self.build_plot_canvas()
-        right_side_layout.addWidget(self.build_toolbar())
+        right_side_layout.addLayout(self.build_toolbar())
         right_side_layout.addWidget(canvas_build)
 
         outer.addWidget(left_side, stretch=3)  # 30% width
@@ -120,6 +259,7 @@ class FieldEmission(Display):
             checkbox.toggled.connect(self._refresh_plot_button_state)
         self.sel_all_rad_btn.clicked.connect(self.on_sel_all_rad_btn_clicked)
         self.plot_btn.clicked.connect(self.on_plot_btn_clicked)
+        self.update_btn.clicked.connect(self.open_update_dialogue)
 
     def _checkbox_helper(self, labels, cols):
         grid_layout = QGridLayout()
@@ -359,13 +499,21 @@ class FieldEmission(Display):
         radio_btn_layout.addWidget(self.radio_fit_btn)
         return radio_btn_layout
 
+    def build_update_button(self):
+        self.update_btn = QPushButton("Add New Data")
+        return self.update_btn
+
     def build_toolbar(self):
         # Embed provided matplotlib toolbar into Qt layout
-        #        toolbar_layout = QHBoxLayout()
+        toolbar_layout = QHBoxLayout()
         self.toolbar = NavigationToolbar(self.canvas, self)
-        #        toolbar_layout.addWidget(self.toolbar)
-        #        toolbar_layout.addWidget()
-        return self.toolbar
+        toolbar_layout.addWidget(self.toolbar)
+        toolbar_layout.addWidget(self.build_update_button())
+        return toolbar_layout
+
+    def open_update_dialogue(self):
+        dialog = UpdateButtons()
+        dialog.exec()
 
     def build_plot_canvas(self):
         # Embed canvas into Qt layout
