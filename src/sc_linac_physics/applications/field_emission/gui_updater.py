@@ -90,7 +90,7 @@ def _validate_elog(elog):
 
 
 def _validate_filters(filters):
-    """check if filters are set up correctly"""  # (though they're still unused bc im scary lol)
+    """check if filters are set up correctly"""
     # assumption that filters are at end of string in case of future additions
     clean_filters = []
     for fil in filters:
@@ -127,7 +127,6 @@ def read_from_csv(filepath):
                 )
             timestamp = start_date.strftime(CSV_DATE_FORMAT)
             decarad = row[5] if row[5] is not None else ""
-            # print(cm, start_date, end_date, decarad, timestamp)
             yield cm, start_date, end_date, decarad, timestamp
 
 
