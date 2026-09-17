@@ -1097,10 +1097,16 @@ class FrequencyTuningUI(PhaseUIBase):
         cavity.setup_tuning() sets all three of these automatically at the top
         of a tuning run (piezo enabled, feedback off, drive level clamped to
         SAFE_PULSED_DRIVE_LEVEL), so this panel is normally just confirmation.
-        It exists because piezo feedback fighting the stepper is a real failure
-        mode mid-tune, and the operator needs to both see that state and be able
-        to correct it without leaving the tuning tab (review feedback from
-        @hmarts9 on PR #270).
+
+        It exists because @hmarts9 asked, reviewing PR #270, whether there was a
+        path to adjust piezo mode from this screen "if something goes sideways
+        during tuning piezo feedback fighting the stepper etc". The panel is the
+        answer to that request for manual access.
+
+        CHECK: is piezo feedback fighting the stepper something that actually
+        happens mid-tune? It was raised as a hypothetical, and an earlier version
+        of this docstring restated it as an established failure mode. Nothing in
+        this repo settles it either way.
         """
         group = QGroupBox("Piezo && RF Drive")
         layout = QGridLayout()

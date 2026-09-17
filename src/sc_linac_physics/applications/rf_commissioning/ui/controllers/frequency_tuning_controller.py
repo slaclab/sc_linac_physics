@@ -183,9 +183,10 @@ class FrequencyTuningController(QObject):
             ("fscan_stat_readback", cavity.rack.pv_prefix + "FSCAN:STAT"),
             ("stage4_8pi9_label", cavity.pv_addr("FSCAN:8PI9MODE")),
             ("stage4_7pi9_label", cavity.pv_addr("FSCAN:7PI9MODE")),
-            # Piezo state and RF drive level — visible during tuning so that
-            # piezo feedback fighting the stepper is diagnosable, and
-            # correctable, without leaving this tab.
+            # Piezo state and RF drive level — visible and settable during
+            # tuning so the operator does not have to leave this tab to adjust
+            # them. Requested by @hmarts9 in review of PR #270; see the CHECK
+            # in PhaseBuilders._build_piezo_settings for what prompted it.
             ("piezo_enable_stat_readback", piezo.enable_stat_pv),
             ("piezo_enable_ctrl", piezo.enable_pv),
             ("piezo_mode_stat_readback", piezo.feedback_stat_pv),

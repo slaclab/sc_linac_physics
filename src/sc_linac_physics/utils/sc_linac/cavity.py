@@ -875,12 +875,17 @@ class Cavity(linac_utils.SCLinacObject):
 
             # A zero step estimate commands no motion, so the detune cannot
             # change and steps_moved cannot grow -- so the runaway guard below
-            # can never fire, and the temperature guard above will not either
-            # unless the stepper was already hot on entry (an idle motor does
-            # not heat up). Bail out instead of spinning forever. This means
+            # can never fire. Bail out instead of spinning forever. This means
             # the scale factor relating Hz to microsteps is implausibly large
             # (the stepper SCALE PV, and for the piezo-centering pass the
             # piezo SCALE PV that sets both delta_hz and tolerance).
+            #
+            # CHECK: does STEPTEMP climb on a stepper that is commanded no
+            # motion? An earlier version of this comment claimed the
+            # temperature guard could not fire either, because "an idle motor
+            # does not heat up" -- but a stepper holding position may still
+            # draw holding current. Nothing in this repo settles it. The bail
+            # out below does not depend on the answer; only that claim did.
             if est_steps == 0:
                 hz_per_microstep = 1 / microsteps_per_hz
                 self.set_status_message(
