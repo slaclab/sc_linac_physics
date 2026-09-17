@@ -519,6 +519,8 @@ class FieldEmission(Display):
         # Embed canvas into Qt layout
         self.fig = Figure(figsize=(5, 4))
         self.canvas = FigureCanvas(self.fig)
+        self.canvas.setMinimumSize(700, 700)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         return self.canvas
 
     def build_plot_button(self):

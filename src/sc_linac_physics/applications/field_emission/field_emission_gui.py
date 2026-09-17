@@ -360,17 +360,15 @@ class FieldEmission(Display):
         return radio_btn_layout
 
     def build_toolbar(self):
-        # Embed provided matplotlib toolbar into Qt layout
-        #        toolbar_layout = QHBoxLayout()
         self.toolbar = NavigationToolbar(self.canvas, self)
-        #        toolbar_layout.addWidget(self.toolbar)
-        #        toolbar_layout.addWidget()
         return self.toolbar
 
     def build_plot_canvas(self):
         # Embed canvas into Qt layout
         self.fig = Figure(figsize=(5, 4))
         self.canvas = FigureCanvas(self.fig)
+        self.canvas.setMinimumSize(700, 700)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         return self.canvas
 
     def build_plot_button(self):
