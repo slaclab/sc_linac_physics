@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v9.36.1 (2026-09-16)
+
+### Bug Fixes
+
+- **sc-linac**: The stepper temperature limit is kelvin, not celsius
+  ([#303](https://github.com/slaclab/sc_linac_physics/pull/303),
+  [`1b2b6ef`](https://github.com/slaclab/sc_linac_physics/commit/1b2b6ef62964a938cd6eae15f7150901ae7a151f))
+
+### Chores
+
+- **ci**: Bump actions/deploy-pages in the github-actions group
+  ([#296](https://github.com/slaclab/sc_linac_physics/pull/296),
+  [`837f992`](https://github.com/slaclab/sc_linac_physics/commit/837f99259f289738c8f6676c231d4ea91e044f8a))
+
+### Documentation
+
+- **sc-linac**: Cite the tuner papers where the constants live
+  ([#304](https://github.com/slaclab/sc_linac_physics/pull/304),
+  [`910405d`](https://github.com/slaclab/sc_linac_physics/commit/910405d56f8a43871e6c3310a494fe5aea93dd53))
+
+### Testing
+
+- **q0**: Register Q0GUI widgets for teardown to stop xdist worker crashes
+  ([#299](https://github.com/slaclab/sc_linac_physics/pull/299),
+  [`fbe1e24`](https://github.com/slaclab/sc_linac_physics/commit/fbe1e24096ef47d8f27db36b19ef1e31cb35b0a6))
+
+
 ## v9.36.0 (2026-09-10)
 
 ### Bug Fixes
