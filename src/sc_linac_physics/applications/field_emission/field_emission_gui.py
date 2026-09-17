@@ -1,6 +1,8 @@
 import sys
 import math
+
 from PyQt5.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -13,6 +15,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QRadioButton,
     QSizePolicy,
@@ -20,8 +23,8 @@ from PyQt5.QtWidgets import (
     QSpacerItem,
     QScrollArea,
     QWidget,
-    QAbstractItemView,
 )
+from PyQt5.QtCore import Qt, QThread
 from pydm import Display, PyDMApplication
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -40,8 +43,8 @@ from sc_linac_physics.applications.field_emission.constants import (
 )
 from sc_linac_physics.applications.field_emission.plot_me import plot_amp_vs_rad
 from sc_linac_physics.applications.field_emission.gui_updater import (
-    single_update,
-    multi_update,
+    UpdateWorker,
+    validate_emission_data,
 )
 
 
@@ -63,17 +66,60 @@ class UpdateButtons(QDialog):
     def update_in_single_mode(self):
         dialog = SingleInputDialog()
         if dialog.exec():
+            input_row = dialog.get_inputs()
             try:
-                single_update(dialog.get_inputs())
+                valid = validate_emission_data(input_row)
             except ValueError as e:
                 QMessageBox.warning(self, "Invalid input", str(e))
-            self.accept()
+                return
+            self._do_background_task("single", valid, input_row)
 
     def update_in_multi_mode(self):
         dialog = MultiInputDialog()
         if dialog.exec():
-            multi_update(dialog.get_input())
-            self.accept()
+            input_csv = dialog.get_input()
+            self._do_background_task("multi", input_csv)
+
+    def _do_background_task(self, mode, *args):
+        # Make new thread, establish worker, move worker to thread
+        self.thread = QThread()
+        self.worker = UpdateWorker(mode, *args)
+        self.worker.moveToThread(self.thread)
+
+        self.progress_dialog = self._build_progress_dialog()
+
+        # Make connections to helper methods
+        self.thread.started.connect(self.worker.run)
+        self.worker.error.connect(self._on_worker_error)
+        self.worker.progress.connect(self.progress_dialog.setLabelText)
+        self.worker.finished.connect(self._on_worker_finished)
+
+        # Clean up worker and thread when complete
+        self.worker.error.connect(self.thread.quit)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.thread.start()
+
+    def _build_progress_dialog(self):
+        self.progress_dialog = QProgressDialog(
+            "Working on it...", None, 0, 0, self
+        )
+        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self.progress_dialog.setMinimumDuration(0)
+        self.progress_dialog.setWindowTitle("Updating")
+        self.progress_dialog.show()
+        return self.progress_dialog
+
+    def _on_worker_error(self, message):
+        self.progress_dialog.close()
+        QMessageBox.warning(self, "Update failed", message)
+
+    def _on_worker_finished(self, message):
+        QMessageBox.information(self, "Update Complete", message)
+        self.progress_dialog.close()
+        self.accept()
 
 
 class SingleInputDialog(QDialog):
