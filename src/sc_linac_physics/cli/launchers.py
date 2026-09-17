@@ -178,7 +178,7 @@ def launch_microphonics(standalone=True):
 
 @application
 def launch_field_emission(standalone=True):
-    """Launch the microphonics GUI."""
+    """Launch the field emission GUI."""
     from sc_linac_physics.applications.field_emission.field_emission_gui import (
         FieldEmission,
     )
