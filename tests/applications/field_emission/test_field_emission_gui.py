@@ -256,6 +256,7 @@ class TestPlotButtonEnableLogic:
         display.cryo_dropdown.setCurrentIndex(
             0
         )  # triggers on_cryomodule_updated
+        display.meas_list_widget.item(0).setSelected(True)
 
     def test_disabled_when_nothing_selected(self, display):
         display._refresh_plot_button_state()

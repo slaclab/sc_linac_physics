@@ -109,7 +109,7 @@ def read_from_csv(filepath):
         for row in reader:
             if "#" in row[0]:  # skip commented rows
                 continue
-            cm = row[0][2:]
+            cm = row[0].strip().zfill(2).upper().removeprefix("CM")
             try:
                 start_date = datetime.strptime(
                     f"{row[1]} {row[2]}", STANDARD_DATE_FORMAT
