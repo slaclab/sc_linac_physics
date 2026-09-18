@@ -87,7 +87,11 @@ def align_pvs_to_common_time(dfs):
     """join dataframes (dict of dicts) to common master timebase"""
     series_per_pv = {}
     for pv_name, df in dfs.items():
-        s = pd.Series(df["values"].values, index=df["timestamps"])
+        valid = df["is_valid"].astype(bool)
+        s = pd.Series(
+            df.loc[valid, "values"].to_numpy(),
+            index=df.loc[valid, "timestamps"],
+        )
         s = s[~s.index.duplicated(keep="first")]
         s = s.sort_index()
         series_per_pv[pv_name] = s
