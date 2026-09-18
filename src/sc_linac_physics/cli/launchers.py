@@ -176,6 +176,18 @@ def launch_microphonics(standalone=True):
     )
 
 
+@application
+def launch_field_emission(standalone=True):
+    """Launch the field emission GUI."""
+    from sc_linac_physics.applications.field_emission.field_emission_gui import (
+        FieldEmission,
+    )
+
+    return launch_python_display(
+        FieldEmission, *sys.argv[1:], standalone=standalone
+    )
+
+
 @display
 def launch_plotter(standalone=True):
     from sc_linac_physics.displays.plot.plot import PVGroupArchiverDisplay

@@ -7,6 +7,7 @@ recursive-include src *.json
 recursive-include src *.mat
 recursive-include src *.csv
 recursive-include src *.md
+recursive-include src *.hdf5
 
 prune src/sc_linac_physics/applications/microphonics/test_data
 
