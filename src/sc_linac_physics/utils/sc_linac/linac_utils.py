@@ -1,3 +1,34 @@
+"""Cryomodule groupings, PV naming, and hardware constants.
+
+Tuner references
+----------------
+Several tuner constants below are measurements, not choices. Both papers are
+open access (CC BY 3.0).
+
+[TUNER-2015]
+    Y. Pischalnikov, E. Borissov, I. Gonin, J. Holzbauer, T. Khabiboulline,
+    W. Schappert, S. Smith, J.C. Yun (FNAL), "Design and Test of Compact Tuner
+    for Narrow Bandwidth SRF Cavities", Proc. IPAC'15, Richmond, VA, USA,
+    paper WEPTY035, pp. 3352-3354.
+    doi:10.18429/JACoW-IPAC2015-WEPTY035
+    https://proceedings.jacow.org/IPAC2015/papers/wepty035.pdf
+
+    Prototype tuner bench measurements: slow tuner sensitivity 1.4 Hz/step
+    over a ~450 kHz range (1.3 mm stroke, hard stops); ~30 steps of mechanical
+    backlash and ~45 Hz of hysteresis over a +/-150 Hz range; piezo resolution
+    bounded at 110 mHz; strongest mechanical resonances near 250 Hz.
+
+[TUNER-2018]
+    J.P. Holzbauer, C. Contreras, Y. Pischalnikov, W. Schappert, J.C. Yun
+    (FNAL), "Production Tuner Testing for LCLS-II Cryomodule Production",
+    Proc. IPAC'18, Vancouver, BC, Canada, paper WEPML004, pp. 2678-2680.
+    doi:10.18429/JACoW-IPAC2018-WEPML004
+    https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf
+
+    Acceptance data for 56 tuner/cavity systems across CM1-7, so this is the
+    better source for anything expected to hold on a production cavity.
+"""
+
 from abc import ABC, abstractmethod
 from typing import Dict, Optional
 
@@ -117,7 +148,22 @@ RF_MODE_CHIRP = 5
 SAFE_PULSED_DRIVE_LEVEL = 10
 NOMINAL_PULSED_ONTIME = 70
 
+# Kelvin, not Celsius. The stepper sits in the cryomodule insulating vacuum:
+# [TUNER-2018] interlocks the motor below 70 K and reports it starting around
+# 30 K and rising no more than 4 K during a long motion. The simulation agrees,
+# serving STEPTEMP at 35.0 with its alarm limit at 70 (cavity_service.py).
+#
+# Several call sites label this Celsius -- StepperTempError's message in
+# Cavity._auto_tune, and FrequencyTuningLimits.temp_limit_c with the
+# stepper_temp_c/temp_limit_c log keys. Those names and that operator-facing
+# message are wrong and are being corrected separately; the number is right.
 STEPPER_TEMP_LIMIT = 70
+
+# A single move is capped at 1,000,000 usteps; VELO runs at 20,000 usteps/s
+# (its EGU reads "usteps/"), so a full-range move is ~50 s. For scale,
+# [TUNER-2015] puts the coarse tuner's whole range at ~450 kHz between hard
+# stops, and [TUNER-2018] needed ~200 kHz on average -- 300 kHz at worst -- to
+# bring a production cavity from cold landing to 1.3 GHz.
 DEFAULT_STEPPER_MAX_STEPS = 1000000
 DEFAULT_STEPPER_SPEED = 20000
 MAX_STEPPER_SPEED = 60000
@@ -140,14 +186,32 @@ PIEZO_SCRIPT_CRASH_VALUE = 0
 PIEZO_PRE_RF_CHECKOUT_PASS_VALUE = 0
 PIEZO_WITH_RF_GRAD = 6.5
 PIEZO_CENTER_VOLTAGE = 25
+# 20 Hz/V is the production acceptance figure: +20 V on all four piezo-stacks
+# detunes a cavity by ~400 Hz, which is the check that the piezo wiring and
+# stacks are healthy before the 100 V measurement [TUNER-2018]. Only the
+# simulation uses this; live code reads the per-cavity PZT:SCALE PV, and
+# [TUNER-2018] found CM2 running ~2x high because its piezos had not finished
+# cooling down when they were qualified.
 PIEZO_HZ_PER_VOLT = 20
 
 MICROSTEPS_PER_STEP = 256
 
+# 1.4 Hz/step is the measured slow-tuner sensitivity, not a nominal: the
+# prototype measured it over a ~450 kHz range [TUNER-2015], and production
+# acceptance requires each cavity to come within 20% of -1.4 Hz/step before the
+# tuner is driven to 1.3 GHz [TUNER-2018]. The sign is negative on the machine
+# (positive steps lower the frequency); the magnitude is what is stored here,
+# and StepperTuner.hz_per_microstep takes abs() of the live SCALE PV.
 HZ_PER_STEP = 1.4
 HL_HZ_PER_STEP = 18.3
 
 # These are very rough values obtained empirically
+# ...and they are one prototype's numbers. [TUNER-2018] measured 56
+# tuner/cavity systems and found real spread: CM1 ran 5% low against CM2-6
+# (different split-ring cavity interface), and cavity 1 on CM4 and CM5 lower
+# again after a change in tuner mounting technique. Live tuning reads the
+# per-cavity SCALE PV instead of these; nothing in utils/sc_linac/ or
+# applications/ consumes them.
 ESTIMATED_MICROSTEPS_PER_HZ = MICROSTEPS_PER_STEP / HZ_PER_STEP
 ESTIMATED_MICROSTEPS_PER_HZ_HL = MICROSTEPS_PER_STEP / HL_HZ_PER_STEP
 
@@ -233,6 +297,13 @@ def stepper_tol_factor(num_steps) -> float:
     the steps to cold landing are about the same due to both large dead zones
     and large detunes). We are starting with a linear function and seeing how
     that goes.
+
+    Why small moves need the slack: the prototype tuner measured ~30 steps of
+    mechanical backlash (motor/planetary gear/spindle/traveling nut) and ~45 Hz
+    of hysteresis over a +/-150 Hz range [TUNER-2015]. Those are one effect in
+    two units -- 45 Hz at 1.4 Hz/step is ~32 steps -- so at and below the
+    10,000 step plateau the backlash is a real fraction of the commanded move,
+    and a tolerance factor near 1 would fail on a healthy tuner.
     """
 
     num_steps = abs(num_steps)

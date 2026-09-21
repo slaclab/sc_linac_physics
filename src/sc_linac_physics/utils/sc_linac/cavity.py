@@ -862,8 +862,8 @@ class Cavity(linac_utils.SCLinacObject):
                 temp = self.stepper_temp_pv_obj.get()
                 if temp > max_stepper_temp:
                     raise linac_utils.StepperTempError(
-                        f"{self} stepper motor temp {temp:.1f} °C exceeds "
-                        f"limit {max_stepper_temp} °C"
+                        f"{self} stepper motor temp {temp:.1f} K exceeds "
+                        f"limit {max_stepper_temp} K"
                     )
 
             # Optional per-iteration hook (e.g. progress/telemetry).

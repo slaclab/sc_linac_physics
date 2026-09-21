@@ -107,6 +107,13 @@ class StepperPVGroup(PVGroup):
             if self.cavity_group.is_hl
             else 1 / ESTIMATED_MICROSTEPS_PER_HZ
         )
+        # +/-20% is the production acceptance band, not an arbitrary spread:
+        # a cavity is driven to 1.3 GHz only once its measured sensitivity is
+        # within 20% of -1.4 Hz/step (Holzbauer et al., "Production Tuner
+        # Testing for LCLS-II Cryomodule Production", IPAC'18 WEPML004,
+        # https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf). So a
+        # simulated cavity lands anywhere a real accepted one could.
+        #
         # Skip the putter (which reverts direct writes) — this is the
         # internal initial-value seed, not a client write to SCALE.
         await instance.write(

@@ -2,6 +2,7 @@ import builtins
 import logging
 import logging.handlers
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -143,6 +144,87 @@ Path.open = _mock_path_open
 
 
 # ============================================================================
+# Network Guard
+# ============================================================================
+
+# Nothing in this suite should reach the network. Archiver and EPICS access is
+# meant to be mocked, and a test that escapes its mocks does not fail — it
+# blocks on a connect that has no timeout. That is how the fault heatmap tests
+# came to spend 80+ minutes querying lcls-archapp from CI runners that cannot
+# route to it, which looked like a hung job rather than a missing mock.
+#
+# Blocking the connect turns that silent hang into an immediate, named failure.
+# Loopback stays open because caproto and PyDM legitimately use it.
+
+_original_socket_connect = socket.socket.connect
+_original_socket_connect_ex = socket.socket.connect_ex
+
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "0.0.0.0", ""})
+
+
+class NetworkAccessBlocked(BaseException):
+    """A test attempted outbound network access.
+
+    Deliberately derived from BaseException rather than Exception. The code
+    paths that reach the network here — `FaultDataFetcher._fetch_single_cavity`
+    and the EPICS wrappers — wrap their work in broad `except Exception`
+    handlers that turn any failure into an error result. An Exception-derived
+    guard gets swallowed by those handlers, and the test passes while silently
+    testing nothing, which is the failure mode this guard exists to end.
+    """
+
+
+def _is_loopback(address) -> bool:
+    """True for addresses a test may legitimately connect to.
+
+    Non-tuple addresses (AF_UNIX paths, for instance) are left alone: this
+    guard is about outbound IP traffic, not local socket plumbing.
+    """
+    if not isinstance(address, tuple) or not address:
+        return True
+    host = str(address[0])
+    return host in _LOOPBACK_HOSTS or host.startswith("127.")
+
+
+def _network_blocked_message(address) -> str:
+    return (
+        f"Test attempted an outbound network connection to {address}. "
+        "Tests must not touch the network — mock the call instead. If you are "
+        "seeing this from the fault heatmap, a real BackendMachine reached the "
+        "archiver; pass a mock machine rather than letting the display build "
+        "its own. To allow a specific test, mark it "
+        "@pytest.mark.allow_network."
+    )
+
+
+def _guarded_connect(self, address):
+    if _is_loopback(address):
+        return _original_socket_connect(self, address)
+    raise NetworkAccessBlocked(_network_blocked_message(address))
+
+
+def _guarded_connect_ex(self, address):
+    if _is_loopback(address):
+        return _original_socket_connect_ex(self, address)
+    raise NetworkAccessBlocked(_network_blocked_message(address))
+
+
+@pytest.fixture(autouse=True)
+def block_network(request):
+    """Fail fast on outbound network access instead of hanging on it."""
+    if request.node.get_closest_marker("allow_network"):
+        yield
+        return
+    socket.socket.connect = _guarded_connect
+    socket.socket.connect_ex = _guarded_connect_ex
+    try:
+        yield
+    finally:
+        socket.socket.connect = _original_socket_connect
+        socket.socket.connect_ex = _original_socket_connect_ex
+
+
+# ============================================================================
 # Environment Setup (runs before imports)
 # ============================================================================
 
@@ -157,6 +239,11 @@ def pytest_configure(config):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ.setdefault("QT_API", "pyqt5")
     os.environ.setdefault("PYDM_DISABLE_TELEMETRY", "1")
+
+    config.addinivalue_line(
+        "markers",
+        "allow_network: permit outbound network access for this test",
+    )
 
     # Inject fake EPICS module
     _setup_fake_epics()

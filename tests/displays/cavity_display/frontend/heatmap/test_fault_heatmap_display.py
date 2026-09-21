@@ -28,7 +28,15 @@ def _count_expected_cm_widgets():
 
 @pytest.fixture
 def display():
-    disp = FaultHeatmapDisplay()
+    """A display backed by a mock machine.
+
+    The machine has to be passed explicitly. `FaultHeatmapDisplay(machine=None)`
+    does not mean "no machine" — it means "build a real BackendMachine", which
+    gives the display 480 real cavities whose get_fault_history queries the
+    live archiver. Any test that then triggers a fetch spends minutes on real
+    HTTP requests, or hangs outright on a runner that cannot reach SLAC.
+    """
+    disp = FaultHeatmapDisplay(machine=make_machine(num_cavities=8))
     yield disp
     disp.close()
 
@@ -565,7 +573,8 @@ class TestFetchSelected:
         display._on_cavity_clicked("01", 3)
         assert len(display._selection) == 2
 
-        # _on_refresh_clicked clears selection (but won't start fetch without a machine)
+        # _on_refresh_clicked clears the selection before starting the fetch.
+        # The fetch itself runs against the fixture's mock machine.
         display._on_refresh_clicked()
         assert len(display._selection) == 0
 

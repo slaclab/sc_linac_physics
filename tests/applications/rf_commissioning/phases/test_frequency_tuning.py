@@ -96,7 +96,7 @@ def fast_limits():
     return FrequencyTuningLimits(
         tolerance_hz=500.0,
         probe_steps=10,
-        temp_limit_c=70.0,
+        temp_limit_k=70.0,
         max_total_steps=10_000,
     )
 
@@ -779,7 +779,7 @@ def test_tune_to_resonance_delegates_to_auto_tune(
     # max_stepper_temp defaults to the plain limit, and an iteration_callback
     # is supplied for abort + live plot.
     kwargs = mock_cavity._auto_tune.call_args.kwargs
-    assert kwargs["max_stepper_temp"] == phase.limits.temp_limit_c
+    assert kwargs["max_stepper_temp"] == phase.limits.temp_limit_k
     assert callable(kwargs["iteration_callback"])
     # NSTEPS_COLD = negation of the accumulated signed steps.
     assert result.data["cold_landing_steps"] == -4000
@@ -813,27 +813,27 @@ def test_tune_to_resonance_over_temp_fails_with_ack_flag(phase, mock_cavity):
     # _auto_tune raises StepperTempError on an over-temp breach; the phase
     # maps it to FAILED + requires_over_temp_ack for the UI to prompt.
     _setup_phase(phase)
-    phase.limits.temp_limit_c = 70.0
+    phase.limits.temp_limit_k = 70.0
     phase.cavity.stepper_temp_pv_obj.get.return_value = 85.0
     mock_cavity._auto_tune.side_effect = StepperTempError(
-        "stepper motor temp 85.0 °C exceeds limit 70 °C"
+        "stepper motor temp 85.0 K exceeds limit 70 K"
     )
 
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
     assert result.data["requires_over_temp_ack"] is True
-    assert result.data["stepper_temp_c"] == 85.0
-    assert result.data["temp_limit_c"] == 70.0
+    assert result.data["stepper_temp_k"] == 85.0
+    assert result.data["temp_limit_k"] == 70.0
 
 
 def test_tune_to_resonance_passes_ack_ceiling_and_records(
     phase, mock_cavity, context
 ):
-    # Operator-supplied over_temp_ack_c raises the ceiling passed to _auto_tune
+    # Operator-supplied over_temp_ack_k raises the ceiling passed to _auto_tune
     # and is recorded (with the operator) on success.
     _setup_phase(phase)
-    phase.limits.temp_limit_c = 70.0
-    context.parameters["over_temp_ack_c"] = 90.0
+    phase.limits.temp_limit_k = 70.0
+    context.parameters["over_temp_ack_k"] = 90.0
     mock_cavity.stepper_tuner.step_signed_pv_obj.get.return_value = 1000
 
     result = phase._tune_to_resonance()
