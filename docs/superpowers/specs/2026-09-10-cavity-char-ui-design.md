@@ -95,27 +95,32 @@ imply knowledge we do not have.
 
 Stated here because they are invisible in the code that relies on them.
 
-1. **There is no characterization abort.** `Cavity.request_abort()` sets
-   `abort_flag`, a cooperative software flag checked by `check_abort()` inside
-   Python loops. There is no abort PV. Once `PROBECALSTRT` is written the IOC
-   runs the characterization to completion or to its own crash state. The UI's
-   Abort button therefore stops the *waiting loop only*, and it must say so in
-   those words — an operator who believes Abort stops the measurement will draw
-   wrong conclusions about the cavity's state.
+1. **There is no characterization abort PV.** `Cavity` exposes
+   `PROBECALSTRT`, `PROBECALSTS` and `PROBECALTS` for this measurement and
+   nothing else. `request_abort()` sets `abort_flag`, which `check_abort()`
+   reads inside Python loops. So Abort ends the `_wait_for_completion` poll
+   and writes nothing to the machine, and the button has to say that.
 
-2. **`PROBECALSTS` is the only progress signal.** Running and crashed are
-   detected by comparing it against `CHARACTERIZATION_RUNNING_VALUE` and
-   `CHARACTERIZATION_CRASHED_VALUE`. There is no intermediate progress.
+   CHECK: once `PROBECALSTRT` is written, does the IOC always reach either a
+   settled status or `CHARACTERIZATION_CRASHED_VALUE`? The UI assumes so,
+   because it has nothing to send that would stop it.
 
-3. **Probe Q derivation must be triggered before readback.**
-   `QPROBE_CALC1.PROC` is processed, then the backend waits
-   `status_settle_delay` (2 s). This ordering is load-bearing and is why the
-   read step is not a pure read.
+2. **`PROBECALSTS` is the only progress signal.** `characterization_running`
+   and `characterization_crashed` compare it against
+   `CHARACTERIZATION_RUNNING_VALUE` and `CHARACTERIZATION_CRASHED_VALUE`.
+   Nothing reports partial progress, which is why the panel shows elapsed time
+   rather than a fraction.
 
-4. **The Q window is per cavity class.** `loaded_q_lower_limit` /
-   `loaded_q_upper_limit` are set on the Cavity from harmonic-linearizer, HE
-   (per PR #284) or standard constants. The panel displays the actual bounds
-   for the loaded cavity rather than a hard-coded pair.
+3. **Probe Q derivation is triggered, then read.** `_read_results()` processes
+   `QPROBE_CALC1.PROC`, sleeps `status_settle_delay` (2 s), then reads. The
+   ordering is relied on, so the read step is not a pure read.
+
+   CHECK: is 2 s enough for the calc record to settle on hardware?
+
+4. **The Q window is per cavity class.** `Cavity.__init__` sets
+   `loaded_q_lower_limit` / `loaded_q_upper_limit` from harmonic-linearizer,
+   HE (#284) or standard constants. The panel reads those attributes off the
+   loaded cavity rather than hard-coding a pair.
 
 ## Architecture
 
@@ -142,13 +147,16 @@ Alternatives rejected:
 
 ### Registry hazard
 
-`displays/__init__.py` currently re-exports the *placeholder*
-`FrequencyTuningDisplay` from `standard.py` while `registry.py` maps the phase
-to the real one in `frequency_tuning.py` — two different classes with one name,
-left behind by #270. Replacing the `CavityCharDisplay` placeholder is the same
-manoeuvre and must not repeat it: when the real display lands, the placeholder
-is deleted and every re-export is repointed in the same change. The
-pre-existing frequency-tuning collision is tracked separately.
+`displays/__init__.py` re-exports the *placeholder* `FrequencyTuningDisplay`
+from `standard.py` while `registry.py` maps the phase to the real one in
+`frequency_tuning.py` — two classes, one name, left behind by #270. #297 fixes
+that one and adds a test parametrized over `PHASE_DISPLAY_MAP` asserting each
+phase's registry class is the object the package exports.
+
+Replacing the `CavityCharDisplay` placeholder is the same manoeuvre. When the
+real display lands, the placeholder goes and every re-export is repointed in
+the same change — and #297's test then covers CAVITY_CHAR for free, so the
+assertion listed under Testing below is already there if #297 merges first.
 
 ## Data flow
 
