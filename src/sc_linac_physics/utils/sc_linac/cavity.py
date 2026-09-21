@@ -880,12 +880,13 @@ class Cavity(linac_utils.SCLinacObject):
             # (the stepper SCALE PV, and for the piezo-centering pass the
             # piezo SCALE PV that sets both delta_hz and tolerance).
             #
-            # CHECK: does STEPTEMP climb on a stepper that is commanded no
-            # motion? An earlier version of this comment claimed the
-            # temperature guard could not fire either, because "an idle motor
-            # does not heat up" -- but a stepper holding position may still
-            # draw holding current. Nothing in this repo settles it. The bail
-            # out below does not depend on the answer; only that claim did.
+            # CHECK: does STEPTEMP climb on a stepper commanded no motion?
+            # [TUNER-2018] puts the interlock at 70 K and the rise under 4 K
+            # through a long motion (quoted on
+            # FrequencyTuningLimits.temp_limit_k), which ties the heating to
+            # motion but does not cover holding current at rest. The bail out
+            # below does not depend on the answer; only the "an idle motor
+            # does not heat up" claim this replaced did.
             if est_steps == 0:
                 hz_per_microstep = 1 / microsteps_per_hz
                 self.set_status_message(
