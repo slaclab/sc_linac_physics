@@ -112,6 +112,21 @@ class TestAddPolyFit:
         xdata = ax.lines[0].get_xdata()
         assert len(xdata) == 250
 
+    def test_fit_line_uses_supplied_color(self):
+        fig, ax = plt.subplots()
+        amp = np.linspace(2.0, 10.0, 30)
+        rad = plot_me.fit_equation(amp, 1.0, 2.0)
+        line, patch = plot_me.add_poly_fit(amp, rad, ax, "Title", color="red")
+        assert line.get_color() == "red"
+        assert patch.get_edgecolor() is not None
+
+    def test_fit_line_uses_supplied_label(self):
+        fig, ax = plt.subplots()
+        amp = np.linspace(2.0, 10.0, 30)
+        rad = plot_me.fit_equation(amp, 1.0, 2.0)
+        line, _ = plot_me.add_poly_fit(amp, rad, ax, "Ch 1", color="blue")
+        assert line.get_label() == "Ch 1"
+
     def test_runtime_error_returns_none(self):
         """If curve_fit raises RuntimeError (no convergence), gracefully return None."""
         fig, ax = plt.subplots()
@@ -138,6 +153,22 @@ class TestAddPolyFit:
         # maxfev is passed as a keyword in the source
         _, kwargs = mock_fit.call_args
         assert kwargs.get("maxfev") == 5500
+
+    def test_patch_label_formats_coefficients(self):
+        """Patch label should format C1 with %.1g and C2 with %.1f."""
+        fig, ax = plt.subplots()
+        amp = np.array([2.0, 3.0, 4.0])
+        rad = np.array([1.0, 2.0, 3.0])
+        fake_param = np.array([1234.0, 5.678])
+        fake_covar = np.eye(2)
+        with patch.object(
+            plot_me, "curve_fit", return_value=(fake_param, fake_covar)
+        ):
+            _, patch_obj = plot_me.add_poly_fit(
+                amp, rad, ax, "Title", color="blue"
+            )
+        label = patch_obj.get_label()
+        assert label == "C1: 1e+03    C2: 5.7"
 
 
 # ===========================================================================
@@ -276,6 +307,121 @@ class TestPlotAmpVsRadMockedColumns:
 
 
 # ===========================================================================
+# unify_legends
+# ===========================================================================
+class TestUnifyLegends:
+    def test_empty_axes_returns_empty_lists(self):
+        handles, labels = plot_me.unify_legends([])
+        assert handles == []
+        assert labels == []
+
+    def test_collects_labels_from_single_axis(self):
+        fig, ax = plt.subplots()
+        ax.plot([0, 1], [0, 1], label="A")
+        ax.plot([0, 1], [1, 0], label="B")
+        handles, labels = plot_me.unify_legends([ax])
+        assert labels == ["A", "B"]
+        assert len(handles) == 2
+
+    def test_deduplicates_labels_across_axes(self):
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.plot([0, 1], [0, 1], label="Ch 1")
+        ax2.plot([0, 1], [1, 0], label="Ch 1")  # duplicate label
+        ax2.plot([0, 1], [0, 1], label="Ch 2")
+        handles, labels = plot_me.unify_legends([ax1, ax2])
+        assert labels == ["Ch 1", "Ch 2"]
+        assert len(handles) == 2
+
+    def test_preserves_first_occurrence_order(self):
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.plot([0, 1], [0, 1], label="B")
+        ax2.plot([0, 1], [1, 0], label="A")
+        ax2.plot([0, 1], [0, 1], label="B")  # duplicate, should not reorder
+        handles, labels = plot_me.unify_legends([ax1, ax2])
+        assert labels == ["B", "A"]
+
+    def test_axis_without_labeled_artists(self):
+        fig, ax = plt.subplots()
+        ax.plot([0, 1], [0, 1])  # no explicit label
+        handles, labels = plot_me.unify_legends([ax])
+        # Unlabeled artists get an auto-label prefixed with "_",
+        # which get_legend_handles_labels() excludes.
+        assert labels == []
+        assert handles == []
+
+    def test_mixed_labeled_and_unlabeled(self):
+        fig, ax = plt.subplots()
+        ax.plot([0, 1], [0, 1])  # unlabeled -> excluded
+        ax.plot([0, 1], [1, 0], label="Keep me")
+        handles, labels = plot_me.unify_legends([ax])
+        assert labels == ["Keep me"]
+        assert len(handles) == 1
+
+
+# ===========================================================================
+# unify_axes
+# ===========================================================================
+class TestUnifyAxes:
+    def test_empty_axes_no_error(self):
+        # Should simply return (None) without raising.
+        assert plot_me.unify_axes([]) is None
+
+    def test_sets_common_limits_across_axes(self):
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.set_xlim(0, 10)
+        ax1.set_ylim(0, 5)
+        ax2.set_xlim(2, 20)
+        ax2.set_ylim(-3, 8)
+
+        plot_me.unify_axes([ax1, ax2])
+
+        # x range spans overall min/max: (0, 20)
+        # y range spans overall min/max: (-3, 8)
+        for ax in (ax1, ax2):
+            np.testing.assert_allclose(ax.get_xlim(), (0.0, 20.0))
+            np.testing.assert_allclose(ax.get_ylim(), (-3.0, 8.0))
+
+    def test_single_axis_unchanged(self):
+        fig, ax = plt.subplots()
+        ax.set_xlim(1, 4)
+        ax.set_ylim(2, 6)
+        plot_me.unify_axes([ax])
+        np.testing.assert_allclose(ax.get_xlim(), (1.0, 4.0))
+        np.testing.assert_allclose(ax.get_ylim(), (2.0, 6.0))
+
+    def test_applies_same_limits_to_all_axes(self):
+        fig, axes = plt.subplots(1, 3)
+        axes[0].set_xlim(-5, 1)
+        axes[0].set_ylim(0, 2)
+        axes[1].set_xlim(0, 3)
+        axes[1].set_ylim(-1, 10)
+        axes[2].set_xlim(1, 7)
+        axes[2].set_ylim(4, 6)
+
+        plot_me.unify_axes(list(axes))
+
+        expected_x = (-5.0, 7.0)
+        expected_y = (-1.0, 10.0)
+        for ax in axes:
+            np.testing.assert_allclose(ax.get_xlim(), expected_x)
+            np.testing.assert_allclose(ax.get_ylim(), expected_y)
+
+    def test_does_not_reverse_axis_direction(self):
+        """Unified limits should keep (min, max) ordering, not invert."""
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.set_xlim(0, 10)
+        ax1.set_ylim(0, 10)
+        ax2.set_xlim(5, 15)
+        ax2.set_ylim(5, 15)
+        plot_me.unify_axes([ax1, ax2])
+        for ax in (ax1, ax2):
+            xlo, xhi = ax.get_xlim()
+            ylo, yhi = ax.get_ylim()
+            assert xlo < xhi
+            assert ylo < yhi
+
+
+# ===========================================================================
 # Integration-ish: fit line actually overlays scatter for real data
 # ===========================================================================
 class TestPlotIntegration:
@@ -294,4 +440,35 @@ class TestPlotIntegration:
         plot_me.plot_amp_vs_rad(df, ax, mask, fit=True)
         assert len(ax.collections) == 1  # scatter
         assert len(ax.lines) == 1  # fit line
+        plt.close(fig)
+
+    def test_legend_present_after_convergent_fit(self):
+        """A convergent fit should produce a legend built from the fit patch."""
+        amp = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
+        rad = plot_me.fit_equation(amp, 1.0, 3.0)
+        df = pd.DataFrame({"amps": amp, 1: rad})
+        mask = [True] + [False] * 9
+
+        fig, ax = plt.subplots()
+        plot_me.plot_amp_vs_rad(df, ax, mask, fit=True)
+        legend = ax.get_legend()
+        assert legend is not None
+        labels = [t.get_text() for t in legend.get_texts()]
+        assert len(labels) == 1
+        assert labels[0].startswith("C1:")
+        assert "C2:" in labels[0]
+        plt.close(fig)
+
+    def test_multichannel_fit_and_scatter_counts(self):
+        """Two convergent channels -> two scatters and two fit lines."""
+        amp = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
+        rad1 = plot_me.fit_equation(amp, 1.0, 3.0)
+        rad2 = plot_me.fit_equation(amp, 2.0, 5.0)
+        df = pd.DataFrame({"amps": amp, 1: rad1, 2: rad2})
+        mask = [True, True] + [False] * 8
+
+        fig, ax = plt.subplots()
+        plot_me.plot_amp_vs_rad(df, ax, mask, fit=True)
+        assert len(ax.collections) == 2  # two scatters
+        assert len(ax.lines) == 2  # two fit lines
         plt.close(fig)

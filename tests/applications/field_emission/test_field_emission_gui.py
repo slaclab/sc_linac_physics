@@ -747,60 +747,6 @@ class TestPlotButtonClicked:
 
 
 # ---------------------------------------------------------------------------
-# _unify_legends
-# ---------------------------------------------------------------------------
-class TestUnifyLegends:
-    def test_dedupes_labels_across_axes(self, display):
-        fig = display.fig
-        fig.clear()
-        ax1 = fig.add_subplot(1, 2, 1)
-        ax2 = fig.add_subplot(1, 2, 2)
-        ax1.plot([0, 1], [0, 1], label="Ch 1")
-        ax1.plot([0, 1], [1, 2], label="Ch 2")
-        ax2.plot([0, 1], [0, 1], label="Ch 1")  # duplicate label
-
-        handles, labels = display._unify_legends([ax1, ax2])
-        # "Ch 1" should appear only once despite being on both axes
-        assert labels == ["Ch 1", "Ch 2"]
-        assert len(handles) == 2
-
-    def test_empty_axes_returns_empty(self, display):
-        fig = display.fig
-        fig.clear()
-        ax = fig.add_subplot(1, 1, 1)
-        handles, labels = display._unify_legends([ax])
-        assert handles == []
-        assert labels == []
-
-
-# ---------------------------------------------------------------------------
-# _unify_axes
-# ---------------------------------------------------------------------------
-class TestUnifyAxes:
-    def test_empty_axes_no_error(self, display):
-        # Should simply return without raising
-        assert display._unify_axes([]) is None
-
-    def test_axes_share_common_limits(self, display):
-        fig = display.fig
-        fig.clear()
-        ax1 = fig.add_subplot(1, 2, 1)
-        ax2 = fig.add_subplot(1, 2, 2)
-        ax1.set_xlim(0, 10)
-        ax1.set_ylim(0, 5)
-        ax2.set_xlim(2, 20)
-        ax2.set_ylim(1, 8)
-
-        display._unify_axes([ax1, ax2])
-
-        assert ax1.get_xlim() == ax2.get_xlim()
-        assert ax1.get_ylim() == ax2.get_ylim()
-        # Unified range is the overall min/max
-        assert ax1.get_xlim() == (0.0, 20.0)
-        assert ax1.get_ylim() == (0.0, 8.0)
-
-
-# ---------------------------------------------------------------------------
 # Signal wiring integration (checkbox toggle -> button label update)
 # ---------------------------------------------------------------------------
 class TestSignalWiring:
