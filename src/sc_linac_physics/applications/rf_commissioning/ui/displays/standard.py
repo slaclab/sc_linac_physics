@@ -1,7 +1,6 @@
 """Standard placeholder phase displays."""
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
-    CavityCharacterization,
     FrequencyTuningData,
     HighPowerRampData,
     MPProcessingData,
@@ -22,15 +21,6 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
     PHASE_NAME = "Frequency Tuning"
     DATA_ATTR = "frequency_tuning"
     DATA_MODEL = FrequencyTuningData
-
-
-class CavityCharDisplay(BasePlaceholderDisplay):
-    """Display for Cavity Characterization phase."""
-
-    UI_CLASS = GenericPhaseUI
-    PHASE_NAME = "Cavity Characterization"
-    DATA_ATTR = "cavity_char"
-    DATA_MODEL = CavityCharacterization
 
 
 class PiezoWithRFDisplay(BasePlaceholderDisplay):

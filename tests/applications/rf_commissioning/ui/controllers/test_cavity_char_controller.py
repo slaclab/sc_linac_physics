@@ -228,3 +228,182 @@ def test_crash_and_timeout_produce_different_status_text(controller, view):
     assert crashed_status != timeout_status
     assert "crashed" in crashed_status
     assert "did not finish" in timeout_status
+
+
+# ---------------------------------------------------------------------------
+# The path to a machine write
+#
+# on_run_characterization is what eventually puts SEL_ASET and PROBECALSTRT,
+# so each guard that stops short of it gets its own test.
+# ---------------------------------------------------------------------------
+
+
+def _session_ready():
+    s = Mock()
+    s.can_run_phase.return_value = (True, "ok")
+    s.get_active_record_id.return_value = 7
+    s.start_active_phase_instance.return_value = Mock(phase_instance_id=42)
+    return s
+
+
+def test_run_stops_on_a_bad_drive_level(view, monkeypatch):
+    view.drive_level_spinbox.value.return_value = 99.0
+    c = CavityCharController(view, _session_ready())
+    c._cavity = Mock()
+    called = []
+    monkeypatch.setattr(
+        c, "_prepare_phase_context", lambda *a: called.append(1) or True
+    )
+    c.on_run_characterization()
+    assert called == []
+
+
+def test_run_stops_with_no_operator(view, monkeypatch):
+    view.get_current_operator.return_value = None
+    c = CavityCharController(view, _session_ready())
+    c._cavity = Mock()
+    called = []
+    monkeypatch.setattr(
+        c, "_prepare_phase_context", lambda *a: called.append(1) or True
+    )
+    c.on_run_characterization()
+    assert called == []
+    view.show_error.assert_called_once()
+
+
+def test_run_stops_with_no_cavity_selected(view, monkeypatch):
+    view.get_current_operator.return_value = "lisa"
+    c = CavityCharController(view, _session_ready())
+    c._cavity = None
+    called = []
+    monkeypatch.setattr(
+        c, "_prepare_phase_context", lambda *a: called.append(1) or True
+    )
+    c.on_run_characterization()
+    assert called == []
+
+
+def test_run_reaches_execution_when_every_guard_passes(view, monkeypatch):
+    view.get_current_operator.return_value = "lisa"
+    c = CavityCharController(view, _session_ready())
+    c._cavity = Mock()
+    monkeypatch.setattr(c, "_prepare_phase_context", lambda *a: True)
+    started = []
+    monkeypatch.setattr(c, "_execute_phase_async", lambda: started.append(1))
+    c.on_run_characterization()
+    assert started == [1]
+
+
+def test_drive_level_is_passed_into_the_phase_context(view, monkeypatch):
+    view.drive_level_spinbox.value.return_value = 12.5
+    view.get_current_operator.return_value = "lisa"
+    c = CavityCharController(view, _session_ready())
+    cavity = Mock()
+    c._cavity = cavity
+
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "cavity_char_controller.CavityCharPhase",
+        Mock(return_value=Mock(validate_prerequisites=lambda: (True, "ok"))),
+    )
+    assert c._prepare_phase_context(cavity, "lisa", 12.5) is True
+    assert c.context.parameters["drive_level"] == 12.5
+    assert c.context.parameters["cavity"] is cavity
+
+
+def test_context_prep_stops_when_the_workflow_refuses(view):
+    session = _session_ready()
+    session.can_run_phase.return_value = (False, "SSA_CHAR not complete")
+    c = CavityCharController(view, session)
+    assert c._prepare_phase_context(Mock(), "lisa", 10.0) is False
+    assert "SSA_CHAR not complete" in view.show_error.call_args[0][0]
+
+
+def test_context_prep_stops_when_prerequisites_fail(view, monkeypatch):
+    c = CavityCharController(view, _session_ready())
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "cavity_char_controller.CavityCharPhase",
+        Mock(
+            return_value=Mock(
+                validate_prerequisites=lambda: (False, "no SSA object")
+            )
+        ),
+    )
+    assert c._prepare_phase_context(Mock(), "lisa", 10.0) is False
+    assert "no SSA object" in view.show_error.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# The Q window the panel renders against
+# ---------------------------------------------------------------------------
+
+
+def test_update_pv_addresses_publishes_the_cavitys_own_q_window(
+    view, monkeypatch
+):
+    """HE, harmonic-linearizer and standard cavities have different windows."""
+    c = CavityCharController(view, Mock())
+    cavity = Mock()
+    cavity.loaded_q_lower_limit = 3.0e7
+    cavity.loaded_q_upper_limit = 7.0e7
+    monkeypatch.setattr(c, "_get_machine_cavity", lambda cm, cav: cavity)
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "cavity_char_controller.resolve_cavity_selection",
+        lambda v, cm, cav: ("37", "1"),
+    )
+    c.update_pv_addresses("37", "1")
+    assert c._cavity is cavity
+    assert view.cavity_loaded_q_window == (3.0e7, 7.0e7)
+
+
+def test_update_pv_addresses_with_no_selection_is_a_noop(view, monkeypatch):
+    c = CavityCharController(view, Mock())
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "cavity_char_controller.resolve_cavity_selection",
+        lambda v, cm, cav: (None, None),
+    )
+    c.update_pv_addresses()
+    assert c._cavity is None
+
+
+def test_a_broken_cavity_lookup_is_logged_not_raised(view, monkeypatch):
+    c = CavityCharController(view, Mock())
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "cavity_char_controller.resolve_cavity_selection",
+        lambda v, cm, cav: ("01", "1"),
+    )
+    monkeypatch.setattr(
+        c, "_get_machine_cavity", Mock(side_effect=KeyError("no such CM"))
+    )
+    c.update_pv_addresses("01", "1")
+    assert "Error setting PVs" in view.log_message.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# Elapsed time
+# ---------------------------------------------------------------------------
+
+
+def test_elapsed_is_emitted_while_running_then_stops(controller, monkeypatch):
+    cavity = Mock()
+    cavity.characterization_running = True
+
+    emitted = []
+    controller.elapsed_updated.connect(emitted.append)
+    controller._cavity = cavity
+
+    def stop_after_two(_):
+        if len(emitted) >= 2:
+            cavity.characterization_running = False
+
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "cavity_char_controller.time.sleep",
+        stop_after_two,
+    )
+    controller._emit_elapsed_until_done(0.0)
+    assert len(emitted) == 2
