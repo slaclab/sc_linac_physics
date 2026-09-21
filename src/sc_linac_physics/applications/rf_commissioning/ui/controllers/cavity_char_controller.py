@@ -30,12 +30,36 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
+# The steps Start Test runs.
+#
+# Deliberately not CavityCharPhase.get_phase_steps(). That list continues
+# "push_results", "record_results", and push_results puts PUSH_QLOADED.PROC
+# and PUSH_CAV_SCALE.PROC — so running it whole commits the measurement to
+# the cavity the instant it is read, with nothing for the operator to review.
+#
+# The backend splits reading from pushing on purpose (see
+# CavityCharPhase._read_results) but does not enforce the gap; its
+# _push_results docstring says the step is "reached only once the operator
+# has confirmed". Enforcing that is this controller's job. The push runs from
+# its own button, and the phase is finalized after it, not here.
+MEASURE_STEPS = (
+    "verify_initial_state",
+    "set_drive_level",
+    "start_characterization",
+    "wait_for_completion",
+    "read_results",
+)
+
 
 class CavityCharController(QObject):
     """Owns CavityCharPhase execution for the Cavity Characterization display."""
 
+    # Emitted once the phase has advanced, which happens after the push, not
+    # after the measurement.
     phase_completed = pyqtSignal(object)
     phase_run_finished = pyqtSignal(bool, str)
+    # The measurement is read and on the record, awaiting operator review.
+    measurement_finished = pyqtSignal()
     # Seconds since the characterization started. Emitted from the poll
     # thread so the elapsed label updates on the GUI thread.
     elapsed_updated = pyqtSignal(float)
@@ -213,13 +237,13 @@ class CavityCharController(QObject):
         def worker() -> None:
             try:
                 self.phase._mark_phase_started()
-                for step_name in self.phase.get_phase_steps():
+                for step_name in MEASURE_STEPS:
                     if not self._execute_single_step(step_name):
                         self.phase_run_finished.emit(
                             False, f"Step failed: {step_name}"
                         )
                         return
-                self._finalize_background_phase()
+                self._finish_measurement()
             except Exception as exc:
                 self.phase_run_finished.emit(False, str(exc))
 
@@ -252,9 +276,17 @@ class CavityCharController(QObject):
             self.view.set_char_status(result.message)
             return False
 
-    def _finalize_background_phase(self) -> None:
-        self.phase.finalize_phase()
-        self.phase_run_finished.emit(True, "")
+    def _finish_measurement(self) -> None:
+        """The measurement is read and on the record. The phase is not done.
+
+        finalize_phase() and the workflow advance both wait for the push, so
+        neither happens here — a characterization whose values never reached
+        the cavity has not completed.
+        """
+        self.view.set_char_status(
+            "Measurement complete — review the values before pushing"
+        )
+        self.measurement_finished.emit()
 
     def _emit_elapsed_until_done(self, started_at: float) -> None:
         """Emit elapsed seconds while the characterization runs.

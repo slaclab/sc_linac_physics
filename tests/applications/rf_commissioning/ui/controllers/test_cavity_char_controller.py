@@ -8,6 +8,7 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseResult,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_char_controller import (  # noqa: E501
+    MEASURE_STEPS,
     CavityCharController,
 )
 
@@ -117,7 +118,7 @@ def _step_result(outcome, message="ok", retry_delay=None):
     return r
 
 
-def test_steps_run_in_the_backend_order(controller, monkeypatch):
+def test_measure_steps_run_in_order(controller, monkeypatch):
     phase = Mock()
     phase.get_phase_steps.return_value = BACKEND_STEPS
     controller.phase = phase
@@ -127,26 +128,26 @@ def test_steps_run_in_the_backend_order(controller, monkeypatch):
     monkeypatch.setattr(
         controller, "_execute_single_step", lambda s: ran.append(s) or True
     )
-    monkeypatch.setattr(controller, "_finalize_background_phase", lambda: None)
+    monkeypatch.setattr(controller, "_finish_measurement", lambda: None)
     monkeypatch.setattr("threading.Thread", RunInline)
 
     controller._run_phase_in_background()
-    assert ran == BACKEND_STEPS
+    assert ran == list(MEASURE_STEPS)
 
 
 def test_a_failed_step_stops_the_run(controller, monkeypatch):
-    phase = Mock()
-    phase.get_phase_steps.return_value = ["a", "b", "c"]
-    controller.phase = phase
+    controller.phase = Mock()
     controller.context = Mock()
 
     ran = []
 
-    def first_then_fail(step):
+    def fail_at_start_characterization(step):
         ran.append(step)
-        return step == "a"
+        return step != "start_characterization"
 
-    monkeypatch.setattr(controller, "_execute_single_step", first_then_fail)
+    monkeypatch.setattr(
+        controller, "_execute_single_step", fail_at_start_characterization
+    )
     monkeypatch.setattr("threading.Thread", RunInline)
 
     finished = []
@@ -155,16 +156,21 @@ def test_a_failed_step_stops_the_run(controller, monkeypatch):
     )
     controller._run_phase_in_background()
 
-    assert ran == ["a", "b"]
+    assert ran == [
+        "verify_initial_state",
+        "set_drive_level",
+        "start_characterization",
+    ]
+    assert "wait_for_completion" not in ran
     assert finished and finished[0][0] is False
-    assert "b" in finished[0][1]
+    assert "start_characterization" in finished[0][1]
 
 
 def test_an_exception_in_the_worker_is_reported_not_swallowed(
     controller, monkeypatch
 ):
     phase = Mock()
-    phase.get_phase_steps.side_effect = RuntimeError("boom")
+    phase._mark_phase_started.side_effect = RuntimeError("boom")
     controller.phase = phase
     controller.context = Mock()
     monkeypatch.setattr("threading.Thread", RunInline)
@@ -407,3 +413,69 @@ def test_elapsed_is_emitted_while_running_then_stops(controller, monkeypatch):
     )
     controller._emit_elapsed_until_done(0.0)
     assert len(emitted) == 2
+
+
+# ---------------------------------------------------------------------------
+# Start Test must not push
+#
+# CavityCharPhase.get_phase_steps() ends with push_results, which puts
+# PUSH_QLOADED.PROC and PUSH_CAV_SCALE.PROC. Running the list whole would
+# commit the measurement to the cavity with no operator review, which is the
+# thing the backend's read/push split exists to prevent.
+# ---------------------------------------------------------------------------
+
+
+def test_start_test_stops_after_reading_and_never_pushes(
+    controller, monkeypatch
+):
+    phase = Mock()
+    phase.get_phase_steps.return_value = BACKEND_STEPS
+    controller.phase = phase
+    controller.context = Mock()
+
+    ran = []
+    monkeypatch.setattr(
+        controller, "_execute_single_step", lambda s: ran.append(s) or True
+    )
+    monkeypatch.setattr("threading.Thread", RunInline)
+
+    controller._run_phase_in_background()
+
+    assert "push_results" not in ran
+    assert "record_results" not in ran
+    assert ran[-1] == "read_results"
+
+
+def test_start_test_does_not_advance_the_phase(controller, monkeypatch):
+    """Completion belongs after the push, not after the measurement."""
+    phase = Mock()
+    phase.get_phase_steps.return_value = BACKEND_STEPS
+    controller.phase = phase
+    controller.context = Mock()
+
+    monkeypatch.setattr(controller, "_execute_single_step", lambda s: True)
+    monkeypatch.setattr("threading.Thread", RunInline)
+
+    advanced = []
+    controller.phase_completed.connect(advanced.append)
+    controller._run_phase_in_background()
+
+    assert advanced == []
+    phase.finalize_phase.assert_not_called()
+
+
+def test_measure_steps_are_the_backends_leading_steps():
+    """MEASURE_STEPS is a hand-copied slice, so pin it to the source.
+
+    If CavityCharPhase reorders its steps or inserts one before
+    read_results, Start Test would silently run the wrong sequence — or, if
+    push_results moved earlier, push without review.
+    """
+    from sc_linac_physics.applications.rf_commissioning.phases.cavity_char import (  # noqa: E501
+        CavityCharPhase,
+    )
+
+    backend = CavityCharPhase.get_phase_steps(None)
+    assert list(MEASURE_STEPS) == backend[: len(MEASURE_STEPS)]
+    assert "push_results" in backend
+    assert "push_results" not in MEASURE_STEPS
