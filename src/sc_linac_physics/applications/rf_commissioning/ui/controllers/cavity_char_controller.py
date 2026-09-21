@@ -93,10 +93,14 @@ class CavityCharController(QObject):
         self.machine: Machine | None = None
         self._cavity = None
         self._paused = False
+        self._running = False
         self._active_phase_instance_id: int | None = None
         self._steps: list[str] = list(MEASURE_STEPS)
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
+        # Queued: measurement_finished is emitted from the worker thread and
+        # this slot lives on the controller, whose affinity is the GUI thread.
+        self.measurement_finished.connect(self._on_measurement_finished)
         if hasattr(self.view, "log_message"):
             self._log_signal.connect(self.view.log_message)
         if hasattr(self.view, "set_char_status"):
@@ -185,11 +189,72 @@ class CavityCharController(QObject):
     def on_pause_test(self) -> None:
         self._paused = not self._paused
 
+    def _set_running_ui_state(self, running: bool) -> None:
+        """Lock the toolbar for the duration of a run.
+
+        Without this, Start Test stays clickable and every click starts
+        another daemon thread driving the same cavity, interleaving SEL_ASET
+        and PROBECALSTRT writes.
+        """
+        self.view.run_button.setEnabled(not running)
+        self.view.pause_button.setEnabled(running)
+        self.view.abort_button.setEnabled(running)
+
+    def _on_measurement_finished(self) -> None:
+        """Persist the measurement. The phase instance stays open.
+
+        The checkpoints and measured values are on the in-memory record
+        until save_active_record() writes them, so without this a completed
+        run leaves nothing in the commissioning database.
+
+        complete_active_phase_instance() is deliberately not called: the
+        phase is not complete until the values are pushed, which happens
+        from the push button.
+        """
+        self._running = False
+        self._paused = False
+        self._set_running_ui_state(False)
+        try:
+            if self.session.save_active_record():
+                self._log_signal.emit(
+                    "Measurement saved to the record "
+                    f"(ID: {self.session.get_active_record_id()})"
+                )
+            else:
+                self._log_signal.emit(
+                    "Warning: failed to save the measurement to the database"
+                )
+        except Exception as exc:
+            self._log_signal.emit(f"Warning: failed to save: {exc}")
+
     def _on_phase_run_finished(self, success: bool, error_msg: str) -> None:
         if success and self.context is not None:
             self.phase_completed.emit(self.context.record)
-        elif not success:
-            self.view.show_error(error_msg)
+            return
+
+        if success:
+            return
+
+        self._running = False
+        self._paused = False
+        self._set_running_ui_state(False)
+        try:
+            # Partial results are worth keeping: the operator needs to see
+            # how far the run got.
+            self.session.save_active_record()
+            if self._active_phase_instance_id is not None:
+                self.session.fail_active_phase_instance(
+                    phase_instance_id=self._active_phase_instance_id,
+                    phase=CommissioningPhase.CAVITY_CHAR,
+                    error_message=error_msg,
+                )
+        except Exception as exc:
+            self._log_signal.emit(
+                f"Warning: failed to save partial results: {exc}"
+            )
+        finally:
+            self._active_phase_instance_id = None
+        self.view.show_error(error_msg)
 
     # ------------------------------------------------------------------
     # Phase execution
@@ -197,6 +262,9 @@ class CavityCharController(QObject):
 
     def on_run_characterization(self) -> None:
         """Validate, open a phase instance, then run on a thread."""
+        if self._running:
+            return
+
         drive_level = self._get_drive_level()
         if drive_level is None:
             return
@@ -213,6 +281,8 @@ class CavityCharController(QObject):
         if not self._prepare_phase_context(self._cavity, operator, drive_level):
             return
 
+        self._running = True
+        self._set_running_ui_state(True)
         self._execute_phase_async()
 
     def _prepare_phase_context(

@@ -625,3 +625,85 @@ def test_retry_gives_up_instead_of_looping_forever(controller, monkeypatch):
 
     assert controller._execute_single_step("verify_initial_state") is False
     assert phase.execute_step.call_count == MAX_STEP_ATTEMPTS
+
+
+# ---------------------------------------------------------------------------
+# Run lifecycle: button state, persistence, phase instance
+#
+# All three are things ssa_char_controller does in _set_running_ui_state,
+# on_phase_completed and on_phase_failed.
+# ---------------------------------------------------------------------------
+
+
+def _ready_controller(view, monkeypatch):
+    view.get_current_operator.return_value = "lisa"
+    c = CavityCharController(view, _session_ready())
+    c._cavity = Mock()
+    monkeypatch.setattr(c, "_prepare_phase_context", lambda *a: True)
+    monkeypatch.setattr(c, "_execute_phase_async", lambda: None)
+    return c
+
+
+def test_running_disables_run_and_enables_abort(view, monkeypatch):
+    """Otherwise Start Test can be clicked again mid-run.
+
+    Each click starts another daemon thread driving the same cavity, so two
+    runs would interleave SEL_ASET and PROBECALSTRT writes.
+    """
+    c = _ready_controller(view, monkeypatch)
+    c.on_run_characterization()
+    view.run_button.setEnabled.assert_called_with(False)
+    view.abort_button.setEnabled.assert_called_with(True)
+
+
+def test_a_second_click_while_running_is_ignored(view, monkeypatch):
+    c = _ready_controller(view, monkeypatch)
+    started = []
+    monkeypatch.setattr(c, "_execute_phase_async", lambda: started.append(1))
+
+    c.on_run_characterization()
+    c.on_run_characterization()
+
+    assert started == [1]
+
+
+def test_measurement_saves_the_record(view, monkeypatch):
+    """Checkpoints on an in-memory record are not in the commissioning log."""
+    c = _ready_controller(view, monkeypatch)
+    c.context = Mock()
+    c._on_measurement_finished()
+    c.session.save_active_record.assert_called_once()
+
+
+def test_measurement_does_not_complete_the_phase_instance(view, monkeypatch):
+    """Completion waits for the push, which is PR 3."""
+    c = _ready_controller(view, monkeypatch)
+    c.context = Mock()
+    c._on_measurement_finished()
+    c.session.complete_active_phase_instance.assert_not_called()
+
+
+def test_a_failed_run_saves_and_fails_the_phase_instance(view, monkeypatch):
+    c = _ready_controller(view, monkeypatch)
+    c.context = Mock()
+    c._active_phase_instance_id = 9
+    c._on_phase_run_finished(False, "Step failed: set_drive_level")
+
+    c.session.save_active_record.assert_called_once()
+    c.session.fail_active_phase_instance.assert_called_once()
+    assert c._active_phase_instance_id is None
+
+
+def test_buttons_are_restored_after_a_failure(view, monkeypatch):
+    c = _ready_controller(view, monkeypatch)
+    c.context = Mock()
+    c._on_phase_run_finished(False, "boom")
+    view.run_button.setEnabled.assert_called_with(True)
+    view.abort_button.setEnabled.assert_called_with(False)
+
+
+def test_buttons_are_restored_after_a_measurement(view, monkeypatch):
+    c = _ready_controller(view, monkeypatch)
+    c.context = Mock()
+    c._on_measurement_finished()
+    view.run_button.setEnabled.assert_called_with(True)
