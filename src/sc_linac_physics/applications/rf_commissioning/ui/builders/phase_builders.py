@@ -1100,13 +1100,10 @@ class FrequencyTuningUI(PhaseUIBase):
 
         It exists because @hmarts9 asked, reviewing PR #270, whether there was a
         path to adjust piezo mode from this screen "if something goes sideways
-        during tuning piezo feedback fighting the stepper etc". The panel is the
-        answer to that request for manual access.
-
-        CHECK: is piezo feedback fighting the stepper something that actually
-        happens mid-tune? It was raised as a hypothetical, and an earlier version
-        of this docstring restated it as an established failure mode. Nothing in
-        this repo settles it either way.
+        during tuning piezo feedback fighting the stepper etc". Asked on #294
+        whether that fight actually happens, she answered that it was
+        hypothetical: what she wanted was piezo mode and drive level visible
+        while manually moving the stepper, which is what these readbacks show.
         """
         group = QGroupBox("Piezo && RF Drive")
         layout = QGridLayout()

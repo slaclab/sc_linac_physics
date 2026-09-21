@@ -185,8 +185,8 @@ class FrequencyTuningController(QObject):
             ("stage4_7pi9_label", cavity.pv_addr("FSCAN:7PI9MODE")),
             # Piezo state and RF drive level — visible and settable during
             # tuning so the operator does not have to leave this tab to adjust
-            # them. Requested by @hmarts9 in review of PR #270; see the CHECK
-            # in PhaseBuilders._build_piezo_settings for what prompted it.
+            # them. Requested by @hmarts9 in review of PR #270; see
+            # PhaseBuilders._build_piezo_settings for what prompted it.
             ("piezo_enable_stat_readback", piezo.enable_stat_pv),
             ("piezo_enable_ctrl", piezo.enable_pv),
             ("piezo_mode_stat_readback", piezo.feedback_stat_pv),
