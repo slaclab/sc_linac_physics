@@ -1,6 +1,7 @@
 """Tests for the Cavity Characterization controller."""
 
-from unittest.mock import Mock
+import pathlib
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -8,6 +9,7 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseResult,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_char_controller import (  # noqa: E501
+    MAX_STEP_ATTEMPTS,
     MEASURE_STEPS,
     CavityCharController,
 )
@@ -110,11 +112,14 @@ BACKEND_STEPS = [
 ]
 
 
-def _step_result(outcome, message="ok", retry_delay=None):
+def _step_result(outcome, message="ok", retry_delay=None, data=None):
     r = Mock()
     r.result = outcome
     r.message = message
     r.retry_delay_seconds = retry_delay
+    # A real mapping: _create_step_checkpoint does dict(result.data or {}),
+    # and dict(Mock()) raises.
+    r.data = data
     return r
 
 
@@ -123,6 +128,7 @@ def test_measure_steps_run_in_order(controller, monkeypatch):
     phase.get_phase_steps.return_value = BACKEND_STEPS
     controller.phase = phase
     controller.context = Mock()
+    controller.context.is_abort_requested.return_value = False
 
     ran = []
     monkeypatch.setattr(
@@ -138,6 +144,7 @@ def test_measure_steps_run_in_order(controller, monkeypatch):
 def test_a_failed_step_stops_the_run(controller, monkeypatch):
     controller.phase = Mock()
     controller.context = Mock()
+    controller.context.is_abort_requested.return_value = False
 
     ran = []
 
@@ -173,6 +180,7 @@ def test_an_exception_in_the_worker_is_reported_not_swallowed(
     phase._mark_phase_started.side_effect = RuntimeError("boom")
     controller.phase = phase
     controller.context = Mock()
+    controller.context.is_abort_requested.return_value = False
     monkeypatch.setattr("threading.Thread", RunInline)
 
     finished = []
@@ -432,6 +440,7 @@ def test_start_test_stops_after_reading_and_never_pushes(
     phase.get_phase_steps.return_value = BACKEND_STEPS
     controller.phase = phase
     controller.context = Mock()
+    controller.context.is_abort_requested.return_value = False
 
     ran = []
     monkeypatch.setattr(
@@ -452,6 +461,7 @@ def test_start_test_does_not_advance_the_phase(controller, monkeypatch):
     phase.get_phase_steps.return_value = BACKEND_STEPS
     controller.phase = phase
     controller.context = Mock()
+    controller.context.is_abort_requested.return_value = False
 
     monkeypatch.setattr(controller, "_execute_single_step", lambda s: True)
     monkeypatch.setattr("threading.Thread", RunInline)
@@ -479,3 +489,139 @@ def test_measure_steps_are_the_backends_leading_steps():
     assert list(MEASURE_STEPS) == backend[: len(MEASURE_STEPS)]
     assert "push_results" in backend
     assert "push_results" not in MEASURE_STEPS
+
+
+# ---------------------------------------------------------------------------
+# What the worker thread is allowed to touch
+#
+# RunInline runs the worker on the main thread, which is exactly the
+# condition that hides a Qt threading violation. These tests pin the
+# marshalling instead of the timing.
+# ---------------------------------------------------------------------------
+
+
+def test_log_and_status_are_marshalled_through_signals(view):
+    """Widgets must not be touched from the worker thread.
+
+    _execute_single_step runs on a daemon thread. Calling view.log_message()
+    or view.set_char_status() from there mutates Qt widgets off the GUI
+    thread. ssa_char_controller routes the same updates through
+    _log_signal; this controller does the same.
+    """
+    c = CavityCharController(view, Mock())
+    assert hasattr(c, "_log_signal")
+    assert hasattr(c, "_status_signal")
+
+    src = pathlib.Path(
+        "src/sc_linac_physics/applications/rf_commissioning/ui/"
+        "controllers/cavity_char_controller.py"
+    ).read_text()
+    worker_region = src[src.index("def _execute_single_step") :]
+    worker_region = worker_region[
+        : worker_region.index("def _finish_measurement")
+    ]
+    assert "self.view.log_message" not in worker_region
+    assert "self.view.set_char_status" not in worker_region
+
+
+def test_each_step_lands_a_checkpoint_on_the_record(controller):
+    """The commissioning record is where a run is visible afterwards."""
+    record = Mock()
+    record.phase_history = []
+    controller.context = Mock(
+        record=record, operator="lisa", phase_instance_id=3
+    )
+    controller.context.is_abort_requested.return_value = False
+    phase = Mock()
+    phase.phase_type = "cavity_char"
+    phase.execute_step.return_value = _step_result(
+        PhaseResult.SUCCESS, "Loaded Q 4.100e+07"
+    )
+    controller.phase = phase
+
+    controller._execute_single_step("read_results")
+
+    assert len(record.phase_history) == 1
+    cp = record.phase_history[0]
+    assert cp.step_name == "read_results"
+    assert cp.success is True
+    assert "4.100e+07" in cp.notes
+    assert cp.operator == "lisa"
+
+
+def test_a_failed_step_is_checkpointed_too(controller):
+    record = Mock()
+    record.phase_history = []
+    controller.context = Mock(
+        record=record, operator="lisa", phase_instance_id=None
+    )
+    controller.context.is_abort_requested.return_value = False
+    phase = Mock()
+    phase.phase_type = "cavity_char"
+    phase.execute_step.return_value = _step_result(
+        PhaseResult.FAILED, "Characterization did not finish within 300 s"
+    )
+    controller.phase = phase
+
+    controller._execute_single_step("wait_for_completion")
+
+    assert len(record.phase_history) == 1
+    assert record.phase_history[0].success is False
+
+
+def test_abort_between_steps_stops_the_run(controller, monkeypatch):
+    """on_abort only reaches _wait_for_completion's check_abort.
+
+    Between steps the loop has to look at the context itself, or Abort does
+    nothing until the next long wait.
+    """
+    controller.phase = Mock()
+    controller.context = Mock()
+    controller.context.is_abort_requested.return_value = True
+
+    ran = []
+    monkeypatch.setattr(
+        controller, "_execute_single_step", lambda s: ran.append(s) or True
+    )
+    monkeypatch.setattr("threading.Thread", RunInline)
+    controller._run_phase_in_background()
+
+    assert ran == []
+
+
+def test_progress_callback_is_wired_so_the_bar_moves(controller):
+    controller.phase = Mock()
+    controller.phase.get_phase_steps.return_value = BACKEND_STEPS
+    controller.context = Mock()
+    controller.context.progress_callback = None
+    with patch("PyQt5.QtCore.QTimer.singleShot"):
+        controller._execute_phase_async()
+    assert controller.context.progress_callback is not None
+
+
+def test_retry_gives_up_instead_of_looping_forever(controller, monkeypatch):
+    """_verify_initial_state returns RETRY on any cavity read exception.
+
+    An uncapped retry loop spins every 3 s forever: no failure, no progress,
+    and nothing reaches the machine. ssa_char_controller caps at 3 tries.
+    """
+    record = Mock()
+    record.phase_history = []
+    controller.context = Mock(
+        record=record, operator="lisa", phase_instance_id=None
+    )
+    controller.context.is_abort_requested.return_value = False
+    phase = Mock()
+    phase.phase_type = "cavity_char"
+    phase.execute_step.return_value = _step_result(
+        PhaseResult.RETRY, "Could not read cavity state: boom", retry_delay=0
+    )
+    controller.phase = phase
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "cavity_char_controller.time.sleep",
+        lambda _: None,
+    )
+
+    assert controller._execute_single_step("verify_initial_state") is False
+    assert phase.execute_step.call_count == MAX_STEP_ATTEMPTS

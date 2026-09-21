@@ -8,11 +8,13 @@ measurement.
 
 import threading
 import time
+from datetime import datetime
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
+    PhaseCheckpoint,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.cavity_char import (
     CavityCharLimits,
@@ -50,6 +52,15 @@ MEASURE_STEPS = (
     "read_results",
 )
 
+# How many times a step may come back RETRY before the run gives up.
+#
+# _verify_initial_state turns any exception reading the cavity into a RETRY,
+# and _read_results does the same while the values settle. Retrying without a
+# cap spins every few seconds forever: no failure, no progress, and nothing
+# written to the machine — which looks from the outside like the button did
+# nothing. ssa_char_controller uses the same limit.
+MAX_STEP_ATTEMPTS = 3
+
 
 class CavityCharController(QObject):
     """Owns CavityCharPhase execution for the Cavity Characterization display."""
@@ -63,6 +74,13 @@ class CavityCharController(QObject):
     # Seconds since the characterization started. Emitted from the poll
     # thread so the elapsed label updates on the GUI thread.
     elapsed_updated = pyqtSignal(float)
+    # Everything the worker thread wants to show goes through these. The
+    # steps run on a daemon thread, and calling view.log_message() or
+    # view.set_char_status() from there would mutate Qt widgets off the GUI
+    # thread. Emitting lets Qt marshal the call. Same arrangement as
+    # ssa_char_controller._log_signal.
+    _log_signal = pyqtSignal(str)
+    _status_signal = pyqtSignal(str)
 
     def __init__(self, view, session: CommissioningSession) -> None:
         super().__init__()
@@ -76,8 +94,13 @@ class CavityCharController(QObject):
         self._cavity = None
         self._paused = False
         self._active_phase_instance_id: int | None = None
+        self._steps: list[str] = list(MEASURE_STEPS)
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
+        if hasattr(self.view, "log_message"):
+            self._log_signal.connect(self.view.log_message)
+        if hasattr(self.view, "set_char_status"):
+            self._status_signal.connect(self.view.set_char_status)
 
     # ------------------------------------------------------------------
     # Operator input
@@ -231,6 +254,12 @@ class CavityCharController(QObject):
     def _execute_phase_async(self) -> None:
         if not self.context or not self.phase:
             return
+        self._steps = list(MEASURE_STEPS)
+        # Drives the container's current-step label and progress bar through
+        # PhaseDisplayBase.step_progress_signal.
+        self.context.progress_callback = (
+            lambda step, prog: self.view.step_progress_signal.emit(step, prog)
+        )
         QTimer.singleShot(100, self._run_phase_in_background)
 
     def _run_phase_in_background(self) -> None:
@@ -238,6 +267,9 @@ class CavityCharController(QObject):
             try:
                 self.phase._mark_phase_started()
                 for step_name in MEASURE_STEPS:
+                    if not self._check_pause_and_abort():
+                        self.phase_run_finished.emit(False, "Aborted")
+                        return
                     if not self._execute_single_step(step_name):
                         self.phase_run_finished.emit(
                             False, f"Step failed: {step_name}"
@@ -249,32 +281,96 @@ class CavityCharController(QObject):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _check_pause_and_abort(self) -> bool:
+        """Block while paused; report whether the run should continue.
+
+        on_abort() sets the cavity's abort_flag, which only check_abort()
+        inside _wait_for_completion reads. Between steps the loop has to ask
+        the context, or Abort does nothing until the next long wait.
+        """
+        while self._paused:
+            time.sleep(0.1)
+            if self.context and self.context.is_abort_requested():
+                return False
+        return not (self.context and self.context.is_abort_requested())
+
+    def _report(self, log_line: str, status: str) -> None:
+        """Send text to the panel from whichever thread is running.
+
+        Both are signals so the widget mutation happens on the GUI thread.
+        """
+        self._log_signal.emit(log_line)
+        self._status_signal.emit(status)
+
     def _execute_single_step(self, step_name: str) -> bool:
         """Run one step, retrying for as long as the backend asks.
 
-        RETRY is not a failure: _read_results returns it while the measured
-        values are still settling.
+        RETRY is not a failure on its own: _read_results returns it while the
+        measured values are still settling. It becomes one after
+        MAX_STEP_ATTEMPTS, so a cavity that cannot be read fails the run
+        instead of retrying out of sight.
         """
-        while True:
+        for attempt in range(1, MAX_STEP_ATTEMPTS + 1):
             result = self.phase.execute_step(step_name)
+            self._create_step_checkpoint(step_name, result)
 
             if result.result is PhaseResult.RETRY:
-                self.view.log_message(f"{step_name}: {result.message}")
-                self.view.set_char_status(result.message)
+                self._report(
+                    f"{step_name}: {result.message} "
+                    f"(attempt {attempt}/{MAX_STEP_ATTEMPTS})",
+                    result.message,
+                )
+                if attempt == MAX_STEP_ATTEMPTS:
+                    give_up = (
+                        f"{step_name} gave up after {MAX_STEP_ATTEMPTS} "
+                        f"attempts: {result.message}"
+                    )
+                    self._report(give_up, give_up)
+                    return False
                 time.sleep(result.retry_delay_seconds or 1.0)
                 continue
 
             if result.result is PhaseResult.SUCCESS:
-                self.view.log_message(f"{step_name}: {result.message}")
-                self.view.set_char_status(result.message)
+                self._report(f"{step_name}: {result.message}", result.message)
                 return True
 
             # A crash and a timeout both arrive as FAILED with different
             # messages. Passing the message straight through keeps them
             # distinguishable in the panel.
-            self.view.log_message(f"{step_name} failed: {result.message}")
-            self.view.set_char_status(result.message)
+            self._report(
+                f"{step_name} failed: {result.message}", result.message
+            )
             return False
+
+        # Unreachable: the RETRY branch returns on the final attempt. Explicit
+        # so the function never falls out with an implicit None.
+        return False
+
+    def _create_step_checkpoint(self, step_name: str, result) -> None:
+        """Append the step to record.phase_history.
+
+        This is what makes a run visible afterwards; without it the phase
+        leaves no trace on the commissioning record.
+        """
+        if self.context is None or self.context.record is None:
+            return
+        measurements = dict(result.data or {})
+        if self.context.phase_instance_id is not None:
+            measurements.setdefault(
+                "phase_instance_id", self.context.phase_instance_id
+            )
+        self.context.record.phase_history.append(
+            PhaseCheckpoint(
+                phase=self.phase.phase_type,
+                timestamp=datetime.now(),
+                operator=self.context.operator,
+                step_name=step_name,
+                success=result.result
+                in (PhaseResult.SUCCESS, PhaseResult.SKIP),
+                notes=result.message,
+                measurements=measurements,
+            )
+        )
 
     def _finish_measurement(self) -> None:
         """The measurement is read and on the record. The phase is not done.
@@ -283,7 +379,7 @@ class CavityCharController(QObject):
         neither happens here — a characterization whose values never reached
         the cavity has not completed.
         """
-        self.view.set_char_status(
+        self._status_signal.emit(
             "Measurement complete — review the values before pushing"
         )
         self.measurement_finished.emit()
