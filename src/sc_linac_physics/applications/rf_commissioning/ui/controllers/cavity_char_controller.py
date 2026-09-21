@@ -1,0 +1,270 @@
+"""Controller for the Cavity Characterization display.
+
+Drives CavityCharPhase and owns every write this phase makes to the machine:
+SEL_ASET (drive level) and PROBECALSTRT (start) here, and in a later change
+PUSH_QLOADED.PROC / PUSH_CAV_SCALE.PROC once the operator has reviewed the
+measurement.
+"""
+
+import threading
+import time
+
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal
+
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.cavity_char import (
+    CavityCharLimits,
+    CavityCharPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
+    PhaseContext,
+    PhaseResult,
+)
+from sc_linac_physics.applications.rf_commissioning.session_manager import (
+    CommissioningSession,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
+    resolve_cavity_selection,
+)
+from sc_linac_physics.utils.sc_linac.linac import Machine
+
+
+class CavityCharController(QObject):
+    """Owns CavityCharPhase execution for the Cavity Characterization display."""
+
+    phase_completed = pyqtSignal(object)
+    phase_run_finished = pyqtSignal(bool, str)
+    # Seconds since the characterization started. Emitted from the poll
+    # thread so the elapsed label updates on the GUI thread.
+    elapsed_updated = pyqtSignal(float)
+
+    def __init__(self, view, session: CommissioningSession) -> None:
+        super().__init__()
+        self.view = view
+        self.session = session
+        self.limits = CavityCharLimits()
+
+        self.context: PhaseContext | None = None
+        self.phase: CavityCharPhase | None = None
+        self.machine: Machine | None = None
+        self._cavity = None
+        self._paused = False
+        self._active_phase_instance_id: int | None = None
+
+        self.phase_run_finished.connect(self._on_phase_run_finished)
+
+    # ------------------------------------------------------------------
+    # Operator input
+    # ------------------------------------------------------------------
+
+    def _get_drive_level(self) -> float | None:
+        """Read the spinbox and apply CavityCharLimits' bounds.
+
+        CavityCharPhase._set_drive_level re-validates before writing SEL_ASET.
+        Checking here as well means the operator is told before a phase
+        instance is opened against the record.
+        """
+        drive = float(self.view.drive_level_spinbox.value())
+        if not 0 < drive <= self.limits.max_drive_level:
+            self.view.show_error(
+                f"Drive level must be in (0, "
+                f"{self.limits.max_drive_level:.0f}]"
+            )
+            return None
+        return drive
+
+    # ------------------------------------------------------------------
+    # PV wiring
+    # ------------------------------------------------------------------
+
+    def setup_pv_connections(self) -> None:
+        if self.session is not None and self.session.has_active_record():
+            self.update_pv_addresses()
+
+    def update_pv_addresses(
+        self,
+        cryomodule: str | None = None,
+        cavity_number: str | None = None,
+    ) -> None:
+        """Cache the selected cavity and publish its loaded-Q window.
+
+        The window differs between harmonic-linearizer, LCLS-II-HE and
+        standard cavities, so the panel reads it off the cavity rather than
+        hard-coding a pair.
+        """
+        cryomodule, cavity_number = resolve_cavity_selection(
+            self.view, cryomodule, cavity_number
+        )
+        if cryomodule is None or cavity_number is None:
+            return
+        try:
+            cavity = self._get_machine_cavity(
+                int(cryomodule), int(cavity_number)
+            )
+            self._cavity = cavity
+            self.view.cavity_loaded_q_window = (
+                cavity.loaded_q_lower_limit,
+                cavity.loaded_q_upper_limit,
+            )
+        except Exception as exc:
+            self.view.log_message(f"Error setting PVs: {exc}")
+
+    def _get_machine_cavity(self, cm: int, cav: int):
+        if not self.machine:
+            self.machine = Machine()
+        return self.machine.cryomodules[f"{cm:02d}"].cavities[cav]
+
+    # ------------------------------------------------------------------
+    # Abort and pause
+    # ------------------------------------------------------------------
+
+    def on_abort(self) -> None:
+        """End the wait for a result. Writes nothing to the machine.
+
+        Cavity exposes PROBECALSTRT, PROBECALSTS and PROBECALTS for this
+        measurement and nothing else, so there is no abort to send.
+        request_abort() sets abort_flag, which check_abort() reads inside
+        CavityCharPhase._wait_for_completion.
+        """
+        if self._cavity is not None:
+            self._cavity.request_abort()
+        self.view.log_message(
+            "Abort requested. This stops waiting for the result; the "
+            "characterization itself continues in the IOC."
+        )
+
+    def on_pause_test(self) -> None:
+        self._paused = not self._paused
+
+    def _on_phase_run_finished(self, success: bool, error_msg: str) -> None:
+        if success and self.context is not None:
+            self.phase_completed.emit(self.context.record)
+        elif not success:
+            self.view.show_error(error_msg)
+
+    # ------------------------------------------------------------------
+    # Phase execution
+    # ------------------------------------------------------------------
+
+    def on_run_characterization(self) -> None:
+        """Validate, open a phase instance, then run on a thread."""
+        drive_level = self._get_drive_level()
+        if drive_level is None:
+            return
+
+        operator = self.view.get_current_operator()
+        if not operator:
+            self.view.show_error("Select an operator before running")
+            return
+
+        if self._cavity is None:
+            self.view.show_error("No cavity selected")
+            return
+
+        if not self._prepare_phase_context(self._cavity, operator, drive_level):
+            return
+
+        self._execute_phase_async()
+
+    def _prepare_phase_context(
+        self, cavity, operator: str, drive_level: float
+    ) -> bool:
+        record = self.session.get_active_record()
+        record_id = self.session.get_active_record_id()
+
+        can_run, reason = self.session.can_run_phase(
+            CommissioningPhase.CAVITY_CHAR
+        )
+        if not can_run:
+            self.view.show_error(f"Cannot run CAVITY_CHAR phase: {reason}")
+            return False
+
+        if record_id is not None:
+            phase_start = self.session.start_active_phase_instance(
+                CommissioningPhase.CAVITY_CHAR, operator=operator
+            )
+            self._active_phase_instance_id = (
+                phase_start.phase_instance_id if phase_start else None
+            )
+
+        self.context = PhaseContext(
+            record=record,
+            operator=operator,
+            parameters={"cavity": cavity, "drive_level": drive_level},
+            phase_instance_id=self._active_phase_instance_id,
+            run_intent="commissioning",
+        )
+        self.phase = CavityCharPhase(self.context, self.limits)
+
+        is_valid, message = self.phase.validate_prerequisites()
+        if not is_valid:
+            self.view.show_error(f"Prerequisites not met: {message}")
+            return False
+        return True
+
+    def _execute_phase_async(self) -> None:
+        if not self.context or not self.phase:
+            return
+        QTimer.singleShot(100, self._run_phase_in_background)
+
+    def _run_phase_in_background(self) -> None:
+        def worker() -> None:
+            try:
+                self.phase._mark_phase_started()
+                for step_name in self.phase.get_phase_steps():
+                    if not self._execute_single_step(step_name):
+                        self.phase_run_finished.emit(
+                            False, f"Step failed: {step_name}"
+                        )
+                        return
+                self._finalize_background_phase()
+            except Exception as exc:
+                self.phase_run_finished.emit(False, str(exc))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _execute_single_step(self, step_name: str) -> bool:
+        """Run one step, retrying for as long as the backend asks.
+
+        RETRY is not a failure: _read_results returns it while the measured
+        values are still settling.
+        """
+        while True:
+            result = self.phase.execute_step(step_name)
+
+            if result.result is PhaseResult.RETRY:
+                self.view.log_message(f"{step_name}: {result.message}")
+                self.view.set_char_status(result.message)
+                time.sleep(result.retry_delay_seconds or 1.0)
+                continue
+
+            if result.result is PhaseResult.SUCCESS:
+                self.view.log_message(f"{step_name}: {result.message}")
+                self.view.set_char_status(result.message)
+                return True
+
+            # A crash and a timeout both arrive as FAILED with different
+            # messages. Passing the message straight through keeps them
+            # distinguishable in the panel.
+            self.view.log_message(f"{step_name} failed: {result.message}")
+            self.view.set_char_status(result.message)
+            return False
+
+    def _finalize_background_phase(self) -> None:
+        self.phase.finalize_phase()
+        self.phase_run_finished.emit(True, "")
+
+    def _emit_elapsed_until_done(self, started_at: float) -> None:
+        """Emit elapsed seconds while the characterization runs.
+
+        PROBECALSTS reports running or crashed and nothing in between, so
+        elapsed time against the timeout is the only progress the panel can
+        honestly show.
+        """
+        while (
+            self._cavity is not None and self._cavity.characterization_running
+        ):
+            self.elapsed_updated.emit(time.monotonic() - started_at)
+            time.sleep(self.limits.status_poll_interval)
