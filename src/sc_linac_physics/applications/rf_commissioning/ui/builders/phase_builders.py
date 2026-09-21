@@ -535,6 +535,83 @@ class SSACharUI(PhaseUIBase):
         return group
 
 
+class CavityCharUI(PhaseUIBase):
+    """Builds the Cavity Characterization display UI.
+
+    Drive level is the only operator input. There is no probe Q row:
+    CavityCharPhase._read_probe_q() returns None because the hardware model
+    has no probe Q readback PV and no PUSH_QPROBE to pair with one.
+    """
+
+    def build(self) -> QHBoxLayout:
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(6)
+        left_panel.addLayout(self._build_main_toolbar())
+        left_panel.addWidget(self._build_char_inputs())
+        left_panel.addWidget(self._build_history(), stretch=1)
+
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(6)
+        right_panel.addWidget(
+            self._build_stored_data_section(
+                self._get_parent_stored_data_fields()
+            )
+        )
+        right_panel.addStretch()
+
+        main_layout.addLayout(left_panel, 1)
+        main_layout.addLayout(right_panel, 1)
+        return main_layout
+
+    def _build_char_inputs(self) -> QGroupBox:
+        group = QGroupBox("Cavity Characterization")
+        layout = QGridLayout()
+        layout.setSpacing(6)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        layout.addWidget(QLabel("Drive level:"), 0, 0)
+        # A plain QDoubleSpinBox, deliberately not a PyDMSpinbox. The PyDM
+        # spinboxes in this file are wired writeOnPress/send_value, which puts
+        # the value to the PV as the operator edits. Here the phase owns the
+        # write: CavityCharPhase._set_drive_level validates first, then puts
+        # SEL_ASET. The maximum is applied by CavityCharDisplay, which can see
+        # CavityCharLimits; builders in this package do not import phases.
+        spin = self._register(
+            "drive_level_spinbox", QDoubleSpinBox(parent=self.parent)
+        )
+        spin.setRange(0.01, 100.0)
+        spin.setSingleStep(1.0)
+        spin.setDecimals(2)
+        spin.setValue(linac_utils.SAFE_PULSED_DRIVE_LEVEL)
+        spin.setFixedWidth(90)
+        layout.addWidget(spin, 0, 1)
+        layout.addWidget(QLabel("% forward power"), 0, 2)
+
+        for row, (caption, name) in enumerate(
+            (
+                ("Status:", "char_status_label"),
+                ("Elapsed:", "elapsed_label"),
+                ("Phase:", "local_phase_status"),
+            ),
+            start=1,
+        ):
+            layout.addWidget(QLabel(caption), row, 0)
+            layout.addWidget(
+                self._register(name, self._make_local_label("-")),
+                row,
+                1,
+                1,
+                2,
+            )
+
+        group.setLayout(layout)
+        return group
+
+
 class FrequencyTuningUI(PhaseUIBase):
     """Builds the Frequency Tuning display UI with 3-stage checklist layout."""
 
