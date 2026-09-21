@@ -34,7 +34,11 @@ from sc_linac_physics.applications.field_emission.constants import (
     CAV_RANGE,
     RAD_CHAN_RANGE,
 )
-from sc_linac_physics.applications.field_emission.plot_me import plot_amp_vs_rad
+from sc_linac_physics.applications.field_emission.plot_me import (
+    plot_amp_vs_rad,
+    unify_legends,
+    unify_axes,
+)
 
 
 class FieldEmission(Display):
@@ -484,7 +488,7 @@ class FieldEmission(Display):
         return axes, title
 
     def _configure_plot_canvas(self, axes, title):
-        all_handles, all_labels = self._unify_legends(axes)
+        all_handles, all_labels = unify_legends(axes)
         if all_handles:
             self.fig.legend(
                 all_handles, all_labels, fontsize="x-small", loc="upper right"
@@ -492,41 +496,8 @@ class FieldEmission(Display):
         self.fig.suptitle(title)
         self.fig.supxlabel("Amplitude (MV)")
         self.fig.supylabel("Radiation (mR/hr)")
-        self._unify_axes(axes)
+        unify_axes(axes)
         self.canvas.draw()
-
-    def _unify_legends(self, axes):
-        # Build summary legend
-        all_handles = []
-        all_labels = []
-        for ax in axes:
-            handles, labels = ax.get_legend_handles_labels()
-            for h, l in zip(handles, labels):
-                if l not in all_labels:
-                    all_handles.append(h)
-                    all_labels.append(l)
-        return all_handles, all_labels
-
-    def _unify_axes(self, axes):
-        if not axes:
-            return
-
-        # Find the overall min/max across every subplot
-        x_mins, x_maxs, y_mins, y_maxs = [], [], [], []
-        for ax in axes:
-            x_min, x_max = ax.get_xlim()
-            y_min, y_max = ax.get_ylim()
-            x_mins.append(x_min)
-            x_maxs.append(x_max)
-            y_mins.append(y_min)
-            y_maxs.append(y_max)
-
-        x_range = (min(x_mins), max(x_maxs))
-        y_range = (min(y_mins), max(y_maxs))
-
-        for ax in axes:
-            ax.set_xlim(x_range)
-            ax.set_ylim(y_range)
 
 
 if __name__ == "__main__":

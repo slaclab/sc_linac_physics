@@ -66,3 +66,40 @@ def add_poly_fit(amp, rad, axis, label, color):
         color=color, label=f"C1: {param[0]:.1g}    C2: {param[1]:.1f}"
     )
     return line, patch
+
+
+def unify_legends(axes):
+    """combine legend labels from subplots into one joint legend"""
+    # Build summary legend
+    all_handles = []
+    all_labels = []
+    for ax in axes:
+        handles, labels = ax.get_legend_handles_labels()
+        for h, l in zip(handles, labels):
+            if l not in all_labels:
+                all_handles.append(h)
+                all_labels.append(l)
+    return all_handles, all_labels
+
+
+def unify_axes(axes):
+    """plot all subplots on a common pair of axes for easier comparison"""
+    if not axes:
+        return
+
+    # Find the overall min/max across every subplot
+    x_mins, x_maxs, y_mins, y_maxs = [], [], [], []
+    for ax in axes:
+        x_min, x_max = ax.get_xlim()
+        y_min, y_max = ax.get_ylim()
+        x_mins.append(x_min)
+        x_maxs.append(x_max)
+        y_mins.append(y_min)
+        y_maxs.append(y_max)
+
+    x_range = (min(x_mins), max(x_maxs))
+    y_range = (min(y_mins), max(y_maxs))
+
+    for ax in axes:
+        ax.set_xlim(x_range)
+        ax.set_ylim(y_range)
