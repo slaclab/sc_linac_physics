@@ -117,3 +117,19 @@ def test_a_record_with_no_cavity_char_does_not_raise(display):
     record = CommissioningRecord(linac=0, cryomodule="01", cavity_number=1)
     assert record.cavity_char is None
     display.refresh_from_record(record)
+
+
+def test_stored_data_omits_the_probe_q_row(display):
+    """A row that can never fill reads as missing data to chase.
+
+    CavityCharacterization declares probe_q as a phase_display_field, so the
+    generic Stored Data section renders it. The phase cannot populate it:
+    QPROBE_CALC1.PROC only triggers the calculation and there is no readback
+    PV. The spec's decision is to omit it until the PVs exist.
+    """
+    names = [
+        spec.widget_name for spec in display.get_phase_stored_field_specs()
+    ]
+    assert "cavity_probe_q" not in names
+    assert "cavity_loaded_q" in names
+    assert "cavity_scale_factor" in names

@@ -52,6 +52,23 @@ class CavityCharDisplay(BasePlaceholderDisplay):
 
         self.controller.setup_pv_connections()
 
+    # Probe Q is declared on CavityCharacterization as a phase_display_field,
+    # so the generic Stored Data section renders a row for it. The phase never
+    # fills it: QPROBE_CALC1.PROC triggers the calculation and there is no
+    # readback PV to read the answer from, and no PUSH_QPROBE to push it with
+    # (see CavityCharPhase._read_probe_q). A row that can never fill reads as
+    # missing data an operator should chase, so it is dropped here rather than
+    # by changing the record model — the field stays, ready for the PVs.
+    _OMITTED_STORED_FIELDS = ("cavity_probe_q",)
+
+    @classmethod
+    def get_phase_stored_field_specs(cls):
+        return [
+            spec
+            for spec in super().get_phase_stored_field_specs()
+            if spec.widget_name not in cls._OMITTED_STORED_FIELDS
+        ]
+
     def _apply_drive_level_limits(self) -> None:
         limits = self.controller.limits
         self.drive_level_spinbox.setMaximum(limits.max_drive_level)
