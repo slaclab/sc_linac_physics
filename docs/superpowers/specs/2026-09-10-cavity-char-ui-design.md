@@ -162,7 +162,7 @@ assertion listed under Testing below is already there if #297 merges first.
 
 ```
 operator sets drive level (spinbox, default 10, max 15)
-    -> controller runs phase steps on a Worker(QThread)
+    -> controller runs phase steps on a daemon threading.Thread
        verify_initial_state -> set_drive_level -> start_characterization
     -> wait_for_completion: poll PROBECALSTS @1s, emit elapsed
        panel shows status text + elapsed/300s; Abort stops waiting only
@@ -175,9 +175,13 @@ operator sets drive level (spinbox, default 10, max 15)
     -> record_results / finalize_phase
 ```
 
-No blocking EPICS call runs on the Qt main thread; the phase is driven from
-`Worker(QThread)` per `utils/qt.py`, consistent with the other phase
-controllers.
+No blocking EPICS call runs on the Qt main thread. An earlier draft of this
+spec said the phase would run on `Worker(QThread)` from `utils/qt.py`. It will
+not: `utils.qt` is not imported anywhere in `rf_commissioning`, and all three
+phase controllers that thread — `ssa_char`, `piezo_pre_rf`, `frequency_tuning`
+— start a daemon `threading.Thread` and marshal results back with
+`pyqtSignal`. `CavityCharController` follows them. Introducing a second
+threading idiom for the fourth phase is not worth the inconsistency.
 
 ## Error handling
 
