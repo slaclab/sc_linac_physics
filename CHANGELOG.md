@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.36.2 (2026-09-21)
+
+### Bug Fixes
+
+- **tests**: Stop the fault heatmap tests querying the live archiver
+  ([#298](https://github.com/slaclab/sc_linac_physics/pull/298),
+  [`e5d8626`](https://github.com/slaclab/sc_linac_physics/commit/e5d86266a05c66f516f3cfbb2fa1184ab06f717c))
+
+
 ## v9.36.1 (2026-09-16)
 
 ### Bug Fixes
