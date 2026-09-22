@@ -1,9 +1,15 @@
-import sys
+# Every test here builds a real top-level PVGroupArchiverDisplay. Left to
+# itself that widget's C++ object is destroyed whenever its last Python
+# reference happens to go away, which is what made this file flaky: under
+# pytest-xdist a stray teardown takes the whole worker down, along with the
+# unrelated tests it was running. So the `display` fixture registers the
+# widget with qtbot.addWidget, the pattern used in
+# tests/applications/q0/test_q0_gui.py.
 from unittest.mock import Mock, patch, MagicMock
 
 import pytest
-from PyQt5.QtWidgets import QDialog
-from qtpy.QtWidgets import QApplication
+from PyQt5.QtCore import QEvent
+from PyQt5.QtWidgets import QApplication, QDialog
 
 from sc_linac_physics.displays.plot.plot import (
     PVGroupArchiverDisplay,
@@ -20,14 +26,25 @@ from sc_linac_physics.displays.plot.utils import (
 )
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication instance for tests."""
+@pytest.fixture(autouse=True)
+def flush_deferred_deletes():
+    """Finish the deletion qtbot.addWidget only starts.
+
+    qtbot's cleanup calls close() then deleteLater() on each registered
+    widget, and deleteLater() only posts a DeferredDelete event.
+    QApplication.processEvents(), which is all pytest-qt runs afterwards,
+    does not deliver DeferredDelete -- so the posted event sits in the
+    queue holding the widget alive, and registering with qtbot on its own
+    is not enough to get the display destroyed inside its own test.
+
+    This runs after qtbot's cleanup: pytest-qt closes widgets in the part
+    of its pytest_runtest_teardown wrapper that precedes the yield, and
+    fixture finalizers run inside that yield.
+    """
+    yield
     app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-    yield app
-    # Don't quit the app here as it might be used by other tests
+    if app is not None:
+        app.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 @pytest.fixture
@@ -97,8 +114,32 @@ def mock_pv_groups():
 
 
 @pytest.fixture
-def display(qapp, mock_machine, mock_pv_groups):
-    """Create PVGroupArchiverDisplay instance with mocked data."""
+def display(qtbot, mock_machine, mock_pv_groups):
+    """Create PVGroupArchiverDisplay instance with mocked data.
+
+    close() alone is not enough. It leaves the widget's C++ object alive
+    and its PyDMArchiverTimePlot redraw timer (1000 ms) still firing, so
+    the tree is torn down later at whatever moment the last Python
+    reference drops -- for two tests in this file, inside some unrelated
+    later test. qtbot.addWidget makes that a deleteLater() in this test's
+    own teardown instead, which flush_deferred_deletes then delivers.
+
+    The two tests that used to leak are test_open_axis_range_dialog_no_axes
+    and test_open_axis_range_dialog_with_axes. Both assert on a mock that
+    recorded a call taking the display itself as an argument
+    (QMessageBox.information(self, ...) and AxisRangeDialog(..., self)).
+    Those call records outlive the `with patch(...)` block and pin the
+    widget past fixture teardown; gc.collect() does not free it.
+
+    Registering with qtbot does not unpin it -- the Python wrapper still
+    lingers for those two tests -- but it does destroy the C++ object on
+    schedule, which is the only half that can take a worker down.
+    Measured, counting widgets whose C++ object is still alive after each
+    test, plus the redraw timers they keep running:
+
+      before    1 display and 1-2 active 1000 ms timers, for those 2 tests
+      after     0 displays and 0 timers, for all 40
+    """
     with (
         patch("sc_linac_physics.displays.plot.plot.Machine") as MockMachine,
         patch(
@@ -110,8 +151,8 @@ def display(qapp, mock_machine, mock_pv_groups):
         mock_get_pvs.return_value = mock_pv_groups
 
         display = PVGroupArchiverDisplay()
+        qtbot.addWidget(display)
         yield display
-        display.close()
 
 
 class TestPVGroupArchiverDisplayInitialization:
