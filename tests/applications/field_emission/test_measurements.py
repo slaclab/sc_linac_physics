@@ -126,6 +126,13 @@ class TestMatchMeasurementDates:
             result = measurements.match_measurement_dates("34")
         assert result == []
 
+    def test_missing_cm_returns_empty_list(self):
+        """CM group does not exist at all -> [] (h5_cryo is None)."""
+        fake_file = FakeH5File({"CM99": FakeGroup(children={})})
+        with patch(f"{MOD}.h5py.File", return_value=fake_file):
+            result = measurements.match_measurement_dates("34")
+        assert result == []
+
     def test_preserves_order_of_matches(self):
         fake_file = self._file_for_cm34()
         with patch(f"{MOD}.h5py.File", return_value=fake_file):
@@ -449,3 +456,133 @@ class TestGetColumns:
         amp, rad = measurements.get_columns(df, r_chan)
         assert amp.iloc[0] == 4.0  # exactly 4 -> kept
         assert np.isnan(amp.iloc[1])  # 3.9 -> masked
+
+
+# ===========================================================================
+# fetch_plot_data
+# ---------------------------------------------------------------------------
+# fetch_plot_data(cavity, measurement, readout_type) aggregates find_dataframes
+# results into a list of dicts:
+#   {"measurement": <meas>, "dataframes": <selected>, "label": <label>}
+# It returns {} early when no measurements OR no cavities are selected.
+# ===========================================================================
+SAMPLE_MEASUREMENTS = [
+    {
+        "cm": "34",
+        "date": datetime(2025, 5, 1, 16, 33),
+        "display": "CM34    2025-05-01 16:33:00",
+    },
+    {
+        "cm": "34",
+        "date": datetime(2025, 5, 2, 10, 0),
+        "display": "CM34    2025-05-02 10:00:00",
+    },
+]
+
+
+class TestFetchPlotData:
+    def test_empty_when_no_measurement(self):
+        """No measurements selected -> {} (falsy list)."""
+        result = measurements.fetch_plot_data(
+            [True] + [False] * 7, [], "Average"
+        )
+        assert result == {}
+
+    def test_empty_when_measurement_is_none(self):
+        """A None/empty measurement arg -> {}."""
+        result = measurements.fetch_plot_data([True], None, "Average")
+        assert result == {}
+
+    def test_empty_when_no_cavity_checked(self):
+        """No cavities checked -> {} even with measurements present."""
+        result = measurements.fetch_plot_data(
+            [False] * 8, list(SAMPLE_MEASUREMENTS), "Average"
+        )
+        assert result == {}
+
+    def test_one_result_per_measurement(self):
+        selected = {1: pd.DataFrame({"a": [1, 2]})}
+        with patch.object(
+            measurements,
+            "find_dataframes",
+            return_value=(selected, "Label", 1),
+        ) as mock_find:
+            result = measurements.fetch_plot_data(
+                [True] + [False] * 7, list(SAMPLE_MEASUREMENTS), "Average"
+            )
+        assert isinstance(result, list)
+        assert len(result) == 2  # two measurements -> two results
+        assert mock_find.call_count == 2
+
+    def test_result_dict_shape(self):
+        selected = {1: pd.DataFrame({"a": [1, 2]})}
+        with patch.object(
+            measurements,
+            "find_dataframes",
+            return_value=(selected, "MyLabel", 1),
+        ):
+            result = measurements.fetch_plot_data(
+                [True] + [False] * 7, [SAMPLE_MEASUREMENTS[0]], "Average"
+            )
+        assert len(result) == 1
+        entry = result[0]
+        assert set(entry.keys()) == {"measurement", "dataframes", "label"}
+        assert entry["measurement"] == SAMPLE_MEASUREMENTS[0]
+        assert entry["dataframes"] is selected
+        assert entry["label"] == "MyLabel"
+
+    def test_forwards_args_to_find_dataframes(self):
+        selected = {1: pd.DataFrame({"a": [1]})}
+        cav = [True, False, True] + [False] * 5
+        with patch.object(
+            measurements,
+            "find_dataframes",
+            return_value=(selected, "Label", 1),
+        ) as mock_find:
+            measurements.fetch_plot_data(
+                cav, [SAMPLE_MEASUREMENTS[0]], "Instant"
+            )
+        cm_arg, date_arg, cav_arg, readout_arg = mock_find.call_args.args
+        assert cm_arg == "34"
+        assert date_arg == SAMPLE_MEASUREMENTS[0]["date"]
+        assert cav_arg == cav
+        assert readout_arg == "Instant"
+
+    def test_calls_find_dataframes_once_per_measurement_with_correct_dates(
+        self,
+    ):
+        """Each measurement's cm/date is forwarded in order."""
+        selected = {1: pd.DataFrame({"a": [1]})}
+        with patch.object(
+            measurements,
+            "find_dataframes",
+            return_value=(selected, "Label", 1),
+        ) as mock_find:
+            measurements.fetch_plot_data(
+                [True] + [False] * 7, list(SAMPLE_MEASUREMENTS), "Average"
+            )
+        forwarded_dates = [call.args[1] for call in mock_find.call_args_list]
+        assert forwarded_dates == [
+            SAMPLE_MEASUREMENTS[0]["date"],
+            SAMPLE_MEASUREMENTS[1]["date"],
+        ]
+
+    def test_preserves_measurement_order(self):
+        """Results come back in the same order the measurements were given."""
+        with patch.object(
+            measurements,
+            "find_dataframes",
+            side_effect=lambda cm, date, cav, read: (
+                {1: pd.DataFrame({"a": [1]})},
+                str(date),
+                1,
+            ),
+        ):
+            result = measurements.fetch_plot_data(
+                [True] + [False] * 7, list(SAMPLE_MEASUREMENTS), "Average"
+            )
+        assert [r["measurement"] for r in result] == SAMPLE_MEASUREMENTS
+        assert [r["label"] for r in result] == [
+            str(SAMPLE_MEASUREMENTS[0]["date"]),
+            str(SAMPLE_MEASUREMENTS[1]["date"]),
+        ]
