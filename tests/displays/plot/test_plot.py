@@ -5,10 +5,15 @@
 # unrelated tests it was running. So the `display` fixture registers the
 # widget with qtbot.addWidget, the pattern used in
 # tests/applications/q0/test_q0_gui.py.
+#
+# That file also carries a no_leaked_qthreads guard (#307). This one does
+# too, but it has to skip pydm's RulesEngine -- see the fixture.
+import gc
 from unittest.mock import Mock, patch, MagicMock
 
 import pytest
-from PyQt5.QtCore import QEvent
+from PyQt5 import sip
+from PyQt5.QtCore import QEvent, QThread
 from PyQt5.QtWidgets import QApplication, QDialog
 
 from sc_linac_physics.displays.plot.plot import (
@@ -45,6 +50,74 @@ def flush_deferred_deletes():
     app = QApplication.instance()
     if app is not None:
         app.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+# pydm's RulesDispatcher is a singleton that owns one RulesEngine QThread
+# and start()s it the first time a real PyDM widget registers rules
+# (pydm/widgets/rules.py:70-72, pydm 1.28.2). PVGroupArchiverDisplay builds
+# real PyDMLabel and PyDMArchiverTimePlot children, so the first test in
+# this file starts it -- test_display_creation, measured.
+#
+# It is not a leak and it is not this test's to clean up: quitting it would
+# leave every later test in the process without rules evaluation. It also
+# cannot be excluded by the before/after diff below, because it is started
+# lazily *during* the first test rather than at import. Hence the name
+# check. tests/applications/q0/test_q0_gui.py needs no such carve-out
+# because its widgets are Mocks, so it never builds a PyDM widget at all.
+_PYDM_SINGLETON_THREADS = frozenset({"RulesEngine"})
+
+
+def _live_qthreads():
+    """Every real QThread whose C++ object is still alive.
+
+    Deliberately not preceded by gc.collect(): a stray worker is usually
+    kept alive only by the reference cycle through the widget that built
+    it, so collecting first would destroy the evidence -- and that
+    destruction is the crash this guard exists to report.
+
+    issubclass(type(obj), ...) rather than isinstance(obj, ...): a Mock
+    built with spec=QThread reports QThread as its __class__, so
+    isinstance says True and sip.isdeleted() then raises TypeError on
+    being handed a Mock. type() sees through that.
+    """
+    return [
+        obj
+        for obj in gc.get_objects()
+        if issubclass(type(obj), QThread)
+        and type(obj).__name__ not in _PYDM_SINGLETON_THREADS
+        and not sip.isdeleted(obj)
+    ]
+
+
+@pytest.fixture(autouse=True)
+def no_leaked_qthreads():
+    """Fail the test that leaks a QThread, instead of crashing the worker.
+
+    Nothing in displays/plot/ constructs a QThread today, so this guard is
+    insurance rather than a fix: the display is a real pydm Display, and if
+    a future change has it start a worker, Qt aborts the process when that
+    thread is garbage collected while still running. xdist reports that as
+    "worker 'gwN' crashed" against whichever unrelated test happened to be
+    running, which is how the CalibrationWorker leak in #307 stayed hidden
+    through #299.
+
+    Declared after flush_deferred_deletes so it tears down first
+    (finalizers run in reverse): this quits, joins, and schedules the stray
+    thread for deletion, then the flush delivers that deletion.
+    """
+    before = {id(t) for t in _live_qthreads()}
+    yield
+    # Only threads this test created: a thread another file left in the
+    # shared worker process is not this test's to report.
+    leaked = [t for t in _live_qthreads() if id(t) not in before]
+    for thread in leaked:
+        thread.quit()
+        thread.wait(5000)
+        thread.deleteLater()
+    assert not leaked, (
+        "test left real QThread(s) behind: "
+        f"{sorted(type(t).__name__ for t in leaked)}."
+    )
 
 
 @pytest.fixture
