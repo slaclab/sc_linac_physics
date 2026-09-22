@@ -85,6 +85,7 @@ def find_dataframes(cm, date, cav, read):
 
 
 def get_columns(df, r_channels):
+    """get selected columns from dataframe, masking setup amplitude"""
     # eliminate rows under active amplitude threshold voltage
     threshold = AMPLITUDE_THRESHOLD
     df2 = df.mask(df.iloc[:, 0] < threshold)
@@ -96,6 +97,7 @@ def get_columns(df, r_channels):
 
 
 def fetch_plot_data(cavity, measurement, readout_type):
+    """grab amplitude and radiation data from all selected measurements"""
     if not measurement or not any(cavity):
         return {}
 
