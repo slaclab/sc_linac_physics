@@ -93,3 +93,23 @@ def get_columns(df, r_channels):
     x_amplitude = df2.iloc[:, 0]
     rad_cols = df2.iloc[:, idx_list]
     return x_amplitude, rad_cols
+
+
+def fetch_plot_data(cavity, measurement, readout_type):
+    if not measurement or not any(cavity):
+        return {}
+
+    # Fetch data for every measurement
+    all_results = []
+    for m in measurement:
+        selected, label, n = find_dataframes(
+            m["cm"], m["date"], cavity, readout_type
+        )
+        all_results.append(
+            {
+                "measurement": m,
+                "dataframes": selected,
+                "label": label,
+            }
+        )
+    return all_results

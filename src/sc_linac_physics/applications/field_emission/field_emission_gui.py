@@ -27,7 +27,7 @@ from matplotlib.backends.backend_qt5agg import (
 from sc_linac_physics.applications.field_emission.measurements import (
     match_measurement_dates,
     fetch_measurement_metadata,
-    find_dataframes,
+    fetch_plot_data,
 )
 from sc_linac_physics.applications.field_emission.constants import (
     VALID_CMS_LIST,
@@ -390,7 +390,7 @@ class FieldEmission(Display):
         r_channels = [cb.isChecked() for cb in self.rad_chan_cb]
         fit = self.radio_fit_btn.isChecked()
 
-        plot_dfs = self._fetch_plot_data(cav, meas, readout)
+        plot_dfs = fetch_plot_data(cav, meas, readout)
         if len(plot_dfs) == 1:
             axes_list, plot_title = self._plot_one_date(
                 plot_dfs[0], r_channels, fit
@@ -400,25 +400,6 @@ class FieldEmission(Display):
                 plot_dfs, r_channels, fit
             )
         self._configure_plot_canvas(axes_list, plot_title)
-
-    def _fetch_plot_data(self, cavity, measurement, readout_type):
-        if not measurement or not any(cavity):
-            return {}
-
-        # Fetch data for every measurement
-        all_results = []
-        for m in measurement:
-            selected, label, n = find_dataframes(
-                m["cm"], m["date"], cavity, readout_type
-            )
-            all_results.append(
-                {
-                    "measurement": m,
-                    "dataframes": selected,
-                    "label": label,
-                }
-            )
-        return all_results
 
     def _plot_one_date(self, measurement, rad_channels, fit_flag):
         # Calculate subplot rows, cols
