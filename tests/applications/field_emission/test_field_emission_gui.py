@@ -43,6 +43,19 @@ SAMPLE_METADATA = (
 )
 
 
+def _make_plot_result(measurement, cav_nums, label="My Label"):
+    """
+    Build a single fetch_plot_data result dict:
+        {"measurement": <meas>, "dataframes": {cav_num: df}, "label": <str>}
+    """
+    dfs = {}
+    for c in cav_nums:
+        m = MagicMock(name=f"df{c}")
+        m.empty = False
+        dfs[c] = m
+    return {"measurement": measurement, "dataframes": dfs, "label": label}
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -61,8 +74,10 @@ def display(qtbot):
         patch.object(
             feg, "fetch_measurement_metadata", return_value=SAMPLE_METADATA
         ),
-        patch.object(feg, "find_dataframes", return_value=({}, "label", 0)),
+        patch.object(feg, "fetch_plot_data", return_value=[]),
         patch.object(feg, "plot_amp_vs_rad"),
+        patch.object(feg, "unify_legends", return_value=([], [])),
+        patch.object(feg, "unify_axes"),
     ):
         widget = FieldEmission()
         qtbot.addWidget(widget)
@@ -140,6 +155,10 @@ class TestConstruction:
     def test_default_radio_is_amp_vs_rad(self, display):
         assert display.radio_amp_rad_btn.isChecked() is True
         assert display.radio_fit_btn.isChecked() is False
+
+    def test_amp_rad_radio_text(self, display):
+        assert display.radio_amp_rad_btn.text() == "Radiation vs Amplitude"
+        assert display.radio_fit_btn.text() == "Fit Line"
 
     def test_canvas_and_toolbar_created(self, display):
         assert display.fig is not None
@@ -245,18 +264,20 @@ class TestButtonHelpers:
 
 
 # ---------------------------------------------------------------------------
-# on_cb_clicked -> plot button enable/disable logic
+# _refresh_plot_button_state -> plot button enable/disable logic
 #
-# NOTE: enable requires cav checked AND rad checked AND cm index > -1
-#       AND meas_list_widget.count() > 0.
+# NOTE: enable requires cav checked AND rad checked AND cryo index > -1
+#       AND self._selected_rows is non-empty.
 # ---------------------------------------------------------------------------
 class TestPlotButtonEnableLogic:
     def _prime_selection(self, display):
-        """Set cryomodule so the measurement list gets populated (count > 0)."""
+        """Set cryomodule so the measurement list gets populated + row selected."""
         display.cryo_dropdown.setCurrentIndex(
             0
         )  # triggers on_cryomodule_updated
         display.meas_list_widget.item(0).setSelected(True)
+        # ensure _selected_rows is populated
+        display.on_measurement_updated()
 
     def test_disabled_when_nothing_selected(self, display):
         display._refresh_plot_button_state()
@@ -277,6 +298,7 @@ class TestPlotButtonEnableLogic:
     def test_disabled_when_no_cryomodule(self, display):
         # cavity + channel checked but cryo index == -1
         display.cryo_dropdown.setCurrentIndex(-1)
+        display._selected_rows = []
         display.cavity_cb[0].setChecked(True)
         display.rad_chan_cb[0].setChecked(True)
         display._refresh_plot_button_state()
@@ -424,6 +446,16 @@ class TestMeasurementUpdated:
                 SAMPLE_MEASUREMENTS[1]["date"]
             )
 
+    def test_selected_rows_tracked(self, display):
+        with patch.object(
+            feg,
+            "match_measurement_dates",
+            return_value=list(SAMPLE_MEASUREMENTS),
+        ):
+            display.cryo_dropdown.setCurrentIndex(0)
+            _select_rows(display, [0, 1])
+            assert display._selected_rows == [0, 1]
+
     def test_clear_metadata_labels_sets_dashes(self, display):
         display.clear_metadata_labels()
         for lbl in (
@@ -435,48 +467,6 @@ class TestMeasurementUpdated:
             display.meas_notes_label,
         ):
             assert lbl.text() == "-"
-
-
-# ---------------------------------------------------------------------------
-# _fetch_plot_data
-# ---------------------------------------------------------------------------
-class TestFetchPlotData:
-    def test_empty_when_no_measurement(self, display):
-        result = display._fetch_plot_data([True], [], "Average")
-        assert result == {}
-
-    def test_empty_when_no_cavity_checked(self, display):
-        result = display._fetch_plot_data(
-            [False] * 8, list(SAMPLE_MEASUREMENTS), "Average"
-        )
-        assert result == {}
-
-    def test_one_result_per_measurement(self, display):
-        selected = {1: MagicMock()}
-        with patch.object(
-            feg, "find_dataframes", return_value=(selected, "Label", 1)
-        ) as mock_find:
-            result = display._fetch_plot_data(
-                [True] + [False] * 7, list(SAMPLE_MEASUREMENTS), "Average"
-            )
-        assert isinstance(result, list)
-        assert len(result) == 2  # two measurements -> two results
-        assert mock_find.call_count == 2
-        for r in result:
-            assert set(r.keys()) == {"measurement", "dataframes", "label"}
-
-    def test_forwards_args_to_find_dataframes(self, display):
-        selected = {1: MagicMock()}
-        cav = [True, False, True] + [False] * 5
-        with patch.object(
-            feg, "find_dataframes", return_value=(selected, "Label", 1)
-        ) as mock_find:
-            display._fetch_plot_data(cav, [SAMPLE_MEASUREMENTS[0]], "Instant")
-        cm_arg, date_arg, cav_arg, readout_arg = mock_find.call_args.args
-        assert cm_arg == "01"
-        assert date_arg == SAMPLE_MEASUREMENTS[0]["date"]
-        assert cav_arg == cav
-        assert readout_arg == "Instant"
 
 
 # ---------------------------------------------------------------------------
@@ -607,19 +597,20 @@ class TestPlotMultipleDates:
 
 # ---------------------------------------------------------------------------
 # on_plot_btn_clicked  (integration through the branching logic)
+#
+# NOTE: on_plot_btn_clicked now calls module-level feg.fetch_plot_data(cav, meas,
+#       readout) ONCE and branches on len(result): 1 -> _plot_one_date,
+#       else -> _plot_multiple_dates.
 # ---------------------------------------------------------------------------
 class TestPlotButtonClicked:
-    def _make_selected(self, n):
-        """Return a dict mapping cavity number -> fake dataframe."""
-        dfs = {}
-        for i in range(1, n + 1):
-            m = MagicMock(name=f"df{i}")
-            m.empty = False
-            dfs[i] = m
-        return dfs
+    def test_returns_early_when_no_rows_selected(self, display):
+        with patch.object(feg, "fetch_plot_data") as mock_fetch:
+            display._selected_rows = []
+            display.on_plot_btn_clicked()
+            mock_fetch.assert_not_called()
 
     def test_single_date_single_cavity_plot(self, display):
-        selected = self._make_selected(1)
+        result = [_make_plot_result(SAMPLE_MEASUREMENTS[0], [1], "My Label")]
         with (
             patch.object(
                 feg,
@@ -627,8 +618,8 @@ class TestPlotButtonClicked:
                 return_value=list(SAMPLE_MEASUREMENTS),
             ),
             patch.object(
-                feg, "find_dataframes", return_value=(selected, "My Label", 1)
-            ) as mock_find,
+                feg, "fetch_plot_data", return_value=result
+            ) as mock_fetch,
             patch.object(feg, "plot_amp_vs_rad") as mock_plot,
         ):
             display.cryo_dropdown.setCurrentIndex(0)
@@ -638,21 +629,21 @@ class TestPlotButtonClicked:
 
             display.on_plot_btn_clicked()
 
-            mock_find.assert_called_once()
+            mock_fetch.assert_called_once()
             assert mock_plot.call_count == 1
             assert display.fig._suptitle.get_text() == "My Label"
 
     def test_single_date_multiple_cavities(self, display):
-        selected = self._make_selected(4)
+        result = [
+            _make_plot_result(SAMPLE_MEASUREMENTS[0], [1, 2, 3, 4], "Label")
+        ]
         with (
             patch.object(
                 feg,
                 "match_measurement_dates",
                 return_value=list(SAMPLE_MEASUREMENTS),
             ),
-            patch.object(
-                feg, "find_dataframes", return_value=(selected, "Label", 4)
-            ),
+            patch.object(feg, "fetch_plot_data", return_value=result),
             patch.object(feg, "plot_amp_vs_rad") as mock_plot,
         ):
             display.cryo_dropdown.setCurrentIndex(0)
@@ -666,16 +657,17 @@ class TestPlotButtonClicked:
             assert len(display.fig.axes) == 4
 
     def test_multiple_dates_uses_multi_plot(self, display):
-        selected = self._make_selected(1)
+        result = [
+            _make_plot_result(SAMPLE_MEASUREMENTS[0], [1], "Label"),
+            _make_plot_result(SAMPLE_MEASUREMENTS[1], [1], "Label"),
+        ]
         with (
             patch.object(
                 feg,
                 "match_measurement_dates",
                 return_value=list(SAMPLE_MEASUREMENTS),
             ),
-            patch.object(
-                feg, "find_dataframes", return_value=(selected, "Label", 1)
-            ) as mock_find,
+            patch.object(feg, "fetch_plot_data", return_value=result),
             patch.object(feg, "plot_amp_vs_rad") as mock_plot,
         ):
             display.cryo_dropdown.setCurrentIndex(0)
@@ -687,23 +679,19 @@ class TestPlotButtonClicked:
 
             display.on_plot_btn_clicked()
 
-            # find_dataframes called once per selected measurement
-            assert mock_find.call_count == 2
             # 1 cavity x 2 measurements = 2 subplots, each with data -> 2 plot calls
             assert len(display.fig.axes) == 2
             assert mock_plot.call_count == 2
 
     def test_fit_flag_passed_through(self, display):
-        selected = self._make_selected(1)
+        result = [_make_plot_result(SAMPLE_MEASUREMENTS[0], [1], "Label")]
         with (
             patch.object(
                 feg,
                 "match_measurement_dates",
                 return_value=list(SAMPLE_MEASUREMENTS),
             ),
-            patch.object(
-                feg, "find_dataframes", return_value=(selected, "Label", 1)
-            ),
+            patch.object(feg, "fetch_plot_data", return_value=result),
             patch.object(feg, "plot_amp_vs_rad") as mock_plot,
         ):
             display.cryo_dropdown.setCurrentIndex(0)
@@ -718,8 +706,8 @@ class TestPlotButtonClicked:
             args = mock_plot.call_args.args
             assert args[-1] is True  # fit flag
 
-    def test_readout_passed_to_find_dataframes(self, display):
-        selected = self._make_selected(1)
+    def test_args_passed_to_fetch_plot_data(self, display):
+        result = [_make_plot_result(SAMPLE_MEASUREMENTS[0], [1], "Label")]
         with (
             patch.object(
                 feg,
@@ -727,8 +715,8 @@ class TestPlotButtonClicked:
                 return_value=list(SAMPLE_MEASUREMENTS),
             ),
             patch.object(
-                feg, "find_dataframes", return_value=(selected, "Label", 1)
-            ) as mock_find,
+                feg, "fetch_plot_data", return_value=result
+            ) as mock_fetch,
             patch.object(feg, "plot_amp_vs_rad"),
         ):
             display.cryo_dropdown.setCurrentIndex(0)
@@ -739,11 +727,13 @@ class TestPlotButtonClicked:
 
             display.on_plot_btn_clicked()
 
-            cm_arg, date_arg, cav_arg, readout_arg = mock_find.call_args.args
-            assert cm_arg == "01"
-            assert date_arg == SAMPLE_MEASUREMENTS[0]["date"]
-            assert readout_arg == "Instant"
+            cav_arg, meas_arg, readout_arg = mock_fetch.call_args.args
+            # cav is a list of bools, one per cavity checkbox
             assert cav_arg[2] is True  # cavity 3 checked
+            assert len(cav_arg) == 8
+            # meas is a list of the selected measurement dicts
+            assert meas_arg == [SAMPLE_MEASUREMENTS[0]]
+            assert readout_arg == "Instant"
 
 
 # ---------------------------------------------------------------------------
