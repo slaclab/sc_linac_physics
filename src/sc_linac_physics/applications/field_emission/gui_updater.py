@@ -141,7 +141,7 @@ class UpdateWorker(QObject):
         self.args = args
 
     def run(self):
-        """ "modes (single vs multiple by csv) of new dat entry"""
+        """ "modes (single vs multiple by csv) of new data entry"""
         try:
             if self.mode == "single":
                 self.single_update(*self.args)
@@ -153,6 +153,7 @@ class UpdateWorker(QObject):
         self.finished.emit("File successfully updated!")
 
     def single_update(self, valid, input_row):
+        """process a single row of cryomodule field emission data"""
         self.progress.emit("Creating CSVs...")
         generate_amp_vs_rad_csvs(
             valid["cryomodule"], valid["start"], valid["end"], valid["decarad"]
@@ -162,6 +163,7 @@ class UpdateWorker(QObject):
         convert_to_h5(lookup)
 
     def multi_update(self, input_csv):
+        """process multiple rows of cryomodule field emission data"""
         self.progress.emit("Creating CSVs...")
         for cryo, date_s, date_e, rad, stamp in read_from_csv(input_csv):
             generate_amp_vs_rad_csvs(cryo, date_s, date_e, rad)
