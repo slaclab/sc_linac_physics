@@ -1,7 +1,14 @@
-import sys
+# Every test here builds a real top-level LinacGroupedCryomodulePlotDisplay.
+# Left to itself that widget's C++ object is destroyed whenever its last
+# Python reference happens to go away, which is what made this file flaky:
+# under pytest-xdist a stray teardown takes the whole worker down, along
+# with the unrelated tests it was running. So the `display` fixture
+# registers the widget with qtbot.addWidget, the pattern used in
+# tests/applications/q0/test_q0_gui.py.
 from unittest.mock import Mock, patch
 
 import pytest
+from qtpy.QtCore import QEvent
 from qtpy.QtWidgets import QApplication, QDialog
 
 from sc_linac_physics.displays.plot.cryo_signals import (
@@ -11,13 +18,25 @@ from sc_linac_physics.displays.plot.cryo_signals import (
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication instance for tests."""
+@pytest.fixture(autouse=True)
+def flush_deferred_deletes():
+    """Finish the deletion qtbot.addWidget only starts.
+
+    qtbot's cleanup calls close() then deleteLater() on each registered
+    widget, and deleteLater() only posts a DeferredDelete event.
+    QApplication.processEvents(), which is all pytest-qt runs afterwards,
+    does not deliver DeferredDelete -- so the posted event sits in the
+    queue holding the widget alive, and registering with qtbot on its own
+    is not enough to get the display destroyed inside its own test.
+
+    This runs after qtbot's cleanup: pytest-qt closes widgets in the part
+    of its pytest_runtest_teardown wrapper that precedes the yield, and
+    fixture finalizers run inside that yield.
+    """
+    yield
     app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-    yield app
+    if app is not None:
+        app.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 @pytest.fixture
@@ -60,8 +79,15 @@ def mock_machine():
 
 
 @pytest.fixture
-def display(qapp, mock_machine):
-    """Create LinacGroupedCryomodulePlotDisplay instance with mocked data."""
+def display(qtbot, mock_machine):
+    """Create LinacGroupedCryomodulePlotDisplay instance with mocked data.
+
+    The display is a top-level widget: close() alone leaves the C++ object
+    alive, so the tree would otherwise be torn down at whatever moment the
+    last Python reference drops, possibly inside some unrelated later test.
+    qtbot.addWidget makes that a deleteLater() in this test's own teardown
+    instead, which flush_deferred_deletes then delivers.
+    """
     with (
         patch(
             "sc_linac_physics.displays.plot.cryo_signals.Machine"
@@ -103,8 +129,8 @@ def display(qapp, mock_machine):
         MockArchiverPlot.side_effect = create_mock_archiver_plot
 
         display = LinacGroupedCryomodulePlotDisplay()
+        qtbot.addWidget(display)
         yield display
-        display.close()
 
 
 class TestLinacGroupedCryomodulePlotDisplayInitialization:
