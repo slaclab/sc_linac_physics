@@ -1,6 +1,8 @@
 # README
 
-This collection of scripts is to generate the appropriate data files, update, and run the field emission GUI. The purpose of the GUI is to aid in the visualization and characterization of field emission from linac cavities. Radiation data is collected by one of two decarads with 10 channels each and recorded in archiver. The display works to end dependency on slow archiver retrieval as well as consolidating data to one base.
+The purpose of the GUI is to aid in the visualization and characterization of field emission from linac cavities. This collection of scripts is to generate the appropriate data files, update, and run the field emission GUI.
+
+Radiation data is collected by one of two decarads with 10 channels each and is recorded in the archiver. The display works to end dependency on slow archiver retrieval as well as consolidating data to one base.
 
 The collection consists of:
 
@@ -55,3 +57,10 @@ After successful update, select any other cryomodule in the display. Click back 
 
 
 - **Overlapping Plots:** due to time constraints, the ability to overlap data for further comparison has been excluded. If added, this ability can become a radio button setting in addition to the Amplitude vs Radiation and Fit Line toggles above the Plot button.
+
+
+## Entry point
+
+```bash
+sc-field-emission
+```
