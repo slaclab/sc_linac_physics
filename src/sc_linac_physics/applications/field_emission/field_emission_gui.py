@@ -436,7 +436,7 @@ class FieldEmission(Display):
         self.fig.clear()
         axes = []
 
-        # Generate subplots
+        # Generate subplots, vertical date comparison, horizontal cavity comparison
         for row_idx, cav_num in enumerate(selected_cavities):
             for col_idx, result in enumerate(measurements):
                 position = row_idx * n_cols + col_idx + 1
@@ -464,8 +464,6 @@ class FieldEmission(Display):
                 )
                 ax.set_title(f"Cavity {cav_num} - {meas_date}", fontsize=9)
                 axes.append(ax)
-                # Keep subplots from overlapping super titles
-                self.fig.tight_layout(rect=[0.03, 0.03, 0.97, 0.97])
         return axes, title
 
     def _configure_plot_canvas(self, axes, title):
@@ -478,6 +476,8 @@ class FieldEmission(Display):
         self.fig.supxlabel("Amplitude (MV)")
         self.fig.supylabel("Radiation (mR/hr)")
         unify_axes(axes)
+        # Keep subplots from overlapping super titles, margin padding
+        self.fig.tight_layout(rect=[0.0, 0.0, 0.95, 0.98])
         self.canvas.draw()
 
 
