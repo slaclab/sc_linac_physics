@@ -356,7 +356,7 @@ class FieldEmission(Display):
     def build_radio_buttons(self):
         # Buttons to choose plot style
         radio_btn_layout = QHBoxLayout()
-        self.radio_amp_rad_btn = QRadioButton("Radiation vs Amplitude")
+        self.radio_amp_rad_btn = QRadioButton("Amplitude vs Radiation")
         self.radio_amp_rad_btn.setChecked(True)
         self.radio_fit_btn = QRadioButton("Fit Line")
         radio_btn_layout.addWidget(self.radio_amp_rad_btn)
