@@ -157,7 +157,7 @@ class TestConstruction:
         assert display.radio_fit_btn.isChecked() is False
 
     def test_amp_rad_radio_text(self, display):
-        assert display.radio_amp_rad_btn.text() == "Radiation vs Amplitude"
+        assert display.radio_amp_rad_btn.text() == "Amplitude vs Radiation"
         assert display.radio_fit_btn.text() == "Fit Line"
 
     def test_canvas_and_toolbar_created(self, display):
