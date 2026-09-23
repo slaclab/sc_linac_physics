@@ -62,5 +62,5 @@ After successful update, select any other cryomodule in the display. Click back 
 ## Entry point
 
 ```bash
-sc-field-emission
+sc-field-emission # included in launchers.py but not initiated yet
 ```
