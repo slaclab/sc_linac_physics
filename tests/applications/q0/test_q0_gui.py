@@ -1,7 +1,25 @@
 # test_q0_gui.py - Final fixed version
+#
+# Every test here builds a real top-level Q0GUI. Left to itself that widget
+# outlives the test and is destroyed whenever the garbage collector happens
+# to get to it, which is what made this file flaky: under pytest-xdist a
+# stray teardown takes the whole worker down, along with the unrelated tests
+# it was running. So each test takes the `qtbot` fixture and registers the
+# GUI with qtbot.addWidget(gui), the pattern used in
+# tests/applications/rf_commissioning/ui/test_displays.py.
+#
+# Stray widgets were only half of it. Two tests also started a real
+# CalibrationWorker QThread; see setup_mocks for why that one class
+# escaped the mocks and no_leaked_qthreads for the guard that now catches
+# it. Both leaks produced the same symptom -- a worker crash in an
+# unrelated test -- because both were cleaned up by the garbage
+# collector rather than by teardown.
+import gc
 from unittest.mock import Mock, patch
 
 import pytest
+from PyQt5 import sip
+from PyQt5.QtCore import QEvent, QThread
 from PyQt5.QtWidgets import QApplication, QWidget
 
 
@@ -72,13 +90,84 @@ class MockCavAmpControl:
         pass  # Do nothing, just like a real connect might
 
 
-@pytest.fixture
-def qapp():
-    """QApplication fixture."""
+@pytest.fixture(autouse=True)
+def flush_deferred_deletes():
+    """Finish the deletion qtbot.addWidget only starts.
+
+    qtbot's cleanup calls close() then deleteLater() on each registered
+    widget, and deleteLater() only posts a DeferredDelete event.
+    QApplication.processEvents(), which is all pytest-qt runs afterwards,
+    does not deliver DeferredDelete -- so the posted event sits in the
+    queue holding the widget alive, and registering with qtbot on its own
+    leaves all 41 Q0GUI widgets alive for the whole session instead of
+    zero. Measured: 41 live vs. 0 with this flush.
+
+    This runs after qtbot's cleanup: pytest-qt closes widgets in the part
+    of its pytest_runtest_teardown wrapper that precedes the yield, and
+    fixture finalizers run inside that yield.
+    """
+    yield
     app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
+    if app is not None:
+        app.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+def _live_qthreads():
+    """Every real QThread whose C++ object is still alive.
+
+    Deliberately not preceded by gc.collect(): a stray worker is usually
+    kept alive only by the reference cycle through the Q0GUI that built
+    it, so collecting first would destroy the evidence -- and that
+    destruction is the crash no_leaked_qthreads exists to report.
+
+    issubclass(type(obj), ...) rather than isinstance(obj, ...): a Mock
+    built with spec=QThread reports QThread as its __class__, so
+    isinstance says True and sip.isdeleted() then raises TypeError on
+    being handed a Mock. type() sees through that. gc.get_objects()
+    covers the whole process and CI runs `--dist loadfile`, so other
+    test files' spec'd mocks are visible here -- this raised a teardown
+    error in every test in this file on a full-suite run.
+    """
+    return [
+        obj
+        for obj in gc.get_objects()
+        if issubclass(type(obj), QThread) and not sip.isdeleted(obj)
+    ]
+
+
+@pytest.fixture(autouse=True)
+def no_leaked_qthreads():
+    """Fail the test that leaks a QThread, instead of crashing the worker.
+
+    setup_mocks replaces every worker class Q0GUI constructs, so no test
+    in this file should ever start a thread. When one slips through, the
+    QThread object is destroyed whenever the garbage collector gets to
+    it, which can be several tests later -- and Qt aborts the process if
+    the thread is still running at that point. xdist reports that as
+    "worker 'gwN' crashed" against whichever unrelated test happened to
+    be running, which is how the CalibrationWorker leak below stayed
+    hidden through #299.
+
+    Declared after flush_deferred_deletes so it tears down first
+    (finalizers run in reverse): this quits, joins, and schedules the
+    stray thread for deletion, then the flush delivers that deletion. A
+    thread reported once is therefore already gone and does not trip the
+    next test too.
+    """
+    before = {id(t) for t in _live_qthreads()}
+    yield
+    # Only threads this test created: a thread another file left in the
+    # shared worker process is not this test's to report.
+    leaked = [t for t in _live_qthreads() if id(t) not in before]
+    for thread in leaked:
+        thread.quit()
+        thread.wait(5000)
+        thread.deleteLater()
+    assert not leaked, (
+        "test left real QThread(s) behind: "
+        f"{sorted(type(t).__name__ for t in leaked)}. "
+        "Add the worker class to setup_mocks so it is never started."
+    )
 
 
 @pytest.fixture
@@ -126,6 +215,15 @@ def setup_mocks():
         patch(
             "sc_linac_physics.applications.q0.q0_gui.q0_gui_utils"
         ) as mock_utils,
+        # q0_gui.py builds every worker but one through the q0_gui_utils
+        # module attribute, which the patch above covers. CalibrationWorker
+        # is the exception: q0_gui.py:13 imports the class by name, so
+        # takeNewCalibration() at q0_gui.py:488 bound the real class and
+        # start()ed a real QThread against a Mock cryomodule. That thread
+        # outlived the test, and Qt aborts the process when a running
+        # QThread is destroyed -- which is what the garbage collector then
+        # did, a test or two later, taking the whole xdist worker with it.
+        patch("sc_linac_physics.applications.q0.q0_gui.CalibrationWorker"),
     ):
         mock_utils.CavAmpControl = MockCavAmpControl
 
@@ -161,15 +259,16 @@ def setup_mocks():
 class TestQ0GUIBasicFunctionality:
     """Test basic GUI functionality."""
 
-    def test_gui_creation(self, qapp):
+    def test_gui_creation(self, qtbot):
         """Test that GUI can be created."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         assert gui is not None
         assert gui.windowTitle() == "Q0 Measurement"
 
-    def test_cryomodule_selection(self, qapp, mock_cryomodule):
+    def test_cryomodule_selection(self, qtbot, mock_cryomodule):
         """Test cryomodule selection."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -178,14 +277,16 @@ class TestQ0GUIBasicFunctionality:
             {"01": mock_cryomodule},
         ):
             gui = Q0GUI()
+            qtbot.addWidget(gui)
             gui.update_cm("01")
             assert gui.selected_cm == mock_cryomodule
 
-    def test_require_cm_validation(self, qapp):
+    def test_require_cm_validation(self, qtbot):
         """Test cryomodule selection validation."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = None
 
         with patch(
@@ -195,11 +296,12 @@ class TestQ0GUIBasicFunctionality:
             assert result is False
             mock_popup.assert_called_once()
 
-    def test_desired_cavity_amplitudes(self, qapp, mock_cryomodule):
+    def test_desired_cavity_amplitudes(self, qtbot, mock_cryomodule):
         """Test cavity amplitude calculation."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         # Set up mock controls
@@ -221,7 +323,7 @@ class TestQ0GUIBasicFunctionality:
 class TestQ0GUICalibrationWorkflow:
     """Test calibration workflow."""
 
-    def test_take_new_calibration(self, qapp, mock_cryomodule):
+    def test_take_new_calibration(self, qtbot, mock_cryomodule):
         """Test starting new calibration."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -229,6 +331,7 @@ class TestQ0GUICalibrationWorkflow:
             "sc_linac_physics.applications.q0.q0_gui.ValveParams"
         ) as mock_valve_params:
             gui = Q0GUI()
+            qtbot.addWidget(gui)
             gui.selected_cm = mock_cryomodule
 
             gui.takeNewCalibration()
@@ -236,11 +339,12 @@ class TestQ0GUICalibrationWorkflow:
             # Should create ValveParams
             mock_valve_params.assert_called_once()
 
-    def test_load_calibration(self, qapp, mock_cryomodule):
+    def test_load_calibration(self, qtbot, mock_cryomodule):
         """Test loading existing calibration."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         with (
@@ -266,11 +370,12 @@ class TestQ0GUICalibrationWorkflow:
                 display_called or window_exists
             ), "load_calibration should create or reuse a window"
 
-    def test_show_calibration_data_no_data(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_no_data(self, qtbot, mock_cryomodule):
         """Test showing calibration data when none exists."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
         mock_cryomodule.calibration = None
 
@@ -280,11 +385,12 @@ class TestQ0GUICalibrationWorkflow:
             gui.show_calibration_data()
             mock_popup.assert_called_once()
 
-    def test_kill_calibration(self, qapp, mock_cryomodule):
+    def test_kill_calibration(self, qtbot, mock_cryomodule):
         """Test killing calibration process."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         mock_worker = Mock()
         mock_worker.cryomodule = mock_cryomodule
         gui.calibration_worker = mock_worker
@@ -296,7 +402,7 @@ class TestQ0GUICalibrationWorkflow:
 class TestQ0GUIQ0MeasurementWorkflow:
     """Test Q0 measurement workflow."""
 
-    def test_take_new_q0_measurement(self, qapp, mock_cryomodule):
+    def test_take_new_q0_measurement(self, qtbot, mock_cryomodule):
         """Test starting new Q0 measurement."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -304,6 +410,7 @@ class TestQ0GUIQ0MeasurementWorkflow:
             "sc_linac_physics.applications.q0.q0_gui.ValveParams"
         ) as mock_valve_params:
             gui = Q0GUI()
+            qtbot.addWidget(gui)
             gui.selected_cm = mock_cryomodule
 
             gui.take_new_q0_measurement()
@@ -311,11 +418,12 @@ class TestQ0GUIQ0MeasurementWorkflow:
             # Should create ValveParams
             mock_valve_params.assert_called_once()
 
-    def test_ramp_cavities(self, qapp, mock_cryomodule):
+    def test_ramp_cavities(self, qtbot, mock_cryomodule):
         """Test cavity ramping."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         # Set up mock controls with some amplitudes
@@ -330,11 +438,12 @@ class TestQ0GUIQ0MeasurementWorkflow:
         # Should have started ramp workers for 2 cavities
         assert gui._ramp_remaining == 2
 
-    def test_show_q0_data_no_data(self, qapp, mock_cryomodule):
+    def test_show_q0_data_no_data(self, qtbot, mock_cryomodule):
         """Test showing Q0 data when none exists."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
         mock_cryomodule.q0_measurement = None
 
@@ -344,11 +453,12 @@ class TestQ0GUIQ0MeasurementWorkflow:
             gui.show_q0_data()
             mock_popup.assert_called_once()
 
-    def test_kill_rf(self, qapp, mock_cryomodule):
+    def test_kill_rf(self, qtbot, mock_cryomodule):
         """Test killing RF processes."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
 
         # Set up active workers
         mock_setup_worker = Mock()
@@ -366,42 +476,46 @@ class TestQ0GUIQ0MeasurementWorkflow:
 class TestQ0GUIControlMethods:
     """Test control methods."""
 
-    def test_restore_cryo(self, qapp, mock_cryomodule):
+    def test_restore_cryo(self, qtbot, mock_cryomodule):
         """Test restoring cryo conditions."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         gui.restore_cryo()
         mock_cryomodule.restore_cryo.assert_called_once()
 
-    def test_setup_for_cryo_params(self, qapp, mock_cryomodule):
+    def test_setup_for_cryo_params(self, qtbot, mock_cryomodule):
         """Test cryo parameter setup."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         gui.setup_for_cryo_params()
         # Should have created a CryoParamSetupWorker - check it was called
         assert gui.cryo_param_setup_worker is not None
 
-    def test_update_ll_buffer(self, qapp, mock_cryomodule):
+    def test_update_ll_buffer(self, qtbot, mock_cryomodule):
         """Test updating liquid level buffer."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         gui.update_ll_buffer(15)
         assert mock_cryomodule.ll_buffer_size == 15
 
-    def test_update_cryo_params(self, qapp, mock_cryomodule):
+    def test_update_cryo_params(self, qtbot, mock_cryomodule):
         """Test updating cryo parameters display."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         # Mock valve params
@@ -420,11 +534,12 @@ class TestQ0GUIControlMethods:
 class TestQ0GUIStatusHandling:
     """Test status and error handling."""
 
-    def test_handle_cal_status(self, qapp):
+    def test_handle_cal_status(self, qtbot):
         """Test calibration status handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.handle_cal_status("Calibration running")
 
         gui.main_widget.cal_status_label.setText.assert_called_with(
@@ -434,11 +549,12 @@ class TestQ0GUIStatusHandling:
             "color: blue;"
         )
 
-    def test_handle_cal_error(self, qapp):
+    def test_handle_cal_error(self, qtbot):
         """Test calibration error handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.handle_cal_error("Calibration failed")
 
         gui.main_widget.cal_status_label.setText.assert_called_with(
@@ -448,11 +564,12 @@ class TestQ0GUIStatusHandling:
             "color: red;"
         )
 
-    def test_handle_rf_status(self, qapp):
+    def test_handle_rf_status(self, qtbot):
         """Test RF status handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.handle_rf_status("RF measurement running")
 
         gui.main_widget.rf_status_label.setText.assert_called_with(
@@ -462,11 +579,12 @@ class TestQ0GUIStatusHandling:
             "color: blue;"
         )
 
-    def test_handle_rf_error(self, qapp):
+    def test_handle_rf_error(self, qtbot):
         """Test RF error handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.handle_rf_error("RF measurement failed")
 
         gui.main_widget.rf_status_label.setText.assert_called_with(
@@ -480,11 +598,12 @@ class TestQ0GUIStatusHandling:
 class TestQ0GUIExceptionHandling:
     """Test exception scenarios."""
 
-    def test_restore_cryo_exception(self, qapp, mock_cryomodule):
+    def test_restore_cryo_exception(self, qtbot, mock_cryomodule):
         """Test restore cryo exception handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
         mock_cryomodule.restore_cryo.side_effect = Exception("Restore failed")
 
@@ -494,12 +613,13 @@ class TestQ0GUIExceptionHandling:
             gui.restore_cryo()
             mock_popup.assert_called_once()
 
-    def test_takeNewCalibration_success(self, qapp, mock_cryomodule):
+    def test_takeNewCalibration_success(self, qtbot, mock_cryomodule):
         """Test successful calibration start."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         with patch("sc_linac_physics.applications.q0.q0_gui.ValveParams"):
             gui = Q0GUI()
+            qtbot.addWidget(gui)
             gui.selected_cm = mock_cryomodule
 
             # This should succeed without raising exceptions
@@ -512,31 +632,34 @@ class TestQ0GUIExceptionHandling:
 class TestQ0GUIWorkerManagement:
     """Test worker lifecycle management."""
 
-    def test_clear_ramp_worker(self, qapp):
+    def test_clear_ramp_worker(self, qtbot):
         """Test clearing ramp worker."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.q0_ramp_workers[1] = Mock()
 
         gui._clear_ramp_worker(1)
         assert gui.q0_ramp_workers[1] is None
 
-    def test_clear_q0_meas_worker(self, qapp):
+    def test_clear_q0_meas_worker(self, qtbot):
         """Test clearing Q0 measurement worker."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.q0_meas_worker = Mock()
 
         gui._clear_q0_meas_worker()
         assert gui.q0_meas_worker is None
 
-    def test_on_ramp_finished(self, qapp, mock_cryomodule):
+    def test_on_ramp_finished(self, qtbot, mock_cryomodule):
         """Test ramp completion handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
         gui._ramp_remaining = 2
 
@@ -550,11 +673,12 @@ class TestQ0GUIWorkerManagement:
             assert gui._ramp_remaining == 0
             mock_start.assert_called_once()
 
-    def test_start_q0_worker_direct_call(self, qapp, mock_cryomodule):
+    def test_start_q0_worker_direct_call(self, qtbot, mock_cryomodule):
         """Test direct call to _start_q0_worker."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         # Set up minimal mock controls
@@ -569,12 +693,13 @@ class TestQ0GUIWorkerManagement:
         assert gui.q0_meas_worker is not None
 
     def test_on_ramp_finished_calls_start_q0_worker(
-        self, qapp, mock_cryomodule
+        self, qtbot, mock_cryomodule
     ):
         """Test that _on_ramp_finished calls _start_q0_worker when appropriate."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
         gui._ramp_remaining = 1  # Set to 1 so next call triggers worker
 
@@ -594,11 +719,12 @@ class TestQ0GUIWorkerManagement:
 class TestQ0GUIQ0LoadMethods:
     """Test Q0 data loading methods."""
 
-    def test_load_q0_new_window(self, qapp, mock_cryomodule):
+    def test_load_q0_new_window(self, qtbot, mock_cryomodule):
         """Test loading Q0 measurement - creates new window."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         with (
@@ -619,11 +745,12 @@ class TestQ0GUIQ0LoadMethods:
                 display_called or window_exists
             ), "load_q0 should create or manage a window"
 
-    def test_load_q0_existing_window(self, qapp, mock_cryomodule):
+    def test_load_q0_existing_window(self, qtbot, mock_cryomodule):
         """Test loading Q0 measurement - reuses existing window."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         # Pre-populate with existing window
@@ -641,11 +768,12 @@ class TestQ0GUIQ0LoadMethods:
             # Should show the existing window
             mock_show.assert_called_once_with(existing_window)
 
-    def test_load_q0_no_cryomodule(self, qapp):
+    def test_load_q0_no_cryomodule(self, qtbot):
         """Test loading Q0 measurement when no cryomodule selected."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = None
 
         with patch(
@@ -658,11 +786,12 @@ class TestQ0GUIQ0LoadMethods:
                 "No Cryomodule Selected", "Please select a cryomodule first."
             )
 
-    def test_load_q0_exception_handling(self, qapp, mock_cryomodule):
+    def test_load_q0_exception_handling(self, qtbot, mock_cryomodule):
         """Test load_q0 exception handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         with (
@@ -682,11 +811,12 @@ class TestQ0GUIQ0LoadMethods:
             mock_popup.assert_called_once()
             assert "Failed to load Q0 data" in mock_popup.call_args[0][1]
 
-    def test_load_q0_basic_functionality(self, qapp, mock_cryomodule):
+    def test_load_q0_basic_functionality(self, qtbot, mock_cryomodule):
         """Test basic load_q0 functionality - just ensure it runs."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         # Just test that the method runs without crashing
@@ -712,11 +842,12 @@ class TestQ0GUIQ0LoadMethods:
 class TestQ0GUIShowCalibrationData:
     """Test show_calibration_data method comprehensively."""
 
-    def test_show_calibration_data_no_data(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_no_data(self, qtbot, mock_cryomodule):
         """Test showing calibration data when none exists."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
         mock_cryomodule.calibration = None
 
@@ -728,11 +859,12 @@ class TestQ0GUIShowCalibrationData:
                 "No Calibration Data", "No calibration data available."
             )
 
-    def test_show_calibration_data_no_cryomodule(self, qapp):
+    def test_show_calibration_data_no_cryomodule(self, qtbot):
         """Test showing calibration data when no cryomodule selected."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = None
 
         with patch(
@@ -744,7 +876,7 @@ class TestQ0GUIShowCalibrationData:
             )
 
     def test_show_calibration_data_with_data_new_window(
-        self, qapp, mock_cryomodule
+        self, qtbot, mock_cryomodule
     ):
         """Test showing calibration data when data exists - creates new window."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
@@ -767,6 +899,7 @@ class TestQ0GUIShowCalibrationData:
         mock_cryomodule.calibration = mock_calibration
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
         gui.calibration_window = None  # Ensure no existing window
 
@@ -797,7 +930,7 @@ class TestQ0GUIShowCalibrationData:
             ), "Should create or show calibration window"
 
     def test_show_calibration_data_with_existing_window(
-        self, qapp, mock_cryomodule
+        self, qtbot, mock_cryomodule
     ):
         """Test showing calibration data when window already exists."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
@@ -815,6 +948,7 @@ class TestQ0GUIShowCalibrationData:
         mock_cryomodule.calibration = mock_calibration
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         # Set up existing window and plots
@@ -843,7 +977,7 @@ class TestQ0GUIShowCalibrationData:
             assert True  # If we get here, method executed successfully
 
     def test_show_calibration_data_empty_heater_runs(
-        self, qapp, mock_cryomodule
+        self, qtbot, mock_cryomodule
     ):
         """Test showing calibration data with empty heater runs."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
@@ -856,6 +990,7 @@ class TestQ0GUIShowCalibrationData:
         mock_cryomodule.calibration = mock_calibration
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         with (
@@ -878,7 +1013,7 @@ class TestQ0GUIShowCalibrationData:
             assert success, "Should handle empty heater runs gracefully"
 
     def test_show_calibration_data_exception_handling(
-        self, qapp, mock_cryomodule
+        self, qtbot, mock_cryomodule
     ):
         """Test show_calibration_data exception handling."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
@@ -889,6 +1024,7 @@ class TestQ0GUIShowCalibrationData:
         mock_cryomodule.calibration = mock_calibration
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         with (
@@ -910,7 +1046,9 @@ class TestQ0GUIShowCalibrationData:
                 "Failed to show calibration data" in mock_popup.call_args[0][1]
             )
 
-    def test_show_calibration_data_plot_operations(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_plot_operations(
+        self, qtbot, mock_cryomodule
+    ):
         """Test that show_calibration_data performs operations."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -934,6 +1072,7 @@ class TestQ0GUIShowCalibrationData:
         mock_cryomodule.calibration = mock_calibration
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         with (
@@ -954,7 +1093,7 @@ class TestQ0GUIShowCalibrationData:
             # The exact plotting behavior may vary based on implementation
             assert True
 
-    def test_show_calibration_data_window_layout(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_window_layout(self, qtbot, mock_cryomodule):
         """Test that show_calibration_data executes without errors."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -963,6 +1102,7 @@ class TestQ0GUIShowCalibrationData:
         mock_cryomodule.calibration = mock_calibration
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         with (
@@ -993,7 +1133,9 @@ class TestQ0GUIShowCalibrationData:
 
             assert success, "Method should execute without exceptions"
 
-    def test_show_calibration_data_basic_execution(self, qapp, mock_cryomodule):
+    def test_show_calibration_data_basic_execution(
+        self, qtbot, mock_cryomodule
+    ):
         """Test basic show_calibration_data execution."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI
 
@@ -1003,6 +1145,7 @@ class TestQ0GUIShowCalibrationData:
         mock_cryomodule.calibration = mock_calibration
 
         gui = Q0GUI()
+        qtbot.addWidget(gui)
         gui.selected_cm = mock_cryomodule
 
         # Just test that calling the method doesn't crash
