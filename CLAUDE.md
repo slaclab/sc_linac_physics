@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Commands
 
 ```bash
@@ -41,15 +39,7 @@ See also `AGENTS.md` at the repo root for architectural conventions enforced acr
 
 ## Architecture
 
-This package provides controls, displays, and analysis tools for the SLAC SC Linac (superconducting RF linac). It is built on PyDM/PyQt5 and uses EPICS (via caproto/pyepics) for hardware communication.
-
-```
-src/sc_linac_physics/
-├── applications/       # Major standalone applications
-├── displays/           # PyDM-based operator displays
-├── cli/                # Unified launcher CLI (sc-linac entry point)
-└── utils/              # Shared infrastructure (EPICS, Qt, logging, linac model)
-```
+Controls, displays, and analysis tools for the SLAC SC Linac, built on PyDM/PyQt5 with EPICS (caproto/pyepics). Code lives in `src/sc_linac_physics/{applications,displays,cli,utils}`.
 
 ### Linac Hardware Model (`utils/sc_linac/`)
 
@@ -98,16 +88,11 @@ Long-running operations use `Worker(QThread)` from `utils/qt.py`, which emits `f
 
 ## Scope and shipping
 
-These rules exist because AI-assisted development makes it easy to produce more
-change per PR than a reviewer can absorb. They are about reviewability, not
-about slowing down.
-
 ### Split at planning time, not review time
 
-Before starting a piece of work, state how it will be split into PRs. Splitting
-is a planning decision — once the code is written, splitting becomes a chore and
-gets skipped. If a task can't be described as a sequence of independently
-mergeable changes, say so and explain why before starting.
+Before starting a piece of work, state how it will be split into PRs. If a task
+can't be a sequence of independently mergeable changes, say so and why before
+starting.
 
 ### Target PR size
 
@@ -125,13 +110,8 @@ new or reordered UI, changed defaults, renamed commands, altered PV usage,
 different launch behavior — say so explicitly in the PR description under the
 `## Operator-visible` heading, in one or two sentences of plain language.
 
-These need a short note to `#srf-software` when released. Changes that hide
-inside a large commit and surprise people at launch are the specific failure
-mode this prevents.
-
-The PR template (`.github/pull_request_template.md`) has sections for this, for
-split rationale, for decisions worth recording, and for tagging a learning
-reviewer. Fill them in rather than deleting them.
+These need a short note to `#srf-software` when released. Fill in the PR
+template (`.github/pull_request_template.md`) sections rather than deleting them.
 
 ### Record decisions with reasoning
 
@@ -139,9 +119,6 @@ When choosing between real alternatives — reusing production code vs.
 reimplementing, staging a rollout, deferring a migration — write down the
 reasoning, not just the outcome. A comment at the decision point is enough for
 small calls; anything architectural goes in `docs/`.
-
-The reasoning is what nobody can reconstruct later. The code shows what was
-chosen; it never shows what was rejected or why.
 
 ### Write for the physicist reading it
 
@@ -153,21 +130,12 @@ and how it derives the numbers people act on.
 
 #### Say what the code does. Do not explain what the hardware does.
 
-This is the rule that matters most, and it is the one an earlier version of this
-section got backwards by asking for "what physically happens."
-
-Every written review comment Sebastian left over July–August — five, across
-#284 and #288 — corrected an explanation of the hardware. None corrected the
-code.
-#284 stated the LCLS-II-HE loaded-Q window correctly, then explained it as the
-same cavity "held to a looser standard" when it follows from a different default
-Qext. #288 claimed active microphonics compensation the machine does not have
-(it is slow drift feedback, cutoff a few Hz), and described cold landing as
-recorded after the stepper moves rather than before.
-
-Fluent wrong physics is worse than no physics: it reads authoritative, so it
-costs the reviewer a fact-check instead of a read, and it is indistinguishable
-from not having looked at the change at all.
+This is the rule that matters most. Every written review comment on #284 and
+#288 corrected a hardware explanation, not the code. Examples: the LCLS-II-HE
+loaded-Q window follows from a different default Qext, not a "looser standard".
+There is no active microphonics compensation, only slow drift feedback (cutoff a
+few Hz). Cold landing is recorded before the stepper moves. Fluent wrong physics
+costs the reviewer a fact-check instead of a read.
 
 Two categories, treated differently:
 
@@ -186,10 +154,8 @@ sentence:
 # CHECK: is DF_COLD recorded before the stepper moves, or after?
 ```
 
-Reviewers can grep `CHECK:` and clear them in one pass. Three flagged questions
-make a better PR than three confident sentences that turn out to be wrong —
-and flagging them *is* the "pre-digest before sending it for review" that has
-now been asked for two years running.
+Reviewers grep `CHECK:` and clear them in one pass. Three flagged questions beat
+three confident sentences that turn out wrong.
 
 #### The rest
 
@@ -216,10 +182,8 @@ This governs PR descriptions, docs, and comments. The audience is a physicist
 and a manager, both reading between other things. Aim at what you would type in
 Slack, not at a technical report.
 
-The failure mode is measurable and it runs backwards: the smallest PRs get the
-longest descriptions, because a small diff leaves room to explain. #292 is 66
-lines of CI config and 580 words. #284 is 132 lines and 702 words, and is one of
-only two PRs to draw written review comments.
+The failure mode runs backwards: the smallest PRs get the longest descriptions
+(#292: 66 lines of CI config, 580 words).
 
 **Budgets.** *What this changes*: 60 words. Each recorded decision: 80. If a
 section needs more, the PR is probably too big — check the size comment.
@@ -239,11 +203,7 @@ cryomodule, piezo, SSA, chirp, `NSTEPS_COLD` — identifiers, PV names and
 constants the reader can grep. No gloss needed. Jargon is the opposite: words
 that exist only in prose. Orthogonal, idempotent, invariant, semantics,
 pre-flight — none of them name anything in `src/`.
-
-The test is grep, not taste, and it separates cleanly: each domain term above
-appears in 10–217 files, each prose term in zero. It has to be identifiers
-rather than any text match, or the jargon launders itself — write "source of
-truth" into one docstring and it has "appeared in the code."
+The test is grep over identifiers, not taste.
 
 ## Conventions
 
