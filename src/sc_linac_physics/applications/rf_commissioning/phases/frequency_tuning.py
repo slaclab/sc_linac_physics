@@ -70,10 +70,13 @@ class FrequencyTuningLimits:
     # https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf).
     temp_limit_k: float = linac_utils.STEPPER_TEMP_LIMIT
     max_total_steps: int = 10_000_000
-    # A healthy probe move (probe_steps microsteps at ~0.005 Hz/microstep)
-    # produces a few hundred Hz of detune change on real cavities; require a
-    # solid fraction of that so a degraded/uncoupled stepper is caught, not
-    # just a totally dead one.
+    # Computed, not measured: probe_steps microsteps at HZ_PER_STEP /
+    # MICROSTEPS_PER_STEP = 1.4 / 256 Hz per microstep works out to
+    # 50_000 * 1.4 / 256 = 273 Hz. Require a solid fraction of that so a
+    # degraded/uncoupled stepper is caught, not just a totally dead one.
+    # Those constants are flagged "very rough values obtained empirically"
+    # where they are defined (linac_utils.py:150), so treat 273 Hz as an
+    # order of magnitude rather than an expected reading.
     min_probe_delta_hz: float = 100.0
     pi_scan_freq_start: int = -3_500_000
     pi_scan_freq_stop: int = 50_000
