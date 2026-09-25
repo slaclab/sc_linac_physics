@@ -7,10 +7,19 @@
 # it was running. So each test takes the `qtbot` fixture and registers the
 # GUI with qtbot.addWidget(gui), the pattern used in
 # tests/applications/rf_commissioning/ui/test_displays.py.
+#
+# Stray widgets were only half of it. Two tests also started a real
+# CalibrationWorker QThread; see setup_mocks for why that one class
+# escaped the mocks and no_leaked_qthreads for the guard that now catches
+# it. Both leaks produced the same symptom -- a worker crash in an
+# unrelated test -- because both were cleaned up by the garbage
+# collector rather than by teardown.
+import gc
 from unittest.mock import Mock, patch
 
 import pytest
-from PyQt5.QtCore import QEvent
+from PyQt5 import sip
+from PyQt5.QtCore import QEvent, QThread
 from PyQt5.QtWidgets import QApplication, QWidget
 
 
@@ -103,6 +112,64 @@ def flush_deferred_deletes():
         app.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
+def _live_qthreads():
+    """Every real QThread whose C++ object is still alive.
+
+    Deliberately not preceded by gc.collect(): a stray worker is usually
+    kept alive only by the reference cycle through the Q0GUI that built
+    it, so collecting first would destroy the evidence -- and that
+    destruction is the crash no_leaked_qthreads exists to report.
+
+    issubclass(type(obj), ...) rather than isinstance(obj, ...): a Mock
+    built with spec=QThread reports QThread as its __class__, so
+    isinstance says True and sip.isdeleted() then raises TypeError on
+    being handed a Mock. type() sees through that. gc.get_objects()
+    covers the whole process and CI runs `--dist loadfile`, so other
+    test files' spec'd mocks are visible here -- this raised a teardown
+    error in every test in this file on a full-suite run.
+    """
+    return [
+        obj
+        for obj in gc.get_objects()
+        if issubclass(type(obj), QThread) and not sip.isdeleted(obj)
+    ]
+
+
+@pytest.fixture(autouse=True)
+def no_leaked_qthreads():
+    """Fail the test that leaks a QThread, instead of crashing the worker.
+
+    setup_mocks replaces every worker class Q0GUI constructs, so no test
+    in this file should ever start a thread. When one slips through, the
+    QThread object is destroyed whenever the garbage collector gets to
+    it, which can be several tests later -- and Qt aborts the process if
+    the thread is still running at that point. xdist reports that as
+    "worker 'gwN' crashed" against whichever unrelated test happened to
+    be running, which is how the CalibrationWorker leak below stayed
+    hidden through #299.
+
+    Declared after flush_deferred_deletes so it tears down first
+    (finalizers run in reverse): this quits, joins, and schedules the
+    stray thread for deletion, then the flush delivers that deletion. A
+    thread reported once is therefore already gone and does not trip the
+    next test too.
+    """
+    before = {id(t) for t in _live_qthreads()}
+    yield
+    # Only threads this test created: a thread another file left in the
+    # shared worker process is not this test's to report.
+    leaked = [t for t in _live_qthreads() if id(t) not in before]
+    for thread in leaked:
+        thread.quit()
+        thread.wait(5000)
+        thread.deleteLater()
+    assert not leaked, (
+        "test left real QThread(s) behind: "
+        f"{sorted(type(t).__name__ for t in leaked)}. "
+        "Add the worker class to setup_mocks so it is never started."
+    )
+
+
 @pytest.fixture
 def mock_cryomodule():
     """Mock cryomodule fixture."""
@@ -148,6 +215,15 @@ def setup_mocks():
         patch(
             "sc_linac_physics.applications.q0.q0_gui.q0_gui_utils"
         ) as mock_utils,
+        # q0_gui.py builds every worker but one through the q0_gui_utils
+        # module attribute, which the patch above covers. CalibrationWorker
+        # is the exception: q0_gui.py:13 imports the class by name, so
+        # takeNewCalibration() at q0_gui.py:488 bound the real class and
+        # start()ed a real QThread against a Mock cryomodule. That thread
+        # outlived the test, and Qt aborts the process when a running
+        # QThread is destroyed -- which is what the garbage collector then
+        # did, a test or two later, taking the whole xdist worker with it.
+        patch("sc_linac_physics.applications.q0.q0_gui.CalibrationWorker"),
     ):
         mock_utils.CavAmpControl = MockCavAmpControl
 

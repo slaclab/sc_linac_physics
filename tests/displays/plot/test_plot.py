@@ -1,9 +1,20 @@
-import sys
+# Every test here builds a real top-level PVGroupArchiverDisplay. Left to
+# itself that widget's C++ object is destroyed whenever its last Python
+# reference happens to go away, which is what made this file flaky: under
+# pytest-xdist a stray teardown takes the whole worker down, along with the
+# unrelated tests it was running. So the `display` fixture registers the
+# widget with qtbot.addWidget, the pattern used in
+# tests/applications/q0/test_q0_gui.py.
+#
+# That file also carries a no_leaked_qthreads guard (#307). This one does
+# too, but it has to skip pydm's RulesEngine -- see the fixture.
+import gc
 from unittest.mock import Mock, patch, MagicMock
 
 import pytest
-from PyQt5.QtWidgets import QDialog
-from qtpy.QtWidgets import QApplication
+from PyQt5 import sip
+from PyQt5.QtCore import QEvent, QThread
+from PyQt5.QtWidgets import QApplication, QDialog
 
 from sc_linac_physics.displays.plot.plot import (
     PVGroupArchiverDisplay,
@@ -20,14 +31,93 @@ from sc_linac_physics.displays.plot.utils import (
 )
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication instance for tests."""
+@pytest.fixture(autouse=True)
+def flush_deferred_deletes():
+    """Finish the deletion qtbot.addWidget only starts.
+
+    qtbot's cleanup calls close() then deleteLater() on each registered
+    widget, and deleteLater() only posts a DeferredDelete event.
+    QApplication.processEvents(), which is all pytest-qt runs afterwards,
+    does not deliver DeferredDelete -- so the posted event sits in the
+    queue holding the widget alive, and registering with qtbot on its own
+    is not enough to get the display destroyed inside its own test.
+
+    This runs after qtbot's cleanup: pytest-qt closes widgets in the part
+    of its pytest_runtest_teardown wrapper that precedes the yield, and
+    fixture finalizers run inside that yield.
+    """
+    yield
     app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-    yield app
-    # Don't quit the app here as it might be used by other tests
+    if app is not None:
+        app.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+# pydm's RulesDispatcher is a singleton that owns one RulesEngine QThread
+# and start()s it the first time a real PyDM widget registers rules
+# (pydm/widgets/rules.py:70-72, pydm 1.28.2). PVGroupArchiverDisplay builds
+# real PyDMLabel and PyDMArchiverTimePlot children, so the first test in
+# this file starts it -- test_display_creation, measured.
+#
+# It is not a leak and it is not this test's to clean up: quitting it would
+# leave every later test in the process without rules evaluation. It also
+# cannot be excluded by the before/after diff below, because it is started
+# lazily *during* the first test rather than at import. Hence the name
+# check. tests/applications/q0/test_q0_gui.py needs no such carve-out
+# because its widgets are Mocks, so it never builds a PyDM widget at all.
+_PYDM_SINGLETON_THREADS = frozenset({"RulesEngine"})
+
+
+def _live_qthreads():
+    """Every real QThread whose C++ object is still alive.
+
+    Deliberately not preceded by gc.collect(): a stray worker is usually
+    kept alive only by the reference cycle through the widget that built
+    it, so collecting first would destroy the evidence -- and that
+    destruction is the crash this guard exists to report.
+
+    issubclass(type(obj), ...) rather than isinstance(obj, ...): a Mock
+    built with spec=QThread reports QThread as its __class__, so
+    isinstance says True and sip.isdeleted() then raises TypeError on
+    being handed a Mock. type() sees through that.
+    """
+    return [
+        obj
+        for obj in gc.get_objects()
+        if issubclass(type(obj), QThread)
+        and type(obj).__name__ not in _PYDM_SINGLETON_THREADS
+        and not sip.isdeleted(obj)
+    ]
+
+
+@pytest.fixture(autouse=True)
+def no_leaked_qthreads():
+    """Fail the test that leaks a QThread, instead of crashing the worker.
+
+    Nothing in displays/plot/ constructs a QThread today, so this guard is
+    insurance rather than a fix: the display is a real pydm Display, and if
+    a future change has it start a worker, Qt aborts the process when that
+    thread is garbage collected while still running. xdist reports that as
+    "worker 'gwN' crashed" against whichever unrelated test happened to be
+    running, which is how the CalibrationWorker leak in #307 stayed hidden
+    through #299.
+
+    Declared after flush_deferred_deletes so it tears down first
+    (finalizers run in reverse): this quits, joins, and schedules the stray
+    thread for deletion, then the flush delivers that deletion.
+    """
+    before = {id(t) for t in _live_qthreads()}
+    yield
+    # Only threads this test created: a thread another file left in the
+    # shared worker process is not this test's to report.
+    leaked = [t for t in _live_qthreads() if id(t) not in before]
+    for thread in leaked:
+        thread.quit()
+        thread.wait(5000)
+        thread.deleteLater()
+    assert not leaked, (
+        "test left real QThread(s) behind: "
+        f"{sorted(type(t).__name__ for t in leaked)}."
+    )
 
 
 @pytest.fixture
@@ -97,8 +187,32 @@ def mock_pv_groups():
 
 
 @pytest.fixture
-def display(qapp, mock_machine, mock_pv_groups):
-    """Create PVGroupArchiverDisplay instance with mocked data."""
+def display(qtbot, mock_machine, mock_pv_groups):
+    """Create PVGroupArchiverDisplay instance with mocked data.
+
+    close() alone is not enough. It leaves the widget's C++ object alive
+    and its PyDMArchiverTimePlot redraw timer (1000 ms) still firing, so
+    the tree is torn down later at whatever moment the last Python
+    reference drops -- for two tests in this file, inside some unrelated
+    later test. qtbot.addWidget makes that a deleteLater() in this test's
+    own teardown instead, which flush_deferred_deletes then delivers.
+
+    The two tests that used to leak are test_open_axis_range_dialog_no_axes
+    and test_open_axis_range_dialog_with_axes. Both assert on a mock that
+    recorded a call taking the display itself as an argument
+    (QMessageBox.information(self, ...) and AxisRangeDialog(..., self)).
+    Those call records outlive the `with patch(...)` block and pin the
+    widget past fixture teardown; gc.collect() does not free it.
+
+    Registering with qtbot does not unpin it -- the Python wrapper still
+    lingers for those two tests -- but it does destroy the C++ object on
+    schedule, which is the only half that can take a worker down.
+    Measured, counting widgets whose C++ object is still alive after each
+    test, plus the redraw timers they keep running:
+
+      before    1 display and 1-2 active 1000 ms timers, for those 2 tests
+      after     0 displays and 0 timers, for all 40
+    """
     with (
         patch("sc_linac_physics.displays.plot.plot.Machine") as MockMachine,
         patch(
@@ -110,8 +224,8 @@ def display(qapp, mock_machine, mock_pv_groups):
         mock_get_pvs.return_value = mock_pv_groups
 
         display = PVGroupArchiverDisplay()
+        qtbot.addWidget(display)
         yield display
-        display.close()
 
 
 class TestPVGroupArchiverDisplayInitialization:
