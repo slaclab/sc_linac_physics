@@ -10,6 +10,7 @@ from .phase_base import (
     PhaseStepResult,
     PhaseExecutionError,
 )
+from .cavity_char import CavityCharLimits, CavityCharPhase
 from .frequency_tuning import FrequencyTuningLimits, FrequencyTuningPhase
 from .piezo_pre_rf import PiezoPreRFPhase
 from .ssa_char import SSACharPhase
@@ -21,6 +22,8 @@ __all__ = [
     "PhaseStepResult",
     "PhaseExecutionError",
     "FrequencyTuningLimits",
+    "CavityCharLimits",
+    "CavityCharPhase",
     "FrequencyTuningPhase",
     "PiezoPreRFPhase",
     "SSACharPhase",
