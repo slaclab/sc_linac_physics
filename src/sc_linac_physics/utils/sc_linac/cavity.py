@@ -1313,8 +1313,53 @@ class Cavity(linac_utils.SCLinacObject):
         self.start_characterization()
         time.sleep(2)
 
+        self.wait_for_characterization()
+        self.finish_characterization()
+
+    def wait_for_characterization(
+        self,
+        timeout: Optional[float] = None,
+        poll_interval: float = 1.0,
+        max_result_age_seconds: float = 300.0,
+    ):
+        """Block until the probe calibration settles, then vet the result.
+
+        Shared by Cavity.characterize() and the RF commissioning cavity
+        characterization phase. They disagree about what to do with the
+        result — auto setup pushes it, commissioning shows it to an operator
+        first — but the polling and the checks below are the same job, and a
+        second copy is a second place for them to drift.
+
+        PROBECALSTS is checked against CHARACTERIZATION_RUNNING_VALUE and
+        CHARACTERIZATION_CRASHED_VALUE; PROBECALTS carries the time of the
+        last result.
+
+        @param timeout: seconds to wait for the status to settle. None polls
+            indefinitely, which is what Cavity.characterize() has always done.
+        @param poll_interval: seconds between status reads.
+        @param max_result_age_seconds: how old PROBECALTS may be and still
+            count as this run's result.
+        @raise CavityCharacterizationError: crashed, timed out, or settled on
+            a result older than max_result_age_seconds.
+        @raise CavityAbortError: via check_abort(), each poll.
+        """
+        deadline = None if timeout is None else time.monotonic() + timeout
+
         while self.characterization_running:
             self.check_abort()
+            if deadline is not None and time.monotonic() >= deadline:
+                self.set_status_message(
+                    "Characterization did not finish in time",
+                    logging.ERROR,
+                    extra_data={
+                        "timeout_seconds": timeout,
+                        "cavity": str(self),
+                    },
+                )
+                raise linac_utils.CavityCharacterizationError(
+                    f"{self} characterization did not finish within "
+                    f"{timeout:.0f} s"
+                )
             self.set_status_message(
                 "Waiting for characterization to complete",
                 logging.DEBUG,
@@ -1323,30 +1368,7 @@ class Cavity(linac_utils.SCLinacObject):
                     "cavity": str(self),
                 },
             )
-            time.sleep(1)
-
-        if (
-            self.characterization_status
-            == linac_utils.CALIBRATION_COMPLETE_VALUE
-        ):
-            seconds_since_char = (
-                datetime.now() - self.characterization_timestamp
-            ).total_seconds()
-
-            if seconds_since_char > 300:
-                self.set_status_message(
-                    "No valid characterization within the last 5 minutes",
-                    logging.ERROR,
-                    extra_data={
-                        "seconds_since_characterization": seconds_since_char,
-                        "timestamp": self.characterization_timestamp.isoformat(),
-                        "cavity": str(self),
-                    },
-                )
-                raise linac_utils.CavityCharacterizationError(
-                    f"No valid {self} characterization within the last 5 min"
-                )
-            self.finish_characterization()
+            time.sleep(poll_interval)
 
         if self.characterization_crashed:
             self.set_status_message(
@@ -1359,6 +1381,26 @@ class Cavity(linac_utils.SCLinacObject):
             )
             raise linac_utils.CavityCharacterizationError(
                 f"{self} characterization crashed"
+            )
+
+        # A COMPLETE older than the window predates this run: the IOC never
+        # went busy, and PROBECALSTS is still reporting the previous result.
+        # Reading QLOADED_NEW here would hand back a stale measurement.
+        seconds_since_char = (
+            datetime.now() - self.characterization_timestamp
+        ).total_seconds()
+        if seconds_since_char > max_result_age_seconds:
+            self.set_status_message(
+                "No valid characterization within the last 5 minutes",
+                logging.ERROR,
+                extra_data={
+                    "seconds_since_characterization": seconds_since_char,
+                    "timestamp": self.characterization_timestamp.isoformat(),
+                    "cavity": str(self),
+                },
+            )
+            raise linac_utils.CavityCharacterizationError(
+                f"No valid {self} characterization within the last 5 min"
             )
 
     def finish_characterization(self):

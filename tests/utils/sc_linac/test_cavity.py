@@ -1036,3 +1036,93 @@ def test_walk_amp(cavity):
 def test_is_offline(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_OFFLINE_VALUE)
     assert cavity.is_offline
+
+
+# ---------------------------------------------------------------------------
+# wait_for_characterization — shared by Cavity.characterize() and
+# CavityCharPhase, so the polling and staleness semantics live in one place.
+# ---------------------------------------------------------------------------
+
+
+def test_wait_returns_once_the_status_settles(cavity):
+    cavity._characterization_status_pv_obj = make_mock_pv(
+        get_val=CALIBRATION_COMPLETE_VALUE
+    )
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    cavity.wait_for_characterization()
+
+
+def test_wait_raises_when_the_characterization_crashed(cavity):
+    cavity._characterization_status_pv_obj = make_mock_pv(
+        get_val=CHARACTERIZATION_CRASHED_VALUE
+    )
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    with pytest.raises(CavityCharacterizationError, match="crashed"):
+        cavity.wait_for_characterization()
+
+
+def test_wait_rejects_a_complete_that_predates_this_run(cavity):
+    """A COMPLETE older than the window is a leftover, not a measurement.
+
+    If the IOC has not gone busy yet, the status still reads COMPLETE from
+    the previous run. Without this the caller reads stale QLOADED_NEW and
+    presents it as a fresh result.
+    """
+    cavity._characterization_status_pv_obj = make_mock_pv(
+        get_val=CALIBRATION_COMPLETE_VALUE
+    )
+    stale = (datetime.now() - timedelta(seconds=400)).strftime(
+        "%Y-%m-%d-%H:%M:%S"
+    )
+    cavity._char_timestamp_pv_obj = make_mock_pv(get_val=stale)
+    with pytest.raises(CavityCharacterizationError, match="5 min|stale|old"):
+        cavity.wait_for_characterization()
+
+
+def test_wait_times_out_rather_than_polling_forever(cavity):
+    cavity._characterization_status_pv_obj = make_mock_pv(
+        get_val=CHARACTERIZATION_RUNNING_VALUE
+    )
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    with pytest.raises(CavityCharacterizationError, match="did not finish"):
+        cavity.wait_for_characterization(timeout=0.2, poll_interval=0.05)
+
+
+def test_wait_without_a_timeout_polls_until_it_settles(cavity):
+    """Default timeout=None keeps Cavity.characterize()'s unbounded wait."""
+    seq = [CHARACTERIZATION_RUNNING_VALUE] * 2 + [CALIBRATION_COMPLETE_VALUE]
+    pv = make_mock_pv()
+    pv.get = MagicMock(
+        side_effect=lambda *a, **k: (
+            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
+        )
+    )
+    cavity._characterization_status_pv_obj = pv
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    cavity.wait_for_characterization(poll_interval=0.01)
+    assert seq == []
+
+
+def test_wait_checks_abort_while_polling(cavity):
+    seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
+    pv = make_mock_pv()
+    pv.get = MagicMock(
+        side_effect=lambda *a, **k: (
+            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
+        )
+    )
+    cavity._characterization_status_pv_obj = pv
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    cavity.check_abort = MagicMock()
+    cavity.wait_for_characterization(poll_interval=0.01)
+    cavity.check_abort.assert_called()
