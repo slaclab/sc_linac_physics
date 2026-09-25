@@ -16,7 +16,7 @@ phase:
      Cavity._auto_tune to move to resonance (with a per-iteration stepper
      temperature guard).  There is no automatic cool-down: if the temperature
      exceeds the limit the step fails and the operator must investigate and
-     re-run with a higher acknowledgement ceiling (over_temp_ack_c).  After
+     re-run with a higher acknowledgement ceiling (over_temp_ack_k).  After
      converging, writes the (signed) return-trip step count to the NSTEPS_COLD
      PV and sets tune_config to RESONANCE.
   5. Runs a single-cavity FSCAN to find the 8π/9 and 7π/9 parasitic modes and
@@ -63,7 +63,12 @@ class FrequencyTuningLimits:
     # Run commissioning moves at max speed; StepperTuner.move() restores the
     # speed to DEFAULT_STEPPER_SPEED via restore_defaults() after each move.
     move_speed: int = linac_utils.MAX_STEPPER_SPEED
-    temp_limit_c: float = linac_utils.STEPPER_TEMP_LIMIT
+    # Kelvin. The stepper sits in the cryomodule insulating vacuum: production
+    # testing interlocks the motor below 70 K and reports it starting near 30 K
+    # and rising under 4 K through a long motion (Holzbauer et al., "Production
+    # Tuner Testing for LCLS-II Cryomodule Production", IPAC2018, WEPML004,
+    # https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf).
+    temp_limit_k: float = linac_utils.STEPPER_TEMP_LIMIT
     max_total_steps: int = 10_000_000
     # A healthy probe move (probe_steps microsteps at ~0.005 Hz/microstep)
     # produces a few hundred Hz of detune change on real cavities; require a
@@ -360,7 +365,7 @@ class FrequencyTuningPhase(PhaseBase):
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
-                f"Cavity ready for probing — temp {temp:.1f} °C, "
+                f"Cavity ready for probing — temp {temp:.1f} K, "
                 f"detune {detune:.0f} Hz"
             ),
         )
@@ -396,7 +401,7 @@ class FrequencyTuningPhase(PhaseBase):
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message=(
-                f"Cavity ready for tuning — temp {temp:.1f} °C, "
+                f"Cavity ready for tuning — temp {temp:.1f} K, "
                 f"detune {detune:.0f} Hz"
             ),
         )
@@ -488,7 +493,7 @@ class FrequencyTuningPhase(PhaseBase):
 
         message = (
             "Cavity prepared for tuning (SSA on, interlocks reset, chirp valid). "
-            f"Temp {temp:.1f} °C, detune {detune:.0f} Hz"
+            f"Temp {temp:.1f} K, detune {detune:.0f} Hz"
         )
         if tune_config_warning:
             message += f". WARNING: {tune_config_warning}"
@@ -804,9 +809,9 @@ class FrequencyTuningPhase(PhaseBase):
 
         # Operator-authorized over-temp ceiling (re-run raises it); default is
         # the plain temperature limit.  _auto_tune fails hard on a breach.
-        ack_ceiling = self.context.parameters.get("over_temp_ack_c")
+        ack_ceiling = self.context.parameters.get("over_temp_ack_k")
         max_temp = (
-            ack_ceiling if ack_ceiling is not None else self.limits.temp_limit_c
+            ack_ceiling if ack_ceiling is not None else self.limits.temp_limit_k
         )
 
         # Pre-seed the plot with the current state before the tuning loop
@@ -900,11 +905,11 @@ class FrequencyTuningPhase(PhaseBase):
                 result=PhaseResult.FAILED,
                 message=(
                     f"{exc}. Investigate; to proceed, acknowledge and re-run "
-                    "with a higher over_temp_ack_c."
+                    "with a higher over_temp_ack_k."
                 ),
                 data={
-                    "stepper_temp_c": temp,
-                    "temp_limit_c": self.limits.temp_limit_c,
+                    "stepper_temp_k": temp,
+                    "temp_limit_k": self.limits.temp_limit_k,
                     "requires_over_temp_ack": True,
                 },
             )
@@ -948,7 +953,7 @@ class FrequencyTuningPhase(PhaseBase):
         )
         # Audit trail: if the operator authorized proceeding over the temp
         # limit, record the ceiling and who authorized it.
-        if ack_ceiling is not None and ack_ceiling > self.limits.temp_limit_c:
+        if ack_ceiling is not None and ack_ceiling > self.limits.temp_limit_k:
             data["over_temp_acknowledged_c"] = ack_ceiling
             data["over_temp_acknowledged_by"] = self.context.operator
 
