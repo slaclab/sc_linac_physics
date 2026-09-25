@@ -61,6 +61,14 @@ class Cavity(linac_utils.SCLinacObject):
             self.scale_factor_lower_limit = linac_utils.CAVITY_SCALE_LOWER_LIMIT
             self.scale_factor_upper_limit = linac_utils.CAVITY_SCALE_UPPER_LIMIT
 
+            # LCLS-II-HE cavities (all of L4B) are the same length and
+            # frequency as the original LCLS-II cavities but accept a wider
+            # loaded-Q window, so only that pair is overridden here. See the
+            # provenance note on LOADED_Q_*_LIMIT_HE in linac_utils.
+            if self.cryomodule.is_high_energy:
+                self.loaded_q_lower_limit = linac_utils.LOADED_Q_LOWER_LIMIT_HE
+                self.loaded_q_upper_limit = linac_utils.LOADED_Q_UPPER_LIMIT_HE
+
         self._pv_prefix = linac_utils.build_cavity_pv_prefix(
             linac_name=self.linac.name,
             cryomodule_name=self.cryomodule.name,
