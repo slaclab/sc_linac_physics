@@ -155,13 +155,13 @@
         <tr><td>Speed</td><td>Slow — a mechanical move. Roughly 50 s at
             full range: 1,000,000 usteps at 20,000 usteps/s
             <span class="cite">DEFAULT_STEPPER_MAX_STEPS, DEFAULT_STEPPER_SPEED,
-            linac_utils.py:121-122; STEP:VELO EGU is usteps/</span></td>
+            linac_utils.py:167-168; STEP:VELO EGU is usteps/</span></td>
             <td>Fast — a voltage change, not a mechanical move
             <span class="cite">piezo.py:50</span></td></tr>
         <tr><td>Range</td><td>Enormous; tens of millions of microsteps to cold
             landing <span class="cite">50,000,000 steps, stepper_tol_factor,
-            linac_utils.py:228</span></td><td>Narrow, centered at 25 V
-            <span class="cite">PIEZO_CENTER_VOLTAGE, linac_utils.py:142</span>
+            linac_utils.py:292</span></td><td>Narrow, centered at 25 V
+            <span class="cite">PIEZO_CENTER_VOLTAGE, linac_utils.py:188</span>
             </td></tr>
         <tr><td>Role</td><td>Gets the cavity to resonance and holds the coarse
             position <span class="cite">move_to_resonance(),
@@ -207,7 +207,7 @@
       Those two are <em>estimates</em>. Nothing in <code>utils/sc_linac/</code>
       or <code>applications/</code> reads either one. Their only consumers are
       the two derived constants declared immediately below them
-      <span class="cite">ESTIMATED_MICROSTEPS_PER_HZ, linac_utils.py:151-152</span>,
+      <span class="cite">ESTIMATED_MICROSTEPS_PER_HZ, linac_utils.py:215-216</span>,
       and the only thing that imports <em>those</em> is the simulation IOC
       <span class="cite">utils/simulation/tuner_service.py:104-111</span>. It
       seeds each simulated cavity's <code>SCALE</code> PV at startup, picking
@@ -379,7 +379,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  &lt;- shrinks as det
       <a href="https://proceedings.jacow.org/IPAC2015/papers/wepty035.pdf">WEPTY035</a></span>, which is why the tolerance factors are far wider than a
       linear response needs — 5&times; the estimated steps below 10,000 steps,
       1.01&times; near cold landing, fitted empirically against large dead zones
-      <span class="cite">stepper_tol_factor, linac_utils.py:224-236</span>.
+      <span class="cite">stepper_tol_factor, linac_utils.py:288-307</span>.
       Trust the loop structure here; do not trust the smoothness.
     </div>
   </section>
