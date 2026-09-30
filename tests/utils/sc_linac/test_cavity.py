@@ -1054,9 +1054,11 @@ class TestLoadedQLimitsByCavityClass:
 
     @staticmethod
     def _cavity(cm_name, number=1):
-        from sc_linac_physics.utils.sc_linac.linac import Machine
-
-        return Machine().cryomodules[cm_name].cavities[number]
+        # The module-level MACHINE, not a fresh Machine(): these assertions
+        # only read limits set in Cavity.__init__ from linac_utils
+        # constants, and a Machine() per call rebuilds all 60 cryomodules
+        # and 480 cavities. Same reuse as test_edm_macro_string.
+        return MACHINE.cryomodules[cm_name].cavities[number]
 
     def test_high_energy_cavities_use_the_he_window(self):
         from sc_linac_physics.utils.sc_linac import linac_utils
