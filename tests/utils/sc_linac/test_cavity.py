@@ -1045,10 +1045,11 @@ def test_is_offline(cavity):
 class TestLoadedQLimitsByCavityClass:
     """Three cavity classes, three loaded-Q windows.
 
-    HE (all of L4B) accepts a wider window than the original LCLS-II cavities
-    at both ends — a different default value for loaded Q, not a looser
-    standard. Using the standard limits there would flag correctly-performing
-    HE cavities.
+    HE (all of L4B) uses 3e7-7e7 where the original LCLS-II cavities use
+    2.5e7-5.1e7. Both limits are higher, so the window shifts up as well as
+    widening, and it is tighter at the low end — a different default value
+    for loaded Q, not a looser standard. Using the standard limits there
+    would flag correctly-performing HE cavities.
     """
 
     @staticmethod
