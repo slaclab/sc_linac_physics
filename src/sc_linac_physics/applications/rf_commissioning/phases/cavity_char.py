@@ -149,6 +149,19 @@ class CavityCharPhase(PhaseBase):
 
     def _verify_initial_state(self) -> PhaseStepResult:
         """Check the cavity is ready, and warn about stale inputs."""
+        if self.context.dry_run:
+            # HW_MODE and the stepper's motor_moving are PV reads, so skip
+            # them; _stale_prerequisites reads the record only, and a
+            # rehearsal is exactly when its warning is worth seeing.
+            stale = self._stale_prerequisites()
+            message = "Dry run: cavity state check simulated"
+            if stale:
+                message += f" — note: {', '.join(stale)}"
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message=message,
+                data={"dry_run": True},
+            )
         try:
             if not self.cavity.is_online:
                 return PhaseStepResult(
@@ -231,6 +244,17 @@ class CavityCharPhase(PhaseBase):
                     f"Drive level {drive:.1f} is outside the allowed range "
                     f"(0, {self.limits.max_drive_level:.0f}]"
                 ),
+            )
+
+        # Validated above, so a dry run still catches a bad parameter. Below
+        # this line reset_interlocks() writes INTLK_RESET_ALL and drive_level
+        # writes SEL_ASET, so a rehearsal stops here.
+        if self.context.dry_run:
+            self._drive_level = drive
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message=f"Dry run: drive level {drive:.1f} not written",
+                data={"drive_level": drive, "dry_run": True},
             )
 
         try:
@@ -324,6 +348,17 @@ class CavityCharPhase(PhaseBase):
         Separating read from push is the point of this phase: the operator sees
         loaded Q, scale factor and probe Q before any of them reach the cavity.
         """
+        if self.context.dry_run:
+            # Nothing to simulate: there is no measurement to read, and
+            # calculate_probe_q() below processes QPROBE_CALC1.PROC, which is
+            # a write. Store nothing rather than put invented numbers on the
+            # record.
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message="Dry run: result read simulated, nothing stored",
+                data={"dry_run": True},
+            )
+
         try:
             self._loaded_q = float(self.cavity.measured_loaded_q)
             self._scale_factor = float(self.cavity.measured_scale_factor)

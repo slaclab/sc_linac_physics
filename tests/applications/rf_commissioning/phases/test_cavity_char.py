@@ -348,6 +348,12 @@ def test_wait_times_out_rather_than_hanging(mock_cavity, record):
 
 
 def test_dry_run_touches_no_hardware(mock_cavity, record):
+    """Every step, not just the ones that were already guarded.
+
+    The earlier version ran the three steps that checked context.dry_run and
+    skipped the three that did not, so it passed while set_drive_level wrote
+    SEL_ASET and read_results processed QPROBE_CALC1.PROC.
+    """
     context = PhaseContext(
         record=record,
         operator="op",
@@ -357,15 +363,40 @@ def test_dry_run_touches_no_hardware(mock_cavity, record):
     p = CavityCharPhase(context)
     p.validate_prerequisites()
 
-    for step in (
-        "start_characterization",
-        "wait_for_completion",
-        "push_results",
-    ):
-        assert p.execute_step(step).result == PhaseResult.SUCCESS
+    for step in p.get_phase_steps():
+        assert p.execute_step(step).result == PhaseResult.SUCCESS, step
 
+    # Writes
     mock_cavity.start_characterization.assert_not_called()
     mock_cavity.push_loaded_q.assert_not_called()
+    mock_cavity.push_scale_factor.assert_not_called()
+    mock_cavity.reset_interlocks.assert_not_called()
+    mock_cavity.calculate_probe_q.assert_not_called()
+
+    # drive_level is an attribute assignment, not a call: _set_drive_level
+    # would put a float there. An untouched Mock attribute is still a Mock.
+    assert not isinstance(
+        mock_cavity.drive_level, float
+    ), "dry run wrote SEL_ASET via cavity.drive_level"
+
+    # Reads
+    mock_cavity.check_abort.assert_not_called()
+
+
+def test_dry_run_does_not_store_measurements(mock_cavity, record):
+    """A rehearsal must not leave invented numbers on the record."""
+    context = PhaseContext(
+        record=record,
+        operator="op",
+        parameters={"cavity": mock_cavity},
+        dry_run=True,
+    )
+    p = CavityCharPhase(context)
+    p.validate_prerequisites()
+    p.execute_step("read_results")
+
+    data = record.cavity_char
+    assert data is None or (data.loaded_q is None and data.scale_factor is None)
 
 
 def test_prerequisites_need_an_ssa(record):
