@@ -881,12 +881,13 @@ class Cavity(linac_utils.SCLinacObject):
             # piezo SCALE PV that sets both delta_hz and tolerance).
             #
             # CHECK: does STEPTEMP climb on a stepper commanded no motion?
-            # [TUNER-2018] puts the interlock at 70 K and the rise under 4 K
-            # through a long motion (quoted on
-            # FrequencyTuningLimits.temp_limit_k), which ties the heating to
-            # motion but does not cover holding current at rest. The bail out
-            # below does not depend on the answer; only the "an idle motor
-            # does not heat up" claim this replaced did.
+            # [TUNER-2018] interlocks at 70 K and measured the rise staying
+            # under 4 K through a long motion (quoted on
+            # FrequencyTuningLimits.temp_limit_k). That is a reading taken
+            # during motion: it neither isolates motion as the cause nor says
+            # anything about holding current at rest. The bail out below does
+            # not depend on the answer; only the "an idle motor does not heat
+            # up" claim this replaced did.
             if est_steps == 0:
                 hz_per_microstep = 1 / microsteps_per_hz
                 self.set_status_message(

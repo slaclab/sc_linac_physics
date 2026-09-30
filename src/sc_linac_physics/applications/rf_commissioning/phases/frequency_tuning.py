@@ -74,9 +74,16 @@ class FrequencyTuningLimits:
     # MICROSTEPS_PER_STEP = 1.4 / 256 Hz per microstep works out to
     # 50_000 * 1.4 / 256 = 273 Hz. Require a solid fraction of that so a
     # degraded/uncoupled stepper is caught, not just a totally dead one.
-    # Those constants are flagged "very rough values obtained empirically"
-    # where they are defined (linac_utils.py:150), so treat 273 Hz as an
-    # order of magnitude rather than an expected reading.
+    #
+    # 273 Hz is a design figure, not a per-cavity prediction: live tuning
+    # reads the stepper SCALE PV rather than HZ_PER_STEP, and [TUNER-2018]
+    # measured spread across 56 tuner/cavity systems (CM1 ~5% low against
+    # CM2-6, cavity 1 on CM4 and CM5 lower again). That is a few percent, so
+    # 100 Hz sits well below anything a healthy stepper should produce and
+    # catches a badly degraded one rather than a slightly off one.
+    #
+    # Not "very rough constants": linac_utils.HZ_PER_STEP documents
+    # 1.4 Hz/step as measured, and MICROSTEPS_PER_STEP is exact gearing.
     min_probe_delta_hz: float = 100.0
     pi_scan_freq_start: int = -3_500_000
     pi_scan_freq_stop: int = 50_000
