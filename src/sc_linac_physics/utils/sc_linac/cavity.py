@@ -1324,15 +1324,24 @@ class Cavity(linac_utils.SCLinacObject):
     ):
         """Block until the probe calibration settles, then vet the result.
 
-        Shared by Cavity.characterize() and the RF commissioning cavity
-        characterization phase. They disagree about what to do with the
-        result — auto setup pushes it, commissioning shows it to an operator
-        first — but the polling and the checks below are the same job, and a
-        second copy is a second place for them to drift.
+        Extracted from Cavity.characterize(), which is currently the only
+        caller. The RF commissioning cavity characterization phase (#285) is
+        the intended second one: it needs the same polling and the same
+        checks, but shows the result to an operator instead of pushing it.
+        Pulling the wait out here first means that phase adopts this rather
+        than growing a second copy to drift against.
 
-        PROBECALSTS is checked against CHARACTERIZATION_RUNNING_VALUE and
-        CHARACTERIZATION_CRASHED_VALUE; PROBECALTS carries the time of the
+        PROBECALSTS is read via characterization_running (== 2) and
+        characterization_crashed (== 0). PROBECALTS carries the time of the
         last result.
+
+        The status is a DBF_ENUM with exactly three states — 0 Crash,
+        1 Complete, 2 Running (checked against ACCL:L0B:0110:PROBECALSTS,
+        2026-09-30) — so the loop exiting on != 2 and the crash check
+        raising on 0 leave 1 as the only value that reaches the staleness
+        check. There is deliberately no fourth-value branch: the IOC has no
+        fourth state, and PV.get() raises rather than returning a sentinel
+        when a read fails, so an unrecognized status cannot arrive here.
 
         @param timeout: seconds to wait for the status to settle. None polls
             indefinitely, which is what Cavity.characterize() has always done.
