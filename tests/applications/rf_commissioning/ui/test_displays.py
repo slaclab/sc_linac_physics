@@ -486,19 +486,30 @@ class TestDisplayRegistry:
 
     @pytest.mark.parametrize("phase", sorted(PHASE_DISPLAY_MAP, key=str))
     def test_package_export_matches_registry(self, phase):
-        """The package export and the registry must be the same class.
+        """Both package exports and the registry must be the same class.
 
         A phase display starts as a placeholder in ``displays.standard`` and
         later gets a real module of its own. If the registry is repointed at
-        the real class but ``displays/__init__.py`` still re-exports the
-        placeholder, ``from ... .ui.displays import XDisplay`` silently hands
-        callers the dead placeholder while the app runs the real one.
+        the real class but a package still re-exports the placeholder,
+        ``from ... import XDisplay`` silently hands callers the dead
+        placeholder while the app runs the real one.
+
+        Checks ``ui.displays`` and ``ui``, since both re-export these and
+        ``ui.__all__`` lists them, so either one going stale or missing is a
+        break in the public API.
         """
         registry_cls = PHASE_DISPLAY_MAP[phase]
-        exported = getattr(displays_pkg, registry_cls.__name__, None)
-        assert exported is not None, (
-            f"{registry_cls.__name__} is in PHASE_DISPLAY_MAP but is not "
-            f"exported from {displays_pkg.__name__}"
-        )
-        assert exported is registry_cls
-        assert getattr(ui_pkg, registry_cls.__name__, exported) is registry_cls
+
+        for pkg in (displays_pkg, ui_pkg):
+            # Default None, not `exported`: with `exported` as the default a
+            # missing attribute returns the class we just matched, so the
+            # assertion passes and a dropped re-export goes unnoticed.
+            found = getattr(pkg, registry_cls.__name__, None)
+            assert found is not None, (
+                f"{registry_cls.__name__} is in PHASE_DISPLAY_MAP but is not "
+                f"exported from {pkg.__name__}"
+            )
+            assert found is registry_cls, (
+                f"{pkg.__name__} exports a different "
+                f"{registry_cls.__name__} than PHASE_DISPLAY_MAP uses"
+            )
