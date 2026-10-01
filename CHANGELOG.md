@@ -2,6 +2,51 @@
 
 <!-- version list -->
 
+## v9.36.3 (2026-10-01)
+
+### Documentation
+
+- **claude-md**: Trim evidence paragraphs to cut per-turn context
+  ([#310](https://github.com/slaclab/sc_linac_physics/pull/310),
+  [`df6305d`](https://github.com/slaclab/sc_linac_physics/commit/df6305d0013d0bb96405d7cdd24f0f2aa143b457))
+
+### Refactoring
+
+- **sc-linac**: Share the characterization wait between both callers
+  ([#306](https://github.com/slaclab/sc_linac_physics/pull/306),
+  [`374d41e`](https://github.com/slaclab/sc_linac_physics/commit/374d41ed555b3540948eb030cfeacc5dfa094ac6))
+
+### Testing
+
+- **displays**: Register cryo signals display for teardown
+  ([#309](https://github.com/slaclab/sc_linac_physics/pull/309),
+  [`43f7b23`](https://github.com/slaclab/sc_linac_physics/commit/43f7b238c0afb97f22e14e365e99b00f4737d3de))
+
+- **docs**: Check that file:line citations still point where they claim
+  ([#305](https://github.com/slaclab/sc_linac_physics/pull/305),
+  [`60e1fc9`](https://github.com/slaclab/sc_linac_physics/commit/60e1fc976ada17ebacf51df145ef4fadefa9616c))
+
+- **docs**: Record the citation-window blind spot
+  ([#312](https://github.com/slaclab/sc_linac_physics/pull/312),
+  [`2e8114e`](https://github.com/slaclab/sc_linac_physics/commit/2e8114e4600e33188fa7831557507c58c3ee1c50))
+
+- **docs**: Require a path prefix on every ambiguous citation
+  ([#305](https://github.com/slaclab/sc_linac_physics/pull/305),
+  [`60e1fc9`](https://github.com/slaclab/sc_linac_physics/commit/60e1fc976ada17ebacf51df145ef4fadefa9616c))
+
+- **plot**: Guard against leaked QThreads, skipping pydm's RulesEngine
+  ([#308](https://github.com/slaclab/sc_linac_physics/pull/308),
+  [`6db7807`](https://github.com/slaclab/sc_linac_physics/commit/6db7807a4f9efda6a7201bfd932dd827fc0afad2))
+
+- **plot**: Register display widgets for teardown to stop xdist worker crashes
+  ([#308](https://github.com/slaclab/sc_linac_physics/pull/308),
+  [`6db7807`](https://github.com/slaclab/sc_linac_physics/commit/6db7807a4f9efda6a7201bfd932dd827fc0afad2))
+
+- **q0**: Stop a real CalibrationWorker thread from crashing xdist workers
+  ([#307](https://github.com/slaclab/sc_linac_physics/pull/307),
+  [`7a10aa9`](https://github.com/slaclab/sc_linac_physics/commit/7a10aa95a2bdf1657b216fe59efc63f8f1e2d7b5))
+
+
 ## v9.36.2 (2026-09-21)
 
 ### Bug Fixes
