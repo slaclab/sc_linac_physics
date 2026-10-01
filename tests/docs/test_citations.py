@@ -30,6 +30,18 @@ independently of whether the tree currently has anything to catch.
 Not checked: continuation citations like `over_temp_ack_c, :807`, which take
 their file from the preceding citation in the same span. Cite the file
 explicitly and this will check it.
+
+Known blind spot, and it is the common case. A shift smaller than
+SYMBOL_WINDOW passes, because the window that makes a block citation tolerable
+also hides a small drift. #303 inserted five comment lines near the top of
+phases/frequency_tuning.py; that moved nine of the ten citations #288 makes
+into that file and nothing here failed — five is inside the six-line window,
+and seven of the nine name no symbol to check against.
+
+The window cannot simply be tightened: a citation legitimately points at a
+block whose name is several lines above it. So what these checks catch is
+deletion and large moves, not an edit above the cited line. Re-point citations
+by hand when a cited file gains or loses lines near the top.
 """
 
 import re
