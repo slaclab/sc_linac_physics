@@ -3,6 +3,12 @@ name: CI
 on:
   pull_request:
     branches: ["main"]
+  # Runs CI on the merge queue's combined commit: main plus every PR queued
+  # ahead. Each PR alone can pass against its own base while two together
+  # fail on main (#284, #294 and #311 moved lines #288 cites, and the
+  # Release run was the first to test them together). Only gates merges
+  # once the queue is on and these jobs are required checks for main.
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

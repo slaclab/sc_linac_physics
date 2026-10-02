@@ -70,10 +70,20 @@ class FrequencyTuningLimits:
     # https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf).
     temp_limit_k: float = linac_utils.STEPPER_TEMP_LIMIT
     max_total_steps: int = 10_000_000
-    # A healthy probe move (probe_steps microsteps at ~0.005 Hz/microstep)
-    # produces a few hundred Hz of detune change on real cavities; require a
-    # solid fraction of that so a degraded/uncoupled stepper is caught, not
-    # just a totally dead one.
+    # Computed, not measured: probe_steps microsteps at HZ_PER_STEP /
+    # MICROSTEPS_PER_STEP = 1.4 / 256 Hz per microstep works out to
+    # 50_000 * 1.4 / 256 = 273 Hz. Require a solid fraction of that so a
+    # degraded/uncoupled stepper is caught, not just a totally dead one.
+    #
+    # 273 Hz is a design figure, not a per-cavity prediction: live tuning
+    # reads the stepper SCALE PV rather than HZ_PER_STEP, and [TUNER-2018]
+    # measured spread across 56 tuner/cavity systems (CM1 ~5% low against
+    # CM2-6, cavity 1 on CM4 and CM5 lower again). That is a few percent, so
+    # 100 Hz sits well below anything a healthy stepper should produce and
+    # catches a badly degraded one rather than a slightly off one.
+    #
+    # Not "very rough constants": linac_utils.HZ_PER_STEP documents
+    # 1.4 Hz/step as measured, and MICROSTEPS_PER_STEP is exact gearing.
     min_probe_delta_hz: float = 100.0
     pi_scan_freq_start: int = -3_500_000
     pi_scan_freq_stop: int = 50_000
@@ -734,7 +744,7 @@ class FrequencyTuningPhase(PhaseBase):
                 message=(
                     f"Probe move of {probe} steps produced only {abs(delta):.1f} Hz change "
                     f"(minimum {self.limits.min_probe_delta_hz:.1f} Hz required). "
-                    "Check that the stepper is mechanically connected and the cavity is at 2 K."
+                    "Check that the stepper is mechanically connected to the tuner."
                 ),
             )
 

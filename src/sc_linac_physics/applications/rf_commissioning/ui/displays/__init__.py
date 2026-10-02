@@ -2,11 +2,11 @@
 
 from .base_placeholder import BasePlaceholderDisplay
 from .cavity_char import CavityCharDisplay
+from .frequency_tuning import FrequencyTuningDisplay
 from .piezo_pre_rf import PiezoPreRFDisplay
 from .registry import PHASE_DISPLAY_MAP, get_phase_display_class
 from .ssa_char import SSACharDisplay
 from .standard import (
-    FrequencyTuningDisplay,
     HighPowerMPProcessingDisplay,
     HighPowerOneHourRunDisplay,
     HighPowerRampDisplay,

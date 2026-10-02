@@ -7,17 +7,22 @@ then lets the operator review the results before they are pushed to the cavity.
 Almost none of the measurement lives here. `Cavity` already implements the whole
 sequence — `start_characterization()`, the `characterization_running` /
 `characterization_crashed` status predicates, `calculate_probe_q()`,
-`push_loaded_q()`, `push_scale_factor()`, and the per-cavity-class tolerance
-check `measured_loaded_q_in_tolerance`. Auto setup's `request_characterization()`
+`push_loaded_q()`, `push_scale_factor()`, `wait_for_characterization()`, and the
+tolerance checks `measured_loaded_q_in_tolerance` and
+`measured_scale_factor_in_tolerance`. Auto setup's `request_characterization()`
 is a twelve-line wrapper over the same code. This phase is deliberately a
 similarly thin wrapper: if a step body here grows past a few lines of
 orchestration, something is being duplicated.
 
-The one deliberate divergence from `Cavity.characterize()`: that method bundles
-start, wait and push into a single blocking call, which suits unattended setup.
-Commissioning needs an operator to see the loaded Q, scale factor and probe Q
-*before* anything is written to the cavity, so this phase drives the same code at
-a lower level and stops between measuring and pushing.
+Deliberate divergences from `Cavity.characterize()`, each commented where it
+happens:
+- It stops between measuring and pushing. `characterize()` bundles start, wait
+  and push into one blocking call, which suits unattended setup. Commissioning
+  needs an operator to see loaded Q, scale factor and probe Q first.
+- It always starts a fresh run (`_start_characterization`). `characterize()`
+  reuses a COMPLETE result under 60 s old.
+- An operator may push an out-of-tolerance value after confirming
+  (`_push_results`). `finish_characterization()` refuses.
 
 Known gap: probe Q. QPROBE_CALC1.PROC triggers the calculation and is the only
 probe-Q PV that exists — there is no value record to read the result from and no
@@ -26,17 +31,21 @@ those PVs presumably exist on the machine and are missing from the model. Until
 they are added, probe_q stays None on the record rather than being invented.
 
 Sequence:
-  1. verify_initial_state    – stepper idle, cavity online, RF/SSA ready; warn if
-                               SSA calibration or tuning are stale
+  1. verify_initial_state    – cavity online, stepper idle, SSA on and not
+                               calibrating; warn if SSA calibration or tuning
+                               are stale
   2. set_drive_level         – clamp drive for characterization (operator may
                                override the default)
-  3. start_characterization  – kick off PROBECALSTRT
-  4. wait_for_completion     – poll the status until it settles or crashes
+  3. start_characterization  – kick off PROBECALSTRT; clear the previous
+                               run's results from the record
+  4. wait_for_completion     – poll PROBECALSTS until it settles, then reject a
+                               crash or a PROBECALTS too old to be this run
   5. read_results            – read loaded Q and scale factor, trigger the
-                               probe-Q calculation, flag out-of-tolerance loaded
-                               Q. Nothing is pushed.
-  6. push_results            – operator-confirmed: push loaded Q and scale
-                               factor to the cavity
+                               probe-Q calculation, flag either one out of
+                               tolerance. Nothing is pushed.
+  6. push_results            – refused unless parameters["confirmed_loaded_q"]
+                               matches the loaded Q read in step 5; then push
+                               loaded Q and scale factor to the cavity
   7. record_results          – write CavityCharacterization onto the record
 """
 
@@ -56,6 +65,10 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseStepResult,
 )
 from sc_linac_physics.utils.sc_linac import linac_utils
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    CavityAbortError,
+    CavityCharacterizationError,
+)
 
 
 @dataclass
@@ -96,6 +109,7 @@ class CavityCharPhase(PhaseBase):
         self._scale_factor: float | None = None
         self._probe_q: float | None = None
         self._loaded_q_in_tolerance: bool | None = None
+        self._scale_factor_in_tolerance: bool | None = None
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -149,6 +163,19 @@ class CavityCharPhase(PhaseBase):
 
     def _verify_initial_state(self) -> PhaseStepResult:
         """Check the cavity is ready, and warn about stale inputs."""
+        if self.context.dry_run:
+            # HW_MODE and the stepper's motor_moving are PV reads, so skip
+            # them; _stale_prerequisites reads the record only, and a
+            # rehearsal is exactly when its warning is worth seeing.
+            stale = self._stale_prerequisites()
+            message = "Dry run: cavity state check simulated"
+            if stale:
+                message += f" — note: {', '.join(stale)}"
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message=message,
+                data={"dry_run": True},
+            )
         try:
             if not self.cavity.is_online:
                 return PhaseStepResult(
@@ -161,6 +188,22 @@ class CavityCharPhase(PhaseBase):
                     message=(
                         "Stepper motor is moving — wait for it to stop before "
                         "characterizing"
+                    ),
+                )
+            # Read-only checks. Cavity.characterize() makes neither, but the
+            # phase sets drive and starts PROBECALSTRT next, so refuse here
+            # rather than characterize against an SSA that is off or busy.
+            if not self.cavity.ssa.is_on:
+                return PhaseStepResult(
+                    result=PhaseResult.FAILED,
+                    message="SSA is not on — cannot characterize",
+                )
+            if self.cavity.ssa.calibration_running:
+                return PhaseStepResult(
+                    result=PhaseResult.FAILED,
+                    message=(
+                        "SSA calibration is running — wait for it to finish "
+                        "before characterizing"
                     ),
                 )
         except Exception as exc:
@@ -233,6 +276,17 @@ class CavityCharPhase(PhaseBase):
                 ),
             )
 
+        # Validated above, so a dry run still catches a bad parameter. Below
+        # this line reset_interlocks() writes INTLK_RESET_ALL and drive_level
+        # writes SEL_ASET, so a rehearsal stops here.
+        if self.context.dry_run:
+            self._drive_level = drive
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message=f"Dry run: drive level {drive:.1f} not written",
+                data={"drive_level": drive, "dry_run": True},
+            )
+
         try:
             self.cavity.reset_interlocks()
             self.cavity.drive_level = drive
@@ -266,6 +320,18 @@ class CavityCharPhase(PhaseBase):
                 message=f"Could not start characterization: {exc}",
                 retry_delay_seconds=3.0,
             )
+        # Always a fresh run. Cavity.characterize() reuses a COMPLETE result
+        # under 60 s old instead of starting one; this phase does not, because
+        # the record should hold a measurement this phase started.
+        #
+        # A new run invalidates the last one's numbers. Clear them now so a
+        # read that fails later cannot leave this run's record carrying the
+        # previous run's probe Q (or loaded Q) — _store_phase_fields skips
+        # None and finalize_phase keeps what is on the record. A session
+        # resumed past this step does not come back through here, so its
+        # values survive.
+        self._clear_measured_fields()
+
         # The status PV does not go busy instantly; without this the wait step
         # can see the previous run's COMPLETE and return immediately.
         time.sleep(self.limits.status_settle_delay)
@@ -275,7 +341,19 @@ class CavityCharPhase(PhaseBase):
         )
 
     def _wait_for_completion(self) -> PhaseStepResult:
-        """Poll until the characterization settles, crashes, or times out."""
+        """Wait for the characterization via Cavity.wait_for_characterization().
+
+        The same wait auto setup runs through Cavity.characterize(). It polls
+        PROBECALSTS until it stops reading RUNNING (2), then raises
+        CavityCharacterizationError on CRASH (0), on a timeout, or on a
+        PROBECALTS older than 300 s (a COMPLETE (1) left over from an earlier
+        run). PhaseBase.run() only checks the commissioning abort between
+        steps, so it is passed in as should_abort and checked each poll. Either
+        kind of abort calls turn_off() and raises CavityAbortError.
+
+        Both abort paths return FAILED rather than raising, so PhaseBase
+        does not retry a step the operator asked to stop.
+        """
         if self.context.dry_run:
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
@@ -283,52 +361,63 @@ class CavityCharPhase(PhaseBase):
                 data={"dry_run": True},
             )
 
-        deadline = time.monotonic() + (
-            self.limits.characterization_timeout_seconds
-        )
-        while time.monotonic() < deadline:
-            self.cavity.check_abort()
-            try:
-                if self.cavity.characterization_crashed:
-                    return PhaseStepResult(
-                        result=PhaseResult.FAILED,
-                        message=(
-                            "Characterization crashed — check the cavity's "
-                            "PROBECALSTS and the RF interlocks"
-                        ),
-                    )
-                if not self.cavity.characterization_running:
-                    return PhaseStepResult(
-                        result=PhaseResult.SUCCESS,
-                        message="Characterization complete",
-                    )
-            except Exception as exc:
-                return PhaseStepResult(
-                    result=PhaseResult.RETRY,
-                    message=f"Could not read characterization status: {exc}",
-                    retry_delay_seconds=3.0,
-                )
-            time.sleep(self.limits.status_poll_interval)
+        try:
+            self.cavity.wait_for_characterization(
+                timeout=self.limits.characterization_timeout_seconds,
+                poll_interval=self.limits.status_poll_interval,
+                should_abort=self.context.is_abort_requested,
+            )
+        except CavityAbortError as exc:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=f"Aborted while waiting for characterization: {exc}",
+            )
+        except CavityCharacterizationError as exc:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    f"{exc} — check the cavity's PROBECALSTS, PROBECALTS and "
+                    "the RF interlocks"
+                ),
+            )
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read characterization status: {exc}",
+                retry_delay_seconds=3.0,
+            )
 
         return PhaseStepResult(
-            result=PhaseResult.FAILED,
-            message=(
-                "Characterization did not finish within "
-                f"{self.limits.characterization_timeout_seconds:.0f} s"
-            ),
+            result=PhaseResult.SUCCESS,
+            message="Characterization complete",
         )
 
     def _read_results(self) -> PhaseStepResult:
-        """Read the measured values and flag loaded Q. Pushes nothing.
+        """Read the measured values and flag both tolerances. Pushes nothing.
 
         Separating read from push is the point of this phase: the operator sees
         loaded Q, scale factor and probe Q before any of them reach the cavity.
         """
+        if self.context.dry_run:
+            # Nothing to simulate: there is no measurement to read, and
+            # calculate_probe_q() below processes QPROBE_CALC1.PROC, which is
+            # a write. Store nothing rather than put invented numbers on the
+            # record.
+            return PhaseStepResult(
+                result=PhaseResult.SUCCESS,
+                message="Dry run: result read simulated, nothing stored",
+                data={"dry_run": True},
+            )
+
         try:
             self._loaded_q = float(self.cavity.measured_loaded_q)
             self._scale_factor = float(self.cavity.measured_scale_factor)
+            # The same checks finish_characterization() makes before pushing.
             self._loaded_q_in_tolerance = bool(
                 self.cavity.measured_loaded_q_in_tolerance
+            )
+            self._scale_factor_in_tolerance = bool(
+                self.cavity.measured_scale_factor_in_tolerance
             )
             # QPROBE_CALC1.PROC derives probe Q from the measurement just taken,
             # so it has to be triggered before the value can be read back.
@@ -347,6 +436,7 @@ class CavityCharPhase(PhaseBase):
             scale_factor=self._scale_factor,
             probe_q=self._probe_q,
             loaded_q_in_tolerance=self._loaded_q_in_tolerance,
+            scale_factor_in_tolerance=self._scale_factor_in_tolerance,
         )
 
         summary = (
@@ -356,23 +446,25 @@ class CavityCharPhase(PhaseBase):
         if self._probe_q is not None:
             summary += f", probe Q {self._probe_q:.3e}"
 
+        # Out of tolerance is not a step failure: the measurement succeeded
+        # and the operator needs to see it. The record carries both flags.
+        outside = []
         if not self._loaded_q_in_tolerance:
-            # Not a step failure: the measurement succeeded and the operator
-            # needs to see it. Whether to push it is their decision, and the
-            # record carries the flag either way.
-            return PhaseStepResult(
-                result=PhaseResult.SUCCESS,
-                message=(
-                    f"{summary} — loaded Q is OUTSIDE the expected range "
-                    f"[{self.cavity.loaded_q_lower_limit:.2e}, "
-                    f"{self.cavity.loaded_q_upper_limit:.2e}]"
-                ),
-                data=self._result_data(),
+            outside.append(
+                "loaded Q is OUTSIDE the expected range "
+                f"[{self.cavity.loaded_q_lower_limit:.2e}, "
+                f"{self.cavity.loaded_q_upper_limit:.2e}]"
             )
-
+        if not self._scale_factor_in_tolerance:
+            outside.append(
+                "scale factor is OUTSIDE the expected range "
+                f"[{self.cavity.scale_factor_lower_limit:.1f}, "
+                f"{self.cavity.scale_factor_upper_limit:.1f}]"
+            )
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message=f"{summary} — loaded Q in tolerance",
+            message=f"{summary} — "
+            + ("; ".join(outside) if outside else "both in tolerance"),
             data=self._result_data(),
         )
 
@@ -392,12 +484,29 @@ class CavityCharPhase(PhaseBase):
         return None
 
     def _push_results(self) -> PhaseStepResult:
-        """Push the reviewed values to the cavity.
+        """Push the reviewed values to the cavity, if the operator confirmed.
 
-        Reached only once the operator has confirmed, which is why this is its
-        own step rather than part of reading. Cavity.finish_characterization()
-        would push loaded Q and scale factor automatically based on tolerance;
-        this phase keeps that decision with the operator.
+        PhaseBase.run() goes straight from read_results to here with no pause,
+        so the gate has to be in this step: it refuses unless
+        context.parameters["confirmed_loaded_q"] equals the loaded Q that
+        read_results just stored. A confirmation of an older measurement
+        does not match and is refused too. The UI sets the parameter when the
+        operator confirms the values on screen.
+
+        On success it processes PUSH_QLOADED.PROC (push_loaded_q) and
+        PUSH_CAV_SCALE.PROC (push_scale_factor), in that order, whether or
+        not either value is in tolerance.
+
+        This differs from auto setup on purpose. Cavity.finish_characterization()
+        refuses to push an out-of-tolerance loaded Q or scale factor. In
+        commissioning the operator has the values on screen with the flags,
+        and confirms them explicitly, so pushing an out-of-tolerance value is
+        their call. The record keeps both flags, and passed is False.
+
+        No SAVE_QLOADED.PROC / SAVE_CAV_SCALE.PROC afterwards, and none is
+        needed. Push writes the value to the register the hardware uses. Save
+        only keeps a copy for a human, and the hardware does not read it
+        (Lisa Zacarias, #285, 2026-10-02).
         """
         if self.context.dry_run:
             return PhaseStepResult(
@@ -409,6 +518,14 @@ class CavityCharPhase(PhaseBase):
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
                 message="Nothing measured yet — run the characterization first",
+            )
+        if self.context.parameters.get("confirmed_loaded_q") != self._loaded_q:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    "Push not confirmed for this measurement — review loaded "
+                    f"Q {self._loaded_q:.3e} and confirm before pushing"
+                ),
             )
 
         try:
@@ -444,8 +561,25 @@ class CavityCharPhase(PhaseBase):
             "scale_factor": self._scale_factor,
             "probe_q": self._probe_q,
             "loaded_q_in_tolerance": self._loaded_q_in_tolerance,
+            "scale_factor_in_tolerance": self._scale_factor_in_tolerance,
             "drive_level": self._drive_level,
         }
+
+    def _clear_measured_fields(self) -> None:
+        """Blank this phase's measured values, in memory and on the record."""
+        self._loaded_q = None
+        self._scale_factor = None
+        self._probe_q = None
+        self._loaded_q_in_tolerance = None
+        self._scale_factor_in_tolerance = None
+        record = getattr(self.context, "record", None)
+        if record is None or record.cavity_char is None:
+            return
+        record.cavity_char.loaded_q = None
+        record.cavity_char.scale_factor = None
+        record.cavity_char.probe_q = None
+        record.cavity_char.loaded_q_in_tolerance = None
+        record.cavity_char.scale_factor_in_tolerance = None
 
     def _store_phase_fields(self, **fields) -> None:
         """Merge step results onto the record as each step produces them.
