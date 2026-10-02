@@ -132,6 +132,20 @@ LOADED_Q_LOWER_LIMIT_HL = int(1.5e7)
 LOADED_Q_UPPER_LIMIT_HL = int(3.5e7)
 DESIGN_Q_LOADED_HL = int(2.5e7)
 
+# LCLS-II-HE cavities, which is every cavity in L4B (CM 37-59). Both limits
+# are higher than the LCLS-II ones — 2.5e7-5.1e7 becomes 3e7-7e7 — so the
+# window shifts up as well as widening, and it is tighter at the low end: a
+# cavity at 2.8e7 passes the LCLS-II window and fails this one. This results
+# from a different default value for Qext, not the same cavity held to a
+# looser standard.
+#
+# Source: Ryan Porter's cavity characterization outline — "Flag loaded Q is
+# < 3E7 or > 7E7 (for HE cavities)". Confirm with him before treating these as
+# settled; no separate HE scale-factor limits were specified, so L4B keeps the
+# standard ones.
+LOADED_Q_LOWER_LIMIT_HE = int(3e7)
+LOADED_Q_UPPER_LIMIT_HE = int(7e7)
+
 CAVITY_SCALE_UPPER_LIMIT = 125
 CAVITY_SCALE_LOWER_LIMIT = 10
 
