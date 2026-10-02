@@ -105,8 +105,8 @@
     layers, what one button click passes through on its way to the machine and
     to SQLite, how a phase is written, what each implemented phase writes to
     EPICS, and the places where the code surprises people. Everything here is
-    read from upstream main. Hardware questions the code does not answer are
-    marked <code>CHECK:</code>.
+    read from upstream main. The few facts the code cannot establish were
+    checked against the IOC records and say so.
   </p>
 
   <section id="shape">
@@ -363,7 +363,7 @@
         <tr><td>3</td><td><code>SCALE_CALC.B</code> from the measured Hz/microstep, auto-tune, <code>NSTEPS_COLD</code>, <code>TUNE_CONFIG</code></td>
           <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._write_cold_landing_steps “self.cavity.stepper_tuner.steps_cold_landing_pv_obj.put(”</td></tr>
         <tr><td>4</td><td>Rack frequency scan: <code>FSCAN:SEL</code> = 1 for this cavity and 0 for the rest of the rack,
-          then <code>FSCAN:FREQ_START</code> = −3,500,000, <code>FSCAN:FREQ_STOP</code> = 50,000,
+          then <code>FSCAN:FREQ_START</code> = −3,500,000 Hz, <code>FSCAN:FREQ_STOP</code> = 50,000 Hz,
           <code>FSCAN:RMS_THRESH</code> = 10.0, <code>FSCAN:MODE_OVERLAP</code> = 1,000,
           then <code>FSCAN:START</code> = 1, then the 8π/9 and 7π/9 pushes. The four
           settings are <code>FrequencyTuningLimits</code> defaults.</td>
@@ -393,14 +393,18 @@
       </tbody>
     </table></div>
 
-    <div class="caveat">
-      Open questions for the area physicist, from reading this code:
-      <pre><code># CHECK: what units are FSCAN:FREQ_START / FREQ_STOP in?
-# CHECK: CommissioningPiezo reads CHA_TESTMSG2 for channel B. Typo for CHB?
-# CHECK: is TESTSTS == 0 really "crash"?</code></pre>
-      <span class="cite">models/commissioning_piezo.py::CommissioningPiezo.__init__ “self.pv_addr("CHA_TESTMSG2")”</span>,
-      <span class="cite">phases/piezo_pre_rf.py::PiezoPreRFPhase._trigger_prerf_test “is_crash = test_status == 0  # Crash”</span>
-    </div>
+    <h3>Checked against the IOC</h3>
+    <p>Three things that look wrong in the code and are not:</p>
+    <ul>
+      <li><code>FSCAN:FREQ_START</code> and <code>FREQ_STOP</code> are in Hz
+        (record EGU), so stage 4 scans −3.5 MHz to +50 kHz.</li>
+      <li><code>TESTSTS</code> is an enum: 0 Crash, 1 Complete, 2 Running. The
+        code's <code>== 0</code> crash test matches
+        <span class="cite">phases/piezo_pre_rf.py::PiezoPreRFPhase._trigger_prerf_test “is_crash = test_status == 0  # Crash”</span>.</li>
+      <li><code>CommissioningPiezo</code> reads <code>CHA_TESTMSG2</code> for
+        channel B's message. That is the real PV name, not a typo
+        <span class="cite">models/commissioning_piezo.py::CommissioningPiezo.__init__ “self.pv_addr("CHA_TESTMSG2")”</span>.</li>
+    </ul>
   </section>
 
   <section id="traps">
@@ -476,11 +480,10 @@
         <code>~/databases/</code>, which is out of date.</li>
     </ul>
     <div class="caveat">
-      On Linux that is the same path on every host that mounts
-      <code>/home/physics</code>. Saving there from a dev session saves into the
-      commissioning records.
-      <pre><code># CHECK: which hosts share /home/physics/srf, and is it the production DB?</code></pre>
-      For safe local work, run on a Mac, or construct the window yourself
+      On Linux this is the production database. <code>/home/physics</code> is the
+      shared physics login and <code>srf</code> is the group's directory in it,
+      so a dev session on any of those hosts saves into the real commissioning
+      records. For safe local work, run on a Mac, or construct the window yourself
       with <code>MultiPhaseCommissioningDisplay(session=CommissioningSession(db_path=...))</code>.
     </div>
 
