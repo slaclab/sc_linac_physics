@@ -44,6 +44,16 @@ interactive part is a small HTML widget shown inline. On GitHub a widget shows
 as a link; opened on its own it also works offline. The auto-tune explainer is
 still a single HTML file.
 
+The two explainers are single HTML files that work offline. GitHub shows their
+source instead of rendering them, so open them from a checkout:
+
+```bash
+open docs/explainers/rf_commissioning.html      # macOS
+xdg-open docs/explainers/rf_commissioning.html  # Linux
+```
+
+Or double-click the file.
+
 ### Displays
 
 | Page | What it covers |
