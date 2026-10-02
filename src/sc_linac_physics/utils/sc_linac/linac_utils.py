@@ -287,16 +287,32 @@ def build_cavity_pv(
 
 def stepper_tol_factor(num_steps) -> float:
     """
-    First attempt at making the stepper mover tolerance dependent on the
-    steps to move. We have empirically determined that 1.3GHz cavities move
-    around 50,000 steps around resonance and 50,000,000 steps for cold landing.
-    We want to allow 5x the expected steps around resonance, and 1% of the
-    expected steps around cold landing. We also empirically determined that
-    this also works to (roughly) triple the steps around resonance for 3.9GHz
-    cavities, which are about an order of magnitude lower at resonance (while
-    the steps to cold landing are about the same due to both large dead zones
-    and large detunes). We are starting with a linear function and seeing how
-    that goes.
+    How many times the estimated step count the auto-tune loop may actually
+    move before it declares the motor is running away (see
+    ``Cavity._auto_tune``). Generous at small step counts, where mechanical
+    dead zones and hysteresis make the estimate rough, and tight at large
+    ones, where even a 1% overrun is an enormous number of steps.
+
+    Empirically, 1.3GHz cavities move around 50,000 steps around resonance and
+    around 50,000,000 steps for cold landing. 3.9GHz cavities are about an
+    order of magnitude lower at resonance (~5,000 steps), while their steps to
+    cold landing are about the same, due to both large dead zones and large
+    detunes.
+
+    Note carefully which regime gets which factor, because it does not follow
+    from those step counts the way you might expect. The flat 5x plateau
+    covers everything at or below 10,000 steps -- that is the 3.9GHz cavities
+    at resonance. A 1.3GHz cavity at its ~50,000 steps falls on the
+    interpolated 10e3..100e3 segment and gets ~3.89x, not 5x. Cold landing
+    sits on the 5e6..50e6 segment and converges on 1.01x, i.e. the intended
+    1% allowance.
+
+    This docstring used to claim 5x around resonance for 1.3GHz and "roughly
+    triple" for 3.9GHz. That was the pairing from before the plateau boundary
+    was lowered from 50,000 to 10,000 steps, which is the edit that moved
+    1.3GHz resonance off the plateau; the factors above are what this function
+    has actually computed since. Still a linear interpolation between
+    hand-picked breakpoints.
 
     Why small moves need the slack: the prototype tuner measured ~30 steps of
     mechanical backlash (motor/planetary gear/spindle/traveling nut) and ~45 Hz
@@ -316,9 +332,11 @@ def stepper_tol_factor(num_steps) -> float:
         100e3: 2.5,
         1e6: 1.25,
         5e6: 1.1,
-        10e6: 1.05,
         50e6: 1.01,
     }
+    # Deliberately jumps 5e6 -> 50e6 with no split in between; every key here
+    # is reachable. Adding a breakpoint without a matching range makes it dead
+    # code, which is what happened to a former 10e6 entry.
     ranges = [(10e3, 100e3), (100e3, 1e6), (1e6, 5e6), (5e6, 50e6)]
 
     for start, end in ranges:
