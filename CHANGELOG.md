@@ -2,6 +2,26 @@
 
 <!-- version list -->
 
+## v9.37.1 (2026-10-02)
+
+### Bug Fixes
+
+- **docs**: Re-point auto-tune explainer citations after #284/#294/#311
+  ([#316](https://github.com/slaclab/sc_linac_physics/pull/316),
+  [`9d4e013`](https://github.com/slaclab/sc_linac_physics/commit/9d4e01374a1c99b9acb669ef8282c3583db5ac70))
+
+### Continuous Integration
+
+- Run CI on merge queue groups ([#315](https://github.com/slaclab/sc_linac_physics/pull/315),
+  [`b037f08`](https://github.com/slaclab/sc_linac_physics/commit/b037f081fb2ef284e66b7c45d8bbff05be1b5e31))
+
+### Documentation
+
+- Cite source by symbol and quoted line, not line number
+  ([#316](https://github.com/slaclab/sc_linac_physics/pull/316),
+  [`9d4e013`](https://github.com/slaclab/sc_linac_physics/commit/9d4e01374a1c99b9acb669ef8282c3583db5ac70))
+
+
 ## v9.37.0 (2026-10-02)
 
 ### Bug Fixes
