@@ -158,9 +158,11 @@
             <td>Runs the phase on a background thread, pushes results back to the GUI
             with Qt signals, calls the session to open and close attempts.</td></tr>
           <tr><td>Phase</td><td><code>phases/</code></td>
-            <td>The steps. This is the only layer that commands hardware, through
+            <td>The steps. The automated test's PV writes happen here, through
             <code>Cavity</code>, <code>SSA</code>, <code>Piezo</code> and
-            <code>StepperTuner</code> from <code>utils/sc_linac/</code>.</td></tr>
+            <code>StepperTuner</code> from <code>utils/sc_linac/</code>. Controllers
+            and PyDM widgets also write some PVs directly when the operator acts.
+            Section 5 lists both.</td></tr>
           <tr><td>Session and storage</td><td><code>session_manager.py</code>,
             <code>services/workflow_service.py</code>, <code>models/persistence/</code></td>
             <td><code>CommissioningSession</code> is the facade the UI calls.
@@ -189,9 +191,11 @@
 
     <div class="panel" id="tracer">
       <div class="lanes" id="lanes"></div>
-      <div class="hop-title" id="hop-title"></div>
-      <p id="hop-body"></p>
-      <p class="cite" id="hop-cite"></p>
+      <div aria-live="polite" aria-atomic="true">
+        <div class="hop-title" id="hop-title"></div>
+        <p id="hop-body"></p>
+        <p class="cite" id="hop-cite"></p>
+      </div>
       <div class="hop-nav">
         <button type="button" id="hop-prev">&larr; Back</button>
         <button type="button" id="hop-next">Next &rarr;</button>
@@ -201,7 +205,7 @@
 
     <noscript>
       <p>The step-through needs JavaScript. The same hops, in order:
-      display → controller builds phase → session opens attempt → background
+      display → session opens attempt → controller builds phase → background
       thread runs steps → hardware → signal back to GUI → session completes
       attempt → record saved with a version check.</p>
     </noscript>
@@ -358,8 +362,34 @@
           <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._do_probe_move “self.cavity.stepper_tuner.move(probe, speed=speed, check_detune=False)”</td></tr>
         <tr><td>3</td><td><code>SCALE_CALC.B</code> from the measured Hz/microstep, auto-tune, <code>NSTEPS_COLD</code>, <code>TUNE_CONFIG</code></td>
           <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._write_cold_landing_steps “self.cavity.stepper_tuner.steps_cold_landing_pv_obj.put(”</td></tr>
-        <tr><td>4</td><td>Rack frequency scan: <code>FSCAN:SEL</code> per cavity, scan range, <code>FSCAN:START</code>, then the 8π/9 and 7π/9 pushes</td>
-          <td class="cite">rack.py::Rack.run_fscan “cav.fscan_sel_pv_obj.put(1 if num in selected_nums else 0)”</td></tr>
+        <tr><td>4</td><td>Rack frequency scan: <code>FSCAN:SEL</code> = 1 for this cavity and 0 for the rest of the rack,
+          then <code>FSCAN:FREQ_START</code> = −3,500,000, <code>FSCAN:FREQ_STOP</code> = 50,000,
+          <code>FSCAN:RMS_THRESH</code> = 10.0, <code>FSCAN:MODE_OVERLAP</code> = 1,000,
+          then <code>FSCAN:START</code> = 1, then the 8π/9 and 7π/9 pushes. The four
+          settings are <code>FrequencyTuningLimits</code> defaults.</td>
+          <td class="cite">rack.py::Rack.run_fscan “self.fscan_rms_thresh_pv_obj.put(rms_thresh)”,
+          phases/frequency_tuning.py::FrequencyTuningLimits “pi_scan_rms_thresh: float = 10.0”</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Writes outside the phase</h3>
+    <p>
+      These happen when the operator clicks or edits something, not as a step
+      of the automated test.
+    </p>
+    <div class="scroll"><table>
+      <thead><tr><th>Trigger</th><th>Writes</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Frequency tuning: push cold landing</td><td><code>DF_COLD</code> = the chosen value</td>
+          <td class="cite">ui/controllers/frequency_tuning_controller.py::FrequencyTuningController._commit_cold_landing “PV(cavity.pv_addr("DF_COLD")).put(value)”</td></tr>
+        <tr><td>Frequency tuning: push SCALE</td><td><code>SCALE_CALC.B</code> via <code>set_hz_per_microstep</code></td>
+          <td class="cite">ui/controllers/frequency_tuning_controller.py::FrequencyTuningController.push_hz_per_step_to_scale “self._cavity.stepper_tuner.set_hz_per_microstep(signed_hz)”</td></tr>
+        <tr><td>Frequency tuning: manual move buttons</td><td><code>MOV_REQ_POS</code> / <code>MOV_REQ_NEG</code> = 1</td>
+          <td class="cite">ui/controllers/frequency_tuning_controller.py::FrequencyTuningController._do_stepper_move “stepper.move_positive()”</td></tr>
+        <tr><td>SSA char: push slope button</td><td><code>PUSH_SSA_SLOPE.PROC</code> = 1</td>
+          <td class="cite">ui/controllers/ssa_char_controller.py::SSACharController.on_push_slope “cavity.push_ssa_slope()”</td></tr>
+        <tr><td>PyDM widgets, on edit</td><td>Piezo enable and mode combos, SSA drive max, stepper step-count spinboxes write their bound PVs directly</td>
+          <td class="cite">ui/builders/phase_builders.py “PyDMEnumComboBox(parent=self.parent)”</td></tr>
       </tbody>
     </table></div>
 
@@ -498,16 +528,16 @@
       cite: "ui/displays/piezo_pre_rf.py::PiezoPreRFDisplay.on_run_automated_test “self.controller.on_run_automated_test()”",
     },
     {
-      lane: 1,
-      title: "The controller builds the phase",
-      body: "A PhaseContext wraps the active record and cavity, and the controller constructs the phase object from it.",
-      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._prepare_phase_context “self.phase = PiezoPreRFPhase(self.context)”",
-    },
-    {
       lane: 2,
       title: "The session opens an attempt",
-      body: "WorkflowService inserts a phase-instance row with the next attempt number for this phase. Reruns never overwrite an earlier attempt.",
-      cite: "services/workflow_service.py::WorkflowService.start_phase_for_record “attempt_number = int(cursor.fetchone()[0]) + 1”",
+      body: "Before building anything, the controller asks the session for a new attempt. WorkflowService inserts a phase-instance row with the next attempt number for this phase. Reruns never overwrite an earlier attempt.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._prepare_phase_context “phase_start = self.session.start_active_phase_instance(”, services/workflow_service.py::WorkflowService.start_phase_for_record “attempt_number = int(cursor.fetchone()[0]) + 1”",
+    },
+    {
+      lane: 1,
+      title: "The controller builds the phase",
+      body: "With the attempt open, a PhaseContext wraps the active record and cavity, and the controller constructs the phase object from it.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._prepare_phase_context “self.phase = PiezoPreRFPhase(self.context)”",
     },
     {
       lane: 3,
@@ -524,7 +554,7 @@
     {
       lane: 5,
       title: "The machine is written",
-      body: "Only phase code puts to PVs, through the shared hardware classes. For this phase: BIAS, ENABLE, MODECTRL, DAC_SP, then TESTSTRT = 1. See section 5.",
+      body: "The phase's steps put to PVs through the shared hardware classes. For this phase: BIAS, ENABLE, MODECTRL, DAC_SP, then TESTSTRT = 1. Some PVs are also written straight from a controller or a PyDM widget when the operator acts. Section 5 lists both.",
       cite: "phases/piezo_pre_rf.py::PiezoPreRFPhase._trigger_prerf_test “piezo.prerf_test_start_pv_obj.put(1)”",
     },
     {
