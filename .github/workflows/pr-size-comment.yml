@@ -78,6 +78,26 @@ jobs:
           NUMSTAT=$(gh api --paginate "repos/${REPO}/pulls/${NUM}/files" \
                       --jq '.[] | [.additions, .deletions, .filename] | @tsv')
 
+          # The files endpoint stops at 3,000 files even with --paginate. A
+          # short list would undercount, which could turn an oversized PR
+          # green. Report "unavailable" instead, as pr-size.yml does when it
+          # cannot measure.
+          EXPECTED=$(gh api "repos/${REPO}/pulls/${NUM}" --jq '.changed_files')
+          ROWS=$(grep -c . <<< "$NUMSTAT" || true)
+          if [ "$ROWS" -ne "$EXPECTED" ]; then
+            {
+              echo "### ⚪ PR size: unavailable"
+              echo
+              echo "The GitHub API listed ${ROWS} of this PR's ${EXPECTED} changed"
+              echo "files, so no size was measured. The \"PR size\" run summary"
+              echo "has the count from \`git diff\`."
+              echo
+              echo "<sub>Advisory only; this check never fails the build.</sub>"
+            } > comment.md
+            echo "API listed ${ROWS} of ${EXPECTED} files; reported size as unavailable" >&2
+            exit 0
+          fi
+
           read -r ADD DEL SKIPPED < <(
             awk -F'\t' '
                 NF < 3 { next }
@@ -104,14 +124,16 @@ jobs:
             # Filenames are chosen by the PR author and land in a comment
             # posted as github-actions[bot]. Anything outside a plain path
             # character set becomes "?", so a name cannot close the code
-            # span, break the table, or carry markdown.
+            # span, break the table, or carry markdown. The last awk reads
+            # the whole stream rather than `head -5`: with pipefail, `head`
+            # exiting early can kill `sort` with SIGPIPE and abort the step.
             awk -F'\t' '
                 NF < 3 { next }
                 $3 ~ /(^|\/)(tests?)\// { next }
                 $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { next }
                 { printf "%d\t+%s/-%s\t%s\n", $1+$2, $1, $2, $3 }' <<< "$NUMSTAT" \
-              | sort -rn | head -5 \
-              | awk -F'\t' '{
+              | sort -rn \
+              | awk -F'\t' 'NR <= 5 {
                   name = $3
                   gsub("[^A-Za-z0-9_.+/-]", "?", name)
                   printf "| `%s` | %s |\n", name, $2

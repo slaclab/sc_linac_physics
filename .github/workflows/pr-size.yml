@@ -98,14 +98,16 @@ jobs:
             echo "|---|---|"
             # Same two exclusions as the total above. Without the asset line, a
             # large regenerated .ui or lockfile tops this table while counting
-            # zero toward the reported size.
+            # zero toward the reported size. NR <= 5 rather than `head -5`:
+            # with pipefail, `head` exiting early can kill `sort` with SIGPIPE
+            # and fail the step, and this check must never fail the build.
             git diff --numstat "$BASE_SHA...$HEAD_SHA" \
               | awk -F'\t' '
                   $3 ~ /(^|\/)(tests?)\// { next }
                   $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { next }
                   { printf "%d\t+%s/-%s\t%s\n", $1+$2, $1, $2, $3 }' \
-              | sort -rn | head -5 \
-              | awk -F'\t' '{ printf "| `%s` | %s |\n", $3, $2 }'
+              | sort -rn \
+              | awk -F'\t' 'NR <= 5 { printf "| `%s` | %s |\n", $3, $2 }'
             echo
             echo "<sub>Target is 400 lines excluding tests, hard stop around 800 — see"
             echo "\"Scope and shipping\" in \`CLAUDE.md\`. If this PR is over, the description"
