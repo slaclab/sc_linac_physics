@@ -1211,3 +1211,38 @@ def test_wait_checks_abort_while_polling(cavity):
     cavity.check_abort = MagicMock()
     cavity.wait_for_characterization(poll_interval=0.01)
     cavity.check_abort.assert_called()
+
+
+def test_wait_stops_when_the_caller_aborts(cavity):
+    """should_abort is handled like a cavity abort: RF off, then raise."""
+    pv = make_mock_pv(get_val=CHARACTERIZATION_RUNNING_VALUE)
+    cavity._characterization_status_pv_obj = pv
+    cavity.turn_off = MagicMock()
+
+    with pytest.raises(CavityAbortError):
+        cavity.wait_for_characterization(
+            poll_interval=0.01, should_abort=lambda: True
+        )
+
+    cavity.turn_off.assert_called_once()
+
+
+def test_wait_ignores_a_caller_that_never_aborts(cavity):
+    seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
+    pv = make_mock_pv()
+    pv.get = MagicMock(
+        side_effect=lambda *a, **k: (
+            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
+        )
+    )
+    cavity._characterization_status_pv_obj = pv
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    should_abort = MagicMock(return_value=False)
+
+    cavity.wait_for_characterization(
+        poll_interval=0.01, should_abort=should_abort
+    )
+
+    should_abort.assert_called()
