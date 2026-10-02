@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.36.4 (2026-10-02)
+
+### Bug Fixes
+
+- **rf-commissioning**: Export the real FrequencyTuningDisplay
+  ([#297](https://github.com/slaclab/sc_linac_physics/pull/297),
+  [`bcdf00a`](https://github.com/slaclab/sc_linac_physics/commit/bcdf00a45f81835d459c8d81087aed57028436d9))
+
+
 ## v9.36.3 (2026-10-01)
 
 ### Documentation
