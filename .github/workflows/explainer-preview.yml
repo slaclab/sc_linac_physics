@@ -1,0 +1,27 @@
+name: Explainer preview
+
+# Trigger only. explainer-preview-comment.yml does the work on `workflow_run`
+# and reads nothing this run produces.
+#
+# Why it produces nothing: a `pull_request` run executes the PR's own copy of
+# this file, so a fork can make it upload anything. pr-size.yml hands its
+# comment over as an artifact; anything handed over that way is
+# fork-controlled. The commenting half instead looks the PR and its files up
+# from the GitHub API, keyed on `workflow_run` metadata the fork cannot set.
+#
+# No `paths` filter, on purpose. It would skip the push that reverts the last
+# explainer change, and that push is the one that must clear the comment.
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "explainer-preview-comment.yml takes it from here"
