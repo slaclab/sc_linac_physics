@@ -44,15 +44,12 @@ interactive part is a small HTML widget shown inline. On GitHub a widget shows
 as a link; opened on its own it also works offline. The auto-tune explainer is
 still a single HTML file.
 
-The two explainers are single HTML files that work offline. GitHub shows their
-source instead of rendering them, so open them from a checkout:
-
-```bash
-open docs/explainers/rf_commissioning.html      # macOS
-xdg-open docs/explainers/rf_commissioning.html  # Linux
-```
-
-Or double-click the file.
+The explainers are single HTML files. Read them on the docs site, where they
+render and run:
+[auto-tune](https://slaclab.github.io/sc_linac_physics/explainers/auto_tune.html),
+[RF commissioning](https://slaclab.github.io/sc_linac_physics/explainers/rf_commissioning.html).
+GitHub's file view shows their source instead. They also work offline: open
+the file from a checkout.
 
 ### Displays
 
