@@ -1,5 +1,7 @@
+import asyncio
 from datetime import datetime
 from random import randrange, randint
+from typing import TYPE_CHECKING
 
 import numpy as np
 from caproto import AlarmSeverity, AlarmStatus, ChannelType
@@ -16,8 +18,6 @@ from caproto.server import (
     PvpropertyBoolEnum,
     SubGroup,
 )
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sc_linac_physics.utils.simulation.cryomodule_service import (
@@ -369,6 +369,12 @@ class CavityPVGroup(PVGroup):
     HL_FREQ = 3.9e9
     NORMAL_FREQ = 1.3e9
 
+    # Simulated probe calibration run (PROBECALSTRT -> PROBECALSTS). Sim-only
+    # numbers, picked so a run is long enough to watch "Running" and fails
+    # often enough to exercise the crash path. Not taken from the real IOC.
+    CHARACTERIZATION_DURATION_RANGE_S = (3.0, 8.0)
+    CHARACTERIZATION_CRASH_PROBABILITY = 0.2
+
     def __init__(self, prefix, isHL: bool, cm_group):
         super().__init__(prefix)
         self.is_hl = isHL
@@ -376,6 +382,7 @@ class CavityPVGroup(PVGroup):
         self.frequency = self.HL_FREQ if isHL else self.NORMAL_FREQ
         self.cm_group: "CryomodulePVGroup" = cm_group
         self.piezo_group = None
+        self._characterization_task: asyncio.Task | None = None
 
     @property
     def power(self):
@@ -574,11 +581,52 @@ class CavityPVGroup(PVGroup):
 
     @probe_cal_start.putter
     async def probe_cal_start(self, instance, value):
-        if value == 1:
-            await self.probe_cal_time.write(
-                datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        """Start a simulated characterization; PROBECALSTRT reads back 0.
+
+        Sets PROBECALSTS to Running here and finishes the run in a task, so
+        the put returns at once and clients can poll the status meanwhile.
+        """
+        if value != 1:
+            return None
+        if (
+            self._characterization_task is not None
+            and not self._characterization_task.done()
+        ):
+            self.log.warning(
+                f"{self.prefix} characterization already running; "
+                "start ignored"
             )
-            await self.probe_cal_start.write(0)
+            return 0
+        self.log.info(f"{self.prefix} cavity characterization started")
+        await self.probe_cal_stat.write("Running")
+        self._characterization_task = asyncio.get_running_loop().create_task(
+            self._finish_characterization()
+        )
+        # Returning 0 is what resets PROBECALSTRT. Writing 0 from inside this
+        # putter was overwritten by the 1 being put once the putter returned.
+        return 0
+
+    async def _finish_characterization(self):
+        """End the run after a random delay: Crash or a fresh Complete.
+
+        On Complete, PROBECALTS is stamped before PROBECALSTS changes, so a
+        client that sees Complete also sees this run's timestamp. A crash
+        leaves PROBECALTS at the last good result.
+        """
+        await asyncio.sleep(
+            np.random.uniform(*self.CHARACTERIZATION_DURATION_RANGE_S)
+        )
+        if np.random.random() < self.CHARACTERIZATION_CRASH_PROBABILITY:
+            self.log.warning(
+                f"{self.prefix} cavity characterization crashed (simulated)"
+            )
+            await self.probe_cal_stat.write("Crash")
+            return
+        await self.probe_cal_time.write(
+            datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        )
+        await self.probe_cal_stat.write("Complete")
+        self.log.info(f"{self.prefix} cavity characterization complete")
 
     @interlock_reset.putter
     async def interlock_reset(self, instance, value):

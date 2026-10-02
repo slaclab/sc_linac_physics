@@ -464,15 +464,65 @@ class TestCalibrationAndMaintenance:
     """Test calibration and maintenance functionality."""
 
     @pytest.mark.asyncio
-    async def test_probe_cal_start_putter(self, regular_cavity):
-        """Test probe calibration start."""
+    async def test_probe_cal_start_sets_running_and_schedules_the_run(
+        self, regular_cavity
+    ):
+        """Start flips PROBECALSTS to Running and returns PROBECALSTRT to 0."""
+        regular_cavity.log = Mock()
+        with patch.object(
+            regular_cavity, "_finish_characterization", new_callable=AsyncMock
+        ) as mock_finish:
+            result = await regular_cavity.probe_cal_start.putter(None, 1)
+            await regular_cavity._characterization_task
+
+        assert result == 0
+        assert regular_cavity.probe_cal_stat.value == "Running"
+        mock_finish.assert_awaited_once()
+        regular_cavity.log.info.assert_called_once_with(
+            "TEST:CAV: cavity characterization started"
+        )
+
+    @pytest.mark.asyncio
+    async def test_probe_cal_start_ignored_while_running(self, regular_cavity):
+        """A second start during a run does not start another run."""
+        regular_cavity.log = Mock()
+        running = Mock()
+        running.done.return_value = False
+        regular_cavity._characterization_task = running
+
+        result = await regular_cavity.probe_cal_start.putter(None, 1)
+
+        assert result == 0
+        assert regular_cavity._characterization_task is running
+        regular_cavity.log.warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_probe_cal_start_putter_no_action_for_zero(
+        self, regular_cavity
+    ):
+        """Putting 0 does not start a characterization."""
+        before = regular_cavity.probe_cal_stat.value
+        await regular_cavity.probe_cal_start.putter(None, 0)
+
+        assert regular_cavity._characterization_task is None
+        assert regular_cavity.probe_cal_stat.value == before
+
+    @pytest.mark.asyncio
+    async def test_characterization_completes_with_fresh_timestamp(
+        self, regular_cavity
+    ):
+        """A run that does not crash stamps PROBECALTS, then reports Complete."""
+        regular_cavity.log = Mock()
+        await regular_cavity.probe_cal_stat.write("Running")
         with (
-            patch.object(
-                regular_cavity.probe_cal_time, "write", new_callable=AsyncMock
-            ) as mock_time,
-            patch.object(
-                regular_cavity.probe_cal_start, "write", new_callable=AsyncMock
-            ) as mock_start,
+            patch(
+                "sc_linac_physics.utils.simulation.cavity_service.asyncio.sleep",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "sc_linac_physics.utils.simulation.cavity_service.np.random.random",
+                return_value=0.99,
+            ),
             patch(
                 "sc_linac_physics.utils.simulation.cavity_service.datetime"
             ) as mock_datetime,
@@ -480,31 +530,36 @@ class TestCalibrationAndMaintenance:
             mock_datetime.now.return_value.strftime.return_value = (
                 "2023-12-01-14:30:00"
             )
+            await regular_cavity._finish_characterization()
 
-            await regular_cavity.probe_cal_start.putter(None, 1)
-
-        # Should update timestamp and reset start flag
-        mock_time.assert_called_once_with("2023-12-01-14:30:00")
-        mock_start.assert_called_once_with(0)
+        assert regular_cavity.probe_cal_stat.value == "Complete"
+        assert regular_cavity.probe_cal_time.value == "2023-12-01-14:30:00"
 
     @pytest.mark.asyncio
-    async def test_probe_cal_start_putter_no_action_for_zero(
+    async def test_characterization_crash_leaves_timestamp(
         self, regular_cavity
     ):
-        """Test that probe calibration doesn't start for value 0."""
+        """A crashed run reports Crash and does not refresh PROBECALTS."""
+        regular_cavity.log = Mock()
+        before = regular_cavity.probe_cal_time.value
+        await regular_cavity.probe_cal_stat.write("Running")
         with (
-            patch.object(
-                regular_cavity.probe_cal_time, "write", new_callable=AsyncMock
-            ) as mock_time,
-            patch.object(
-                regular_cavity.probe_cal_start, "write", new_callable=AsyncMock
-            ) as mock_start,
+            patch(
+                "sc_linac_physics.utils.simulation.cavity_service.asyncio.sleep",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "sc_linac_physics.utils.simulation.cavity_service.np.random.random",
+                return_value=0.0,
+            ),
         ):
-            await regular_cavity.probe_cal_start.putter(None, 0)
+            await regular_cavity._finish_characterization()
 
-        # Should not update anything
-        mock_time.assert_not_called()
-        mock_start.assert_not_called()
+        assert regular_cavity.probe_cal_stat.value == "Crash"
+        assert regular_cavity.probe_cal_time.value == before
+        regular_cavity.log.warning.assert_called_once_with(
+            "TEST:CAV: cavity characterization crashed (simulated)"
+        )
 
     def test_default_timestamp_format(self, regular_cavity):
         """Test that default probe calibration timestamp has correct format."""

@@ -731,3 +731,68 @@ class TestIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSimLogging:
+    """sc-sim shows the PV groups' self.log.info() lines by default."""
+
+    CAVITY_LOGGER = (
+        "sc_linac_physics.utils.simulation.cavity_service.CavityPVGroup"
+    )
+
+    @pytest.fixture(autouse=True)
+    def _restore_sim_logger(self):
+        import logging
+
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            SIM_LOGGER_NAME,
+        )
+
+        logger = logging.getLogger(SIM_LOGGER_NAME)
+        handlers, level = list(logger.handlers), logger.level
+        # main() tests earlier in the run add the handler too, bound to that
+        # test's captured stdout. Start clean so this test's capsys sees it.
+        logger.handlers.clear()
+        # conftest's suppress_logging autouse fixture disables all logging;
+        # these tests are about what gets printed, so lift it for them.
+        logging.disable(logging.NOTSET)
+        yield
+        logger.handlers[:] = handlers
+        logger.setLevel(level)
+
+    def test_info_from_a_pv_group_is_printed(self, capsys):
+        import logging
+
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            _enable_sim_logging,
+        )
+
+        _enable_sim_logging([])
+        logging.getLogger(self.CAVITY_LOGGER).info("characterization started")
+
+        assert "characterization started" in capsys.readouterr().out
+
+    def test_quiet_flag_keeps_info_hidden(self, capsys):
+        import logging
+
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            _enable_sim_logging,
+        )
+
+        _enable_sim_logging(["-q"])
+        logging.getLogger(self.CAVITY_LOGGER).info("characterization started")
+
+        assert "characterization started" not in capsys.readouterr().out
+
+    def test_calling_twice_prints_each_line_once(self, capsys):
+        import logging
+
+        from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
+            _enable_sim_logging,
+        )
+
+        _enable_sim_logging([])
+        _enable_sim_logging([])
+        logging.getLogger(self.CAVITY_LOGGER).info("characterization started")
+
+        assert capsys.readouterr().out.count("characterization started") == 1

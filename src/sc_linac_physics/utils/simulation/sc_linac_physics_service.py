@@ -1,8 +1,10 @@
 import io
+import logging
 import os
 import shutil
 import socket
 import subprocess
+import sys
 import time
 import warnings
 
@@ -475,6 +477,32 @@ _REPEATER_PORT = 5065
 _REPEATER_WAIT_S = 2.0
 _REPEATER_POLL_S = 0.05
 
+# Every PVGroup here logs as <its module>.<its class>, e.g.
+# sc_linac_physics.utils.simulation.cavity_service.CavityPVGroup. caproto's
+# -v/-vv flags only configure loggers under "caproto", so without a handler on
+# this one the groups' self.log.info() lines are dropped and only WARNING and
+# above reach stderr.
+SIM_LOGGER_NAME = "sc_linac_physics.utils.simulation"
+
+
+def _enable_sim_logging(argv: list[str]) -> None:
+    """Print the PV groups' INFO lines to stdout unless -q/--quiet was given."""
+    if "-q" in argv or "--quiet" in argv:
+        return
+    logger = logging.getLogger(SIM_LOGGER_NAME)
+    if any(getattr(h, "_sc_sim_handler", False) for h in logger.handlers):
+        return
+    handler = logging.StreamHandler(sys.stdout)
+    handler._sc_sim_handler = True
+    handler.setFormatter(
+        logging.Formatter(
+            "[%(levelname).1s %(asctime)s %(module)s:%(lineno)d] %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    )
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
 
 def main():
     import faulthandler
@@ -489,6 +517,7 @@ def main():
     _, run_options = ioc_arg_parser(
         default_prefix="", desc="Simulated CM Cavity Service"
     )
+    _enable_sim_logging(sys.argv[1:])
     repeater_process = _start_caproto_repeater()
 
     try:
