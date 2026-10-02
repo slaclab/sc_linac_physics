@@ -219,6 +219,41 @@ class TestStepperTolFactor:
         result = stepper_tol_factor(0)
         assert result == 5  # Should default to small steps behavior
 
+    @pytest.mark.parametrize(
+        "num_steps,expected",
+        [
+            # 3.9GHz cavity at resonance. On the flat plateau (<= 10,000).
+            (5_000, 5.0),
+            # 1.3GHz cavity at resonance. On the interpolated 10e3..100e3
+            # segment, so ~3.89x -- NOT the 5x plateau value. The docstring
+            # claimed 5x here until the pairing was corrected; if this drops
+            # back to 5.0, the plateau boundary moved and auto-tune now
+            # tolerates more overshoot before raising DetuneError.
+            (50_000, 3.888888888888889),
+            # Interpolated on the 5e6..50e6 segment. There is no 10e6
+            # breakpoint -- a dead `10e6: 1.05` entry was removed from
+            # step_tol_des because `ranges` never referenced it. If this
+            # becomes 1.05, someone made that breakpoint live and tightened
+            # runaway detection across the cold-landing ramp.
+            (10_000_000, 1.09),
+        ],
+    )
+    def test_resolved_tolerance_factors_are_pinned(self, num_steps, expected):
+        """Pin the operationally meaningful factors against silent drift.
+
+        stepper_tol_factor gates the "motor moved more steps than expected"
+        abort in Cavity._auto_tune, so changing any of these changes when the
+        machine gives up on a cavity. Breaking this test is not necessarily
+        wrong, but it must be a deliberate, operator-visible decision.
+        """
+        assert stepper_tol_factor(num_steps) == pytest.approx(
+            expected, abs=1e-9
+        )
+        # Sign of the detune must not affect the factor.
+        assert stepper_tol_factor(-num_steps) == pytest.approx(
+            expected, abs=1e-9
+        )
+
 
 class TestExceptions:
     """Test custom exception classes"""

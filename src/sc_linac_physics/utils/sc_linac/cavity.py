@@ -61,6 +61,14 @@ class Cavity(linac_utils.SCLinacObject):
             self.scale_factor_lower_limit = linac_utils.CAVITY_SCALE_LOWER_LIMIT
             self.scale_factor_upper_limit = linac_utils.CAVITY_SCALE_UPPER_LIMIT
 
+            # LCLS-II-HE cavities (all of L4B) are the same length and
+            # frequency as the original LCLS-II cavities but accept a wider
+            # loaded-Q window, so only that pair is overridden here. See the
+            # provenance note on LOADED_Q_*_LIMIT_HE in linac_utils.
+            if self.cryomodule.is_high_energy:
+                self.loaded_q_lower_limit = linac_utils.LOADED_Q_LOWER_LIMIT_HE
+                self.loaded_q_upper_limit = linac_utils.LOADED_Q_UPPER_LIMIT_HE
+
         self._pv_prefix = linac_utils.build_cavity_pv_prefix(
             linac_name=self.linac.name,
             cryomodule_name=self.cryomodule.name,
@@ -875,12 +883,19 @@ class Cavity(linac_utils.SCLinacObject):
 
             # A zero step estimate commands no motion, so the detune cannot
             # change and steps_moved cannot grow -- so the runaway guard below
-            # can never fire, and the temperature guard above will not either
-            # unless the stepper was already hot on entry (an idle motor does
-            # not heat up). Bail out instead of spinning forever. This means
+            # can never fire. Bail out instead of spinning forever. This means
             # the scale factor relating Hz to microsteps is implausibly large
             # (the stepper SCALE PV, and for the piezo-centering pass the
             # piezo SCALE PV that sets both delta_hz and tolerance).
+            #
+            # CHECK: does STEPTEMP climb on a stepper commanded no motion?
+            # [TUNER-2018] interlocks at 70 K and measured the rise staying
+            # under 4 K through a long motion (quoted on
+            # FrequencyTuningLimits.temp_limit_k). That is a reading taken
+            # during motion: it neither isolates motion as the cause nor says
+            # anything about holding current at rest. The bail out below does
+            # not depend on the answer; only the "an idle motor does not heat
+            # up" claim this replaced did.
             if est_steps == 0:
                 hz_per_microstep = 1 / microsteps_per_hz
                 self.set_status_message(
