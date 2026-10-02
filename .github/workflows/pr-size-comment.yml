@@ -1,6 +1,6 @@
 name: PR size comment
 
-# Posts the report produced by pr-size.yml as a sticky comment.
+# Posts the PR size as a sticky comment. Advisory only — never gates a merge.
 #
 # Why this is a separate workflow: a `pull_request` run from a fork gets a
 # read-only GITHUB_TOKEN regardless of its `permissions:` block, so it cannot
@@ -8,20 +8,21 @@ name: PR size comment
 # writable token and fires for fork PRs too, which makes it the only way to get
 # a comment onto the ~90% of PRs here that come from forks.
 #
-# That writable token is why this workflow deliberately does almost nothing. It
-# never checks out the PR, never runs code from it, and reads exactly two small
-# files out of the artifact:
+# It trusts nothing the triggering run produced. That run executes the PR's
+# own copy of pr-size.yml, so a fork can make it upload any PR number and any
+# markdown. Everything here comes from the `workflow_run` event and the GitHub
+# API instead:
 #
-#   pr-number   — validated to digits before use; it originates from a
-#                 fork-controlled run and is passed to the GitHub API.
-#   comment.md  — handed to the action as a file path, so untrusted text is
-#                 never interpolated into a shell command or through a
-#                 $GITHUB_OUTPUT heredoc.
+#   PR number  — the open PR whose head repo, branch and SHA match the run.
+#   size       — recomputed from the PR's changed files in the API, never from
+#                a checkout. This job does not check out or run PR code.
 #
-# NOTE: `workflow_run` only triggers from the copy of this file on the default
-# branch. It will not run on the PR that introduces it — expect the first
-# comment on the next PR after this merges. Until then the size is on the
-# "PR size" run summary.
+# The exclusions and the 400/800 thresholds are duplicated from pr-size.yml,
+# which takes them from "Scope and shipping" in CLAUDE.md. Change all three
+# together.
+#
+# NOTE: `workflow_run` only fires from the copy of this file on main, so a
+# change here does not run on the PR that makes it.
 
 on:
   workflow_run:
@@ -39,31 +40,94 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: Download report
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: pr-size
-          path: pr-size
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Read PR number
-        id: pr
+      - name: Find PR and render comment
+        id: render
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          # Strip to digits: this value comes from a run that fork-authored
-          # content influenced, and it is about to be used in an API call.
-          NUM=$(tr -dc '0-9' < pr-size/pr-number | head -c 10)
-          if [ -z "$NUM" ]; then
-            echo "artifact contained no usable PR number" >&2
+          WARN=400
+          HARD=800
+          OWNER="${HEAD_REPO%%/*}"
+          # GitHub sets this, but it is spliced into the jq filter below, so
+          # refuse anything that is not a commit SHA.
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "unexpected head SHA: $HEAD_SHA" >&2
             exit 1
+          fi
+
+          # The SHA match is what ties the PR to this run. A branch name alone
+          # could match a PR whose head has since moved.
+          NUM=$(gh api -X GET "repos/${REPO}/pulls" \
+                  -f state=open -f head="${OWNER}:${HEAD_BRANCH}" \
+                  --jq "map(select(.head.sha == \"${HEAD_SHA}\")) | .[0].number // empty")
+          if [ -z "$NUM" ]; then
+            echo "no open PR matches ${HEAD_REPO}@${HEAD_SHA}; nothing to do"
+            echo "number=" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           echo "number=$NUM" >> "$GITHUB_OUTPUT"
 
+          # Same shape as `git diff --numstat` in pr-size.yml, so the awk below
+          # matches it line for line. @tsv escapes any tab or newline in a
+          # filename. The API diffs against the merge base, like `BASE...HEAD`.
+          NUMSTAT=$(gh api --paginate "repos/${REPO}/pulls/${NUM}/files" \
+                      --jq '.[] | [.additions, .deletions, .filename] | @tsv')
+
+          read -r ADD DEL SKIPPED < <(
+            awk -F'\t' '
+                NF < 3 { next }
+                $3 ~ /(^|\/)(tests?)\// { s++; next }
+                $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { s++; next }
+                { a += $1; d += $2 }
+                END { printf "%d %d %d\n", a+0, d+0, s+0 }' <<< "$NUMSTAT"
+          )
+          TOTAL=$((ADD + DEL))
+
+          if   [ "$TOTAL" -ge "$HARD" ]; then STATE="over the ${HARD}-line hard limit"; ICON="🔴"
+          elif [ "$TOTAL" -ge "$WARN" ]; then STATE="over the ${WARN}-line target";     ICON="🟡"
+          else                                STATE="within target";                    ICON="🟢"
+          fi
+
+          {
+            echo "### ${ICON} PR size: ${TOTAL} lines — ${STATE}"
+            echo
+            echo "\`+${ADD}\` / \`-${DEL}\` in production code."
+            echo "${SKIPPED} test and asset files excluded."
+            echo
+            echo "| Largest files | Change |"
+            echo "|---|---|"
+            # Filenames are chosen by the PR author and land in a comment
+            # posted as github-actions[bot]. Anything outside a plain path
+            # character set becomes "?", so a name cannot close the code
+            # span, break the table, or carry markdown.
+            awk -F'\t' '
+                NF < 3 { next }
+                $3 ~ /(^|\/)(tests?)\// { next }
+                $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { next }
+                { printf "%d\t+%s/-%s\t%s\n", $1+$2, $1, $2, $3 }' <<< "$NUMSTAT" \
+              | sort -rn | head -5 \
+              | awk -F'\t' '{
+                  name = $3
+                  gsub("[^A-Za-z0-9_.+/-]", "?", name)
+                  printf "| `%s` | %s |\n", name, $2
+                }'
+            echo
+            echo "<sub>Target is 400 lines excluding tests, hard stop around 800 — see"
+            echo "\"Scope and shipping\" in \`CLAUDE.md\`. If this PR is over, the description"
+            echo "should say why it could not be split. Advisory only; this check never"
+            echo "fails the build.</sub>"
+          } > comment.md
+
       - name: Comment
+        if: steps.render.outputs.number != ''
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         continue-on-error: true
         with:
           header: pr-size
-          number: ${{ steps.pr.outputs.number }}
-          path: pr-size/comment.md
+          number: ${{ steps.render.outputs.number }}
+          path: comment.md
