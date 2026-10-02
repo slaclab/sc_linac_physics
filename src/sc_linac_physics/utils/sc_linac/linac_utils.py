@@ -124,6 +124,43 @@ HL_SSA_SHARED_PVS = [
 
 HL_SSA_PS_SETPOINT = 2500
 
+# Rated output power of the SSA driving each cavity, in kW. No PV reports
+# this. The mapping is the current installation as Sebastian Aderhold gave it
+# on #285 (2026-10-02): L0B-L2B and L3B up to CM34 cavity 5 are 3.8 kW,
+# CM34 cavities 6-8 and CM35 cavity 1 are 4.6 kW, CM35 cavities 2-8 and all of
+# L4B are 7 kW. Swapping an SSA makes this table stale, and nothing will flag
+# it. Update it here.
+# CHECK: what are the HL (H1, H2) SSAs rated at?
+SSA_RATED_POWER_3_8_KW = 3.8
+SSA_RATED_POWER_4_6_KW = 4.6
+SSA_RATED_POWER_7_KW = 7.0
+_SSA_RATED_POWER_BY_CM_KW = {
+    **{cm: SSA_RATED_POWER_3_8_KW for cm in L0B + L1B + L2B + L3B},
+    **{cm: SSA_RATED_POWER_7_KW for cm in L4B},
+}
+_SSA_RATED_POWER_BY_CAVITY_KW = {
+    ("34", 6): SSA_RATED_POWER_4_6_KW,
+    ("34", 7): SSA_RATED_POWER_4_6_KW,
+    ("34", 8): SSA_RATED_POWER_4_6_KW,
+    ("35", 1): SSA_RATED_POWER_4_6_KW,
+    **{("35", n): SSA_RATED_POWER_7_KW for n in range(2, 9)},
+}
+
+
+def ssa_rated_power_kw(
+    cryomodule_name: str, cavity_number: int
+) -> float | None:
+    """Rated power in kW of the SSA driving this cavity, or None if unknown.
+
+    None for the HL cryomodules (not in the table yet) and for any name the
+    table does not cover. Callers must handle None rather than guess.
+    """
+    return _SSA_RATED_POWER_BY_CAVITY_KW.get(
+        (cryomodule_name, cavity_number),
+        _SSA_RATED_POWER_BY_CM_KW.get(cryomodule_name),
+    )
+
+
 LOADED_Q_LOWER_LIMIT = int(2.5e7)
 LOADED_Q_UPPER_LIMIT = int(5.1e7)
 DESIGN_Q_LOADED = int(4.1e7)

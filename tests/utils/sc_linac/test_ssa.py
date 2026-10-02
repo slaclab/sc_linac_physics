@@ -330,3 +330,61 @@ def test_wait_while_resetting(ssa):
     ssa._status_pv_obj = make_mock_pv(get_val=SSA_STATUS_RESETTING_FAULTS_VALUE)
     with pytest.raises(CavityAbortError):
         ssa.wait_while_resetting()
+
+
+class TestRatedPower:
+    """The SSA rating table, checked against the whole machine.
+
+    Counts come from the mapping in linac_utils: 58 non-HL cryomodules of 8
+    cavities each, split 269 / 4 / 191 across 3.8 / 4.6 / 7 kW.
+    """
+
+    @staticmethod
+    def _ssa(cm_name, number):
+        # The module-level MACHINE, not a fresh Machine(): rated_power_kw only
+        # reads names, and a Machine() per call rebuilds every cavity.
+        from sc_linac_physics.utils.sc_linac.linac import MACHINE
+
+        return MACHINE.cryomodules[cm_name].cavities[number].ssa
+
+    def test_every_cavity_is_counted_once(self):
+        from collections import Counter
+
+        from sc_linac_physics.utils.sc_linac.linac import MACHINE
+
+        counts = Counter(
+            cavity.ssa.rated_power_kw
+            for cm in MACHINE.cryomodules.values()
+            for cavity in cm.cavities.values()
+        )
+        assert counts == {3.8: 269, 4.6: 4, 7.0: 191, None: 16}
+
+    @pytest.mark.parametrize(
+        "cm_name,number,expected",
+        [
+            ("01", 1, 3.8),
+            ("15", 8, 3.8),
+            ("33", 8, 3.8),
+            ("34", 5, 3.8),
+            ("34", 6, 4.6),
+            ("34", 8, 4.6),
+            ("35", 1, 4.6),
+            ("35", 2, 7.0),
+            ("35", 8, 7.0),
+            ("37", 1, 7.0),
+            ("59", 8, 7.0),
+        ],
+    )
+    def test_boundaries(self, cm_name, number, expected):
+        assert self._ssa(cm_name, number).rated_power_kw == expected
+
+    @pytest.mark.parametrize("cm_name", ["H1", "H2"])
+    def test_hl_is_unknown_rather_than_guessed(self, cm_name):
+        assert self._ssa(cm_name, 1).rated_power_kw is None
+
+    def test_unknown_cryomodule_is_none(self):
+        from sc_linac_physics.utils.sc_linac.linac_utils import (
+            ssa_rated_power_kw,
+        )
+
+        assert ssa_rated_power_kw("99", 1) is None

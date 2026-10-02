@@ -117,6 +117,16 @@ class SSA(linac_utils.SCLinacObject):
         return self._status_pv_obj.get()
 
     @property
+    def rated_power_kw(self) -> Optional[float]:
+        """Rated power in kW from linac_utils.ssa_rated_power_kw. No PV read.
+
+        None for HL SSAs and anything else the table does not cover.
+        """
+        return linac_utils.ssa_rated_power_kw(
+            self.cavity.cryomodule.name, self.cavity.number
+        )
+
+    @property
     def is_on(self) -> bool:
         return self.status_message == linac_utils.SSA_STATUS_ON_VALUE
 
