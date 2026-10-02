@@ -1,0 +1,65 @@
+# Shipped default profiles for the mock archiver.
+# Rules are matched top-to-bottom against the PV name (glob). First match wins.
+# Fields map to PVProfile: base, noise, trend, trend_amplitude, noise_scale,
+# spike_prob, spike_scale, sample_rate_hz, kind.
+
+rules:
+  # --- Cavity amplitude sum (axis 0-144) -> quadratic ramp ---------------
+  - match: "*AACTMEANSUM*"
+    profile:
+      kind: FLOAT
+      base: 100.0
+      noise: 5.0
+      trend: quadratic
+      trend_amplitude: 30.0
+      noise_scale: 1.0
+
+  # --- Cavity amplitude / gradient (~16.5 MV/m) -------------------------
+  - match: "*AACTMEAN*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+  - match: "*ADES*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+  - match: "*AACT*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+  - match: "*GDES*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+  - match: "*GACT*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+
+  # --- Phase --------------------------------------------------------------
+  - match: "*PDES*"
+    profile: {kind: FLOAT, base: 0.0, noise: 0.5}
+  - match: "*PACT*"
+    profile: {kind: FLOAT, base: 0.0, noise: 0.5}
+
+  # --- Detune / cold detune (sine / linear drift) ------------------------
+  - match: "*DF_COLD*"
+    profile: {kind: FLOAT, base: 0.0, noise: 10.0, trend: linear, trend_amplitude: 5.0}
+  - match: "*DFBEST*"
+    profile: {kind: FLOAT, base: 0.0, noise: 10.0, trend: sine, trend_amplitude: 5.0}
+  - match: "*DETUNE*"
+    profile: {kind: FLOAT, base: 0.0, noise: 10.0, trend: sine, trend_amplitude: 5.0}
+  - match: "*DF*"
+    profile: {kind: FLOAT, base: 0.0, noise: 10.0}
+
+  - match: "*SEL_ASET*"
+    profile: {kind: FLOAT, base: 0.0, noise: 0.5}
+
+  # --- JT valve position (axis 0-80, ~40%) -> sine -----------------------
+  - match: "*PVJT*"
+    profile: {kind: FLOAT, base: 40.0, noise: 3.0, trend: sine, trend_amplitude: 8.0}
+  - match: "*ORBV*"
+    profile: {kind: FLOAT, base: 40.0, noise: 3.0, trend: sine, trend_amplitude: 8.0}
+
+  # --- Liquid levels (sine) ----------------------------------------------
+  - match: "*DS:LVL*"
+    profile: {kind: FLOAT, base: 90.0, noise: 2.0, trend: sine, trend_amplitude: 4.0, noise_scale: 0.5}
+  - match: "*US:LVL*"
+    profile: {kind: FLOAT, base: 70.0, noise: 2.0, trend: sine, trend_amplitude: 4.0, noise_scale: 0.5}
+
+# Kind-based fallbacks when no rule matches.
+defaults:
+  FLOAT: {base: 0.0, noise: 0.1, trend: flat, trend_amplitude: 1.0, noise_scale: 1.0}
+  INT:   {kind: INT}
+  ENUM:  {kind: ENUM}
+  STRING: {kind: STRING}

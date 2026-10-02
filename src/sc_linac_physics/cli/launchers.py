@@ -5,6 +5,20 @@ import sys
 from pydm import PyDMApplication
 from pydm.main_window import PyDMMainWindow
 
+def _maybe_install_mock_archiver():
+    """Install the PyDM mock-archiver patch if SC_ARCHIVER_MOCK=1.
+
+    No-op unless the env var is set. Wrapped so a missing/broken import can
+    never prevent a display from launching.
+    """
+    try:
+        from sc_linac_physics.utils.archiver.pydm_mock_patch import (
+            install_mock_archiver_patch,
+        )
+        install_mock_archiver_patch()
+    except Exception:
+        pass
+
 
 def display(func):
     """Decorator to mark a launcher as a display."""
@@ -37,6 +51,10 @@ def launch_python_display(display_class, *args, standalone=True):
         The display window instance if standalone=False, None otherwise
     """
     import inspect
+
+    # Install the mock-archiver patch (no-op unless SC_ARCHIVER_MOCK=1) BEFORE
+    # any display class is instantiated so every curve auto-wires to the mock.
+    _maybe_install_mock_archiver()
 
     # Get the file path of the display class
     display_file = inspect.getfile(display_class)
