@@ -1,81 +1,27 @@
 name: Explainer preview
 
-# Renders a comment linking to a live preview of each explainer page the PR
-# adds or changes. GitHub serves repo HTML as source, so without this a
-# reviewer has to check the PR out locally to see the page.
+# Trigger only. explainer-preview-comment.yml does the work on `workflow_run`
+# and reads nothing this run produces.
 #
-# Same two-workflow split as pr-size.yml, for the same reason: a fork PR's
-# `pull_request` run has a read-only token and cannot comment. This half
-# renders the comment and uploads it; explainer-preview-comment.yml posts it.
+# Why it produces nothing: a `pull_request` run executes the PR's own copy of
+# this file, so a fork can make it upload anything. pr-size.yml hands its
+# comment over as an artifact; anything handed over that way is
+# fork-controlled. The commenting half instead looks the PR and its files up
+# from the GitHub API, keyed on `workflow_run` metadata the fork cannot set.
 #
-# The link goes through htmlpreview.github.io, a third-party renderer, reading
-# raw.githubusercontent.com at refs/pull/N/head. That ref follows every push,
-# so the comment never goes stale. raw.githubusercontent.com caches for a few
-# minutes, so a fresh push can take that long to show.
+# No `paths` filter, on purpose. It would skip the push that reverts the last
+# explainer change, and that push is the one that must clear the comment.
 
 on:
   pull_request:
     branches: ["main"]
     types: [opened, synchronize, reopened]
-    paths:
-      - "docs/explainers/*.html"
-
-concurrency:
-  group: explainer-preview-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  render:
+  trigger:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Render comment
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          mkdir -p explainer-preview
-          # Travels with the artifact: `workflow_run.pull_requests` is empty
-          # for fork runs, so the commenting half cannot read it itself.
-          echo "$PR_NUMBER" > explainer-preview/pr-number
-
-          RAW="https://raw.githubusercontent.com/${REPO}/refs/pull/${PR_NUMBER}/head"
-          # Added or modified only; a deleted page has nothing to preview.
-          # The name filter keeps a fork-chosen filename from carrying markdown
-          # into the comment.
-          PAGES=$(git diff --name-only --diff-filter=AM "$BASE_SHA...$HEAD_SHA" \
-            -- 'docs/explainers/*.html' \
-            | grep -E '^docs/explainers/[A-Za-z0-9_.-]+\.html$' || true)
-
-          {
-            echo "### Explainer preview"
-            echo
-            if [ -z "$PAGES" ]; then
-              echo "No explainer pages added or changed in this PR."
-            else
-              while read -r page; do
-                echo "- [\`$(basename "$page")\`](https://htmlpreview.github.io/?${RAW}/${page})"
-              done <<< "$PAGES"
-            fi
-            echo
-            echo "<sub>Follows the latest push; allow a few minutes for caching."
-            echo "Rendered by htmlpreview.github.io, a third-party service.</sub>"
-          } > explainer-preview/comment.md
-
-          cat explainer-preview/comment.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload comment
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: explainer-preview
-          path: explainer-preview/
-          retention-days: 1
+      - run: echo "explainer-preview-comment.yml takes it from here"
