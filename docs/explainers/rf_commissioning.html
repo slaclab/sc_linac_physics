@@ -402,8 +402,68 @@
 
   <section id="tests">
     <h2>7. Running and testing it</h2>
+
+    <h3>Launch the app</h3>
+    <p>
+      Install once with <code>pip install -e ".[dev,test]"</code> from the repo
+      root. Then pick how much of the machine you want:
+    </p>
+    <div class="scroll"><table>
+      <thead><tr><th>You want</th><th>Run</th><th>What you get</th></tr></thead>
+      <tbody>
+        <tr><td>Layout only</td>
+          <td><code>PYDM_DEFAULT_PROTOCOL=fake sc-rf-comm</code></td>
+          <td>The window opens with no EPICS. PV values are zero or empty.
+          Good for UI work.</td></tr>
+        <tr><td>Live fake data</td>
+          <td><code>sc-sim</code> in one terminal, then <code>sc-rf-comm</code> in another</td>
+          <td>A caproto IOC serving simulated cavity PVs. Phases can run
+          end to end against it. See <a href="../getting_started.md">Getting started</a>.</td></tr>
+        <tr><td>The real machine</td>
+          <td><code>sc-rf-comm</code> on a control-room host</td>
+          <td>Phases write to the PVs in section 5.</td></tr>
+      </tbody>
+    </table></div>
+    <p>
+      <code>sc-linac rf-commissioning</code> launches the same window through the
+      unified CLI
+      <span class="cite">cli/launchers.py::launch_rf_commissioning “MultiPhaseCommissioningDisplay, *sys.argv[1:], standalone=standalone”</span>.
+    </p>
+
+    <h3>Which database it opens</h3>
+    <p>
+      There is no command-line flag for the database path. The window always
+      builds a default <code>CommissioningSession()</code>
+      <span class="cite">ui/multi_phase_screen.py::MultiPhaseCommissioningDisplay.__init__ “self.session = session or CommissioningSession()”</span>,
+      which picks the path by OS
+      <span class="cite">rf_commissioning/session_manager.py::get_default_db_path “db_dir = get_srf_base_dir() if is_linux() else get_database_dir()”</span>:
+    </p>
     <ul>
-      <li>Launch: <code>sc-rf-comm</code> or <code>sc-linac rf-commissioning</code>.</li>
+      <li>Linux: <code>/home/physics/srf/commissioning.db</code>
+        <span class="cite">utils/platform_paths.py::get_srf_base_dir “return Path("/home/physics/srf")”</span></li>
+      <li>macOS: <code>~/.sc_linac_physics/databases/commissioning.db</code>. The
+        docstring on <code>get_default_db_path</code> still says
+        <code>~/databases/</code>, which is out of date.</li>
+    </ul>
+    <div class="caveat">
+      On Linux that is the same path on every host that mounts
+      <code>/home/physics</code>. Saving there from a dev session saves into the
+      commissioning records.
+      <pre><code># CHECK: which hosts share /home/physics/srf, and is it the production DB?</code></pre>
+      For safe local work, run on a Mac, or construct the window yourself
+      with <code>MultiPhaseCommissioningDisplay(session=CommissioningSession(db_path=...))</code>.
+    </div>
+
+    <h3>Open this page</h3>
+    <p>
+      It is one self-contained file with no network loads. Double-click
+      <code>docs/explainers/rf_commissioning.html</code> in a checkout, or
+      <code>open</code> / <code>xdg-open</code> it. GitHub shows the HTML source
+      rather than rendering it, so view it from a checkout.
+    </p>
+
+    <h3>Test it</h3>
+    <ul>
       <li>Tests: <code>pytest tests/applications/rf_commissioning -n auto</code>.
         About 900 tests, about 12 s.</li>
       <li>EPICS is faked for the whole test run by <code>tests/conftest.py</code>,
