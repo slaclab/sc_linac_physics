@@ -38,15 +38,12 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 | [How auto-tune works](explainers/auto_tune.html) | Interactive explainer: the `_auto_tune` convergence loop, its guards, and how it fails. |
 | [How RF commissioning is built](explainers/rf_commissioning.html) | Onboarding map: the layers, one click traced to the machine and SQLite, what each phase writes, and where newcomers trip. |
 
-The two explainers are single HTML files that work offline. GitHub shows their
-source instead of rendering them, so open them from a checkout:
-
-```bash
-open docs/explainers/rf_commissioning.html      # macOS
-xdg-open docs/explainers/rf_commissioning.html  # Linux
-```
-
-Or double-click the file.
+The explainers are single HTML files. Read them on the docs site, where they
+render and run:
+[auto-tune](https://slaclab.github.io/sc_linac_physics/explainers/auto_tune.html),
+[RF commissioning](https://slaclab.github.io/sc_linac_physics/explainers/rf_commissioning.html).
+GitHub's file view shows their source instead. They also work offline: open
+the file from a checkout.
 
 ### Displays
 
