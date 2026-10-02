@@ -49,6 +49,9 @@ def mock_cavity():
     cavity.measured_loaded_q = 4.0e7
     cavity.measured_scale_factor = 30.0
     cavity.measured_loaded_q_in_tolerance = True
+    cavity.measured_scale_factor_in_tolerance = True
+    cavity.scale_factor_lower_limit = 10.0
+    cavity.scale_factor_upper_limit = 50.0
     cavity.loaded_q_lower_limit = 2.5e7
     cavity.loaded_q_upper_limit = 5.1e7
     # Deliberately does NOT set probe_q: the real Cavity has no such
@@ -232,6 +235,36 @@ def test_real_cavity_has_no_probe_q_readback():
     assert hasattr(cavity, "calc_probe_q_pv")
 
 
+def test_scale_factor_out_of_tolerance_is_flagged_and_recorded(
+    phase, record, mock_cavity
+):
+    """The check finish_characterization() makes before pushing scale factor."""
+    mock_cavity.measured_scale_factor_in_tolerance = False
+
+    result = phase.execute_step("read_results")
+
+    assert result.result == PhaseResult.SUCCESS
+    assert "scale factor is OUTSIDE" in result.message
+    assert "loaded Q is OUTSIDE" not in result.message
+    assert record.cavity_char.scale_factor_in_tolerance is False
+    assert record.cavity_char.passed is False
+
+
+def test_scale_factor_out_of_tolerance_can_still_be_pushed(phase, mock_cavity):
+    """Unlike auto setup: the operator confirmed, so it is their call."""
+    mock_cavity.measured_scale_factor_in_tolerance = False
+    phase.execute_step("read_results")
+    _confirm(phase)
+
+    assert phase.execute_step("push_results").result == PhaseResult.SUCCESS
+    mock_cavity.push_scale_factor.assert_called_once()
+
+
+def test_both_in_tolerance_says_so(phase):
+    result = phase.execute_step("read_results")
+    assert "both in tolerance" in result.message
+
+
 def test_out_of_tolerance_is_recorded_as_not_passed(phase, record, mock_cavity):
     """Flagging the value is pointless if the record still says it passed."""
     mock_cavity.measured_loaded_q_in_tolerance = False
@@ -264,6 +297,7 @@ def test_starting_a_new_run_clears_the_previous_results(phase, record):
         scale_factor=30.0,
         probe_q=2.0e9,
         loaded_q_in_tolerance=True,
+        scale_factor_in_tolerance=True,
     )
 
     phase.execute_step("start_characterization")
@@ -272,6 +306,7 @@ def test_starting_a_new_run_clears_the_previous_results(phase, record):
     assert record.cavity_char.scale_factor is None
     assert record.cavity_char.probe_q is None
     assert record.cavity_char.loaded_q_in_tolerance is None
+    assert record.cavity_char.scale_factor_in_tolerance is None
 
 
 def test_a_failed_start_keeps_the_previous_results(phase, record, mock_cavity):
@@ -403,11 +438,28 @@ def test_crash_is_reported(phase, mock_cavity):
     assert "crashed" in result.message.lower()
 
 
-def test_wait_returns_when_the_status_settles(phase, mock_cavity):
+def test_wait_delegates_to_the_shared_cavity_wait(phase, mock_cavity):
+    """The same wait auto setup runs, with this phase's limits and abort."""
     result = phase.execute_step("wait_for_completion")
+
     assert result.result == PhaseResult.SUCCESS
-    # The shared crash/staleness vetting runs once the loop exits.
-    mock_cavity.wait_for_characterization.assert_called_once_with()
+    mock_cavity.wait_for_characterization.assert_called_once_with(
+        timeout=phase.limits.characterization_timeout_seconds,
+        poll_interval=phase.limits.status_poll_interval,
+        should_abort=phase.context.is_abort_requested,
+    )
+
+
+def test_wait_passes_a_live_view_of_the_commissioning_abort(phase, mock_cavity):
+    """PhaseBase.run() only checks the context flag between steps."""
+    phase.execute_step("wait_for_completion")
+    should_abort = mock_cavity.wait_for_characterization.call_args.kwargs[
+        "should_abort"
+    ]
+
+    assert should_abort() is False
+    phase.context.request_abort()
+    assert should_abort() is True
 
 
 def test_stale_complete_from_an_earlier_run_fails(phase, mock_cavity):
@@ -422,10 +474,11 @@ def test_stale_complete_from_an_earlier_run_fails(phase, mock_cavity):
     assert "PROBECALTS" in result.message
 
 
-def test_commissioning_abort_stops_the_wait(phase, mock_cavity):
-    """PhaseBase.run() only checks the context flag between steps."""
-    mock_cavity.characterization_running = True
-    phase.context.request_abort()
+def test_abort_is_terminal_not_retried(phase, mock_cavity):
+    """Either abort reaches the phase as CavityAbortError."""
+    mock_cavity.wait_for_characterization.side_effect = CavityAbortError(
+        "abort"
+    )
 
     result = phase.execute_step("wait_for_completion")
 
@@ -433,32 +486,14 @@ def test_commissioning_abort_stops_the_wait(phase, mock_cavity):
     assert "Aborted" in result.message
 
 
-def test_cavity_abort_is_terminal_not_retried(phase, mock_cavity):
-    mock_cavity.characterization_running = True
-    mock_cavity.check_abort.side_effect = CavityAbortError("abort")
+def test_timeout_fails_rather_than_hangs(phase, mock_cavity):
+    mock_cavity.wait_for_characterization.side_effect = (
+        CavityCharacterizationError(
+            "CM37 cavity 1 characterization did not finish within 300 s"
+        )
+    )
 
     result = phase.execute_step("wait_for_completion")
-
-    assert result.result == PhaseResult.FAILED
-    assert "Aborted" in result.message
-
-
-def test_wait_times_out_rather_than_hanging(mock_cavity, record):
-    """A characterization that never finishes must not block the phase forever."""
-    mock_cavity.characterization_running = True
-    context = PhaseContext(
-        record=record, operator="op", parameters={"cavity": mock_cavity}
-    )
-    p = CavityCharPhase(
-        context,
-        limits=CavityCharLimits(
-            characterization_timeout_seconds=0.05,
-            status_poll_interval=0.01,
-        ),
-    )
-    p.validate_prerequisites()
-
-    result = p.execute_step("wait_for_completion")
 
     assert result.result == PhaseResult.FAILED
     assert "did not finish" in result.message
@@ -498,6 +533,7 @@ def test_dry_run_touches_no_hardware(mock_cavity, record):
 
     # Reads
     mock_cavity.check_abort.assert_not_called()
+    mock_cavity.wait_for_characterization.assert_not_called()
 
 
 def test_dry_run_does_not_store_measurements(mock_cavity, record):

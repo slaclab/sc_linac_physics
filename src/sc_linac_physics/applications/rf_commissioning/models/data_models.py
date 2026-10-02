@@ -363,6 +363,8 @@ class CavityCharacterization:
     # Cavity object and the record has no access to one. None means the check
     # was never made — records written before this field existed.
     loaded_q_in_tolerance: bool | None = None
+    # Same, for the scale factor against the Cavity's scale_factor limits.
+    scale_factor_in_tolerance: bool | None = None
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -381,7 +383,11 @@ class CavityCharacterization:
         loaded_q_in_tolerance (None) keep their previous result rather than
         retroactively failing.
         """
-        return self.is_complete and self.loaded_q_in_tolerance is not False
+        return (
+            self.is_complete
+            and self.loaded_q_in_tolerance is not False
+            and self.scale_factor_in_tolerance is not False
+        )
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
