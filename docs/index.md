@@ -36,6 +36,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 | [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection |
 | [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence |
 | [How auto-tune works](explainers/auto_tune.html) | Interactive explainer: the `_auto_tune` convergence loop, its guards, and how it fails. |
+| [How RF commissioning is built](explainers/rf_commissioning.html) | Onboarding map: the layers, one click traced to the machine and SQLite, what each phase writes, and where newcomers trip. |
 
 ### Displays
 
