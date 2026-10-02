@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How RF commissioning is built — SC Linac</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --ink: #e6e8ec;
+    --dim: #9aa3b2;
+    --line: #2b303a;
+    /* Same contrast reasoning as auto_tune.html: --edge is 3.25:1 against
+       --panel so buttons have a visible border before hover. */
+    --edge: #656f7e;
+    --accent: #6ea8fe;
+    --warn: #e0a458;
+    --bad: #e06c75;
+    --ok: #7fb069;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 62rem; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .5rem; }
+  h2 {
+    font-size: 1.35rem;
+    margin: 3.5rem 0 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+  .lede { color: var(--dim); font-size: 1.05rem; }
+  code, .mono, pre { font-family: var(--mono); font-size: .9em; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .cite { font-family: var(--mono); font-size: .78rem; color: var(--dim); }
+  .caveat {
+    border-left: 3px solid var(--warn);
+    padding: .5rem 0 .5rem 1rem;
+    margin: 1.25rem 0;
+    color: var(--dim);
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; }
+  th, td {
+    text-align: left;
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--line);
+    font-size: .92rem;
+    vertical-align: top;
+  }
+  th { color: var(--dim); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  button {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    padding: .35rem .8rem;
+    font: inherit;
+    font-size: .88rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  .ok { color: var(--ok); }
+  .warn { color: var(--warn); }
+  .bad { color: var(--bad); }
+
+  /* ---- Section 2 click tracer ---- */
+  .lanes { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 1rem; }
+  .lane {
+    flex: 1 1 7rem;
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+    padding: .4rem .5rem;
+    font-size: .8rem;
+    text-align: center;
+    color: var(--dim);
+    background: var(--bg);
+  }
+  .lane.on { border-color: var(--accent); color: var(--ink); background: #1f2a3d; }
+  .lane.done { color: var(--ink); }
+  .hop-title { font-weight: 600; margin: .25rem 0; }
+  .hop-nav { display: flex; gap: .5rem; align-items: center; margin-top: 1rem; }
+  .hop-nav .count { color: var(--dim); font-size: .85rem; margin-left: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>How RF commissioning is built</h1>
+  <p class="lede">
+    An onboarding map of <code>applications/rf_commissioning/</code>: the
+    layers, what one button click passes through on its way to the machine and
+    to SQLite, how a phase is written, what each implemented phase writes to
+    EPICS, and the places where the code surprises people. Everything here is
+    read from upstream main. Hardware questions the code does not answer are
+    marked <code>CHECK:</code>.
+  </p>
+
+  <section id="shape">
+    <h2>1. The shape of the app</h2>
+
+    <p>
+      Commissioning is nine phases run in a fixed order per cavity. Each phase
+      has a stored value, a record attribute and a data model, all declared in
+      one registry <span class="cite">models/registry.py::create_phase_registry</span>.
+      Today three phases are real. The rest have a tab with a placeholder
+      display whose Run button only logs
+      <span class="cite">ui/displays/base_placeholder.py::BasePlaceholderDisplay.on_run_automated_test “This is a placeholder implementation”</span>.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>#</th><th>Phase</th><th>Phase class</th><th>Controller</th><th>Status on main</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>PIEZO_PRE_RF</code></td><td><code>PiezoPreRFPhase</code></td>
+            <td><code>PiezoPreRFController</code>, plus a batch window</td><td class="ok">Implemented</td></tr>
+          <tr><td>2</td><td><code>SSA_CHAR</code></td><td><code>SSACharPhase</code></td>
+            <td><code>SSACharController</code></td><td class="ok">Implemented</td></tr>
+          <tr><td>3</td><td><code>FREQUENCY_TUNING</code></td><td><code>FrequencyTuningPhase</code></td>
+            <td><code>FrequencyTuningController</code> (4 stages)</td><td class="ok">Implemented</td></tr>
+          <tr><td>4</td><td><code>CAVITY_CHAR</code></td><td>—</td><td>—</td>
+            <td class="warn">Placeholder. Backend in open PR #285, UI in progress</td></tr>
+          <tr><td>5</td><td><code>PIEZO_WITH_RF</code></td><td>—</td><td>—</td><td class="warn">Placeholder</td></tr>
+          <tr><td>6</td><td><code>HIGH_POWER_RAMP</code></td><td>—</td><td>—</td><td class="warn">Placeholder</td></tr>
+          <tr><td>7</td><td><code>MP_PROCESSING</code></td><td>—</td><td>—</td><td class="warn">Placeholder</td></tr>
+          <tr><td>8</td><td><code>ONE_HOUR_RUN</code></td><td>—</td><td>—</td><td class="warn">Placeholder</td></tr>
+          <tr><td>9</td><td><code>COMPLETE</code></td><td>—</td><td>—</td>
+            <td>No tab. Its registry entry has <code>record_attr=None</code>
+            <span class="cite">models/registry.py::create_phase_registry “record_attr=None,”</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Five layers, top to bottom:</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Layer</th><th>Where</th><th>Job</th></tr></thead>
+        <tbody>
+          <tr><td>Container</td><td><code>ui/multi_phase_screen.py</code>, <code>ui/container/</code></td>
+            <td>The window. Header, cavity picker, progress bar, notes, one tab per phase.
+            Built from mixins.</td></tr>
+          <tr><td>Display</td><td><code>ui/displays/</code></td>
+            <td>One tab's widgets. Forwards button clicks to its controller.</td></tr>
+          <tr><td>Controller</td><td><code>ui/controllers/</code></td>
+            <td>Runs the phase on a background thread, pushes results back to the GUI
+            with Qt signals, calls the session to open and close attempts.</td></tr>
+          <tr><td>Phase</td><td><code>phases/</code></td>
+            <td>The steps. This is the only layer that commands hardware, through
+            <code>Cavity</code>, <code>SSA</code>, <code>Piezo</code> and
+            <code>StepperTuner</code> from <code>utils/sc_linac/</code>.</td></tr>
+          <tr><td>Session and storage</td><td><code>session_manager.py</code>,
+            <code>services/workflow_service.py</code>, <code>models/persistence/</code></td>
+            <td><code>CommissioningSession</code> is the facade the UI calls.
+            <code>WorkflowService</code> owns phase attempts. Repositories own SQL.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="caveat">
+      The repo-wide CLAUDE.md describes a <code>backend/ frontend/ launcher/</code>
+      layout and <code>Worker(QThread)</code> threading. This app uses neither.
+      There is no <code>launcher/</code> directory: the entry point is
+      <span class="cite">cli/launchers.py::launch_rf_commissioning</span>. Threads are
+      plain <code>threading.Thread</code>
+      <span class="cite">ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._run_phase_in_background “Thread(target=worker, daemon=True).start()”</span>.
+    </div>
+  </section>
+
+  <section id="click">
+    <h2>2. Follow one click</h2>
+    <p>
+      An operator presses <em>Run automated test</em> on the Piezo Pre-RF tab.
+      Step through what happens. The other two implemented phases follow the
+      same path with their own controller.
+    </p>
+
+    <div class="panel" id="tracer">
+      <div class="lanes" id="lanes"></div>
+      <div class="hop-title" id="hop-title"></div>
+      <p id="hop-body"></p>
+      <p class="cite" id="hop-cite"></p>
+      <div class="hop-nav">
+        <button type="button" id="hop-prev">&larr; Back</button>
+        <button type="button" id="hop-next">Next &rarr;</button>
+        <span class="count" id="hop-count"></span>
+      </div>
+    </div>
+
+    <noscript>
+      <p>The step-through needs JavaScript. The same hops, in order:
+      display → controller builds phase → session opens attempt → background
+      thread runs steps → hardware → signal back to GUI → session completes
+      attempt → record saved with a version check.</p>
+    </noscript>
+  </section>
+
+  <section id="phase">
+    <h2>3. Writing a phase</h2>
+    <p>
+      A phase subclasses <code>PhaseBase</code> and implements five members:
+      <code>phase_type</code>, <code>validate_prerequisites</code>,
+      <code>get_phase_steps</code>, <code>execute_step</code> and
+      <code>finalize_phase</code>
+      <span class="cite">phases/phase_base.py::PhaseBase “Subclasses must implement:”</span>.
+    </p>
+    <ul>
+      <li><code>get_phase_steps</code> returns an ordered list of step names.
+        <code>SSACharPhase</code> is the cleanest short example
+        <span class="cite">phases/ssa_char.py::SSACharPhase.get_phase_steps</span>.</li>
+      <li><code>execute_step</code> dispatches on the name and returns a
+        <code>PhaseStepResult</code> carrying <code>SUCCESS</code>,
+        <code>RETRY</code>, <code>FAILED</code> or <code>SKIP</code>
+        <span class="cite">phases/phase_base.py::PhaseResult</span>.</li>
+      <li><code>RETRY</code> waits <code>retry_delay_seconds</code>, default 5 s
+        <span class="cite">phases/phase_base.py::PhaseStepResult “retry_delay_seconds: float = 5.0”</span>,
+        up to three times per step
+        <span class="cite">phases/phase_base.py::PhaseBase.__init__ “self._max_retries_per_step: int = 3”</span>.</li>
+      <li>Abort is a flag, not an interrupt
+        <span class="cite">phases/phase_base.py::PhaseContext.request_abort “self.abort_requested = True”</span>.
+        A long step has to check it itself.</li>
+    </ul>
+
+    <div class="caveat">
+      <code>PhaseBase.run()</code> exists but no controller calls it. Each of the
+      three controllers has its own step loop and calls private phase methods
+      directly, for example
+      <span class="cite">ui/controllers/ssa_char_controller.py::SSACharController._run_phase_in_background “self.phase._mark_phase_started()”</span>.
+      So there are four step loops, and they do not all do the same
+      bookkeeping. Read the controller for the phase you are touching, not
+      just <code>PhaseBase</code>.
+    </div>
+  </section>
+
+  <section id="storage">
+    <h2>4. What gets stored</h2>
+    <p>
+      SQLite. The schema is in one function
+      <span class="cite">models/persistence/database_schema.py::initialize_database_schema</span>.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Table</th><th>One row per</th><th>Holds</th></tr></thead>
+        <tbody>
+          <tr><td><code>commissioning_records</code></td><td>cavity</td>
+            <td>One JSON column per phase payload, general notes, and a
+            <code>version</code> counter</td></tr>
+          <tr><td><code>commissioning_runs</code></td><td>record</td><td>Run status</td></tr>
+          <tr><td><code>commissioning_phase_instances</code></td><td>attempt of a phase</td>
+            <td>Status, operator, timestamps. Unique on
+            <code>(run_id, phase, attempt_number)</code>
+            <span class="cite">models/persistence/database_schema.py::initialize_database_schema “UNIQUE(run_id, phase, attempt_number)”</span></td></tr>
+          <tr><td><code>commissioning_phase_artifacts</code></td><td>artifact</td><td>JSON payload tied to an attempt</td></tr>
+          <tr><td><code>commissioning_workflow_events</code></td><td>event</td><td>Append-only log</td></tr>
+          <tr><td><code>measurement_history</code></td><td>measurement</td><td>Append-only, with notes</td></tr>
+          <tr><td><code>operators</code>, <code>cryomodule_records</code></td><td></td><td>Operator list, cryomodule-level records</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Two things that are not where you would look</h3>
+    <ul>
+      <li><strong>Phase status is not stored on the record.</strong> On load it is
+        rebuilt from the latest attempt of each phase
+        <span class="cite">models/persistence/database_helpers.py::build_workflow_state “if previous is None or attempt >= previous[0]:”</span>.
+        The in-memory <code>record.phase_status</code> that <code>PhaseBase</code>
+        updates is not what persists.</li>
+      <li><strong><code>phase_history</code> is not persisted.</strong> It is reset on
+        every load
+        <span class="cite">repositories/records.py::RecordRepository.row_to_record “phase_history=[],”</span>.</li>
+    </ul>
+
+    <h3>Two people, one cavity</h3>
+    <p>
+      Saves use optimistic locking. The update only matches if the version is
+      unchanged since load
+      <span class="cite">repositories/records.py::RecordRepository.save_record “WHERE id = ? AND version = ?”</span>.
+      The window also polls every 5 s and reloads if someone else saved
+      <span class="cite">ui/container/sync.py::_SyncMixin._check_for_external_changes “if local_version is not None and db_version > local_version:”</span>.
+      Measurement notes skip the version check
+      <span class="cite">repositories/measurements.py::MeasurementRepository.append_measurement_note “"UPDATE measurement_history SET notes = ? WHERE id = ?",”</span>.
+    </p>
+  </section>
+
+  <section id="pvs">
+    <h2>5. What each phase writes to the machine</h2>
+    <p>
+      Only what the code shows, in step order. Reads are left out. Where a phase
+      hands off to a shared <code>Cavity</code> method, the table names the
+      method rather than repeating what it writes.
+    </p>
+
+    <h3>PIEZO_PRE_RF</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Step</th><th>PV</th><th>Value</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td><code>setup_piezo</code></td><td><code>BIAS</code></td><td>25</td>
+          <td class="cite">piezo.py::Piezo.enable “self.bias_voltage = 25”</td></tr>
+        <tr><td></td><td><code>ENABLE</code></td><td>disable, then enable, 2 s apart, only if not already enabled</td>
+          <td class="cite">piezo.py::Piezo.enable “self.enable_pv_obj.put(linac_utils.PIEZO_DISABLE_VALUE)”</td></tr>
+        <tr><td></td><td><code>MODECTRL</code></td><td><code>PIEZO_MANUAL_VALUE</code></td>
+          <td class="cite">piezo.py::Piezo.set_to_manual “self.feedback_control_pv_obj.put(linac_utils.PIEZO_MANUAL_VALUE)”</td></tr>
+        <tr><td></td><td><code>DAC_SP</code></td><td>0</td>
+          <td class="cite">phases/piezo_pre_rf.py::PiezoPreRFPhase._setup_piezo “piezo.dc_setpoint = 0”</td></tr>
+        <tr><td><code>trigger_prerf_test</code></td><td><code>TESTSTRT</code></td><td>1</td>
+          <td class="cite">phases/piezo_pre_rf.py::PiezoPreRFPhase._trigger_prerf_test “piezo.prerf_test_start_pv_obj.put(1)”</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>SSA_CHAR</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Step</th><th>PV</th><th>Value</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td><code>set_drive_max</code></td><td><code>DRV_MAX_REQ</code></td><td>operator's drive max, a 0–1 fraction</td>
+          <td class="cite">phases/ssa_char.py::SSACharPhase._set_drive_max “self.cavity.ssa.drive_max = drive_max”</td></tr>
+        <tr><td><code>reset_and_power_on</code></td><td><code>FaultReset</code></td><td>1, while faulted</td>
+          <td class="cite">ssa.py::SSA.reset “self.reset_pv_obj.put(1)”</td></tr>
+        <tr><td></td><td><code>PowerOn</code></td><td>1, if off</td>
+          <td class="cite">ssa.py::SSA.turn_on “self.turn_on_pv_obj.put(1)”</td></tr>
+        <tr><td></td><td><code>INTLK_RESET_ALL</code></td><td>1</td>
+          <td class="cite">cavity.py::Cavity.reset_interlocks “self._interlock_reset_pv_obj.put(1, wait=False)”</td></tr>
+        <tr><td><code>start_calibration</code></td><td><code>CALSTRT</code></td><td>1</td>
+          <td class="cite">ssa.py::SSA.start_calibration “self._calibration_start_pv_obj.put(1, wait=False)”</td></tr>
+        <tr><td><code>validate_and_push</code></td><td><code>PUSH_SSA_SLOPE.PROC</code></td><td>1, after the slope passes validation</td>
+          <td class="cite">phases/ssa_char.py::SSACharPhase._validate_and_push “self.cavity.push_ssa_slope()”</td></tr>
+      </tbody>
+    </table></div>
+    <p>
+      The drive-max spinbox on the tab is a PyDM widget bound straight to the
+      setpoint PV, so editing it writes the PV before any test runs
+      <span class="cite">ui/controllers/ssa_char_controller.py::SSACharController._apply_ssa_pv_mapping “("drive_max_spinbox", ssa.drive_max_setpoint_pv),”</span>.
+    </p>
+
+    <h3>FREQUENCY_TUNING</h3>
+    <p>
+      Four operator-driven stages. Stage 3 runs <code>Cavity._auto_tune</code>,
+      which has its own explainer: <a href="auto_tune.html">How auto-tune works</a>,
+      section 5 of which walks the four stages in detail.
+    </p>
+    <div class="scroll"><table>
+      <thead><tr><th>Stage</th><th>Writes</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Delegates to <code>Cavity.setup_tuning</code> and friends. Operator's cold-landing value pushed to <code>DF_COLD</code> in Hz</td>
+          <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._prepare_cavity_for_tuning “self.cavity.setup_tuning()”</td></tr>
+        <tr><td>2</td><td><code>TOTSGN_RESET</code> = 0, then a +50,000 / −50,000 microstep probe move</td>
+          <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._do_probe_move “self.cavity.stepper_tuner.move(probe, speed=speed, check_detune=False)”</td></tr>
+        <tr><td>3</td><td><code>SCALE_CALC.B</code> from the measured Hz/microstep, auto-tune, <code>NSTEPS_COLD</code>, <code>TUNE_CONFIG</code></td>
+          <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._write_cold_landing_steps “self.cavity.stepper_tuner.steps_cold_landing_pv_obj.put(”</td></tr>
+        <tr><td>4</td><td>Rack frequency scan: <code>FSCAN:SEL</code> per cavity, scan range, <code>FSCAN:START</code>, then the 8π/9 and 7π/9 pushes</td>
+          <td class="cite">rack.py::Rack.run_fscan “cav.fscan_sel_pv_obj.put(1 if num in selected_nums else 0)”</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="caveat">
+      Open questions for the area physicist, from reading this code:
+      <pre><code># CHECK: what units are FSCAN:FREQ_START / FREQ_STOP in?
+# CHECK: CommissioningPiezo reads CHA_TESTMSG2 for channel B. Typo for CHB?
+# CHECK: is TESTSTS == 0 really "crash"?</code></pre>
+      <span class="cite">models/commissioning_piezo.py::CommissioningPiezo.__init__ “self.pv_addr("CHA_TESTMSG2")”</span>,
+      <span class="cite">phases/piezo_pre_rf.py::PiezoPreRFPhase._trigger_prerf_test “is_crash = test_status == 0  # Crash”</span>
+    </div>
+  </section>
+
+  <section id="traps">
+    <h2>6. Where newcomers trip</h2>
+    <ol>
+      <li><strong>Three prerequisite checks that disagree.</strong>
+        <code>CommissioningRecord.can_start_phase</code> and
+        <code>WorkflowService._validate_phase_prerequisites</code> accept a previous
+        phase that is complete or skipped. <code>CommissioningSession.can_run_phase</code>
+        accepts complete only
+        <span class="cite">rf_commissioning/session_manager.py::CommissioningSession.can_run_phase “if previous_status != PhaseStatus.COMPLETE:”</span>.</li>
+      <li><strong>Frequency tuning's stage checks are not in its step list.</strong>
+        They exist only in <code>execute_step</code>'s dispatch, and only Stage 1
+        opens an attempt
+        <span class="cite">ui/controllers/frequency_tuning_controller.py::FrequencyTuningController._find_open_phase_instance_id “Only Stage 1 opens a phase instance”</span>.</li>
+      <li><strong>The batch Piezo window skips the session facade.</strong> It calls
+        the workflow service directly and writes no measurement history
+        <span class="cite">ui/controllers/batch_piezo_pre_rf_controller.py::BatchPiezoPreRFController._init_record_and_context “phase_start = self.session.workflow.start_phase_for_record(”</span>.</li>
+      <li><strong>Docs drift.</strong> <code>docs/applications/rf_commissioning.md</code>
+        says only the Piezo tab shows by default. All phases with a record
+        attribute show
+        <span class="cite">ui/container/phase_specs.py::DEFAULT_BETA_VISIBLE_PHASES</span>.</li>
+      <li><strong>Small naming bumps.</strong> <code>self._controller</code> in
+        <code>FrequencyTuningDisplay</code> vs <code>self.controller</code> elsewhere.
+        <code>ssa_char</code> in the registry but <code>"ssa_characterization"</code>
+        in <code>CommissioningRecord.to_dict</code>.</li>
+    </ol>
+  </section>
+
+  <section id="tests">
+    <h2>7. Running and testing it</h2>
+    <ul>
+      <li>Launch: <code>sc-rf-comm</code> or <code>sc-linac rf-commissioning</code>.</li>
+      <li>Tests: <code>pytest tests/applications/rf_commissioning -n auto</code>.
+        About 900 tests, about 12 s.</li>
+      <li>EPICS is faked for the whole test run by <code>tests/conftest.py</code>,
+        which installs a fake PV class at configure time.</li>
+      <li>Three patterns worth copying:
+        <ul>
+          <li>Real SQLite in <code>tmp_path</code>:
+            <span class="cite">tests/applications/rf_commissioning/test_session_workflow.py</span></li>
+          <li>Controller against a stub view:
+            <span class="cite">tests/applications/rf_commissioning/test_piezo_pre_rf_controller.py</span></li>
+          <li>Container methods on a <code>SimpleNamespace</code> stub:
+            <span class="cite">tests/applications/rf_commissioning/ui/test_multi_phase_screen.py</span></li>
+        </ul></li>
+    </ul>
+  </section>
+</main>
+
+<script>
+  "use strict";
+
+  // Each hop names the layer it lives in (index into LANES) and the code that
+  // does the work. Citations are plain text here; test_citations.py checks
+  // them the same as the ones in the prose above.
+  const LANES = ["Display", "Controller", "Session", "Thread", "Phase", "Machine", "SQLite"];
+
+  const HOPS = [
+    {
+      lane: 0,
+      title: "The display forwards the click",
+      body: "The tab owns no logic. Its slot hands the click to its controller.",
+      cite: "ui/displays/piezo_pre_rf.py::PiezoPreRFDisplay.on_run_automated_test “self.controller.on_run_automated_test()”",
+    },
+    {
+      lane: 1,
+      title: "The controller builds the phase",
+      body: "A PhaseContext wraps the active record and cavity, and the controller constructs the phase object from it.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._prepare_phase_context “self.phase = PiezoPreRFPhase(self.context)”",
+    },
+    {
+      lane: 2,
+      title: "The session opens an attempt",
+      body: "WorkflowService inserts a phase-instance row with the next attempt number for this phase. Reruns never overwrite an earlier attempt.",
+      cite: "services/workflow_service.py::WorkflowService.start_phase_for_record “attempt_number = int(cursor.fetchone()[0]) + 1”",
+    },
+    {
+      lane: 3,
+      title: "Steps run on a background thread",
+      body: "A daemon threading.Thread walks the step list and calls the phase's retry wrapper for each step. The GUI thread stays free.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._run_phase_in_background “success = self.phase._execute_step_with_retry(step_name)”",
+    },
+    {
+      lane: 4,
+      title: "The phase dispatches each step",
+      body: "execute_step looks up the step by name and returns SUCCESS, RETRY, FAILED or SKIP.",
+      cite: "phases/piezo_pre_rf.py::PiezoPreRFPhase.execute_step",
+    },
+    {
+      lane: 5,
+      title: "The machine is written",
+      body: "Only phase code puts to PVs, through the shared hardware classes. For this phase: BIAS, ENABLE, MODECTRL, DAC_SP, then TESTSTRT = 1. See section 5.",
+      cite: "phases/piezo_pre_rf.py::PiezoPreRFPhase._trigger_prerf_test “piezo.prerf_test_start_pv_obj.put(1)”",
+    },
+    {
+      lane: 1,
+      title: "Results come back as a Qt signal",
+      body: "The worker thread emits a signal. Qt delivers it on the GUI thread, which is the only thread that touches widgets.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController “phase_run_finished = pyqtSignal(bool, str)”",
+    },
+    {
+      lane: 2,
+      title: "The session closes the attempt",
+      body: "The attempt is marked complete. If there is a next phase the run stays in progress.",
+      cite: 'services/workflow_service.py::WorkflowService.complete_phase_instance “run_status = "complete" if next_phase is None else "in_progress"”',
+    },
+    {
+      lane: 6,
+      title: "The record is saved with a version check",
+      body: "The UPDATE only matches if nobody else saved since this window loaded the record. Otherwise the save fails rather than overwriting.",
+      cite: "repositories/records.py::RecordRepository.save_record “WHERE id = ? AND version = ?”",
+    },
+  ];
+
+  const lanesEl = document.getElementById("lanes");
+  const laneEls = LANES.map((name) => {
+    const el = document.createElement("div");
+    el.className = "lane";
+    el.textContent = name;
+    lanesEl.appendChild(el);
+    return el;
+  });
+
+  const titleEl = document.getElementById("hop-title");
+  const bodyEl = document.getElementById("hop-body");
+  const citeEl = document.getElementById("hop-cite");
+  const countEl = document.getElementById("hop-count");
+  const prevBtn = document.getElementById("hop-prev");
+  const nextBtn = document.getElementById("hop-next");
+  let at = 0;
+
+  function render() {
+    const hop = HOPS[at];
+    const visited = new Set(HOPS.slice(0, at).map((h) => h.lane));
+    laneEls.forEach((el, i) => {
+      el.classList.toggle("on", i === hop.lane);
+      el.classList.toggle("done", visited.has(i) && i !== hop.lane);
+    });
+    titleEl.textContent = (at + 1) + ". " + hop.title;
+    bodyEl.textContent = hop.body;
+    citeEl.textContent = hop.cite;
+    countEl.textContent = (at + 1) + " / " + HOPS.length;
+    prevBtn.disabled = at === 0;
+    nextBtn.disabled = at === HOPS.length - 1;
+  }
+
+  prevBtn.addEventListener("click", () => { if (at > 0) { at -= 1; render(); } });
+  nextBtn.addEventListener("click", () => { if (at < HOPS.length - 1) { at += 1; render(); } });
+  render();
+</script>
+</body>
+</html>
