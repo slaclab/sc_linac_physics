@@ -503,9 +503,10 @@ class CavityCharPhase(PhaseBase):
         and confirms them explicitly, so pushing an out-of-tolerance value is
         their call. The record keeps both flags, and passed is False.
 
-        CHECK: Cavity also names SAVE_QLOADED.PROC and SAVE_CAV_SCALE.PROC,
-        and nothing processes them. Does pushing need a save after it to
-        persist, or is the push enough?
+        No SAVE_QLOADED.PROC / SAVE_CAV_SCALE.PROC afterwards, and none is
+        needed. Push writes the value to the register the hardware uses. Save
+        only keeps a copy for a human, and the hardware does not read it
+        (Lisa Zacarias, #285, 2026-10-02).
         """
         if self.context.dry_run:
             return PhaseStepResult(
