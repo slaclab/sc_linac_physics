@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.38.0 (2026-10-03)
+
+### Continuous Integration
+
+- Comment a live preview link on PRs that change an explainer
+  ([#319](https://github.com/slaclab/sc_linac_physics/pull/319),
+  [`18bea4f`](https://github.com/slaclab/sc_linac_physics/commit/18bea4ff1089aaadd24f698f841a3b20b27e1367))
+
+- Stop trusting the fork's artifact in the explainer preview comment
+  ([#319](https://github.com/slaclab/sc_linac_physics/pull/319),
+  [`18bea4f`](https://github.com/slaclab/sc_linac_physics/commit/18bea4ff1089aaadd24f698f841a3b20b27e1367))
+
+### Features
+
+- **sim**: Randomize characterization outcome and show sim INFO logs
+  ([#321](https://github.com/slaclab/sc_linac_physics/pull/321),
+  [`0a7c8a7`](https://github.com/slaclab/sc_linac_physics/commit/0a7c8a7923af5f1b1513a37e2814753a18ae7718))
+
+
 ## v9.37.1 (2026-10-02)
 
 ### Bug Fixes
