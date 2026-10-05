@@ -2,6 +2,343 @@
 
 <!-- version list -->
 
+## v9.39.0 (2026-10-05)
+
+### Bug Fixes
+
+- **field-emission**: Caught and omitted corrupted date from h5
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Forgot to undo debug lines
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Guarding against empty measurement if using extended selection
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Moved cavity attribute to appopriate level
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+### Chores
+
+- **field-emission**: Added new constant
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Added space for linting (killing multi-line comments seems to have worked)
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Attempt to clean up
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Attempt to clean up part II
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Attempt to clean up part IV
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Attempt to clean up part V?
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Attempt to fix linting
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Attempt to shorten project length
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Attempt to shorten script
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Cleaning up comments that i maybe shouldn't have written idk
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Describing new method in comment
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Discarding unused variable
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Fix linting error
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Fix so medadata can match to harmonic linearizers
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Fixing comment to match app -_-
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Guarding against reading empty cryomodule data
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Locking canvas minimum size
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Readded overwritten logic
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Remove unused constant
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Removing .csv file as is no longer necessary
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Removing antiquated scripts
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Removing comments
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Renamed file as csv is no longer used
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Renaming constant for specificity
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Reordering toggle button title to match plot x-y orientation
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Replaced variable with constant name
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Skip fitting when less than two samples are available instead of if any are
+  available ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Splitting display into read and write versions; adding readme
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating docstrings
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating error as tuple for exception
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating if not cavity scenario
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating import statements
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating import statements in gui scripts
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+### Code Style
+
+- **field-emission**: Breaking out constants
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Moving static method out of display class
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Moving static plot methods out of gui script and into plotting script
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+### Documentation
+
+- **field-emission**: Added note on launcher entry point
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Adding entry point to readme
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating readme.md
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+### Features
+
+- **field-emission**: Adding updater script to coordinate addition of future cryomodules
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Button and dialogues for cryomodule data addition (sandbox becomes production)
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Gui to display field emission data for characterization purposes
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Gui to display field emission data for characte…
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Message box for incorrect entries
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Workshopping ability to update gui -> less scripts, will refactor. she's
+  getting big ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+### Refactoring
+
+- **field-emission**: Added to field emission to cli launchers maybe
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Change file handling in conversion script; made file_handling method more
+  reusable ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Claude fix need more love
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Completed method comments; modified file handling for portability
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Created file handling method to modularize across scripts
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Guarding in case of empty measurement set
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Implementing claude proposed index fix
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Inverting method logic and input/output
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Minimizing accidental global variable
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Modularized build_amplitude_pvs method across scripts
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Moving plot configuration into its own method
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Multi-date plot logic added
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Refactored gui into methods to make room for multi-date selection option
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Replace h5 conversion script with more portable version, removed old script
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Swapped zipped cryomodule CMAP for DICT
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating import statements
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating main gui script
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating to handle datasets that don't have columns named numerically. also
+  using masked values because whatever I did before was not that lol
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating to use filtered radiation columns
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Using constants ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Using constants added h5 group paths to constants
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Using constants and eliminated dependency on csv
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Using constants, edited variable names in constants
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+### Testing
+
+- **field-emission**: ACTUALLY adding test for measurements.py because that's not what happened in
+  the last commit ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Adding test folder
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Adding tests for measurements.py. this might be physical pain
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Adding tests for plot_me.py
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Rearranging tests to match new method placement
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Revamping tests with claude additions because it's better at this (and more
+  comprehensive) than I am ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field-emission**: Updating radio button check
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+- **field_emission**: Had Claude update unit tests due to much refactoring
+  ([#278](https://github.com/slaclab/sc_linac_physics/pull/278),
+  [`0a41739`](https://github.com/slaclab/sc_linac_physics/commit/0a4173909fd5b4f8069ac09d22b04431a7c78fa7))
+
+
 ## v9.38.0 (2026-10-03)
 
 ### Continuous Integration
