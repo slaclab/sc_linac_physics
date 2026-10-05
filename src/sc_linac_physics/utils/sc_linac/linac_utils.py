@@ -120,45 +120,35 @@ HL_SSA_SHARED_PVS = [
     "NRP_PRMT",
     "FaultSummary.SEVR",
     "480VACStat",
+    "Type",
 ]
 
 HL_SSA_PS_SETPOINT = 2500
 
-# Rated output power of the SSA driving each cavity, in kW. No PV reports
-# this. The mapping is the current installation as Sebastian Aderhold gave it
-# on #285 (2026-10-02): L0B-L2B and L3B up to CM34 cavity 5 are 3.8 kW,
-# CM34 cavities 6-8 and CM35 cavity 1 are 4.6 kW, CM35 cavities 2-8 and all of
-# L4B are 7 kW. Swapping an SSA makes this table stale, and nothing will flag
-# it. Update it here.
-# CHECK: what are the HL (H1, H2) SSAs rated at?
-SSA_RATED_POWER_3_8_KW = 3.8
-SSA_RATED_POWER_4_6_KW = 4.6
-SSA_RATED_POWER_7_KW = 7.0
-_SSA_RATED_POWER_BY_CM_KW = {
-    **{cm: SSA_RATED_POWER_3_8_KW for cm in L0B + L1B + L2B + L3B},
-    **{cm: SSA_RATED_POWER_7_KW for cm in L4B},
-}
-_SSA_RATED_POWER_BY_CAVITY_KW = {
-    ("34", 6): SSA_RATED_POWER_4_6_KW,
-    ("34", 7): SSA_RATED_POWER_4_6_KW,
-    ("34", 8): SSA_RATED_POWER_4_6_KW,
-    ("35", 1): SSA_RATED_POWER_4_6_KW,
-    **{("35", n): SSA_RATED_POWER_7_KW for n in range(2, 9)},
+# SSA:Type is an enum naming the SSA model. Its labels only state the power
+# for states 0 and 1, so the rating comes from this map, keyed on the enum
+# index. Ratings are from Mike Dunning and Andy Benwell (email, 2026-10-05).
+# Read across the whole machine on 2026-10-05, the PV agreed with the per-CM
+# table Sebastian Aderhold gave on #285: 191 x state 0, 4 x state 1,
+# 269 x state 2, 16 x state 3 (HL, 8 read through HL_SSA_MAP).
+# States 4 (CA186, GUNB) and 5 (CA199, MSU) do not drive linac cavities.
+# CHECK: HL_SSA_MAP shares PS and on/off between cavity pairs, but CALPWR and
+# DRV_MAX are per cavity. Is 1 kW the rating per output (per cavity), or the
+# total shared by the pair?
+SSA_TYPE_RATED_POWER_KW: dict[int, float] = {
+    0: 7.0,  # RK CA1300 7kW, LCLS-II-HE
+    1: 4.6,  # RK CA1300 4.6kW, HE prototypes
+    2: 3.8,  # RK CA1300, standard LCLS-II (label gives no power)
+    3: 1.0,  # RK CA3900, 3.9 GHz HL
 }
 
 
-def ssa_rated_power_kw(
-    cryomodule_name: str, cavity_number: int
-) -> float | None:
-    """Rated power in kW of the SSA driving this cavity, or None if unknown.
+def ssa_rated_power_kw(ssa_type: int) -> float | None:
+    """Rated power in kW for an SSA:Type enum index, or None if unknown.
 
-    None for the HL cryomodules (not in the table yet) and for any name the
-    table does not cover. Callers must handle None rather than guess.
+    Callers must handle None rather than guess a drive level.
     """
-    return _SSA_RATED_POWER_BY_CAVITY_KW.get(
-        (cryomodule_name, cavity_number),
-        _SSA_RATED_POWER_BY_CM_KW.get(cryomodule_name),
-    )
+    return SSA_TYPE_RATED_POWER_KW.get(ssa_type)
 
 
 LOADED_Q_LOWER_LIMIT = int(2.5e7)

@@ -333,58 +333,30 @@ def test_wait_while_resetting(ssa):
 
 
 class TestRatedPower:
-    """The SSA rating table, checked against the whole machine.
-
-    Counts come from the mapping in linac_utils: 58 non-HL cryomodules of 8
-    cavities each, split 269 / 4 / 191 across 3.8 / 4.6 / 7 kW.
-    """
+    """SSA.rated_power_kw reads SSA:Type and maps the enum index to kW."""
 
     @staticmethod
     def _ssa(cm_name, number):
-        # The module-level MACHINE, not a fresh Machine(): rated_power_kw only
-        # reads names, and a Machine() per call rebuilds every cavity.
+        # The module-level MACHINE, not a fresh Machine(): a Machine() per
+        # call rebuilds every cavity.
         from sc_linac_physics.utils.sc_linac.linac import MACHINE
 
         return MACHINE.cryomodules[cm_name].cavities[number].ssa
 
-    def test_every_cavity_is_counted_once(self):
-        from collections import Counter
+    def test_type_pv_name(self):
+        assert self._ssa("35", 2).type_pv == "ACCL:L3B:3520:SSA:Type"
 
-        from sc_linac_physics.utils.sc_linac.linac import MACHINE
-
-        counts = Counter(
-            cavity.ssa.rated_power_kw
-            for cm in MACHINE.cryomodules.values()
-            for cavity in cm.cavities.values()
+    @pytest.mark.parametrize("number,shared", [(1, 1), (5, 1), (8, 4)])
+    def test_hl_type_pv_is_shared(self, number, shared):
+        # SSA:Type only exists on HL cavities 1-4 (checked 2026-10-05)
+        assert (
+            self._ssa("H1", number).type_pv == f"ACCL:L1B:H1{shared}0:SSA:Type"
         )
-        assert counts == {3.8: 269, 4.6: 4, 7.0: 191, None: 16}
 
     @pytest.mark.parametrize(
-        "cm_name,number,expected",
-        [
-            ("01", 1, 3.8),
-            ("15", 8, 3.8),
-            ("33", 8, 3.8),
-            ("34", 5, 3.8),
-            ("34", 6, 4.6),
-            ("34", 8, 4.6),
-            ("35", 1, 4.6),
-            ("35", 2, 7.0),
-            ("35", 8, 7.0),
-            ("37", 1, 7.0),
-            ("59", 8, 7.0),
-        ],
+        "ssa_type,expected",
+        [(0, 7.0), (1, 4.6), (2, 3.8), (3, 1.0), (4, None), (5, None)],
     )
-    def test_boundaries(self, cm_name, number, expected):
-        assert self._ssa(cm_name, number).rated_power_kw == expected
-
-    @pytest.mark.parametrize("cm_name", ["H1", "H2"])
-    def test_hl_is_unknown_rather_than_guessed(self, cm_name):
-        assert self._ssa(cm_name, 1).rated_power_kw is None
-
-    def test_unknown_cryomodule_is_none(self):
-        from sc_linac_physics.utils.sc_linac.linac_utils import (
-            ssa_rated_power_kw,
-        )
-
-        assert ssa_rated_power_kw("99", 1) is None
+    def test_rated_power_from_type(self, ssa, ssa_type, expected):
+        ssa._type_pv_obj = make_mock_pv(get_val=ssa_type)
+        assert ssa.rated_power_kw == expected
