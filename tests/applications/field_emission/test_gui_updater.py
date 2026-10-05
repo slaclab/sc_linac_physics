@@ -34,6 +34,28 @@ def test_sync_fetches_only_missing_runs():
     convert.assert_called_once_with({"k": "row"})
 
 
+def test_sync_writes_each_run_before_fetching_the_next():
+    """an interrupted sync keeps the runs it finished"""
+    worker = UpdateWorker("sync", "runs.csv")
+    calls = []
+    with (
+        patch(f"{MOD}.read_from_csv", return_value=iter([RUN_A, RUN_B])),
+        patch(f"{MOD}.find_missing_runs", return_value=[RUN_A, RUN_B]),
+        patch(
+            f"{MOD}.generate_amp_vs_rad_csvs",
+            side_effect=lambda cm, *a: calls.append(("fetch", cm)),
+        ),
+        patch(f"{MOD}.parse_csv", return_value={}),
+        patch(
+            f"{MOD}.convert_to_h5",
+            side_effect=lambda lookup: calls.append(("write",)),
+        ),
+    ):
+        worker.run()
+
+    assert calls == [("fetch", "01"), ("write",), ("fetch", "02"), ("write",)]
+
+
 def test_sync_with_nothing_missing_does_not_touch_h5():
     _, generate, _, convert = _run_sync([])
 

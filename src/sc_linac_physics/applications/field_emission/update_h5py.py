@@ -90,6 +90,7 @@ def convert_to_h5(metadata_lookup):
     input_csvs = glob.glob(os.path.join(CSV_OUTPUT_DIR, "*.csv"))
 
     H5_PATH.parent.mkdir(parents=True, exist_ok=True)
+    converted = []
     with h5py.File(H5_PATH, "a") as h5f:
         for csv_path in input_csvs:
             csv_name = os.path.basename(csv_path)
@@ -129,6 +130,12 @@ def convert_to_h5(metadata_lookup):
             _write_dataset_with_attributes(
                 cav_group, df, values, csv_name, readout_type, cav
             )
+            converted.append(csv_path)
+
+    # CSVs are only a hand-off from the archiver fetch. Delete them once the
+    # file has closed cleanly; a full cache leaves about 3 GB of them otherwise.
+    for csv_path in converted:
+        os.remove(csv_path)
 
 
 def _format_metadata_lookup_key(cm_str, date, time):
@@ -168,13 +175,11 @@ def _set_metadata_attributes(group, row):
 
 def _write_dataset_with_attributes(group, df, values, csv_name, readout, cav):
     """add data and assign attributes at the dataset level"""
-    dset = group.require_dataset(
-        f"{readout}",
-        shape=values.shape,
-        dtype=values.dtype,
-        compression="gzip",
-    )
-    dset[...] = values
+    # Replace rather than reuse: a re-fetched run can come back with a
+    # different row count, and require_dataset raises on a shape mismatch.
+    if readout in group:
+        del group[readout]
+    dset = group.create_dataset(readout, data=values, compression="gzip")
     no_time_df = df.drop(columns="timestamps")
 
     # define attributes at the readout level

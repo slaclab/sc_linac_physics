@@ -176,12 +176,29 @@ class UpdateWorker(QObject):
 
     def sync_update(self, run_list):
         """fetch every run in the run list that is missing from the h5 cache"""
-        missing = find_missing_runs(list(read_from_csv(run_list)))
-        for i, (cryo, date_s, date_e, rad, _) in enumerate(missing, 1):
-            self.progress.emit(
-                f"Fetching run {i}/{len(missing)}: CM{cryo} {date_s}"
-            )
-            generate_amp_vs_rad_csvs(cryo, date_s, date_e, rad)
-        if missing:
-            self.progress.emit("Updating hdf5...")
-            convert_to_h5(parse_csv(run_list))
+        sync_cache(run_list, self.progress.emit)
+
+
+def sync_cache(run_list, progress=print):
+    """fetch each run missing from the h5 cache and write it in
+
+    Each run is written as soon as it is fetched, so an interrupted sync keeps
+    the runs it finished. A full build from an empty cache takes hours.
+    """
+    lookup = parse_csv(run_list)
+    missing = find_missing_runs(list(read_from_csv(run_list)))
+    for i, (cryo, date_s, date_e, rad, _) in enumerate(missing, 1):
+        progress(f"Fetching run {i}/{len(missing)}: CM{cryo} {date_s}")
+        generate_amp_vs_rad_csvs(cryo, date_s, date_e, rad)
+        convert_to_h5(lookup)
+    progress(f"Cache up to date ({len(missing)} run(s) fetched)")
+
+
+if __name__ == "__main__":
+    # Build or top up the shared cache without opening the display:
+    #   python -m sc_linac_physics.applications.field_emission.gui_updater
+    from sc_linac_physics.applications.field_emission.constants import (
+        RUN_LIST_PATH,
+    )
+
+    sync_cache(RUN_LIST_PATH)
