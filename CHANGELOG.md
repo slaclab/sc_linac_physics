@@ -2,6 +2,196 @@
 
 <!-- version list -->
 
+## v9.38.0 (2026-10-03)
+
+### Continuous Integration
+
+- Comment a live preview link on PRs that change an explainer
+  ([#319](https://github.com/slaclab/sc_linac_physics/pull/319),
+  [`18bea4f`](https://github.com/slaclab/sc_linac_physics/commit/18bea4ff1089aaadd24f698f841a3b20b27e1367))
+
+- Stop trusting the fork's artifact in the explainer preview comment
+  ([#319](https://github.com/slaclab/sc_linac_physics/pull/319),
+  [`18bea4f`](https://github.com/slaclab/sc_linac_physics/commit/18bea4ff1089aaadd24f698f841a3b20b27e1367))
+
+### Features
+
+- **sim**: Randomize characterization outcome and show sim INFO logs
+  ([#321](https://github.com/slaclab/sc_linac_physics/pull/321),
+  [`0a7c8a7`](https://github.com/slaclab/sc_linac_physics/commit/0a7c8a7923af5f1b1513a37e2814753a18ae7718))
+
+
+## v9.37.1 (2026-10-02)
+
+### Bug Fixes
+
+- **docs**: Re-point auto-tune explainer citations after #284/#294/#311
+  ([#316](https://github.com/slaclab/sc_linac_physics/pull/316),
+  [`9d4e013`](https://github.com/slaclab/sc_linac_physics/commit/9d4e01374a1c99b9acb669ef8282c3583db5ac70))
+
+### Continuous Integration
+
+- Run CI on merge queue groups ([#315](https://github.com/slaclab/sc_linac_physics/pull/315),
+  [`b037f08`](https://github.com/slaclab/sc_linac_physics/commit/b037f081fb2ef284e66b7c45d8bbff05be1b5e31))
+
+### Documentation
+
+- Cite source by symbol and quoted line, not line number
+  ([#316](https://github.com/slaclab/sc_linac_physics/pull/316),
+  [`9d4e013`](https://github.com/slaclab/sc_linac_physics/commit/9d4e01374a1c99b9acb669ef8282c3583db5ac70))
+
+
+## v9.37.0 (2026-10-02)
+
+### Bug Fixes
+
+- **docs**: Re-point auto-tune explainer citations after #284/#294/#311
+  ([#314](https://github.com/slaclab/sc_linac_physics/pull/314),
+  [`a86d623`](https://github.com/slaclab/sc_linac_physics/commit/a86d6236b0e7bff289387277627f12f4a4e66f6e))
+
+### Documentation
+
+- **rf-commissioning**: Flag hardware claims the repo does not establish
+  ([#294](https://github.com/slaclab/sc_linac_physics/pull/294),
+  [`a889fb7`](https://github.com/slaclab/sc_linac_physics/commit/a889fb76fd0b3a614b650e640d08ce23ffac9b84))
+
+- **tuning**: Add an interactive auto-tune explainer
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Add the failure-mode table with fault injection
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Add the interactive convergence simulator
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Add the tune_config state diagram
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Address review findings on the tol factor port
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Correct the loop port's oracle coverage and labelling
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Derive the section 2 prose figures at runtime
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Document chirp vs SELA and the mid-tune chirp widening
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Document the commissioning stages
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Explain the SCALE PV as the source of Hz per microstep
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Fix inverted stepper_tol_factor docstring, drop dead breakpoint
+  ([#311](https://github.com/slaclab/sc_linac_physics/pull/311),
+  [`de654c2`](https://github.com/slaclab/sc_linac_physics/commit/de654c2cf5e4d630bc08cc1426a56f2a4f1769c4))
+
+- **tuning**: Link the auto-tune explainer from the docs index
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Move the abort Inject button to the row it actually demonstrates
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Note that the explainer must be opened locally
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Port stepper_tol_factor to the explainer with a self-check
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Port the _auto_tune loop with hand-traced convergence checks
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Resync the explainer with main after #270, #286 and #287
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Scaffold the auto-tune explainer page
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+- **tuning**: Widen the detune slider and make the zero-step guard drivable
+  ([#288](https://github.com/slaclab/sc_linac_physics/pull/288),
+  [`cc9ba36`](https://github.com/slaclab/sc_linac_physics/commit/cc9ba36125b80ebe433599461d5ed25e67f7b215))
+
+### Features
+
+- **sc-linac**: Give LCLS-II-HE cavities their own loaded-Q window
+  ([#284](https://github.com/slaclab/sc_linac_physics/pull/284),
+  [`d8b1d39`](https://github.com/slaclab/sc_linac_physics/commit/d8b1d39a8ee46888abebf031758afd318e9714e1))
+
+
+## v9.36.4 (2026-10-02)
+
+### Bug Fixes
+
+- **rf-commissioning**: Export the real FrequencyTuningDisplay
+  ([#297](https://github.com/slaclab/sc_linac_physics/pull/297),
+  [`bcdf00a`](https://github.com/slaclab/sc_linac_physics/commit/bcdf00a45f81835d459c8d81087aed57028436d9))
+
+
+## v9.36.3 (2026-10-01)
+
+### Documentation
+
+- **claude-md**: Trim evidence paragraphs to cut per-turn context
+  ([#310](https://github.com/slaclab/sc_linac_physics/pull/310),
+  [`df6305d`](https://github.com/slaclab/sc_linac_physics/commit/df6305d0013d0bb96405d7cdd24f0f2aa143b457))
+
+### Refactoring
+
+- **sc-linac**: Share the characterization wait between both callers
+  ([#306](https://github.com/slaclab/sc_linac_physics/pull/306),
+  [`374d41e`](https://github.com/slaclab/sc_linac_physics/commit/374d41ed555b3540948eb030cfeacc5dfa094ac6))
+
+### Testing
+
+- **displays**: Register cryo signals display for teardown
+  ([#309](https://github.com/slaclab/sc_linac_physics/pull/309),
+  [`43f7b23`](https://github.com/slaclab/sc_linac_physics/commit/43f7b238c0afb97f22e14e365e99b00f4737d3de))
+
+- **docs**: Check that file:line citations still point where they claim
+  ([#305](https://github.com/slaclab/sc_linac_physics/pull/305),
+  [`60e1fc9`](https://github.com/slaclab/sc_linac_physics/commit/60e1fc976ada17ebacf51df145ef4fadefa9616c))
+
+- **docs**: Record the citation-window blind spot
+  ([#312](https://github.com/slaclab/sc_linac_physics/pull/312),
+  [`2e8114e`](https://github.com/slaclab/sc_linac_physics/commit/2e8114e4600e33188fa7831557507c58c3ee1c50))
+
+- **docs**: Require a path prefix on every ambiguous citation
+  ([#305](https://github.com/slaclab/sc_linac_physics/pull/305),
+  [`60e1fc9`](https://github.com/slaclab/sc_linac_physics/commit/60e1fc976ada17ebacf51df145ef4fadefa9616c))
+
+- **plot**: Guard against leaked QThreads, skipping pydm's RulesEngine
+  ([#308](https://github.com/slaclab/sc_linac_physics/pull/308),
+  [`6db7807`](https://github.com/slaclab/sc_linac_physics/commit/6db7807a4f9efda6a7201bfd932dd827fc0afad2))
+
+- **plot**: Register display widgets for teardown to stop xdist worker crashes
+  ([#308](https://github.com/slaclab/sc_linac_physics/pull/308),
+  [`6db7807`](https://github.com/slaclab/sc_linac_physics/commit/6db7807a4f9efda6a7201bfd932dd827fc0afad2))
+
+- **q0**: Stop a real CalibrationWorker thread from crashing xdist workers
+  ([#307](https://github.com/slaclab/sc_linac_physics/pull/307),
+  [`7a10aa9`](https://github.com/slaclab/sc_linac_physics/commit/7a10aa95a2bdf1657b216fe59efc63f8f1e2d7b5))
+
+
 ## v9.36.2 (2026-09-21)
 
 ### Bug Fixes

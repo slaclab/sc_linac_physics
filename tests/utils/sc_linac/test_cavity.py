@@ -84,6 +84,10 @@ def make_rack(is_hl=False):
     rack.cryomodule.name = choice(ALL_CRYOMODULES)
     rack.cryomodule.is_harmonic_linearizer = is_hl
     rack.cryomodule.linac.name = f"L{randint(0, 3)}B"
+    # Set explicitly: the cryomodule is a Mock, so any unset property returns a
+    # truthy Mock and would select the HE loaded-Q window. The linac name above
+    # is always L0B-L3B, so this fixture is never a high-energy cavity.
+    rack.cryomodule.is_high_energy = False
     return rack
 
 
@@ -1036,3 +1040,174 @@ def test_walk_amp(cavity):
 def test_is_offline(cavity):
     cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_OFFLINE_VALUE)
     assert cavity.is_offline
+
+
+class TestLoadedQLimitsByCavityClass:
+    """Three cavity classes, three loaded-Q windows.
+
+    HE (all of L4B) uses 3e7-7e7 where the original LCLS-II cavities use
+    2.5e7-5.1e7. Both limits are higher, so the window shifts up as well as
+    widening, and it is tighter at the low end — a different default value
+    for loaded Q, not a looser standard. Using the standard limits there
+    would flag correctly-performing HE cavities.
+    """
+
+    @staticmethod
+    def _cavity(cm_name, number=1):
+        # The module-level MACHINE, not a fresh Machine(): these assertions
+        # only read limits set in Cavity.__init__ from linac_utils
+        # constants, and a Machine() per call rebuilds all 60 cryomodules
+        # and 480 cavities. Same reuse as test_edm_macro_string.
+        return MACHINE.cryomodules[cm_name].cavities[number]
+
+    def test_high_energy_cavities_use_the_he_window(self):
+        from sc_linac_physics.utils.sc_linac import linac_utils
+
+        for cm_name in ("37", "48", "59"):
+            cavity = self._cavity(cm_name)
+            assert (
+                cavity.loaded_q_lower_limit
+                == linac_utils.LOADED_Q_LOWER_LIMIT_HE
+            )
+            assert (
+                cavity.loaded_q_upper_limit
+                == linac_utils.LOADED_Q_UPPER_LIMIT_HE
+            )
+
+    def test_standard_cavities_are_unchanged(self):
+        from sc_linac_physics.utils.sc_linac import linac_utils
+
+        cavity = self._cavity("01")
+        assert cavity.loaded_q_lower_limit == linac_utils.LOADED_Q_LOWER_LIMIT
+        assert cavity.loaded_q_upper_limit == linac_utils.LOADED_Q_UPPER_LIMIT
+
+    def test_harmonic_linearizer_cavities_are_unchanged(self):
+        from sc_linac_physics.utils.sc_linac import linac_utils
+
+        cavity = self._cavity("H1")
+        assert (
+            cavity.loaded_q_lower_limit == linac_utils.LOADED_Q_LOWER_LIMIT_HL
+        )
+        assert (
+            cavity.loaded_q_upper_limit == linac_utils.LOADED_Q_UPPER_LIMIT_HL
+        )
+
+    def test_he_cavities_keep_standard_scale_factor_limits(self):
+        """No separate HE scale-factor limits were specified."""
+        from sc_linac_physics.utils.sc_linac import linac_utils
+
+        cavity = self._cavity("37")
+        assert (
+            cavity.scale_factor_lower_limit
+            == linac_utils.CAVITY_SCALE_LOWER_LIMIT
+        )
+        assert (
+            cavity.scale_factor_upper_limit
+            == linac_utils.CAVITY_SCALE_UPPER_LIMIT
+        )
+
+    def test_he_tolerance_check_accepts_a_q_the_standard_window_rejects(self):
+        """The behavioural consequence: 6e7 passes on L4B, fails on L0B."""
+        from unittest.mock import PropertyMock, patch
+
+        he = self._cavity("37")
+        standard = self._cavity("01")
+
+        for cavity, expected in ((he, True), (standard, False)):
+            with patch.object(
+                type(cavity),
+                "measured_loaded_q",
+                new_callable=PropertyMock,
+                return_value=6e7,
+            ):
+                assert cavity.measured_loaded_q_in_tolerance is expected
+
+
+# ---------------------------------------------------------------------------
+# wait_for_characterization — shared by Cavity.characterize() and
+# CavityCharPhase, so the polling and staleness semantics live in one place.
+# ---------------------------------------------------------------------------
+
+
+def test_wait_returns_once_the_status_settles(cavity):
+    cavity._characterization_status_pv_obj = make_mock_pv(
+        get_val=CALIBRATION_COMPLETE_VALUE
+    )
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    cavity.wait_for_characterization()
+
+
+def test_wait_raises_when_the_characterization_crashed(cavity):
+    cavity._characterization_status_pv_obj = make_mock_pv(
+        get_val=CHARACTERIZATION_CRASHED_VALUE
+    )
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    with pytest.raises(CavityCharacterizationError, match="crashed"):
+        cavity.wait_for_characterization()
+
+
+def test_wait_rejects_a_complete_that_predates_this_run(cavity):
+    """A COMPLETE older than the window is a leftover, not a measurement.
+
+    If the IOC has not gone busy yet, the status still reads COMPLETE from
+    the previous run. Without this the caller reads stale QLOADED_NEW and
+    presents it as a fresh result.
+    """
+    cavity._characterization_status_pv_obj = make_mock_pv(
+        get_val=CALIBRATION_COMPLETE_VALUE
+    )
+    stale = (datetime.now() - timedelta(seconds=400)).strftime(
+        "%Y-%m-%d-%H:%M:%S"
+    )
+    cavity._char_timestamp_pv_obj = make_mock_pv(get_val=stale)
+    with pytest.raises(CavityCharacterizationError, match="5 min|stale|old"):
+        cavity.wait_for_characterization()
+
+
+def test_wait_times_out_rather_than_polling_forever(cavity):
+    cavity._characterization_status_pv_obj = make_mock_pv(
+        get_val=CHARACTERIZATION_RUNNING_VALUE
+    )
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    with pytest.raises(CavityCharacterizationError, match="did not finish"):
+        cavity.wait_for_characterization(timeout=0.2, poll_interval=0.05)
+
+
+def test_wait_without_a_timeout_polls_until_it_settles(cavity):
+    """Default timeout=None keeps Cavity.characterize()'s unbounded wait."""
+    seq = [CHARACTERIZATION_RUNNING_VALUE] * 2 + [CALIBRATION_COMPLETE_VALUE]
+    pv = make_mock_pv()
+    pv.get = MagicMock(
+        side_effect=lambda *a, **k: (
+            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
+        )
+    )
+    cavity._characterization_status_pv_obj = pv
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    cavity.wait_for_characterization(poll_interval=0.01)
+    assert seq == []
+
+
+def test_wait_checks_abort_while_polling(cavity):
+    seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
+    pv = make_mock_pv()
+    pv.get = MagicMock(
+        side_effect=lambda *a, **k: (
+            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
+        )
+    )
+    cavity._characterization_status_pv_obj = pv
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    cavity.check_abort = MagicMock()
+    cavity.wait_for_characterization(poll_interval=0.01)
+    cavity.check_abort.assert_called()

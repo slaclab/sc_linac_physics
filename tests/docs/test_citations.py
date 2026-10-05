@@ -1,37 +1,35 @@
-"""Check that `file.py:NNN` citations in prose still point where they claim.
+"""Check that source citations in prose still point at what they claim.
 
-Docs and comments in this repo cite the source by file and line — `stepper.py:96`,
-`linac_utils.py:224-236`. CLAUDE.md asks for those citations because a claim a
-reader can check against the source is worth more than one they have to take on
-faith. But a line number is a claim about the code that rots the moment the code
-moves, and nothing notices: the prose still reads fine, the citation still looks
-authoritative, and it now points at something else.
+Docs and comments in this repo cite the source so a reader can check a claim
+instead of taking it on faith. A citation names a definition, optionally with a
+quoted snippet from inside it:
 
-Three failure modes, all of them silent:
+    <span class="cite">piezo.py::Piezo.feedback_setpoint_pv</span>
+    <span class="cite">cavity.py::Cavity._auto_tune “if est_steps == 0:”</span>
+    <span class="cite">linac_utils.py “very rough values”</span>
 
-1. The cited file is renamed or deleted.
-2. The file shrinks past the cited line.
-3. The line still exists but no longer holds what was cited. Only checkable when
-   the citation names a symbol as well as a location, which is the convention
-   worth keeping for exactly this reason:
+`file.py::Name` names a module-level function, class or assignment.
+`Class.name` also covers methods, class attributes and `self.name = ...`
+assignments in any method. The snippet must appear, whitespace-normalized,
+inside that definition's source, or anywhere in the file when no name is given.
 
-       <span class="cite">INTEG_SP, piezo.py:41</span>
+Why not line numbers. This file used to check `file.py:NNN`, and #288 cited
+about 80 places that way. On 2026-10-02, #284, #294 and #311 each passed CI and then
+merged after #288. They moved lines it cited and broke main's Release run. The
+six-line symbol window also hid drift that had already happened: #303's
+five-line shift, and a `TUNE_CONFIG` citation 60 lines away from the
+constants. A name does not move when lines are added above it. A snippet fails
+only when the cited code itself changes, which is when the prose needs
+re-reading anyway. The cost: a citation without a snippet points at a whole
+function rather than a line. Add a snippet when the line matters.
 
-   That form is verifiable. A bare `piezo.py:41` is not.
+Line-number citations are now rejected outright, so they cannot creep back.
 
-A fourth is not rot but ambiguity: this repo has 12 colliding basenames, so
-`frequency_tuning.py:66` could mean either of two files. The check asks for a
-path-qualified citation rather than picking one.
-
-The scans below pass trivially while no citations exist in a scanned file. The
-tests at the bottom run each check against fixtures so the logic is proven
-independently of whether the tree currently has anything to catch.
-
-Not checked: continuation citations like `over_temp_ack_c, :807`, which take
-their file from the preceding citation in the same span. Cite the file
-explicitly and this will check it.
+A path may be partial. This repo has colliding basenames, so the citation needs
+enough path to pick exactly one file (`phases/frequency_tuning.py`).
 """
 
+import ast
 import re
 from pathlib import Path
 
@@ -47,23 +45,17 @@ SCAN_GLOBS = ("src/**/*.py", "docs/**/*.md", "docs/**/*.html")
 # Where cited files may live.
 SOURCE_GLOBS = ("src/**/*.py",)
 
-# `foo.py:12`, `a/b/foo.py:12`, `foo.py:12-34`. The path may be partial.
+_PATH = r"((?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_]+\.py)"
+
+# `foo.py::Name`, `a/foo.py::Class.attr`, either one followed by a quoted
+# snippet, or `foo.py “snippet”` on its own. A bare `foo.py` is a mention, not
+# a citation, and is not matched.
 CITATION = re.compile(
-    r"\b((?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_]+\.py):(\d+)(?:-(\d+))?\b"
+    r"\b" + _PATH + r"(?:::([A-Za-z_][A-Za-z0-9_.]*))?" r"(?:\s+“([^”]+)”)?"
 )
 
-# `SYMBOL, foo.py:12` — a symbol named alongside its location. Allows
-# `A/B` alternatives (`MODECTRL/MODESTAT`), a trailing `()`, and dotted
-# attributes (`Cavity._auto_tune`).
-SYMBOL_CITATION = re.compile(
-    r"([A-Za-z_][A-Za-z0-9_.]*(?:/[A-Za-z_][A-Za-z0-9_.]*)*(?:\(\))?)"
-    r"\s*,\s*"
-    r"((?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_]+\.py):(\d+)(?:-(\d+))?"
-)
-
-# How far from the cited line the named symbol may sit. A citation points at a
-# block, not always its first line, and the block's name is usually at the top.
-SYMBOL_WINDOW = 6
+# The retired form: `foo.py:12`, `foo.py:12-34`.
+LINE_CITATION = re.compile(r"\b" + _PATH + r":(\d+)(?:-(\d+))?\b")
 
 
 def _label(path):
@@ -90,6 +82,10 @@ def _source_files():
     )
 
 
+def _squash(text):
+    return " ".join(text.split())
+
+
 def resolve(cited_path, sources):
     """Every source file whose path ends with `cited_path`.
 
@@ -101,62 +97,96 @@ def resolve(cited_path, sources):
     return [p for p in sources if tuple(p.parts[-len(wanted) :]) == wanted]
 
 
-def symbol_near(path, start, end, symbol):
-    """Whether `symbol` appears within SYMBOL_WINDOW lines of the citation.
+def _add(found, name, node):
+    start = min(
+        [d.lineno for d in getattr(node, "decorator_list", [])] + [node.lineno]
+    )
+    found.setdefault(name, []).append((start, node.end_lineno))
 
-    `A/B` counts as found if either side is present — the form is used for PV
-    pairs, where citing both lines but naming both symbols reads better than
-    two separate citations.
+
+def _assign_targets(node):
+    if isinstance(node, ast.Assign):
+        return node.targets
+    if isinstance(node, ast.AnnAssign):
+        return [node.target]
+    return []
+
+
+def _add_self_attributes(found, func, cls):
+    """`self.x = ...` anywhere in `func` defines `cls.x`."""
+    for node in ast.walk(func):
+        for t in _assign_targets(node):
+            if (
+                isinstance(t, ast.Attribute)
+                and isinstance(t.value, ast.Name)
+                and t.value.id == "self"
+            ):
+                _add(found, f"{cls}.{t.attr}", node)
+
+
+def _walk(found, scope, prefix, cls):
+    for node in ast.iter_child_nodes(scope):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            _add(found, prefix + node.name, node)
+            if cls:
+                _add_self_attributes(found, node, cls)
+        elif isinstance(node, ast.ClassDef):
+            name = prefix + node.name
+            _add(found, name, node)
+            _walk(found, node, name + ".", name)
+        else:
+            for t in _assign_targets(node):
+                if isinstance(t, ast.Name):
+                    _add(found, prefix + t.id, node)
+
+
+def definitions(path):
+    """Map each citable name in `path` to the (start, end) lines defining it.
+
+    A name can map to several spans: a property and its setter, or a
+    `self.x` assigned in more than one method.
     """
-    lines = path.read_text(errors="replace").split("\n")
-    lo = max(1, start - SYMBOL_WINDOW)
-    hi = min(len(lines), (end or start) + SYMBOL_WINDOW)
-    window = "\n".join(lines[lo - 1 : hi])
-    names = [
-        part.replace("()", "").split(".")[-1]
-        for part in symbol.split("/")
-        if part
-    ]
-    return any(name and name in window for name in names)
+    found = {}
+    _walk(found, ast.parse(path.read_text(errors="replace")), "", None)
+    return found
 
 
 def collect(targets=None, sources=None):
-    """Every citation found, as (origin, cited_path, start, end, symbol)."""
+    """Every citation found, as dicts of origin, path, symbol and snippet."""
     targets = _scan_targets() if targets is None else targets
     sources = _source_files() if sources is None else sources
     found = []
     for target in targets:
         text = target.read_text(errors="replace")
-        symbols = {
-            (m.group(2), m.group(3), m.group(4)): m.group(1)
-            for m in SYMBOL_CITATION.finditer(text)
-        }
         for m in CITATION.finditer(text):
-            key = (m.group(1), m.group(2), m.group(3))
+            if not (m.group(2) or m.group(3)):
+                continue
             found.append(
                 {
                     "origin": _label(target),
                     "path": m.group(1),
-                    "start": int(m.group(2)),
-                    "end": int(m.group(3)) if m.group(3) else None,
-                    "symbol": symbols.get(key),
+                    "symbol": m.group(2),
+                    "snippet": _squash(m.group(3)) if m.group(3) else None,
                 }
             )
     return found, sources
 
 
 def _describe(c):
-    span = f"{c['start']}-{c['end']}" if c["end"] else str(c["start"])
-    return f"{c['origin']} cites {c['path']}:{span}"
+    out = f"{c['origin']} cites {c['path']}"
+    if c["symbol"]:
+        out += f"::{c['symbol']}"
+    if c["snippet"]:
+        out += f" “{c['snippet']}”"
+    return out
 
 
 def unambiguous(citations, sources):
     """Pair each citation that resolves to exactly one file with that file.
 
-    The bounds and symbol checks run only against these. A citation matching
+    The symbol and snippet checks run only against these. A citation matching
     several files belongs to the ambiguity check, and running the other checks
-    on it reports one root cause once per candidate, naming files the writer
-    never meant.
+    on it reports one root cause once per candidate.
     """
     pairs = []
     for c in citations:
@@ -164,6 +194,23 @@ def unambiguous(citations, sources):
         if len(matches) == 1:
             pairs.append((c, matches[0]))
     return pairs
+
+
+def check(citation, path):
+    """Why `citation` no longer holds against `path`, or None if it does."""
+    lines = path.read_text(errors="replace").split("\n")
+    if citation["symbol"]:
+        spans = definitions(path).get(citation["symbol"])
+        if not spans:
+            return f"{citation['symbol']!r} is not defined in {_label(path)}"
+    else:
+        spans = [(1, len(lines))]
+    if citation["snippet"]:
+        bodies = (_squash("\n".join(lines[a - 1 : b])) for a, b in spans)
+        if not any(citation["snippet"] in body for body in bodies):
+            where = citation["symbol"] or _label(path)
+            return f"the snippet is no longer in {where}"
+    return None
 
 
 def test_cited_files_exist():
@@ -175,34 +222,8 @@ def test_cited_files_exist():
     )
 
 
-def test_cited_lines_are_in_bounds():
-    """The cited line must exist in the file it names.
-
-    Ambiguous citations are skipped so one missing path prefix does not also
-    surface here as an out-of-bounds error against a file nobody meant.
-    """
-    citations, sources = collect()
-    bad = []
-    for c, path in unambiguous(citations, sources):
-        length = len(path.read_text(errors="replace").split("\n"))
-        hi = c["end"] or c["start"]
-        if hi > length:
-            bad.append(
-                f"  {_describe(c)} but {_label(path)} has {length} lines"
-            )
-    assert not bad, "citations past the end of the cited file:\n" + "\n".join(
-        bad
-    )
-
-
 def test_ambiguous_citations_are_path_qualified():
-    """A bare basename matching two source files does not identify one.
-
-    Enough path is required to pick one even when a single candidate is long
-    enough to hold the cited line. Resolving `frequency_tuning.py:743` by
-    noticing the other copy stops at 448 lines is not what a reader does, and
-    it breaks silently as soon as the short copy grows past the cited line.
-    """
+    """A bare basename matching two source files does not identify one."""
     citations, sources = collect()
     ambiguous = []
     for c in citations:
@@ -216,28 +237,29 @@ def test_ambiguous_citations_are_path_qualified():
     )
 
 
-def test_named_symbols_appear_near_their_citation():
-    """`SYMBOL, file.py:NNN` must have SYMBOL near line NNN.
-
-    This is the check that catches drift rather than deletion: the file still
-    exists, the line still exists, and it moved.
-    """
+def test_citations_still_hold():
+    """The named definition exists and still contains the quoted snippet."""
     citations, sources = collect()
-    drifted = []
+    broken = []
     for c, path in unambiguous(citations, sources):
-        if not c["symbol"]:
-            continue
-        length = len(path.read_text(errors="replace").split("\n"))
-        if (c["end"] or c["start"]) > length:
-            continue  # reported by the bounds test
-        if not symbol_near(path, c["start"], c["end"], c["symbol"]):
-            drifted.append(
-                f"  {_describe(c)} — {c['symbol']!r} is not within "
-                f"{SYMBOL_WINDOW} lines of there"
-            )
-    assert (
-        not drifted
-    ), "cited symbols not found near the line cited:\n" + "\n".join(drifted)
+        reason = check(c, path)
+        if reason:
+            broken.append(f"  {_describe(c)} — {reason}")
+    assert not broken, "citations that no longer hold:\n" + "\n".join(broken)
+
+
+def test_no_line_number_citations():
+    """`file.py:NNN` breaks whenever lines move. See the module docstring."""
+    found = []
+    for target in _scan_targets():
+        text = target.read_text(errors="replace")
+        for m in LINE_CITATION.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            found.append(f"  {_label(target)}:{line} — {m.group(0)}")
+    assert not found, (
+        "line-number citations; cite `file.py::Name` and quote the line "
+        "instead:\n" + "\n".join(found)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +269,30 @@ def test_named_symbols_appear_near_their_citation():
 # that the logic works. These can.
 # ---------------------------------------------------------------------------
 
+PIEZO_SOURCE = """\
+LIMIT = 70
+
+
+class Piezo:
+    mode: int = 0
+
+    def __init__(self):
+        self.setpoint_pv = "INTEG_SP"
+
+    @property
+    def voltage(self):
+        # read the drive voltage
+        return 25
+
+    @voltage.setter
+    def voltage(self, value):
+        self.written = value
+
+
+def helper():
+    return LIMIT
+"""
+
 
 @pytest.fixture
 def tree(tmp_path):
@@ -255,18 +301,10 @@ def tree(tmp_path):
     b = tmp_path / "src" / "pkg" / "ui"
     a.mkdir(parents=True)
     b.mkdir(parents=True)
-    long = a / "thing.py"
-    long.write_text("\n".join(f"line {i}" for i in range(1, 201)))
-    short = b / "thing.py"
-    short.write_text("\n".join(f"line {i}" for i in range(1, 21)))
-    other = a / "piezo.py"
-    other.write_text(
-        "\n".join(
-            ["import x", "", "class Piezo:", "    def enable_feedback(self):"]
-            + [f"        pass  # {i}" for i in range(5, 60)]
-        )
-    )
-    return [long, short, other]
+    (a / "thing.py").write_text("def run():\n    return 1\n")
+    (b / "thing.py").write_text("def run():\n    return 2\n")
+    (a / "piezo.py").write_text(PIEZO_SOURCE)
+    return sorted((tmp_path / "src").rglob("*.py"))
 
 
 def _cite(tmp_path, text):
@@ -275,75 +313,110 @@ def _cite(tmp_path, text):
     return [doc]
 
 
+def _one(tmp_path, tree, text):
+    citations, sources = collect(_cite(tmp_path, text), tree)
+    assert len(citations) == 1, citations
+    c = citations[0]
+    return c, resolve(c["path"], sources)
+
+
 def test_resolve_matches_on_path_suffix(tree):
     assert len(resolve("thing.py", tree)) == 2
     assert len(resolve("phases/thing.py", tree)) == 1
     assert resolve("nope.py", tree) == []
 
 
-def test_collect_pairs_symbol_with_its_location(tmp_path, tree):
-    docs = _cite(tmp_path, "see enable_feedback(), piezo.py:4 for the mode")
-    citations, _ = collect(docs, tree)
-    assert len(citations) == 1
-    assert citations[0]["symbol"] == "enable_feedback()"
-    assert citations[0]["start"] == 4
+def test_collect_reads_symbol_and_snippet(tmp_path, tree):
+    c, _ = _one(
+        tmp_path, tree, "see piezo.py::Piezo.voltage “drive\n  voltage”."
+    )
+    assert c["path"] == "piezo.py"
+    assert c["symbol"] == "Piezo.voltage"
+    assert c["snippet"] == "drive voltage"
 
 
-def test_bare_citation_has_no_symbol(tmp_path, tree):
-    docs = _cite(tmp_path, "the guard lives at piezo.py:4")
-    citations, _ = collect(docs, tree)
-    assert citations[0]["symbol"] is None
+def test_bare_file_mention_is_not_a_citation(tmp_path, tree):
+    citations, _ = collect(_cite(tmp_path, "edit piezo.py and rerun"), tree)
+    assert citations == []
 
 
 @pytest.mark.parametrize(
-    "text,expect_found",
+    "symbol",
     [
-        ("enable_feedback(), piezo.py:4", True),
-        ("enable_feedback(), piezo.py:50", False),
-        ("MODECTRL/enable_feedback, piezo.py:4", True),
-        ("Piezo.enable_feedback, piezo.py:4", True),
+        "LIMIT",
+        "helper",
+        "Piezo",
+        "Piezo.mode",
+        "Piezo.__init__",
+        "Piezo.setpoint_pv",
+        "Piezo.voltage",
+        "Piezo.written",
     ],
 )
-def test_symbol_proximity(tmp_path, tree, text, expect_found):
-    """Drift is a symbol that is no longer near the line it was cited at."""
-    citations, sources = collect(_cite(tmp_path, text), tree)
-    c = citations[0]
-    path = resolve(c["path"], sources)[0]
-    assert symbol_near(path, c["start"], c["end"], c["symbol"]) is expect_found
+def test_definition_kinds_are_citable(tmp_path, tree, symbol):
+    c, [path] = _one(tmp_path, tree, f"piezo.py::{symbol}")
+    assert check(c, path) is None
 
 
-def test_out_of_bounds_line_is_detectable(tmp_path, tree):
-    citations, sources = collect(_cite(tmp_path, "ui/thing.py:500"), tree)
-    path = resolve(citations[0]["path"], sources)[0]
-    length = len(path.read_text().split("\n"))
-    assert citations[0]["start"] > length
+@pytest.mark.parametrize("symbol", ["Piezo.missing", "voltage", "Other"])
+def test_undefined_symbol_is_reported(tmp_path, tree, symbol):
+    c, [path] = _one(tmp_path, tree, f"piezo.py::{symbol}")
+    assert "is not defined" in check(c, path)
 
 
-@pytest.mark.parametrize("text", ["thing.py:10", "thing.py:150"])
-def test_bare_basename_is_ambiguous_whatever_the_line(tmp_path, tree, text):
-    """Both copies are named `thing.py`, so a path prefix is required.
+def test_snippet_is_searched_only_inside_the_named_definition(tmp_path, tree):
+    """`return LIMIT` is in helper, so it does not hold for Piezo.voltage."""
+    c, [path] = _one(tmp_path, tree, "piezo.py::helper “return LIMIT”")
+    assert check(c, path) is None
+    c, [path] = _one(tmp_path, tree, "piezo.py::Piezo.voltage “return LIMIT”")
+    assert "no longer in" in check(c, path)
 
-    Line 10 exists in both. Line 150 exists only in the 200-line copy, which
-    makes it resolvable by elimination rather than unambiguous — the check
-    asks for the prefix either way.
-    """
-    citations, sources = collect(_cite(tmp_path, text), tree)
+
+def test_snippet_matches_any_span_of_a_name(tmp_path, tree):
+    """Piezo.voltage is both the getter and the setter."""
+    c, [path] = _one(
+        tmp_path, tree, "piezo.py::Piezo.voltage “self.written = value”"
+    )
+    assert check(c, path) is None
+
+
+def test_file_only_snippet_searches_the_whole_file(tmp_path, tree):
+    c, [path] = _one(tmp_path, tree, "piezo.py “LIMIT = 70”")
+    assert check(c, path) is None
+
+
+def test_moving_lines_does_not_break_a_citation(tmp_path, tree):
+    """The failure that retired line numbers."""
+    piezo = next(p for p in tree if p.name == "piezo.py")
+    c, [path] = _one(
+        tmp_path, tree, "piezo.py::Piezo.voltage “read the drive voltage”"
+    )
+    piezo.write_text("# added\n" * 40 + PIEZO_SOURCE)
+    assert check(c, path) is None
+
+
+def test_bare_basename_is_ambiguous(tmp_path, tree):
+    citations, sources = collect(_cite(tmp_path, "thing.py::run"), tree)
     assert len(resolve(citations[0]["path"], sources)) == 2
     assert unambiguous(citations, sources) == []
 
 
 def test_path_qualified_citation_resolves_to_one_file(tmp_path, tree):
-    citations, sources = collect(_cite(tmp_path, "phases/thing.py:150"), tree)
+    citations, sources = collect(_cite(tmp_path, "phases/thing.py::run"), tree)
     pairs = unambiguous(citations, sources)
     assert len(pairs) == 1
     assert pairs[0][1].parts[-2:] == ("phases", "thing.py")
 
 
-def test_ambiguous_citation_is_not_also_reported_out_of_bounds(tmp_path, tree):
-    """One missing prefix is one failure, not two.
+@pytest.mark.parametrize(
+    "text", ["piezo.py:41", "phases/thing.py:10-20", "see thing.py:3."]
+)
+def test_line_citation_pattern_catches_the_retired_form(text):
+    assert LINE_CITATION.search(text)
 
-    `thing.py:150` is past the end of the 20-line copy, but that is a
-    consequence of the ambiguity, not a separate defect.
-    """
-    citations, sources = collect(_cite(tmp_path, "thing.py:150"), tree)
-    assert unambiguous(citations, sources) == []
+
+@pytest.mark.parametrize(
+    "text", ["piezo.py::Piezo", "a 3:1 ratio", "piezo.py “x:1”"]
+)
+def test_line_citation_pattern_ignores_the_new_form(text):
+    assert not LINE_CITATION.search(text)

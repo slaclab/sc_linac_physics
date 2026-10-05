@@ -183,9 +183,14 @@ class FrequencyTuningController(QObject):
             ("fscan_stat_readback", cavity.rack.pv_prefix + "FSCAN:STAT"),
             ("stage4_8pi9_label", cavity.pv_addr("FSCAN:8PI9MODE")),
             ("stage4_7pi9_label", cavity.pv_addr("FSCAN:7PI9MODE")),
-            # Piezo state and RF drive level — visible during tuning so that
-            # piezo feedback fighting the stepper is diagnosable, and
-            # correctable, without leaving this tab.
+            # Piezo enable and mode are settable from this tab: both _ctrl
+            # entries below are PyDMEnumComboBox and write ENABLE / MODECTRL.
+            # Drive level is read-only here — drive_level_readback is a
+            # PyDMLabel, shown next to a static "expect
+            # SAFE_PULSED_DRIVE_LEVEL" hint, with no widget that writes it.
+            # Requested by @hmarts9 in review of PR #270; see
+            # FrequencyTuningUI._build_piezo_settings in
+            # ui/builders/phase_builders.py for what prompted it.
             ("piezo_enable_stat_readback", piezo.enable_stat_pv),
             ("piezo_enable_ctrl", piezo.enable_pv),
             ("piezo_mode_stat_readback", piezo.feedback_stat_pv),
