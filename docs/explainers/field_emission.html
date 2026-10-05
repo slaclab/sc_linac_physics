@@ -98,7 +98,7 @@
   .flow > div b { display: block; color: var(--accent); margin-bottom: .2rem; }
 
   /* ---- cache grids ---- */
-  .grids { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .grids { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
   @media (max-width: 52rem) { .grids { grid-template-columns: 1fr; } }
   .grid-title { font-size: .9rem; font-weight: 600; margin: .75rem 0 .35rem; }
   .run { display: flex; align-items: center; gap: .4rem; margin: .2rem 0; }
@@ -305,30 +305,15 @@ if missing:                                  # phase 2: convert
     </ul>
   </section>
 
-  <section id="decision">
+  <section id="cached">
     <h2>4. What counts as "already cached"</h2>
 
     <p>
-      <code>find_missing_runs</code> skips a run only when all 16 of its
-      datasets exist (rule B below). Rule A was the simpler alternative:</p>
-
-    <div class="scroll">
-    <table>
-      <thead><tr><th></th><th>Rule A: group exists</th><th>Rule B: group is complete</th></tr></thead>
-      <tbody>
-        <tr><td>Skip a run when</td>
-            <td><code>CM01/2023-10-02_0913</code> exists</td>
-            <td>it has all 8 <code>CAV{n}</code>, each with
-              <code>average</code> and <code>instant</code></td></tr>
-        <tr><td>A half-written run</td>
-            <td>stays half-written, unless an unrelated sync happens to sweep up its leftover CSVs</td>
-            <td>gets re-fetched next time the display opens</td></tr>
-        <tr><td>Cost</td>
-            <td>a group lookup per run</td>
-            <td>16 dataset lookups per run, still a fraction of a second for 80 runs</td></tr>
-      </tbody>
-    </table>
-    </div>
+      <code>find_missing_runs</code> skips a run only when all 8
+      <code>CAV{n}</code> groups exist, each with <code>average</code> and
+      <code>instant</code>. A run left half-written by an interrupted sync is
+      fetched again on the next open.
+    </p>
     <p class="cite">update_h5py.py::_run_is_complete “for readout in RAD_READ_TYPES”</p>
 
     <h3>Why empty datasets still count</h3>
@@ -336,7 +321,7 @@ if missing:                                  # phase 2: convert
       A run with genuinely no data is never re-fetched in a loop. For a PV with
       no samples in the window, <code>lcls_tools</code> returns an empty result
       rather than raising. That still writes a CSV, and an empty CSV still
-      becomes a dataset, so the run counts as complete. Rule B only re-fetches
+      becomes a dataset, so the run counts as complete. The sync only re-fetches
       a dataset that was <em>never written</em>, which takes a crash.
       Timeouts, connection failures and HTTP errors do raise, and stop the
       sync in phase 1; that run is retried next open.
@@ -356,8 +341,8 @@ if missing:                                  # phase 2: convert
 
     <p>
       This simulates a first sync of a few runs into an empty cache, with a
-      failure you choose, then what the <em>next</em> open does under each rule
-      (assuming that sync goes cleanly). Each row is a run. Each square is one
+      failure you choose, then what the <em>next</em> open does (assuming that
+      sync goes cleanly). Each row is a run. Each square is one
       dataset: 8 <code>average</code>, then 8 <code>instant</code>, in fetch order.
     </p>
 
@@ -382,8 +367,7 @@ if missing:                                  # phase 2: convert
 
       <div class="grids">
         <div><div class="grid-title">After first sync</div><div id="g0"></div></div>
-        <div><div class="grid-title">Next open, rule A</div><div id="gA"></div></div>
-        <div><div class="grid-title">Next open, rule B</div><div id="gB"></div></div>
+        <div><div class="grid-title">Next open</div><div id="g1"></div></div>
       </div>
       <div class="legend">
         <span><i></i>nothing</span>
@@ -483,20 +467,20 @@ function update() {
   $("where-v").textContent = kind === "none" ? "—" : `R${run} #${ds}`;
 
   const first = sync(emptyCache(n), () => false, { kind, at });
-  const ruleA = sync(first, hasAny, { kind: "none" });
-  const ruleB = sync(first, isComplete, { kind: "none" });
-  render($("g0"), first); render($("gA"), ruleA); render($("gB"), ruleB);
+  const next = sync(first, isComplete, { kind: "none" });
+  render($("g0"), first); render($("g1"), next);
 
-  const a = summarize(ruleA), b = summarize(ruleB);
-  const line = (name, s) => s.partial
-    ? `<span class="bad">${name}: ${s.partial} run(s) stuck partial.</span> ` +
-      `It will never re-fetch ${s.partial === 1 ? "it" : "them"}.`
-    : `<span class="good">${name}: all ${s.full} runs complete.</span>`;
+  const before = summarize(first), after = summarize(next);
+  const refetched = before.partial + before.none;
   $("verdict").innerHTML =
-    `<p class="verdict">${line("Rule A", a)}</p><p class="verdict">${line("Rule B", b)}</p>` +
+    `<p class="verdict"><span class="good">All ${after.full} runs complete.</span> ` +
+    (refetched
+      ? `Next open re-fetched ${refetched} run(s): ${before.partial} half-written, ` +
+        `${before.none} never written.`
+      : `Nothing to re-fetch.`) + `</p>` +
     (kind === "archiver"
-      ? `<p class="note">An archiver error stops the sync before convert, so the cache stays ` +
-        `empty and both rules recover. The CSVs it did write get converted next time.</p>`
+      ? `<p class="note">An archiver error stops the sync before convert, so nothing is ` +
+        `written. The CSVs it did fetch sit on disk until the next sync converts them.</p>`
       : "");
 }
 
@@ -517,16 +501,15 @@ update();
     "kill at 20 should leave R1 full, R2 partial");
   expect(!hasAny(killed[2]) && killed[2].every((d) => d.csv),
     "kill at 20 should leave R3 as CSVs only");
-  // Rule A: R3 missing, so convert runs and sweeps up R2's leftover CSVs.
-  expect(sync(killed, hasAny, { kind: "none" }).every(isComplete),
-    "rule A heals R2 by accident when R3 is also missing");
+  expect(sync(killed, isComplete, { kind: "none" }).every(isComplete),
+    "next open should heal R2 and convert R3");
 
-  // Killed in the last run: nothing is missing under A, so no convert runs.
+  // Killed in the last run: only that run is missing next time.
   const late = sync(emptyCache(3), () => false, { kind: "killed", at: 40 });
-  expect(!isComplete(sync(late, hasAny, { kind: "none" })[2]),
-    "rule A should leave the last run partial");
+  expect(late.filter((r) => !isComplete(r)).length === 1,
+    "kill at 40 should leave only R3 incomplete");
   expect(sync(late, isComplete, { kind: "none" }).every(isComplete),
-    "rule B should heal the last run");
+    "next open should heal the last run");
 
   // Archiver error: nothing converted.
   const arch = sync(emptyCache(3), () => false, { kind: "archiver", at: 20 });
