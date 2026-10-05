@@ -124,6 +124,7 @@ def generate_amp_vs_rad_csvs(cm, start, end, decarad):
     """combine methods for portable amplitude and radiation generation"""
     print(f"Processing CM{cm} {start} -> {end}")
     csv_date = start.strftime(CSV_DATE_FORMAT)
+    CSV_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     amp_pvs = build_amplitude_pvs(cm)
     for readout in RAD_READ_TYPES:
         rad_pvs = build_rad_readout_pvs(decarad, RAD_CHAN_RANGE, readout)

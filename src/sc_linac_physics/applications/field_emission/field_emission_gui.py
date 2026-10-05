@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QLabel,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QRadioButton,
     QSizePolicy,
@@ -18,6 +19,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QWidget,
 )
+from PyQt5.QtCore import QThread
 from pydm import Display, PyDMApplication
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -33,6 +35,10 @@ from sc_linac_physics.applications.field_emission.constants import (
     VALID_CMS_LIST,
     CAV_RANGE,
     RAD_CHAN_RANGE,
+    RUN_LIST_PATH,
+)
+from sc_linac_physics.applications.field_emission.gui_updater import (
+    UpdateWorker,
 )
 from sc_linac_physics.applications.field_emission.plot_me import (
     plot_amp_vs_rad,
@@ -70,12 +76,16 @@ class FieldEmission(Display):
         self.update_btn = None
         self.toolbar = None
         self.canvas = None
+        self.left_panel = None
+        self._sync_thread = None
+        self._sync_worker = None
 
         outer = QHBoxLayout()
         self.setLayout(outer)
 
         # Configure main panels as widgets so they can be resized
         left_side = QWidget()
+        self.left_panel = left_side
         left_side_layout = QVBoxLayout()
         left_side_layout.setContentsMargins(0, 0, 0, 0)
         left_side.setLayout(left_side_layout)
@@ -104,6 +114,48 @@ class FieldEmission(Display):
         outer.addWidget(right_side, stretch=7)  # 70% width
 
         self.connect_signals()
+        self.start_cache_sync()
+
+    def start_cache_sync(self):
+        """fetch any run in the run list that the h5 cache does not have yet
+
+        Selection is disabled until the sync ends, so the display never reads
+        the h5 file while the worker is writing it.
+        """
+        self.left_panel.setEnabled(False)
+        self.setWindowTitle("LCLS-II Field Emission (checking data cache...)")
+
+        self._sync_thread = QThread()
+        self._sync_worker = UpdateWorker("sync", RUN_LIST_PATH)
+        self._sync_worker.moveToThread(self._sync_thread)
+
+        self._sync_thread.started.connect(self._sync_worker.run)
+        self._sync_worker.progress.connect(
+            lambda msg: self.setWindowTitle(f"LCLS-II Field Emission ({msg})")
+        )
+        self._sync_worker.finished.connect(self._on_sync_done)
+        self._sync_worker.error.connect(self._on_sync_error)
+
+        self._sync_worker.finished.connect(self._sync_thread.quit)
+        self._sync_worker.error.connect(self._sync_thread.quit)
+        self._sync_worker.finished.connect(self._sync_worker.deleteLater)
+        self._sync_worker.error.connect(self._sync_worker.deleteLater)
+        self._sync_thread.finished.connect(self._sync_thread.deleteLater)
+
+        self._sync_thread.start()
+
+    def _on_sync_done(self, _message):
+        self.setWindowTitle("LCLS-II Field Emission")
+        self.left_panel.setEnabled(True)
+        self.on_cryomodule_updated()
+
+    def _on_sync_error(self, message):
+        self._on_sync_done(message)
+        QMessageBox.warning(
+            self,
+            "Data cache not updated",
+            f"Showing cached data only. Fetching new runs failed:\n{message}",
+        )
 
     def connect_signals(self):
         self.cryo_dropdown.currentTextChanged.connect(

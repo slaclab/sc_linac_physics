@@ -78,6 +78,7 @@ def display(qtbot):
         patch.object(feg, "plot_amp_vs_rad"),
         patch.object(feg, "unify_legends", return_value=([], [])),
         patch.object(feg, "unify_axes"),
+        patch.object(FieldEmission, "start_cache_sync"),
     ):
         widget = FieldEmission()
         qtbot.addWidget(widget)
@@ -750,3 +751,43 @@ class TestSignalWiring:
         for cb in display.rad_chan_cb:
             cb.setChecked(True)
         assert display.sel_all_rad_btn.text() == "Deselect All Channels"
+
+
+# ---------------------------------------------------------------------------
+# Data cache sync
+# ---------------------------------------------------------------------------
+# the display fixture patches start_cache_sync out; keep the real one here
+REAL_START_CACHE_SYNC = FieldEmission.start_cache_sync
+
+
+class TestCacheSync:
+    def test_start_disables_selection_and_runs_sync_worker(self, display):
+        with (
+            patch.object(feg, "QThread") as thread_cls,
+            patch.object(feg, "UpdateWorker") as worker_cls,
+        ):
+            REAL_START_CACHE_SYNC(display)
+
+        assert not display.left_panel.isEnabled()
+        worker_cls.assert_called_once_with("sync", feg.RUN_LIST_PATH)
+        thread_cls.return_value.start.assert_called_once()
+
+    def test_done_reenables_selection_and_refreshes(self, display):
+        display.left_panel.setEnabled(False)
+        with patch.object(display, "on_cryomodule_updated") as refresh:
+            display._on_sync_done("File successfully updated!")
+
+        assert display.left_panel.isEnabled()
+        assert display.windowTitle() == "LCLS-II Field Emission"
+        refresh.assert_called_once()
+
+    def test_error_warns_and_keeps_cached_data_usable(self, display):
+        display.left_panel.setEnabled(False)
+        with (
+            patch.object(display, "on_cryomodule_updated"),
+            patch.object(feg.QMessageBox, "warning") as warn,
+        ):
+            display._on_sync_error("archiver timeout")
+
+        assert display.left_panel.isEnabled()
+        assert "archiver timeout" in warn.call_args.args[2]

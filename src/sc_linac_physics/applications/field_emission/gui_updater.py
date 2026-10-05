@@ -9,6 +9,7 @@ from sc_linac_physics.applications.field_emission.update_h5py import (
     receive_metadata_input,
     parse_csv,
     convert_to_h5,
+    find_missing_runs,
 )
 from sc_linac_physics.applications.field_emission.constants import (
     VALID_CMS_LIST,
@@ -147,6 +148,8 @@ class UpdateWorker(QObject):
                 self.single_update(*self.args)
             elif self.mode == "multi":
                 self.multi_update(*self.args)
+            elif self.mode == "sync":
+                self.sync_update(*self.args)
         except Exception as e:
             self.error.emit(str(e))
             return
@@ -170,3 +173,15 @@ class UpdateWorker(QObject):
         self.progress.emit("Updating hdf5...")
         lookup = parse_csv(input_csv)
         convert_to_h5(lookup)
+
+    def sync_update(self, run_list):
+        """fetch every run in the run list that is missing from the h5 cache"""
+        missing = find_missing_runs(list(read_from_csv(run_list)))
+        for i, (cryo, date_s, date_e, rad, _) in enumerate(missing, 1):
+            self.progress.emit(
+                f"Fetching run {i}/{len(missing)}: CM{cryo} {date_s}"
+            )
+            generate_amp_vs_rad_csvs(cryo, date_s, date_e, rad)
+        if missing:
+            self.progress.emit("Updating hdf5...")
+            convert_to_h5(parse_csv(run_list))

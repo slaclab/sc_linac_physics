@@ -16,7 +16,11 @@ from sc_linac_physics.applications.field_emission.constants import (
 def match_measurement_dates(cryomodule):
     """match cryomodule str to available measurement dates in h5 file"""
     measurements = []
-    with h5py.File(H5_PATH, "r") as h5f:
+    try:
+        h5f = h5py.File(H5_PATH, "r")
+    except FileNotFoundError:  # cache not built yet
+        return []
+    with h5f:
         h5_cryo = h5f.get(f"CM{cryomodule}")
         if h5_cryo is None:
             return []

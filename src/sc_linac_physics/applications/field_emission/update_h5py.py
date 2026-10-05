@@ -7,6 +7,10 @@ import pandas as pd
 
 from sc_linac_physics.applications.field_emission.constants import (
     H5_PATH,
+    H5_DATE_FORMAT,
+    H5_READOUT_PATH,
+    CAV_RANGE,
+    RAD_READ_TYPES,
     CSV_OUTPUT_DIR,
     DATA_CSV_NAME_PATTERN,
 )
@@ -54,10 +58,38 @@ def receive_metadata_input(input_row):
     return metadata_lookup
 
 
+def find_missing_runs(runs, h5_path=H5_PATH):
+    """return the runs from the run list that are not fully in the h5 cache
+
+    runs: tuples of (cm, start, end, decarad, timestamp) from read_from_csv.
+    A run counts as cached only when every cavity has every readout dataset,
+    so a run left half-written by an interrupted sync is fetched again. An
+    empty dataset still counts: the archiver returning no samples is a result,
+    not a failure, and re-fetching it would never change it.
+    """
+    if not os.path.exists(h5_path):
+        return list(runs)
+    with h5py.File(h5_path, "r") as h5f:
+        return [run for run in runs if not _run_is_complete(h5f, run)]
+
+
+def _run_is_complete(h5f, run):
+    """True if the run has a dataset for every cavity and readout"""
+    cm, start = run[0], run[1]
+    date = start.strftime(H5_DATE_FORMAT)
+    return all(
+        H5_READOUT_PATH.format(cm=cm, date=date, cav=cav, readout=readout)
+        in h5f
+        for cav in CAV_RANGE
+        for readout in RAD_READ_TYPES
+    )
+
+
 def convert_to_h5(metadata_lookup):
     """convert metadata lookup table to h5 addition"""
     input_csvs = glob.glob(os.path.join(CSV_OUTPUT_DIR, "*.csv"))
 
+    H5_PATH.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(H5_PATH, "a") as h5f:
         for csv_path in input_csvs:
             csv_name = os.path.basename(csv_path)

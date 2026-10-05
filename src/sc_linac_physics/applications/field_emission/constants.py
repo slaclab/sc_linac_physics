@@ -1,12 +1,16 @@
 import re
 from pathlib import Path
+from sc_linac_physics.utils.platform_paths import get_field_emission_dir
 from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_DICT
 
 # Default File Paths
-_DATA_DIR = Path(__file__).resolve().parent
+# The run list is the only data kept in git. The HDF5 is a cache of archiver
+# data built from it, so it lives in the shared SRF directory, not the package.
+RUN_LIST_PATH = Path(__file__).resolve().parent / "field_emission_runs.csv"
 
-CSV_OUTPUT_DIR = _DATA_DIR
-H5_PATH = _DATA_DIR / "field_emission_data.hdf5"
+_CACHE_DIR = get_field_emission_dir()
+CSV_OUTPUT_DIR = _CACHE_DIR / "archiver_csvs"
+H5_PATH = _CACHE_DIR / "field_emission_data.hdf5"
 
 # HDF5 Group Paths
 H5_MEASUREMENT_PATH = "CM{cm}/{date}"
