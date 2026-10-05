@@ -258,9 +258,11 @@ field_emission_data.hdf5
         in the future. The run list in git has the corrected date.</li>
       <li><strong>CM04 2023-10-25, CAV5 <code>instant</code></strong>: 1 row. The
         align step drops a timestamp until all 11 PVs have had at least one
-        value, so one sparse PV can shrink a whole dataset.
-        CHECK: was one of decarad 1's <code>GAMMA_DOSE_RATE</code> channels
-        dead or unarchived that day?</li>
+        value, so one sparse PV can shrink a whole dataset. Here it was CAV5's
+        own <code>AACTMEAN</code>: the other 7 cavities' <code>instant</code>
+        datasets use the same 10 decarad PVs and have about 6,900 rows each, and
+        CAV5's <code>average</code> is short too. The one value is 0.004 MV, so
+        CAV5 was off and nothing above 4 MV was lost.</li>
     </ul>
   </section>
 
@@ -304,9 +306,11 @@ if missing:                                  # phase 2: convert
   </section>
 
   <section id="decision">
-    <h2>4. The open decision: what counts as "already cached"?</h2>
+    <h2>4. What counts as "already cached"</h2>
 
-    <p><code>find_missing_runs</code> needs a rule for skipping a run:</p>
+    <p>
+      <code>find_missing_runs</code> skips a run only when all 16 of its
+      datasets exist (rule B below). Rule A was the simpler alternative:</p>
 
     <div class="scroll">
     <table>
@@ -324,25 +328,18 @@ if missing:                                  # phase 2: convert
             <td>16 dataset lookups per run, still a fraction of a second for 80 runs</td></tr>
       </tbody>
     </table>
-    <p>
-      <strong>Rule B is what the code does.</strong>
-      <span class="cite">update_h5py.py::_run_is_complete “for readout in RAD_READ_TYPES”</span>
-    </p>
     </div>
+    <p class="cite">update_h5py.py::_run_is_complete “for readout in RAD_READ_TYPES”</p>
 
+    <h3>Why empty datasets still count</h3>
     <p>
-      The worry with rule B was that a run with genuinely no data would be
-      re-fetched on every open. That can't happen through the normal path. A
-      fetch with no data still writes a CSV, and an empty CSV still becomes a
-      dataset. So the dataset exists, and B counts it. B only re-fetches when
-      a dataset was <em>never written</em>, which takes a crash.
-    </p>
-
-    <p>
-      This holds for the installed <code>lcls_tools</code>. A PV with no
-      samples in the window comes back as an empty handler, not an error.
-      Only a timeout, a connection failure, or an HTTP error raises, and any of
-      those stops the sync in phase 1 under either rule.
+      A run with genuinely no data is never re-fetched in a loop. For a PV with
+      no samples in the window, <code>lcls_tools</code> returns an empty result
+      rather than raising. That still writes a CSV, and an empty CSV still
+      becomes a dataset, so the run counts as complete. Rule B only re-fetches
+      a dataset that was <em>never written</em>, which takes a crash.
+      Timeouts, connection failures and HTTP errors do raise, and stop the
+      sync in phase 1; that run is retried next open.
       <span class="cite">lcls_tools: get_values_over_time_range, the “if pv not in result” fill-in</span>
     </p>
 
