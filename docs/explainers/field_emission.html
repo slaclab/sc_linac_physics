@@ -377,24 +377,26 @@ field_emission_data.hdf5
       <pre>
 missing = find_missing_runs(run list)        # compare run list to cache
 
-for run in missing:                          # phase 1: fetch
+for run in missing:
     16 × (archiver fetch → align → write CSV)
-    # any exception stops the sync here, and phase 2 never runs
-
-if missing:                                  # phase 2: convert
-    for csv in CSV_OUTPUT_DIR/*.csv:         # every CSV on disk, old ones too
-        write it into the HDF5 as one dataset</pre>
-      <p class="cite">gui_updater.py::UpdateWorker.sync_update “if missing:”, update_h5py.py::convert_to_h5 “glob.glob(os.path.join(CSV_OUTPUT_DIR, "*.csv"))”</p>
+    write every CSV on disk into the HDF5    # this run's, plus any leftovers
+    delete the CSVs it wrote, once the file has closed
+    # any exception stops the sync here; runs already written stay</pre>
+      <p class="cite">gui_updater.py::sync_cache “convert_to_h5(lookup)”, update_h5py.py::convert_to_h5 “os.remove(csv_path)”</p>
     </div>
 
-    <p>Two details matter for what follows:</p>
-    <ul>
-      <li><strong>CSVs are never deleted.</strong> Phase 2 converts every CSV in
-        the directory, including ones left over from an earlier sync that
-        failed.</li>
-      <li><strong>Phase 2 only runs if something was missing.</strong> If
-        nothing is missing, leftover CSVs just sit there.</li>
-    </ul>
+    <p>
+      Each run takes a few minutes: 155 s for CM01's 47-minute window, measured
+      on site. The 80 runs cover about 101 hours of windows, so building the
+      cache from empty takes hours. Build it once without the display, and
+      after that each open only fetches new runs:
+    </p>
+    <div class="panel"><pre>python -m sc_linac_physics.applications.field_emission.gui_updater</pre></div>
+    <p>
+      Re-fetching a run replaces its datasets rather than reusing them, since
+      the archiver can return a different row count.
+      <span class="cite">update_h5py.py::_write_dataset_with_attributes “del group[readout]”</span>
+    </p>
   </section>
 
   <section id="cached">
@@ -415,8 +417,8 @@ if missing:                                  # phase 2: convert
       rather than raising. That still writes a CSV, and an empty CSV still
       becomes a dataset, so the run counts as complete. The sync only re-fetches
       a dataset that was <em>never written</em>, which takes a crash.
-      Timeouts, connection failures and HTTP errors do raise, and stop the
-      sync in phase 1; that run is retried next open.
+      Timeouts, connection failures and HTTP errors do raise and stop the
+      sync; the run being fetched is retried next open.
       <span class="cite">lcls_tools: get_values_over_time_range, the “if pv not in result” fill-in</span>
     </p>
 
@@ -470,21 +472,22 @@ if missing:                                  # phase 2: convert
     </div>
 
     <div class="caveat">
-      The simulator converts CSVs in run order. The real order is whatever
-      <code>glob</code> returns, which isn't sorted. That changes <em>which</em>
-      datasets land before a crash, not whether a run ends up partial.
+      The simulator writes a run's datasets in fetch order. The real order is
+      whatever <code>glob</code> returns, which isn't sorted. That changes
+      <em>which</em> datasets land before a crash, not whether a run ends up
+      partial.
       <span class="cite">update_h5py.py::convert_to_h5</span>
     </div>
 
     <h3>The failure the simulator can't show</h3>
     <p>
-      HDF5 has no journal. If the process dies during phase 2, the file can be
+      HDF5 has no journal. If the process dies while writing a run, the file can be
       left unreadable, not just incomplete. The display then raises on open,
       because <code>match_measurement_dates</code> only handles a
       <em>missing</em> file (<code>FileNotFoundError</code>). The fix today is
-      deleting the file, after which the next open rebuilds it. Closing the
-      display during the first build, which writes all 80 runs, is the likely
-      way to hit this.
+      deleting the file, after which the next sync rebuilds it. The write
+      takes seconds per run, against minutes of fetching, so the window is
+      small, but it reopens on every run of a long build.
       <span class="cite">field_emission/measurements.py::match_measurement_dates “except FileNotFoundError”</span>
     </p>
   </section>
@@ -503,32 +506,30 @@ const clone = (c) => c.map((run) => run.map((d) => ({ ...d })));
 const isComplete = (run) => run.every((d) => d.cached);
 const hasAny = (run) => run.some((d) => d.cached);
 
-/* One sync, mirroring UpdateWorker.sync_update.
+/* One sync, mirroring gui_updater.sync_cache.
    fail: {kind: "none"|"archiver"|"killed", at: dataset index}
    For "archiver", `at` counts fetches across the missing runs.
-   For "killed", `at` counts datasets written during convert. */
+   For "killed", `at` counts datasets written during the sync. */
 function sync(cache, isCached, fail) {
   const c = clone(cache);
   const missing = c.map((run, i) => i).filter((i) => !isCached(c[i]));
-
-  let fetched = 0;
+  let fetched = 0, written = 0;
   for (const r of missing) {
     for (let d = 0; d < PER_RUN; d++) {
-      if (fail.kind === "archiver" && fetched === fail.at) return c;  // no convert
+      if (fail.kind === "archiver" && fetched === fail.at) return c;
       c[r][d].csv = true;
       fetched++;
     }
-  }
-  if (!missing.length) return c;  // convert only runs if something was missing
-
-  let written = 0;
-  for (const run of c) {
-    for (const d of run) {
-      if (!d.csv) continue;
-      if (fail.kind === "killed" && written === fail.at) return c;
-      d.cached = true;
-      written++;
+    // convert_to_h5: every CSV on disk, leftovers included, then delete them
+    for (const run of c) {
+      for (const d of run) {
+        if (!d.csv) continue;
+        if (fail.kind === "killed" && written === fail.at) return c;  // CSVs stay
+        d.cached = true;
+        written++;
+      }
     }
+    for (const run of c) for (const d of run) if (d.cached) d.csv = false;
   }
   return c;
 }
@@ -571,8 +572,8 @@ function update() {
         `${before.none} never written.`
       : `Nothing to re-fetch.`) + `</p>` +
     (kind === "archiver"
-      ? `<p class="note">An archiver error stops the sync before convert, so nothing is ` +
-        `written. The CSVs it did fetch sit on disk until the next sync converts them.</p>`
+      ? `<p class="note">An archiver error stops the sync. Runs already written stay; ` +
+        `the run it was fetching is fetched again next open.</p>`
       : "");
 }
 
@@ -641,12 +642,13 @@ update();
   const clean = sync(emptyCache(3), () => false, { kind: "none" });
   expect(clean.every(isComplete), "clean sync should complete every run");
 
-  // Killed partway through run 2: run 2 partial, run 3 CSVs only.
+  // Killed partway through writing run 2: R2 partial, R3 never fetched.
   const killed = sync(emptyCache(3), () => false, { kind: "killed", at: 20 });
   expect(isComplete(killed[0]) && hasAny(killed[1]) && !isComplete(killed[1]),
     "kill at 20 should leave R1 full, R2 partial");
-  expect(!hasAny(killed[2]) && killed[2].every((d) => d.csv),
-    "kill at 20 should leave R3 as CSVs only");
+  expect(killed[2].every((d) => !d.csv && !d.cached),
+    "kill at 20 should leave R3 untouched");
+  expect(killed[0].every((d) => !d.csv), "written runs should have no CSVs left");
   expect(sync(killed, isComplete, { kind: "none" }).every(isComplete),
     "next open should heal R2 and convert R3");
 
@@ -657,12 +659,13 @@ update();
   expect(sync(late, isComplete, { kind: "none" }).every(isComplete),
     "next open should heal the last run");
 
-  // Archiver error: nothing converted.
+  // Archiver error in run 2: run 1 was already written and stays.
   const arch = sync(emptyCache(3), () => false, { kind: "archiver", at: 20 });
-  expect(arch.every((r) => !hasAny(r)), "archiver error should convert nothing");
+  expect(isComplete(arch[0]) && !hasAny(arch[1]),
+    "archiver error in R2 should keep R1 and write nothing of R2");
 
   if (fails.length) console.error("SELF-CHECK FAILED\n" + fails.join("\n"));
-  else console.log("SELF-CHECK PASSED (7 cases)");
+  else console.log("SELF-CHECK PASSED (8 cases)");
 })();
 </script>
 </body>
