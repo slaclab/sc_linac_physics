@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the field emission display works — SC Linac</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --ink: #e6e8ec;
+    --dim: #9aa3b2;
+    --line: #2b303a;
+    --edge: #656f7e;
+    --accent: #6ea8fe;
+    --warn: #e0a458;
+    --bad: #e06c75;
+    --ok: #7fb069;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 62rem; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .5rem; }
+  h2 {
+    font-size: 1.35rem;
+    margin: 3.5rem 0 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+  .lede { color: var(--dim); font-size: 1.05rem; }
+  code, .mono, pre { font-family: var(--mono); font-size: .9em; }
+  pre { overflow-x: auto; margin: 0; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .cite { font-family: var(--mono); font-size: .78rem; color: var(--dim); }
+  .caveat {
+    border-left: 3px solid var(--warn);
+    padding: .5rem 0 .5rem 1rem;
+    margin: 1.25rem 0;
+    color: var(--dim);
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; }
+  th, td {
+    text-align: left;
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--line);
+    font-size: .92rem;
+    vertical-align: top;
+  }
+  th { color: var(--dim); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  select, input[type="range"] { accent-color: var(--accent); }
+  select {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    padding: .25rem .4rem;
+    font: inherit;
+    font-size: .88rem;
+  }
+  .ctl {
+    display: grid;
+    grid-template-columns: 14rem 1fr 9rem;
+    gap: .4rem .9rem;
+    align-items: center;
+  }
+  .ctl > label { font-size: .92rem; }
+  .ctl > .val { font-family: var(--mono); font-size: .85rem; text-align: right; }
+  @media (max-width: 44rem) {
+    .ctl { grid-template-columns: 1fr; }
+    .ctl > .val { text-align: left; }
+  }
+  input[type="range"] { width: 100%; margin: 0; }
+
+  /* ---- pipeline ---- */
+  .flow { display: flex; flex-wrap: wrap; gap: .5rem; align-items: stretch; }
+  .flow > div {
+    flex: 1 1 10rem;
+    background: var(--bg);
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+    padding: .6rem .75rem;
+    font-size: .88rem;
+  }
+  .flow > div b { display: block; color: var(--accent); margin-bottom: .2rem; }
+
+  /* ---- cache grids ---- */
+  .grids { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  @media (max-width: 52rem) { .grids { grid-template-columns: 1fr; } }
+  .grid-title { font-size: .9rem; font-weight: 600; margin: .75rem 0 .35rem; }
+  .run { display: flex; align-items: center; gap: .4rem; margin: .2rem 0; }
+  .run > span { font-family: var(--mono); font-size: .78rem; width: 2rem; color: var(--dim); }
+  .cells { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; flex: 1; }
+  .cells > i {
+    display: block; aspect-ratio: 1; border-radius: 2px;
+    border: 1px solid var(--line); background: var(--bg);
+  }
+  .cells > i:nth-child(8) { margin-right: 3px; }
+  .cells > i.csv { background: #3a3f4a; border-color: var(--edge); }
+  .cells > i.cached { background: var(--ok); border-color: var(--ok); }
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .82rem; color: var(--dim); margin-top: .75rem; }
+  .legend i { display: inline-block; width: .8rem; height: .8rem; border-radius: 2px; vertical-align: -1px; margin-right: .3rem; border: 1px solid var(--line); }
+  .note { font-size: .85rem; color: var(--dim); margin: .35rem 0 0; }
+  .verdict { font-weight: 600; margin: .9rem 0 .2rem; }
+  .bad { color: var(--bad); }
+  .good { color: var(--ok); }
+</style>
+</head>
+<body>
+<main>
+  <h1>How the field emission display works</h1>
+  <p class="lede">
+    <code>applications/field_emission/</code> plots cavity amplitude against
+    decarad radiation readings, one plot per cavity, for past measurement runs.
+    This page covers what the display reads, where each run's data comes from,
+    and how the data cache is built and fails.
+  </p>
+
+  <section id="what-it-shows">
+    <h2>1. What the display shows</h2>
+
+    <p>
+      Pick a cryomodule, one or more measurement runs, cavities, decarad
+      channels, and a readout type. Each plot puts cavity amplitude on the x-axis
+      and one point series per decarad channel on the y-axis.
+    </p>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>PV</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>x: amplitude</td>
+            <td><code>ACCL:{linac}:{cm}{cav}0:AACTMEAN</code></td>
+            <td>MV, all 8 cavities, whichever one was being run
+            <span class="cite">amp_vs_radiation.py::build_amplitude_pvs</span></td></tr>
+        <tr><td>y: radiation, "average"</td>
+            <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMAAVE</code></td>
+            <td>decarad <code>n</code> is 1 or 2, channels 01–10
+            <span class="cite">amp_vs_radiation.py::build_rad_readout_pvs</span></td></tr>
+        <tr><td>y: radiation, "instant"</td>
+            <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMA_DOSE_RATE</code></td>
+            <td><span class="cite">amp_vs_radiation.py::build_rad_readout_pvs</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>
+      Every PV is read from the archiver, never live. The display writes no PVs.
+      <span class="cite">amp_vs_radiation.py::fetch_pv_data → lcls_tools get_values_over_time_range</span>
+    </p>
+
+    <h3>Two things it does to the data before you see it</h3>
+
+    <p>
+      <strong>Rows under 4 MV are dropped.</strong> Any sample where
+      <code>AACTMEAN</code> is below <code>AMPLITUDE_THRESHOLD = 4</code> is
+      masked out of both the plot and the fit.
+      <span class="cite">field_emission/constants.py::AMPLITUDE_THRESHOLD, field_emission/measurements.py::get_columns</span>
+    </p>
+
+    <p>
+      <strong>The optional fit line</strong> is
+      <code>rad = C1 · E<sup>2.5</sup> · exp(−C2 / E)</code>, with
+      <code>E</code> the amplitude in MV, fitted per channel with
+      <code>scipy.optimize.curve_fit</code> (5500 evaluations max). Channels
+      with fewer than 2 nonzero points, or that don't converge, get no line.
+      The legend shows C1 and C2.
+      <span class="cite">plot_me.py::fit_equation, plot_me.py::add_poly_fit, field_emission/constants.py::NUM_FIT_ITERATIONS</span>
+    </p>
+
+    <div class="caveat">
+      CHECK: where does this fit form come from, and is 2.5 the intended
+      exponent? Nothing in the repo cites a source.
+      <br>
+      CHECK: is 4 MV the right "cavity is on" cutoff for every cryomodule,
+      including LCLS-II-HE?
+      <br>
+      CHECK: where are decarads 1 and 2 physically, relative to each
+      cryomodule? The code takes the number from the run list and does nothing
+      else with it.
+    </div>
+  </section>
+
+  <section id="a-run">
+    <h2>2. Where one run's data comes from</h2>
+
+    <p>
+      A <em>run</em> is one row of the run list: a cryomodule, a start and end
+      time, which decarad was used, and an elog link. Everything else is fetched.
+    </p>
+
+    <div class="flow">
+      <div><b>Run list row</b>
+        <code>CM01, 10/2/23, 9:13, , 10:00, 1, elog…</code>
+        <div class="cite">field_emission_runs.csv</div></div>
+      <div><b>16 archiver fetches</b>
+        2 readouts × 8 cavities. Each fetch asks for 11 PVs: that cavity's
+        <code>AACTMEAN</code> + 10 decarad channels.
+        <div class="cite">amp_vs_radiation.py::generate_amp_vs_rad_csvs</div></div>
+      <div><b>Align</b>
+        drop invalid samples, outer-join on timestamp, forward-fill, drop any
+        row still missing a value
+        <div class="cite">amp_vs_radiation.py::align_pvs_to_common_time</div></div>
+      <div><b>16 CSVs on disk</b>
+        <code>cm01_23_10_02_09_13_cavity1_average.csv</code>
+        <div class="cite">field_emission/constants.py::CSV_OUTPUT_DIR</div></div>
+      <div><b>HDF5 cache</b>
+        one dataset per CSV, 11 columns: amplitude, then channels 1–10
+        <div class="cite">update_h5py.py::convert_to_h5</div></div>
+    </div>
+
+    <h3>The cache layout</h3>
+
+    <div class="panel">
+      <pre>
+field_emission_data.hdf5
+└── CM01                         one group per cryomodule
+    └── 2023-10-02_0913          one group per run, named by start time
+        │   attrs: date, time_start, time_end, decarad, elog, notes, filters
+        ├── CAV1
+        │   ├── average          (rows × 11) float64
+        │   └── instant          (rows × 11) float64
+        ├── CAV2 …
+        └── CAV8</pre>
+      <p class="cite">field_emission/constants.py::H5_MEASUREMENT_PATH, field_emission/constants.py::H5_READOUT_PATH, update_h5py.py::_write_dataset_with_attributes</p>
+    </div>
+
+    <h3>What kvetta's original file contained</h3>
+
+    <table>
+      <tbody>
+        <tr><td>Runs</td><td>80, across 37 cryomodules, Oct 2023 onward</td></tr>
+        <tr><td>Complete runs</td><td>All 80 had all 8 cavities × both readouts.
+          None had an empty dataset.</td></tr>
+        <tr><td>Rows per dataset</td><td>median about 12,000, max about 420,000</td></tr>
+        <tr><td>Size</td><td>73.8 MB</td></tr>
+      </tbody>
+    </table>
+
+    <p>Two runs looked wrong, and both are explained by the steps above:</p>
+    <ul>
+      <li><strong>CM27, dated 2026-10-16</strong>: 1 row in all 16 datasets, and no
+        cavity ever above 4 MV. The date was a typo for 2024 (same elog ID as
+        CM27's other 10/16/24 run), so the archiver was asked about a window
+        in the future. The run list in git has the corrected date.</li>
+      <li><strong>CM04 2023-10-25, CAV5 <code>instant</code></strong>: 1 row. The
+        align step drops a timestamp until all 11 PVs have had at least one
+        value, so one sparse PV can shrink a whole dataset.
+        CHECK: was one of decarad 1's <code>GAMMA_DOSE_RATE</code> channels
+        dead or unarchived that day?</li>
+    </ul>
+  </section>
+
+  <section id="sync">
+    <h2>3. How the cache gets built</h2>
+
+    <p>
+      Only the run list is in git. The cache lives in the shared SRF directory
+      (<code>/home/physics/srf/field_emission/</code> on Linux).
+      <span class="cite">platform_paths.py::get_field_emission_dir, field_emission/constants.py::H5_PATH</span>
+    </p>
+
+    <p>
+      Every time the display opens, it starts a background sync, and keeps the
+      selection panel disabled until the sync ends.
+      <span class="cite">field_emission_gui.py::FieldEmission.start_cache_sync</span>
+    </p>
+
+    <div class="panel">
+      <pre>
+missing = find_missing_runs(run list)        # compare run list to cache
+
+for run in missing:                          # phase 1: fetch
+    16 × (archiver fetch → align → write CSV)
+    # any exception stops the sync here, and phase 2 never runs
+
+if missing:                                  # phase 2: convert
+    for csv in CSV_OUTPUT_DIR/*.csv:         # every CSV on disk, old ones too
+        write it into the HDF5 as one dataset</pre>
+      <p class="cite">gui_updater.py::UpdateWorker.sync_update, update_h5py.py::convert_to_h5</p>
+    </div>
+
+    <p>Two details matter for what follows:</p>
+    <ul>
+      <li><strong>CSVs are never deleted.</strong> Phase 2 converts every CSV in
+        the directory, including ones left over from an earlier sync that
+        failed.</li>
+      <li><strong>Phase 2 only runs if something was missing.</strong> If
+        nothing is missing, leftover CSVs just sit there.</li>
+    </ul>
+  </section>
+
+  <section id="decision">
+    <h2>4. The open decision: what counts as "already cached"?</h2>
+
+    <p><code>find_missing_runs</code> needs a rule for skipping a run:</p>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>Rule A: group exists</th><th>Rule B: group is complete</th></tr></thead>
+      <tbody>
+        <tr><td>Skip a run when</td>
+            <td><code>CM01/2023-10-02_0913</code> exists</td>
+            <td>it has all 8 <code>CAV{n}</code>, each with
+              <code>average</code> and <code>instant</code></td></tr>
+        <tr><td>A half-written run</td>
+            <td>stays half-written, unless an unrelated sync happens to sweep up its leftover CSVs</td>
+            <td>gets re-fetched next time the display opens</td></tr>
+        <tr><td>Cost</td>
+            <td>a group lookup per run</td>
+            <td>16 dataset lookups per run, still a fraction of a second for 80 runs</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>
+      The worry with rule B was that a run with genuinely no data would be
+      re-fetched on every open. That can't happen through the normal path. A
+      fetch with no data still writes a CSV, and an empty CSV still becomes a
+      dataset. So the dataset exists, and B counts it. B only re-fetches when
+      a dataset was <em>never written</em>, which takes a crash.
+    </p>
+
+    <p>
+      This holds for the installed <code>lcls_tools</code>. A PV with no
+      samples in the window comes back as an empty handler, not an error.
+      Only a timeout, a connection failure, or an HTTP error raises, and any of
+      those stops the sync in phase 1 under either rule.
+      <span class="cite">lcls_tools: get_values_over_time_range, the “if pv not in result” fill-in</span>
+    </p>
+
+    <div class="caveat">
+      <strong>One empty PV empties the whole dataset.</strong> The align step
+      drops every row with a missing value, so a channel with no samples leaves
+      0 rows. All 8 cavities share the same 10 decarad PVs, so one unarchived
+      channel blanks all 8 datasets for that readout. None of kvetta's 80 runs
+      hit this.
+      <span class="cite">amp_vs_radiation.py::align_pvs_to_common_time “dropna(how="any")”</span>
+    </div>
+
+    <h3>Try it</h3>
+
+    <p>
+      This simulates a first sync of a few runs into an empty cache, with a
+      failure you choose, then what the <em>next</em> open does under each rule
+      (assuming that sync goes cleanly). Each row is a run. Each square is one
+      dataset: 8 <code>average</code>, then 8 <code>instant</code>, in fetch order.
+    </p>
+
+    <div class="panel">
+      <div class="ctl">
+        <label for="nruns">Runs in the run list</label>
+        <input id="nruns" type="range" min="2" max="6" value="4">
+        <span class="val" id="nruns-v"></span>
+
+        <label for="fail">First sync fails by</label>
+        <select id="fail">
+          <option value="none">not failing</option>
+          <option value="archiver">archiver error during fetch</option>
+          <option value="killed" selected>display closed during convert</option>
+        </select>
+        <span class="val"></span>
+
+        <label for="where">…at dataset</label>
+        <input id="where" type="range" min="0" max="63" value="53">
+        <span class="val" id="where-v"></span>
+      </div>
+
+      <div class="grids">
+        <div><div class="grid-title">After first sync</div><div id="g0"></div></div>
+        <div><div class="grid-title">Next open, rule A</div><div id="gA"></div></div>
+        <div><div class="grid-title">Next open, rule B</div><div id="gB"></div></div>
+      </div>
+      <div class="legend">
+        <span><i></i>nothing</span>
+        <span><i style="background:#3a3f4a;border-color:var(--edge)"></i>CSV on disk only</span>
+        <span><i style="background:var(--ok);border-color:var(--ok)"></i>in the HDF5 cache</span>
+      </div>
+      <div id="verdict"></div>
+    </div>
+
+    <div class="caveat">
+      The simulator converts CSVs in run order. The real order is whatever
+      <code>glob</code> returns, which isn't sorted. That changes <em>which</em>
+      datasets land before a crash, not whether a run ends up partial.
+      <span class="cite">update_h5py.py::convert_to_h5</span>
+    </div>
+
+    <h3>The failure the simulator can't show</h3>
+    <p>
+      HDF5 has no journal. If the process dies during phase 2, the file can be
+      left unreadable, not just incomplete. The display then raises on open,
+      because <code>match_measurement_dates</code> only handles a
+      <em>missing</em> file (<code>FileNotFoundError</code>). The fix today is
+      deleting the file, after which the next open rebuilds it. Closing the
+      display during the first build, which writes all 80 runs, is the likely
+      way to hit this.
+      <span class="cite">field_emission/measurements.py::match_measurement_dates</span>
+    </p>
+  </section>
+</main>
+
+<script>
+const PER_RUN = 16;
+const $ = (id) => document.getElementById(id);
+
+function emptyCache(n) {
+  return Array.from({ length: n }, () =>
+    Array.from({ length: PER_RUN }, () => ({ csv: false, cached: false })));
+}
+const clone = (c) => c.map((run) => run.map((d) => ({ ...d })));
+
+const isComplete = (run) => run.every((d) => d.cached);
+const hasAny = (run) => run.some((d) => d.cached);
+
+/* One sync, mirroring UpdateWorker.sync_update.
+   fail: {kind: "none"|"archiver"|"killed", at: dataset index}
+   For "archiver", `at` counts fetches across the missing runs.
+   For "killed", `at` counts datasets written during convert. */
+function sync(cache, isCached, fail) {
+  const c = clone(cache);
+  const missing = c.map((run, i) => i).filter((i) => !isCached(c[i]));
+
+  let fetched = 0;
+  for (const r of missing) {
+    for (let d = 0; d < PER_RUN; d++) {
+      if (fail.kind === "archiver" && fetched === fail.at) return c;  // no convert
+      c[r][d].csv = true;
+      fetched++;
+    }
+  }
+  if (!missing.length) return c;  // convert only runs if something was missing
+
+  let written = 0;
+  for (const run of c) {
+    for (const d of run) {
+      if (!d.csv) continue;
+      if (fail.kind === "killed" && written === fail.at) return c;
+      d.cached = true;
+      written++;
+    }
+  }
+  return c;
+}
+
+function render(el, cache) {
+  el.innerHTML = cache.map((run, i) =>
+    `<div class="run"><span>R${i + 1}</span><div class="cells">` +
+    run.map((d) => `<i class="${d.cached ? "cached" : d.csv ? "csv" : ""}"></i>`).join("") +
+    `</div></div>`).join("");
+}
+
+function summarize(cache) {
+  const full = cache.filter(isComplete).length;
+  const partial = cache.filter((r) => hasAny(r) && !isComplete(r)).length;
+  return { full, partial, none: cache.length - full - partial };
+}
+
+function update() {
+  const n = +$("nruns").value;
+  const kind = $("fail").value;
+  const where = $("where");
+  where.max = n * PER_RUN - 1;
+  if (+where.value > +where.max) where.value = where.max;
+  where.disabled = kind === "none";
+  $("nruns-v").textContent = n;
+  const at = +where.value;
+  const run = Math.floor(at / PER_RUN) + 1, ds = (at % PER_RUN) + 1;
+  $("where-v").textContent = kind === "none" ? "—" : `R${run} #${ds}`;
+
+  const first = sync(emptyCache(n), () => false, { kind, at });
+  const ruleA = sync(first, hasAny, { kind: "none" });
+  const ruleB = sync(first, isComplete, { kind: "none" });
+  render($("g0"), first); render($("gA"), ruleA); render($("gB"), ruleB);
+
+  const a = summarize(ruleA), b = summarize(ruleB);
+  const line = (name, s) => s.partial
+    ? `<span class="bad">${name}: ${s.partial} run(s) stuck partial.</span> ` +
+      `It will never re-fetch ${s.partial === 1 ? "it" : "them"}.`
+    : `<span class="good">${name}: all ${s.full} runs complete.</span>`;
+  $("verdict").innerHTML =
+    `<p class="verdict">${line("Rule A", a)}</p><p class="verdict">${line("Rule B", b)}</p>` +
+    (kind === "archiver"
+      ? `<p class="note">An archiver error stops the sync before convert, so the cache stays ` +
+        `empty and both rules recover. The CSVs it did write get converted next time.</p>`
+      : "");
+}
+
+for (const id of ["nruns", "fail", "where"]) $(id).addEventListener("input", update);
+update();
+
+/* Self-check against the cases worked out by hand in section 4. */
+(function selfCheck() {
+  const fails = [];
+  const expect = (cond, msg) => { if (!cond) fails.push(msg); };
+
+  const clean = sync(emptyCache(3), () => false, { kind: "none" });
+  expect(clean.every(isComplete), "clean sync should complete every run");
+
+  // Killed partway through run 2: run 2 partial, run 3 CSVs only.
+  const killed = sync(emptyCache(3), () => false, { kind: "killed", at: 20 });
+  expect(isComplete(killed[0]) && hasAny(killed[1]) && !isComplete(killed[1]),
+    "kill at 20 should leave R1 full, R2 partial");
+  expect(!hasAny(killed[2]) && killed[2].every((d) => d.csv),
+    "kill at 20 should leave R3 as CSVs only");
+  // Rule A: R3 missing, so convert runs and sweeps up R2's leftover CSVs.
+  expect(sync(killed, hasAny, { kind: "none" }).every(isComplete),
+    "rule A heals R2 by accident when R3 is also missing");
+
+  // Killed in the last run: nothing is missing under A, so no convert runs.
+  const late = sync(emptyCache(3), () => false, { kind: "killed", at: 40 });
+  expect(!isComplete(sync(late, hasAny, { kind: "none" })[2]),
+    "rule A should leave the last run partial");
+  expect(sync(late, isComplete, { kind: "none" }).every(isComplete),
+    "rule B should heal the last run");
+
+  // Archiver error: nothing converted.
+  const arch = sync(emptyCache(3), () => false, { kind: "archiver", at: 20 });
+  expect(arch.every((r) => !hasAny(r)), "archiver error should convert nothing");
+
+  if (fails.length) console.error("SELF-CHECK FAILED\n" + fails.join("\n"));
+  else console.log("SELF-CHECK PASSED (7 cases)");
+})();
+</script>
+</body>
+</html>

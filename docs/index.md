@@ -36,6 +36,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 | [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection |
 | [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence |
 | [How auto-tune works](explainers/auto_tune.html) | Interactive explainer: the `_auto_tune` convergence loop, its guards, and how it fails. |
+| [How the field emission display works](explainers/field_emission.html) | Interactive explainer: what the display plots, how a run becomes cached data, and how the cache sync fails. |
 
 ### Displays
 
