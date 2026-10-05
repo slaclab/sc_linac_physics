@@ -145,14 +145,14 @@
         <tr><td>x: amplitude</td>
             <td><code>ACCL:{linac}:{cm}{cav}0:AACTMEAN</code></td>
             <td>MV, all 8 cavities, whichever one was being run
-            <span class="cite">amp_vs_radiation.py::build_amplitude_pvs</span></td></tr>
+            <span class="cite">amp_vs_radiation.py::build_amplitude_pvs “+ "AACTMEAN"”, field_emission/constants.py::CAVITIES “CAVITIES = 8”</span></td></tr>
         <tr><td>y: radiation, "average"</td>
             <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMAAVE</code></td>
             <td>decarad <code>n</code> is 1 or 2, channels 01–10
-            <span class="cite">amp_vs_radiation.py::build_rad_readout_pvs</span></td></tr>
+            <span class="cite">amp_vs_radiation.py::build_decarad_pvs “RADM:SYS0:{decarad}00:”, amp_vs_radiation.py::build_rad_readout_pvs “{sel_rad_channel:02d}:GAMMAAVE”, field_emission/constants.py::RAD_CHANNELS “RAD_CHANNELS = 10”</span></td></tr>
         <tr><td>y: radiation, "instant"</td>
             <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMA_DOSE_RATE</code></td>
-            <td><span class="cite">amp_vs_radiation.py::build_rad_readout_pvs</span></td></tr>
+            <td><span class="cite">amp_vs_radiation.py::build_rad_readout_pvs “{sel_rad_channel:02d}:GAMMA_DOSE_RATE”</span></td></tr>
       </tbody>
     </table>
     </div>
@@ -168,7 +168,7 @@
       <strong>Rows under 4 MV are dropped.</strong> Any sample where
       <code>AACTMEAN</code> is below <code>AMPLITUDE_THRESHOLD = 4</code> is
       masked out of both the plot and the fit.
-      <span class="cite">field_emission/constants.py::AMPLITUDE_THRESHOLD, field_emission/measurements.py::get_columns</span>
+      <span class="cite">field_emission/constants.py::AMPLITUDE_THRESHOLD “AMPLITUDE_THRESHOLD = 4”, field_emission/measurements.py::get_columns “df.mask(df.iloc[:, 0]”</span>
     </p>
 
     <p>
@@ -178,7 +178,7 @@
       <code>scipy.optimize.curve_fit</code> (5500 evaluations max). Channels
       with fewer than 2 nonzero points, or that don't converge, get no line.
       The legend shows C1 and C2.
-      <span class="cite">plot_me.py::fit_equation, plot_me.py::add_poly_fit, field_emission/constants.py::NUM_FIT_ITERATIONS</span>
+      <span class="cite">plot_me.py::fit_equation “c1 * (amp**2.5) * np.exp((-c2) / amp)”, plot_me.py::add_poly_fit “skip fitting when less than two samples”, field_emission/constants.py::NUM_FIT_ITERATIONS “NUM_FIT_ITERATIONS = 5500”</span>
     </p>
 
     <div class="caveat">
@@ -209,11 +209,11 @@
       <div><b>16 archiver fetches</b>
         2 readouts × 8 cavities. Each fetch asks for 11 PVs: that cavity's
         <code>AACTMEAN</code> + 10 decarad channels.
-        <div class="cite">amp_vs_radiation.py::generate_amp_vs_rad_csvs</div></div>
+        <div class="cite">amp_vs_radiation.py::generate_amp_vs_rad_csvs “for readout in RAD_READ_TYPES”</div></div>
       <div><b>Align</b>
         drop invalid samples, outer-join on timestamp, forward-fill, drop any
         row still missing a value
-        <div class="cite">amp_vs_radiation.py::align_pvs_to_common_time</div></div>
+        <div class="cite">amp_vs_radiation.py::align_pvs_to_common_time “aligned.ffill()”</div></div>
       <div><b>16 CSVs on disk</b>
         <code>cm01_23_10_02_09_13_cavity1_average.csv</code>
         <div class="cite">field_emission/constants.py::CSV_OUTPUT_DIR</div></div>
@@ -270,13 +270,13 @@ field_emission_data.hdf5
     <p>
       Only the run list is in git. The cache lives in the shared SRF directory
       (<code>/home/physics/srf/field_emission/</code> on Linux).
-      <span class="cite">platform_paths.py::get_field_emission_dir, field_emission/constants.py::H5_PATH</span>
+      <span class="cite">platform_paths.py::get_srf_base_dir “Path("/home/physics/srf")”, platform_paths.py::get_field_emission_dir “/ "field_emission"”, field_emission/constants.py::H5_PATH</span>
     </p>
 
     <p>
       Every time the display opens, it starts a background sync, and keeps the
       selection panel disabled until the sync ends.
-      <span class="cite">field_emission_gui.py::FieldEmission.start_cache_sync</span>
+      <span class="cite">field_emission_gui.py::FieldEmission.start_cache_sync “self.left_panel.setEnabled(False)”</span>
     </p>
 
     <div class="panel">
@@ -290,7 +290,7 @@ for run in missing:                          # phase 1: fetch
 if missing:                                  # phase 2: convert
     for csv in CSV_OUTPUT_DIR/*.csv:         # every CSV on disk, old ones too
         write it into the HDF5 as one dataset</pre>
-      <p class="cite">gui_updater.py::UpdateWorker.sync_update, update_h5py.py::convert_to_h5</p>
+      <p class="cite">gui_updater.py::UpdateWorker.sync_update “if missing:”, update_h5py.py::convert_to_h5 “glob.glob(os.path.join(CSV_OUTPUT_DIR, "*.csv"))”</p>
     </div>
 
     <p>Two details matter for what follows:</p>
@@ -324,6 +324,10 @@ if missing:                                  # phase 2: convert
             <td>16 dataset lookups per run, still a fraction of a second for 80 runs</td></tr>
       </tbody>
     </table>
+    <p>
+      <strong>Rule B is what the code does.</strong>
+      <span class="cite">update_h5py.py::_run_is_complete “for readout in RAD_READ_TYPES”</span>
+    </p>
     </div>
 
     <p>
@@ -408,7 +412,7 @@ if missing:                                  # phase 2: convert
       deleting the file, after which the next open rebuilds it. Closing the
       display during the first build, which writes all 80 runs, is the likely
       way to hit this.
-      <span class="cite">field_emission/measurements.py::match_measurement_dates</span>
+      <span class="cite">field_emission/measurements.py::match_measurement_dates “except FileNotFoundError”</span>
     </p>
   </section>
 </main>
