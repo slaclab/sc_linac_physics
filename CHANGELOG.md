@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v9.40.0 (2026-10-06)
+
+### Continuous Integration
+
+- Recompute PR size in the commenting workflow instead of trusting the artifact
+  ([#320](https://github.com/slaclab/sc_linac_physics/pull/320),
+  [`9b5c32e`](https://github.com/slaclab/sc_linac_physics/commit/9b5c32e31c7e5acfded2f725f85588d583685298))
+
+- Report PR size unavailable past the 3,000-file API cap; avoid SIGPIPE in top-files table
+  ([#320](https://github.com/slaclab/sc_linac_physics/pull/320),
+  [`9b5c32e`](https://github.com/slaclab/sc_linac_physics/commit/9b5c32e31c7e5acfded2f725f85588d583685298))
+
+### Documentation
+
+- **sc-linac**: HL SSA rating is per cavity
+  ([#317](https://github.com/slaclab/sc_linac_physics/pull/317),
+  [`eb2f781`](https://github.com/slaclab/sc_linac_physics/commit/eb2f7818f1c557c140aec3a97f65856f88af3778))
+
+### Features
+
+- **sc-linac**: Read SSA rated power from SSA:Type
+  ([#317](https://github.com/slaclab/sc_linac_physics/pull/317),
+  [`eb2f781`](https://github.com/slaclab/sc_linac_physics/commit/eb2f7818f1c557c140aec3a97f65856f88af3778))
+
+- **sc-linac**: Record each cavity's SSA rated power
+  ([#317](https://github.com/slaclab/sc_linac_physics/pull/317),
+  [`eb2f781`](https://github.com/slaclab/sc_linac_physics/commit/eb2f7818f1c557c140aec3a97f65856f88af3778))
+
+
 ## v9.39.0 (2026-10-05)
 
 ### Bug Fixes
