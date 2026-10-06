@@ -448,3 +448,57 @@ class TestBackgroundFetch:
         display.hide_fault_combo_box.setCurrentText("BCS")
         display._store_counts(data)
         assert display.y_data == [] and "BCS" in data
+
+
+class TestStatusLabel:
+    def _select(self, display, counts, cav="1"):
+        for box, text in (
+            (display.cm_combo_box, "01"),
+            (display.cav_combo_box, cav),
+        ):
+            box.blockSignals(True)
+            box.setCurrentText(text)
+            box.blockSignals(False)
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = counts
+
+    def test_says_loading_while_fetch_runs(self, display):
+        self._select(display, Mock(return_value={}), cav="3")
+        display._start_fetch = lambda target, *args: None  # never finishes
+        display.update_plot()
+        assert display.status_label.text().startswith(
+            "Loading fault counts for CM01 cavity 3"
+        )
+
+    def test_clears_when_counts_arrive(self, display):
+        self._select(display, Mock(return_value=_counts("BCS")))
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+        assert display.status_label.text() == ""
+
+    def test_empty_result_says_so(self, display):
+        self._select(display, Mock(return_value={}))
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+        assert display.status_label.text().startswith("No faults")
+
+    def test_failure_shows_message(self, display):
+        self._select(display, Mock(side_effect=RuntimeError("boom")))
+        display.update_plot()
+        assert display.status_label.text() == "Fetch failed: boom"
+
+    def test_failure_after_display_deleted_is_swallowed(self, display):
+        self._select(display, Mock(side_effect=RuntimeError("boom")))
+        with patch.object(
+            type(display), "fetch_failed", create=False
+        ) as signal:
+            signal.emit.side_effect = RuntimeError(
+                "wrapped C/C++ object deleted"
+            )
+            display.update_plot()  # must not raise
+
+    def test_stale_failure_is_ignored(self, display):
+        display._request_id = 2
+        display.status_label.setText("Loading")
+        display._on_fetch_failed(1, "old")
+        assert display.status_label.text() == "Loading"

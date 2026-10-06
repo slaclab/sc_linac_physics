@@ -33,6 +33,7 @@ class FaultCountDisplay(Display):
     # request id, Dict[str, FaultCounter]; emitted from the fetch thread,
     # delivered on the Qt main thread (queued connection)
     counts_ready = pyqtSignal(int, object)
+    fetch_failed = pyqtSignal(int, str)  # request id, error message
 
     fault_tlc_list: List[str] = sorted(
         set(map(lambda d: d["Three Letter Code"], utils.parse_csv()))
@@ -95,6 +96,9 @@ class FaultCountDisplay(Display):
         omit_fault_h_layout.addWidget(self.omit_tlc_text)
         omit_fault_h_layout.addWidget(self.hide_fault_combo_box)
         omit_fault_h_layout.addStretch()
+        # Says whether a fetch is running, so a blank plot is not ambiguous
+        self.status_label = QLabel("Select a cryomodule and cavity")
+        omit_fault_h_layout.addWidget(self.status_label)
 
         self.cm_combo_box.addItems([""] + ALL_CRYOMODULES)
         self.cav_combo_box.addItems([""] + [str(i) for i in range(1, 9)])
@@ -111,6 +115,7 @@ class FaultCountDisplay(Display):
         # dropped.
         self._request_id = 0
         self.counts_ready.connect(self._on_counts_ready)
+        self.fetch_failed.connect(self._on_fetch_failed)
         self.cm_combo_box.currentIndexChanged.connect(self.update_cavity)
         self.cav_combo_box.currentIndexChanged.connect(self.update_cavity)
 
@@ -167,6 +172,10 @@ class FaultCountDisplay(Display):
         self._request_id += 1
         request_id = self._request_id
         start, end = self._selected_range()
+        self.status_label.setText(
+            f"Loading fault counts for CM{self.cm_combo_box.currentText()} "
+            f"cavity {self.cav_combo_box.currentText()}..."
+        )
         self._start_fetch(self._fetch, request_id, self.cavity, start, end)
 
     @staticmethod
@@ -195,6 +204,10 @@ class FaultCountDisplay(Display):
             # get_fault_counts already logs archiver errors and returns {};
             # this is anything else, or the display was deleted mid-fetch.
             utils.cavity_fault_logger.error(f"Fault count fetch failed: {e}")
+            try:
+                self.fetch_failed.emit(request_id, str(e))
+            except RuntimeError:  # the display was deleted mid-fetch
+                pass
 
     def closeEvent(self, event):
         # CavityDisplay keeps this window and shows it again, so nothing is
@@ -207,6 +220,20 @@ class FaultCountDisplay(Display):
             return
         self._store_counts(data)
         self._draw()
+        if self.y_data:
+            self.status_label.setText("")
+        else:
+            # get_fault_counts returns {} when the archiver query fails, so
+            # an empty result can't be told apart from a quiet cavity here.
+            self.status_label.setText(
+                "No faults in this range (or the archiver query failed; "
+                "see the cavity fault log)"
+            )
+
+    def _on_fetch_failed(self, request_id, message):
+        if request_id != self._request_id:
+            return
+        self.status_label.setText(f"Fetch failed: {message}")
 
     def _draw(self):
         ticks = []
