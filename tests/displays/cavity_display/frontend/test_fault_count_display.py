@@ -1,6 +1,7 @@
 # "test_fault_count_display.py"
 import sys
 from datetime import datetime
+from concurrent.futures import Future
 from unittest.mock import Mock, patch
 
 import pytest
@@ -41,10 +42,32 @@ def mock_machine():
         yield mock
 
 
+class InlineExecutor:
+    """Runs each fetch on the calling thread, so update_plot draws before
+    it returns."""
+
+    def submit(self, fn, *args):
+        future = Future()
+        future.set_result(fn(*args))
+        return future
+
+    def shutdown(self, **kwargs):
+        pass
+
+
+@pytest.fixture
+def threaded_display(qapp, mock_machine):
+    """Display with its real fetch thread."""
+    disp = FaultCountDisplay(lazy_fault_pvs=True)
+    yield disp
+    disp.close()
+
+
 @pytest.fixture
 def display(qapp, mock_machine):
     """Create display instance."""
     disp = FaultCountDisplay(lazy_fault_pvs=True)
+    disp._executor = InlineExecutor()
     yield disp
     disp.close()
 
@@ -360,3 +383,78 @@ def test_various_fault_data(display, fault_counts, expected_totals):
     assert display.num_faults == expected_totals[0]
     assert display.num_invalids == expected_totals[1]
     assert display.num_warnings == expected_totals[2]
+
+
+def _counts(tlc):
+    return {tlc: FaultCounter(alarm_count=1, ok_count=0, invalid_count=0)}
+
+
+class TestBackgroundFetch:
+    def test_fetch_runs_off_the_main_thread(self, threaded_display, qtbot):
+        import threading
+
+        display = threaded_display
+        main = threading.get_ident()
+        seen = {}
+
+        def get_counts(start, end):
+            seen["thread"] = threading.get_ident()
+            return _counts("BCS")
+
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = get_counts
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+            qtbot.waitUntil(lambda: display.y_data == ["BCS"], timeout=2000)
+        assert seen["thread"] != main
+
+    def test_failed_fetch_is_logged_not_raised(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(side_effect=RuntimeError("x"))
+        display._executor = Mock()
+        failed = Future()
+        failed.set_exception(RuntimeError("boom"))
+        display._executor.submit.return_value = failed
+        with patch(
+            "sc_linac_physics.displays.cavity_display.utils.utils"
+            ".cavity_fault_logger"
+        ) as log:
+            display.update_plot()
+        assert "boom" in log.error.call_args.args[0]
+        assert display.y_data is None
+
+    def test_new_request_cancels_pending_one(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(return_value={})
+        pending = Mock()
+        display._pending = pending
+        display.update_plot()
+        pending.cancel.assert_called_once()
+
+    def test_cancelled_fetch_delivers_nothing(self, display):
+        cancelled = Future()
+        cancelled.cancel()
+        with patch.object(display, "counts_ready") as signal:
+            display._deliver(1, cancelled)
+        signal.emit.assert_not_called()
+
+    def test_fetch_gets_selected_range(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(return_value={})
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+        start, end = display.cavity.get_fault_counts.call_args.args
+        assert (start, end) == display._selected_range()
+
+    def test_stale_result_is_dropped(self, display):
+        display._request_id = 2
+        with patch.object(display.plot_window, "addItem") as add:
+            display._on_counts_ready(1, _counts("OLD"))
+        add.assert_not_called()
+        assert display.y_data is None
+
+    def test_omitted_fault_does_not_change_fetched_dict(self, display):
+        data = _counts("BCS")
+        display.hide_fault_combo_box.setCurrentText("BCS")
+        display._store_counts(data)
+        assert display.y_data == [] and "BCS" in data
