@@ -10,6 +10,11 @@ multi-PV request (getDataForPVs.json, which lcls_tools used). A PV the
 archiver does not know then fails only its own request; the multi-PV endpoint
 returns 404 for the whole batch.
 
+getDataForPVs is not in the user guide. Its server side, doGetMultiPV in
+DataRetrievalServlet.java, reads the PVs one at a time on one thread
+("For now, we only use the current thread to execute in serial."):
+https://github.com/archiver-appliance/epicsarchiverap/blob/master/src/main/org/epics/archiverappliance/retrieval/DataRetrievalServlet.java
+
 Value-at-time is the exception: one POST naming every PV took the same 7-8 s
 as splitting it into parallel single-PV POSTs, so it stays one request.
 
