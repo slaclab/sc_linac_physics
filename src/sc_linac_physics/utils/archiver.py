@@ -18,8 +18,9 @@ https://github.com/archiver-appliance/epicsarchiverap/blob/master/src/main/org/e
 Value-at-time is the exception: one POST naming every PV took the same 7-8 s
 as splitting it into parallel single-PV POSTs, so it stays one request.
 
-In every test, the first query of a session was slow (55-138 s) whichever
-method went first. CHECK: is that the archiver warming up after idle?
+Cold queries are slow whichever method is used: the first query of a
+session took 55-138 s, and cold value-at-time lookups 26-63 s. CHECK: is that
+the archiver reading from slower storage?
 
 Differences from lcls_tools, on purpose:
 
@@ -48,16 +49,21 @@ from sc_linac_physics.utils.epics.config import EPICS_INVALID_VAL
 
 ARCHIVER_URL = "http://lcls-archapp.slac.stanford.edu/retrieval/data"
 
-# Same limit FaultDataFetcher.MAX_WORKERS uses against this archiver.
+# Measured on site (2026-10-06), 28 PVs x 2 h, uncached windows, median of 3:
+# 1 worker 6.9 s, 2: 3.6 s, 4: 1.9 s, 8: 1.1 s, 16: 1.3 s. Same value as
+# FaultDataFetcher.MAX_WORKERS.
 MAX_WORKERS = 8
 
-RANGE_TIMEOUT = 90.0  # seconds per PV request; long windows are slow to read
-# Same default as lcls_tools. A cold query can take minutes (138 s measured);
-# a repeat of it took 7 s, so a retry after a timeout often succeeds.
-AT_TIME_TIMEOUT = 15.0
+# A proxy in front of the archiver answers 502 at 60 s, so a longer timeout
+# never helps; 75 s lets the proxy's 502 arrive and be retried. Measured: range
+# requests took 12 s at most (72 h window); cold value-at-time took 26-63 s.
+# CHECK: who configures the 60 s proxy limit?
+RANGE_TIMEOUT = 75.0
+AT_TIME_TIMEOUT = 75.0
 
-# Same retry policy as utils/epics PVConfig: 3 tries, 0.5 s * attempt between.
-MAX_RETRIES = 3
+# Cold value-at-time lookups took up to 4 attempts (502, 502, then 200), each
+# about 60 s. So one lookup can block for about 4 minutes before it fails.
+MAX_RETRIES = 4
 RETRY_DELAY = 0.5
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")

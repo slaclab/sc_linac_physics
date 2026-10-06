@@ -100,8 +100,44 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
 - Errors: `PVNotArchivedError` (names every unknown PV), `ArchiverTimeoutError`,
   `ArchiverConnectionError`, all subclasses of `ArchiverError`. Timeouts,
   connection errors and 5xx responses are retried 3 times first.
-- `get_values_at_time` leaves out a PV the archiver has no value for. A cold
-  query can take minutes; pass a longer `timeout` if you can wait.
+- `get_values_at_time` leaves out a PV the archiver has no value for.
+- Cold queries are slow: value-at-time took 26-63 s on site. A proxy answers
+  502 at 60 s, which is retried, so one cold lookup can block for about 4
+  minutes before it fails. Keep these calls off the Qt main thread.
+
+### Plotting one signal against another
+
+The archiver timestamps each PV separately, so pair the samples by time first.
+`merge_asof` matches each x sample with the last y sample at or before it:
+
+```python
+from datetime import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
+from sc_linac_physics.utils.archiver import get_values_over_time_range
+
+amp, rad = "ACCL:L0B:0110:AACTMEAN", "RADM:SYS0:100:01:GAMMAAVE"
+frames = get_values_over_time_range(
+    [amp, rad], datetime(2023, 10, 2, 9, 13), datetime(2023, 10, 2, 10)
+)
+x = frames[amp][frames[amp]["valid"]]
+y = frames[rad][frames[rad]["valid"]]
+paired = pd.merge_asof(
+    x[["timestamp", "value"]],
+    y[["timestamp", "value"]],
+    on="timestamp",
+    suffixes=("_amp", "_rad"),
+).dropna()
+
+fig, ax = plt.subplots()
+ax.scatter(paired["value_amp"], paired["value_rad"], marker=".")
+ax.set_xlabel(amp)
+ax.set_ylabel(rad)
+plt.show()
+```
+
+Field emission does the same pairing for a whole run, with forward-fill, in
+`amp_vs_radiation.py::align_pvs_to_common_time`.
 
 ## Platform paths (`utils/platform_paths.py`)
 
