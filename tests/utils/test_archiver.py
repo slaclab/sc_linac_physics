@@ -298,3 +298,50 @@ def test_pair_by_time_drops_x_before_first_y():
     y = _series("RAD", [(5, 0.1)])
 
     assert archiver.pair_by_time(x, y)["AMP"].tolist() == [2.0]
+
+
+# ---------------------------------------------------------------------------
+# Review fixes
+# ---------------------------------------------------------------------------
+def test_range_error_names_the_pv(session):
+    session.request.side_effect = requests.exceptions.Timeout()
+
+    with pytest.raises(ArchiverTimeoutError, match="^A:PV: "):
+        get_values_over_time_range(["A:PV"], START, END)
+
+
+@pytest.mark.parametrize(
+    "naive",
+    [
+        datetime(2024, 11, 3, 1, 30),  # fall back: 01:30 happens twice
+        datetime(2024, 3, 10, 2, 30),  # spring forward: 02:30 never happens
+    ],
+)
+def test_naive_time_during_dst_change_is_refused(session, naive):
+    with pytest.raises(ValueError, match="daylight saving"):
+        get_values_over_time_range(["A:PV"], naive, END)
+
+    session.request.assert_not_called()
+
+
+def test_aware_time_during_dst_change_is_accepted(session):
+    session.request.return_value = _response(payload=[])
+    pdt = archiver.LOCAL_TZ
+    first_0130 = datetime(2024, 11, 3, 1, 30, tzinfo=pdt, fold=0)
+
+    get_values_over_time_range(["A:PV"], first_0130, datetime(2024, 11, 4))
+
+    assert (
+        session.request.call_args.kwargs["params"]["from"]
+        == "2024-11-03T08:30:00.000000Z"
+    )
+
+
+def test_pair_by_time_sorts_unsorted_input():
+    x = _series("AMP", [(30, 3.0), (10, 1.0), (20, 2.0)])
+    y = _series("RAD", [(25, 0.3), (5, 0.1)])
+
+    paired = archiver.pair_by_time(x, y)
+
+    assert paired["AMP"].tolist() == [1.0, 2.0, 3.0]
+    assert paired["RAD"].tolist() == [0.1, 0.1, 0.3]

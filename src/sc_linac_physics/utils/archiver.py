@@ -13,7 +13,8 @@ returns 404 for the whole batch.
 getDataForPVs is not in the user guide. Its server side, doGetMultiPV in
 DataRetrievalServlet.java, reads the PVs one at a time on one thread
 ("For now, we only use the current thread to execute in serial."):
-https://github.com/archiver-appliance/epicsarchiverap/blob/master/src/main/org/epics/archiverappliance/retrieval/DataRetrievalServlet.java
+https://github.com/archiver-appliance/epicsarchiverap, file
+src/main/org/epics/archiverappliance/retrieval/DataRetrievalServlet.java
 
 Value-at-time is the exception: one POST naming every PV took the same 7-8 s
 as splitting it into parallel single-PV POSTs, so it stays one request.
@@ -127,12 +128,16 @@ def get_values_over_time_range(
     params = {"from": _to_utc_iso(start), "to": _to_utc_iso(end)}
 
     def fetch(pv: str) -> Optional[pd.DataFrame]:
-        response = _request(
-            "GET",
-            f"{ARCHIVER_URL}/getData.json",
-            timeout,
-            params={**params, "pv": pv},
-        )
+        try:
+            response = _request(
+                "GET",
+                f"{ARCHIVER_URL}/getData.json",
+                timeout,
+                params={**params, "pv": pv},
+            )
+        except ArchiverError as e:
+            # Every range request has the same URL; name the PV that failed.
+            raise type(e)(f"{pv}: {e}") from e
         if response is None:
             return None
         payload = response.json()
@@ -174,9 +179,9 @@ def pair_by_time(x: pd.Series, y: pd.Series) -> pd.DataFrame:
     against the other. Columns are the two Series' names. Rows before y's
     first sample are dropped.
     """
-    paired = pd.merge_asof(
-        x.rename("x").rename_axis("timestamp").reset_index(),
-        y.rename("y").rename_axis("timestamp").reset_index(),
+    paired = pd.merge_asof(  # needs both sorted by time
+        x.sort_index().rename("x").rename_axis("timestamp").reset_index(),
+        y.sort_index().rename("y").rename_axis("timestamp").reset_index(),
         on="timestamp",
     ).dropna()
     return paired.set_index("timestamp").rename(
@@ -250,8 +255,25 @@ def _request(
 
 def _to_utc_iso(moment: datetime) -> str:
     if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=LOCAL_TZ)
+        moment = _localize(moment)
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _localize(naive: datetime) -> datetime:
+    """Read a naive time as Pacific, refusing times DST makes unclear.
+
+    In the fall-back hour (e.g. 01:30 on the first Sunday of November) a wall
+    time happens twice; in the spring-forward hour it never happens. Guessing
+    would query the wrong window, so pass an aware datetime for those.
+    """
+    first = naive.replace(tzinfo=LOCAL_TZ, fold=0)
+    second = naive.replace(tzinfo=LOCAL_TZ, fold=1)
+    if first.utcoffset() != second.utcoffset():
+        raise ValueError(
+            f"{naive} is ambiguous or does not exist in Pacific time "
+            "(daylight saving change); pass a timezone-aware datetime"
+        )
+    return first
 
 
 def _timestamp(secs: int, nanos: int) -> datetime:

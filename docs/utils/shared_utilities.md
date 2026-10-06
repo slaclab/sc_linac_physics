@@ -94,7 +94,8 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
 - One request per PV, up to `MAX_WORKERS` (8) at once. The archiver spends its
   time reading each PV, so this is much faster than one multi-PV request.
 - Naive datetimes are read as Pacific time. Returned timestamps are
-  timezone-aware.
+  timezone-aware. A naive time in a daylight-saving change hour (it happens
+  twice, or not at all) raises `ValueError`; pass an aware datetime there.
 - A range may or may not include the last sample before `start`: the same
   query a few minutes apart did both. Don't rely on either.
 - Errors: `PVNotArchivedError` (names every unknown PV), `ArchiverTimeoutError`,
@@ -143,9 +144,11 @@ paired.plot.scatter(x=AMP, y=RAD, marker=".")
 plt.show()
 ```
 
-Which cavity a channel sits beside is not fixed. A decarad has 10 heads, one
-at each end of the cryomodule and one at each cavity's tuner access port, and
-the two decarads are moved between cryomodules and set up per run. Nothing in
+Which cavity a channel sits beside is not fixed. There are two decarads with
+10 heads each (`sc_linac/decarad.py::Decarad`). CHECK: the head placement (one
+at each end of the cryomodule, one at each cavity's tuner access port) and the
+decarads being moved between cryomodules and set up per run come from the SRF
+group, not from a document. Is there one to cite? Nothing in
 `field_emission_runs.csv` records that setup. Channel 6 here was picked from
 the data, not from a known mapping. In this run CAV3 and CAV4 were also above
 4 MV, so plot all 8 amplitudes on the time axis to see which cavities overlap.
