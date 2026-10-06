@@ -1,4 +1,4 @@
-from concurrent.futures import Future, ThreadPoolExecutor
+import threading
 from typing import Dict, Optional, List
 
 import pyqtgraph as pg
@@ -106,15 +106,9 @@ class FaultCountDisplay(Display):
         self.data: Dict[str, FaultCounter] = None
 
         self.cavity: Optional[BackendCavity] = None
-        # get_fault_counts queries the archiver. A failing query retries for
-        # up to a few minutes (utils/archiver.py MAX_RETRIES x RANGE_TIMEOUT),
-        # so it runs here instead of on the Qt main thread. A plain executor,
-        # not QThread: QThreads outliving their owner have crashed this
-        # repo's test workers (#307, #308).
-        self._executor = ThreadPoolExecutor(max_workers=1)
-        self._pending: Optional[Future] = None
         # Only the newest request is drawn; an older fetch that finishes
-        # late (e.g. after switching cavity) is dropped.
+        # late (e.g. after switching cavity, or closing the window) is
+        # dropped.
         self._request_id = 0
         self.counts_ready.connect(self._on_counts_ready)
         self.cm_combo_box.currentIndexChanged.connect(self.update_cavity)
@@ -173,28 +167,39 @@ class FaultCountDisplay(Display):
         self._request_id += 1
         request_id = self._request_id
         start, end = self._selected_range()
-        if self._pending is not None:
-            self._pending.cancel()  # only stops it if it has not started
-        self._pending = self._executor.submit(
-            self.cavity.get_fault_counts, start, end
-        )
-        self._pending.add_done_callback(
-            lambda future: self._deliver(request_id, future)
-        )
+        self._start_fetch(self._fetch, request_id, self.cavity, start, end)
 
-    def _deliver(self, request_id: int, future: Future):
+    @staticmethod
+    def _start_fetch(target, *args):
+        """Run target on a daemon thread.
+
+        get_fault_counts queries the archiver. A failing query retries for
+        up to a few minutes (utils/archiver.py MAX_RETRIES x RANGE_TIMEOUT),
+        so it can't run on the Qt main thread. Not QThread: QThreads that
+        outlived their owner crashed this repo's test workers (#307, #308).
+        Not a ThreadPoolExecutor: its workers are joined at interpreter exit,
+        so a stuck fetch would keep the application from quitting. A daemon
+        thread is abandoned at exit instead.
+        """
+        threading.Thread(
+            target=target, args=args, daemon=True, name="fault-count-fetch"
+        ).start()
+
+    def _fetch(self, request_id, cavity, start, end):
         """Runs on the fetch thread; hands the result to the main thread."""
-        if future.cancelled():
-            return
         try:
-            self.counts_ready.emit(request_id, future.result())
+            self.counts_ready.emit(
+                request_id, cavity.get_fault_counts(start, end)
+            )
         except Exception as e:
             # get_fault_counts already logs archiver errors and returns {};
-            # this is anything else, or the display closed mid-fetch.
+            # this is anything else, or the display was deleted mid-fetch.
             utils.cavity_fault_logger.error(f"Fault count fetch failed: {e}")
 
     def closeEvent(self, event):
-        self._executor.shutdown(wait=False, cancel_futures=True)
+        # CavityDisplay keeps this window and shows it again, so nothing is
+        # shut down here; a fetch still running is just not drawn.
+        self._request_id += 1
         super().closeEvent(event)
 
     def _on_counts_ready(self, request_id, data):

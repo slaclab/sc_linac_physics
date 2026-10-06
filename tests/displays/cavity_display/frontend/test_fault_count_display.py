@@ -1,7 +1,6 @@
 # "test_fault_count_display.py"
 import sys
 from datetime import datetime
-from concurrent.futures import Future
 from unittest.mock import Mock, patch
 
 import pytest
@@ -42,19 +41,6 @@ def mock_machine():
         yield mock
 
 
-class InlineExecutor:
-    """Runs each fetch on the calling thread, so update_plot draws before
-    it returns."""
-
-    def submit(self, fn, *args):
-        future = Future()
-        future.set_result(fn(*args))
-        return future
-
-    def shutdown(self, **kwargs):
-        pass
-
-
 @pytest.fixture
 def threaded_display(qapp, mock_machine):
     """Display with its real fetch thread."""
@@ -67,7 +53,8 @@ def threaded_display(qapp, mock_machine):
 def display(qapp, mock_machine):
     """Create display instance."""
     disp = FaultCountDisplay(lazy_fault_pvs=True)
-    disp._executor = InlineExecutor()
+    # run each fetch on the calling thread, so update_plot draws first
+    disp._start_fetch = lambda target, *args: target(*args)
     yield disp
     disp.close()
 
@@ -410,11 +397,7 @@ class TestBackgroundFetch:
 
     def test_failed_fetch_is_logged_not_raised(self, display):
         display.cavity = Mock(cryomodule="01", number=1)
-        display.cavity.get_fault_counts = Mock(side_effect=RuntimeError("x"))
-        display._executor = Mock()
-        failed = Future()
-        failed.set_exception(RuntimeError("boom"))
-        display._executor.submit.return_value = failed
+        display.cavity.get_fault_counts = Mock(side_effect=RuntimeError("boom"))
         with patch(
             "sc_linac_physics.displays.cavity_display.utils.utils"
             ".cavity_fault_logger"
@@ -423,20 +406,27 @@ class TestBackgroundFetch:
         assert "boom" in log.error.call_args.args[0]
         assert display.y_data is None
 
-    def test_new_request_cancels_pending_one(self, display):
-        display.cavity = Mock(cryomodule="01", number=1)
-        display.cavity.get_fault_counts = Mock(return_value={})
-        pending = Mock()
-        display._pending = pending
-        display.update_plot()
-        pending.cancel.assert_called_once()
+    def test_fetch_thread_does_not_block_exit(self, threaded_display):
+        with patch("threading.Thread") as thread:
+            threaded_display._start_fetch(print)
+        assert thread.call_args.kwargs["daemon"] is True
 
-    def test_cancelled_fetch_delivers_nothing(self, display):
-        cancelled = Future()
-        cancelled.cancel()
-        with patch.object(display, "counts_ready") as signal:
-            display._deliver(1, cancelled)
-        signal.emit.assert_not_called()
+    def test_reopened_window_still_fetches(self, display):
+        """CavityDisplay reshows the same instance after a close."""
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(return_value=_counts("BCS"))
+        display.close()
+        display.show()
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+        assert display.y_data == ["BCS"]
+
+    def test_result_after_close_is_dropped(self, display):
+        display._request_id = 1
+        display.close()
+        with patch.object(display.plot_window, "addItem") as add:
+            display._on_counts_ready(1, _counts("BCS"))
+        add.assert_not_called()
 
     def test_fetch_gets_selected_range(self, display):
         display.cavity = Mock(cryomodule="01", number=1)
