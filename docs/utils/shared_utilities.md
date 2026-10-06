@@ -95,8 +95,8 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   time reading each PV, so this is much faster than one multi-PV request.
 - Naive datetimes are read as Pacific time. Returned timestamps are
   timezone-aware.
-- A range includes the last sample before `start`, which is what forward-fill
-  needs.
+- A range may or may not include the last sample before `start`: the same
+  query a few minutes apart did both. Don't rely on either.
 - Errors: `PVNotArchivedError` (names every unknown PV), `ArchiverTimeoutError`,
   `ArchiverConnectionError`, all subclasses of `ArchiverError`. Timeouts,
   connection errors and 5xx responses are retried 3 times first.
