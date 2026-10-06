@@ -144,15 +144,6 @@ paired.plot.scatter(x=AMP, y=RAD, marker=".")
 plt.show()
 ```
 
-Which cavity a channel sits beside is not fixed. There are two decarads with
-10 heads each (`sc_linac/decarad.py::Decarad`). CHECK: the head placement (one
-at each end of the cryomodule, one at each cavity's tuner access port) and the
-decarads being moved between cryomodules and set up per run come from the SRF
-group, not from a document. Is there one to cite? Nothing in
-`field_emission_runs.csv` records that setup. Channel 6 here was picked from
-the data, not from a known mapping. In this run CAV3 and CAV4 were also above
-4 MV, so plot all 8 amplitudes on the time axis to see which cavities overlap.
-
 Field emission does the same pairing for a whole run, with forward-fill, in
 `amp_vs_radiation.py::align_pvs_to_common_time`.
 
