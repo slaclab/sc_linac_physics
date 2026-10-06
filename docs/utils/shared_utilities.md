@@ -107,55 +107,36 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
 
 ### Plotting two signals
 
-This fetches CAV7's amplitude and one decarad channel for CM06's 2024-02-02 run
-from `field_emission_runs.csv`.
+`get_series` returns each PV's valid samples as a pandas Series indexed by
+time. This fetches CAV7's amplitude and one decarad channel for CM06's
+2024-02-02 run from `field_emission_runs.csv`:
 
 ```python
 from datetime import datetime
-import pandas as pd
-import matplotlib.pyplot as plt
-from sc_linac_physics.utils.archiver import get_values_over_time_range
+from sc_linac_physics.utils.archiver import get_series, pair_by_time
+from sc_linac_physics.utils.archiver_plot import plot_over_time
 
-amp, rad = "ACCL:L2B:0670:AACTMEAN", "RADM:SYS0:200:06:GAMMAAVE"
-frames = get_values_over_time_range(
-    [amp, rad], datetime(2024, 2, 2, 12, 40), datetime(2024, 2, 2, 13, 3)
+AMP, RAD = "ACCL:L2B:0670:AACTMEAN", "RADM:SYS0:200:06:GAMMAAVE"
+series = get_series(
+    [AMP, RAD], datetime(2024, 2, 2, 12, 40), datetime(2024, 2, 2, 13, 3)
 )
-x = frames[amp][frames[amp]["valid"]]
-y = frames[rad][frames[rad]["valid"]]
 ```
 
-**On one time axis.** Give each signal its own y-axis. Archived values hold
-until the next sample, so draw them as steps:
+**On one time axis.** Each Series gets its own y-axis, drawn as steps, since
+an archived value holds until the next sample. Ticks are Pacific time, with
+the date shown once:
 
 ```python
-fig, ax_amp = plt.subplots()
-ax_rad = ax_amp.twinx()
-ax_amp.step(x["timestamp"], x["value"], where="post", color="C0")
-ax_rad.step(y["timestamp"], y["value"], where="post", color="C1")
-ax_amp.set_ylabel(amp, color="C0")
-ax_rad.set_ylabel(rad, color="C1")
-fig.autofmt_xdate()
-plt.show()
+fig, axes = plot_over_time(series[AMP], series[RAD])
 ```
 
-**One against the other.** The archiver timestamps each PV separately, so pair
-samples by time first. `merge_asof` matches each amplitude sample with the last
-radiation sample at or before it:
+**One against the other.** PVs are timestamped separately. `pair_by_time`
+matches each amplitude sample with the last radiation sample at or before it:
 
 ```python
-paired = pd.merge_asof(
-    x[["timestamp", "value"]],
-    y[["timestamp", "value"]],
-    on="timestamp",
-    suffixes=("_amp", "_rad"),
-).dropna()
-paired = paired[paired["value_amp"] >= 4]  # the display's AMPLITUDE_THRESHOLD
-
-fig, ax = plt.subplots()
-ax.scatter(paired["value_amp"], paired["value_rad"], marker=".")
-ax.set_xlabel(amp)
-ax.set_ylabel(rad)
-plt.show()
+paired = pair_by_time(series[AMP], series[RAD])
+paired = paired[paired[AMP] >= 4]  # the display's AMPLITUDE_THRESHOLD
+paired.plot.scatter(x=AMP, y=RAD, marker=".")
 ```
 
 Which cavity a channel sits beside is not fixed. A decarad has 10 heads, one

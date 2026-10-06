@@ -245,3 +245,56 @@ def test_each_thread_gets_its_own_session():
 
     assert archiver._session() is archiver._session()
     assert sessions[0] is not archiver._session()
+
+
+# ---------------------------------------------------------------------------
+# get_series / pair_by_time
+# ---------------------------------------------------------------------------
+def test_get_series_keeps_valid_samples_indexed_by_time(session):
+    session.request.return_value = _response(
+        payload=[
+            {
+                "meta": {},
+                "data": [
+                    _datum(1696263180, 1.5),
+                    _datum(1696263181, 9.9, severity=3),  # INVALID, dropped
+                    _datum(1696263182, 2.5),
+                ],
+            }
+        ]
+    )
+
+    series = archiver.get_series(["A:PV"], START, END)["A:PV"]
+
+    assert series.name == "A:PV"
+    assert series.tolist() == [1.5, 2.5]
+    assert series.index[0] == datetime(2023, 10, 2, 16, 13, tzinfo=timezone.utc)
+
+
+def _series(name, secs_vals):
+    import pandas as pd
+
+    return pd.Series(
+        [v for _, v in secs_vals],
+        index=pd.DatetimeIndex(
+            [archiver._timestamp(s, 0) for s, _ in secs_vals]
+        ),
+        name=name,
+    )
+
+
+def test_pair_by_time_takes_last_y_at_or_before_each_x():
+    x = _series("AMP", [(10, 1.0), (20, 2.0), (30, 3.0)])
+    y = _series("RAD", [(5, 0.1), (20, 0.2), (25, 0.3)])
+
+    paired = archiver.pair_by_time(x, y)
+
+    assert paired.columns.tolist() == ["AMP", "RAD"]
+    assert paired["RAD"].tolist() == [0.1, 0.2, 0.3]
+
+
+def test_pair_by_time_drops_x_before_first_y():
+    x = _series("AMP", [(1, 1.0), (10, 2.0)])
+    y = _series("RAD", [(5, 0.1)])
+
+    assert archiver.pair_by_time(x, y)["AMP"].tolist() == [2.0]

@@ -147,6 +147,43 @@ def get_values_over_time_range(
     return frames
 
 
+def get_series(
+    pvs: Iterable[str], start: datetime, end: datetime, **kwargs
+) -> Dict[str, pd.Series]:
+    """Return each PV's valid samples between start and end, as a Series.
+
+    Indexed by timestamp and named by PV, so a Series plots against time
+    directly. Samples with INVALID severity are dropped. Keyword arguments go
+    to get_values_over_time_range.
+    """
+    frames = get_values_over_time_range(pvs, start, end, **kwargs)
+    return {
+        pv: pd.Series(
+            frame.loc[frame["valid"], "value"].to_numpy(),
+            index=pd.DatetimeIndex(frame.loc[frame["valid"], "timestamp"]),
+            name=pv,
+        )
+        for pv, frame in frames.items()
+    }
+
+
+def pair_by_time(x: pd.Series, y: pd.Series) -> pd.DataFrame:
+    """Pair each x sample with the last y sample at or before it.
+
+    Archived PVs are timestamped separately; this lines them up to plot one
+    against the other. Columns are the two Series' names. Rows before y's
+    first sample are dropped.
+    """
+    paired = pd.merge_asof(
+        x.rename("x").rename_axis("timestamp").reset_index(),
+        y.rename("y").rename_axis("timestamp").reset_index(),
+        on="timestamp",
+    ).dropna()
+    return paired.set_index("timestamp").rename(
+        columns={"x": x.name, "y": y.name}
+    )
+
+
 def get_values_at_time(
     pvs: Iterable[str], at: datetime, timeout: float = AT_TIME_TIMEOUT
 ) -> Dict[str, ArchiverSample]:
