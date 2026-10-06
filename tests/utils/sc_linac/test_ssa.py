@@ -330,3 +330,33 @@ def test_wait_while_resetting(ssa):
     ssa._status_pv_obj = make_mock_pv(get_val=SSA_STATUS_RESETTING_FAULTS_VALUE)
     with pytest.raises(CavityAbortError):
         ssa.wait_while_resetting()
+
+
+class TestRatedPower:
+    """SSA.rated_power_kw reads SSA:Type and maps the enum index to kW."""
+
+    @staticmethod
+    def _ssa(cm_name, number):
+        # The module-level MACHINE, not a fresh Machine(): a Machine() per
+        # call rebuilds every cavity.
+        from sc_linac_physics.utils.sc_linac.linac import MACHINE
+
+        return MACHINE.cryomodules[cm_name].cavities[number].ssa
+
+    def test_type_pv_name(self):
+        assert self._ssa("35", 2).type_pv == "ACCL:L3B:3520:SSA:Type"
+
+    @pytest.mark.parametrize("number,shared", [(1, 1), (5, 1), (8, 4)])
+    def test_hl_type_pv_is_shared(self, number, shared):
+        # SSA:Type only exists on HL cavities 1-4 (checked 2026-10-05)
+        assert (
+            self._ssa("H1", number).type_pv == f"ACCL:L1B:H1{shared}0:SSA:Type"
+        )
+
+    @pytest.mark.parametrize(
+        "ssa_type,expected",
+        [(0, 7.0), (1, 4.6), (2, 3.8), (3, 1.0), (4, None), (5, None)],
+    )
+    def test_rated_power_from_type(self, ssa, ssa_type, expected):
+        ssa._type_pv_obj = make_mock_pv(get_val=ssa_type)
+        assert ssa.rated_power_kw == expected

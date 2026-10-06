@@ -120,9 +120,35 @@ HL_SSA_SHARED_PVS = [
     "NRP_PRMT",
     "FaultSummary.SEVR",
     "480VACStat",
+    "Type",
 ]
 
 HL_SSA_PS_SETPOINT = 2500
+
+# SSA:Type is an enum naming the SSA model. Its labels only state the power
+# for states 0 and 1, so the rating comes from this map, keyed on the enum
+# index. Ratings are from Mike Dunning and Andy Benwell (email, 2026-10-05).
+# Read across the whole machine on 2026-10-05, the PV agreed with the per-CM
+# table Sebastian Aderhold gave on #285: 191 x state 0, 4 x state 1,
+# 269 x state 2, 16 x state 3 (HL, 8 read through HL_SSA_MAP).
+# States 4 (CA186, GUNB) and 5 (CA199, MSU) do not drive linac cavities.
+# On HL, HL_SSA_MAP shares PS and on/off between cavity pairs, but the 1 kW
+# is per cavity, not shared by the pair (Sebastian Aderhold on #317).
+SSA_TYPE_RATED_POWER_KW: dict[int, float] = {
+    0: 7.0,  # RK CA1300 7kW, LCLS-II-HE
+    1: 4.6,  # RK CA1300 4.6kW, HE prototypes
+    2: 3.8,  # RK CA1300, standard LCLS-II (label gives no power)
+    3: 1.0,  # RK CA3900, 3.9 GHz HL
+}
+
+
+def ssa_rated_power_kw(ssa_type: int) -> float | None:
+    """Rated power in kW for an SSA:Type enum index, or None if unknown.
+
+    Callers must handle None rather than guess a drive level.
+    """
+    return SSA_TYPE_RATED_POWER_KW.get(ssa_type)
+
 
 LOADED_Q_LOWER_LIMIT = int(2.5e7)
 LOADED_Q_UPPER_LIMIT = int(5.1e7)
