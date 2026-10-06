@@ -23,7 +23,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 | Page | What it covers |
 |------|----------------|
 | [Linac Hardware Model](utils/linac_model.md) | `Machine → Linac → Cryomodule → Rack → Cavity` class hierarchy, PV naming, cryomodule groupings, all constants |
-| [Shared Utilities](utils/shared_utilities.md) | EPICS `PV` wrapper, `PVBatch`, `platform_paths`, `custom_logger`, Qt helpers |
+| [Shared Utilities](utils/shared_utilities.md) | EPICS `PV` wrapper, `PVBatch`, archiver client, `platform_paths`, `custom_logger`, Qt helpers |
 
 ### Applications
 

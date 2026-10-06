@@ -70,6 +70,39 @@ Prefer `PVBatch` when touching more than ~5 PVs at once (e.g., reading all 296 c
 | `PVPutError` | Write failed after retries |
 | `PVInvalidError` | Value out of allowed range or alarm severity exceeded |
 
+## Archiver (`utils/archiver.py`)
+
+Reads past PV values from the LCLS archiver appliance. Replaces
+`lcls_tools.common.data.archiver`, which is deprecated.
+
+```python
+from datetime import datetime
+from sc_linac_physics.utils.archiver import (
+    get_values_over_time_range,
+    get_values_at_time,
+)
+
+frames = get_values_over_time_range(
+    ["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9, 13), datetime(2023, 10, 2, 10)
+)
+# {pv: DataFrame with columns timestamp, value, severity, status, valid}
+
+samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9, 30))
+# {pv: ArchiverSample(timestamp, value, severity, status)}; .valid
+```
+
+- One request per PV, up to `MAX_WORKERS` (8) at once. The archiver spends its
+  time reading each PV, so this is much faster than one multi-PV request.
+- Naive datetimes are read as Pacific time. Returned timestamps are
+  timezone-aware.
+- A range includes the last sample before `start`, which is what forward-fill
+  needs.
+- Errors: `PVNotArchivedError` (names every unknown PV), `ArchiverTimeoutError`,
+  `ArchiverConnectionError`, all subclasses of `ArchiverError`. Timeouts,
+  connection errors and 5xx responses are retried 3 times first.
+- `get_values_at_time` leaves out a PV the archiver has no value for. A cold
+  query can take minutes; pass a longer `timeout` if you can wait.
+
 ## Platform paths (`utils/platform_paths.py`)
 
 Centralizes the paths that differ between Linux (production) and macOS (development):
