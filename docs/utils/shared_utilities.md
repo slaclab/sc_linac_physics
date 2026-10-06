@@ -105,10 +105,10 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   502 at 60 s, which is retried, so one cold lookup can block for about 4
   minutes before it fails. Keep these calls off the Qt main thread.
 
-### Plotting one signal against another
+### Plotting two signals
 
-The archiver timestamps each PV separately, so pair the samples by time first.
-`merge_asof` matches each x sample with the last y sample at or before it:
+This fetches CAV7's amplitude and one decarad channel for CM06's 2024-02-02 run
+from `field_emission_runs.csv`.
 
 ```python
 from datetime import datetime
@@ -116,18 +116,40 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sc_linac_physics.utils.archiver import get_values_over_time_range
 
-amp, rad = "ACCL:L0B:0110:AACTMEAN", "RADM:SYS0:100:01:GAMMAAVE"
+amp, rad = "ACCL:L2B:0670:AACTMEAN", "RADM:SYS0:200:06:GAMMAAVE"
 frames = get_values_over_time_range(
-    [amp, rad], datetime(2023, 10, 2, 9, 13), datetime(2023, 10, 2, 10)
+    [amp, rad], datetime(2024, 2, 2, 12, 40), datetime(2024, 2, 2, 13, 3)
 )
 x = frames[amp][frames[amp]["valid"]]
 y = frames[rad][frames[rad]["valid"]]
+```
+
+**On one time axis.** Give each signal its own y-axis. Archived values hold
+until the next sample, so draw them as steps:
+
+```python
+fig, ax_amp = plt.subplots()
+ax_rad = ax_amp.twinx()
+ax_amp.step(x["timestamp"], x["value"], where="post", color="C0")
+ax_rad.step(y["timestamp"], y["value"], where="post", color="C1")
+ax_amp.set_ylabel(amp, color="C0")
+ax_rad.set_ylabel(rad, color="C1")
+fig.autofmt_xdate()
+plt.show()
+```
+
+**One against the other.** The archiver timestamps each PV separately, so pair
+samples by time first. `merge_asof` matches each amplitude sample with the last
+radiation sample at or before it:
+
+```python
 paired = pd.merge_asof(
     x[["timestamp", "value"]],
     y[["timestamp", "value"]],
     on="timestamp",
     suffixes=("_amp", "_rad"),
 ).dropna()
+paired = paired[paired["value_amp"] >= 4]  # the display's AMPLITUDE_THRESHOLD
 
 fig, ax = plt.subplots()
 ax.scatter(paired["value_amp"], paired["value_rad"], marker=".")
@@ -135,6 +157,10 @@ ax.set_xlabel(amp)
 ax.set_ylabel(rad)
 plt.show()
 ```
+
+A decarad channel reads every cavity at once. In this run CAV3 and CAV4 were
+also above 4 MV, so radiation plotted against CAV7 alone may include theirs.
+Plot all 8 amplitudes on the time axis to see which cavities overlap.
 
 Field emission does the same pairing for a whole run, with forward-fill, in
 `amp_vs_radiation.py::align_pvs_to_common_time`.
