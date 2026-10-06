@@ -132,9 +132,8 @@ HL_SSA_PS_SETPOINT = 2500
 # table Sebastian Aderhold gave on #285: 191 x state 0, 4 x state 1,
 # 269 x state 2, 16 x state 3 (HL, 8 read through HL_SSA_MAP).
 # States 4 (CA186, GUNB) and 5 (CA199, MSU) do not drive linac cavities.
-# CHECK: HL_SSA_MAP shares PS and on/off between cavity pairs, but CALPWR and
-# DRV_MAX are per cavity. Is 1 kW the rating per output (per cavity), or the
-# total shared by the pair?
+# On HL, HL_SSA_MAP shares PS and on/off between cavity pairs, but the 1 kW
+# is per cavity, not shared by the pair (Sebastian Aderhold on #317).
 SSA_TYPE_RATED_POWER_KW: dict[int, float] = {
     0: 7.0,  # RK CA1300 7kW, LCLS-II-HE
     1: 4.6,  # RK CA1300 4.6kW, HE prototypes
