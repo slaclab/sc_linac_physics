@@ -345,3 +345,9 @@ def test_pair_by_time_sorts_unsorted_input():
 
     assert paired["AMP"].tolist() == [1.0, 2.0, 3.0]
     assert paired["RAD"].tolist() == [0.1, 0.1, 0.3]
+
+
+def test_timestamp_keeps_exact_microseconds():
+    # secs + nanos / 1e9 as one float gives 999999 here.
+    stamp = archiver._timestamp(1727049601, 999_998_500)
+    assert stamp.microsecond == 999998

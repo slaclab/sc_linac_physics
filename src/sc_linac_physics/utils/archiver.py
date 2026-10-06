@@ -38,7 +38,7 @@ old; where it is silent, this follows what the LCLS archiver did when tested.
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional, Union
 from zoneinfo import ZoneInfo
@@ -277,7 +277,12 @@ def _localize(naive: datetime) -> datetime:
 
 
 def _timestamp(secs: int, nanos: int) -> datetime:
-    return datetime.fromtimestamp(secs + nanos / 1e9, tz=LOCAL_TZ)
+    # Not fromtimestamp(secs + nanos / 1e9): a float near 1.7e9 s resolves
+    # about 0.24 us, so 1 in 17 timestamps came out 1 us off. That made
+    # samples of two PVs collide, or stop colliding, when aligned.
+    return datetime.fromtimestamp(secs, tz=LOCAL_TZ) + timedelta(
+        microseconds=nanos / 1000
+    )
 
 
 def _to_sample(datum: dict) -> ArchiverSample:
