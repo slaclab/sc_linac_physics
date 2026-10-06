@@ -127,7 +127,10 @@ an archived value holds until the next sample. Ticks are Pacific time, with
 the date shown once:
 
 ```python
+import matplotlib.pyplot as plt
+
 fig, axes = plot_over_time(series[AMP], series[RAD])
+plt.show()
 ```
 
 **One against the other.** PVs are timestamped separately. `pair_by_time`
@@ -137,6 +140,7 @@ matches each amplitude sample with the last radiation sample at or before it:
 paired = pair_by_time(series[AMP], series[RAD])
 paired = paired[paired[AMP] >= 4]  # the display's AMPLITUDE_THRESHOLD
 paired.plot.scatter(x=AMP, y=RAD, marker=".")
+plt.show()
 ```
 
 Which cavity a channel sits beside is not fixed. A decarad has 10 heads, one
