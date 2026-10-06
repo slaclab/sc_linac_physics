@@ -72,7 +72,7 @@ Nine-phase gated acceptance workflow (PIEZO_PRE_RF → SSA_CHAR → … → ONE_
 
 ### Threading
 
-Long-running operations use `Worker(QThread)` from `utils/qt.py`, which emits `finished`, `progress`, `error`, and `status` signals. Never run blocking EPICS calls on the main Qt thread.
+Long-running operations run on a `concurrent.futures.ThreadPoolExecutor` and report back through a `pyqtSignal`, which Qt delivers on the main thread. Don't add new `QThread` subclasses: ones that outlived their owner have crashed test workers (#307, #308). `Worker(QThread)` in `utils/qt.py` and the heatmap's `FaultDataFetcher` are older code still to move. Never run blocking EPICS or archiver calls on the main Qt thread.
 
 ### Logging
 
