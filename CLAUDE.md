@@ -49,6 +49,8 @@ The full hierarchy is `Machine → Linac → Cryomodule → Rack → Cavity` (+ 
 
 Use `PV` (never raw `pyepics.PV`) — it adds retry/backoff, typed exceptions, and never returns `None`. For bulk reads across many cavities, use `PVBatch.get_values()`. PV objects are always lazily instantiated on first property access to avoid connecting to hardware at import time.
 
+Read archived data through `utils/archiver.py`, not `lcls_tools.common.data.archiver` (deprecated). Its timestamps are timezone-aware Pacific, and it reads naive inputs as Pacific.
+
 Platform-aware paths (log dirs, database dirs) live in `utils/platform_paths.py`.
 
 ### Displays (`displays/`)
