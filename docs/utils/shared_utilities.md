@@ -158,9 +158,12 @@ ax.set_ylabel(rad)
 plt.show()
 ```
 
-A decarad channel reads every cavity at once. In this run CAV3 and CAV4 were
-also above 4 MV, so radiation plotted against CAV7 alone may include theirs.
-Plot all 8 amplitudes on the time axis to see which cavities overlap.
+Which cavity a channel sits beside is not fixed. A decarad has 10 heads, one
+at each end of the cryomodule and one at each cavity's tuner access port, and
+the two decarads are moved between cryomodules and set up per run. Nothing in
+`field_emission_runs.csv` records that setup. Channel 6 here was picked from
+the data, not from a known mapping. In this run CAV3 and CAV4 were also above
+4 MV, so plot all 8 amplitudes on the time axis to see which cavities overlap.
 
 Field emission does the same pairing for a whole run, with forward-fill, in
 `amp_vs_radiation.py::align_pvs_to_common_time`.
