@@ -142,6 +142,7 @@
   .qlist div.sel { background: #3d7bd9; color: #fff; }
   .qmeta { display: grid; grid-template-columns: auto 1fr; gap: 0 .5rem; }
   .qmeta a { color: #2257b8; }
+  .qurl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .qradio span::before { content: "○ "; }
   .qradio span.on::before { content: "◉ "; }
   .qright { background: #fff; border: 1px solid #b4b8bf; display: flex; flex-direction: column; }
@@ -193,15 +194,15 @@
               <div class="sel">CM01    2023-10-02 09:13:00</div>
               <div>CM01    2023-10-15 11:22:00</div>
             </div>
-          </div>
-          <div class="qbox"><span class="t">Measurement Information</span>
-            <div class="qmeta">
-              <span>Date:</span><span>Monday, October 02, 2023</span>
-              <span>Start Time:</span><span>9:13</span>
-              <span>End Time:</span><span>10:00</span>
-              <span>Decarad:</span><span>1</span>
-              <span>eLog:</span><a>elog_id=1228238</a>
-              <span>Notes:</span><span></span>
+            <div class="qbox"><span class="t">Measurement Information</span>
+              <div class="qmeta">
+                <span>Date:</span><span>Monday, October 02, 2023</span>
+                <span>Start Time:</span><span>9:13</span>
+                <span>End Time:</span><span>10:00</span>
+                <span>Decarad:</span><span>1</span>
+                <span>eLog:</span><a class="qurl">https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1228238</a>
+                <span>Notes:</span><span></span>
+              </div>
             </div>
           </div>
           <div class="qbox"><span class="t">Decarad Configuration</span>
@@ -222,7 +223,7 @@
         </div>
       </div>
     </div>
-    <p class="cite">field_emission_gui.py::FieldEmission.build_linac_configuration, field_emission_gui.py::FieldEmission.build_decarad_configuration, field_emission_gui.py::FieldEmission._plot_one_date “n_rows = min(2, n)”</p>
+    <p class="cite">field_emission_gui.py::FieldEmission.build_linac_configuration, field_emission_gui.py::FieldEmission.build_meas_selection, field_emission_gui.py::FieldEmission.build_decarad_configuration, field_emission_gui.py::FieldEmission._plot_one_date “n_rows = min(2, n)”, field_emission_gui.py::FieldEmission._configure_plot_canvas “Radiation (mR/hr)”</p>
     <p class="note">
       PLOT stays disabled until at least one cavity, one channel and one
       measurement are picked. Selecting several measurements switches to a
@@ -236,7 +237,7 @@
       <tbody>
         <tr><td>x: amplitude</td>
             <td><code>ACCL:{linac}:{cm}{cav}0:AACTMEAN</code></td>
-            <td>MV, all 8 cavities, whichever one was being run
+            <td>MV, one fetch per cavity, each using that cavity's own <code>AACTMEAN</code>
             <span class="cite">amp_vs_radiation.py::build_amplitude_pvs “+ "AACTMEAN"”, field_emission/constants.py::CAVITIES “CAVITIES = 8”</span></td></tr>
         <tr><td>y: radiation, "average"</td>
             <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMAAVE</code></td>
@@ -254,7 +255,7 @@
       <span class="cite">amp_vs_radiation.py::fetch_pv_data → lcls_tools get_values_over_time_range</span>
     </p>
 
-    <h3>Two things it does to the data before you see it</h3>
+    <h3>What it does to the data before you see it</h3>
 
     <p>
       <strong>Rows under 4 MV are dropped.</strong> Any sample where
@@ -273,9 +274,21 @@
       <span class="cite">plot_me.py::fit_equation “c1 * (amp**2.5) * np.exp((-c2) / amp)”, plot_me.py::add_poly_fit “skip fitting when less than two samples”, field_emission/constants.py::NUM_FIT_ITERATIONS “NUM_FIT_ITERATIONS = 5500”</span>
     </p>
 
+    <p>
+      <strong>No background is subtracted.</strong> The dose is plotted and
+      fitted as archived. The linac model subtracts a fixed background before
+      using a reading (0.8 for <code>GAMMAAVE</code>, 8 for
+      <code>GAMMA_DOSE_RATE</code>). Quench processing uses the subtracted
+      <code>GAMMA_DOSE_RATE</code>. Field emission does not subtract either.
+      <span class="cite">linac_utils.py::DECARAD_BACKGROUND_READING_AVG “DECARAD_BACKGROUND_READING_AVG = 0.8”, linac_utils.py::DECARAD_BACKGROUND_READING_RAW “DECARAD_BACKGROUND_READING_RAW = 8”, quench_processing/quench_cavity.py “if self.decarad.max_raw_dose”</span>
+    </p>
+
     <div class="caveat">
       CHECK: where does this fit form come from, and is 2.5 the intended
       exponent? Nothing in the repo cites a source.
+      <br>
+      CHECK: should the fit use background-subtracted dose? That would change
+      C1 and C2.
       <br>
       CHECK: is 4 MV the right "cavity is on" cutoff for every cryomodule,
       including LCLS-II-HE?
@@ -283,12 +296,23 @@
 
     <h3>Which channel is which</h3>
     <p>
-      There are two decarads, each with 10 heads: one at each end of the
-      cryomodule and one at each cavity's tuner access port. They are wheeled
-      between cryomodules and set up per run, so channel <em>n</em> is not tied
-      to any cavity. The run list records which decarad was used, not how it
+      There are two decarads, each with 10 heads
+      <span class="cite">sc_linac/decarad.py::Decarad “for head in range(1, 11)”</span>.
+      CHECK, from the SRF group, no document: one head sits at each end of the
+      cryomodule and one at each cavity's tuner access port, and the decarads
+      are wheeled between cryomodules and set up per run. The archived
+      <code>POSN</code> history below does show them moving. So channel
+      <em>n</em> is not tied to any cavity. The run list records which decarad was used, not how it
       was set up, and the display plots every selected channel against every
       selected cavity. Read the run's elog to know which head a channel was.
+    </p>
+    <p>
+      Each head has a text PV naming its position, for example
+      <code>RADM:SYS0:100:01:POSN</code> = "US of Cavity 1, CM01", but those
+      are not archived, so past runs can't be read back from them. Each
+      decarad's own <code>RADM:SYS0:{n}00:POSN</code> is archived and holds a
+      cryomodule number. It matched the run list's cryomodule for 76 of 80
+      runs.
     </p>
     <p>
       Cavities in one run can overlap in time. In CM06's 2024-02-02 run, CAV3,
@@ -332,7 +356,9 @@
 field_emission_data.hdf5
 └── CM01                         one group per cryomodule
     └── 2023-10-02_0913          one group per run, named by start time
-        │   attrs: date, time_start, time_end, decarad, elog, notes, filters
+        │   attrs: cryomodule, date, time_start, date_end (if set),
+        │          time_end, decarad, elog, notes, filter_rechar,
+        │          filter_multipacting, filter_commissioning
         ├── CAV1
         │   ├── average          (rows × 11) float64
         │   └── instant          (rows × 11) float64
@@ -353,7 +379,7 @@ field_emission_data.hdf5
       </tbody>
     </table>
 
-    <p>Two runs looked wrong, and both are explained by the steps above:</p>
+    <p>Three runs looked wrong:</p>
     <ul>
       <li><strong>CM27, dated 2026-10-16</strong>: 1 row in all 16 datasets, and no
         cavity ever above 4 MV. The date was a typo for 2024 (same elog ID as
@@ -366,6 +392,11 @@ field_emission_data.hdf5
         datasets use the same 10 decarad PVs and have about 6,900 rows each, and
         CAV5's <code>average</code> is short too. The one value is 0.004 MV, so
         CAV5 was off and nothing above 4 MV was lost.</li>
+      <li><strong>CM01 2023-10-02</strong>: channel 1 read up to about 88
+        between 09:39 and 09:41 while every cavity in CM01–CM05, H1, H2 and
+        CM35 was below 4 MV. Decarad 1's <code>POSN</code> read 35 for
+        the whole run and only changed to 1 at 10:55. CHECK: was decarad 1 at
+        CM01 during this run, and what caused the spike?</li>
     </ul>
   </section>
 
@@ -391,16 +422,16 @@ missing = find_missing_runs(run list)        # compare run list to cache
 for run in missing:
     16 × (archiver fetch → align → write CSV)
     write every CSV on disk into the HDF5    # this run's, plus any leftovers
-    delete the CSVs it wrote, once the file has closed
+    delete every CSV it wrote in, once the file has closed
     # any exception stops the sync here; runs already written stay</pre>
       <p class="cite">gui_updater.py::sync_cache “convert_to_h5(lookup)”, update_h5py.py::convert_to_h5 “os.remove(csv_path)”</p>
     </div>
 
     <p>
-      Each run takes a few minutes: 155 s for CM01's 47-minute window, measured
-      on site. The 80 runs cover about 101 hours of windows, so building the
-      cache from empty takes hours. Build it once without the display, and
-      after that each open only fetches new runs:
+      Each run takes a minute or two. A full build of all 80 runs took 1.75
+      hours on site (2026-10-05), and matched kvetta's original file for
+      every run except the corrected CM27 one. Build it once without the
+      display, and after that each open only fetches new runs:
     </p>
     <div class="panel"><pre>python -m sc_linac_physics.applications.field_emission.gui_updater</pre></div>
     <p>
@@ -426,11 +457,21 @@ for run in missing:
       A run with genuinely no data is never re-fetched in a loop. For a PV with
       no samples in the window, <code>lcls_tools</code> returns an empty result
       rather than raising. That still writes a CSV, and an empty CSV still
-      becomes a dataset, so the run counts as complete. The sync only re-fetches
-      a dataset that was <em>never written</em>, which takes a crash.
+      becomes a dataset, so the run counts as complete. The sync re-fetches a
+      whole run only when one of its datasets was <em>never written</em>,
+      which takes a crash.
       Timeouts, connection failures and HTTP errors do raise and stop the
       sync; the run being fetched is retried next open.
       <span class="cite">lcls_tools: get_values_over_time_range, the “if pv not in result” fill-in</span>
+    </p>
+
+    <h3>What the cache rule doesn't catch</h3>
+    <p>
+      A run is keyed only by cryomodule and start time. Editing a run-list row
+      in any other way (end time, decarad, notes) doesn't trigger a re-fetch.
+      Re-fetching also never updates a run's attrs: they are written once and
+      skipped after that. To pick up an edited row, delete the cache file.
+      <span class="cite">update_h5py.py::_run_is_complete, update_h5py.py::_set_metadata_attributes “"cryomodule" not in group.attrs”</span>
     </p>
 
     <div class="caveat">
@@ -493,8 +534,9 @@ for run in missing:
     <h3>The failure the simulator can't show</h3>
     <p>
       HDF5 has no journal. If the process dies while writing a run, the file can be
-      left unreadable, not just incomplete. The display then raises on open,
-      because <code>match_measurement_dates</code> only handles a
+      left unreadable, not just incomplete. On the next open, the sync fails
+      first and shows "Data cache not updated". Then picking a cryomodule
+      raises, because <code>match_measurement_dates</code> only handles a
       <em>missing</em> file (<code>FileNotFoundError</code>). The fix today is
       deleting the file, after which the next sync rebuilds it. The write
       takes seconds per run, against minutes of fetching, so the window is
@@ -602,7 +644,14 @@ update();
   const fit = (e, c1, c2) => c1 * e ** 2.5 * Math.exp(-c2 / e);
   const params = [[[0.05, 60], [0.03, 55], [0.02, 70]], [[0.04, 75], [0.02, 65], [0.015, 80]]];
   const X0 = 46, W = 380, H = 170, EMIN = 4, EMAX = 18;
-  let out = `<text x="220" y="16" text-anchor="middle" font-size="13" fill="#222">ACCL:L0B:01x0</text>`;
+  let out = `<text x="220" y="16" text-anchor="middle" font-size="13" fill="#222">ACCL:L0B:01x0</text>` +
+    `<text x="236" y="466" text-anchor="middle" font-size="11" fill="#222">Amplitude (MV)</text>` +
+    `<text x="12" y="235" text-anchor="middle" font-size="11" fill="#222" transform="rotate(-90 12 235)">Radiation (mR/hr)</text>`;
+  // figure-level channel legend, upper right (fig.legend in _configure_plot_canvas)
+  colors.forEach((c, ch) => {
+    out += `<circle cx="${392}" cy="${10 + ch * 11}" r="3" fill="${c}"/>` +
+           `<text x="${399}" y="${13 + ch * 11}" font-size="9" fill="#222">Ch ${ch + 1}</text>`;
+  });
   params.forEach((chans, k) => {
     // Headroom over the largest fitted value, so nothing clips into a fake plateau.
     const YMAX = 1.3 * Math.max(...chans.map(([c1, c2]) => fit(EMAX, c1, c2)));
