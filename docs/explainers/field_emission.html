@@ -240,7 +240,7 @@
             <span class="cite">amp_vs_radiation.py::build_amplitude_pvs “+ "AACTMEAN"”, field_emission/constants.py::CAVITIES “CAVITIES = 8”</span></td></tr>
         <tr><td>y: radiation, "average"</td>
             <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMAAVE</code></td>
-            <td>decarad <code>n</code> is 1 or 2, channels 01–10
+            <td>decarad <code>n</code> is 1 or 2, channels 01–10 (heads; see below)
             <span class="cite">amp_vs_radiation.py::build_decarad_pvs “RADM:SYS0:{decarad}00:”, amp_vs_radiation.py::build_rad_readout_pvs “{sel_rad_channel:02d}:GAMMAAVE”, field_emission/constants.py::RAD_CHANNELS “RAD_CHANNELS = 10”</span></td></tr>
         <tr><td>y: radiation, "instant"</td>
             <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMA_DOSE_RATE</code></td>
@@ -279,11 +279,22 @@
       <br>
       CHECK: is 4 MV the right "cavity is on" cutoff for every cryomodule,
       including LCLS-II-HE?
-      <br>
-      CHECK: where are decarads 1 and 2 physically, relative to each
-      cryomodule? The code takes the number from the run list and does nothing
-      else with it.
     </div>
+
+    <h3>Which channel is which</h3>
+    <p>
+      There are two decarads, each with 10 heads: one at each end of the
+      cryomodule and one at each cavity's tuner access port. They are wheeled
+      between cryomodules and set up per run, so channel <em>n</em> is not tied
+      to any cavity. The run list records which decarad was used, not how it
+      was set up, and the display plots every selected channel against every
+      selected cavity. Read the run's elog to know which head a channel was.
+    </p>
+    <p>
+      Cavities in one run can overlap in time. In CM06's 2024-02-02 run, CAV3,
+      CAV4 and CAV7 were all above 4 MV at once, so a channel plotted against
+      one of them can include radiation from the others.
+    </p>
   </section>
 
   <section id="a-run">
