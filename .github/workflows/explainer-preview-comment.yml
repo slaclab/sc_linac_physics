@@ -12,7 +12,8 @@ name: Explainer preview comment
 #
 #   PR number  — the open PR whose head repo, branch and SHA match the run.
 #   page list  — the PR's changed files from the API, filtered to
-#                docs/explainers/<name>.html.
+#                docs/explainers/<name>.html and the widgets markdown
+#                explainers embed, docs/explainers/widgets/<name>.html.
 #
 # The link goes through htmlpreview.github.io, a third-party renderer, reading
 # raw.githubusercontent.com at refs/pull/N/head. That ref follows every push.
@@ -72,7 +73,7 @@ jobs:
           # markdown into the comment.
           PAGES=$(gh api --paginate "repos/${REPO}/pulls/${NUM}/files" \
                     --jq '.[] | select(.status != "removed") | .filename' \
-                  | grep -E '^docs/explainers/[A-Za-z0-9_.-]+\.html$' || true)
+                  | grep -E '^docs/explainers/(widgets/)?[A-Za-z0-9_.-]+\.html$' || true)
 
           if [ -z "$PAGES" ]; then
             echo "pages=none" >> "$GITHUB_OUTPUT"
