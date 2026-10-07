@@ -18,7 +18,7 @@ The collection consists of:
 
 - **`run_cache.py`**: reads the run list (committed plus added) and loads each run from the cache, fetching it if needed.
 
-- **`field_emission_gui_update.py`**: holds the "Add New Data" dialogs used by the display.
+- **`add_run_dialogs.py`**: the "Add New Data" dialogs used by the display.
 
 - **`measurements.py`**: called by `field_emission_gui.py` to list runs and load their data.
 
@@ -33,8 +33,6 @@ The collection consists of:
 
 - **`gui_updater.py`**: validates "Add New Data" input; its worker adds the runs to `added_runs.csv` and fetches them into the cache.
 
-
-- **`update_h5py.py`**: builds the old bundled `field_emission_data.hdf5` from CSVs. No longer used by the display; to be removed.
 
 
 ## To Add Data
