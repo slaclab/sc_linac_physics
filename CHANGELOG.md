@@ -2,6 +2,77 @@
 
 <!-- version list -->
 
+## v9.41.0 (2026-10-07)
+
+### Bug Fixes
+
+- **archiver**: Address review comments
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Keep exact microseconds in sample timestamps
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Keep PST on samples from the fall-back hour
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+### Documentation
+
+- **archiver**: Add a time-axis plot and use a run with real field emission
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Channel-to-cavity mapping depends on the decarad setup
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Cite why getDataForPVs is slower
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Move decarad setup out of the archiver docs
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Show the plots in the examples
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: The sample before start is not guaranteed
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **claude-md**: Daemon thread, not an executor, for calls that can hang
+  ([#327](https://github.com/slaclab/sc_linac_physics/pull/327),
+  [`728fe50`](https://github.com/slaclab/sc_linac_physics/commit/728fe50621dbea7d421acbb93fe55874edeb7202))
+
+- **claude-md**: Point archiver reads at utils/archiver.py
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **claude-md**: Use an executor and a signal for background work, not QThread
+  ([#327](https://github.com/slaclab/sc_linac_physics/pull/327),
+  [`728fe50`](https://github.com/slaclab/sc_linac_physics/commit/728fe50621dbea7d421acbb93fe55874edeb7202))
+
+### Features
+
+- **archiver**: Add an archiver client to replace lcls_tools'
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Add get_series, pair_by_time and plot_over_time
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+### Performance Improvements
+
+- **archiver**: Tune timeouts and retries from on-site measurements
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+
 ## v9.40.0 (2026-10-06)
 
 ### Continuous Integration
