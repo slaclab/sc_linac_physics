@@ -2,6 +2,8 @@
 
 `applications/tuning/` manages cavity frequency control during operation. Cavities must stay near resonance (within ~20 Hz for normal operation) or be parked/landed to a cold reference frequency when not in use.
 
+For how the auto-tune loop converges, its guards, and how it fails, see the explainer: [How auto-tune works](../explainers/auto_tune.html).
+
 ## Cavity tuning states
 
 Each cavity has a `tune_config` PV with four possible states:
