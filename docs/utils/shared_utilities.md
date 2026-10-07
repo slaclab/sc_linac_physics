@@ -96,6 +96,8 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
 - Naive datetimes are read as Pacific time. Returned timestamps are
   timezone-aware. A naive time in a daylight-saving change hour (it happens
   twice, or not at all) raises `ValueError`; pass an aware datetime there.
+  Returned timestamps in the repeated November hour are PST. Shift them in
+  UTC, not Pacific: adding a `timedelta` to a Pacific datetime makes them PDT.
 - A range may or may not include the last sample before `start`: the same
   query a few minutes apart did both. Don't rely on either.
 - Errors: `PVNotArchivedError` (names every unknown PV), `ArchiverTimeoutError`,

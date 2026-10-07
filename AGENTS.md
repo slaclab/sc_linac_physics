@@ -22,6 +22,7 @@
 - For one-shot large PV reads, prefer `PVBatch.get_values` (used by tuning poller) instead of creating hundreds of PV objects (`utils/epics/batch.py`, `applications/tuning/state/tune_status_poll.py`).
 - Logging convention is structured: `custom_logger(..., extra={"extra_data": {...}})` for both text and JSONL outputs (`utils/logger.py`).
 - Platform-aware filesystem paths are deliberate (`utils/platform_paths.py`): Linux defaults to `/home/physics/srf/...`, macOS to `~/...`.
+- Do time arithmetic in UTC and convert to Pacific last. Adding a `timedelta` to a Pacific datetime resets `fold` to 0, so a time in the repeated November hour moves an hour early (`utils/archiver.py::_timestamp`). Tests of time handling should include a sample from that hour.
 - Setup commands expect cryomodule identifiers like `01`, `H1` (not `CM01`), and cavity as `1..8` (`srf_*_setup_launcher.py`).
 
 ## Integration points and cross-component communication
