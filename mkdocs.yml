@@ -70,4 +70,4 @@ nav:
       - SRF Home: displays/srf_home.md
   - Explainers:
       - How auto-tune works: explainers/auto_tune.html
-      - How RF commissioning is built: explainers/rf_commissioning.html
+      - How RF commissioning is built: explainers/rf_commissioning.md
