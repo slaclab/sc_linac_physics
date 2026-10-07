@@ -39,9 +39,10 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 
 An explainer is the "how it works and why" for an app, or for a piece several
 apps share: data flow, decisions, how it fails, each claim cited to the code.
-The app's page is the short reference. Explainers are single HTML files. They
-render and run on the docs site and offline from a checkout. GitHub's file
-view shows their source instead.
+The app's page is the short reference. An explainer is a docs page, and each
+interactive part is a small HTML widget shown inline. On GitHub a widget shows
+as a link; opened on its own it also works offline. The auto-tune explainer is
+still a single HTML file.
 
 ### Displays
 

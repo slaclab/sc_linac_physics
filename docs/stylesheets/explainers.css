@@ -1,0 +1,27 @@
+/* Explainer pages: citations and inline widgets. */
+
+/* A citation names the code a claim comes from. tests/docs/test_citations.py
+   checks each one against src/. */
+.md-typeset .cite {
+  font-size: .68rem;
+  color: var(--md-default-fg-color--light);
+}
+.md-typeset .cite code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+iframe.explainer-widget {
+  display: block;
+  width: 100%;
+  min-height: 4rem;
+  border: 0;
+  margin: 1.25em 0 0;
+}
+.md-typeset .explainer-widget-open {
+  margin: .2em 0 1.25em;
+  font-size: .68rem;
+  text-align: right;
+}

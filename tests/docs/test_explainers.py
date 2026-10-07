@@ -12,8 +12,11 @@ from pathlib import Path
 
 import pytest
 
+# Single-file explainers and the widgets markdown explainers embed.
 EXPLAINERS = sorted(
-    (Path(__file__).resolve().parents[2] / "docs" / "explainers").glob("*.html")
+    (Path(__file__).resolve().parents[2] / "docs" / "explainers").rglob(
+        "*.html"
+    )
 )
 
 # Anything the browser fetches in order to render: script, stylesheet, webfont,
