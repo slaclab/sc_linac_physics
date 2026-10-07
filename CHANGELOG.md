@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.41.1 (2026-10-07)
+
+### Bug Fixes
+
+- **archiver**: Run parallel fetches on daemon threads
+  ([#334](https://github.com/slaclab/sc_linac_physics/pull/334),
+  [`2c17a0c`](https://github.com/slaclab/sc_linac_physics/commit/2c17a0c24565ead793d50eaa610a29b5b8bea272))
+
+### Chores
+
+- **codeowners**: Add Derikka as a cavity display owner
+  ([#331](https://github.com/slaclab/sc_linac_physics/pull/331),
+  [`27a89c5`](https://github.com/slaclab/sc_linac_physics/commit/27a89c51ab2bd4eeaa5d3f91edbf9efcdd0dfedf))
+
+- **codeowners**: Add Sebastian and Ryan as field emission owners
+  ([#329](https://github.com/slaclab/sc_linac_physics/pull/329),
+  [`57e7452`](https://github.com/slaclab/sc_linac_physics/commit/57e7452cfcad1f099196e94b5ab9f92cde42a9fc))
+
+
 ## v9.41.0 (2026-10-07)
 
 ### Bug Fixes
