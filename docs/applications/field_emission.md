@@ -31,6 +31,8 @@ Cryomodule, Start Date, Start Time, End Date, End Time, Decarad #, Link to Measu
 - Dates are `mm/dd/yy`, times `hh:mm` (24 h). Leave End Date empty when the run ends on its start date.
 - Decarad is `1` or `2`. Filters are `Y` or `N`.
 - A `#` in the first column skips the row.
+- The eLog link may be empty. If given, it must be an `mccelog` link.
+- Every row is checked before any is added. The first bad row is reported with its line number.
 
 Added runs are shared by everyone using the same cache directory. To make a run permanent for every installation, add its row to `field_emission_runs.csv` in a PR.
 

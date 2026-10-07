@@ -166,6 +166,7 @@
 </head>
 <body>
 <main>
+  <p><a href="https://slaclab.github.io/sc_linac_physics/">← SC Linac Physics docs</a></p>
   <h1>How the field emission display works</h1>
   <p class="lede">
     <code>applications/field_emission/</code> plots cavity amplitude against
@@ -364,9 +365,11 @@
     </div>
 
     <p>
-      A run took 1.8–2.3 s through the archiver when it was warm (2026-10-07).
-      A run nobody has asked for in a while can take tens of seconds. Caching
-      all 80 runs from empty took 253 s.
+      A run took 1.8–2.3 s through the archiver when it was warm. A run
+      nobody has asked for in a while can take tens of seconds. Caching all
+      80 runs from empty took 253 s (#335's Testing section). These and the
+      other counts on this page were measured once, on 2026-10-07, while
+      writing #335 and this page. No script for them is in the repo.
     </p>
 
     <h3>The cache layout</h3>
@@ -395,13 +398,13 @@ get_field_emission_dir()          /home/physics/srf/field_emission on Linux
       <span class="cite">field_emission/measurements.py::fetch_measurement_metadata “find_run(cm, date, read_run_list())”</span>
     </p>
 
-    <h3>The bundled file this replaces</h3>
+    <h3>Checked against the old bundled file</h3>
 
     <p>
-      Until this change, the display read a 73.8 MB
+      The display used to read a 73.8 MB
       <code>field_emission_data.hdf5</code> shipped inside the package, built
-      by hand from 80 runs (Oct 2023 onward, 37 cryomodules). The cache
-      reproduces it: all 16 datasets of CM06's 2024-02-02 run have the same
+      by hand from the same 80 runs (Oct 2023 onward, 37 cryomodules). The
+      cache reproduces it: all 16 datasets of CM06's 2024-02-02 run have the same
       shapes and columns. Values differ in the last bit for 5–9% of samples
       (at most 1.8e-15): the bundled file went through CSVs read back with
       pandas' default float parser, and the cache stores what the archiver
@@ -465,10 +468,12 @@ title: "LCLS-II Field Emission", or "background caching stopped (...)"</pre>
       Each run is checked (a known cryomodule, dates in
       <code>mm/dd/yy hh:mm</code>, end after start, decarad 1 or 2, an
       <code>mccelog</code> link, Y/N filters), appended to
-      <code>added_runs.csv</code>, and fetched. The run list refreshes when the
+      <code>added_runs.csv</code>, and fetched. A CSV row may leave the elog
+      link empty, as 7 runs in git do. The first bad CSV row is reported with
+      its line number, and no row from that file is added. The run list refreshes when the
       dialog closes. To make a run permanent for every installation, add its
       row to <code>field_emission_runs.csv</code> in a PR.
-      <span class="cite">gui_updater.py::validate_emission_data, gui_updater.py::UpdateWorker._add_and_fetch “added = add_runs(rows)”, field_emission/run_cache.py::add_runs “with open(added_path, "a", newline="")”, field_emission_gui.py::FieldEmission.open_update_dialog “self.on_cryomodule_updated()”</span>
+      <span class="cite">gui_updater.py::validate_emission_data, gui_updater.py::UpdateWorker.multi_update “validate_emission_data(row, require_elog=False)”, gui_updater.py::UpdateWorker._add_and_fetch “added = add_runs(rows)”, field_emission/run_cache.py::add_runs “with open(added_path, "a", newline="")”, field_emission_gui.py::FieldEmission.open_update_dialog “self.on_cryomodule_updated()”</span>
     </p>
   </section>
 
