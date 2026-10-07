@@ -99,6 +99,7 @@
 </head>
 <body>
 <main>
+  <p><a href="https://slaclab.github.io/sc_linac_physics/">← SC Linac Physics docs</a></p>
   <h1>How RF commissioning is built</h1>
   <p class="lede">
     An onboarding map of <code>applications/rf_commissioning/</code>: the
@@ -228,10 +229,15 @@
         <code>PhaseStepResult</code> carrying <code>SUCCESS</code>,
         <code>RETRY</code>, <code>FAILED</code> or <code>SKIP</code>
         <span class="cite">phases/phase_base.py::PhaseResult</span>.</li>
-      <li><code>RETRY</code> waits <code>retry_delay_seconds</code>, default 5 s
-        <span class="cite">phases/phase_base.py::PhaseStepResult “retry_delay_seconds: float = 5.0”</span>,
-        up to three times per step
-        <span class="cite">phases/phase_base.py::PhaseBase.__init__ “self._max_retries_per_step: int = 3”</span>.</li>
+      <li><code>RETRY</code> re-runs the step after <code>retry_delay_seconds</code>, default 5 s
+        <span class="cite">phases/phase_base.py::PhaseStepResult “retry_delay_seconds: float = 5.0”</span>.
+        A step runs at most 3 times, so it gets 2 retries
+        <span class="cite">phases/phase_base.py::PhaseBase.__init__ “self._max_retries_per_step: int = 3”</span>.
+        An exception also uses up an attempt. Piezo goes through
+        <code>PhaseBase</code>, which waits before retrying an exception. SSA and
+        frequency tuning each have their own copy of this loop, with the same
+        limit, that retries an exception at once
+        <span class="cite">ui/controllers/ssa_char_controller.py::SSACharController._execute_step_with_retries “retry_count = 0”, ui/controllers/frequency_tuning_controller.py::FrequencyTuningController._execute_step_with_retries “retry_count = 0”</span>.</li>
       <li>Abort is a flag, not an interrupt
         <span class="cite">phases/phase_base.py::PhaseContext.request_abort “self.abort_requested = True”</span>.
         A long step has to check it itself.</li>
@@ -242,9 +248,16 @@
       three controllers has its own step loop and calls private phase methods
       directly, for example
       <span class="cite">ui/controllers/ssa_char_controller.py::SSACharController._run_phase_in_background “self.phase._mark_phase_started()”</span>.
-      So there are four step loops, and they do not all do the same
-      bookkeeping. Read the controller for the phase you are touching, not
-      just <code>PhaseBase</code>.
+      The batch Piezo window has one more. So there are five step loops, and
+      they do not all do the same bookkeeping. One example: <code>PhaseBase.run()</code>
+      and the batch window reset the attempt counter before each step
+      <span class="cite">phases/phase_base.py::PhaseBase.run “self._retry_count = 0”, ui/controllers/batch_piezo_pre_rf_controller.py::BatchPiezoPreRFController._run_step “state.phase._retry_count = 0”</span>.
+      The single-cavity Piezo controller does not, so exceptions add up across
+      the whole phase there. Read the controller for the phase you are
+      touching, not just <code>PhaseBase</code>.
+      <br><br>
+      Decided 2026-10-02: one shared step runner will replace these loops,
+      before any placeholder phase is implemented.
     </div>
   </section>
 
@@ -268,7 +281,7 @@
             <span class="cite">models/persistence/database_schema.py::initialize_database_schema “UNIQUE(run_id, phase, attempt_number)”</span></td></tr>
           <tr><td><code>commissioning_phase_artifacts</code></td><td>artifact</td><td>JSON payload tied to an attempt</td></tr>
           <tr><td><code>commissioning_workflow_events</code></td><td>event</td><td>Append-only log</td></tr>
-          <tr><td><code>measurement_history</code></td><td>measurement</td><td>Append-only, with notes</td></tr>
+          <tr><td><code>measurement_history</code></td><td>measurement</td><td>A row per measurement. Notes can be edited later (below)</td></tr>
           <tr><td><code>operators</code>, <code>cryomodule_records</code></td><td></td><td>Operator list, cryomodule-level records</td></tr>
         </tbody>
       </table>
@@ -312,8 +325,9 @@
       <tbody>
         <tr><td><code>setup_piezo</code></td><td><code>BIAS</code></td><td>25</td>
           <td class="cite">piezo.py::Piezo.enable “self.bias_voltage = 25”</td></tr>
-        <tr><td></td><td><code>ENABLE</code></td><td>disable, then enable, 2 s apart, only if not already enabled</td>
-          <td class="cite">piezo.py::Piezo.enable “self.enable_pv_obj.put(linac_utils.PIEZO_DISABLE_VALUE)”</td></tr>
+        <tr><td></td><td><code>ENABLE</code></td><td>only if not already enabled: disable, wait 2 s, enable. Repeats until
+          the piezo reports enabled, up to 10 tries, then raises</td>
+          <td class="cite">piezo.py::Piezo.enable “self.enable_pv_obj.put(linac_utils.PIEZO_DISABLE_VALUE)”, piezo.py::Piezo “ENABLE_MAX_ATTEMPTS = 10”</td></tr>
         <tr><td></td><td><code>MODECTRL</code></td><td><code>PIEZO_MANUAL_VALUE</code></td>
           <td class="cite">piezo.py::Piezo.set_to_manual “self.feedback_control_pv_obj.put(linac_utils.PIEZO_MANUAL_VALUE)”</td></tr>
         <tr><td></td><td><code>DAC_SP</code></td><td>0</td>
@@ -356,18 +370,22 @@
     <div class="scroll"><table>
       <thead><tr><th>Stage</th><th>Writes</th><th>Source</th></tr></thead>
       <tbody>
-        <tr><td>1</td><td>Delegates to <code>Cavity.setup_tuning</code> and friends. Operator's cold-landing value pushed to <code>DF_COLD</code> in Hz</td>
-          <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._prepare_cavity_for_tuning “self.cavity.setup_tuning()”</td></tr>
-        <tr><td>2</td><td><code>TOTSGN_RESET</code> = 0, then a +50,000 / −50,000 microstep probe move</td>
-          <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._do_probe_move “self.cavity.stepper_tuner.move(probe, speed=speed, check_detune=False)”</td></tr>
+        <tr><td>1</td><td>Delegates to <code>Cavity.setup_tuning</code> and friends. Records the
+          cold-landing detune for the operator. It does not write <code>DF_COLD</code>:
+          the operator pushes that from the UI (next table)</td>
+          <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._prepare_cavity_for_tuning “self.cavity.setup_tuning()”, phases/frequency_tuning.py “the operator pushes it to”</td></tr>
+        <tr><td>2</td><td>Refuses to move until <code>DF_COLD</code> matches the recorded value
+          within 1 Hz. Then <code>TOTSGN_RESET</code> = 0, then a +50,000 / −50,000 microstep probe move</td>
+          <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._check_df_cold_recorded “DF_COLD does not match the recorded cold-landing”, phases/frequency_tuning.py::FrequencyTuningPhase._do_probe_move “self.cavity.stepper_tuner.move(probe, speed=speed, check_detune=False)”</td></tr>
         <tr><td>3</td><td><code>SCALE_CALC.B</code> from the measured Hz/microstep, auto-tune, <code>NSTEPS_COLD</code>, <code>TUNE_CONFIG</code></td>
           <td class="cite">phases/frequency_tuning.py::FrequencyTuningPhase._write_cold_landing_steps “self.cavity.stepper_tuner.steps_cold_landing_pv_obj.put(”</td></tr>
         <tr><td>4</td><td>Rack frequency scan: <code>FSCAN:SEL</code> = 1 for this cavity and 0 for the rest of the rack,
           then <code>FSCAN:FREQ_START</code> = −3,500,000 Hz, <code>FSCAN:FREQ_STOP</code> = 50,000 Hz,
           <code>FSCAN:RMS_THRESH</code> = 10.0, <code>FSCAN:MODE_OVERLAP</code> = 1,000,
-          then <code>FSCAN:START</code> = 1, then the 8π/9 and 7π/9 pushes. The four
-          settings are <code>FrequencyTuningLimits</code> defaults.</td>
-          <td class="cite">rack.py::Rack.run_fscan “self.fscan_rms_thresh_pv_obj.put(rms_thresh)”,
+          then <code>FSCAN:START</code> = 1, then, once the scan is done,
+          <code>FSCAN:PUSH_8PI9.PROC</code> = 1 and <code>FSCAN:PUSH_7PI9.PROC</code> = 1
+          for this cavity. The four settings are <code>FrequencyTuningLimits</code> defaults.</td>
+          <td class="cite">rack.py::Rack.run_fscan “self.fscan_rms_thresh_pv_obj.put(rms_thresh)”, rack.py::Rack.run_fscan “cav.fscan_push_8pi9_pv_obj.put(1)”, cavity.py::Cavity.__init__ “self.pv_addr("FSCAN:PUSH_8PI9.PROC")”,
           phases/frequency_tuning.py::FrequencyTuningLimits “pi_scan_rms_thresh: float = 10.0”</td></tr>
       </tbody>
     </table></div>
@@ -394,7 +412,8 @@
     </table></div>
 
     <h3>Checked against the IOC</h3>
-    <p>Three things that look wrong in the code and are not:</p>
+    <p>Three things that look wrong in the code and are not. Confirmed
+      against the IOC records on 2026-10-02. Those records are not in this repo.</p>
     <ul>
       <li><code>FSCAN:FREQ_START</code> and <code>FREQ_STOP</code> are in Hz
         (record EGU), so stage 4 scans −3.5 MHz to +50 kHz.</li>
@@ -415,7 +434,10 @@
         <code>WorkflowService._validate_phase_prerequisites</code> accept a previous
         phase that is complete or skipped. <code>CommissioningSession.can_run_phase</code>
         accepts complete only
-        <span class="cite">rf_commissioning/session_manager.py::CommissioningSession.can_run_phase “if previous_status != PhaseStatus.COMPLETE:”</span>.</li>
+        <span class="cite">rf_commissioning/session_manager.py::CommissioningSession.can_run_phase “if previous_status != PhaseStatus.COMPLETE:”</span>.
+        Decided 2026-10-02: complete or skipped is the rule, and
+        <code>can_run_phase</code> will defer to the workflow service. Nothing
+        records a skip yet.</li>
       <li><strong>Frequency tuning's stage checks are not in its step list.</strong>
         They exist only in <code>execute_step</code>'s dispatch, and only Stage 1
         opens an attempt
@@ -426,7 +448,9 @@
       <li><strong>Docs drift.</strong> <code>docs/applications/rf_commissioning.md</code>
         says only the Piezo tab shows by default. All phases with a record
         attribute show
-        <span class="cite">ui/container/phase_specs.py::DEFAULT_BETA_VISIBLE_PHASES</span>.</li>
+        <span class="cite">ui/container/phase_specs.py::DEFAULT_BETA_VISIBLE_PHASES</span>.
+        It also calls <code>phase_history</code> an append-only checkpoint
+        history, but <code>phase_history</code> is not persisted (section 4).</li>
       <li><strong>Small naming bumps.</strong> <code>self._controller</code> in
         <code>FrequencyTuningDisplay</code> vs <code>self.controller</code> elsewhere.
         <code>ssa_char</code> in the registry but <code>"ssa_characterization"</code>

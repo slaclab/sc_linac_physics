@@ -30,7 +30,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 | Page | What it covers | Explainer |
 |------|----------------|-----------|
 | [Auto Setup](applications/auto_setup.md) | Automated cavity turn-on: SSA calibration → auto-tune → characterization → RF ramp | [How auto-tune works](explainers/auto_tune.html) |
-| [RF Commissioning](applications/rf_commissioning.md) | Phase-gated acceptance workflow for newly-installed cavities | [How auto-tune works](explainers/auto_tune.html) |
+| [RF Commissioning](applications/rf_commissioning.md) | Phase-gated acceptance workflow for newly-installed cavities | [How RF commissioning is built](explainers/rf_commissioning.html), [How auto-tune works](explainers/auto_tune.html) |
 | [Q0 Measurement](applications/q0.md) | Cavity quality-factor measurement under thermal load | |
 | [Microphonics](applications/microphonics.md) | Mechanical vibration noise acquisition and analysis | |
 | [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection | |
@@ -43,13 +43,6 @@ The app's page is the short reference. An explainer is a docs page, and each
 interactive part is a small HTML widget shown inline. On GitHub a widget shows
 as a link; opened on its own it also works offline. The auto-tune explainer is
 still a single HTML file.
-
-The explainers are single HTML files. Read them on the docs site, where they
-render and run:
-[auto-tune](https://slaclab.github.io/sc_linac_physics/explainers/auto_tune.html),
-[RF commissioning](https://slaclab.github.io/sc_linac_physics/explainers/rf_commissioning.html).
-GitHub's file view shows their source instead. They also work offline: open
-the file from a checkout.
 
 ### Displays
 
