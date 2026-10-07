@@ -31,6 +31,13 @@ theme:
         icon: material/weather-sunny
         name: Switch to light mode
 
+# Explainer pages: citation styling, and inline widgets from
+# docs/explainers/widgets/. See docs/javascripts/explainer_widgets.js.
+extra_css:
+  - stylesheets/explainers.css
+extra_javascript:
+  - javascripts/explainer_widgets.js
+
 plugins:
   - search
 
