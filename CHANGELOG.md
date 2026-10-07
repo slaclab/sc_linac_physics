@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.41.2 (2026-10-07)
+
+### Bug Fixes
+
+- **tests**: Match log paths by directory and suffix, not substring
+  ([#339](https://github.com/slaclab/sc_linac_physics/pull/339),
+  [`ac2cba5`](https://github.com/slaclab/sc_linac_physics/commit/ac2cba59601e5a4a0fe266606f1b610050eb441a))
+
+
 ## v9.41.1 (2026-10-07)
 
 ### Bug Fixes
