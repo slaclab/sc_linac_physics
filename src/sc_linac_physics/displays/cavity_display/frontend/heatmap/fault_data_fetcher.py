@@ -171,6 +171,10 @@ class FaultDataFetcher(QThread):
     MAX_WORKERS = 8
     # How often run() checks for an abort while waiting on cavities
     ABORT_POLL_S = 0.2
+    # Archiver slots shared by every fetcher. An aborted fetch's in-flight
+    # requests keep their slots until they finish, so abort-and-refetch
+    # can't stack pools past MAX_WORKERS requests.
+    _archiver_slots = threading.BoundedSemaphore(MAX_WORKERS)
 
     def run(self) -> None:
         try:
@@ -232,6 +236,22 @@ class FaultDataFetcher(QThread):
         self, cm_name: str, cavity_num: int, cavity
     ) -> CavityFaultResult:
         """Query the archiver for one cavity. Runs inside the thread pool."""
+        # Wait for a slot, still noticing an abort while waiting
+        while not self._archiver_slots.acquire(timeout=self.ABORT_POLL_S):
+            if self._abort_event.is_set():
+                break
+        else:
+            try:
+                return self._fetch_with_slot(cm_name, cavity_num, cavity)
+            finally:
+                self._archiver_slots.release()
+        return CavityFaultResult(
+            cm_name=cm_name, cavity_num=cavity_num, error="Aborted"
+        )
+
+    def _fetch_with_slot(
+        self, cm_name: str, cavity_num: int, cavity
+    ) -> CavityFaultResult:
         if self._abort_event.is_set():
             return CavityFaultResult(
                 cm_name=cm_name,

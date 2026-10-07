@@ -200,6 +200,39 @@ class TestFaultDataFetcherAbort:
         assert elapsed < 2
         finished_spy.assert_called_once_with([])
 
+    def test_refetch_waits_for_aborted_requests(self, monkeypatch):
+        """An aborted fetch's stuck request keeps its archiver slot."""
+        monkeypatch.setattr(
+            FaultDataFetcher, "_archiver_slots", threading.BoundedSemaphore(1)
+        )
+        release = threading.Event()
+        first_machine = make_machine(num_cavities=1)
+        first_cav = first_machine.linacs[0].cryomodules["01"].cavities[1]
+
+        def stuck(*args):
+            release.wait(10)
+            return {}, []
+
+        first_cav.get_fault_history = stuck
+        first = FaultDataFetcher(first_machine, datetime.now(), datetime.now())
+        threading.Timer(0.3, first.abort).start()
+        first.run()  # returns on abort; its request still holds the slot
+
+        second_machine = make_machine(num_cavities=1)
+        second_cav = second_machine.linacs[0].cryomodules["01"].cavities[1]
+        second_cav.get_fault_history = Mock(return_value=({}, []))
+        second = FaultDataFetcher(
+            second_machine, datetime.now(), datetime.now()
+        )
+        runner = threading.Thread(target=second.run, daemon=True)
+        runner.start()
+        time.sleep(0.5)
+        assert second_cav.get_fault_history.call_count == 0
+
+        release.set()
+        runner.join(5)
+        assert second_cav.get_fault_history.call_count == 1
+
 
 class TestFaultDataFetcherErrors:
     def test_single_cavity_exception_continues(self):
