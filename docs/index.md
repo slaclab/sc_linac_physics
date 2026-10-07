@@ -27,21 +27,28 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 
 ### Applications
 
-| Page | What it covers |
-|------|----------------|
-| [Auto Setup](applications/auto_setup.md) | Automated cavity turn-on: SSA calibration → auto-tune → characterization → RF ramp |
-| [RF Commissioning](applications/rf_commissioning.md) | Phase-gated acceptance workflow for newly-installed cavities |
-| [Q0 Measurement](applications/q0.md) | Cavity quality-factor measurement under thermal load |
-| [Microphonics](applications/microphonics.md) | Mechanical vibration noise acquisition and analysis |
-| [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection |
-| [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence |
-| [How auto-tune works](explainers/auto_tune.html) | Interactive explainer: the `_auto_tune` convergence loop, its guards, and how it fails. |
+| Page | What it covers | Explainer |
+|------|----------------|-----------|
+| [Auto Setup](applications/auto_setup.md) | Automated cavity turn-on: SSA calibration → auto-tune → characterization → RF ramp | [How auto-tune works](explainers/auto_tune.html) |
+| [RF Commissioning](applications/rf_commissioning.md) | Phase-gated acceptance workflow for newly-installed cavities | [How auto-tune works](explainers/auto_tune.html) |
+| [Q0 Measurement](applications/q0.md) | Cavity quality-factor measurement under thermal load | |
+| [Microphonics](applications/microphonics.md) | Mechanical vibration noise acquisition and analysis | |
+| [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection | |
+| [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence | [How auto-tune works](explainers/auto_tune.html) |
+| [Field Emission](applications/field_emission.md) | Cavity amplitude vs. decarad radiation for past runs | |
+
+An explainer is the "how it works and why" for an app, or for a piece several
+apps share: data flow, decisions, how it fails, each claim cited to the code.
+The app's page is the short reference. Explainers are single HTML files. They
+render and run on the docs site and offline from a checkout. GitHub's file
+view shows their source instead.
 
 ### Displays
 
 | Page | What it covers |
 |------|----------------|
 | [Cavity Display](displays/cavity_display.md) | Fault monitoring dashboard for all 296 cavities with heatmap and audio alerts |
+| [Fault Heatmap](displays/fault_heatmap.md) | Fault counts per cavity over a time window, as a heatmap |
 | [SRF Home](displays/srf_home.md) | Top-level launcher panel and watcher management |
 
 ## Quick orientation
