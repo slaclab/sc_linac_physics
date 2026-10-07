@@ -2,7 +2,7 @@
 
 Plots cavity amplitude against decarad radiation for past measurement runs, one plot per cavity.
 
-For how it works — what it plots, where each run's data comes from, how the cache fills and fails — see the explainer: [How the field emission display works](../explainers/field_emission.html).
+For how it works — what it plots, where each run's data comes from, how the cache fills and fails — see the explainer: [How the field emission display works](../explainers/field_emission.md).
 
 ## Run it
 
