@@ -35,12 +35,12 @@ Endpoints: https://epicsarchiver.readthedocs.io/en/stable/user/userguide.html
 old; where it is silent, this follows what the LCLS archiver did when tested.
 """
 
+import queue
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from time import sleep
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Callable, Dict, Iterable, List, Optional, TypeVar, Union
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -72,6 +72,9 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 COLUMNS = ["timestamp", "value", "severity", "status", "valid"]
 
 Value = Union[float, int, str]
+
+T = TypeVar("T")
+R = TypeVar("R")
 
 
 class ArchiverError(Exception):
@@ -143,8 +146,7 @@ def get_values_over_time_range(
         payload = response.json()
         return _to_frame(payload[0]["data"] if payload else [])
 
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        frames = dict(zip(pvs, pool.map(fetch, pvs)))
+    frames = dict(zip(pvs, _map_in_daemon_threads(fetch, pvs, max_workers)))
 
     missing = [pv for pv, frame in frames.items() if frame is None]
     if missing:
@@ -210,6 +212,59 @@ def get_values_at_time(
     if response is None:  # 404: none of the PVs are known
         return {}
     return {pv: _to_sample(datum) for pv, datum in response.json().items()}
+
+
+def _map_in_daemon_threads(
+    fn: Callable[[T], R], items: List[T], max_workers: int
+) -> List[R]:
+    """Return [fn(item) for item in items], running up to max_workers at once.
+
+    Waits for every call, then raises the first error in item order, as
+    ThreadPoolExecutor.map did.
+
+    Not ThreadPoolExecutor: Python joins its worker threads at exit, so one
+    request stuck for its ~5 minutes of retries kept the app open after its
+    window closed. These threads are daemons, so exit drops them.
+
+    A fixed set of workers pulls items from a queue, rather than one thread
+    per item, so each worker reuses its session's connection across PVs as
+    the pool's workers did.
+    """
+    if max_workers <= 0:
+        raise ValueError("max_workers must be greater than 0")
+    results: List[Optional[R]] = [None] * len(items)
+    errors: List[Optional[BaseException]] = [None] * len(items)
+    todo: "queue.SimpleQueue" = queue.SimpleQueue()
+    for index, item in enumerate(items):
+        todo.put((index, item))
+
+    workers = [
+        threading.Thread(
+            target=_work, args=(fn, todo, results, errors), daemon=True
+        )
+        for _ in range(min(max_workers, len(items)))
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+    first_error = next((e for e in errors if e is not None), None)
+    if first_error is not None:
+        raise first_error
+    return results
+
+
+def _work(fn, todo, results, errors) -> None:
+    """Run fn on queued (index, item) pairs until the queue is empty."""
+    while True:
+        try:
+            index, item = todo.get_nowait()
+        except queue.Empty:
+            return
+        try:
+            results[index] = fn(item)
+        except BaseException as e:  # raised again in the caller's thread
+            errors[index] = e
 
 
 _local = threading.local()
