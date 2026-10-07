@@ -1,13 +1,8 @@
 import bisect
 import dataclasses
+import queue
 import threading
 from collections import defaultdict
-from concurrent.futures import (
-    FIRST_COMPLETED,
-    Future,
-    ThreadPoolExecutor,
-    wait,
-)
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -113,9 +108,8 @@ class CavityFaultResult:
 class FaultDataFetcher(QThread):
     """Fetches fault counts for all cavities in a background thread.
 
-    Uses a ThreadPoolExecutor internally so individual archiver queries
-    run concurrently, but signals are emitted back on the Qt thread for
-    safe UI updates.
+    Runs up to MAX_WORKERS archiver queries at once on daemon threads, but
+    signals are emitted back on the Qt thread for safe UI updates.
     """
 
     progress = pyqtSignal(int, int)  # (completed, total)
@@ -190,52 +184,48 @@ class FaultDataFetcher(QThread):
 
         all_results: List[CavityFaultResult] = []
 
-        executor = ThreadPoolExecutor(max_workers=self.MAX_WORKERS)
-        try:
-            futures: Dict[Future, Tuple[str, int]] = {}
-            for cm_name, cav_num, cavity in cavities:
-                if self._abort_event.is_set():
-                    break
-                future = executor.submit(
-                    self._fetch_single_cavity,
-                    cm_name,
-                    cav_num,
-                    cavity,
-                )
-                futures[future] = (cm_name, cav_num)
+        todo: "queue.SimpleQueue" = queue.SimpleQueue()
+        for cavity_args in cavities:
+            todo.put(cavity_args)
+        done: "queue.SimpleQueue" = queue.SimpleQueue()
 
-            total = len(futures)
-            pending = set(futures)
+        # Daemon threads, not ThreadPoolExecutor: Python joins a pool's
+        # workers at exit, so a request stuck for utils.archiver's
+        # MAX_RETRIES x RANGE_TIMEOUT kept the app open after it closed.
+        for _ in range(min(self.MAX_WORKERS, total)):
+            threading.Thread(
+                target=self._work, args=(todo, done), daemon=True
+            ).start()
 
-            # Wake up regularly so an abort is seen even while every worker
-            # is stuck on a slow archiver request.
-            while pending and not self._abort_event.is_set():
-                done, pending = wait(
-                    pending,
-                    timeout=self.ABORT_POLL_S,
-                    return_when=FIRST_COMPLETED,
-                )
-                for future in done:
-                    result = future.result()
-                    all_results.append(result)
-                    self.cavity_result.emit(result)
-                    self.progress.emit(len(all_results), total)
-                    if self._abort_event.is_set():
-                        break
-        finally:
-            # On abort, don't wait for requests already in flight: one can
-            # take up to utils.archiver's MAX_RETRIES x RANGE_TIMEOUT. Their
-            # results are dropped.
-            executor.shutdown(
-                wait=not self._abort_event.is_set(), cancel_futures=True
-            )
+        # Wake up regularly so an abort is seen even while every worker
+        # is stuck on a slow archiver request. On abort, don't wait for
+        # requests already in flight: their results are dropped.
+        while len(all_results) < total and not self._abort_event.is_set():
+            try:
+                result = done.get(timeout=self.ABORT_POLL_S)
+            except queue.Empty:
+                continue
+            all_results.append(result)
+            self.cavity_result.emit(result)
+            self.progress.emit(len(all_results), total)
 
         self.finished_all.emit(all_results)
+
+    def _work(
+        self, todo: "queue.SimpleQueue", done: "queue.SimpleQueue"
+    ) -> None:
+        """Fetch queued cavities until none are left or the fetch aborts."""
+        while not self._abort_event.is_set():
+            try:
+                cm_name, cav_num, cavity = todo.get_nowait()
+            except queue.Empty:
+                return
+            done.put(self._fetch_single_cavity(cm_name, cav_num, cavity))
 
     def _fetch_single_cavity(
         self, cm_name: str, cavity_num: int, cavity
     ) -> CavityFaultResult:
-        """Query the archiver for one cavity. Runs inside the thread pool."""
+        """Query the archiver for one cavity. Runs on a worker thread."""
         # Wait for a slot, still noticing an abort while waiting
         while not self._archiver_slots.acquire(timeout=self.ABORT_POLL_S):
             if self._abort_event.is_set():

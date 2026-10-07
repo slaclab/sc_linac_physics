@@ -1,9 +1,16 @@
+import os
+import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import Mock
 
 from sc_linac_physics.displays.cavity_display.backend.fault import FaultCounter
+from sc_linac_physics.displays.cavity_display.frontend.heatmap import (
+    fault_data_fetcher,
+)
 from sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_data_fetcher import (
     CavityFaultResult,
     FaultDataFetcher,
@@ -365,3 +372,49 @@ class TestFaultDataFetcherParallel:
         ok_results = [r for r in results if not r.is_error]
         assert len(error_results) == 2
         assert len(ok_results) == 2
+
+
+# A cavity whose archiver request never answers. run() goes on a daemon
+# thread, as a stand-in for the display closing mid-fetch; the main thread
+# then returns, so the interpreter should exit.
+_STUCK_FETCH = """
+import threading
+from datetime import datetime
+from unittest.mock import Mock
+
+from sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_data_fetcher import (
+    FaultDataFetcher,
+)
+
+started = threading.Event()
+
+
+def stuck(*args):
+    started.set()
+    threading.Event().wait()
+
+
+cavity = Mock()
+cavity.get_fault_history = stuck
+machine = Mock()
+machine.linacs = [Mock(cryomodules={"01": Mock(cavities={1: cavity})})]
+fetcher = FaultDataFetcher(machine, datetime.now(), datetime.now())
+threading.Thread(target=fetcher.run, daemon=True).start()
+assert started.wait(10)
+"""
+
+
+def test_stuck_request_does_not_block_exit():
+    src = Path(fault_data_fetcher.__file__).parents[5]
+    env = {**os.environ, "PYTHONPATH": str(src)}
+
+    # Import time is most of this; the old pool hung here until killed.
+    result = subprocess.run(
+        [sys.executable, "-c", _STUCK_FETCH],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
