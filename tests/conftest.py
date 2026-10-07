@@ -2,12 +2,13 @@ import builtins
 import logging
 import logging.handlers
 import os
+import re
 import socket
 import subprocess
 import sys
 import tempfile
 from io import StringIO
-from pathlib import Path
+from pathlib import Path, PurePath
 from unittest.mock import MagicMock, patch, Mock
 
 import pyqtgraph as pg
@@ -29,9 +30,21 @@ _original_path_mkdir = Path.mkdir
 _original_path_open = Path.open
 
 
+# Matched by path component and suffix, not substring. A substring match on
+# "log" also caught "dialog", "catalog" and "logic", so pytest read those test
+# files through the mock below, got "", and collected 0 tests without error.
+# "logfiles" is the directory name from `get_log_base_dir()`; `.log` and
+# `.jsonl` are the files `custom_logger()` writes, plus rotated `.1`, `.2`, ...
+_LOG_DIR_NAMES = frozenset({"logfiles"})
+_LOG_FILE_RE = re.compile(r"\.(log|jsonl)(\.\d+)?$")
+
+
 def _is_log_path(path_str):
-    """Check if path is related to logging."""
-    return "log" in path_str.lower() or path_str.endswith(".log")
+    """True for paths under a log directory or naming a log file."""
+    path = PurePath(path_str)
+    if _LOG_DIR_NAMES.intersection(path.parts):
+        return True
+    return bool(_LOG_FILE_RE.search(path.name))
 
 
 def _is_physics_path(path_str):
