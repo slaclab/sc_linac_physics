@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -351,3 +351,13 @@ def test_timestamp_keeps_exact_microseconds():
     # secs + nanos / 1e9 as one float gives 999999 here.
     stamp = archiver._timestamp(1727049601, 999_998_500)
     assert stamp.microsecond == 999998
+
+
+def test_timestamp_in_fall_back_hour_keeps_pst():
+    # 09:30 UTC on 2024-11-03 is the second 01:30, in PST.
+    secs = int(datetime(2024, 11, 3, 9, 30, tzinfo=timezone.utc).timestamp())
+
+    stamp = archiver._timestamp(secs, 500_000)
+
+    assert stamp.utcoffset() == timedelta(hours=-8)
+    assert stamp.timestamp() == secs + 0.0005

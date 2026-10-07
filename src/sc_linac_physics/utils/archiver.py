@@ -280,9 +280,12 @@ def _timestamp(secs: int, nanos: int) -> datetime:
     # Not fromtimestamp(secs + nanos / 1e9): a float near 1.7e9 s resolves
     # about 0.24 us, so 1 in 17 timestamps came out 1 us off. That made
     # samples of two PVs collide, or stop colliding, when aligned.
-    return datetime.fromtimestamp(secs, tz=LOCAL_TZ) + timedelta(
+    # Add in UTC, then convert: adding a timedelta to a Pacific datetime
+    # resets fold to 0, which moved the fall-back hour's samples an hour early.
+    moment = datetime.fromtimestamp(secs, tz=timezone.utc) + timedelta(
         microseconds=nanos / 1000
     )
+    return moment.astimezone(LOCAL_TZ)
 
 
 def _to_sample(datum: dict) -> ArchiverSample:
