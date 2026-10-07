@@ -41,9 +41,16 @@
   }
 
   for (const paragraph of document.querySelectorAll(".md-content p")) {
-    const link = paragraph.querySelector("a");
-    if (!link || !WIDGET.test(new URL(link.href).pathname)) continue;
+    // Only a paragraph that is exactly one link, so replacing it drops nothing.
+    if (paragraph.children.length !== 1) continue;
+    if (paragraph.classList.contains("explainer-widget-open")) continue;
+    const link = paragraph.firstElementChild;
+    if (link.tagName !== "A") continue;
     if (paragraph.textContent.trim() !== link.textContent.trim()) continue;
+    // Same origin only: widgets must load offline, and a cross-origin frame
+    // can be neither sized nor themed.
+    const url = new URL(link.href);
+    if (url.origin !== location.origin || !WIDGET.test(url.pathname)) continue;
     embed(paragraph, link);
   }
 
