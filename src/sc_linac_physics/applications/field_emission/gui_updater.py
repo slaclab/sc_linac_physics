@@ -2,19 +2,16 @@ import csv
 import re
 
 from datetime import datetime
-from sc_linac_physics.applications.field_emission.amp_vs_radiation import (
-    generate_amp_vs_rad_csvs,
-)
-from sc_linac_physics.applications.field_emission.update_h5py import (
-    receive_metadata_input,
-    parse_csv,
-    convert_to_h5,
+from sc_linac_physics.applications.field_emission.run_cache import (
+    parse_row,
+    add_runs,
+    fill_cache,
+    read_run_list,
 )
 from sc_linac_physics.applications.field_emission.constants import (
     VALID_CMS_LIST,
     ELOG_PATTERN,
     STANDARD_DATE_FORMAT,
-    CSV_DATE_FORMAT,
 )
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -101,35 +98,6 @@ def _validate_filters(filters):
     return clean_filters
 
 
-def read_from_csv(filepath):
-    """yield formatted data for columns of each valid csv row"""
-    with open(filepath) as file:
-        reader = csv.reader(file)
-        next(reader)  # skip header row
-        for row in reader:
-            if "#" in row[0]:  # skip commented rows
-                continue
-            cm = row[0].strip().zfill(2).upper().removeprefix("CM")
-            try:
-                start_date = datetime.strptime(
-                    f"{row[1]} {row[2]}", STANDARD_DATE_FORMAT
-                )
-            except (ValueError, IndexError):
-                continue
-
-            if row[3] == "":
-                end_date = datetime.strptime(
-                    f"{row[1]} {row[4]}", STANDARD_DATE_FORMAT
-                )
-            else:
-                end_date = datetime.strptime(
-                    f"{row[3]} {row[4]}", STANDARD_DATE_FORMAT
-                )
-            timestamp = start_date.strftime(CSV_DATE_FORMAT)
-            decarad = row[5] if row[5] is not None else ""
-            yield cm, start_date, end_date, decarad, timestamp
-
-
 class UpdateWorker(QObject):
     error = pyqtSignal(str)
     progress = pyqtSignal(str)
@@ -144,29 +112,38 @@ class UpdateWorker(QObject):
         """ "modes (single vs multiple by csv) of new data entry"""
         try:
             if self.mode == "single":
-                self.single_update(*self.args)
+                message = self.single_update(*self.args)
             elif self.mode == "multi":
-                self.multi_update(*self.args)
+                message = self.multi_update(*self.args)
         except Exception as e:
             self.error.emit(str(e))
             return
-        self.finished.emit("File successfully updated!")
+        self.finished.emit(message)
 
     def single_update(self, valid, input_row):
-        """process a single row of cryomodule field emission data"""
-        self.progress.emit("Creating CSVs...")
-        generate_amp_vs_rad_csvs(
-            valid["cryomodule"], valid["start"], valid["end"], valid["decarad"]
-        )
-        self.progress.emit("Updating hdf5...")
-        lookup = receive_metadata_input(input_row)
-        convert_to_h5(lookup)
+        """add one run from the dialog and fetch it into the cache"""
+        row = [f"CM{valid['cryomodule']}", *input_row[1:]]
+        return self._add_and_fetch([row])
 
     def multi_update(self, input_csv):
-        """process multiple rows of cryomodule field emission data"""
-        self.progress.emit("Creating CSVs...")
-        for cryo, date_s, date_e, rad, stamp in read_from_csv(input_csv):
-            generate_amp_vs_rad_csvs(cryo, date_s, date_e, rad)
-        self.progress.emit("Updating hdf5...")
-        lookup = parse_csv(input_csv)
-        convert_to_h5(lookup)
+        """add every run in a CSV laid out like the run list, and fetch them"""
+        with open(input_csv, newline="") as file:
+            reader = csv.reader(file)
+            next(reader, None)  # header
+            rows = [row for row in reader if row and "#" not in row[0]]
+        return self._add_and_fetch(rows)
+
+    def _add_and_fetch(self, rows):
+        self.progress.emit("Adding to the run list...")
+        added = add_runs(rows)
+        wanted = {(run.cm, run.start) for run in map(parse_row, rows)}
+        runs = [r for r in read_run_list() if (r.cm, r.start) in wanted]
+        fetched = fill_cache(runs, self._report)
+        return (
+            f"{len(added)} run(s) added, {fetched} fetched from the archiver."
+        )
+
+    def _report(self, done, total, run):
+        self.progress.emit(
+            f"Fetching {done + 1}/{total}: CM{run.cm} {run.start:%m/%d/%y %H:%M}"
+        )

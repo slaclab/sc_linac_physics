@@ -1,6 +1,7 @@
 """Field emission runs: the run list, and a per-run cache of archiver data.
 
-The run list (field_emission_runs.csv) says which runs exist. The data for
+The run list is field_emission_runs.csv, committed to git, plus
+ADDED_RUNS_PATH, which operators add to from the display. The data for
 a run is fetched from the archiver the first time it is needed and kept in
 RUN_CACHE_DIR, one HDF5 file per run, so it stays viewable when the archiver
 is down and is shared by everyone using that directory.
@@ -18,7 +19,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import h5py
 import numpy as np
@@ -27,6 +28,7 @@ from sc_linac_physics.applications.field_emission.amp_vs_radiation import (
     fetch_run,
 )
 from sc_linac_physics.applications.field_emission.constants import (
+    ADDED_RUNS_PATH,
     H5_DATE_FORMAT,
     RUN_CACHE_DIR,
     RUN_LIST_PATH,
@@ -53,23 +55,87 @@ class Run:
     end_text: str
 
 
-def read_run_list(path: Path = RUN_LIST_PATH) -> List[Run]:
-    """Runs in the list, oldest first. Skips "#" rows and malformed rows."""
-    runs = []
+RUN_LIST_HEADER = [
+    "Cryomodule",
+    "Start Date",
+    "Start Time",
+    "End Date",
+    "End Time",
+    "Decarad #",
+    "Link to Measurement",
+    "Notes",
+    "Recharacterization",
+    "Multipacting",
+    "Commissioning",
+]
+
+
+def read_run_list(
+    path: Path = RUN_LIST_PATH, added_path: Path = ADDED_RUNS_PATH
+) -> List[Run]:
+    """Committed and added runs, oldest first.
+
+    Skips "#" rows, malformed rows, and added runs the committed list
+    already has (same cryomodule and start).
+    """
+    runs = {}
+    for list_path in (path, added_path):
+        for run in _read_one_list(list_path):
+            runs.setdefault((run.cm, run.start), run)
+    return sorted(runs.values(), key=lambda run: (run.start, run.cm))
+
+
+def _read_one_list(path: Path) -> Iterable[Run]:
+    if not path.exists():
+        return
     with open(path, newline="") as file:
         reader = csv.reader(file)
-        next(reader)  # header
+        next(reader, None)  # header
         for row in reader:
             if not row or "#" in row[0]:
                 continue
             try:
-                runs.append(_parse_row(row))
+                yield parse_row(row)
             except (ValueError, IndexError):
                 print(f"Skipping malformed run list row: {row}")
-    return sorted(runs, key=lambda run: (run.start, run.cm))
 
 
-def _parse_row(row: List[str]) -> Run:
+def add_runs(
+    rows: Iterable[List[str]],
+    path: Path = RUN_LIST_PATH,
+    added_path: Path = ADDED_RUNS_PATH,
+) -> List[Run]:
+    """Append rows (run list columns) to the added list.
+
+    Returns the runs that were new. Rows that don't parse raise ValueError
+    before anything is written; rows already listed are skipped.
+    """
+    known = {(run.cm, run.start) for run in read_run_list(path, added_path)}
+    new_rows, new_runs = [], []
+    for row in rows:
+        try:
+            run = parse_row(row)
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Bad run list row {row}: {e}") from e
+        if (run.cm, run.start) in known:
+            continue
+        known.add((run.cm, run.start))
+        new_rows.append(row)
+        new_runs.append(run)
+
+    if new_rows:
+        added_path.parent.mkdir(parents=True, exist_ok=True)
+        write_header = not added_path.exists()
+        # CHECK: appends from two operators at once on NFS can interleave
+        with open(added_path, "a", newline="") as file:
+            writer = csv.writer(file)
+            if write_header:
+                writer.writerow(RUN_LIST_HEADER)
+            writer.writerows(new_rows)
+    return new_runs
+
+
+def parse_row(row: List[str]) -> Run:
     start_date, start_time, end_date, end_time = row[1:5]
     start = datetime.strptime(
         f"{start_date} {start_time}", STANDARD_DATE_FORMAT
@@ -103,6 +169,23 @@ def run_path(run: Run, cache_dir: Path = RUN_CACHE_DIR) -> Path:
 
 def is_cached(run: Run, cache_dir: Path = RUN_CACHE_DIR) -> bool:
     return run_path(run, cache_dir).exists()
+
+
+def fill_cache(
+    runs: Iterable[Run],
+    progress: Callable[[int, int, Run], None] = lambda done, total, run: None,
+    cache_dir: Path = RUN_CACHE_DIR,
+) -> int:
+    """Fetch every run not cached yet, one at a time. Returns how many.
+
+    Stops at the first failed fetch and raises it, so an archiver outage
+    doesn't mean one timeout per remaining run.
+    """
+    missing = [run for run in runs if not is_cached(run, cache_dir)]
+    for done, run in enumerate(missing):
+        progress(done, len(missing), run)
+        load_run(run, cache_dir)
+    return len(missing)
 
 
 def load_run(run: Run, cache_dir: Path = RUN_CACHE_DIR) -> RunData:
