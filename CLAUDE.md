@@ -44,6 +44,11 @@ explainer. Don't tell the story in both. Why: two copies drift, and only cited
 text is checked by `tests/docs/test_citations.py`. #323's explainer took 8
 commits to keep current. Apps without an explainer keep their full page.
 
+An explainer is a markdown page. Each interactive part is a small `.html`
+widget in `docs/explainers/widgets/`, linked on a line of its own, which the
+site shows inline. Why: prose diffs a reviewer can read, and the site's search
+and sidebar. `auto_tune.html` predates this and is still one file.
+
 See also `AGENTS.md` at the repo root for architectural conventions enforced across the codebase.
 
 ## Architecture
