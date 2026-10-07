@@ -25,7 +25,8 @@
   --ink: #1d1f23;
   --dim: #5c6370;
   --line: #d8dce2;
-  --edge: #9aa3b2;
+  /* 3.4:1 against --panel, so control borders stay visible (dark: 3.25:1) */
+  --edge: #7d8592;
   --accent: #2f6fd6;
   --warn: #b7791f;
   --bad: #c0392b;
