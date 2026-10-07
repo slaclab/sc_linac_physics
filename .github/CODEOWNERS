@@ -42,6 +42,7 @@
 /src/sc_linac_physics/applications/q0/                  @lisazacarias @RDPorter
 /src/sc_linac_physics/applications/quench_processing/   @lisazacarias @RDPorter
 /src/sc_linac_physics/applications/microphonics/        @hmarts9 @lisazacarias @RDPorter
+/src/sc_linac_physics/applications/field_emission/      @lisazacarias @s-aderhold @RDPorter
 
 # ── Constants and PV naming ──────────────────────────────────────────────────
 # Topology, PV name construction, and hardware constants. Everything downstream
