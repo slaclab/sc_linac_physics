@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v9.41.3 (2026-10-07)
+
+### Bug Fixes
+
+- **explainers**: Embed only same-origin, single-link widget paragraphs; darken light-theme edges
+  ([#343](https://github.com/slaclab/sc_linac_physics/pull/343),
+  [`273e784`](https://github.com/slaclab/sc_linac_physics/commit/273e7849a61a5f8732a90e237633bd94b25f6f93))
+
+### Continuous Integration
+
+- **explainers**: Post preview links for widgets too
+  ([#342](https://github.com/slaclab/sc_linac_physics/pull/342),
+  [`5bf3a5e`](https://github.com/slaclab/sc_linac_physics/commit/5bf3a5e1115b3511b37c280c41e82617bae41052))
+
+### Documentation
+
+- Give explainers their own column, nav section and back-links
+  ([#340](https://github.com/slaclab/sc_linac_physics/pull/340),
+  [`1d5798c`](https://github.com/slaclab/sc_linac_physics/commit/1d5798c3907e560ee488b6655dfc926da8aee3ff))
+
+- **claude-md**: Explainers are markdown pages with inline widgets
+  ([#343](https://github.com/slaclab/sc_linac_physics/pull/343),
+  [`273e784`](https://github.com/slaclab/sc_linac_physics/commit/273e7849a61a5f8732a90e237633bd94b25f6f93))
+
+- **claude-md**: Let an explainer cover a piece several apps share
+  ([#337](https://github.com/slaclab/sc_linac_physics/pull/337),
+  [`c95f027`](https://github.com/slaclab/sc_linac_physics/commit/c95f027e7a864e300a68dd118617effd7b59f234))
+
+- **explainers**: Record the explainer-vs-docs-page rule; check every explainer offline
+  ([#337](https://github.com/slaclab/sc_linac_physics/pull/337),
+  [`c95f027`](https://github.com/slaclab/sc_linac_physics/commit/c95f027e7a864e300a68dd118617effd7b59f234))
+
+- **explainers**: Show widgets inline on explainer pages
+  ([#343](https://github.com/slaclab/sc_linac_physics/pull/343),
+  [`273e784`](https://github.com/slaclab/sc_linac_physics/commit/273e7849a61a5f8732a90e237633bd94b25f6f93))
+
+
 ## v9.41.2 (2026-10-07)
 
 ### Bug Fixes
