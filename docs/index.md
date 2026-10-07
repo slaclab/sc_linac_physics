@@ -35,7 +35,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 | [Microphonics](applications/microphonics.md) | Mechanical vibration noise acquisition and analysis | |
 | [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection | |
 | [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence | [How auto-tune works](explainers/auto_tune.html) |
-| [Field Emission](applications/field_emission.md) | Cavity amplitude vs. decarad radiation for past runs | |
+| [Field Emission](applications/field_emission.md) | Cavity amplitude vs. decarad radiation for past runs | [How the field emission display works](explainers/field_emission.html) |
 
 An explainer is the "how it works and why" for an app, or for a piece several
 apps share: data flow, decisions, how it fails, each claim cited to the code.

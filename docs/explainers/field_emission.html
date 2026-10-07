@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the field emission display works — SC Linac</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --ink: #e6e8ec;
+    --dim: #9aa3b2;
+    --line: #2b303a;
+    --edge: #656f7e;
+    --accent: #6ea8fe;
+    --warn: #e0a458;
+    --bad: #e06c75;
+    --ok: #7fb069;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 62rem; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .5rem; }
+  h2 {
+    font-size: 1.35rem;
+    margin: 3.5rem 0 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+  .lede { color: var(--dim); font-size: 1.05rem; }
+  code, .mono, pre { font-family: var(--mono); font-size: .9em; }
+  pre { overflow-x: auto; margin: 0; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .cite { font-family: var(--mono); font-size: .78rem; color: var(--dim); }
+  .caveat {
+    border-left: 3px solid var(--warn);
+    padding: .5rem 0 .5rem 1rem;
+    margin: 1.25rem 0;
+    color: var(--dim);
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; }
+  th, td {
+    text-align: left;
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--line);
+    font-size: .92rem;
+    vertical-align: top;
+  }
+  th { color: var(--dim); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  select, input[type="range"] { accent-color: var(--accent); }
+  select {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    padding: .25rem .4rem;
+    font: inherit;
+    font-size: .88rem;
+  }
+  .ctl {
+    display: grid;
+    grid-template-columns: 14rem 1fr 9rem;
+    gap: .4rem .9rem;
+    align-items: center;
+  }
+  .ctl > label { font-size: .92rem; }
+  .ctl > .val { font-family: var(--mono); font-size: .85rem; text-align: right; }
+  @media (max-width: 44rem) {
+    .ctl { grid-template-columns: 1fr; }
+    .ctl > .val { text-align: left; }
+  }
+  input[type="range"] { width: 100%; margin: 0; }
+
+  /* ---- pipeline ---- */
+  .flow { display: flex; flex-wrap: wrap; gap: .5rem; align-items: stretch; }
+  .flow > div {
+    flex: 1 1 10rem;
+    background: var(--bg);
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+    padding: .6rem .75rem;
+    font-size: .88rem;
+  }
+  .flow > div b { display: block; color: var(--accent); margin-bottom: .2rem; }
+
+  /* ---- cache grids ---- */
+  .grids { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+  @media (max-width: 52rem) { .grids { grid-template-columns: 1fr; } }
+  .grid-title { font-size: .9rem; font-weight: 600; margin: .75rem 0 .35rem; }
+  .run { display: flex; align-items: center; gap: .4rem; margin: .2rem 0; }
+  .run > span { font-family: var(--mono); font-size: .78rem; width: 2rem; color: var(--dim); }
+  .cells { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; flex: 1; }
+  .cells > i {
+    display: block; aspect-ratio: 1; border-radius: 2px;
+    border: 1px solid var(--line); background: var(--bg);
+  }
+  .cells > i:nth-child(8) { margin-right: 3px; }
+  .cells > i.csv { background: #3a3f4a; border-color: var(--edge); }
+  .cells > i.cached { background: var(--ok); border-color: var(--ok); }
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .82rem; color: var(--dim); margin-top: .75rem; }
+  .legend i { display: inline-block; width: .8rem; height: .8rem; border-radius: 2px; vertical-align: -1px; margin-right: .3rem; border: 1px solid var(--line); }
+  .note { font-size: .85rem; color: var(--dim); margin: .35rem 0 0; }
+  .verdict { font-weight: 600; margin: .9rem 0 .2rem; }
+  .bad { color: var(--bad); }
+  .good { color: var(--ok); }
+  /* ---- UI mockup ---- */
+  .win { border: 1px solid var(--edge); border-radius: 8px; overflow: hidden; background: #e9eaec; color: #1d1f23; font-size: .78rem; }
+  .win-title { background: #cfd2d7; padding: .3rem .7rem; font-size: .8rem; display: flex; gap: .5rem; align-items: center; }
+  .win-title i { width: .65rem; height: .65rem; border-radius: 50%; background: #9aa0a8; display: inline-block; }
+  .win-body { display: grid; grid-template-columns: 3fr 7fr; gap: .6rem; padding: .6rem; }
+  @media (max-width: 44rem) { .win-body { grid-template-columns: 1fr; } }
+  .qleft { display: flex; flex-direction: column; gap: .45rem; transition: opacity .15s; }
+  .qleft.disabled { opacity: .45; pointer-events: none; }
+  .qbox { border: 1px solid #b4b8bf; border-radius: 4px; padding: .55rem .5rem .4rem; position: relative; margin-top: .35rem; }
+  .qbox > .t { position: absolute; top: -.6rem; left: .45rem; background: #e9eaec; padding: 0 .25rem; font-size: .74rem; }
+  .qrow { display: flex; align-items: center; gap: .4rem; margin: .15rem 0; }
+  .qcombo { flex: 1; background: #fff; border: 1px solid #a9adb4; border-radius: 3px; padding: .1rem .35rem; }
+  .qcombo::after { content: " ▾"; float: right; color: #666; }
+  .qchk { display: grid; gap: .1rem .4rem; font-size: .72rem; }
+  .qchk span { white-space: nowrap; }
+  .qchk span::before { content: "☐ "; }
+  .qchk span.on::before { content: "☑ "; }
+  .qbtn { background: #f6f6f7; border: 1px solid #a9adb4; border-radius: 3px; text-align: center; padding: .15rem; }
+  .qbtn.primary { font-weight: 700; }
+  .qlist { background: #fff; border: 1px solid #a9adb4; height: 4.4rem; overflow: hidden; font-family: var(--mono); font-size: .7rem; }
+  .qlist div { padding: 0 .3rem; white-space: pre; }
+  .qlist div:nth-child(even) { background: #f1f2f4; }
+  .qlist div.sel { background: #3d7bd9; color: #fff; }
+  .qmeta { display: grid; grid-template-columns: auto 1fr; gap: 0 .5rem; }
+  .qmeta a { color: #2257b8; }
+  .qurl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .qradio span::before { content: "○ "; }
+  .qradio span.on::before { content: "◉ "; }
+  .qright { background: #fff; border: 1px solid #b4b8bf; display: flex; flex-direction: column; }
+  .qtool { border-bottom: 1px solid #d5d8dc; padding: .2rem .4rem; letter-spacing: .3rem; color: #555; }
+  .qright svg { width: 100%; height: auto; display: block; }
+  .mock-ctl { display: flex; gap: 1rem; align-items: center; margin: 0 0 .6rem; font-size: .88rem; }
+  .mock-ctl label { cursor: pointer; }
+</style>
+<style>
+  /* ---- run-cache simulator: one square per run ---- */
+  .runs { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; max-width: 26rem; }
+  .runs > i {
+    display: block; aspect-ratio: 1; border-radius: 3px;
+    border: 1px solid var(--line); background: var(--bg);
+  }
+  .runs > i.cached { background: var(--ok); border-color: var(--ok); }
+  .runs > i.failed { background: var(--bad); border-color: var(--bad); }
+  .runs > i.tmp { background: var(--bg); border: 1px dashed var(--warn); }
+  .qbtn.loading { color: #777; }
+</style>
+</head>
+<body>
+<main>
+  <h1>How the field emission display works</h1>
+  <p class="lede">
+    <code>applications/field_emission/</code> plots cavity amplitude against
+    decarad radiation readings, one plot per cavity, for past measurement runs.
+    This page covers what the display reads, where each run's data comes from,
+    how runs get into the local cache, and how that fails.
+  </p>
+
+  <section id="what-it-shows">
+    <h2>1. What the display shows</h2>
+
+    <p>
+      Pick a cryomodule, one or more measurement runs, cavities, decarad
+      channels, and a readout type. Each plot puts cavity amplitude on the x-axis
+      and one point series per decarad channel on the y-axis.
+    </p>
+
+    <div class="mock-ctl">
+      <span class="note" style="margin:0">Mockup, illustrative data:</span>
+      <label><input type="radio" name="mstate" value="ready" checked> ready</label>
+      <label><input type="radio" name="mstate" value="fill"> caching on open</label>
+      <label><input type="radio" name="mstate" value="loading"> loading a run</label>
+    </div>
+    <div class="win" aria-label="Mockup of the field emission display">
+      <div class="win-title"><i></i><i></i><i></i><span id="mock-title">LCLS-II Field Emission</span></div>
+      <div class="win-body">
+        <div class="qleft" id="mock-left">
+          <div class="qbox"><span class="t">Measurement Filter</span>
+            <div class="qrow">Cryomodule <span class="qcombo">01</span></div>
+            <div class="qbox"><span class="t">Cavity Selection</span>
+              <div class="qchk" style="grid-template-columns:repeat(4,1fr)">
+                <span class="on">Cavity 1</span><span class="on">Cavity 2</span><span>Cavity 3</span><span>Cavity 4</span>
+                <span>Cavity 5</span><span>Cavity 6</span><span>Cavity 7</span><span>Cavity 8</span>
+              </div></div>
+            <div class="qbtn">Select All Cavities</div>
+          </div>
+          <div class="qbox"><span class="t">Available Measurements</span>
+            <div class="qlist">
+              <div class="sel">CM01    2023-10-02 09:13:00</div>
+              <div>CM01    2023-10-15 11:22:00</div>
+            </div>
+            <div class="qbox"><span class="t">Measurement Information</span>
+              <div class="qmeta">
+                <span>Date:</span><span>Monday, October 02, 2023</span>
+                <span>Start Time:</span><span>9:13</span>
+                <span>End Time:</span><span>10:00</span>
+                <span>Decarad:</span><span>1</span>
+                <span>eLog:</span><a class="qurl">https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1228238</a>
+                <span>Notes:</span><span></span>
+              </div>
+            </div>
+          </div>
+          <div class="qbox"><span class="t">Decarad Configuration</span>
+            <div class="qrow">Readout Type: <span class="qcombo">Average</span></div>
+            <div class="qbox"><span class="t">Channel Selection</span>
+              <div class="qchk" style="grid-template-columns:repeat(5,1fr)">
+                <span class="on">Ch 1</span><span class="on">Ch 2</span><span class="on">Ch 3</span><span>Ch 4</span><span>Ch 5</span>
+                <span>Ch 6</span><span>Ch 7</span><span>Ch 8</span><span>Ch 9</span><span>Ch 10</span>
+              </div></div>
+            <div class="qbtn">Select All Channels</div>
+          </div>
+          <div class="qrow qradio" style="gap:1rem"><span>Amplitude vs Radiation</span><span class="on">Fit Line</span></div>
+          <div class="qbtn primary" id="mock-plot-btn">PLOT</div>
+        </div>
+        <div class="qright">
+          <div class="qtool">⌂ ← → ✥ ⌕ ⚙ 💾 <span class="qbtn" style="display:inline-block;padding:0 .4rem;margin-left:.6rem">Add New Data</span></div>
+          <svg id="mock-plot" viewBox="0 0 440 470" role="img" aria-label="Two stacked plots of radiation against amplitude"></svg>
+        </div>
+      </div>
+    </div>
+    <p class="cite">field_emission_gui.py::FieldEmission.build_linac_configuration, field_emission_gui.py::FieldEmission.build_meas_selection, field_emission_gui.py::FieldEmission.build_decarad_configuration, field_emission_gui.py::FieldEmission.build_toolbar “Add New Data”, field_emission_gui.py::FieldEmission._plot_one_date “n_rows = min(2, n)”, field_emission_gui.py::FieldEmission._configure_plot_canvas “Radiation (mR/hr)”</p>
+    <p class="note">
+      PLOT stays disabled until at least one cavity, one channel and one
+      measurement are picked, and while a plot is loading. Selecting several
+      measurements switches to a grid of cavities × dates.
+      <span class="cite">field_emission_gui.py::FieldEmission._refresh_plot_button_state “can_plot and not self._loading”, field_emission_gui.py::FieldEmission._plot_multiple_dates</span>
+    </p>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>PV</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>x: amplitude</td>
+            <td><code>ACCL:{linac}:{cm}{cav}0:AACTMEAN</code></td>
+            <td>MV, each cavity's own <code>AACTMEAN</code>, taken from the linac model
+            <span class="cite">field_emission/amp_vs_radiation.py::amplitude_pvs “.aact_pv”, sc_linac/cavity.py::Cavity.aact_pv “self.pv_addr("AACTMEAN")”, field_emission/constants.py::CAVITIES “CAVITIES = 8”</span></td></tr>
+        <tr><td>y: radiation, "average"</td>
+            <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMAAVE</code></td>
+            <td>decarad <code>n</code> is 1 or 2, heads 01–10 (see below)
+            <span class="cite">field_emission/amp_vs_radiation.py::rad_readout_pvs “avg_dose_rate_pv”, sc_linac/decarad.py::Decarad “RADM:SYS0:{num}00:”, sc_linac/decarad.py::DecaradHead.avg_dose_rate_pv “GAMMAAVE”</span></td></tr>
+        <tr><td>y: radiation, "instant"</td>
+            <td><code>RADM:SYS0:{n}00:{ch:02d}:GAMMA_DOSE_RATE</code></td>
+            <td><span class="cite">field_emission/amp_vs_radiation.py::rad_readout_pvs “raw_dose_rate_pv”, sc_linac/decarad.py::DecaradHead.raw_dose_rate_pv “GAMMA_DOSE_RATE”</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>
+      Every PV is read from the archiver, never live. The display writes no PVs.
+      <span class="cite">field_emission/amp_vs_radiation.py::fetch_run “get_series(all_pvs, start, end)”</span>
+    </p>
+
+    <h3>What it does to the data before you see it</h3>
+
+    <p>
+      <strong>Rows under 4 MV are dropped.</strong> Any sample where
+      <code>AACTMEAN</code> is below <code>AMPLITUDE_THRESHOLD = 4</code> is
+      masked out of both the plot and the fit.
+      <span class="cite">field_emission/constants.py::AMPLITUDE_THRESHOLD “AMPLITUDE_THRESHOLD = 4”, field_emission/measurements.py::get_columns “df.mask(df.iloc[:, 0]”</span>
+    </p>
+
+    <p>
+      <strong>The optional fit line</strong> is
+      <code>rad = C1 · E<sup>2.5</sup> · exp(−C2 / E)</code>, with
+      <code>E</code> the amplitude in MV, fitted per channel with
+      <code>scipy.optimize.curve_fit</code> (5500 evaluations max). Channels
+      with fewer than 2 nonzero points, or that don't converge, get no line.
+      The legend shows C1 and C2.
+      <span class="cite">plot_me.py::fit_equation “c1 * (amp**2.5) * np.exp((-c2) / amp)”, plot_me.py::add_poly_fit “skip fitting when less than two samples”, field_emission/constants.py::NUM_FIT_ITERATIONS “NUM_FIT_ITERATIONS = 5500”</span>
+    </p>
+
+    <p>
+      <strong>No background is subtracted.</strong> The dose is plotted and
+      fitted as archived. The linac model subtracts a fixed background before
+      using a reading (0.8 for <code>GAMMAAVE</code>, 8 for
+      <code>GAMMA_DOSE_RATE</code>). Quench processing uses the subtracted
+      <code>GAMMA_DOSE_RATE</code>. Field emission does not subtract either.
+      <span class="cite">linac_utils.py::DECARAD_BACKGROUND_READING_AVG “DECARAD_BACKGROUND_READING_AVG = 0.8”, linac_utils.py::DECARAD_BACKGROUND_READING_RAW “DECARAD_BACKGROUND_READING_RAW = 8”, quench_processing/quench_cavity.py “if self.decarad.max_raw_dose”</span>
+    </p>
+
+    <div class="caveat">
+      CHECK: where does this fit form come from, and is 2.5 the intended
+      exponent? Nothing in the repo cites a source.
+      <br>
+      CHECK: should the fit use background-subtracted dose? That would change
+      C1 and C2.
+      <br>
+      CHECK: is 4 MV the right "cavity is on" cutoff for every cryomodule,
+      including LCLS-II-HE?
+    </div>
+
+    <h3>Which channel is which</h3>
+    <p>
+      There are two decarads, each with 10 heads
+      <span class="cite">sc_linac/decarad.py::Decarad “for head in range(1, 11)”</span>.
+      CHECK, from the SRF group, no document: one head sits at each end of the
+      cryomodule and one at each cavity's tuner access port, and the decarads
+      are wheeled between cryomodules and set up per run. The archived
+      <code>POSN</code> history below does show them moving. So channel
+      <em>n</em> is not tied to any cavity. The run list records which decarad was used, not how it
+      was set up, and the display plots every selected channel against every
+      selected cavity. Read the run's elog to know which head a channel was.
+    </p>
+    <p>
+      Each head has a text PV naming its position, for example
+      <code>RADM:SYS0:100:01:POSN</code> = "US of Cavity 1, CM01", but those
+      are not archived, so past runs can't be read back from them. Each
+      decarad's own <code>RADM:SYS0:{n}00:POSN</code> is archived and holds a
+      cryomodule number. It matched the run list's cryomodule for 76 of 80
+      runs.
+    </p>
+    <p>
+      Cavities in one run can overlap in time. In CM06's 2024-02-02 run, CAV3,
+      CAV4 and CAV7 were all above 4 MV at once, so a channel plotted against
+      one of them can include radiation from the others.
+    </p>
+  </section>
+
+  <section id="a-run">
+    <h2>2. Where one run's data comes from</h2>
+
+    <p>
+      A <em>run</em> is one row of the run list: a cryomodule, a start and end
+      time, which decarad was used, and an elog link. The list is
+      <code>field_emission_runs.csv</code> in git plus
+      <code>added_runs.csv</code>, which operators add to from the display. A
+      run in both counts once, as the git row.
+      <span class="cite">field_emission/run_cache.py::read_run_list “runs.setdefault((run.cm, run.start), run)”</span>
+    </p>
+
+    <div class="flow">
+      <div><b>Run list row</b>
+        <code>CM01, 10/2/23, 9:13, , 10:00, 1, elog…</code>
+        <div class="cite">field_emission/run_cache.py::parse_row</div></div>
+      <div><b>28 archiver fetches</b>
+        8 <code>AACTMEAN</code> + 10 heads × 2 readouts, each PV once, up to 8
+        at a time
+        <div class="cite">field_emission/amp_vs_radiation.py::fetch_run “8 amplitudes + 10 heads x 2 readouts”, utils/archiver.py::MAX_WORKERS “MAX_WORKERS = 8”</div></div>
+      <div><b>Align, 16 ways</b>
+        per cavity × readout: drop invalid samples, outer-join on timestamp,
+        forward-fill, drop any row still missing a value
+        <div class="cite">field_emission/amp_vs_radiation.py::align_pvs_to_common_time “aligned.ffill()”</div></div>
+      <div><b>One file per run</b>
+        written to a temp file, then renamed into place
+        <div class="cite">field_emission/run_cache.py::_write_run “os.replace(tmp_name, path)”</div></div>
+    </div>
+
+    <p>
+      A run took 1.8–2.3 s through the archiver when it was warm (2026-10-07).
+      A run nobody has asked for in a while can take tens of seconds. Caching
+      all 80 runs from empty took 253 s.
+    </p>
+
+    <h3>The cache layout</h3>
+
+    <div class="panel">
+      <pre>
+get_field_emission_dir()          /home/physics/srf/field_emission on Linux
+│                                 ~/.sc_linac_physics/field_emission on macOS
+├── added_runs.csv                runs added from the display
+└── runs/
+    ├── cm01_2023-10-02_0913.h5   one file per run: cryomodule, start time
+    │   attrs: cm, start, end, decarad, fetched
+    │   ├── CAV1/average          (rows × 11) float64, attr columns = PV names
+    │   ├── CAV1/instant
+    │   └── … CAV8
+    └── …</pre>
+      <p class="cite">platform_paths.py::get_srf_base_dir “Path("/home/physics/srf")”, platform_paths.py::get_field_emission_dir, field_emission/constants.py::RUN_CACHE_DIR, field_emission/constants.py::ADDED_RUNS_PATH, field_emission/run_cache.py::run_path, field_emission/run_cache.py::_write_run “dset.attrs["columns"]”</p>
+    </div>
+
+    <p>
+      Column 0 is the amplitude, columns 1–10 are heads 1–10. The display
+      numbers channels by column position, not by PV name.
+      <span class="cite">field_emission/measurements.py::find_dataframes “pd.DataFrame(values)”, plot_me.py::plot_amp_vs_rad “label = f"Ch {col}"”</span>
+      Date, times, elog and notes come from the run list each time, not
+      from the file.
+      <span class="cite">field_emission/measurements.py::fetch_measurement_metadata “find_run(cm, date, read_run_list())”</span>
+    </p>
+
+    <h3>The bundled file this replaces</h3>
+
+    <p>
+      Until this change, the display read a 73.8 MB
+      <code>field_emission_data.hdf5</code> shipped inside the package, built
+      by hand from 80 runs (Oct 2023 onward, 37 cryomodules). The cache
+      reproduces it: all 16 datasets of CM06's 2024-02-02 run have the same
+      shapes and columns. Values differ in the last bit for 5–9% of samples
+      (at most 1.8e-15): the bundled file went through CSVs read back with
+      pandas' default float parser, and the cache stores what the archiver
+      returns. Three runs in it looked wrong:
+    </p>
+    <ul>
+      <li><strong>CM27, dated 2026-10-16</strong>: 1 row in all 16 datasets, and no
+        cavity ever above 4 MV. The date was a typo for 2024 (same elog ID as
+        CM27's other 10/16/24 run), so the archiver was asked about a window
+        in the future. The run list in git has the corrected date.</li>
+      <li><strong>CM04 2023-10-25, CAV5 <code>instant</code></strong>: 1 row. The
+        align step drops a timestamp until all 11 PVs have had at least one
+        value, so one sparse PV can shrink a whole dataset. Here it was CAV5's
+        own <code>AACTMEAN</code>. The one value is 0.004 MV, so CAV5 was off
+        and nothing above 4 MV was lost.</li>
+      <li><strong>CM01 2023-10-02</strong>: channel 1 read up to about 88
+        between 09:39 and 09:41 while every cavity in CM01–CM05, H1, H2 and
+        CM35 was below 4 MV. Decarad 1's <code>POSN</code> read 35 for
+        the whole run and only changed to 1 at 10:55. CHECK: was decarad 1 at
+        CM01 during this run, and what caused the spike?</li>
+    </ul>
+  </section>
+
+  <section id="filling">
+    <h2>3. How runs get into the cache</h2>
+
+    <p>A run is fetched the first time any of these needs it.</p>
+
+    <h3>Plotting it</h3>
+    <p>
+      PLOT reads <code>LOADING...</code> while the selected runs load on a
+      background thread. A cached run loads from its file. One that isn't is
+      fetched and written first. A failed fetch shows its error on the plot.
+      <span class="cite">field_emission_gui.py::FieldEmission.on_plot_btn_clicked “self._run_in_background(fetch)”, field_emission_gui.py::FieldEmission._set_loading “LOADING...”, field_emission_gui.py::FieldEmission._on_plot_data_failed “Could not load data”, field_emission/run_cache.py::load_run “if not path.exists():”</span>
+    </p>
+
+    <h3>Opening the display</h3>
+    <p>
+      The first time the window is shown, a background thread fetches every
+      listed run that has no file yet, one at a time. The window title counts
+      them. The panel stays usable; plotting a run the fill hasn't reached
+      fetches it directly.
+      <span class="cite">field_emission_gui.py::FieldEmission.showEvent “self._start_cache_fill()”, field_emission_gui.py::FieldEmission._start_cache_fill “caching runs from the archiver”</span>
+    </p>
+    <div class="panel">
+      <pre>
+missing = [run for run in run list if no file for run]
+
+for run in missing:
+    title: "caching runs from the archiver {n}/{len(missing)}"
+    fetch 28 PVs → align → write temp file → rename
+    # any exception stops here; runs already written stay
+title: "LCLS-II Field Emission", or "background caching stopped (...)"</pre>
+      <p class="cite">field_emission/run_cache.py::fill_cache “load_run(run, cache_dir)”</p>
+    </div>
+
+    <h3>Add New Data</h3>
+    <p>
+      Next to the plot toolbar. <em>Single CM</em> takes one run in a form;
+      <em>Multi CMs from CSV</em> takes a file with the run list's columns.
+      Each run is checked (a known cryomodule, dates in
+      <code>mm/dd/yy hh:mm</code>, end after start, decarad 1 or 2, an
+      <code>mccelog</code> link, Y/N filters), appended to
+      <code>added_runs.csv</code>, and fetched. The run list refreshes when the
+      dialog closes. To make a run permanent for every installation, add its
+      row to <code>field_emission_runs.csv</code> in a PR.
+      <span class="cite">gui_updater.py::validate_emission_data, gui_updater.py::UpdateWorker._add_and_fetch “added = add_runs(rows)”, field_emission/run_cache.py::add_runs “with open(added_path, "a", newline="")”, field_emission_gui.py::FieldEmission.open_update_dialog “self.on_cryomodule_updated()”</span>
+    </p>
+  </section>
+
+  <section id="failures">
+    <h2>4. How it fails</h2>
+
+    <p>
+      <strong>"Cached" means the run's file exists.</strong> Each file is
+      written under a temporary name and renamed when complete, so a run is
+      either all there or not there. A crash during the write leaves the old
+      state: no file.
+      <span class="cite">field_emission/run_cache.py::_write_run “tempfile.mkstemp(”</span>
+    </p>
+
+    <p>
+      <strong>The archiver is down.</strong> Cached runs plot as usual.
+      Plotting an uncached run shows the connection error. The fill on open
+      stops at the first failure, so an outage costs one failed run, not one
+      timeout per remaining run, and the next open picks up where it stopped.
+    </p>
+
+    <p>
+      <strong>Two people fetch the same run.</strong> Both write a temp file;
+      the second rename wins. Both files hold the same archiver data.
+    </p>
+
+    <div class="caveat">
+      CHECK: is <code>/home/physics/srf</code> on NFS on the control-room
+      machines? The rename is atomic on one local filesystem. Appends to
+      <code>added_runs.csv</code> from two operators at the same moment could
+      interleave on NFS; adding runs is rare, so there's no lock.
+    </div>
+
+    <p>
+      <strong>Editing a run-list row.</strong> A file is named by cryomodule and
+      start time only. Changing a row's notes or elog shows up immediately,
+      since those are read from the list. Changing its end time or decarad
+      doesn't re-fetch: delete that run's file and it is fetched again.
+    </p>
+
+    <div class="caveat">
+      <strong>One empty PV empties a dataset.</strong> The align step drops
+      every row with a missing value, so a PV with no samples in the window
+      leaves 0 rows. All 8 cavities share the same 10 decarad PVs, so one empty
+      head blanks all 8 datasets for that readout, and the run still counts as
+      cached. A PV the archiver doesn't know at all fails the fetch instead.
+      <span class="cite">field_emission/amp_vs_radiation.py::align_pvs_to_common_time “dropna(how="any")”</span>
+    </div>
+
+    <h3>Try it</h3>
+
+    <p>
+      Each square is a run in the list. Pick how many are already cached, and
+      what goes wrong during the fill on open; the right side is the next open
+      with the archiver working.
+    </p>
+
+    <div class="panel">
+      <div class="ctl">
+        <label for="ncached">Runs already cached</label>
+        <input id="ncached" type="range" min="0" max="20" value="6">
+        <span class="val" id="ncached-v"></span>
+
+        <label for="fail">During the fill</label>
+        <select id="fail">
+          <option value="none">nothing goes wrong</option>
+          <option value="outage" selected>the archiver goes down</option>
+          <option value="killed">the display is killed mid-write</option>
+        </select>
+        <span class="val"></span>
+
+        <label for="where">…while fetching missing run</label>
+        <input id="where" type="range" min="1" max="20" value="5">
+        <span class="val" id="where-v"></span>
+      </div>
+
+      <div class="grids">
+        <div><div class="grid-title">After this open</div><div class="runs" id="g0"></div></div>
+        <div><div class="grid-title">Next open</div><div class="runs" id="g1"></div></div>
+      </div>
+      <div class="legend">
+        <span><i></i>no file</span>
+        <span><i style="background:var(--ok);border-color:var(--ok)"></i>cached</span>
+        <span><i style="background:var(--bad);border-color:var(--bad)"></i>fetch failed, fill stopped</span>
+        <span><i style="border:1px dashed var(--warn)"></i>stray temp file</span>
+      </div>
+      <div id="verdict"></div>
+    </div>
+
+    <div class="caveat">
+      A process killed hard during the write can leave a
+      <code>cm…_….*.tmp</code> next to the run files. It's ignored, since only
+      the final name counts, but nothing deletes it. A normal exception
+      deletes its temp file.
+      <span class="cite">field_emission/run_cache.py::_write_run “Path(tmp_name).unlink(missing_ok=True)”</span>
+    </div>
+  </section>
+</main>
+
+<script>
+const N_RUNS = 20;
+const $ = (id) => document.getElementById(id);
+
+/* Run states: "none", "cached", "failed", "tmp" (no file, stray temp). */
+
+/* One fill on open, mirroring run_cache.fill_cache.
+   fail: {kind: "none"|"outage"|"killed", at: index among missing runs, from 1} */
+function fill(runs, fail) {
+  const out = runs.map((s) => (s === "failed" ? "none" : s));
+  const missing = out.map((s, i) => i).filter((i) => out[i] !== "cached");
+  for (let k = 0; k < missing.length; k++) {
+    const i = missing[k];
+    if (fail.kind === "outage" && k + 1 === fail.at) { out[i] = "failed"; return out; }
+    if (fail.kind === "killed" && k + 1 === fail.at) { out[i] = "tmp"; return out; }
+    out[i] = "cached";
+  }
+  return out;
+}
+
+function initial(nCached) {
+  return Array.from({ length: N_RUNS }, (_, i) => (i < nCached ? "cached" : "none"));
+}
+
+function render(el, runs) {
+  el.replaceChildren(...runs.map((s) => {
+    const i = document.createElement("i");
+    if (s !== "none") i.className = s;
+    return i;
+  }));
+}
+
+function para(cls, parts) {
+  const p = document.createElement("p");
+  p.className = cls;
+  for (const [text, spanCls] of parts) {
+    if (spanCls) {
+      const s = document.createElement("span");
+      s.className = spanCls;
+      s.textContent = text;
+      p.append(s);
+    } else {
+      p.append(text);
+    }
+  }
+  return p;
+}
+
+function update() {
+  const nCached = +$("ncached").value;
+  const kind = $("fail").value;
+  const where = $("where");
+  const nMissing = N_RUNS - nCached;
+  where.max = Math.max(1, nMissing);
+  if (+where.value > +where.max) where.value = where.max;
+  where.disabled = kind === "none" || nMissing === 0;
+  $("ncached-v").textContent = `${nCached} of ${N_RUNS}`;
+  $("where-v").textContent = where.disabled ? "—" : `${where.value} of ${nMissing}`;
+
+  const first = fill(initial(nCached), { kind, at: +where.value });
+  const next = fill(first, { kind: "none" });
+  render($("g0"), first); render($("g1"), next);
+
+  const count = (runs, s) => runs.filter((x) => x === s).length;
+  const fetchedNow = count(first, "cached") - nCached;
+  const fetchedNext = count(next, "cached") - count(first, "cached");
+  const out = [para("verdict", [
+    [`This open fetched ${fetchedNow} run(s)`, null],
+    [kind === "none" || nMissing === 0 ? "." : ", then stopped.", null],
+    [count(next, "cached") === N_RUNS ? ` Next open: all ${N_RUNS} cached` : "", "good"],
+    [count(next, "cached") === N_RUNS ? `, ${fetchedNext} fetched.` : "", null],
+  ])];
+  if (kind === "outage" && nMissing) {
+    out.push(para("note", [["The failed run is retried next open. Runs already cached stay.", null]]));
+  }
+  if (kind === "killed" && nMissing) {
+    out.push(para("note", [["The killed run left only a temp file, so it counts as not cached and is fetched next open. The temp file stays.", null]]));
+  }
+  $("verdict").replaceChildren(...out);
+}
+
+for (const id of ["ncached", "fail", "where"]) $(id).addEventListener("input", update);
+update();
+
+/* ---- UI mockup ---- */
+(function mockup() {
+  const svg = $("mock-plot");
+  if (!svg) return;
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text !== undefined) e.textContent = text;
+    svg.append(e);
+    return e;
+  };
+  // Illustrative only: a seeded curve of the fitted form plus noise.
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const colors = ["#1f77b4", "#ff7f0e", "#2ca02c"];  // matplotlib C0-C2
+  const fit = (e, c1, c2) => c1 * e ** 2.5 * Math.exp(-c2 / e);
+  const params = [[[0.05, 60], [0.03, 55], [0.02, 70]], [[0.04, 75], [0.02, 65], [0.015, 80]]];
+  const X0 = 46, W = 380, H = 170, EMIN = 4, EMAX = 18;
+  const txt = { "font-size": 11, fill: "#222" };
+  el("text", { x: 220, y: 16, "text-anchor": "middle", "font-size": 13, fill: "#222" }, "ACCL:L0B:01x0");
+  el("text", { x: 236, y: 466, "text-anchor": "middle", ...txt }, "Amplitude (MV)");
+  el("text", { x: 12, y: 235, "text-anchor": "middle", transform: "rotate(-90 12 235)", ...txt }, "Radiation (mR/hr)");
+  // figure-level channel legend, upper right (fig.legend in _configure_plot_canvas)
+  colors.forEach((c, ch) => {
+    el("circle", { cx: 392, cy: 10 + ch * 11, r: 3, fill: c });
+    el("text", { x: 399, y: 13 + ch * 11, "font-size": 9, fill: "#222" }, `Ch ${ch + 1}`);
+  });
+  params.forEach((chans, k) => {
+    const YMAX = 1.3 * Math.max(...chans.map(([c1, c2]) => fit(EMAX, c1, c2)));
+    const top = 40 + k * 215, sx = (e) => X0 + ((e - EMIN) / (EMAX - EMIN)) * W,
+      sy = (r) => top + H - Math.min(r / YMAX, 1) * H;
+    el("text", { x: X0 + W / 2, y: top - 6, "text-anchor": "middle", ...txt }, `Cavity ${k + 1}`);
+    el("rect", { x: X0, y: top, width: W, height: H, fill: "none", stroke: "#888" });
+    for (let g = 1; g < 4; g++) {
+      const y = top + (g * H) / 4, x = X0 + (g * W) / 4;
+      el("line", { x1: X0, x2: X0 + W, y1: y, y2: y, stroke: "#e4e4e4" });
+      el("line", { y1: top, y2: top + H, x1: x, x2: x, stroke: "#e4e4e4" });
+    }
+    chans.forEach(([c1, c2], ch) => {
+      for (let i = 0; i < 70; i++) {
+        const e = EMIN + rand() * (EMAX - EMIN), r = fit(e, c1, c2) * (0.8 + rand() * 0.4);
+        el("circle", { cx: sx(e).toFixed(1), cy: sy(r).toFixed(1), r: 1.6, fill: colors[ch] });
+      }
+      let d = "";
+      for (let i = 0; i <= 40; i++) {
+        const e = EMIN + (i / 40) * (EMAX - EMIN);
+        d += `${i ? "L" : "M"}${sx(e).toFixed(1)},${sy(fit(e, c1, c2)).toFixed(1)}`;
+      }
+      el("path", { d, fill: "none", stroke: colors[ch], "stroke-width": 1.5 });
+      el("rect", { x: X0 + 6, y: top + 6 + ch * 13, width: 8, height: 8, fill: colors[ch] });
+      el("text", { x: X0 + 18, y: top + 13 + ch * 13, "font-size": 9, fill: "#222" }, `C1: ${c1}    C2: ${c2}.0`);
+    });
+    el("text", { x: X0, y: top + H + 13, "font-size": 9, fill: "#555" }, "4");
+    el("text", { x: X0 + W, y: top + H + 13, "font-size": 9, fill: "#555", "text-anchor": "end" }, "18 MV");
+  });
+
+  const TITLE = "LCLS-II Field Emission";
+  for (const r of document.querySelectorAll('input[name="mstate"]')) {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      const btn = $("mock-plot-btn");
+      $("mock-title").textContent = r.value === "fill"
+        ? `${TITLE} — caching runs from the archiver 3/80`
+        : TITLE;
+      btn.textContent = r.value === "loading" ? "LOADING..." : "PLOT";
+      btn.classList.toggle("loading", r.value === "loading");
+    });
+  }
+})();
+
+/* Self-check against the cases worked out by hand in section 4. */
+(function selfCheck() {
+  const fails = [];
+  const expect = (cond, msg) => { if (!cond) fails.push(msg); };
+  const all = (runs, s) => runs.every((x) => x === s);
+
+  expect(all(fill(initial(0), { kind: "none" }), "cached"), "clean fill caches every run");
+  expect(all(fill(initial(N_RUNS), { kind: "outage", at: 1 }), "cached"),
+    "nothing missing means nothing fetched, nothing fails");
+
+  // Outage at the 3rd missing run, 5 already cached: runs 6-7 fetched, 8 failed.
+  const out = fill(initial(5), { kind: "outage", at: 3 });
+  expect(out.slice(0, 7).every((s) => s === "cached") && out[7] === "failed" &&
+    out.slice(8).every((s) => s === "none"), "outage stops at the failed run");
+  expect(all(fill(out, { kind: "none" }), "cached"), "next open retries the failed run");
+
+  // Killed at the 1st missing run: temp file only, fetched next open.
+  const killed = fill(initial(5), { kind: "killed", at: 1 });
+  expect(killed[5] === "tmp" && killed.slice(6).every((s) => s === "none"),
+    "kill leaves a temp file and stops");
+  expect(all(fill(killed, { kind: "none" }), "cached"), "next open fetches the killed run");
+
+  if (fails.length) console.error("SELF-CHECK FAILED\n" + fails.join("\n"));
+  else console.log("SELF-CHECK PASSED (6 cases)");
+})();
+</script>
+</body>
+</html>
