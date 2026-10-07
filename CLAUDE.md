@@ -35,6 +35,14 @@ Full documentation lives in [`docs/`](docs/index.md):
 - [`docs/applications/q0.md`](docs/applications/q0.md), [`microphonics.md`](docs/applications/microphonics.md), [`quench_processing.md`](docs/applications/quench_processing.md), [`tuning.md`](docs/applications/tuning.md)
 - [`docs/displays/cavity_display.md`](docs/displays/cavity_display.md), [`srf_home.md`](docs/displays/srf_home.md)
 
+**Explainer vs. docs page.** An app's "how it works and why" lives in one
+place: `docs/explainers/<app>.html`. That covers data flow, decisions, caveats
+and `CHECK:` questions, each claim cited. The markdown page is a short
+reference: the command, paths, how to add data, a file list, and a link to the
+explainer. Don't tell the story in both. Why: two copies drift, and only cited
+text is checked by `tests/docs/test_citations.py`. #323's explainer took 8
+commits to keep current. Apps without an explainer keep their full page.
+
 See also `AGENTS.md` at the repo root for architectural conventions enforced across the codebase.
 
 ## Architecture
