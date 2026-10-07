@@ -16,14 +16,20 @@ from sc_linac_physics.applications.field_emission.constants import (
 from PyQt5.QtCore import QObject, pyqtSignal
 
 
-def validate_emission_data(input_row):
-    """validation of dialog entries for single cryomodule emission data"""
+def validate_emission_data(input_row, require_elog=True):
+    """validation of dialog entries for single cryomodule emission data
+
+    require_elog=False lets an empty eLog link through, as 7 of the runs in
+    field_emission_runs.csv have. A link that is given is still checked.
+    """
     cm = _validate_cryomodule(input_row[0])
     d_start, d_end = _validate_dates(
         input_row[1], input_row[2], input_row[3], input_row[4]
     )
     dec = _validate_decarad(input_row[5])
-    elog = _validate_elog(input_row[6])
+    elog = input_row[6]
+    if elog or require_elog:
+        elog = _validate_elog(elog)
     filters = _validate_filters(input_row[8:])
     return {
         "cryomodule": cm,
@@ -37,7 +43,8 @@ def validate_emission_data(input_row):
 
 def _validate_cryomodule(cryomodule):
     """format cryomodule string and check if requested cryomodule is available"""
-    cm_str = cryomodule.strip().zfill(2).upper()
+    # "CM04" as the run list writes it, or "4"/"04" as typed in the dialog
+    cm_str = cryomodule.strip().upper().removeprefix("CM").zfill(2)
     if cm_str not in VALID_CMS_LIST:
         raise ValueError(f"Invalid cryomodule {cryomodule}")
     return cm_str
@@ -126,11 +133,24 @@ class UpdateWorker(QObject):
         return self._add_and_fetch([row])
 
     def multi_update(self, input_csv):
-        """add every run in a CSV laid out like the run list, and fetch them"""
+        """add every run in a CSV laid out like the run list, and fetch them
+
+        Every row is checked before add_runs writes any. A row that gets into
+        added_runs.csv and then fails to fetch (unknown cryomodule, decarad
+        3) would stop the fill on open at that run on every open after.
+        """
+        rows = []
         with open(input_csv, newline="") as file:
             reader = csv.reader(file)
             next(reader, None)  # header
-            rows = [row for row in reader if row and "#" not in row[0]]
+            for line, row in enumerate(reader, start=2):
+                if not row or "#" in row[0]:
+                    continue
+                try:
+                    validate_emission_data(row, require_elog=False)
+                except (ValueError, IndexError) as e:
+                    raise ValueError(f"{input_csv} line {line}: {e}") from e
+                rows.append(row)
         return self._add_and_fetch(rows)
 
     def _add_and_fetch(self, rows):
