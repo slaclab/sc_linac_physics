@@ -41,17 +41,29 @@ from sc_linac_physics.applications.field_emission.plot_me import (
     unify_legends,
     unify_axes,
 )
+from sc_linac_physics.applications.field_emission.run_cache import (
+    fill_cache,
+    read_run_list,
+)
+from sc_linac_physics.applications.field_emission.field_emission_gui_update import (
+    UpdateButtons,
+)
+
+TITLE = "LCLS-II Field Emission"
 
 
 class FieldEmission(Display):
     # Emitted from the plot data thread; Qt delivers them on the main thread
     plot_data_ready = pyqtSignal(object, object)  # results, (channels, fit)
     plot_data_failed = pyqtSignal(str)
+    # Emitted from the background cache fill
+    cache_status = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self.setWindowTitle("LCLS-II Field Emission")
+        self.setWindowTitle(TITLE)
         self._loading = False
+        self._cache_fill_started = False
 
         self.cryo_dropdown = None
         self.cavity_cb = None
@@ -133,6 +145,8 @@ class FieldEmission(Display):
         self.plot_btn.clicked.connect(self.on_plot_btn_clicked)
         self.plot_data_ready.connect(self._on_plot_data_ready)
         self.plot_data_failed.connect(self._on_plot_data_failed)
+        self.cache_status.connect(self.setWindowTitle)
+        self.update_btn.clicked.connect(self.open_update_dialog)
 
     def _checkbox_helper(self, labels, cols):
         grid_layout = QGridLayout()
@@ -373,8 +387,55 @@ class FieldEmission(Display):
         return radio_btn_layout
 
     def build_toolbar(self):
+        bar = QWidget()
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.toolbar = NavigationToolbar(self.canvas, self)
-        return self.toolbar
+        self.update_btn = QPushButton("Add New Data")
+        layout.addWidget(self.toolbar)
+        layout.addWidget(self.update_btn)
+        return bar
+
+    def open_update_dialog(self):
+        """add runs to the list, then show them"""
+        UpdateButtons(self).exec()
+        # Refresh even after an error: a run can be listed before its
+        # fetch fails
+        self.on_cryomodule_updated()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._cache_fill_started:
+            self._cache_fill_started = True
+            self._start_cache_fill()
+
+    def _start_cache_fill(self):
+        """fetch every listed run not cached yet, in the background
+
+        Plotting a run that isn't cached fetches it anyway; this just means
+        runs are already cached when the archiver is down later.
+        """
+
+        def progress(done, total, run):
+            self._emit(
+                self.cache_status,
+                f"{TITLE} — caching runs from the archiver {done + 1}/{total}",
+            )
+
+        def fill():
+            try:
+                fill_cache(read_run_list(), progress)
+            except Exception as e:
+                print(f"Background caching stopped: {e}")
+                self._emit(
+                    self.cache_status,
+                    f"{TITLE} — background caching stopped "
+                    f"({type(e).__name__})",
+                )
+                return
+            self._emit(self.cache_status, TITLE)
+
+        self._run_in_background(fill)
 
     def build_plot_canvas(self):
         # Embed canvas into Qt layout

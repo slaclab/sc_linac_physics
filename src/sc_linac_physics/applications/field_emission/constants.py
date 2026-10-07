@@ -13,6 +13,8 @@ H5_PATH = _DATA_DIR / "field_emission_data.hdf5"
 # one file per run, in a shared directory outside the package.
 RUN_LIST_PATH = _DATA_DIR / "field_emission_runs.csv"
 RUN_CACHE_DIR = get_field_emission_dir() / "runs"
+# Runs operators add from the display, same columns as RUN_LIST_PATH
+ADDED_RUNS_PATH = get_field_emission_dir() / "added_runs.csv"
 
 # HDF5 Group Paths
 H5_MEASUREMENT_PATH = "CM{cm}/{date}"
