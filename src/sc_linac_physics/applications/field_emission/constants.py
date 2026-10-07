@@ -6,20 +6,12 @@ from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_DICT
 # Default File Paths
 _DATA_DIR = Path(__file__).resolve().parent
 
-CSV_OUTPUT_DIR = _DATA_DIR
-H5_PATH = _DATA_DIR / "field_emission_data.hdf5"
-
 # Runs known to git. The data for each is fetched from the archiver and kept,
 # one file per run, in a shared directory outside the package.
 RUN_LIST_PATH = _DATA_DIR / "field_emission_runs.csv"
 RUN_CACHE_DIR = get_field_emission_dir() / "runs"
 # Runs operators add from the display, same columns as RUN_LIST_PATH
 ADDED_RUNS_PATH = get_field_emission_dir() / "added_runs.csv"
-
-# HDF5 Group Paths
-H5_MEASUREMENT_PATH = "CM{cm}/{date}"
-H5_CAVITY_PATH = "CM{cm}/{date}/CAV{cav}"
-H5_READOUT_PATH = "CM{cm}/{date}/CAV{cav}/{readout}"
 
 # Linac Configuration
 VALID_LINACS = {0, 1, 2, 3}  # to include linac 4B when ready
@@ -35,8 +27,7 @@ RAD_CHAN_RANGE = list(range(1, RAD_CHANNELS + 1))
 RAD_READ_TYPES = ["average", "instant"]
 
 # Date Formatting
-CSV_DATE_FORMAT = "%y_%m_%d_%H_%M"
-H5_DATE_FORMAT = "%Y-%m-%d_%H%M"
+H5_DATE_FORMAT = "%Y-%m-%d_%H%M"  # run cache file names
 DISPLAY_DATE_FORMAT = "%A, %B %d, %Y"
 STANDARD_DATE_FORMAT = "%m/%d/%y %H:%M"
 
@@ -48,9 +39,6 @@ NUM_FIT_POINTS = 250  # how many data points in fit line
 NUM_FIT_ITERATIONS = 5500  # how many tries scipy curve fit takes to converge
 
 # Regex Patterns
-DATA_CSV_NAME_PATTERN = re.compile(
-    r"cm(\d+|\w+)_(\d+_\d+_\d+_\d+_\d+)_cavity(\d+)_(\w+)\.csv"
-)
 ELOG_PATTERN = re.compile(
     r"https://mccelog\.slac\.stanford\.edu"
     r"/elog/wbin/elog_item\.php\?elog_id=\d+"

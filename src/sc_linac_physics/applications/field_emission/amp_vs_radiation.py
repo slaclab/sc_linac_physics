@@ -1,10 +1,7 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from sc_linac_physics.applications.field_emission.constants import (
     CAV_RANGE,
-    CSV_DATE_FORMAT,
-    CSV_OUTPUT_DIR,
     RAD_READ_TYPES,
     RAD_CHAN_RANGE,
 )
@@ -54,28 +51,7 @@ def align_pvs_to_common_time(series):
     aligned = pd.concat(deduped, axis=1, sort=True)
     aligned = aligned.ffill()
     aligned = aligned.dropna(how="any")
-    # update_h5py.convert_to_h5 drops this column by name.
-    aligned.index.name = "timestamps"
     return aligned
-
-
-def plot_amp_vs_rad(aligned_data):
-    """plot amplitude on x-axis, radiation on y-axis"""
-    x_axis = aligned_data.iloc[
-        :, 0
-    ]  # all rows, first column (amp data lives here)
-    rad_cols = aligned_data.columns[
-        1:
-    ]  # all columns after first (radmon channels live here)
-    fig, ax = plt.subplots()
-    for col in rad_cols:
-        ax.scatter(x_axis, aligned_data[col], label=col, marker=".")
-    ax.set_title(aligned_data.columns[0])
-    ax.set_xlabel("Amplitude (MV)")
-    ax.set_ylabel("Radiation")
-    ax.legend()
-    # plt.show()  # uncomment if you'd like to visualize
-    plt.close(fig)
 
 
 def fetch_run(cm, start, end, decarad):
@@ -99,16 +75,3 @@ def fetch_run(cm, start, end, decarad):
             series = {pv: fetched[pv] for pv in [amp_pv] + rad_pvs[readout]}
             frames[cav_num, readout] = align_pvs_to_common_time(series)
     return frames
-
-
-def generate_amp_vs_rad_csvs(cm, start, end, decarad):
-    """fetch one run and write a CSV per cavity and readout"""
-    print(f"Processing CM{cm} {start} -> {end}")
-    csv_date = start.strftime(CSV_DATE_FORMAT)
-    for (cav_num, readout), aligned in fetch_run(
-        cm, start, end, decarad
-    ).items():
-        csv_path = (
-            CSV_OUTPUT_DIR / f"cm{cm}_{csv_date}_cavity{cav_num}_{readout}.csv"
-        )
-        aligned.to_csv(csv_path)

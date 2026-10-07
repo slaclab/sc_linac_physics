@@ -45,7 +45,7 @@ from sc_linac_physics.applications.field_emission.run_cache import (
     fill_cache,
     read_run_list,
 )
-from sc_linac_physics.applications.field_emission.field_emission_gui_update import (
+from sc_linac_physics.applications.field_emission.add_run_dialogs import (
     UpdateButtons,
 )
 
