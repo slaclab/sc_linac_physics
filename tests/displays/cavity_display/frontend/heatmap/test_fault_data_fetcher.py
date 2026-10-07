@@ -1,3 +1,5 @@
+import threading
+import time
 from datetime import datetime
 from unittest.mock import Mock
 
@@ -170,8 +172,33 @@ class TestFaultDataFetcherAbort:
         fetcher.finished_all.connect(finished_spy)
         fetcher.run()
 
-        assert 1 <= result_spy.call_count < 5
+        # run() can see the abort before handling any result
+        assert result_spy.call_count < 5
         finished_spy.assert_called_once()
+
+    def test_abort_does_not_wait_for_stuck_requests(self):
+        machine = make_machine(num_cavities=3)
+        release = threading.Event()
+
+        def stuck(*args, **kwargs):
+            release.wait(10)
+            return {}, []
+
+        for cav in machine.linacs[0].cryomodules["01"].cavities.values():
+            cav.get_fault_history = stuck
+
+        fetcher = FaultDataFetcher(machine, datetime.now(), datetime.now())
+        finished_spy = Mock()
+        fetcher.finished_all.connect(finished_spy)
+        threading.Timer(0.3, fetcher.abort).start()
+
+        began = time.monotonic()
+        fetcher.run()
+        elapsed = time.monotonic() - began
+        release.set()
+
+        assert elapsed < 2
+        finished_spy.assert_called_once_with([])
 
 
 class TestFaultDataFetcherErrors:

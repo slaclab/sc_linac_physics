@@ -2,7 +2,12 @@ import bisect
 import dataclasses
 import threading
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+    wait,
+)
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -164,6 +169,8 @@ class FaultDataFetcher(QThread):
 
     # Keep low to avoid overloading the archiver
     MAX_WORKERS = 8
+    # How often run() checks for an abort while waiting on cavities
+    ABORT_POLL_S = 0.2
 
     def run(self) -> None:
         try:
@@ -179,7 +186,8 @@ class FaultDataFetcher(QThread):
 
         all_results: List[CavityFaultResult] = []
 
-        with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+        executor = ThreadPoolExecutor(max_workers=self.MAX_WORKERS)
+        try:
             futures: Dict[Future, Tuple[str, int]] = {}
             for cm_name, cav_num, cavity in cavities:
                 if self._abort_event.is_set():
@@ -193,17 +201,30 @@ class FaultDataFetcher(QThread):
                 futures[future] = (cm_name, cav_num)
 
             total = len(futures)
+            pending = set(futures)
 
-            for future in as_completed(futures):
-                result = future.result()
-                all_results.append(result)
-                self.cavity_result.emit(result)
-                self.progress.emit(len(all_results), total)
-
-                if self._abort_event.is_set():
-                    for f in futures:
-                        f.cancel()
-                    break
+            # Wake up regularly so an abort is seen even while every worker
+            # is stuck on a slow archiver request.
+            while pending and not self._abort_event.is_set():
+                done, pending = wait(
+                    pending,
+                    timeout=self.ABORT_POLL_S,
+                    return_when=FIRST_COMPLETED,
+                )
+                for future in done:
+                    result = future.result()
+                    all_results.append(result)
+                    self.cavity_result.emit(result)
+                    self.progress.emit(len(all_results), total)
+                    if self._abort_event.is_set():
+                        break
+        finally:
+            # On abort, don't wait for requests already in flight: one can
+            # take up to utils.archiver's MAX_RETRIES x RANGE_TIMEOUT. Their
+            # results are dropped.
+            executor.shutdown(
+                wait=not self._abort_event.is_set(), cancel_futures=True
+            )
 
         self.finished_all.emit(all_results)
 
