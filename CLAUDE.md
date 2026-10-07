@@ -36,8 +36,9 @@ Full documentation lives in [`docs/`](docs/index.md):
 - [`docs/displays/cavity_display.md`](docs/displays/cavity_display.md), [`srf_home.md`](docs/displays/srf_home.md)
 
 **Explainer vs. docs page.** An app's "how it works and why" lives in one
-place: `docs/explainers/<app>.html`. That covers data flow, decisions, caveats
-and `CHECK:` questions, each claim cited. The markdown page is a short
+place: an explainer in `docs/explainers/`, for the app or for a piece several
+apps share (`auto_tune.html`). That covers data flow, decisions, caveats and
+`CHECK:` questions, each claim cited. The markdown page is a short
 reference: the command, paths, how to add data, a file list, and a link to the
 explainer. Don't tell the story in both. Why: two copies drift, and only cited
 text is checked by `tests/docs/test_citations.py`. #323's explainer took 8
