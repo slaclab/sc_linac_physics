@@ -42,9 +42,19 @@ def mock_machine():
 
 
 @pytest.fixture
+def threaded_display(qapp, mock_machine):
+    """Display with its real fetch thread."""
+    disp = FaultCountDisplay(lazy_fault_pvs=True)
+    yield disp
+    disp.close()
+
+
+@pytest.fixture
 def display(qapp, mock_machine):
     """Create display instance."""
     disp = FaultCountDisplay(lazy_fault_pvs=True)
+    # run each fetch on the calling thread, so update_plot draws first
+    disp._start_fetch = lambda target, *args: target(*args)
     yield disp
     disp.close()
 
@@ -196,7 +206,7 @@ class TestPlotUpdates:
         with patch.object(display.plot_window, "clear") as mock_clear:
             with patch.object(display.plot_window, "addItem"):
                 display.update_plot()
-                mock_clear.assert_called_once()
+                mock_clear.assert_called()
                 assert display.y_data is not None
                 assert len(display.y_data) == 1
 
@@ -360,3 +370,160 @@ def test_various_fault_data(display, fault_counts, expected_totals):
     assert display.num_faults == expected_totals[0]
     assert display.num_invalids == expected_totals[1]
     assert display.num_warnings == expected_totals[2]
+
+
+def _counts(tlc):
+    return {tlc: FaultCounter(alarm_count=1, ok_count=0, invalid_count=0)}
+
+
+class TestBackgroundFetch:
+    def test_fetch_runs_off_the_main_thread(self, threaded_display, qtbot):
+        import threading
+
+        display = threaded_display
+        main = threading.get_ident()
+        seen = {}
+
+        def get_counts(start, end):
+            seen["thread"] = threading.get_ident()
+            return _counts("BCS")
+
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = get_counts
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+            qtbot.waitUntil(lambda: display.y_data == ["BCS"], timeout=2000)
+        assert seen["thread"] != main
+
+    def test_failed_fetch_is_logged_not_raised(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(side_effect=RuntimeError("boom"))
+        with patch(
+            "sc_linac_physics.displays.cavity_display.utils.utils"
+            ".cavity_fault_logger"
+        ) as log:
+            display.update_plot()
+        assert "boom" in log.error.call_args.args[0]
+        assert display.y_data is None
+
+    def test_fetch_thread_does_not_block_exit(self, threaded_display):
+        with patch("threading.Thread") as thread:
+            threaded_display._start_fetch(print)
+        assert thread.call_args.kwargs["daemon"] is True
+
+    def test_reopened_window_still_fetches(self, display):
+        """CavityDisplay reshows the same instance after a close."""
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(return_value=_counts("BCS"))
+        display.close()
+        display.show()
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+        assert display.y_data == ["BCS"]
+
+    def test_result_after_close_is_dropped(self, display):
+        display._request_id = 1
+        display.close()
+        with patch.object(display.plot_window, "addItem") as add:
+            display._on_counts_ready(1, _counts("BCS"))
+        add.assert_not_called()
+
+    def test_fetch_gets_selected_range(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(return_value={})
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+        start, end = display.cavity.get_fault_counts.call_args.args
+        assert (start, end) == display._selected_range()
+
+    def test_stale_result_is_dropped(self, display):
+        display._request_id = 2
+        with patch.object(display.plot_window, "addItem") as add:
+            display._on_counts_ready(1, _counts("OLD"))
+        add.assert_not_called()
+        assert display.y_data is None
+
+    def test_omitted_fault_does_not_change_fetched_dict(self, display):
+        data = _counts("BCS")
+        display.hide_fault_combo_box.setCurrentText("BCS")
+        display._store_counts(data)
+        assert display.y_data == [] and "BCS" in data
+
+
+class TestStatusLabel:
+    def _select(self, display, counts, cav="1"):
+        for box, text in (
+            (display.cm_combo_box, "01"),
+            (display.cav_combo_box, cav),
+        ):
+            box.blockSignals(True)
+            box.setCurrentText(text)
+            box.blockSignals(False)
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = counts
+
+    def test_says_loading_while_fetch_runs(self, display):
+        self._select(display, Mock(return_value={}), cav="3")
+        display._start_fetch = lambda target, *args: None  # never finishes
+        display.update_plot()
+        assert display.status_label.text().startswith(
+            "Loading fault counts for CM01 cavity 3"
+        )
+
+    def test_clears_when_counts_arrive(self, display):
+        self._select(display, Mock(return_value=_counts("BCS")))
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+        assert display.status_label.text() == ""
+
+    def test_empty_result_says_so(self, display):
+        self._select(display, Mock(return_value={}))
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+        assert display.status_label.text().startswith("No faults")
+
+    def test_failure_shows_message(self, display):
+        self._select(display, Mock(side_effect=RuntimeError("boom")))
+        display.update_plot()
+        assert display.status_label.text() == "Fetch failed: boom"
+
+    def test_failure_after_display_deleted_is_swallowed(self, display):
+        self._select(display, Mock(side_effect=RuntimeError("boom")))
+        with patch.object(
+            type(display), "fetch_failed", create=False
+        ) as signal:
+            signal.emit.side_effect = RuntimeError(
+                "wrapped C/C++ object deleted"
+            )
+            display.update_plot()  # must not raise
+
+    def test_stale_failure_is_ignored(self, display):
+        display._request_id = 2
+        display.status_label.setText("Loading")
+        display._on_fetch_failed(1, "old")
+        assert display.status_label.text() == "Loading"
+
+
+class TestHideFault:
+    def _fetched(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(
+            return_value={**_counts("BCS"), **_counts("SSA")}
+        )
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+
+    def test_hiding_a_fault_does_not_refetch(self, display):
+        self._fetched(display)
+        with patch.object(display.plot_window, "addItem"):
+            display.hide_fault_combo_box.setCurrentText("BCS")
+        display.cavity.get_fault_counts.assert_called_once()
+        assert display.y_data == ["SSA"]
+
+    def test_hiding_during_fetch_draws_nothing(self, display):
+        self._fetched(display)
+        display._start_fetch = lambda target, *args: None  # never finishes
+        display.update_plot()
+        with patch.object(display.plot_window, "addItem") as add:
+            display.hide_fault_combo_box.setCurrentText("BCS")
+        add.assert_not_called()

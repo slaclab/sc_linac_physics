@@ -4,7 +4,7 @@
 
 For how the app is built, what one click does on its way to the machine and SQLite, and what each phase writes, see the explainer: [How RF commissioning is built](../explainers/rf_commissioning.md).
 
-For how the auto-tune loop converges, its guards, and how it fails, see the explainer: [How auto-tune works](../explainers/auto_tune.html).
+For how the auto-tune loop converges, its guards, and how it fails, see the explainer: [How auto-tune works](../explainers/auto_tune.md).
 
 Related in-source architecture docs:
 - `src/sc_linac_physics/applications/rf_commissioning/ARCHITECTURE.md`

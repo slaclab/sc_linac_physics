@@ -69,5 +69,5 @@ nav:
       - Fault Heatmap: displays/fault_heatmap.md
       - SRF Home: displays/srf_home.md
   - Explainers:
-      - How auto-tune works: explainers/auto_tune.html
+      - How auto-tune works: explainers/auto_tune.md
       - How RF commissioning is built: explainers/rf_commissioning.md

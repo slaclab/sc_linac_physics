@@ -165,7 +165,7 @@ setpoint PV, so editing it writes the PV before any test runs
 ### FREQUENCY_TUNING
 
 Four operator-driven stages. Stage 3 runs `Cavity._auto_tune`, which has its
-own explainer: [How auto-tune works](auto_tune.html), section 5 of which walks
+own explainer: [How auto-tune works](auto_tune.md), section 5 of which walks
 the four stages in detail.
 
 | Stage | Writes | Source |

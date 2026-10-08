@@ -7,14 +7,9 @@ in EPICS process variables, including historical fault analysis.
 
 import dataclasses
 from datetime import datetime
-from typing import Union, Optional, Dict
+from typing import Union, Optional
 
-from lcls_tools.common.data.archiver import (
-    ArchiveDataHandler,
-    ArchiverValue,
-    get_data_at_time,
-    get_values_over_time_range,
-)
+from lcls_tools.common.data.archiver import ArchiverValue
 
 from sc_linac_physics.utils.epics import (
     PV,
@@ -314,57 +309,6 @@ class Fault:
             raise RuntimeError(
                 f"Fault for {self.pv} has neither 'ok_value' nor 'fault_value' parameter"
             )
-
-    def was_faulted(self, time: datetime) -> bool:
-        """Check if the PV was in a fault state at a specific time.
-
-        Args:
-            time: DateTime to check fault status
-
-        Returns:
-            True if the PV was faulted at the specified time, False otherwise.
-
-        Raises:
-            PVInvalidError: If archiver data is invalid for the requested time.
-        """
-        archiver_result: Dict[str, ArchiverValue] = get_data_at_time(
-            pv_list=[self.pv], time_requested=time
-        )
-        archiver_value: ArchiverValue = archiver_result[self.pv]
-        return self.is_faulted(archiver_value)
-
-    def get_fault_count_over_time_range(
-        self, start_time: datetime, end_time: datetime
-    ) -> FaultCounter:
-        """Analyze fault history over a time range.
-
-        Retrieves archived data and counts fault occurrences, OK states,
-        and invalid data points.
-
-        Args:
-            start_time: Beginning of time range to analyze
-            end_time: End of time range to analyze
-
-        Returns:
-            FaultCounter object with statistics for the time period.
-        """
-        result = get_values_over_time_range(
-            pv_list=[self.pv], start_time=start_time, end_time=end_time
-        )
-
-        data_handler: ArchiveDataHandler = result[self.pv]
-        counter = FaultCounter()
-
-        for archiver_value in data_handler.value_list:
-            try:
-                if self.is_faulted(archiver_value):
-                    counter.alarm_count += 1
-                else:
-                    counter.ok_count += 1
-            except PVInvalidError:
-                counter.invalid_count += 1
-
-        return counter
 
     def __repr__(self) -> str:
         """Provide string representation for debugging."""
