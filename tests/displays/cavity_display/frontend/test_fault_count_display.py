@@ -206,7 +206,7 @@ class TestPlotUpdates:
         with patch.object(display.plot_window, "clear") as mock_clear:
             with patch.object(display.plot_window, "addItem"):
                 display.update_plot()
-                mock_clear.assert_called_once()
+                mock_clear.assert_called()
                 assert display.y_data is not None
                 assert len(display.y_data) == 1
 
@@ -502,3 +502,28 @@ class TestStatusLabel:
         display.status_label.setText("Loading")
         display._on_fetch_failed(1, "old")
         assert display.status_label.text() == "Loading"
+
+
+class TestHideFault:
+    def _fetched(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(
+            return_value={**_counts("BCS"), **_counts("SSA")}
+        )
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+
+    def test_hiding_a_fault_does_not_refetch(self, display):
+        self._fetched(display)
+        with patch.object(display.plot_window, "addItem"):
+            display.hide_fault_combo_box.setCurrentText("BCS")
+        display.cavity.get_fault_counts.assert_called_once()
+        assert display.y_data == ["SSA"]
+
+    def test_hiding_during_fetch_draws_nothing(self, display):
+        self._fetched(display)
+        display._start_fetch = lambda target, *args: None  # never finishes
+        display.update_plot()
+        with patch.object(display.plot_window, "addItem") as add:
+            display.hide_fault_combo_box.setCurrentText("BCS")
+        add.assert_not_called()

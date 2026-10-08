@@ -81,7 +81,9 @@ class FaultCountDisplay(Display):
         self.hide_fault_combo_box.addItems(
             ["No fault selected"] + self.fault_tlc_list
         )
-        self.hide_fault_combo_box.currentIndexChanged.connect(self.update_plot)
+        self.hide_fault_combo_box.currentIndexChanged.connect(
+            self._redraw_last_result
+        )
 
         input_h_layout.addWidget(QLabel("Cryomodule:"))
         input_h_layout.addWidget(self.cm_combo_box)
@@ -169,6 +171,7 @@ class FaultCountDisplay(Display):
         if not self.cavity:
             return
         self.plot_window.clear()
+        self.data = None  # the old result is for another cavity or range
         self._request_id += 1
         request_id = self._request_id
         start, end = self._selected_range()
@@ -218,7 +221,18 @@ class FaultCountDisplay(Display):
     def _on_counts_ready(self, request_id, data):
         if request_id != self._request_id:
             return
-        self._store_counts(data)
+        self.data = data
+        self._redraw_last_result()
+
+    def _redraw_last_result(self):
+        """Redraw from the last fetched counts, e.g. after hiding a fault.
+
+        No archiver query; does nothing while a fetch is still running.
+        """
+        if self.data is None:
+            return
+        self.plot_window.clear()
+        self._store_counts(self.data)
         self._draw()
         if self.y_data:
             self.status_label.setText("")
