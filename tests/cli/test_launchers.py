@@ -102,6 +102,30 @@ class TestLaunchPythonDisplay:
         # Verify sys.exit was called with exec() return value
         mock_exit.assert_called_once_with(0)
 
+    def test_standalone_mode_installs_exception_hook(
+        self, mock_pydm_app, mock_display_class, mock_inspect_getfile
+    ):
+        """The hook goes in after the app exists, before the display opens."""
+        from sc_linac_physics.cli.launchers import launch_python_display
+
+        calls = []
+        mock_pydm_app.side_effect = lambda **_: calls.append("app") or (
+            mock_pydm_app.return_value
+        )
+        mock_pydm_app.return_value.main_window.open.side_effect = (
+            lambda *_, **__: calls.append("open")
+        )
+        with (
+            patch(
+                "sc_linac_physics.cli.launchers.exception_hook.install",
+                side_effect=lambda: calls.append("install"),
+            ),
+            patch("sys.exit"),
+        ):
+            launch_python_display(mock_display_class, standalone=True)
+
+        assert calls == ["app", "install", "open"]
+
     def test_child_window_mode(
         self,
         mock_pydm_app,
