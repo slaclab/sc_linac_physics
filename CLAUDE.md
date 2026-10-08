@@ -37,12 +37,17 @@ Full documentation lives in [`docs/`](docs/index.md):
 
 **Explainer vs. docs page.** An app's "how it works and why" lives in one
 place: an explainer in `docs/explainers/`, for the app or for a piece several
-apps share (`auto_tune.html`). That covers data flow, decisions, caveats and
+apps share (`auto_tune.md`). That covers data flow, decisions, caveats and
 `CHECK:` questions, each claim cited. The markdown page is a short
 reference: the command, paths, how to add data, a file list, and a link to the
 explainer. Don't tell the story in both. Why: two copies drift, and only cited
 text is checked by `tests/docs/test_citations.py`. #323's explainer took 8
 commits to keep current. Apps without an explainer keep their full page.
+
+An explainer is a markdown page. Each interactive part is a small `.html`
+widget in `docs/explainers/widgets/`, linked on a line of its own, which the
+site shows inline. Why: prose diffs a reviewer can read, and the site's search
+and sidebar.
 
 See also `AGENTS.md` at the repo root for architectural conventions enforced across the codebase.
 

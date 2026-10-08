@@ -29,20 +29,19 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 
 | Page | What it covers | Explainer |
 |------|----------------|-----------|
-| [Auto Setup](applications/auto_setup.md) | Automated cavity turn-on: SSA calibration → auto-tune → characterization → RF ramp | [How auto-tune works](explainers/auto_tune.html) |
-| [RF Commissioning](applications/rf_commissioning.md) | Phase-gated acceptance workflow for newly-installed cavities | [How auto-tune works](explainers/auto_tune.html) |
+| [Auto Setup](applications/auto_setup.md) | Automated cavity turn-on: SSA calibration → auto-tune → characterization → RF ramp | [How auto-tune works](explainers/auto_tune.md) |
+| [RF Commissioning](applications/rf_commissioning.md) | Phase-gated acceptance workflow for newly-installed cavities | [How auto-tune works](explainers/auto_tune.md) |
 | [Q0 Measurement](applications/q0.md) | Cavity quality-factor measurement under thermal load | |
 | [Microphonics](applications/microphonics.md) | Mechanical vibration noise acquisition and analysis | |
 | [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection | |
-| [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence | [How auto-tune works](explainers/auto_tune.html) |
+| [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence | [How auto-tune works](explainers/auto_tune.md) |
 | [Field Emission](applications/field_emission.md) | Cavity amplitude vs. decarad radiation for past runs | [How the field emission display works](explainers/field_emission.md) |
 
 An explainer is the "how it works and why" for an app, or for a piece several
 apps share: data flow, decisions, how it fails, each claim cited to the code.
 The app's page is the short reference. An explainer is a docs page, and each
 interactive part is a small HTML widget shown inline. On GitHub a widget shows
-as a link; opened on its own it also works offline. The auto-tune explainer is
-still a single HTML file.
+as a link; opened on its own it also works offline.
 
 ### Displays
 

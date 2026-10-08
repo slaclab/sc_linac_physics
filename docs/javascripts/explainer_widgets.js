@@ -58,6 +58,8 @@
     for (const frame of document.querySelectorAll("iframe.explainer-widget")) {
       if (frame.contentDocument) {
         frame.contentDocument.documentElement.dataset.theme = theme();
+        // A widget that draws with theme colours (a canvas) redraws on resize.
+        frame.contentWindow.dispatchEvent(new Event("resize"));
       }
     }
   }).observe(document.body, {

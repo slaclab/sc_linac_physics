@@ -1,10 +1,7 @@
 import logging
 import os
 from csv import DictReader
-from datetime import datetime, timedelta
 from typing import Dict, List
-
-from lcls_tools.common.data.archiver import ArchiveDataHandler
 
 from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
 from sc_linac_physics.utils.platform_paths import is_macos
@@ -53,25 +50,6 @@ class SpreadsheetError(Exception):
     def __init__(self, message):
         self.message = message
         super().__init__(self.message)
-
-
-def severity_of_fault(timestamp: datetime, severities: ArchiveDataHandler):
-    sevr = None
-    for severity_timestamp, severity in zip(
-        severities.timestamps, severities.values
-    ):
-        try:
-            rounded_ts = severity_timestamp.replace(
-                microsecond=round(severity_timestamp.microsecond / 10000)
-                * 10000
-            )
-        except ValueError:
-            rounded_ts = severity_timestamp + timedelta(seconds=1)
-        if (timestamp - rounded_ts).total_seconds() >= 0:
-            sevr = severity
-        else:
-            break
-    return sevr
 
 
 cavity_fault_logger = custom_logger(
