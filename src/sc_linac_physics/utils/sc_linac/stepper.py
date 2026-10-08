@@ -339,6 +339,20 @@ class StepperTuner(linac_utils.SCLinacObject):
                 check_detune=check_detune,
             )
 
+    def _move_timeout(self, num_steps: int) -> float:
+        """Seconds to allow a move: FACTOR x steps / VELO + MARGIN.
+
+        num_steps can exceed the steps this move covers (move() splits
+        moves larger than max_steps), which only lengthens the timeout.
+        """
+        speed = self.speed
+        timeout = linac_utils.STEPPER_MOVE_TIMEOUT_MARGIN_S
+        if speed > 0:
+            timeout += (
+                linac_utils.STEPPER_MOVE_TIMEOUT_FACTOR * abs(num_steps) / speed
+            )
+        return timeout
+
     def issue_move_command(self, num_steps: int, check_detune: bool = True):
         """
         Determine whether to move positive or negative depending on the requested
@@ -385,11 +399,13 @@ class StepperTuner(linac_utils.SCLinacObject):
         time.sleep(5)
 
         move_start_time = datetime.now()
-        while self.motor_moving:
+
+        def check_abort_and_detune():
             self.check_abort()
             if check_detune:
                 self.cavity.check_detune()
 
+        def log_progress():
             elapsed = (datetime.now() - move_start_time).total_seconds()
             self.cavity.logger.debug(
                 "Motor still moving (%.0fs elapsed)",
@@ -401,7 +417,18 @@ class StepperTuner(linac_utils.SCLinacObject):
                     }
                 },
             )
-            time.sleep(5)
+
+        # CHECK: on timeout this raises StepperError without writing ABORT_REQ,
+        # so the motor may still be moving. Should it abort the motor first?
+        linac_utils.wait_until(
+            lambda: not self.motor_moving,
+            timeout=self._move_timeout(num_steps),
+            description=f"{self} to stop moving",
+            error_class=linac_utils.StepperError,
+            poll_interval=5,
+            check_abort=check_abort_and_detune,
+            on_poll=log_progress,
+        )
 
         total_move_time = (datetime.now() - move_start_time).total_seconds()
         self.cavity.logger.info(
