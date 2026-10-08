@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 class Piezo(linac_utils.SCLinacObject):
     """
     Python representation of LCLS II piezo tuners. This class provides utility
-    functions for toggling feedback mode and changing bias voltage and DC offset
+    functions for toggling feedback mode, enabling the bias voltage, and
+    changing DC offset
 
     """
 
@@ -44,7 +45,12 @@ class Piezo(linac_utils.SCLinacObject):
         self.dc_setpoint_pv: str = self.pv_addr("DAC_SP")
         self._dc_setpoint_pv_obj: Optional[PV] = None
 
-        self.bias_voltage_pv: str = self.pv_addr("BIAS")
+        # The bias voltage is fixed in the IOC (25 V in the LCLS-II linac). We
+        # only switch it on or off with BIAS_ENABLE_SET and read BIAS_RBV.
+        self.bias_enable_pv: str = self.pv_addr("BIAS_ENABLE_SET")
+        self._bias_enable_pv_obj: Optional[PV] = None
+
+        self.bias_voltage_pv: str = self.pv_addr("BIAS_RBV")
         self._bias_voltage_pv_obj: Optional[PV] = None
 
         self.voltage_pv: str = self.pv_addr("V")
@@ -86,14 +92,18 @@ class Piezo(linac_utils.SCLinacObject):
     def bias_voltage(self):
         return self.bias_voltage_pv_obj.get()
 
-    @bias_voltage.setter
-    def bias_voltage(self, value):
+    @property
+    def bias_enable_pv_obj(self) -> PV:
+        if not self._bias_enable_pv_obj:
+            self._bias_enable_pv_obj = PV(self.bias_enable_pv)
+        return self._bias_enable_pv_obj
+
+    def enable_bias(self):
         self.cavity.logger.debug(
-            "Setting piezo bias voltage to %.2fV",
-            value,
-            extra={"extra_data": {"bias_voltage": value, "piezo": str(self)}},
+            "Enabling piezo bias voltage",
+            extra={"extra_data": {"piezo": str(self)}},
         )
-        self.bias_voltage_pv_obj.put(value)
+        self.bias_enable_pv_obj.put(linac_utils.PIEZO_BIAS_ENABLE_VALUE)
 
     @property
     def dc_setpoint_pv_obj(self) -> PV:
@@ -176,10 +186,10 @@ class Piezo(linac_utils.SCLinacObject):
 
     def enable(self):
         self.cavity.logger.info(
-            "Enabling piezo with bias voltage 25V",
-            extra={"extra_data": {"bias_voltage": 25, "piezo": str(self)}},
+            "Enabling piezo with bias voltage enabled",
+            extra={"extra_data": {"piezo": str(self)}},
         )
-        self.bias_voltage = 25
+        self.enable_bias()
 
         attempt = 0
         while not self.is_enabled:

@@ -300,7 +300,15 @@ class PiezoPVGroup(PVGroup):
         enum_strings=("Manual", "Feedback"),
     )
     dc_setpoint = pvproperty(name="DAC_SP", value=0.0, dtype=ChannelType.FLOAT)
-    bias_voltage = pvproperty(name="BIAS", value=0.0, dtype=ChannelType.FLOAT)
+    bias_enable = pvproperty(
+        name="BIAS_ENABLE_SET",
+        value=0,
+        dtype=ChannelType.ENUM,
+        enum_strings=("Disable", "Enable"),
+    )
+    bias_voltage = pvproperty(
+        name="BIAS_RBV", value=0.0, dtype=ChannelType.FLOAT, read_only=True
+    )
 
     # Pre-RF Test PVs
     prerf_test_start = pvproperty(name="TESTSTRT", value=0)
@@ -418,6 +426,17 @@ class PiezoPVGroup(PVGroup):
             # shows both PVs reports a mismatch that hardware would never have.
             await self.feedback_mode_stat.write(0)
             await self.feedback_mode.write(0, verify_value=False)
+        return value
+
+    @bias_enable.putter
+    async def bias_enable(self, instance, value):
+        """Drive BIAS_RBV to the fixed bias voltage or 0 V."""
+        if isinstance(value, str):
+            is_enabled = value == "Enable"
+        else:
+            is_enabled = int(value) == 1
+        # 25 V is the fixed LCLS-II linac bias from the IOC change notice.
+        await self.bias_voltage.write(25.0 if is_enabled else 0.0)
         return value
 
     @prerf_test_start.putter

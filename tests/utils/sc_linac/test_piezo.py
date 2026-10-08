@@ -7,6 +7,7 @@ from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 from sc_linac_physics.utils.epics import PVGetError
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 from sc_linac_physics.utils.sc_linac.linac_utils import (
+    PIEZO_BIAS_ENABLE_VALUE,
     PIEZO_ENABLE_VALUE,
     PIEZO_DISABLE_VALUE,
     PIEZO_MANUAL_VALUE,
@@ -43,6 +44,16 @@ def test_bias_voltage(piezo):
     val = randint(-50, 50)
     piezo._bias_voltage_pv_obj = make_mock_pv(get_val=val)
     assert piezo.bias_voltage == val
+    assert piezo.bias_voltage_pv.endswith("PZT:BIAS_RBV")
+
+
+def test_enable_bias(piezo):
+    piezo._bias_enable_pv_obj = make_mock_pv()
+    piezo.enable_bias()
+    assert piezo.bias_enable_pv.endswith("PZT:BIAS_ENABLE_SET")
+    piezo._bias_enable_pv_obj.put.assert_called_once_with(
+        PIEZO_BIAS_ENABLE_VALUE
+    )
 
 
 def test_dc_setpoint(piezo):
@@ -125,7 +136,7 @@ class MockStatus:
 
 
 def test_enable(piezo):
-    piezo._bias_voltage_pv_obj = make_mock_pv()
+    piezo._bias_enable_pv_obj = make_mock_pv()
     piezo._enable_stat_pv_obj = make_mock_pv()
 
     # With robust status logging, only condition checks consume get side effects.
@@ -143,7 +154,7 @@ def test_enable(piezo):
 
     piezo.enable()
 
-    piezo._bias_voltage_pv_obj.put.assert_called_with(25)
+    piezo._bias_enable_pv_obj.put.assert_called_with(PIEZO_BIAS_ENABLE_VALUE)
     assert piezo.cavity.check_abort.call_count == 2
     assert piezo._enable_pv_obj.put.call_count == 4  # 2x (disable + enable)
 
