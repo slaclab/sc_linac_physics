@@ -879,7 +879,8 @@ class Cavity(linac_utils.SCLinacObject):
                 iteration_callback()
 
             microsteps_per_hz = self.microsteps_per_hz
-            est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+            # Aim for 75% of the measured detune per move (was 90%).
+            est_steps = int(0.75 * delta_hz * microsteps_per_hz)
 
             # A zero step estimate commands no motion, so the detune cannot
             # change and steps_moved cannot grow -- so the runaway guard below
