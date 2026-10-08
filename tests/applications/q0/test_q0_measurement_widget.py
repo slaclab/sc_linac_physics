@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 import pytest
 from PyQt5.QtWidgets import (
-    QApplication,
     QWidget,
     QGroupBox,
     QLabel,
@@ -97,17 +96,6 @@ class MockPyDMByteIndicator(MockPyDMWidget):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
-
-
-@pytest.fixture
-def qapp():
-    """Create QApplication instance for testing."""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
-    if app:
-        app.quit()
 
 
 # Create a fixture that handles all the mocking
