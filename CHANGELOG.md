@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v9.41.4 (2026-10-08)
+
+### Bug Fixes
+
+- **explainers**: Redraw widgets when the site theme changes
+  ([#345](https://github.com/slaclab/sc_linac_physics/pull/345),
+  [`0d87aed`](https://github.com/slaclab/sc_linac_physics/commit/0d87aeddec9c27682644473a05a97ac75d25ad85))
+
+### Continuous Integration
+
+- **explainers**: Link the rendered view of markdown explainers in the preview comment
+  ([#344](https://github.com/slaclab/sc_linac_physics/pull/344),
+  [`b78774a`](https://github.com/slaclab/sc_linac_physics/commit/b78774a7932c44a7c45c6aa0599e076bffe6d19c))
+
+### Documentation
+
+- **tuning**: Turn the auto-tune explainer into a docs page with an inline simulator
+  ([#345](https://github.com/slaclab/sc_linac_physics/pull/345),
+  [`0d87aed`](https://github.com/slaclab/sc_linac_physics/commit/0d87aeddec9c27682644473a05a97ac75d25ad85))
+
+
 ## v9.41.3 (2026-10-07)
 
 ### Bug Fixes
