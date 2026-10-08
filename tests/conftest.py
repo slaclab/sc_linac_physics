@@ -495,6 +495,24 @@ class MockHandler:
 
 
 @pytest.fixture(autouse=True)
+def restore_exception_hooks():
+    """Undo exception_hook.install() after each test.
+
+    Launcher tests run the real install(). Left in place, it would replace
+    pytest's threading.excepthook for every later test in the worker, and a
+    later thread's uncaught exception would go to a popup instead of pytest.
+    """
+    import threading
+
+    from sc_linac_physics.utils import exception_hook
+
+    old_sys, old_threading = sys.excepthook, threading.excepthook
+    yield
+    sys.excepthook, threading.excepthook = old_sys, old_threading
+    exception_hook._notifier = None
+
+
+@pytest.fixture(autouse=True)
 def mock_log_files():
     """Prevent actual log file creation in all tests."""
     with (

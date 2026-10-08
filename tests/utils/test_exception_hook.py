@@ -3,17 +3,9 @@ import threading
 from unittest.mock import patch
 
 import pytest
+from PyQt5.QtCore import QCoreApplication
 
 from sc_linac_physics.utils import exception_hook
-
-
-@pytest.fixture
-def restore_hooks():
-    """Put back whatever hooks the test replaced."""
-    old_sys, old_threading = sys.excepthook, threading.excepthook
-    yield
-    sys.excepthook, threading.excepthook = old_sys, old_threading
-    exception_hook._notifier = None
 
 
 @pytest.fixture
@@ -35,22 +27,20 @@ def _raise(exc):
         return sys.exc_info()
 
 
-def test_install_replaces_both_hooks(qapp, restore_hooks):
+def test_install_replaces_both_hooks(qapp):
     exception_hook.install()
     assert sys.excepthook is exception_hook._sys_hook
     assert threading.excepthook is exception_hook._threading_hook
 
 
-def test_install_twice_keeps_one_notifier(qapp, restore_hooks):
+def test_install_twice_keeps_one_notifier(qapp):
     exception_hook.install()
     first = exception_hook._notifier
     exception_hook.install()
     assert exception_hook._notifier is first
 
 
-def test_main_thread_exception_logs_and_shows_popup(
-    qapp, qtbot, restore_hooks, popups
-):
+def test_main_thread_exception_logs_and_shows_popup(qapp, qtbot, popups):
     exception_hook.install()
     error = ValueError("bad setpoint")
     with patch.object(exception_hook, "logger") as logger:
@@ -63,9 +53,7 @@ def test_main_thread_exception_logs_and_shows_popup(
     assert "Traceback" in details
 
 
-def test_worker_thread_exception_reaches_main_thread_popup(
-    qapp, qtbot, restore_hooks, popups
-):
+def test_worker_thread_exception_reaches_main_thread_popup(qapp, qtbot, popups):
     """Python threads report through threading.excepthook, not sys's."""
     exception_hook.install()
     popup_threads = []
@@ -80,12 +68,14 @@ def test_worker_thread_exception_reaches_main_thread_popup(
     thread = threading.Thread(target=fail)
     thread.start()
     thread.join()
-    qtbot.waitUntil(lambda: bool(popups))
+    # Deliver the queued signal directly. qtbot.waitUntil spins an event
+    # loop, which returns at once if an earlier test called app.quit().
+    QCoreApplication.sendPostedEvents()
     assert "archiver timed out" in popups[0][1]
     assert popup_threads[0] is threading.main_thread()
 
 
-def test_keyboard_interrupt_goes_to_default_hook(qapp, restore_hooks, popups):
+def test_keyboard_interrupt_goes_to_default_hook(qapp, popups):
     exception_hook.install()
     with patch.object(sys, "__excepthook__") as default:
         sys.excepthook(*_raise(KeyboardInterrupt()))
