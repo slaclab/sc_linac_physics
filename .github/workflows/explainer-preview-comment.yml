@@ -3,7 +3,9 @@ name: Explainer preview comment
 # Posts a sticky comment linking a live preview of each explainer page a PR
 # adds, changes or renames, and removes the comment once there are none.
 # GitHub serves repo HTML as source, so without this a reviewer has to check
-# the PR out to see the page.
+# the PR out to see the page. A markdown explainer is linked to GitHub's own
+# rendered view of the file at the PR's head commit, since GitHub opens
+# markdown diffs as source and has no setting to change that.
 #
 # Runs on `workflow_run` so it has a writable token for fork PRs (see
 # pr-size-comment.yml). Unlike that pair, it trusts nothing the triggering run
@@ -12,7 +14,9 @@ name: Explainer preview comment
 #
 #   PR number  — the open PR whose head repo, branch and SHA match the run.
 #   page list  — the PR's changed files from the API, filtered to
-#                docs/explainers/<name>.html.
+#                docs/explainers/<name>.html, docs/explainers/<name>.md, and
+#                the widgets markdown explainers embed,
+#                docs/explainers/widgets/<name>.html.
 #
 # The link goes through htmlpreview.github.io, a third-party renderer, reading
 # raw.githubusercontent.com at refs/pull/N/head. That ref follows every push.
@@ -70,26 +74,37 @@ jobs:
           # Every status except removed. For a rename, .filename is the new
           # path. The name filter keeps a fork-chosen filename from carrying
           # markdown into the comment.
-          PAGES=$(gh api --paginate "repos/${REPO}/pulls/${NUM}/files" \
-                    --jq '.[] | select(.status != "removed") | .filename' \
-                  | grep -E '^docs/explainers/[A-Za-z0-9_.-]+\.html$' || true)
+          FILES=$(gh api --paginate "repos/${REPO}/pulls/${NUM}/files" \
+                    --jq '.[] | select(.status != "removed") | .filename')
+          PAGES=$(grep -E '^docs/explainers/(widgets/)?[A-Za-z0-9_.-]+\.html$' <<< "$FILES" || true)
+          DOCS=$(grep -E '^docs/explainers/[A-Za-z0-9_.-]+\.md$' <<< "$FILES" || true)
 
-          if [ -z "$PAGES" ]; then
+          if [ -z "$PAGES" ] && [ -z "$DOCS" ]; then
             echo "pages=none" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "pages=some" >> "$GITHUB_OUTPUT"
 
           RAW="https://raw.githubusercontent.com/${REPO}/refs/pull/${NUM}/head"
+          BLOB="https://github.com/${REPO}/blob/${HEAD_SHA}"
           {
             echo "### Explainer preview"
             echo
-            while read -r page; do
-              echo "- [\`$(basename "$page")\`](https://htmlpreview.github.io/?${RAW}/${page})"
-            done <<< "$PAGES"
+            if [ -n "$DOCS" ]; then
+              while read -r doc; do
+                echo "- [\`$(basename "$doc")\`](${BLOB}/${doc}), rendered by GitHub"
+              done <<< "$DOCS"
+            fi
+            if [ -n "$PAGES" ]; then
+              while read -r page; do
+                echo "- [\`$(basename "$page")\`](https://htmlpreview.github.io/?${RAW}/${page})"
+              done <<< "$PAGES"
+            fi
             echo
             echo "<sub>Follows the latest push; allow a few minutes for caching."
-            echo "Rendered by htmlpreview.github.io, a third-party service.</sub>"
+            echo "\`.html\` pages are rendered by htmlpreview.github.io, a third-party service."
+            echo "GitHub's view of a \`.md\` page shows \`!!!\` boxes as plain text and"
+            echo "widgets as links.</sub>"
           } > comment.md
 
       - name: Comment

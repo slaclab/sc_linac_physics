@@ -31,6 +31,13 @@ theme:
         icon: material/weather-sunny
         name: Switch to light mode
 
+# Explainer pages: citation styling, and inline widgets from
+# docs/explainers/widgets/. See docs/javascripts/explainer_widgets.js.
+extra_css:
+  - stylesheets/explainers.css
+extra_javascript:
+  - javascripts/explainer_widgets.js
+
 plugins:
   - search
 
@@ -56,7 +63,10 @@ nav:
       - Microphonics: applications/microphonics.md
       - Quench Processing: applications/quench_processing.md
       - Tuning: applications/tuning.md
+      - Field Emission: applications/field_emission.md
   - Displays:
       - Cavity Display: displays/cavity_display.md
       - Fault Heatmap: displays/fault_heatmap.md
       - SRF Home: displays/srf_home.md
+  - Explainers:
+      - How auto-tune works: explainers/auto_tune.md

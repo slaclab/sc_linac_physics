@@ -1,4 +1,8 @@
+import os
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -361,3 +365,79 @@ def test_timestamp_in_fall_back_hour_keeps_pst():
 
     assert stamp.utcoffset() == timedelta(hours=-8)
     assert stamp.timestamp() == secs + 0.0005
+
+
+# ---------------------------------------------------------------------------
+# Daemon threads
+# ---------------------------------------------------------------------------
+# A request that never answers. The fetch runs on a daemon thread, as the
+# displays run it; the main thread then returns, so the interpreter should exit.
+_STUCK_FETCH = """
+import threading
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+from sc_linac_physics.utils import archiver
+
+started = threading.Event()
+
+
+def stuck(*args, **kwargs):
+    started.set()
+    threading.Event().wait()
+
+
+session = MagicMock()
+session.request.side_effect = stuck
+with patch.object(archiver, "_session", return_value=session):
+    threading.Thread(
+        target=archiver.get_values_over_time_range,
+        args=(["A:PV"], datetime(2023, 10, 2, 9), datetime(2023, 10, 2, 10)),
+        daemon=True,
+    ).start()
+    assert started.wait(10)
+"""
+
+
+def test_stuck_request_does_not_block_exit():
+    src = Path(archiver.__file__).parents[2]
+    env = {**os.environ, "PYTHONPATH": str(src)}
+
+    # Import time is most of this; the old pool hung here until killed.
+    result = subprocess.run(
+        [sys.executable, "-c", _STUCK_FETCH],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_errors_raise_in_pv_order_after_every_request(session):
+    def respond(method, url, timeout, params):
+        if params["pv"] == "GOOD:PV":
+            return _response(payload=[])
+        raise requests.exceptions.ConnectionError()
+
+    session.request.side_effect = respond
+
+    with pytest.raises(ArchiverConnectionError, match="^BAD:A: "):
+        get_values_over_time_range(["BAD:A", "GOOD:PV", "BAD:B"], START, END)
+
+    assert session.request.call_count == 1 + 2 * archiver.MAX_RETRIES
+
+
+def test_results_keep_pv_order(session):
+    pvs = [f"PV:{i}" for i in range(20)]
+    session.request.return_value = _response(payload=[])
+
+    frames = get_values_over_time_range(pvs, START, END, max_workers=3)
+
+    assert list(frames) == pvs
+
+
+def test_no_workers_is_refused(session):
+    with pytest.raises(ValueError):
+        get_values_over_time_range(["A:PV"], START, END, max_workers=0)

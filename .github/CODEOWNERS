@@ -23,6 +23,9 @@
 # Default
 *                                                       @lisazacarias
 
+# ── Displays ─────────────────────────────────────────────────────────────────
+/src/sc_linac_physics/displays/cavity_display/          @lisazacarias @Derikka
+
 # ── Hardware command paths ───────────────────────────────────────────────────
 # These modules issue the actual writes to the machine. A wrong value here moves
 # a tuner, drives a piezo, or turns on an SSA.
@@ -34,7 +37,7 @@
 /src/sc_linac_physics/applications/rf_commissioning/    @lisazacarias @s-aderhold @RDPorter
 /src/sc_linac_physics/applications/tuning/              @lisazacarias @RDPorter
 /src/sc_linac_physics/applications/sel_phase_optimizer/ @lisazacarias @RDPorter
-/src/sc_linac_physics/displays/cavity_display/backend/  @lisazacarias @RDPorter
+/src/sc_linac_physics/displays/cavity_display/backend/  @lisazacarias @Derikka @RDPorter
 
 # ── Applications that produce numbers people act on ──────────────────────────
 # Analysis and fitting. A quiet change to a fit or a threshold silently changes

@@ -2,6 +2,8 @@
 
 `applications/auto_setup/` automates cavity commissioning: from a cold, unpowered state to a cavity delivering RF to the beam. It provides both a GUI and command-line launchers at four levels of granularity (machine → linac → cryomodule → cavity).
 
+For how the auto-tune loop converges, its guards, and how it fails, see the explainer: [How auto-tune works](../explainers/auto_tune.md).
+
 ## What "setup" means
 
 For each cavity, setup runs up to four sequential operations:
