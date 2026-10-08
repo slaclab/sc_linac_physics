@@ -5,20 +5,10 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 from PyQt5.QtCore import QThread
-from PyQt5.QtWidgets import QApplication
 
 from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
     AsyncDataManager,
 )
-
-
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication instance for tests"""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
 
 
 # At the top of the file, fix the fixture:

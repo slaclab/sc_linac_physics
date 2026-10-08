@@ -30,15 +30,6 @@ def patch_pyqtgraph():
     yield
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication instance for tests"""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
-
-
 class TestTimeSeriesPlot:
     @pytest.fixture
     def plot_widget(self, qapp):

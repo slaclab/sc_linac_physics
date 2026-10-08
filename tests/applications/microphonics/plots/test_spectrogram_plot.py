@@ -4,20 +4,10 @@ import numpy as np
 import pyqtgraph as pg
 import pytest
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication
 
 from sc_linac_physics.applications.microphonics.plots.spectrogram_plot import (
     SpectrogramPlot,
 )
-
-
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication instance for tests"""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
 
 
 @pytest.fixture

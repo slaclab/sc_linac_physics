@@ -1,10 +1,8 @@
-import sys
 from unittest.mock import patch
 
 import pytest
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QApplication,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -19,17 +17,6 @@ from sc_linac_physics.displays.cavity_display.frontend.fault_decoder_display imp
     DecoderDisplay,
     Row,
 )
-
-
-# Fixture to ensure QApplication exists
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication for testing."""
-    if not QApplication.instance():
-        app = QApplication(sys.argv)
-    else:
-        app = QApplication.instance()
-    yield app
 
 
 @pytest.fixture

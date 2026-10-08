@@ -5,20 +5,11 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QCheckBox, QPushButton
+from PyQt5.QtWidgets import QCheckBox, QPushButton
 
 from sc_linac_physics.applications.microphonics.plots.plot_panel import (
     PlotPanel,
 )
-
-
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication instance for tests"""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
 
 
 @pytest.fixture
