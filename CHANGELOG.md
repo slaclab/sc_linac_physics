@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v9.41.5 (2026-10-08)
+
+### Bug Fixes
+
+- **cavity-display**: Fetch fault counts off the Qt main thread
+  ([#325](https://github.com/slaclab/sc_linac_physics/pull/325),
+  [`488e0bc`](https://github.com/slaclab/sc_linac_physics/commit/488e0bc1e688ddfc916aa12653aea6ce21fc7501))
+
+- **cavity-display**: Fetch fault counts on a daemon thread
+  ([#325](https://github.com/slaclab/sc_linac_physics/pull/325),
+  [`488e0bc`](https://github.com/slaclab/sc_linac_physics/commit/488e0bc1e688ddfc916aa12653aea6ce21fc7501))
+
+- **cavity-display**: Hide a fault without refetching
+  ([#325](https://github.com/slaclab/sc_linac_physics/pull/325),
+  [`488e0bc`](https://github.com/slaclab/sc_linac_physics/commit/488e0bc1e688ddfc916aa12653aea6ce21fc7501))
+
+- **cavity-display**: Show when fault counts are loading
+  ([#325](https://github.com/slaclab/sc_linac_physics/pull/325),
+  [`488e0bc`](https://github.com/slaclab/sc_linac_physics/commit/488e0bc1e688ddfc916aa12653aea6ce21fc7501))
+
+### Refactoring
+
+- **cavity-display**: Remove unused archiver fault functions
+  ([#330](https://github.com/slaclab/sc_linac_physics/pull/330),
+  [`02e0a34`](https://github.com/slaclab/sc_linac_physics/commit/02e0a34f19751e1b381a3261468681d19f19cc04))
+
+
 ## v9.41.4 (2026-10-08)
 
 ### Bug Fixes
