@@ -48,7 +48,8 @@ import requests
 
 from sc_linac_physics.utils.epics.config import EPICS_INVALID_VAL
 
-ARCHIVER_URL = "http://lcls-archapp.slac.stanford.edu/retrieval/data"
+ARCHIVER_BASE_URL = "http://lcls-archapp.slac.stanford.edu"
+ARCHIVER_URL = f"{ARCHIVER_BASE_URL}/retrieval/data"
 
 # Measured on site (2026-10-06), 28 PVs x 2 h, uncached windows, median of 3:
 # 1 worker 6.9 s, 2: 3.6 s, 4: 1.9 s, 8: 1.1 s, 16: 1.3 s. Same value as
