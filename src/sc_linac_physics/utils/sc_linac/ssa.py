@@ -271,18 +271,14 @@ class SSA(linac_utils.SCLinacObject):
             self.cavity.logger.info("Turning SSA on")
             self.turn_on_pv_obj.put(1)
 
-            while not self.is_on:
-                self.cavity.check_abort()
-                self.cavity.logger.debug(
-                    "Waiting for SSA to turn on",
-                    extra={
-                        "extra_data": {
-                            "status_message": self.status_message,
-                            "ssa": str(self),
-                        }
-                    },
-                )
-                time.sleep(1)
+            linac_utils.wait_until(
+                lambda: self.is_on,
+                timeout=linac_utils.SSA_TURN_ON_TIMEOUT_S,
+                description=f"{self} to turn on",
+                error_class=linac_utils.SSAFaultError,
+                check_abort=self.cavity.check_abort,
+                on_poll=lambda: self._log_wait("Waiting for SSA to turn on"),
+            )
 
         if self.cavity.cryomodule.is_harmonic_linearizer:
             self.cavity.logger.debug(
@@ -293,6 +289,17 @@ class SSA(linac_utils.SCLinacObject):
             self.ps_volt_setpoint1_pv_obj.put(linac_utils.HL_SSA_PS_SETPOINT)
 
         self.cavity.logger.info("SSA successfully turned on")
+
+    def _log_wait(self, message: str):
+        self.cavity.logger.debug(
+            message,
+            extra={
+                "extra_data": {
+                    "status_message": self.status_message,
+                    "ssa": str(self),
+                }
+            },
+        )
 
     @property
     def turn_off_pv_obj(self) -> PV:
@@ -305,18 +312,14 @@ class SSA(linac_utils.SCLinacObject):
             self.cavity.logger.info("Turning SSA off")
             self.turn_off_pv_obj.put(1)
 
-            while self.is_on:
-                self.cavity.check_abort()
-                self.cavity.logger.debug(
-                    "Waiting for SSA to turn off",
-                    extra={
-                        "extra_data": {
-                            "status_message": self.status_message,
-                            "ssa": str(self),
-                        }
-                    },
-                )
-                time.sleep(1)
+            linac_utils.wait_until(
+                lambda: not self.is_on,
+                timeout=linac_utils.SSA_TURN_OFF_TIMEOUT_S,
+                description=f"{self} to turn off",
+                error_class=linac_utils.SSAFaultError,
+                check_abort=self.cavity.check_abort,
+                on_poll=lambda: self._log_wait("Waiting for SSA to turn off"),
+            )
 
         self.cavity.logger.info("SSA successfully turned off")
 
@@ -466,8 +469,16 @@ class SSA(linac_utils.SCLinacObject):
         self.start_calibration()
         time.sleep(2)
 
-        while self.calibration_running:
-            self.cavity.logger.debug(
+        # CHECK: this loop had no check_abort() before. With it, an abort
+        # mid-calibration runs cavity.check_abort() -> turn_off(), then
+        # raises CavityAbortError. Is turning RF off mid-sweep acceptable?
+        linac_utils.wait_until(
+            lambda: not self.calibration_running,
+            timeout=linac_utils.SSA_CALIBRATION_TIMEOUT_S,
+            description=f"{self} calibration to finish",
+            error_class=linac_utils.SSACalibrationError,
+            check_abort=self.cavity.check_abort,
+            on_poll=lambda: self.cavity.logger.debug(
                 "Waiting for SSA calibration to complete",
                 extra={
                     "extra_data": {
@@ -475,8 +486,8 @@ class SSA(linac_utils.SCLinacObject):
                         "ssa": str(self),
                     }
                 },
-            )
-            time.sleep(1)
+            ),
+        )
         time.sleep(2)
 
         if self.calibration_crashed:

@@ -753,6 +753,21 @@ def test_check_and_set_on_time(cavity):
     cavity.push_go_button.assert_called()
 
 
+def test_push_go_button_creates_go_pv_lazily(cavity):
+    """push_go_button must not depend on something else creating the PV."""
+    cavity._pulse_status_pv_obj = make_mock_pv(
+        cavity.pulse_status_pv, get_val=2
+    )
+    cavity._pulse_go_pv_obj = None
+    go_pv = make_mock_pv(cavity.pulse_go_pv)
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=go_pv
+    ) as pv_cls:
+        cavity.push_go_button()
+    pv_cls.assert_called_once_with(cavity.pulse_go_pv)
+    go_pv.put.assert_called_with(1, wait=False)
+
+
 def test_push_go_button(cavity):
     cavity._pulse_status_pv_obj = make_mock_pv(
         cavity.pulse_status_pv, get_val=2
@@ -1211,3 +1226,42 @@ def test_wait_checks_abort_while_polling(cavity):
     cavity.check_abort = MagicMock()
     cavity.wait_for_characterization(poll_interval=0.01)
     cavity.check_abort.assert_called()
+
+
+@pytest.fixture
+def no_wait(monkeypatch):
+    """Zero every wait_until timeout so a stuck state times out at once."""
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    for name in (
+        "PULSE_GO_TIMEOUT_S",
+        "CAVITY_TURN_ON_TIMEOUT_S",
+        "CAVITY_TURN_OFF_TIMEOUT_S",
+    ):
+        monkeypatch.setattr(linac_utils, name, 0)
+
+
+def test_push_go_button_times_out_as_pulse_error(cavity, no_wait):
+    from sc_linac_physics.utils.sc_linac.linac_utils import PulseError
+
+    cavity._pulse_status_pv_obj = make_mock_pv(get_val=0)
+    cavity._pulse_go_pv_obj = make_mock_pv()
+    with pytest.raises(PulseError, match="Timed out"):
+        cavity.push_go_button()
+
+
+def test_turn_on_times_out_as_cavity_fault(cavity, no_wait):
+    cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.ssa.turn_on = MagicMock()
+    cavity.reset_interlocks = MagicMock()
+    cavity._rf_state_pv_obj = make_mock_pv(get_val=0)
+    cavity._rf_control_pv_obj = make_mock_pv()
+    with pytest.raises(CavityFaultError, match="RF to turn on"):
+        cavity.turn_on()
+
+
+def test_turn_off_times_out_as_cavity_fault(cavity, no_wait):
+    cavity._rf_control_pv_obj = make_mock_pv()
+    cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
+    with pytest.raises(CavityFaultError, match="RF to turn off"):
+        cavity.turn_off()

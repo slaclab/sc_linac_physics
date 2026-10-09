@@ -1007,7 +1007,7 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def pulse_go_pv_obj(self) -> PV:
         if not self._pulse_go_pv_obj:
-            self._pulse_go_pv_obj = PV(self._pv_prefix + "PULSE_DIFF_SUM")
+            self._pulse_go_pv_obj = PV(self.pulse_go_pv)
         return self._pulse_go_pv_obj
 
     def push_go_button(self):
@@ -1016,18 +1016,22 @@ class Cavity(linac_utils.SCLinacObject):
         go button is pressed
         :return:
         """
-        self._pulse_go_pv_obj.put(1, wait=False)
-        while self.pulse_status < 2:
-            self.check_abort()
-            self.set_status_message(
+        self.pulse_go_pv_obj.put(1, wait=False)
+        linac_utils.wait_until(
+            lambda: self.pulse_status >= 2,
+            timeout=linac_utils.PULSE_GO_TIMEOUT_S,
+            description=f"{self} PULSE_STATUS >= 2",
+            error_class=linac_utils.PulseError,
+            check_abort=self.check_abort,
+            on_poll=lambda: self.set_status_message(
                 "Waiting for pulse state to change",
                 logging.DEBUG,
                 extra_data={
                     "current_pulse_status": self.pulse_status,
                     "cavity": str(self),
                 },
-            )
-            time.sleep(1)
+            ),
+        )
         if self.pulse_status > 2:
             self.set_status_message(
                 "Pulse operation failed",
@@ -1046,17 +1050,21 @@ class Cavity(linac_utils.SCLinacObject):
             self.reset_interlocks()
             self.rf_control = 1
 
-            while not self.is_on:
-                self.check_abort()
-                self.set_status_message(
+            linac_utils.wait_until(
+                lambda: self.is_on,
+                timeout=linac_utils.CAVITY_TURN_ON_TIMEOUT_S,
+                description=f"{self} RF to turn on",
+                error_class=linac_utils.CavityFaultError,
+                check_abort=self.check_abort,
+                on_poll=lambda: self.set_status_message(
                     "Waiting for cavity to turn on",
                     logging.DEBUG,
                     extra_data={
                         "rf_state": self.rf_state,
                         "cavity": str(self),
                     },
-                )
-                time.sleep(1)
+                ),
+            )
 
             self.set_status_message(
                 "Cavity successfully turned on", logging.INFO
@@ -1072,12 +1080,18 @@ class Cavity(linac_utils.SCLinacObject):
     def turn_off(self):
         self.set_status_message("Turning cavity off", logging.INFO)
         self.rf_control = 0
-        while self.is_on:
-            self.check_abort()
-            self.set_status_message(
+        # check_abort() calls turn_off(), so a timeout here can surface from
+        # inside an abort as CavityFaultError rather than CavityAbortError.
+        linac_utils.wait_until(
+            lambda: not self.is_on,
+            timeout=linac_utils.CAVITY_TURN_OFF_TIMEOUT_S,
+            description=f"{self} RF to turn off",
+            error_class=linac_utils.CavityFaultError,
+            check_abort=self.check_abort,
+            on_poll=lambda: self.set_status_message(
                 "Waiting for cavity to turn off", logging.DEBUG
-            )
-            time.sleep(1)
+            ),
+        )
         self.set_status_message("Cavity successfully turned off", logging.INFO)
 
     def setup_selap(self, des_amp: float = 5):
