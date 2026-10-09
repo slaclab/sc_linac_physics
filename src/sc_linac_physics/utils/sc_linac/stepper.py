@@ -296,7 +296,8 @@ class StepperTuner(linac_utils.SCLinacObject):
             try:
                 moving = self.motor_moving
             except Exception:
-                # Can't read MOTOR_MOVING: assume it may be moving.
+                # Can't read MOTOR_MOVING: write ABORT_REQ anyway. Not knowing
+                # whether the motor is moving is itself an unsafe state.
                 moving = True
             if moving:
                 try:

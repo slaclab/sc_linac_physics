@@ -362,3 +362,15 @@ def test_successful_move_does_not_abort(stepper):
     stepper.move(1000)
 
     assert ("ABORT_REQ", 1) not in writes
+
+
+def test_failed_move_aborts_when_motor_moving_unreadable(stepper):
+    """Unknown motor state is treated as unsafe: write ABORT_REQ."""
+    writes = _ready_to_move(stepper)
+    stepper._motor_moving_pv_obj.get.side_effect = RuntimeError("PV down")
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000)
+
+    assert ("ABORT_REQ", 1) in writes
