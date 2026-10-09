@@ -1,10 +1,10 @@
 import time
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from numpy import sign
 
-from sc_linac_physics.utils.epics import PV
+from sc_linac_physics.utils.epics import LazyPV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
@@ -27,55 +27,41 @@ class StepperTuner(linac_utils.SCLinacObject):
         self._pv_prefix: str = self.cavity.pv_addr("STEP:")
 
         self.move_pos_pv: str = self.pv_addr("MOV_REQ_POS")
-        self._move_pos_pv_obj: Optional[PV] = None
 
         self.move_neg_pv: str = self.pv_addr("MOV_REQ_NEG")
-        self._move_neg_pv_obj: Optional[PV] = None
 
         self.abort_pv: str = self.pv_addr("ABORT_REQ")
-        self._abort_pv_obj: Optional[PV] = None
 
         self.step_des_pv: str = self.pv_addr("NSTEPS")
-        self._step_des_pv_obj: Optional[PV] = None
 
         self.max_steps_pv: str = self.pv_addr("NSTEPS.DRVH")
-        self._max_steps_pv_obj: Optional[PV] = None
 
         self.speed_pv: str = self.pv_addr("VELO")
-        self._speed_pv_obj: Optional[PV] = None
 
         self.step_tot_pv: str = self.pv_addr("REG_TOTABS")
         self.step_signed_pv: str = self.pv_addr("REG_TOTSGN")
-        self._step_signed_pv_obj: Optional[PV] = None
         self.reset_tot_pv: str = self.pv_addr("TOTABS_RESET")
 
         self.reset_signed_pv: str = self.pv_addr("TOTSGN_RESET")
-        self._reset_signed_pv_obj: Optional[PV] = None
 
         self.steps_cold_landing_pv: str = self.pv_addr("NSTEPS_COLD")
-        self._steps_cold_landing_pv_obj: Optional[PV] = None
         self.push_signed_cold_pv: str = self.pv_addr("PUSH_NSTEPS_COLD.PROC")
         self.push_signed_park_pv: str = self.pv_addr("PUSH_NSTEPS_PARK.PROC")
 
         self.motor_moving_pv: str = self.pv_addr("STAT_MOV")
-        self._motor_moving_pv_obj: Optional[PV] = None
 
         self.motor_done_pv: str = self.pv_addr("STAT_DONE")
 
         self.limit_switch_a_pv: str = self.pv_addr("STAT_LIMA")
-        self._limit_switch_a_pv_obj: Optional[PV] = None
 
         self.limit_switch_b_pv: str = self.pv_addr("STAT_LIMB")
-        self._limit_switch_b_pv_obj: Optional[PV] = None
 
         self.hz_per_microstep_pv: str = self.pv_addr("SCALE")
-        self._hz_per_microstep_pv_obj: Optional[PV] = None
 
         # SCALE is a derived, read-only calc-record output (SCALE = SCALE_CALC.B / 256).
         # To persist a measured scale we write the Hz-per-full-step field and let the
         # IOC recompute SCALE. See set_hz_per_microstep().
         self.hz_per_step_calc_pv: str = self.pv_addr("SCALE_CALC.B")
-        self._hz_per_step_calc_pv_obj: Optional[PV] = None
 
         # Stepper-only abort: writes ABORT_REQ and leaves RF as it is.
         # Cavity.abort_flag also stops the motor, but turns RF off too.
@@ -96,21 +82,13 @@ class StepperTuner(linac_utils.SCLinacObject):
     def pv_prefix(self):
         return self._pv_prefix
 
-    @property
-    def hz_per_microstep_pv_obj(self) -> PV:
-        if not self._hz_per_microstep_pv_obj:
-            self._hz_per_microstep_pv_obj = PV(self.hz_per_microstep_pv)
-        return self._hz_per_microstep_pv_obj
+    hz_per_microstep_pv_obj = LazyPV("hz_per_microstep_pv")
 
     @property
     def hz_per_microstep(self):
         return abs(self.hz_per_microstep_pv_obj.get())
 
-    @property
-    def hz_per_step_calc_pv_obj(self) -> PV:
-        if not self._hz_per_step_calc_pv_obj:
-            self._hz_per_step_calc_pv_obj = PV(self.hz_per_step_calc_pv)
-        return self._hz_per_step_calc_pv_obj
+    hz_per_step_calc_pv_obj = LazyPV("hz_per_step_calc_pv")
 
     def set_hz_per_microstep(self, hz_per_microstep: float) -> None:
         """Persist a measured stepper scale.
@@ -124,17 +102,9 @@ class StepperTuner(linac_utils.SCLinacObject):
             hz_per_microstep * linac_utils.MICROSTEPS_PER_STEP
         )
 
-    @property
-    def step_signed_pv_obj(self) -> PV:
-        if not self._step_signed_pv_obj:
-            self._step_signed_pv_obj = PV(self.step_signed_pv)
-        return self._step_signed_pv_obj
+    step_signed_pv_obj = LazyPV("step_signed_pv")
 
-    @property
-    def steps_cold_landing_pv_obj(self) -> PV:
-        if not self._steps_cold_landing_pv_obj:
-            self._steps_cold_landing_pv_obj = PV(self.steps_cold_landing_pv)
-        return self._steps_cold_landing_pv_obj
+    steps_cold_landing_pv_obj = LazyPV("steps_cold_landing_pv")
 
     def check_abort(self):
         """
@@ -165,28 +135,24 @@ class StepperTuner(linac_utils.SCLinacObject):
             self.abort_flag = False
             raise linac_utils.StepperAbortError(f"Abort requested for {self}")
 
+    abort_pv_obj = LazyPV("abort_pv")
+
     def abort(self):
         self.cavity.logger.info("Aborting stepper movement")
-        if not self._abort_pv_obj:
-            self._abort_pv_obj = PV(self.abort_pv)
-        self._abort_pv_obj.put(1)
+        self.abort_pv_obj.put(1)
         self._abort_written = True
 
+    move_pos_pv_obj = LazyPV("move_pos_pv")
+
     def move_positive(self):
-        if not self._move_pos_pv_obj:
-            self._move_pos_pv_obj = PV(self.move_pos_pv)
-        self._move_pos_pv_obj.put(1, wait=False)
+        self.move_pos_pv_obj.put(1, wait=False)
+
+    move_neg_pv_obj = LazyPV("move_neg_pv")
 
     def move_negative(self):
-        if not self._move_neg_pv_obj:
-            self._move_neg_pv_obj = PV(self.move_neg_pv)
-        self._move_neg_pv_obj.put(1, wait=False)
+        self.move_neg_pv_obj.put(1, wait=False)
 
-    @property
-    def step_des_pv_obj(self):
-        if not self._step_des_pv_obj:
-            self._step_des_pv_obj = PV(self.step_des_pv)
-        return self._step_des_pv_obj
+    step_des_pv_obj = LazyPV("step_des_pv")
 
     @property
     def step_des(self):
@@ -196,29 +162,21 @@ class StepperTuner(linac_utils.SCLinacObject):
     def step_des(self, value: int):
         self.step_des_pv_obj.put(value)
 
+    motor_moving_pv_obj = LazyPV("motor_moving_pv")
+
     @property
     def motor_moving(self) -> bool:
-        if not self._motor_moving_pv_obj:
-            self._motor_moving_pv_obj = PV(self.motor_moving_pv)
-        return self._motor_moving_pv_obj.get() == 1
+        return self.motor_moving_pv_obj.get() == 1
+
+    reset_signed_pv_obj = LazyPV("reset_signed_pv")
 
     def reset_signed_steps(self):
         self.cavity.logger.debug("Resetting stepper signed steps counter")
-        if not self._reset_signed_pv_obj:
-            self._reset_signed_pv_obj = PV(self.reset_signed_pv)
-        self._reset_signed_pv_obj.put(0)
+        self.reset_signed_pv_obj.put(0)
 
-    @property
-    def limit_switch_a_pv_obj(self):
-        if not self._limit_switch_a_pv_obj:
-            self._limit_switch_a_pv_obj = PV(self.limit_switch_a_pv)
-        return self._limit_switch_a_pv_obj
+    limit_switch_a_pv_obj = LazyPV("limit_switch_a_pv")
 
-    @property
-    def limit_switch_b_pv_obj(self):
-        if not self._limit_switch_b_pv_obj:
-            self._limit_switch_b_pv_obj = PV(self.limit_switch_b_pv)
-        return self._limit_switch_b_pv_obj
+    limit_switch_b_pv_obj = LazyPV("limit_switch_b_pv")
 
     @property
     def on_limit_switch(self) -> bool:
@@ -229,11 +187,7 @@ class StepperTuner(linac_utils.SCLinacObject):
             == linac_utils.STEPPER_ON_LIMIT_SWITCH_VALUE
         )
 
-    @property
-    def max_steps_pv_obj(self) -> PV:
-        if not self._max_steps_pv_obj:
-            self._max_steps_pv_obj = PV(self.max_steps_pv)
-        return self._max_steps_pv_obj
+    max_steps_pv_obj = LazyPV("max_steps_pv")
 
     @property
     def max_steps(self):
@@ -243,11 +197,7 @@ class StepperTuner(linac_utils.SCLinacObject):
     def max_steps(self, value: int):
         self.max_steps_pv_obj.put(value)
 
-    @property
-    def speed_pv_obj(self):
-        if not self._speed_pv_obj:
-            self._speed_pv_obj = PV(self.speed_pv)
-        return self._speed_pv_obj
+    speed_pv_obj = LazyPV("speed_pv")
 
     @property
     def speed(self):

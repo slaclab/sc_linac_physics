@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from sc_linac_physics.utils.epics import PV
+from sc_linac_physics.utils.epics import LazyPV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
@@ -39,10 +39,8 @@ class SSA(linac_utils.SCLinacObject):
             self.fwd_power_lower_limit = 500
 
             self.ps_volt_setpoint1_pv: str = self.hl_prefix + "PSVoltSetpt1"
-            self._ps_volt_setpoint1_pv_obj: Optional[PV] = None
 
             self.ps_volt_setpoint2_pv: str = self.hl_prefix + "PSVoltSetpt2"
-            self._ps_volt_setpoint2_pv_obj: Optional[PV] = None
 
             self.status_pv: str = self.hl_prefix + "StatusMsg"
             self.turn_on_pv: str = self.hl_prefix + "PowerOn"
@@ -56,41 +54,27 @@ class SSA(linac_utils.SCLinacObject):
             self.turn_off_pv: str = self.pv_addr("PowerOff")
             self.reset_pv: str = self.pv_addr("FaultReset")
 
-        self._status_pv_obj: Optional[PV] = None
-        self._turn_on_pv_obj: Optional[PV] = None
-        self._turn_off_pv_obj: Optional[PV] = None
-        self._reset_pv_obj: Optional[PV] = None
-
         self.calibration_start_pv: str = self.pv_addr("CALSTRT")
-        self._calibration_start_pv_obj: Optional[PV] = None
 
         self.calibration_status_pv: str = self.pv_addr("CALSTS")
-        self._calibration_status_pv_obj: Optional[PV] = None
 
         self.cal_result_status_pv: str = self.pv_addr("CALSTAT")
-        self._cal_result_status_pv_obj: Optional[PV] = None
 
         self.current_slope_pv: str = self.pv_addr("SLOPE")
-        self._current_slope_pv_obj: Optional[PV] = None
         self.measured_slope_pv: str = self.pv_addr("SLOPE_NEW")
-        self._measured_slope_pv_obj: Optional[PV] = None
         self.saved_slope_pv: str = self.pv_addr("SLOPE_SAVE")
 
         self.drive_max_setpoint_pv: str = self.pv_addr("DRV_MAX_REQ")
-        self._drive_max_setpoint_pv_obj: Optional[PV] = None
 
         self.drive_max_new_pv: str = self.pv_addr("DRV_MAX_NEW")
         self.drive_max_current_pv: str = self.pv_addr("DRV_MAX")
 
         self.saved_drive_max_pv: str = self.pv_addr("DRV_MAX_SAVE")
-        self._saved_drive_max_pv_obj: Optional[PV] = None
 
         self.max_fwd_pwr_pv: str = self.pv_addr("CALPWR")
-        self._max_fwd_pwr_pv_obj: Optional[PV] = None
 
         # Shared between HL cavity pairs (see HL_SSA_SHARED_PVS)
         self.type_pv: str = self.pv_addr("Type")
-        self._type_pv_obj: Optional[PV] = None
 
     def __str__(self):
         return f"{self.cavity} SSA"
@@ -114,11 +98,13 @@ class SSA(linac_utils.SCLinacObject):
         else:
             return self.pv_prefix + suffix
 
+    status_pv_obj = LazyPV("status_pv")
+
     @property
     def status_message(self):
-        if not self._status_pv_obj:
-            self._status_pv_obj = PV(self.status_pv)
-        return self._status_pv_obj.get()
+        return self.status_pv_obj.get()
+
+    type_pv_obj = LazyPV("type_pv")
 
     @property
     def rated_power_kw(self) -> Optional[float]:
@@ -126,9 +112,7 @@ class SSA(linac_utils.SCLinacObject):
 
         None if the index is not in linac_utils.SSA_TYPE_RATED_POWER_KW.
         """
-        if not self._type_pv_obj:
-            self._type_pv_obj = PV(self.type_pv)
-        return linac_utils.ssa_rated_power_kw(int(self._type_pv_obj.get()))
+        return linac_utils.ssa_rated_power_kw(int(self.type_pv_obj.get()))
 
     @property
     def is_on(self) -> bool:
@@ -147,28 +131,28 @@ class SSA(linac_utils.SCLinacObject):
             linac_utils.SSA_STATUS_FAULT_RESET_FAILED_VALUE,
         ]
 
+    max_fwd_pwr_pv_obj = LazyPV("max_fwd_pwr_pv")
+
     @property
     def max_fwd_pwr(self):
-        if not self._max_fwd_pwr_pv_obj:
-            self._max_fwd_pwr_pv_obj = PV(self.max_fwd_pwr_pv)
-        return self._max_fwd_pwr_pv_obj.get()
+        return self.max_fwd_pwr_pv_obj.get()
+
+    saved_drive_max_pv_obj = LazyPV("saved_drive_max_pv")
 
     @property
     def drive_max(self):
-        if not self._saved_drive_max_pv_obj:
-            self._saved_drive_max_pv_obj = PV(self.saved_drive_max_pv)
-        saved_val = self._saved_drive_max_pv_obj.get()
+        saved_val = self.saved_drive_max_pv_obj.get()
         return (
             saved_val
             if saved_val
             else (1 if self.cavity.cryomodule.is_harmonic_linearizer else 0.8)
         )
 
+    drive_max_setpoint_pv_obj = LazyPV("drive_max_setpoint_pv")
+
     @drive_max.setter
     def drive_max(self, value: float):
-        if not self._drive_max_setpoint_pv_obj:
-            self._drive_max_setpoint_pv_obj = PV(self.drive_max_setpoint_pv)
-        self._drive_max_setpoint_pv_obj.put(value)
+        self.drive_max_setpoint_pv_obj.put(value)
 
     def calibrate(self, drive_max, attempt=0):
         """
@@ -244,23 +228,11 @@ class SSA(linac_utils.SCLinacObject):
                 )
                 raise linac_utils.SSACalibrationError(e)
 
-    @property
-    def ps_volt_setpoint2_pv_obj(self):
-        if not self._ps_volt_setpoint2_pv_obj:
-            self._ps_volt_setpoint2_pv_obj = PV(self.ps_volt_setpoint2_pv)
-        return self._ps_volt_setpoint2_pv_obj
+    ps_volt_setpoint2_pv_obj = LazyPV("ps_volt_setpoint2_pv")
 
-    @property
-    def ps_volt_setpoint1_pv_obj(self):
-        if not self._ps_volt_setpoint1_pv_obj:
-            self._ps_volt_setpoint1_pv_obj = PV(self.ps_volt_setpoint1_pv)
-        return self._ps_volt_setpoint1_pv_obj
+    ps_volt_setpoint1_pv_obj = LazyPV("ps_volt_setpoint1_pv")
 
-    @property
-    def turn_on_pv_obj(self) -> PV:
-        if not self._turn_on_pv_obj:
-            self._turn_on_pv_obj = PV(self.turn_on_pv)
-        return self._turn_on_pv_obj
+    turn_on_pv_obj = LazyPV("turn_on_pv")
 
     def turn_on(self):
         if not self.is_on:
@@ -301,11 +273,7 @@ class SSA(linac_utils.SCLinacObject):
             },
         )
 
-    @property
-    def turn_off_pv_obj(self) -> PV:
-        if not self._turn_off_pv_obj:
-            self._turn_off_pv_obj = PV(self.turn_off_pv)
-        return self._turn_off_pv_obj
+    turn_off_pv_obj = LazyPV("turn_off_pv")
 
     def turn_off(self):
         if self.is_on:
@@ -323,11 +291,7 @@ class SSA(linac_utils.SCLinacObject):
 
         self.cavity.logger.info("SSA successfully turned off")
 
-    @property
-    def reset_pv_obj(self) -> PV:
-        if not self._reset_pv_obj:
-            self._reset_pv_obj = PV(self.reset_pv)
-        return self._reset_pv_obj
+    reset_pv_obj = LazyPV("reset_pv")
 
     def reset(self):
         reset_attempt = 0
@@ -404,18 +368,18 @@ class SSA(linac_utils.SCLinacObject):
                     f"{self} took too long to reset, inspect and try again"
                 )
 
+    calibration_start_pv_obj = LazyPV("calibration_start_pv")
+
     def start_calibration(self):
-        if not self._calibration_start_pv_obj:
-            self._calibration_start_pv_obj = PV(self.calibration_start_pv)
-        self._calibration_start_pv_obj.put(1, wait=False)
+        self.calibration_start_pv_obj.put(1, wait=False)
+
+    calibration_status_pv_obj = LazyPV(
+        "calibration_status_pv", connection_timeout=10
+    )
 
     @property
     def calibration_status(self):
-        if not self._calibration_status_pv_obj:
-            self._calibration_status_pv_obj = PV(
-                self.calibration_status_pv, connection_timeout=10
-            )
-        return self._calibration_status_pv_obj.get(timeout=10)
+        return self.calibration_status_pv_obj.get(timeout=10)
 
     @property
     def calibration_running(self) -> bool:
@@ -429,11 +393,7 @@ class SSA(linac_utils.SCLinacObject):
             self.calibration_status == linac_utils.SSA_CALIBRATION_CRASHED_VALUE
         )
 
-    @property
-    def cal_result_status_pv_obj(self) -> PV:
-        if not self._cal_result_status_pv_obj:
-            self._cal_result_status_pv_obj = PV(self.cal_result_status_pv)
-        return self._cal_result_status_pv_obj
+    cal_result_status_pv_obj = LazyPV("cal_result_status_pv")
 
     @property
     def calibration_result_good(self) -> bool:
@@ -575,18 +535,18 @@ class SSA(linac_utils.SCLinacObject):
             },
         )
 
+    current_slope_pv_obj = LazyPV("current_slope_pv")
+
     @property
     def current_slope(self):
         """Currently active SSA slope (SLOPE PV), i.e. the value in use by the cavity."""
-        if not self._current_slope_pv_obj:
-            self._current_slope_pv_obj = PV(self.current_slope_pv)
-        return self._current_slope_pv_obj.get()
+        return self.current_slope_pv_obj.get()
+
+    measured_slope_pv_obj = LazyPV("measured_slope_pv")
 
     @property
     def measured_slope(self):
-        if not self._measured_slope_pv_obj:
-            self._measured_slope_pv_obj = PV(self.measured_slope_pv)
-        return self._measured_slope_pv_obj.get()
+        return self.measured_slope_pv_obj.get()
 
     @property
     def measured_slope_in_tolerance(self) -> bool:
