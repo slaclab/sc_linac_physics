@@ -110,3 +110,13 @@ def test_archiver_url_already_set_is_kept(qtbot, monkeypatch):
     monkeypatch.setenv("PYDM_ARCHIVER_URL", "http://example.test")
     qtbot.addWidget(ArchiverPlot())
     assert os.environ["PYDM_ARCHIVER_URL"] == "http://example.test"
+
+
+def test_curves_hold_each_sample_until_the_next(plot):
+    item = plot._items["fake://a1"]
+    item.archive_data_buffer[:, -1] = [1000.0, 0.0]
+    item.archive_points_accumulated = 1
+    item.data_buffer[:, -1] = [5000.0, 16.6]
+    item.points_accumulated = 1
+    item.redrawCurve()
+    assert item.curve.opts["stepMode"] == "left"
