@@ -187,6 +187,15 @@ Notable behaviors:
 - `RetryFileHandlerFilter` retries log file creation every 60 s if the directory is missing (handles NFS mounts)
 - Pass `enable_retry=False` in tests to skip retries
 
+## Uncaught exceptions (`utils/exception_hook.py`)
+
+`launch_python_display` calls `exception_hook.install()` in standalone mode,
+right after it creates the `PyDMApplication`. The hook replaces both
+`sys.excepthook` and `threading.excepthook`. An uncaught exception is logged
+with its traceback and shown in a non-blocking error popup on the main thread.
+Without the hook, PyQt5 aborts the app when an exception escapes
+`QThread.run()`.
+
 ## Qt utilities (`utils/qt.py`)
 
 ### `Worker(QThread)`
