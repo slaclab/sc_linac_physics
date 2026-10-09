@@ -119,6 +119,14 @@ are exempt but should be their own PR, never mixed with logic changes.
 When a change is growing past the target mid-work, stop and propose a split
 rather than continuing.
 
+### Stacked PRs stay drafts
+
+A PR whose branch builds on other unmerged PRs opens as a draft
+(`gh pr create --draft`). It stays a draft until every PR it builds on has
+merged. Start its description with "Stacked on #N" and say which commits to
+review. Until then the diff includes the earlier PRs' commits. A draft also
+keeps CODEOWNERS from requesting review before the PR can be read on its own.
+
 ### Flag operator-visible changes
 
 If a change alters what a user sees or how an application behaves by default —
