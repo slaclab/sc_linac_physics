@@ -228,3 +228,38 @@ def test_issue_move_command_hl(stepper):
     stepper._motor_moving_pv_obj.get.assert_called()
     stepper._limit_switch_a_pv_obj.get.assert_called()
     stepper._limit_switch_b_pv_obj.get.assert_called()
+
+
+def test_issue_move_command_times_out_as_stepper_error(stepper, monkeypatch):
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    monkeypatch.setattr(linac_utils, "STEPPER_MOVE_TIMEOUT_MARGIN_S", 0)
+    monkeypatch.setattr(linac_utils, "STEPPER_MOVE_TIMEOUT_FACTOR", 0)
+    stepper.cavity.rack.cryomodule.is_harmonic_linearizer = False
+    stepper.cavity.check_abort = MagicMock()
+    stepper.check_abort = MagicMock()
+    stepper.move_positive = MagicMock()
+    stepper._speed_pv_obj = make_mock_pv(get_val=20000)
+    stepper._motor_moving_pv_obj = make_mock_pv(get_val=1)
+    with pytest.raises(linac_utils.StepperError, match="to stop moving"):
+        stepper.issue_move_command(1000, check_detune=False)
+
+
+def test_move_timeout_scales_with_steps_and_speed(stepper):
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    stepper._speed_pv_obj = make_mock_pv(get_val=20000)
+    expected = (
+        linac_utils.STEPPER_MOVE_TIMEOUT_MARGIN_S
+        + linac_utils.STEPPER_MOVE_TIMEOUT_FACTOR * 100000 / 20000
+    )
+    assert stepper._move_timeout(-100000) == expected
+
+
+def test_move_timeout_is_margin_when_speed_not_positive(stepper):
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    stepper._speed_pv_obj = make_mock_pv(get_val=0)
+    assert (
+        stepper._move_timeout(1000) == linac_utils.STEPPER_MOVE_TIMEOUT_MARGIN_S
+    )

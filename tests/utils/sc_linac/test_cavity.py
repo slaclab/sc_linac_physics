@@ -111,7 +111,7 @@ def test_stepper_temp_pv_obj_lazy_and_cached(cavity):
     assert cavity._stepper_temp_pv_obj is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = cavity.stepper_temp_pv_obj
         second = cavity.stepper_temp_pv_obj
@@ -124,7 +124,7 @@ def test_df_cold_pv_obj_lazy_and_cached(cavity):
     assert cavity._df_cold_pv_obj is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = cavity.df_cold_pv_obj
         second = cavity.df_cold_pv_obj
@@ -147,7 +147,7 @@ def test_cavity_fscan_pv_obj_lazy_and_cached(cavity, prop_name, addr_attr):
     assert getattr(cavity, f"_{prop_name}") is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = getattr(cavity, prop_name)
         second = getattr(cavity, prop_name)
@@ -164,13 +164,13 @@ def test_start_characterization(cavity):
 
 def test_cw_data_decimation(cavity):
     val = randint(0, 256)
-    cavity._cw_data_decim_pv_obj = make_mock_pv(get_val=val)
+    cavity._cw_data_decimation_pv_obj = make_mock_pv(get_val=val)
     assert cavity.cw_data_decimation == val
 
 
 def test_pulsed_data_decimation(cavity):
     val = randint(0, 256)
-    cavity._pulsed_data_decim_pv_obj = make_mock_pv(get_val=val)
+    cavity._pulsed_data_decimation_pv_obj = make_mock_pv(get_val=val)
     assert cavity.pulsed_data_decimation == val
 
 
@@ -753,6 +753,21 @@ def test_check_and_set_on_time(cavity):
     cavity.push_go_button.assert_called()
 
 
+def test_push_go_button_creates_go_pv_lazily(cavity):
+    """push_go_button must not depend on something else creating the PV."""
+    cavity._pulse_status_pv_obj = make_mock_pv(
+        cavity.pulse_status_pv, get_val=2
+    )
+    cavity._pulse_go_pv_obj = None
+    go_pv = make_mock_pv(cavity.pulse_go_pv)
+    with patch(
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=go_pv
+    ) as pv_cls:
+        cavity.push_go_button()
+    pv_cls.assert_called_once_with(cavity.pulse_go_pv)
+    go_pv.put.assert_called_with(1, wait=False)
+
+
 def test_push_go_button(cavity):
     cavity._pulse_status_pv_obj = make_mock_pv(
         cavity.pulse_status_pv, get_val=2
@@ -842,11 +857,11 @@ def test_setup_rf(cavity):
 
 
 def test_reset_data_decimation(cavity):
-    cavity._cw_data_decim_pv_obj = make_mock_pv()
-    cavity._pulsed_data_decim_pv_obj = make_mock_pv()
+    cavity._cw_data_decimation_pv_obj = make_mock_pv()
+    cavity._pulsed_data_decimation_pv_obj = make_mock_pv()
     cavity.reset_data_decimation()
-    cavity._cw_data_decim_pv_obj.put.assert_called_with(255)
-    cavity._pulsed_data_decim_pv_obj.put.assert_called_with(255)
+    cavity._cw_data_decimation_pv_obj.put.assert_called_with(255)
+    cavity._pulsed_data_decimation_pv_obj.put.assert_called_with(255)
 
 
 def test_setup_tuning_sela(cavity):
@@ -1211,3 +1226,42 @@ def test_wait_checks_abort_while_polling(cavity):
     cavity.check_abort = MagicMock()
     cavity.wait_for_characterization(poll_interval=0.01)
     cavity.check_abort.assert_called()
+
+
+@pytest.fixture
+def no_wait(monkeypatch):
+    """Zero every wait_until timeout so a stuck state times out at once."""
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    for name in (
+        "PULSE_GO_TIMEOUT_S",
+        "CAVITY_TURN_ON_TIMEOUT_S",
+        "CAVITY_TURN_OFF_TIMEOUT_S",
+    ):
+        monkeypatch.setattr(linac_utils, name, 0)
+
+
+def test_push_go_button_times_out_as_pulse_error(cavity, no_wait):
+    from sc_linac_physics.utils.sc_linac.linac_utils import PulseError
+
+    cavity._pulse_status_pv_obj = make_mock_pv(get_val=0)
+    cavity._pulse_go_pv_obj = make_mock_pv()
+    with pytest.raises(PulseError, match="Timed out"):
+        cavity.push_go_button()
+
+
+def test_turn_on_times_out_as_cavity_fault(cavity, no_wait):
+    cavity._hw_mode_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.ssa.turn_on = MagicMock()
+    cavity.reset_interlocks = MagicMock()
+    cavity._rf_state_pv_obj = make_mock_pv(get_val=0)
+    cavity._rf_control_pv_obj = make_mock_pv()
+    with pytest.raises(CavityFaultError, match="RF to turn on"):
+        cavity.turn_on()
+
+
+def test_turn_off_times_out_as_cavity_fault(cavity, no_wait):
+    cavity._rf_control_pv_obj = make_mock_pv()
+    cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
+    with pytest.raises(CavityFaultError, match="RF to turn off"):
+        cavity.turn_off()

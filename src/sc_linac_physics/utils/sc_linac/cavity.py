@@ -3,7 +3,11 @@ import time
 from datetime import datetime
 from typing import Optional, Callable, TYPE_CHECKING
 
-from sc_linac_physics.utils.epics import PV, EPICS_INVALID_VAL, PVInvalidError
+from sc_linac_physics.utils.epics import (
+    LazyPV,
+    EPICS_INVALID_VAL,
+    PVInvalidError,
+)
 from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
 from sc_linac_physics.utils.sc_linac import linac_utils
 from sc_linac_physics.utils.sc_linac.linac_utils import (
@@ -88,148 +92,104 @@ class Cavity(linac_utils.SCLinacObject):
         )
         self.piezo: "Piezo" = self.rack.piezo_class(cavity=self)
 
-        self._calc_probe_q_pv_obj: Optional[PV] = None
         self.calc_probe_q_pv: str = self.pv_addr("QPROBE_CALC1.PROC")
 
-        self._push_ssa_slope_pv_obj: Optional[PV] = None
         self.push_ssa_slope_pv: str = self.pv_addr("PUSH_SSA_SLOPE.PROC")
 
         self.save_ssa_slope_pv: str = self.pv_addr("SAVE_SSA_SLOPE.PROC")
-        self._save_ssa_slope_pv_obj: Optional[PV] = None
 
         self.interlock_reset_pv: str = self.pv_addr("INTLK_RESET_ALL")
-        self._interlock_reset_pv_obj: Optional[PV] = None
 
         self.drive_level_pv: str = self.pv_addr("SEL_ASET")
-        self._drive_level_pv_obj: Optional[PV] = None
 
         self.characterization_start_pv: str = self.pv_addr("PROBECALSTRT")
-        self._characterization_start_pv_obj: Optional[PV] = None
 
         self.characterization_status_pv: str = self.pv_addr("PROBECALSTS")
-        self._characterization_status_pv_obj: Optional[PV] = None
 
         self.current_q_loaded_pv: str = self.pv_addr("QLOADED")
 
         self.measured_loaded_q_pv: str = self.pv_addr("QLOADED_NEW")
-        self._measured_loaded_q_pv_obj: Optional[PV] = None
 
         self.push_loaded_q_pv: str = self.pv_addr("PUSH_QLOADED.PROC")
-        self._push_loaded_q_pv_obj: Optional[PV] = None
 
         self.save_q_loaded_pv: str = self.pv_addr("SAVE_QLOADED.PROC")
 
         self.current_cavity_scale_pv: str = self.pv_addr("CAV:SCALER_SEL.B")
 
         self.measured_scale_factor_pv: str = self.pv_addr("CAV:CAL_SCALEB_NEW")
-        self._measured_scale_factor_pv_obj: Optional[PV] = None
 
         self.push_scale_factor_pv: str = self.pv_addr("PUSH_CAV_SCALE.PROC")
-        self._push_scale_factor_pv_obj: Optional[PV] = None
 
         self.save_cavity_scale_pv: str = self.pv_addr("SAVE_CAV_SCALE.PROC")
 
         self.ades_pv: str = self.pv_addr("ADES")
-        self._ades_pv_obj: Optional[PV] = None
 
         self.acon_pv: str = self.pv_addr("ACON")
-        self._acon_pv_obj: Optional[PV] = None
 
         self.aact_pv: str = self.pv_addr("AACTMEAN")
-        self._aact_pv_obj: Optional[PV] = None
 
         self.ades_max_pv: str = self.pv_addr("ADES_MAX")
-        self._ades_max_pv_obj: Optional[PV] = None
 
         self.rf_mode_ctrl_pv: str = self.pv_addr("RFMODECTRL")
-        self._rf_mode_ctrl_pv_obj: Optional[PV] = None
 
         self.rf_mode_pv: str = self.pv_addr("RFMODE")
-        self._rf_mode_pv_obj: Optional[PV] = None
 
         self.rf_state_pv: str = self.pv_addr("RFSTATE")
-        self._rf_state_pv_obj: Optional[PV] = None
 
         self.rf_control_pv: str = self.pv_addr("RFCTRL")
-        self._rf_control_pv_obj: Optional[PV] = None
 
         self.pulse_go_pv: str = self.pv_addr("PULSE_DIFF_SUM")
-        self._pulse_go_pv_obj: Optional[PV] = None
 
         self.pulse_status_pv: str = self.pv_addr("PULSE_STATUS")
-        self._pulse_status_pv_obj: Optional[PV] = None
 
         self.pulse_on_time_pv: str = self.pv_addr("PULSE_ONTIME")
-        self._pulse_on_time_pv_obj: Optional[PV] = None
 
         self.rev_waveform_pv: str = self.pv_addr("REV:AWF")
         self.fwd_waveform_pv: str = self.pv_addr("FWD:AWF")
         self.cav_waveform_pv: str = self.pv_addr("CAV:AWF")
 
         self.stepper_temp_pv: str = self.pv_addr("STEPTEMP")
-        self._stepper_temp_pv_obj: Optional[PV] = None
 
         self.df_cold_pv: str = self.pv_addr("DF_COLD")
-        self._df_cold_pv_obj: Optional[PV] = None
 
         # FSCAN (π-mode scan) cavity-level PVs.
         self.fscan_sel_pv: str = self.pv_addr("FSCAN:SEL")
-        self._fscan_sel_pv_obj: Optional[PV] = None
         self.fscan_8pi9_mode_pv: str = self.pv_addr("FSCAN:8PI9MODE")
-        self._fscan_8pi9_mode_pv_obj: Optional[PV] = None
         self.fscan_7pi9_mode_pv: str = self.pv_addr("FSCAN:7PI9MODE")
-        self._fscan_7pi9_mode_pv_obj: Optional[PV] = None
         self.fscan_push_8pi9_pv: str = self.pv_addr("FSCAN:PUSH_8PI9.PROC")
-        self._fscan_push_8pi9_pv_obj: Optional[PV] = None
         self.fscan_push_7pi9_pv: str = self.pv_addr("FSCAN:PUSH_7PI9.PROC")
-        self._fscan_push_7pi9_pv_obj: Optional[PV] = None
 
         self.detune_best_pv: str = self.pv_addr("DFBEST")
-        self._detune_best_pv_obj: Optional[PV] = None
 
         self.detune_chirp_pv: str = self.pv_addr("CHIRP:DF")
-        self._detune_chirp_pv_obj: Optional[PV] = None
 
         self.rf_permit_pv: str = self.pv_addr("RFPERMIT")
-        self._rf_permit_pv_obj: Optional[PV] = None
 
         self.quench_latch_pv: str = self.pv_addr("QUENCH_LTCH")
-        self._quench_latch_pv_obj: Optional[PV] = None
 
         self.quench_bypass_pv: str = self.pv_addr("QUENCH_BYP")
 
         self.cw_data_decimation_pv: str = self.pv_addr("ACQ_DECIM_SEL.A")
-        self._cw_data_decim_pv_obj: Optional[PV] = None
 
         self.pulsed_data_decimation_pv: str = self.pv_addr("ACQ_DECIM_SEL.C")
-        self._pulsed_data_decim_pv_obj: Optional[PV] = None
 
         self.tune_config_pv: str = self.pv_addr("TUNE_CONFIG")
-        self._tune_config_pv_obj: Optional[PV] = None
 
         self.chirp_freq_start_pv: str = self.chirp_prefix + "FREQ_START"
-        self._chirp_freq_start_pv_obj: Optional[PV] = None
 
         self.chirp_freq_stop_pv: str = self.chirp_prefix + "FREQ_STOP"
-        self._chirp_freq_stop_pv_obj: Optional[PV] = None
 
         self.hw_mode_pv: str = self.pv_addr("HWMODE")
-        self._hw_mode_pv_obj: Optional[PV] = None
 
         self.char_timestamp_pv: str = self.pv_addr("PROBECALTS")
-        self._char_timestamp_pv_obj: Optional[PV] = None
 
         self.progress_pv: str = self.auto_pv_addr("PROG")
-        self._progress_pv_obj: Optional[PV] = None
 
         self.status_pv: str = self.auto_pv_addr("STATUS")
-        self._status_pv_obj: Optional[PV] = None
 
         self.status_msg_pv: str = self.auto_pv_addr("MSG")
-        self._status_msg_pv_obj: Optional[PV] = None
 
         self.note_pv: str = self.auto_pv_addr("NOTE")
-        self._note_pv_obj: Optional[PV] = None
 
     def __str__(self):
         return (
@@ -264,17 +224,9 @@ class Cavity(linac_utils.SCLinacObject):
     def pv_prefix(self):
         return self._pv_prefix
 
-    @property
-    def note_pv_obj(self) -> PV:
-        if not self._note_pv_obj:
-            self._note_pv_obj = PV(self.note_pv)
-        return self._note_pv_obj
+    note_pv_obj = LazyPV("note_pv")
 
-    @property
-    def status_pv_obj(self):
-        if not self._status_pv_obj:
-            self._status_pv_obj = PV(self.status_pv)
-        return self._status_pv_obj
+    status_pv_obj = LazyPV("status_pv")
 
     @property
     def status(self):
@@ -288,11 +240,7 @@ class Cavity(linac_utils.SCLinacObject):
     def script_is_running(self) -> bool:
         return self.status == STATUS_RUNNING_VALUE
 
-    @property
-    def progress_pv_obj(self):
-        if not self._progress_pv_obj:
-            self._progress_pv_obj = PV(self.progress_pv)
-        return self._progress_pv_obj
+    progress_pv_obj = LazyPV("progress_pv")
 
     @property
     def progress(self) -> float:
@@ -302,11 +250,7 @@ class Cavity(linac_utils.SCLinacObject):
     def progress(self, value: float):
         self.progress_pv_obj.put(value)
 
-    @property
-    def status_msg_pv_obj(self) -> PV:
-        if not self._status_msg_pv_obj:
-            self._status_msg_pv_obj = PV(self.status_msg_pv)
-        return self._status_msg_pv_obj
+    status_msg_pv_obj = LazyPV("status_msg_pv")
 
     @property
     def status_message(self):
@@ -347,18 +291,12 @@ class Cavity(linac_utils.SCLinacObject):
     def microsteps_per_hz(self):
         return 1 / self.stepper_tuner.hz_per_microstep
 
-    def start_characterization(self):
-        if not self._characterization_start_pv_obj:
-            self._characterization_start_pv_obj = PV(
-                self.characterization_start_pv
-            )
-        self._characterization_start_pv_obj.put(1, wait=False)
+    characterization_start_pv_obj = LazyPV("characterization_start_pv")
 
-    @property
-    def cw_data_decimation_pv_obj(self) -> PV:
-        if not self._cw_data_decim_pv_obj:
-            self._cw_data_decim_pv_obj = PV(self.cw_data_decimation_pv)
-        return self._cw_data_decim_pv_obj
+    def start_characterization(self):
+        self.characterization_start_pv_obj.put(1, wait=False)
+
+    cw_data_decimation_pv_obj = LazyPV("cw_data_decimation_pv")
 
     @property
     def cw_data_decimation(self):
@@ -368,11 +306,7 @@ class Cavity(linac_utils.SCLinacObject):
     def cw_data_decimation(self, value: float):
         self.cw_data_decimation_pv_obj.put(value)
 
-    @property
-    def pulsed_data_decimation_pv_obj(self) -> PV:
-        if not self._pulsed_data_decim_pv_obj:
-            self._pulsed_data_decim_pv_obj = PV(self.pulsed_data_decimation_pv)
-        return self._pulsed_data_decim_pv_obj
+    pulsed_data_decimation_pv_obj = LazyPV("pulsed_data_decimation_pv")
 
     @property
     def pulsed_data_decimation(self):
@@ -382,11 +316,7 @@ class Cavity(linac_utils.SCLinacObject):
     def pulsed_data_decimation(self, value):
         self.pulsed_data_decimation_pv_obj.put(value)
 
-    @property
-    def rf_control_pv_obj(self) -> PV:
-        if not self._rf_control_pv_obj:
-            self._rf_control_pv_obj = PV(self.rf_control_pv)
-        return self._rf_control_pv_obj
+    rf_control_pv_obj = LazyPV("rf_control_pv")
 
     @property
     def rf_control(self):
@@ -396,17 +326,13 @@ class Cavity(linac_utils.SCLinacObject):
     def rf_control(self, value):
         self.rf_control_pv_obj.put(value)
 
-    @property
-    def rf_mode(self):
-        if not self._rf_mode_pv_obj:
-            self._rf_mode_pv_obj = PV(self.rf_mode_pv)
-        return self._rf_mode_pv_obj.get()
+    rf_mode_pv_obj = LazyPV("rf_mode_pv")
 
     @property
-    def rf_mode_ctrl_pv_obj(self) -> PV:
-        if not self._rf_mode_ctrl_pv_obj:
-            self._rf_mode_ctrl_pv_obj = PV(self.rf_mode_ctrl_pv)
-        return self._rf_mode_ctrl_pv_obj
+    def rf_mode(self):
+        return self.rf_mode_pv_obj.get()
+
+    rf_mode_ctrl_pv_obj = LazyPV("rf_mode_ctrl_pv")
 
     def set_chirp_mode(self):
         self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_CHIRP)
@@ -420,11 +346,7 @@ class Cavity(linac_utils.SCLinacObject):
     def set_selap_mode(self):
         self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_SELAP)
 
-    @property
-    def drive_level_pv_obj(self):
-        if not self._drive_level_pv_obj:
-            self._drive_level_pv_obj = PV(self.drive_level_pv)
-        return self._drive_level_pv_obj
+    drive_level_pv_obj = LazyPV("drive_level_pv")
 
     @property
     def drive_level(self):
@@ -434,23 +356,21 @@ class Cavity(linac_utils.SCLinacObject):
     def drive_level(self, value):
         self.drive_level_pv_obj.put(value)
 
+    push_ssa_slope_pv_obj = LazyPV("push_ssa_slope_pv")
+
     def push_ssa_slope(self):
-        if not self._push_ssa_slope_pv_obj:
-            self._push_ssa_slope_pv_obj = PV(
-                self._pv_prefix + "PUSH_SSA_SLOPE.PROC"
-            )
-        self._push_ssa_slope_pv_obj.put(1, wait=False)
+        self.push_ssa_slope_pv_obj.put(1, wait=False)
+
+    save_ssa_slope_pv_obj = LazyPV("save_ssa_slope_pv")
 
     def save_ssa_slope(self):
-        if not self._save_ssa_slope_pv_obj:
-            self._save_ssa_slope_pv_obj = PV(self.save_ssa_slope_pv)
-        self._save_ssa_slope_pv_obj.put(1, wait=False)
+        self.save_ssa_slope_pv_obj.put(1, wait=False)
+
+    measured_loaded_q_pv_obj = LazyPV("measured_loaded_q_pv")
 
     @property
     def measured_loaded_q(self) -> float:
-        if not self._measured_loaded_q_pv_obj:
-            self._measured_loaded_q_pv_obj = PV(self.measured_loaded_q_pv)
-        return self._measured_loaded_q_pv_obj.get()
+        return self.measured_loaded_q_pv_obj.get()
 
     @property
     def measured_loaded_q_in_tolerance(self) -> bool:
@@ -460,18 +380,16 @@ class Cavity(linac_utils.SCLinacObject):
             <= self.loaded_q_upper_limit
         )
 
+    push_loaded_q_pv_obj = LazyPV("push_loaded_q_pv")
+
     def push_loaded_q(self):
-        if not self._push_loaded_q_pv_obj:
-            self._push_loaded_q_pv_obj = PV(self.push_loaded_q_pv)
-        self._push_loaded_q_pv_obj.put(1, wait=False)
+        self.push_loaded_q_pv_obj.put(1, wait=False)
+
+    measured_scale_factor_pv_obj = LazyPV("measured_scale_factor_pv")
 
     @property
     def measured_scale_factor(self) -> float:
-        if not self._measured_scale_factor_pv_obj:
-            self._measured_scale_factor_pv_obj = PV(
-                self.measured_scale_factor_pv
-            )
-        return self._measured_scale_factor_pv_obj.get()
+        return self.measured_scale_factor_pv_obj.get()
 
     @property
     def measured_scale_factor_in_tolerance(self) -> bool:
@@ -481,18 +399,16 @@ class Cavity(linac_utils.SCLinacObject):
             <= self.scale_factor_upper_limit
         )
 
+    push_scale_factor_pv_obj = LazyPV("push_scale_factor_pv")
+
     def push_scale_factor(self):
-        if not self._push_scale_factor_pv_obj:
-            self._push_scale_factor_pv_obj = PV(self.push_scale_factor_pv)
-        self._push_scale_factor_pv_obj.put(1, wait=False)
+        self.push_scale_factor_pv_obj.put(1, wait=False)
+
+    characterization_status_pv_obj = LazyPV("characterization_status_pv")
 
     @property
     def characterization_status(self):
-        if not self._characterization_status_pv_obj:
-            self._characterization_status_pv_obj = PV(
-                self.characterization_status_pv
-            )
-        return self._characterization_status_pv_obj.get()
+        return self.characterization_status_pv_obj.get()
 
     @property
     def characterization_running(self) -> bool:
@@ -508,69 +424,63 @@ class Cavity(linac_utils.SCLinacObject):
             == linac_utils.CHARACTERIZATION_CRASHED_VALUE
         )
 
+    pulse_on_time_pv_obj = LazyPV("pulse_on_time_pv")
+
     @property
     def pulse_on_time(self):
-        if not self._pulse_on_time_pv_obj:
-            self._pulse_on_time_pv_obj = PV(self.pulse_on_time_pv)
-        return self._pulse_on_time_pv_obj.get()
+        return self.pulse_on_time_pv_obj.get()
 
     @pulse_on_time.setter
     def pulse_on_time(self, value: int):
-        if not self._pulse_on_time_pv_obj:
-            self._pulse_on_time_pv_obj = PV(self.pulse_on_time_pv)
-        self._pulse_on_time_pv_obj.put(value)
+        self.pulse_on_time_pv_obj.put(value)
+
+    pulse_status_pv_obj = LazyPV("pulse_status_pv")
 
     @property
     def pulse_status(self):
-        if not self._pulse_status_pv_obj:
-            self._pulse_status_pv_obj = PV(self.pulse_status_pv)
-        return self._pulse_status_pv_obj.get()
+        return self.pulse_status_pv_obj.get()
+
+    rf_permit_pv_obj = LazyPV("rf_permit_pv")
 
     @property
     def rf_permit(self):
-        if not self._rf_permit_pv_obj:
-            self._rf_permit_pv_obj = PV(self.rf_permit_pv)
-        return self._rf_permit_pv_obj.get()
+        return self.rf_permit_pv_obj.get()
 
     @property
     def rf_inhibited(self) -> bool:
         return self.rf_permit == 0
 
+    ades_pv_obj = LazyPV("ades_pv")
+
     @property
     def ades(self):
-        if not self._ades_pv_obj:
-            self._ades_pv_obj = PV(self.ades_pv)
-        return self._ades_pv_obj.get()
+        return self.ades_pv_obj.get()
 
     @ades.setter
     def ades(self, value: float):
-        if not self._ades_pv_obj:
-            self._ades_pv_obj = PV(self._pv_prefix + "ADES")
-        self._ades_pv_obj.put(value)
+        self.ades_pv_obj.put(value)
+
+    acon_pv_obj = LazyPV("acon_pv")
 
     @property
     def acon(self):
-        if not self._acon_pv_obj:
-            self._acon_pv_obj = PV(self.acon_pv)
-        return self._acon_pv_obj.get()
+        return self.acon_pv_obj.get()
 
     @acon.setter
     def acon(self, value: float):
-        if not self._acon_pv_obj:
-            self._acon_pv_obj = PV(self.acon_pv)
-        self._acon_pv_obj.put(value)
+        self.acon_pv_obj.put(value)
+
+    aact_pv_obj = LazyPV("aact_pv")
 
     @property
     def aact(self):
-        if not self._aact_pv_obj:
-            self._aact_pv_obj = PV(self.aact_pv)
-        return self._aact_pv_obj.get()
+        return self.aact_pv_obj.get()
+
+    ades_max_pv_obj = LazyPV("ades_max_pv")
 
     @property
     def ades_max(self):
-        if not self._ades_max_pv_obj:
-            self._ades_max_pv_obj = PV(self.ades_max_pv)
-        return self._ades_max_pv_obj.get()
+        return self.ades_max_pv_obj.get()
 
     @property
     def edm_macro_string(self):
@@ -605,11 +515,7 @@ class Cavity(linac_utils.SCLinacObject):
         area = self.cryomodule.linac.name
         return f"CM={cm},AREA={area}"
 
-    @property
-    def hw_mode_pv_obj(self) -> PV:
-        if not self._hw_mode_pv_obj:
-            self._hw_mode_pv_obj = PV(self.hw_mode_pv)
-        return self._hw_mode_pv_obj
+    hw_mode_pv_obj = LazyPV("hw_mode_pv")
 
     @property
     def hw_mode(self):
@@ -623,25 +529,17 @@ class Cavity(linac_utils.SCLinacObject):
     def is_offline(self) -> bool:
         return self.hw_mode == linac_utils.HW_MODE_OFFLINE_VALUE
 
+    quench_latch_pv_obj = LazyPV("quench_latch_pv")
+
     @property
     def is_quenched(self) -> bool:
-        if not self._quench_latch_pv_obj:
-            self._quench_latch_pv_obj = PV(self.quench_latch_pv)
-        if self._quench_latch_pv_obj.severity == EPICS_INVALID_VAL:
+        if self.quench_latch_pv_obj.severity == EPICS_INVALID_VAL:
             raise PVInvalidError(f"{self} quench latch PV invalid")
-        return self._quench_latch_pv_obj.get() == 1
+        return self.quench_latch_pv_obj.get() == 1
 
-    @property
-    def tune_config_pv_obj(self) -> PV:
-        if not self._tune_config_pv_obj:
-            self._tune_config_pv_obj = PV(self.tune_config_pv)
-        return self._tune_config_pv_obj
+    tune_config_pv_obj = LazyPV("tune_config_pv")
 
-    @property
-    def chirp_freq_start_pv_obj(self) -> PV:
-        if not self._chirp_freq_start_pv_obj:
-            self._chirp_freq_start_pv_obj = PV(self.chirp_freq_start_pv)
-        return self._chirp_freq_start_pv_obj
+    chirp_freq_start_pv_obj = LazyPV("chirp_freq_start_pv")
 
     @property
     def chirp_freq_start(self):
@@ -651,25 +549,17 @@ class Cavity(linac_utils.SCLinacObject):
     def chirp_freq_start(self, value):
         self.chirp_freq_start_pv_obj.put(value)
 
-    @property
-    def freq_stop_pv_obj(self) -> PV:
-        if not self._chirp_freq_stop_pv_obj:
-            self._chirp_freq_stop_pv_obj = PV(self.chirp_freq_stop_pv)
-        return self._chirp_freq_stop_pv_obj
+    chirp_freq_stop_pv_obj = LazyPV("chirp_freq_stop_pv")
 
     @property
     def chirp_freq_stop(self):
-        return self.freq_stop_pv_obj.get()
+        return self.chirp_freq_stop_pv_obj.get()
 
     @chirp_freq_stop.setter
     def chirp_freq_stop(self, value):
-        self.freq_stop_pv_obj.put(value)
+        self.chirp_freq_stop_pv_obj.put(value)
 
-    @property
-    def calc_probe_q_pv_obj(self) -> PV:
-        if not self._calc_probe_q_pv_obj:
-            self._calc_probe_q_pv_obj = PV(self.calc_probe_q_pv)
-        return self._calc_probe_q_pv_obj
+    calc_probe_q_pv_obj = LazyPV("calc_probe_q_pv")
 
     def calculate_probe_q(self):
         self.calc_probe_q_pv_obj.put(1, wait=False)
@@ -685,11 +575,7 @@ class Cavity(linac_utils.SCLinacObject):
         self.chirp_freq_stop = offset
         self.set_status_message("Chirp range set successfully", logging.INFO)
 
-    @property
-    def rf_state_pv_obj(self) -> PV:
-        if not self._rf_state_pv_obj:
-            self._rf_state_pv_obj = PV(self.rf_state_pv)
-        return self._rf_state_pv_obj
+    rf_state_pv_obj = LazyPV("rf_state_pv")
 
     @property
     def rf_state(self):
@@ -754,59 +640,23 @@ class Cavity(linac_utils.SCLinacObject):
 
         self.tune_config_pv_obj.put(linac_utils.TUNE_CONFIG_RESONANCE_VALUE)
 
-    @property
-    def detune_best_pv_obj(self) -> PV:
-        if not self._detune_best_pv_obj:
-            self._detune_best_pv_obj = PV(self.detune_best_pv)
-        return self._detune_best_pv_obj
+    detune_best_pv_obj = LazyPV("detune_best_pv")
 
-    @property
-    def detune_chirp_pv_obj(self) -> PV:
-        if not self._detune_chirp_pv_obj:
-            self._detune_chirp_pv_obj = PV(self.detune_chirp_pv)
-        return self._detune_chirp_pv_obj
+    detune_chirp_pv_obj = LazyPV("detune_chirp_pv")
 
-    @property
-    def stepper_temp_pv_obj(self) -> PV:
-        if not self._stepper_temp_pv_obj:
-            self._stepper_temp_pv_obj = PV(self.stepper_temp_pv)
-        return self._stepper_temp_pv_obj
+    stepper_temp_pv_obj = LazyPV("stepper_temp_pv")
 
-    @property
-    def df_cold_pv_obj(self) -> PV:
-        if not self._df_cold_pv_obj:
-            self._df_cold_pv_obj = PV(self.df_cold_pv)
-        return self._df_cold_pv_obj
+    df_cold_pv_obj = LazyPV("df_cold_pv")
 
-    @property
-    def fscan_sel_pv_obj(self) -> PV:
-        if not self._fscan_sel_pv_obj:
-            self._fscan_sel_pv_obj = PV(self.fscan_sel_pv)
-        return self._fscan_sel_pv_obj
+    fscan_sel_pv_obj = LazyPV("fscan_sel_pv")
 
-    @property
-    def fscan_8pi9_mode_pv_obj(self) -> PV:
-        if not self._fscan_8pi9_mode_pv_obj:
-            self._fscan_8pi9_mode_pv_obj = PV(self.fscan_8pi9_mode_pv)
-        return self._fscan_8pi9_mode_pv_obj
+    fscan_8pi9_mode_pv_obj = LazyPV("fscan_8pi9_mode_pv")
 
-    @property
-    def fscan_7pi9_mode_pv_obj(self) -> PV:
-        if not self._fscan_7pi9_mode_pv_obj:
-            self._fscan_7pi9_mode_pv_obj = PV(self.fscan_7pi9_mode_pv)
-        return self._fscan_7pi9_mode_pv_obj
+    fscan_7pi9_mode_pv_obj = LazyPV("fscan_7pi9_mode_pv")
 
-    @property
-    def fscan_push_8pi9_pv_obj(self) -> PV:
-        if not self._fscan_push_8pi9_pv_obj:
-            self._fscan_push_8pi9_pv_obj = PV(self.fscan_push_8pi9_pv)
-        return self._fscan_push_8pi9_pv_obj
+    fscan_push_8pi9_pv_obj = LazyPV("fscan_push_8pi9_pv")
 
-    @property
-    def fscan_push_7pi9_pv_obj(self) -> PV:
-        if not self._fscan_push_7pi9_pv_obj:
-            self._fscan_push_7pi9_pv_obj = PV(self.fscan_push_7pi9_pv)
-        return self._fscan_push_7pi9_pv_obj
+    fscan_push_7pi9_pv_obj = LazyPV("fscan_push_7pi9_pv")
 
     @property
     def detune_best(self):
@@ -1004,11 +854,7 @@ class Cavity(linac_utils.SCLinacObject):
             self.pulse_on_time = linac_utils.NOMINAL_PULSED_ONTIME
             self.push_go_button()
 
-    @property
-    def pulse_go_pv_obj(self) -> PV:
-        if not self._pulse_go_pv_obj:
-            self._pulse_go_pv_obj = PV(self._pv_prefix + "PULSE_DIFF_SUM")
-        return self._pulse_go_pv_obj
+    pulse_go_pv_obj = LazyPV("pulse_go_pv")
 
     def push_go_button(self):
         """
@@ -1016,18 +862,22 @@ class Cavity(linac_utils.SCLinacObject):
         go button is pressed
         :return:
         """
-        self._pulse_go_pv_obj.put(1, wait=False)
-        while self.pulse_status < 2:
-            self.check_abort()
-            self.set_status_message(
+        self.pulse_go_pv_obj.put(1, wait=False)
+        linac_utils.wait_until(
+            lambda: self.pulse_status >= 2,
+            timeout=linac_utils.PULSE_GO_TIMEOUT_S,
+            description=f"{self} PULSE_STATUS >= 2",
+            error_class=linac_utils.PulseError,
+            check_abort=self.check_abort,
+            on_poll=lambda: self.set_status_message(
                 "Waiting for pulse state to change",
                 logging.DEBUG,
                 extra_data={
                     "current_pulse_status": self.pulse_status,
                     "cavity": str(self),
                 },
-            )
-            time.sleep(1)
+            ),
+        )
         if self.pulse_status > 2:
             self.set_status_message(
                 "Pulse operation failed",
@@ -1046,17 +896,21 @@ class Cavity(linac_utils.SCLinacObject):
             self.reset_interlocks()
             self.rf_control = 1
 
-            while not self.is_on:
-                self.check_abort()
-                self.set_status_message(
+            linac_utils.wait_until(
+                lambda: self.is_on,
+                timeout=linac_utils.CAVITY_TURN_ON_TIMEOUT_S,
+                description=f"{self} RF to turn on",
+                error_class=linac_utils.CavityFaultError,
+                check_abort=self.check_abort,
+                on_poll=lambda: self.set_status_message(
                     "Waiting for cavity to turn on",
                     logging.DEBUG,
                     extra_data={
                         "rf_state": self.rf_state,
                         "cavity": str(self),
                     },
-                )
-                time.sleep(1)
+                ),
+            )
 
             self.set_status_message(
                 "Cavity successfully turned on", logging.INFO
@@ -1072,12 +926,18 @@ class Cavity(linac_utils.SCLinacObject):
     def turn_off(self):
         self.set_status_message("Turning cavity off", logging.INFO)
         self.rf_control = 0
-        while self.is_on:
-            self.check_abort()
-            self.set_status_message(
+        # check_abort() calls turn_off(), so a timeout here can surface from
+        # inside an abort as CavityFaultError rather than CavityAbortError.
+        linac_utils.wait_until(
+            lambda: not self.is_on,
+            timeout=linac_utils.CAVITY_TURN_OFF_TIMEOUT_S,
+            description=f"{self} RF to turn off",
+            error_class=linac_utils.CavityFaultError,
+            check_abort=self.check_abort,
+            on_poll=lambda: self.set_status_message(
                 "Waiting for cavity to turn off", logging.DEBUG
-            )
-            time.sleep(1)
+            ),
+        )
         self.set_status_message("Cavity successfully turned off", logging.INFO)
 
     def setup_selap(self, des_amp: float = 5):
@@ -1238,6 +1098,8 @@ class Cavity(linac_utils.SCLinacObject):
                     f"+/-{chirp_range}Hz chirp range"
                 )
 
+    interlock_reset_pv_obj = LazyPV("interlock_reset_pv")
+
     def reset_interlocks(self, wait: int = 3, attempt: int = 0):
         # TODO see if it makes more sense to implement this non-recursively
         self.set_status_message(
@@ -1250,10 +1112,7 @@ class Cavity(linac_utils.SCLinacObject):
             },
         )
 
-        if not self._interlock_reset_pv_obj:
-            self._interlock_reset_pv_obj = PV(self.interlock_reset_pv)
-
-        self._interlock_reset_pv_obj.put(1, wait=False)
+        self.interlock_reset_pv_obj.put(1, wait=False)
         time.sleep(wait)
 
         self.set_status_message("Checking RF permit status", logging.DEBUG)
@@ -1283,11 +1142,11 @@ class Cavity(linac_utils.SCLinacObject):
                 "Interlocks successfully reset", logging.INFO
             )
 
+    char_timestamp_pv_obj = LazyPV("char_timestamp_pv")
+
     @property
     def characterization_timestamp(self) -> datetime:
-        if not self._char_timestamp_pv_obj:
-            self._char_timestamp_pv_obj = PV(self.char_timestamp_pv)
-        date_string = self._char_timestamp_pv_obj.get()
+        date_string = self.char_timestamp_pv_obj.get()
         time_readback = datetime.strptime(date_string, "%Y-%m-%d-%H:%M:%S")
         return time_readback
 
