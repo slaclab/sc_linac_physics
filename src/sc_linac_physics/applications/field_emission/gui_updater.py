@@ -2,31 +2,34 @@ import csv
 import re
 
 from datetime import datetime
-from sc_linac_physics.applications.field_emission.amp_vs_radiation import (
-    generate_amp_vs_rad_csvs,
-)
-from sc_linac_physics.applications.field_emission.update_h5py import (
-    receive_metadata_input,
-    parse_csv,
-    convert_to_h5,
+from sc_linac_physics.applications.field_emission.run_cache import (
+    parse_row,
+    add_runs,
+    fill_cache,
+    read_run_list,
 )
 from sc_linac_physics.applications.field_emission.constants import (
     VALID_CMS_LIST,
     ELOG_PATTERN,
     STANDARD_DATE_FORMAT,
-    CSV_DATE_FORMAT,
 )
 from PyQt5.QtCore import QObject, pyqtSignal
 
 
-def validate_emission_data(input_row):
-    """validation of dialog entries for single cryomodule emission data"""
+def validate_emission_data(input_row, require_elog=True):
+    """validation of dialog entries for single cryomodule emission data
+
+    require_elog=False lets an empty eLog link through, as 7 of the runs in
+    field_emission_runs.csv have. A link that is given is still checked.
+    """
     cm = _validate_cryomodule(input_row[0])
     d_start, d_end = _validate_dates(
         input_row[1], input_row[2], input_row[3], input_row[4]
     )
     dec = _validate_decarad(input_row[5])
-    elog = _validate_elog(input_row[6])
+    elog = input_row[6]
+    if elog or require_elog:
+        elog = _validate_elog(elog)
     filters = _validate_filters(input_row[8:])
     return {
         "cryomodule": cm,
@@ -40,7 +43,8 @@ def validate_emission_data(input_row):
 
 def _validate_cryomodule(cryomodule):
     """format cryomodule string and check if requested cryomodule is available"""
-    cm_str = cryomodule.strip().zfill(2).upper()
+    # "CM04" as the run list writes it, or "4"/"04" as typed in the dialog
+    cm_str = cryomodule.strip().upper().removeprefix("CM").zfill(2)
     if cm_str not in VALID_CMS_LIST:
         raise ValueError(f"Invalid cryomodule {cryomodule}")
     return cm_str
@@ -101,35 +105,6 @@ def _validate_filters(filters):
     return clean_filters
 
 
-def read_from_csv(filepath):
-    """yield formatted data for columns of each valid csv row"""
-    with open(filepath) as file:
-        reader = csv.reader(file)
-        next(reader)  # skip header row
-        for row in reader:
-            if "#" in row[0]:  # skip commented rows
-                continue
-            cm = row[0].strip().zfill(2).upper().removeprefix("CM")
-            try:
-                start_date = datetime.strptime(
-                    f"{row[1]} {row[2]}", STANDARD_DATE_FORMAT
-                )
-            except (ValueError, IndexError):
-                continue
-
-            if row[3] == "":
-                end_date = datetime.strptime(
-                    f"{row[1]} {row[4]}", STANDARD_DATE_FORMAT
-                )
-            else:
-                end_date = datetime.strptime(
-                    f"{row[3]} {row[4]}", STANDARD_DATE_FORMAT
-                )
-            timestamp = start_date.strftime(CSV_DATE_FORMAT)
-            decarad = row[5] if row[5] is not None else ""
-            yield cm, start_date, end_date, decarad, timestamp
-
-
 class UpdateWorker(QObject):
     error = pyqtSignal(str)
     progress = pyqtSignal(str)
@@ -144,29 +119,51 @@ class UpdateWorker(QObject):
         """ "modes (single vs multiple by csv) of new data entry"""
         try:
             if self.mode == "single":
-                self.single_update(*self.args)
+                message = self.single_update(*self.args)
             elif self.mode == "multi":
-                self.multi_update(*self.args)
+                message = self.multi_update(*self.args)
         except Exception as e:
             self.error.emit(str(e))
             return
-        self.finished.emit("File successfully updated!")
+        self.finished.emit(message)
 
     def single_update(self, valid, input_row):
-        """process a single row of cryomodule field emission data"""
-        self.progress.emit("Creating CSVs...")
-        generate_amp_vs_rad_csvs(
-            valid["cryomodule"], valid["start"], valid["end"], valid["decarad"]
-        )
-        self.progress.emit("Updating hdf5...")
-        lookup = receive_metadata_input(input_row)
-        convert_to_h5(lookup)
+        """add one run from the dialog and fetch it into the cache"""
+        row = [f"CM{valid['cryomodule']}", *input_row[1:]]
+        return self._add_and_fetch([row])
 
     def multi_update(self, input_csv):
-        """process multiple rows of cryomodule field emission data"""
-        self.progress.emit("Creating CSVs...")
-        for cryo, date_s, date_e, rad, stamp in read_from_csv(input_csv):
-            generate_amp_vs_rad_csvs(cryo, date_s, date_e, rad)
-        self.progress.emit("Updating hdf5...")
-        lookup = parse_csv(input_csv)
-        convert_to_h5(lookup)
+        """add every run in a CSV laid out like the run list, and fetch them
+
+        Every row is checked before add_runs writes any. A row that gets into
+        added_runs.csv and then fails to fetch (unknown cryomodule, decarad
+        3) would stop the fill on open at that run on every open after.
+        """
+        rows = []
+        with open(input_csv, newline="") as file:
+            reader = csv.reader(file)
+            next(reader, None)  # header
+            for line, row in enumerate(reader, start=2):
+                if not row or "#" in row[0]:
+                    continue
+                try:
+                    validate_emission_data(row, require_elog=False)
+                except (ValueError, IndexError) as e:
+                    raise ValueError(f"{input_csv} line {line}: {e}") from e
+                rows.append(row)
+        return self._add_and_fetch(rows)
+
+    def _add_and_fetch(self, rows):
+        self.progress.emit("Adding to the run list...")
+        added = add_runs(rows)
+        wanted = {(run.cm, run.start) for run in map(parse_row, rows)}
+        runs = [r for r in read_run_list() if (r.cm, r.start) in wanted]
+        fetched = fill_cache(runs, self._report)
+        return (
+            f"{len(added)} run(s) added, {fetched} fetched from the archiver."
+        )
+
+    def _report(self, done, total, run):
+        self.progress.emit(
+            f"Fetching {done + 1}/{total}: CM{run.cm} {run.start:%m/%d/%y %H:%M}"
+        )

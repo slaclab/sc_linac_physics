@@ -1,87 +1,72 @@
-import h5py
 import re
 import pandas as pd
 
-from datetime import datetime
 from sc_linac_physics.applications.field_emission.constants import (
-    H5_PATH,
-    H5_DATE_FORMAT,
-    H5_MEASUREMENT_PATH,
-    H5_READOUT_PATH,
     DISPLAY_DATE_FORMAT,
     AMPLITUDE_THRESHOLD,
+)
+from sc_linac_physics.applications.field_emission.run_cache import (
+    find_run,
+    load_run,
+    read_run_list,
 )
 
 
 def match_measurement_dates(cryomodule):
-    """match cryomodule str to available measurement dates in h5 file"""
-    measurements = []
-    with h5py.File(H5_PATH, "r") as h5f:
-        h5_cryo = h5f.get(f"CM{cryomodule}")
-        if h5_cryo is None:
-            return []
-        for date in h5_cryo:
-            h5_date = datetime.strptime(date, H5_DATE_FORMAT)
-            display_str = f"CM{cryomodule}    {h5_date}"
-            measurements.append(
-                {
-                    "display": display_str,
-                    "cm": cryomodule,
-                    "date": h5_date,
-                }
-            )
-    return measurements
+    """runs in the run list for a cryomodule, oldest first"""
+    return [
+        {
+            "display": f"CM{run.cm}    {run.start}",
+            "cm": run.cm,
+            "date": run.start,
+        }
+        for run in read_run_list()
+        if run.cm == cryomodule
+    ]
 
 
 def fetch_measurement_metadata(cm, date):
-    """use measurement to find metadata about selected measurement date from h5 file"""
-    h5_date = datetime.strftime(date, H5_DATE_FORMAT)
-    with h5py.File(H5_PATH, "r") as h5f:
-        h5f_date_group = h5f.get(
-            H5_MEASUREMENT_PATH.format(cm=cm, date=h5_date)
-        )
-        if h5f_date_group is None:
-            return None
-        date = h5f_date_group.attrs["date"]
-        formatted_date = datetime.strptime(date, "%m/%d/%y")
-        date_str = formatted_date.strftime(DISPLAY_DATE_FORMAT)
-        return (
-            date_str,
-            h5f_date_group.attrs["time_start"],
-            h5f_date_group.attrs["time_end"],
-            h5f_date_group.attrs["decarad"],
-            h5f_date_group.attrs["elog"],
-            h5f_date_group.attrs["notes"],
-        )
+    """date, start, end, decarad, elog and notes of a run, for display"""
+    run = find_run(cm, date, read_run_list())
+    if run is None:
+        return None
+    return (
+        run.start.strftime(DISPLAY_DATE_FORMAT),
+        run.start_text,
+        run.end_text,
+        run.decarad,
+        run.elog,
+        run.notes,
+    )
 
 
 def find_dataframes(cm, date, cav, read):
-    """search h5 file for matching datasets to create dataframes for plotting"""
+    """dataframes of the selected cavities of one run, for plotting
+
+    Fetches the run from the archiver if it is not cached yet, so this can
+    block for seconds to minutes. Keep it off the Qt main thread.
+    """
     readout = read.lower()
-    h5_date = datetime.strftime(date, H5_DATE_FORMAT)
     cav_list = [i + 1 for i, c in enumerate(cav) if c]
     if not cav_list:
         return {}, "", 0
-    with h5py.File(H5_PATH, "r") as h5f:
-        dfs = {}
-        for c in cav_list:
-            filepath = H5_READOUT_PATH.format(
-                cm=cm, date=h5_date, cav=c, readout=readout
-            )
-            dataset = h5f[filepath]
-            df = pd.DataFrame(dataset)
-            dfs[c] = df
+    run = find_run(cm, date, read_run_list())
+    if run is None:
+        return {}, "", 0
 
-        columns = dataset.attrs["columns"]
-        amp_label = columns[0]
-        amp_label_parts = amp_label.split(":")
-        title = ":".join(amp_label_parts[:3])
-        if len(cav_list) > 1:
-            # ex: "ACCL:L1B:0310" → "ACCL:L1B:03x0" for multiple cavities
-            title = re.sub(r"(:\d+)(\d)0", r"\1x0", title)
-        num = len(dfs)
-
-    return dfs, title, num
+    data = load_run(run)
+    dfs = {}
+    for c in cav_list:
+        values, columns = data[c, readout]
+        # Integer column labels: plot_amp_vs_rad numbers channels by them
+        dfs[c] = pd.DataFrame(values)
+    amp_label = columns[0]
+    amp_label_parts = amp_label.split(":")
+    title = ":".join(amp_label_parts[:3])
+    if len(cav_list) > 1:
+        # ex: "ACCL:L1B:0310" → "ACCL:L1B:03x0" for multiple cavities
+        title = re.sub(r"(:\d+)(\d)0", r"\1x0", title)
+    return dfs, title, len(dfs)
 
 
 def get_columns(df, r_channels):
