@@ -270,7 +270,17 @@ class PV(EPICS_PV):
         callback_data: Optional[Any] = None,
     ):
         """
-        Put value to PV with automatic retry logic.
+        Put value to PV. Retried only when nothing was sent.
+
+        pyepics' put returns:
+          1    -- sent, and (with wait=True) completion confirmed
+          -1   -- sent, but completion not confirmed within timeout
+          None -- PV not connected, nothing sent
+        It raises on bad values or when CA refuses to queue the request.
+
+        Only None is retried. A -1 or an exception raises PVPutError on
+        the first attempt, so a command PV (abort, reset, start) is never
+        written twice by this wrapper.
 
         Args:
             value: Value to write
@@ -282,25 +292,65 @@ class PV(EPICS_PV):
 
         Raises:
             PVConnectionError: If PV is not connected
-            PVPutError: If put operation fails after retries
+            PVPutError: If the put was sent but not confirmed, raised, or
+                never got sent after max_retries attempts
         """
-        timeout = timeout or self.config.put_timeout
+        if timeout is None:
+            timeout = self.config.put_timeout
 
-        self._ensure_connected(timeout=timeout)
-
-        self._execute_with_retry(
-            operation="put",
-            operation_func=lambda: super(PV, self).put(
-                value,
-                wait=wait,
-                timeout=timeout,
-                use_complete=use_complete,
-                callback=callback,
-                callback_data=callback_data,
-            ),
-            timeout=timeout,
-            context={"value": value},
+        # Reconnect wait is bounded by connection_timeout, not put_timeout:
+        # a disconnected PV should not hold a put for 30 s before it starts.
+        self._ensure_connected(
+            timeout=min(timeout, self.config.connection_timeout)
         )
+
+        for attempt in range(1, self.config.max_retries + 1):
+            try:
+                status = super().put(
+                    value,
+                    wait=wait,
+                    timeout=timeout,
+                    use_complete=use_complete,
+                    callback=callback,
+                    callback_data=callback_data,
+                )
+            except Exception as e:
+                error_msg = f"PV {self.pvname} put of {value!r} raised: {e}"
+                get_logger().error(error_msg)
+                raise PVPutError(error_msg) from e
+
+            if status == 1:
+                if attempt > 1:
+                    get_logger().info(
+                        f"PV {self.pvname} put succeeded on attempt {attempt}"
+                    )
+                return
+
+            if status is not None:
+                error_msg = (
+                    f"PV {self.pvname} put of {value!r} was sent but not "
+                    f"confirmed within {timeout}s (status {status}); "
+                    f"not re-sent"
+                )
+                get_logger().error(error_msg)
+                raise PVPutError(error_msg)
+
+            # status is None: not connected, nothing sent. Safe to retry.
+            if attempt < self.config.max_retries:
+                get_logger().warning(
+                    f"PV {self.pvname} put not sent, PV disconnected "
+                    f"(attempt {attempt}/{self.config.max_retries})"
+                )
+                self._retry_backoff(
+                    attempt, min(timeout, self.config.connection_timeout)
+                )
+
+        error_msg = (
+            f"PV {self.pvname} put of {value!r} not sent after "
+            f"{self.config.max_retries} attempts: PV disconnected"
+        )
+        get_logger().error(error_msg)
+        raise PVPutError(error_msg)
 
     def _execute_with_retry(
         self,
@@ -331,18 +381,14 @@ class PV(EPICS_PV):
             try:
                 result = operation_func()
 
-                # Check success based on operation type
-                if operation == "get":
-                    success = result is not None
-                else:  # put
-                    success = result == 1
-
-                if success:
+                # Only get() comes through here; put() has its own loop
+                # because a put must not be re-sent once it went out.
+                if result is not None:
                     if attempt > 1:
                         get_logger().info(
                             f"PV {self.pvname} {operation} succeeded on attempt {attempt}"
                         )
-                    return result if operation == "get" else None
+                    return result
 
                 # Operation returned failure status
                 if attempt < self.config.max_retries:
