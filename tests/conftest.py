@@ -245,7 +245,8 @@ def block_network(request):
 def pytest_configure(config):
     """
     Pytest hook that runs before test collection.
-    Sets up environment and mocks before any imports.
+    Sets up environment and registers markers. The fake EPICS module is
+    installed earlier, at import of this file; see _setup_fake_epics().
     """
     # Disable PyDM plugins and configure Qt
     os.environ.setdefault("PYDM_DATA_PLUGINS_DISABLED", "1")
@@ -257,9 +258,6 @@ def pytest_configure(config):
         "markers",
         "allow_network: permit outbound network access for this test",
     )
-
-    # Inject fake EPICS module
-    _setup_fake_epics()
 
 
 def pytest_unconfigure(config):
@@ -399,6 +397,16 @@ class FakeCASeverityException(Exception):
 def fake_with_initial_context(func):
     """Fake decorator for withInitialContext."""
     return func
+
+
+# Installed at import, not in pytest_configure. When a test directory is passed
+# on the command line, pytest imports that directory's conftest before
+# pytest_configure runs. tests/applications/auto_setup/conftest.py imports
+# gui_cavity, which pulls in real epics, so utils.epics.core.PV subclassed the
+# real epics.pv.PV. Swapping sys.modules["epics"] afterwards left real epics.ca
+# unable to import epics.clibs, and every PV a test had not mocked raised
+# ChannelAccessException. pytest always imports this file first.
+_setup_fake_epics()
 
 
 # ============================================================================
