@@ -2,6 +2,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from sc_linac_physics.utils.epics.config import EPICS_NO_ALARM_VAL
+from sc_linac_physics.utils.epics.core import PV
 from sc_linac_physics.utils.epics.exceptions import PVGetError, PVPutError
 
 
@@ -24,7 +25,9 @@ def make_mock_pv(
             before succeeding, matching how the real PV wrapper fails
 
     Returns:
-        MagicMock configured to behave like a PV
+        MagicMock with spec=PV, configured to behave like a PV. Reading
+        an attribute PV doesn't have raises AttributeError, so a test
+        can't pass by calling a method that doesn't exist.
 
     Example:
         >>> mock_pv = make_mock_pv("TEST:PV", get_val=42.0)
@@ -32,12 +35,13 @@ def make_mock_pv(
         >>> mock_pv.put(100.0)
         >>> mock_pv.put.assert_called_once_with(100.0)
     """
-    mock_pv = MagicMock()
+    mock_pv = MagicMock(spec=PV)
 
     # Basic attributes
     mock_pv.pvname = pv_name
     mock_pv.connected = connected
     mock_pv.severity = severity
+    mock_pv.status = 0  # pyepics alarm status; 0 is no alarm
     mock_pv.auto_monitor = True
     mock_pv.val = get_val
 
