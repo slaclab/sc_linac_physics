@@ -29,8 +29,9 @@ open access (CC BY 3.0).
     better source for anything expected to hold on a production cavity.
 """
 
+import time
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional, Type
 
 from numpy import polyfit
 
@@ -268,6 +269,25 @@ HW_MODE_READY_VALUE = 4
 
 INTERLOCK_RESET_ATTEMPTS = 5
 
+# Upper bounds on polling loops that used to wait forever. Each is far
+# longer than the step should take; hitting one means something is stuck.
+# The step raises its usual error class (see wait_until) with a timeout
+# message. Values proposed 2026-10-08, not yet reviewed.
+# CHECK: how long does PULSE_STATUS take to reach 2 after PULSE_DIFF_SUM=1?
+PULSE_GO_TIMEOUT_S = 60
+# CHECK: how long from RFCTRL=1 to RFSTATE on, and from RFCTRL=0 to off?
+CAVITY_TURN_ON_TIMEOUT_S = 60
+CAVITY_TURN_OFF_TIMEOUT_S = 60
+# CHECK: how long can an SSA take to report on after the turn-on PV is put?
+SSA_TURN_ON_TIMEOUT_S = 120
+SSA_TURN_OFF_TIMEOUT_S = 60
+# CHECK: how long does a full SSA calibration sweep normally run?
+SSA_CALIBRATION_TIMEOUT_S = 600
+# A stepper move gets FACTOR x (steps / VELO) plus MARGIN seconds. MARGIN
+# alone applies if VELO reads <= 0.
+STEPPER_MOVE_TIMEOUT_FACTOR = 2.0
+STEPPER_MOVE_TIMEOUT_MARGIN_S = 60
+
 # this value is based on historical data, when the decarads were on, but not seeing any FE from a cavity
 DECARAD_BACKGROUND_READING_AVG = 0.8
 DECARAD_BACKGROUND_READING_RAW = 8
@@ -387,6 +407,44 @@ def stepper_tol_factor(num_steps) -> float:
             return m * num_steps + b
 
     return 1.01
+
+
+def wait_until(
+    condition: Callable[[], bool],
+    timeout: float,
+    description: str,
+    error_class: Type[Exception],
+    poll_interval: float = 1.0,
+    check_abort: Optional[Callable[[], None]] = None,
+    on_poll: Optional[Callable[[], None]] = None,
+) -> None:
+    """Poll until condition() is true, or raise error_class after timeout.
+
+    Each poll, in order: condition(), check_abort(), on_poll(), the timeout
+    check, then sleep(poll_interval). This is the order the hand-written
+    loops it replaces already used, so abort handling is unchanged.
+
+    @param condition: returns True when the wait is over.
+    @param timeout: seconds before giving up.
+    @param description: what is being waited for, used in the error.
+    @param error_class: raised on timeout. Callers pass the error type their
+        callers already catch (e.g. SSAFaultError), so a timeout is handled
+        like the step's other failures.
+    @param check_abort: called each poll; raises to abort the wait.
+    @param on_poll: called each poll, e.g. to log progress.
+    @raise error_class: condition still false after timeout seconds.
+    """
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if check_abort is not None:
+            check_abort()
+        if on_poll is not None:
+            on_poll()
+        if time.monotonic() >= deadline:
+            raise error_class(
+                f"Timed out after {timeout:.0f} s waiting for {description}"
+            )
+        time.sleep(poll_interval)
 
 
 class PulseError(Exception):
