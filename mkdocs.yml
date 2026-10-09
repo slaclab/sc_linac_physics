@@ -70,3 +70,4 @@ nav:
       - SRF Home: displays/srf_home.md
   - Explainers:
       - How auto-tune works: explainers/auto_tune.md
+      - How the field emission display works: explainers/field_emission.md

@@ -1,5 +1,6 @@
 import sys
 import math
+import threading
 
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -24,7 +25,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QWidget,
 )
-from PyQt5.QtCore import Qt, QThread
+from PyQt5.QtCore import Qt
 from pydm import Display, PyDMApplication
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -85,26 +86,19 @@ class UpdateButtons(QDialog):
             self._do_background_task("multi", input_csv)
 
     def _do_background_task(self, mode, *args):
-        # Make new thread, establish worker, move worker to thread
-        self.thread = QThread()
+        # The worker stays on the main thread; its signals, emitted from the
+        # daemon thread, are delivered here on the main thread.
         self.worker = UpdateWorker(mode, *args)
-        self.worker.moveToThread(self.thread)
-
         self.progress_dialog = self._build_progress_dialog()
-
-        # Make connections to helper methods
-        self.thread.started.connect(self.worker.run)
         self.worker.error.connect(self._on_worker_error)
         self.worker.progress.connect(self.progress_dialog.setLabelText)
         self.worker.finished.connect(self._on_worker_finished)
+        self._run_in_background(self.worker.run)
 
-        # Clean up worker and thread when complete
-        self.worker.error.connect(self.thread.quit)
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-
-        self.thread.start()
+    @staticmethod
+    def _run_in_background(target):
+        # Daemon, so a hung archiver request can't keep the app open
+        threading.Thread(target=target, daemon=True).start()
 
     def _build_progress_dialog(self):
         self.progress_dialog = QProgressDialog(

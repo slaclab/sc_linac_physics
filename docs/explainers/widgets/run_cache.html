@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run cache: what a fill on open does — SC Linac</title>
+<link rel="stylesheet" href="widgets.css">
+<style>
+
+  /* ---- run-cache simulator: one square per run ---- */
+  .runs { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; max-width: 26rem; }
+  .runs > i {
+    display: block; aspect-ratio: 1; border-radius: 3px;
+    border: 1px solid var(--line); background: var(--bg);
+  }
+  .runs > i.cached { background: var(--ok); border-color: var(--ok); }
+  .runs > i.failed { background: var(--bad); border-color: var(--bad); }
+  .runs > i.tmp { background: var(--bg); border: 1px dashed var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <p class="standalone-only note"><a href="https://slaclab.github.io/sc_linac_physics/explainers/field_emission/">Part of: How the field emission display works</a></p>
+    <div class="panel">
+      <div class="ctl">
+        <label for="ncached">Runs already cached</label>
+        <input id="ncached" type="range" min="0" max="20" value="6">
+        <span class="val" id="ncached-v"></span>
+
+        <label for="fail">During the fill</label>
+        <select id="fail">
+          <option value="none">nothing goes wrong</option>
+          <option value="outage" selected>the archiver goes down</option>
+          <option value="killed">the display is killed mid-write</option>
+        </select>
+        <span class="val"></span>
+
+        <label for="where">…while fetching missing run</label>
+        <input id="where" type="range" min="1" max="20" value="5">
+        <span class="val" id="where-v"></span>
+      </div>
+
+      <div class="grids">
+        <div><div class="grid-title">After this open</div><div class="runs" id="g0"></div></div>
+        <div><div class="grid-title">Next open</div><div class="runs" id="g1"></div></div>
+      </div>
+      <div class="legend">
+        <span><i></i>no file</span>
+        <span><i style="background:var(--ok);border-color:var(--ok)"></i>cached</span>
+        <span><i style="background:var(--bad);border-color:var(--bad)"></i>fetch failed, fill stopped</span>
+        <span><i style="border:1px dashed var(--warn)"></i>stray temp file</span>
+      </div>
+      <div id="verdict"></div>
+    </div>
+</main>
+<script>
+const N_RUNS = 20;
+const $ = (id) => document.getElementById(id);
+
+/* Run states: "none", "cached", "failed", "tmp" (no file, stray temp). */
+
+/* One fill on open, mirroring run_cache.fill_cache.
+   fail: {kind: "none"|"outage"|"killed", at: index among missing runs, from 1} */
+function fill(runs, fail) {
+  const out = runs.map((s) => (s === "failed" ? "none" : s));
+  const missing = out.map((s, i) => i).filter((i) => out[i] !== "cached");
+  for (let k = 0; k < missing.length; k++) {
+    const i = missing[k];
+    if (fail.kind === "outage" && k + 1 === fail.at) { out[i] = "failed"; return out; }
+    if (fail.kind === "killed" && k + 1 === fail.at) { out[i] = "tmp"; return out; }
+    out[i] = "cached";
+  }
+  return out;
+}
+
+function initial(nCached) {
+  return Array.from({ length: N_RUNS }, (_, i) => (i < nCached ? "cached" : "none"));
+}
+
+function render(el, runs) {
+  el.replaceChildren(...runs.map((s) => {
+    const i = document.createElement("i");
+    if (s !== "none") i.className = s;
+    return i;
+  }));
+}
+
+function para(cls, parts) {
+  const p = document.createElement("p");
+  p.className = cls;
+  for (const [text, spanCls] of parts) {
+    if (spanCls) {
+      const s = document.createElement("span");
+      s.className = spanCls;
+      s.textContent = text;
+      p.append(s);
+    } else {
+      p.append(text);
+    }
+  }
+  return p;
+}
+
+function update() {
+  const nCached = +$("ncached").value;
+  const kind = $("fail").value;
+  const where = $("where");
+  const nMissing = N_RUNS - nCached;
+  where.max = Math.max(1, nMissing);
+  if (+where.value > +where.max) where.value = where.max;
+  where.disabled = kind === "none" || nMissing === 0;
+  $("ncached-v").textContent = `${nCached} of ${N_RUNS}`;
+  $("where-v").textContent = where.disabled ? "—" : `${where.value} of ${nMissing}`;
+
+  const first = fill(initial(nCached), { kind, at: +where.value });
+  const next = fill(first, { kind: "none" });
+  render($("g0"), first); render($("g1"), next);
+
+  const count = (runs, s) => runs.filter((x) => x === s).length;
+  const fetchedNow = count(first, "cached") - nCached;
+  const fetchedNext = count(next, "cached") - count(first, "cached");
+  const out = [para("verdict", [
+    [`This open fetched ${fetchedNow} run(s)`, null],
+    [kind === "none" || nMissing === 0 ? "." : ", then stopped.", null],
+    [count(next, "cached") === N_RUNS ? ` Next open: all ${N_RUNS} cached` : "", "good"],
+    [count(next, "cached") === N_RUNS ? `, ${fetchedNext} fetched.` : "", null],
+  ])];
+  if (kind === "outage" && nMissing) {
+    out.push(para("note", [["The failed run is retried next open. Runs already cached stay.", null]]));
+  }
+  if (kind === "killed" && nMissing) {
+    out.push(para("note", [["The killed run left only a temp file, so it counts as not cached and is fetched next open. The temp file stays.", null]]));
+  }
+  $("verdict").replaceChildren(...out);
+}
+
+for (const id of ["ncached", "fail", "where"]) $(id).addEventListener("input", update);
+update();
+
+/* Self-check against the cases worked out by hand in section 4. */
+(function selfCheck() {
+  const fails = [];
+  const expect = (cond, msg) => { if (!cond) fails.push(msg); };
+  const all = (runs, s) => runs.every((x) => x === s);
+
+  expect(all(fill(initial(0), { kind: "none" }), "cached"), "clean fill caches every run");
+  expect(all(fill(initial(N_RUNS), { kind: "outage", at: 1 }), "cached"),
+    "nothing missing means nothing fetched, nothing fails");
+
+  // Outage at the 3rd missing run, 5 already cached: runs 6-7 fetched, 8 failed.
+  const out = fill(initial(5), { kind: "outage", at: 3 });
+  expect(out.slice(0, 7).every((s) => s === "cached") && out[7] === "failed" &&
+    out.slice(8).every((s) => s === "none"), "outage stops at the failed run");
+  expect(all(fill(out, { kind: "none" }), "cached"), "next open retries the failed run");
+
+  // Killed at the 1st missing run: temp file only, fetched next open.
+  const killed = fill(initial(5), { kind: "killed", at: 1 });
+  expect(killed[5] === "tmp" && killed.slice(6).every((s) => s === "none"),
+    "kill leaves a temp file and stops");
+  expect(all(fill(killed, { kind: "none" }), "cached"), "next open fetches the killed run");
+
+  if (fails.length) console.error("SELF-CHECK FAILED\n" + fails.join("\n"));
+  else console.log("SELF-CHECK PASSED (6 cases)");
+})();
+</script>
+</body>
+</html>
