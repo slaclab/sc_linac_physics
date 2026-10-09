@@ -2,7 +2,7 @@ from time import time
 from unittest.mock import patch, PropertyMock, MagicMock, Mock
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import PVInvalidError
+from sc_linac_physics.utils.epics import PVInvalidError
 
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,
