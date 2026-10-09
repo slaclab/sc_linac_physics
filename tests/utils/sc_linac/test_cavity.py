@@ -753,6 +753,21 @@ def test_check_and_set_on_time(cavity):
     cavity.push_go_button.assert_called()
 
 
+def test_push_go_button_creates_go_pv_lazily(cavity):
+    """push_go_button must not depend on something else creating the PV."""
+    cavity._pulse_status_pv_obj = make_mock_pv(
+        cavity.pulse_status_pv, get_val=2
+    )
+    cavity._pulse_go_pv_obj = None
+    go_pv = make_mock_pv(cavity.pulse_go_pv)
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=go_pv
+    ) as pv_cls:
+        cavity.push_go_button()
+    pv_cls.assert_called_once_with(cavity.pulse_go_pv)
+    go_pv.put.assert_called_with(1, wait=False)
+
+
 def test_push_go_button(cavity):
     cavity._pulse_status_pv_obj = make_mock_pv(
         cavity.pulse_status_pv, get_val=2
