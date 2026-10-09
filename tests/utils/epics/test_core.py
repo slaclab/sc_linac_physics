@@ -194,55 +194,87 @@ class TestPVPut:
         connected_pv.put(100.0, timeout=10.0)
         # Should not raise
 
-    def test_put_retry_on_failure(self):
-        """Test put retries on failure"""
+    def _patch_put(self, monkeypatch, returns):
+        """Make FakeEPICS_PV.put return/raise items of `returns` in order.
+
+        Returns the list of values that reached the fake (one per send).
+        """
+        sent = []
+        seq = iter(returns)
+
+        def fake_put(self, value, *args, **kwargs):
+            sent.append(value)
+            item = next(seq)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        monkeypatch.setattr(FakeEPICS_PV, "put", fake_put)
+        return sent
+
+    def test_put_retries_while_not_sent(self, monkeypatch):
+        """None means pyepics sent nothing (disconnected): retry."""
         pv = PV("TEST:PV")
+        sent = self._patch_put(monkeypatch, [None, None, 1])
 
-        call_count = [0]
-        original_put = FakeEPICS_PV.put
+        pv.put(100.0)
 
-        def put_with_retries(self, *args, **kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 2:
-                return 0  # Failure
-            return 1  # Success
+        assert len(sent) == 3
 
-        FakeEPICS_PV.put = put_with_retries
-        try:
+    def test_put_gives_up_after_max_retries_not_sent(self, monkeypatch):
+        pv = PV("TEST:PV")
+        sent = self._patch_put(monkeypatch, [None, None, None])
+
+        with pytest.raises(PVPutError, match="not sent after 3 attempts"):
             pv.put(100.0)
-            assert call_count[0] == 3
-        finally:
-            FakeEPICS_PV.put = original_put
+        assert len(sent) == 3
 
-    def test_put_fails_after_max_retries(self):
-        """Test put raises error after max retries"""
+    def test_put_not_resent_when_completion_times_out(self, monkeypatch):
+        """-1 means the put went out but wait=True timed out: no re-send."""
         pv = PV("TEST:PV")
+        sent = self._patch_put(monkeypatch, [-1, 1, 1])
 
-        original_put = FakeEPICS_PV.put
-        FakeEPICS_PV.put = lambda self, *args, **kwargs: 0
+        with pytest.raises(PVPutError, match="not re-sent"):
+            pv.put(1)
+        assert sent == [1]
 
-        try:
-            with pytest.raises(PVPutError) as exc_info:
-                pv.put(100.0)
-            assert "after 3 attempts" in str(exc_info.value)
-        finally:
-            FakeEPICS_PV.put = original_put
-
-    def test_put_exception_after_max_retries(self):
-        """Test put raises PVPutError after max retries with exception"""
+    def test_put_not_resent_on_exception(self, monkeypatch):
         pv = PV("TEST:PV")
-
-        original_put = FakeEPICS_PV.put
-        FakeEPICS_PV.put = lambda self, *args, **kwargs: (_ for _ in ()).throw(
-            RuntimeError("Persistent error")
+        sent = self._patch_put(
+            monkeypatch, [RuntimeError("Persistent error"), 1, 1]
         )
 
-        try:
-            with pytest.raises(PVPutError) as exc_info:
-                pv.put(100.0)
-            assert "Persistent error" in str(exc_info.value)
-        finally:
-            FakeEPICS_PV.put = original_put
+        with pytest.raises(PVPutError, match="Persistent error") as exc_info:
+            pv.put(100.0)
+        assert len(sent) == 1
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+    def test_put_reconnect_wait_capped_at_connection_timeout(self, monkeypatch):
+        """A disconnected PV waits connection_timeout, not put_timeout."""
+        pv = PV("TEST:PV")
+        waits = []
+        monkeypatch.setattr(
+            pv, "_ensure_connected", lambda timeout=None: waits.append(timeout)
+        )
+
+        pv.put(100.0)
+
+        assert waits == [pv.config.connection_timeout]
+        assert pv.config.put_timeout > pv.config.connection_timeout
+
+    def test_put_timeout_zero_is_not_replaced_by_default(self, monkeypatch):
+        pv = PV("TEST:PV")
+        seen = {}
+
+        def fake_put(self, value, wait=True, timeout=None, **kwargs):
+            seen["timeout"] = timeout
+            return 1
+
+        monkeypatch.setattr(FakeEPICS_PV, "put", fake_put)
+
+        pv.put(1, timeout=0)
+
+        assert seen["timeout"] == 0
 
     def test_put_without_wait(self, connected_pv):
         """Test put without waiting"""
@@ -597,3 +629,53 @@ class TestPVBatchOperations:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSmallFixes:
+    def test_callback_registered_when_disconnected_at_creation(self):
+        """pyepics registers callbacks regardless of connection; so do we."""
+        original_init = FakeEPICS_PV.__init__
+
+        def disconnected_init(self, *args, **kwargs):
+            original_init(self, *args, **kwargs)
+            self._connected = False
+
+        FakeEPICS_PV.__init__ = disconnected_init
+        try:
+            cb = lambda **kw: None  # noqa: E731
+            pv = PV("TEST:PV", callback=cb, require_connection=False)
+            assert cb in pv.callbacks.values()
+        finally:
+            FakeEPICS_PV.__init__ = original_init
+
+    def test_batch_create_require_connection_raises(self, monkeypatch):
+        monkeypatch.setattr(
+            FakeEPICS_PV,
+            "wait_for_connection",
+            lambda self, timeout=None: False,
+        )
+        with pytest.raises(PVConnectionError, match="2 of 2 PVs"):
+            PV.batch_create(["PV1", "PV2"], require_connection=True)
+
+    def test_get_timeout_zero_is_not_replaced_by_default(self, monkeypatch):
+        pv = PV("TEST:PV")
+        seen = {}
+
+        def fake_get(self, *args, timeout=None, **kwargs):
+            seen["timeout"] = timeout
+            return 1.0
+
+        monkeypatch.setattr(FakeEPICS_PV, "get", fake_get)
+        pv.get(timeout=0)
+        assert seen["timeout"] == 0
+
+    def test_mock_pv_fail_count_raises_like_real_pv(self):
+        mock = make_mock_pv("TEST:PV", get_val=5.0, fail_count=1)
+
+        with pytest.raises(PVGetError):
+            mock.get()
+        assert mock.get() == 5.0
+
+        with pytest.raises(PVPutError):
+            mock.put(1)
+        assert mock.put(1) == 1
