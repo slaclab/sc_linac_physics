@@ -247,7 +247,7 @@ class Fault:
         """Check if a pre-fetched value indicates a fault condition.
 
         This method is optimized for batch PV reads where values are fetched
-        all at once using PV.get_many_values().
+        all at once using PVBatch.get_values().
 
         Args:
             value: The current PV value (from batch read)

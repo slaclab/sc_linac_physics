@@ -432,7 +432,7 @@ class BackendCavity(Cavity):
     def run_through_faults(self) -> None:
         """Check all faults and update cavity status PVs (optimized batch version).
 
-        Uses PV.get_many_values() to check all fault PVs simultaneously,
+        Uses PVBatch.get_values() to read all fault PVs in one caget_many,
         which is significantly faster than checking them sequentially.
         Falls back to sequential checking if batch read fails.
         """
