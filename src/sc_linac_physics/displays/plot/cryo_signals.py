@@ -17,10 +17,14 @@ from qtpy.QtWidgets import (
     QScrollArea,
 )
 
-from sc_linac_physics.displays.plot.embeddable_plots import (
-    EmbeddableArchiverPlot,
-)
+from sc_linac_physics.displays.plot.archiver_plot import ArchiverPlot
+from sc_linac_physics.displays.plot.curve_set import Curve, CurveSet
 from sc_linac_physics.utils.sc_linac.linac import Machine
+
+
+def _axis_label(pv_attr):
+    """'ds_level_pv' -> 'Ds Level', used as both curve label and axis name."""
+    return pv_attr.replace("_pv", "").replace("_", " ").title()
 
 
 class GlobalAxisRangeDialog(QDialog):
@@ -271,37 +275,17 @@ class LinacGroupedCryomodulePlotDisplay(Display):
 
     def _apply_settings_to_plot(self, plot_display):
         """Apply global axis settings to a specific plot."""
-        plot_item = plot_display.archiver_plot.getPlotItem()
-
-        # Apply settings to each axis based on PV attribute
         for pv_attr, setting in self.global_axis_settings.items():
-            # Create axis name from PV attribute
-            axis_name = pv_attr.replace("_pv", "").replace("_", " ").title()
+            plot_display.set_y_range(
+                _axis_label(pv_attr), self._y_range(setting)
+            )
 
-            # Find the axis in the plot
-            if hasattr(plot_item, "axes") and axis_name in plot_item.axes:
-                axis_item = plot_item.axes[axis_name].get("item")
-
-                if hasattr(axis_item, "linkedView"):
-                    view_box = axis_item.linkedView()
-
-                    if view_box:
-                        if setting["auto_scale"]:
-                            view_box.enableAutoRange(axis="y")
-                            view_box.setAutoVisible(y=True)
-                            view_box.setLimits(yMin=None, yMax=None)
-                        else:
-                            if setting["range"]:
-                                y_min, y_max = setting["range"]
-                                view_box.disableAutoRange(axis="y")
-                                view_box.setAutoVisible(y=False)
-                                view_box.setYRange(y_min, y_max, padding=0)
-                                view_box.setLimits(yMin=y_min, yMax=y_max)
-                                view_box.updateViewRange()
-
-        # Force update
-        plot_item.update()
-        plot_display.archiver_plot.update()
+    @staticmethod
+    def _y_range(setting):
+        """None (auto-scale) or the fixed (min, max) from a dialog setting."""
+        if setting["auto_scale"] or not setting["range"]:
+            return None
+        return setting["range"]
 
     def _calculate_grid_dimensions(self, num_items):
         """
@@ -339,11 +323,6 @@ class LinacGroupedCryomodulePlotDisplay(Display):
         # Create new linac widget
         self.current_linac_widget = self._create_linac_widget(linac)
         self.content_layout.addWidget(self.current_linac_widget)
-
-        # Apply global axis settings to new plots
-        if self.global_axis_settings:
-            for plot_display in self.cryomodule_plots.values():
-                self._apply_settings_to_plot(plot_display)
 
     def _create_linac_widget(self, linac):
         """Create a widget for a linac with cryomodules in a dynamic grid layout."""
@@ -396,11 +375,7 @@ class LinacGroupedCryomodulePlotDisplay(Display):
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(0)
 
-        # Use the embeddable plot component
-        plot_widget = EmbeddableArchiverPlot(title=f"CM {cryomodule.name}")
-
-        # Add PVs
-        self._add_pvs_to_plot(plot_widget, cryomodule)
+        plot_widget = ArchiverPlot(self._curve_set(cryomodule))
 
         # Store reference
         self.cryomodule_plots[(linac_name, cryomodule.name)] = plot_widget
@@ -410,22 +385,23 @@ class LinacGroupedCryomodulePlotDisplay(Display):
 
         return group
 
-    def _add_pvs_to_plot(self, plot_widget, cryomodule):
-        """Add PVs directly from cryomodule object attributes."""
-        for idx, pv_attr in enumerate(self.SELECTED_PV_ATTRIBUTES):
-            if hasattr(cryomodule, pv_attr):
-                pv_name = getattr(cryomodule, pv_attr)
-                if pv_name:
-                    label = pv_attr.replace("_pv", "").replace("_", " ").title()
-
-                    plot_widget.add_pv(
-                        pv_name=pv_name,
-                        label=label,
-                        axis_name=label,
-                        color=plot_widget._get_rainbow_color(
-                            idx, len(self.SELECTED_PV_ATTRIBUTES)
-                        ),
-                    )
+    def _curve_set(self, cryomodule):
+        """The `SELECTED_PV_ATTRIBUTES` of one cryomodule, one axis each."""
+        curves = []
+        y_ranges = {}
+        for pv_attr in self.SELECTED_PV_ATTRIBUTES:
+            pv_name = getattr(cryomodule, pv_attr, None)
+            if not pv_name:
+                continue
+            label = _axis_label(pv_attr)
+            curves.append(Curve(pv=pv_name, label=label, axis=label))
+            setting = self.global_axis_settings.get(pv_attr)
+            y_range = self._y_range(setting) if setting else None
+            if y_range is not None:
+                y_ranges[label] = y_range
+        return CurveSet(
+            title=f"CM {cryomodule.name}", curves=curves, y_ranges=y_ranges
+        )
 
     def ui_filename(self):
         """Return None since we're building UI programmatically."""
