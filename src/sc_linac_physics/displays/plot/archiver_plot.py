@@ -5,6 +5,7 @@ archiver and then updates it live over Channel Access.
 """
 
 import json
+import os
 from typing import Dict, Optional
 
 from PyQt5.QtCore import Qt
@@ -20,6 +21,7 @@ from sc_linac_physics.displays.plot.curve_set import (
     YRange,
     nth_color,
 )
+from sc_linac_physics.utils.archiver import ARCHIVER_BASE_URL
 
 DEFAULT_TIME_SPAN_SECONDS = 3600
 
@@ -38,6 +40,10 @@ class ArchiverPlot(QWidget):
         parent=None,
     ):
         super().__init__(parent)
+        # PyDM's archiver plugin reads PYDM_ARCHIVER_URL on every request and
+        # backfills nothing without it. Default it to the archiver that
+        # utils/archiver.py uses; a value already in the environment wins.
+        os.environ.setdefault("PYDM_ARCHIVER_URL", ARCHIVER_BASE_URL)
         self._title = ""
         self._y_ranges: Dict[str, YRange] = {}
         self._curves: Dict[str, Curve] = {}

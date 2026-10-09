@@ -1,5 +1,7 @@
 """ArchiverPlot against a real PyDMArchiverTimePlot, fake protocol."""
 
+import os
+
 import pytest
 
 from sc_linac_physics.displays.plot.archiver_plot import ArchiverPlot
@@ -94,3 +96,17 @@ def test_set_curve_set_replaces_contents(plot):
     plot.set_curve_set(CurveSet(curves=[Curve("fake://x", "x", axis="X")]))
     assert [c.pv for c in plot.curve_set.curves] == ["fake://x"]
     assert len(plot.plot.getYAxes()) == 1
+
+
+def test_archiver_url_defaults_to_utils_archiver(qtbot, monkeypatch):
+    from sc_linac_physics.utils.archiver import ARCHIVER_BASE_URL
+
+    monkeypatch.delenv("PYDM_ARCHIVER_URL", raising=False)
+    qtbot.addWidget(ArchiverPlot())
+    assert os.environ["PYDM_ARCHIVER_URL"] == ARCHIVER_BASE_URL
+
+
+def test_archiver_url_already_set_is_kept(qtbot, monkeypatch):
+    monkeypatch.setenv("PYDM_ARCHIVER_URL", "http://example.test")
+    qtbot.addWidget(ArchiverPlot())
+    assert os.environ["PYDM_ARCHIVER_URL"] == "http://example.test"
