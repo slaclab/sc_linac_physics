@@ -78,6 +78,10 @@ class StepperTuner(linac_utils.SCLinacObject):
         self._hz_per_step_calc_pv_obj: Optional[PV] = None
 
         self.abort_flag: bool = False
+        # Per move(): whether ABORT_REQ was written, and whether move()
+        # changed NSTEPS.DRVH / VELO. Read by _clean_up_failed_move().
+        self._abort_written: bool = False
+        self._limits_changed: bool = False
 
     def __str__(self):
         return f"{self.cavity} Stepper Tuner"
@@ -130,8 +134,16 @@ class StepperTuner(linac_utils.SCLinacObject):
         """
         This function raises an error if either a stepper abort or a cavity abort
         has been requested.
+
+        A pending cavity abort_flag writes the stepper ABORT_REQ first.
+        Cavity.check_abort() runs turn_off() and waits for RF off before it
+        raises, so without this the motor would keep moving through that
+        wait. TuneCavity.check_abort already writes ABORT_REQ first in the
+        same way.
         @return: None
         """
+        if self.cavity.abort_flag:
+            self.abort()
         self.cavity.check_abort()
         if self.abort_flag:
             self.cavity.logger.warning("Stepper abort requested")
@@ -144,6 +156,7 @@ class StepperTuner(linac_utils.SCLinacObject):
         if not self._abort_pv_obj:
             self._abort_pv_obj = PV(self.abort_pv)
         self._abort_pv_obj.put(1)
+        self._abort_written = True
 
     def move_positive(self):
         if not self._move_pos_pv_obj:
@@ -259,12 +272,63 @@ class StepperTuner(linac_utils.SCLinacObject):
         :param change_limits: whether to change the speed and steps
         :param check_detune: whether to check for valid detune after each move
         :return: None
-        """
 
+        If the move raises for any reason (abort, DetuneError, limit switch,
+        PV error), _clean_up_failed_move() first writes ABORT_REQ if the
+        motor is still moving, then restores NSTEPS.DRVH and VELO if this
+        move changed them. The original exception is then re-raised.
+        """
+        self._abort_written = False
+        self._limits_changed = False
+        try:
+            self._move(num_steps, max_steps, speed, change_limits, check_detune)
+        except BaseException:
+            self._clean_up_failed_move()
+            raise
+
+    def _clean_up_failed_move(self):
+        """Stop a still-moving motor and undo limit changes after a failure.
+
+        Never raises: a failure here is logged so the original exception
+        from the move is the one the caller sees.
+        """
+        if not self._abort_written:
+            try:
+                moving = self.motor_moving
+            except Exception:
+                # Can't read MOTOR_MOVING: assume it may be moving.
+                moving = True
+            if moving:
+                try:
+                    self.abort()
+                except Exception as e:
+                    self.cavity.logger.error(
+                        "Failed to abort stepper after failed move: %s", e
+                    )
+        if self._limits_changed:
+            try:
+                self.restore_defaults()
+            except Exception as e:
+                self.cavity.logger.error(
+                    "Failed to restore stepper limits after failed move: %s",
+                    e,
+                )
+
+    def _move(
+        self,
+        num_steps: int,
+        max_steps: int,
+        speed: int,
+        change_limits: bool,
+        check_detune: bool,
+    ):
+        """Body of move(). Recurses for moves larger than max_steps."""
         self.check_abort()
         max_steps = abs(max_steps)
 
         if change_limits:
+            # Set before the first write, so a failure partway still restores.
+            self._limits_changed = True
             # on the off chance that someone tries to write a negative maximum
             self.max_steps = max_steps
 
@@ -331,7 +395,7 @@ class StepperTuner(linac_utils.SCLinacObject):
                 "Continuing with remaining %d steps", remaining_steps
             )
 
-            self.move(
+            self._move(
                 remaining_steps,
                 max_steps,
                 speed,

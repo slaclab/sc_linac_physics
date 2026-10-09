@@ -228,3 +228,137 @@ def test_issue_move_command_hl(stepper):
     stepper._motor_moving_pv_obj.get.assert_called()
     stepper._limit_switch_a_pv_obj.get.assert_called()
     stepper._limit_switch_b_pv_obj.get.assert_called()
+
+
+# --- Failed-move cleanup and abort ordering --------------------------------
+
+from sc_linac_physics.utils.sc_linac.linac_utils import (  # noqa: E402
+    CavityAbortError,
+    DetuneError,
+)
+
+
+def _ready_to_move(stepper, motor_moving=1):
+    """Mock every PV a move touches; return the shared write log."""
+    writes = []
+
+    def pv(name, get_val=0):
+        mock = make_mock_pv(get_val=get_val)
+        mock.put.side_effect = lambda value, *a, **k: writes.append(
+            (name, value)
+        )
+        return mock
+
+    stepper._max_steps_pv_obj = pv("NSTEPS.DRVH")
+    stepper._speed_pv_obj = pv("VELO", get_val=DEFAULT_STEPPER_SPEED)
+    stepper._step_des_pv_obj = pv("NSTEPS")
+    stepper._abort_pv_obj = pv("ABORT_REQ")
+    stepper._motor_moving_pv_obj = make_mock_pv(get_val=motor_moving)
+    stepper.cavity.rack.cryomodule.is_harmonic_linearizer = False
+    return writes
+
+
+def test_failed_move_aborts_moving_motor_and_restores_limits(stepper):
+    writes = _ready_to_move(stepper, motor_moving=1)
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000, max_steps=5000, speed=40000)
+
+    assert ("ABORT_REQ", 1) in writes
+    assert writes[-2:] == [
+        ("NSTEPS.DRVH", DEFAULT_STEPPER_MAX_STEPS),
+        ("VELO", DEFAULT_STEPPER_SPEED),
+    ]
+    assert writes.index(("ABORT_REQ", 1)) < len(writes) - 2
+
+
+def test_failed_move_skips_abort_when_motor_stopped(stepper):
+    writes = _ready_to_move(stepper, motor_moving=0)
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000)
+
+    assert ("ABORT_REQ", 1) not in writes
+
+
+def test_failed_move_without_limit_change_does_not_write_limits(stepper):
+    writes = _ready_to_move(stepper, motor_moving=0)
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000, change_limits=False)
+
+    assert not any(name in ("NSTEPS.DRVH", "VELO") for name, _ in writes)
+
+
+def test_stepper_abort_writes_abort_req_once(stepper):
+    writes = _ready_to_move(stepper, motor_moving=1)
+
+    def abort_mid_move(*args, **kwargs):
+        stepper.abort_flag = True
+        stepper.check_abort()
+
+    stepper.issue_move_command = MagicMock(side_effect=abort_mid_move)
+
+    with pytest.raises(StepperAbortError):
+        stepper.move(1000)
+
+    assert writes.count(("ABORT_REQ", 1)) == 1
+
+
+def test_cavity_abort_writes_abort_req_before_rf_off(stepper):
+    """Cavity.check_abort() turns RF off before raising; stop the motor first."""
+    writes = _ready_to_move(stepper, motor_moving=1)
+    stepper.cavity.turn_off = MagicMock(
+        side_effect=lambda: writes.append(("RF", "off"))
+    )
+
+    def cavity_abort_mid_move(*args, **kwargs):
+        stepper.cavity.abort_flag = True
+        stepper.check_abort()
+
+    stepper.issue_move_command = MagicMock(side_effect=cavity_abort_mid_move)
+
+    with pytest.raises(CavityAbortError):
+        stepper.move(1000)
+
+    assert writes.count(("ABORT_REQ", 1)) == 1
+    assert writes.index(("ABORT_REQ", 1)) < writes.index(("RF", "off"))
+
+
+def test_split_move_failure_cleans_up_once(stepper):
+    writes = _ready_to_move(stepper, motor_moving=1)
+    calls = [0]
+
+    def fail_on_second_segment(*args, **kwargs):
+        calls[0] += 1
+        if calls[0] == 2:
+            raise DetuneError("bad")
+
+    stepper.issue_move_command = MagicMock(side_effect=fail_on_second_segment)
+
+    with pytest.raises(DetuneError):
+        stepper.move(9000, max_steps=5000)
+
+    assert writes.count(("ABORT_REQ", 1)) == 1
+    assert writes.count(("VELO", DEFAULT_STEPPER_SPEED)) == 2  # set, restore
+
+
+def test_cleanup_failure_does_not_mask_original_error(stepper):
+    _ready_to_move(stepper, motor_moving=1)
+    stepper._abort_pv_obj.put.side_effect = RuntimeError("ABORT_REQ down")
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000)
+
+
+def test_successful_move_does_not_abort(stepper):
+    writes = _ready_to_move(stepper, motor_moving=0)
+    stepper.issue_move_command = MagicMock()
+
+    stepper.move(1000)
+
+    assert ("ABORT_REQ", 1) not in writes
