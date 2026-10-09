@@ -1,3 +1,3 @@
 """SC Linac Physics package."""
 
-__version__ = "9.41.5"
+__version__ = "9.41.6"
