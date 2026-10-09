@@ -77,6 +77,12 @@ class StepperTuner(linac_utils.SCLinacObject):
         self.hz_per_step_calc_pv: str = self.pv_addr("SCALE_CALC.B")
         self._hz_per_step_calc_pv_obj: Optional[PV] = None
 
+        # Stepper-only abort: writes ABORT_REQ and leaves RF as it is.
+        # Cavity.abort_flag also stops the motor, but turns RF off too.
+        # Kept separate on purpose (decided 2026-10-08). Dropping RF does
+        # not help stop the motor, and leaving it on makes retuning after
+        # the abort easier. The RF commissioning frequency-tuning Abort
+        # button uses this flag.
         self.abort_flag: bool = False
         # Per move(): whether ABORT_REQ was written, and whether move()
         # changed NSTEPS.DRVH / VELO. Read by _clean_up_failed_move().
