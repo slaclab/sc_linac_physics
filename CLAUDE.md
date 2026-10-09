@@ -144,13 +144,22 @@ reimplementing, staging a rollout, deferring a migration — write down the
 reasoning, not just the outcome. A comment at the decision point is enough for
 small calls; anything architectural goes in `docs/`.
 
-### Write for the physicist reading it
+### Write for every audience reading it
 
-Two reviewers are auto-requested by `.github/CODEOWNERS`, and they read for
-different things. Sebastian reads software design — framework structure, phase
-sequencing, threading, persistence. Ryan reads machine behavior, and as area
-physicist they need to know exactly what the code commands the hardware to do
-and how it derives the numbers people act on.
+Several kinds of reader see this work, and each reads for something different:
+
+- **Software experts** read the design: framework structure, phase
+  sequencing, threading, persistence.
+- **Machine experts** read machine behavior. They need to know exactly what
+  the code commands the hardware to do, and how it derives the numbers people
+  act on.
+- **Operators** read what changes in what they see and run. They get the
+  `## Operator-visible` note and the `#srf-software` release note, not the
+  diff.
+
+The list is not exhaustive. `.github/CODEOWNERS` maps each area to its
+reviewers. Write so that any of these readers can follow without the author
+there to explain.
 
 #### Say what the code does. Do not explain what the hardware does.
 
@@ -165,8 +174,8 @@ Two categories, treated differently:
 
 **Derivable from this repo — assert it.** Which PV is written, in what units,
 in what order, what value, what the code branches on, where a constant lives.
-Checkable against the source by whoever is reading. This is most of what the
-area physicist actually needs.
+Checkable against the source by whoever is reading. This is most of what a
+machine expert actually needs.
 
 **A fact about the physical machine — cite it or flag it.** Why the hardware
 behaves that way, feedback bandwidths, what happens inside the cavity, the
@@ -202,8 +211,8 @@ naming and docstrings on phase logic over compact code.
 
 ### How to write it
 
-This governs PR descriptions, docs, and comments. The audience is a physicist
-and a manager, both reading between other things. Aim at what you would type in
+This governs PR descriptions, docs, and comments. The audience is any of the
+readers above, plus managers, all reading between other things. Aim at what you would type in
 Slack, not at a technical report.
 
 The failure mode runs backwards: the smallest PRs get the longest descriptions
