@@ -597,3 +597,67 @@ class TestPVBatchOperations:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSmallFixes:
+    def test_callback_registered_when_disconnected_at_creation(self):
+        """pyepics registers callbacks regardless of connection; so do we."""
+        original_init = FakeEPICS_PV.__init__
+
+        def disconnected_init(self, *args, **kwargs):
+            original_init(self, *args, **kwargs)
+            self._connected = False
+
+        FakeEPICS_PV.__init__ = disconnected_init
+        try:
+            cb = lambda **kw: None  # noqa: E731
+            pv = PV("TEST:PV", callback=cb, require_connection=False)
+            assert cb in pv.callbacks.values()
+        finally:
+            FakeEPICS_PV.__init__ = original_init
+
+    def test_batch_create_require_connection_raises(self, monkeypatch):
+        monkeypatch.setattr(
+            FakeEPICS_PV,
+            "wait_for_connection",
+            lambda self, timeout=None: False,
+        )
+        with pytest.raises(PVConnectionError, match="2 of 2 PVs"):
+            PV.batch_create(["PV1", "PV2"], require_connection=True)
+
+    def test_get_timeout_zero_is_not_replaced_by_default(self, monkeypatch):
+        pv = PV("TEST:PV")
+        seen = {}
+
+        def fake_get(self, *args, timeout=None, **kwargs):
+            seen["timeout"] = timeout
+            return 1.0
+
+        monkeypatch.setattr(FakeEPICS_PV, "get", fake_get)
+        pv.get(timeout=0)
+        assert seen["timeout"] == 0
+
+    def test_mock_pv_fail_count_raises_like_real_pv(self):
+        mock = make_mock_pv("TEST:PV", get_val=5.0, fail_count=1)
+
+        with pytest.raises(PVGetError):
+            mock.get()
+        assert mock.get() == 5.0
+
+        with pytest.raises(PVPutError):
+            mock.put(1)
+        assert mock.put(1) == 1
+
+
+class TestMakeMockPvSpec:
+    def test_unknown_attribute_raises(self):
+        mock = make_mock_pv("TEST:PV")
+        with pytest.raises(AttributeError):
+            mock.get_valu()
+
+    def test_real_pv_methods_work(self):
+        mock = make_mock_pv("TEST:PV", get_val=3.0)
+        assert mock.get() == 3.0
+        mock.put(1)
+        mock.put.assert_called_once_with(1)
+        assert mock.status == 0
