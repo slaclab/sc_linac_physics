@@ -221,7 +221,6 @@ class Fault:
             self.pv,
             connection_timeout=self.connection_timeout,
             auto_monitor=False,  # Don't need continuous monitoring
-            require_connection=False,  # Don't fail if PV doesn't exist
         )
 
     @property
@@ -248,7 +247,7 @@ class Fault:
         """Check if a pre-fetched value indicates a fault condition.
 
         This method is optimized for batch PV reads where values are fetched
-        all at once using PV.get_many_values().
+        all at once using PVBatch.get_values().
 
         Args:
             value: The current PV value (from batch read)

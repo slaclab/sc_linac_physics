@@ -1007,7 +1007,7 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def pulse_go_pv_obj(self) -> PV:
         if not self._pulse_go_pv_obj:
-            self._pulse_go_pv_obj = PV(self._pv_prefix + "PULSE_DIFF_SUM")
+            self._pulse_go_pv_obj = PV(self.pulse_go_pv)
         return self._pulse_go_pv_obj
 
     def push_go_button(self):
@@ -1016,7 +1016,7 @@ class Cavity(linac_utils.SCLinacObject):
         go button is pressed
         :return:
         """
-        self._pulse_go_pv_obj.put(1, wait=False)
+        self.pulse_go_pv_obj.put(1, wait=False)
         while self.pulse_status < 2:
             self.check_abort()
             self.set_status_message(

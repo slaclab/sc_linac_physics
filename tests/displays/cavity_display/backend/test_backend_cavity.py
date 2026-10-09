@@ -165,3 +165,34 @@ class TestProcessFaultHistory:
 
         assert counts["SSA"].invalid_count == 1
         assert events[0].severity is None
+
+
+def test_batch_pv_init_keeps_only_connected_pvs(cavity):
+    """Created together, then each waited on; a dead PV is left unset."""
+    from sc_linac_physics.utils.epics import PVConnectionError
+
+    cavity._status_pv_obj = None
+    cavity._severity_pv_obj = None
+    cavity._description_pv_obj = None
+    created = []
+
+    def fake_pv(name, **kwargs):
+        pv = MagicMock(pvname=name)
+        if name == cavity.severity_pv:
+            pv.ensure_connected.side_effect = PVConnectionError("down")
+        created.append(pv)
+        return pv
+
+    with patch(
+        "sc_linac_physics.displays.cavity_display.backend.backend_cavity.PV",
+        side_effect=fake_pv,
+    ):
+        connected = cavity._batch_pv_init()
+
+    assert connected == 2
+    assert len(created) == 3
+    assert cavity._status_pv_obj is created[0]
+    assert cavity._severity_pv_obj is None
+    assert cavity._description_pv_obj is created[2]
+    for pv in created:
+        pv.ensure_connected.assert_called_once_with(timeout=0.5)

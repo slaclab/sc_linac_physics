@@ -12,6 +12,7 @@ Key improvements over the raw class:
 - **Never returns `None`** — raises a typed exception instead
 - **Retry with backoff** — configurable `max_retries` (default 3) and `retry_delay`
 - **Thread-safe reconnection** — reentrant lock around reconnect logic
+- **No wait in the constructor** — `PV(name)` returns at once. The first `get()`/`put()` waits up to `connection_timeout` and raises `PVConnectionError` if the PV doesn't connect. Call `pv.ensure_connected()` to fail at a known point instead.
 - **Typed exceptions** — `PVConnectionError`, `PVGetError`, `PVPutError`, `PVInvalidError`
 
 ```python
@@ -46,7 +47,7 @@ This keeps import time and test startup fast by avoiding hundreds of CA connecti
 
 ### `PVBatch` (`batch.py`)
 
-Use for bulk reads/writes. Internally calls `epics.caget_many()` to fetch many PVs in a single round-trip, with fallback to individual reads on partial failure.
+Use for bulk reads. Internally calls `epics.caget_many()` to fetch many PVs in a single round-trip, with fallback to individual reads on partial failure.
 
 ```python
 from sc_linac_physics.utils.epics.batch import PVBatch
@@ -54,9 +55,6 @@ from sc_linac_physics.utils.epics.batch import PVBatch
 pv_names = ["ACCL:L0B:0110:ADES", "ACCL:L0B:0120:ADES"]
 values = PVBatch.get_values(pv_names)
 # returns [val_for_pv1, val_for_pv2] — same order as input; None for disconnected PVs
-
-PVBatch.put_values(pv_names, [5.0, 5.0])
-# returns [True, True] — per-PV success flags
 ```
 
 Prefer `PVBatch` when touching more than ~5 PVs at once (e.g., reading all 296 cavity amplitudes).
@@ -65,7 +63,7 @@ Prefer `PVBatch` when touching more than ~5 PVs at once (e.g., reading all 296 c
 
 | Exception | When raised |
 |-----------|-------------|
-| `PVConnectionError` | CA connection failed after retries |
+| `PVConnectionError` | PV didn't connect within the timeout, on first `get()`/`put()` or `ensure_connected()` |
 | `PVGetError` | Read failed after retries |
 | `PVPutError` | Write failed after retries |
 | `PVInvalidError` | Value out of allowed range or alarm severity exceeded |

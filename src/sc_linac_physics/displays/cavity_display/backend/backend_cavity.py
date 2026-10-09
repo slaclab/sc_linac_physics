@@ -28,7 +28,7 @@ from sc_linac_physics.displays.cavity_display.utils.utils import (
     display_hash,
     cavity_fault_logger,
 )
-from sc_linac_physics.utils.epics import PV, PVBatch
+from sc_linac_physics.utils.epics import PV, PVBatch, PVConnectionError
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 
 
@@ -121,12 +121,19 @@ class BackendCavity(Cavity):
         ]
 
         try:
-            all_pvs = PV.batch_create(
-                pv_names,
-                connection_timeout=0.5,
-                auto_monitor=False,
-                require_connection=False,
-            )
+            # Create all three before waiting on any, so Channel Access
+            # searches for them together.
+            created = [
+                PV(name, connection_timeout=0.5, auto_monitor=False)
+                for name in pv_names
+            ]
+            all_pvs = []
+            for pv in created:
+                try:
+                    pv.ensure_connected(timeout=0.5)
+                    all_pvs.append(pv)
+                except PVConnectionError:
+                    all_pvs.append(None)
         except Exception as e:
             cavity_fault_logger.error(
                 f"Batch PV creation failed for {self.pv_prefix}: {e}"
@@ -425,7 +432,7 @@ class BackendCavity(Cavity):
     def run_through_faults(self) -> None:
         """Check all faults and update cavity status PVs (optimized batch version).
 
-        Uses PV.get_many_values() to check all fault PVs simultaneously,
+        Uses PVBatch.get_values() to read all fault PVs in one caget_many,
         which is significantly faster than checking them sequentially.
         Falls back to sequential checking if batch read fails.
         """
