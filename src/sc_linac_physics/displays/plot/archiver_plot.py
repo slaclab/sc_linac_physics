@@ -99,7 +99,7 @@ class ArchiverPlot(QWidget):
         if curve.axis not in self.plot.plotItem.axes:
             self._add_axis(curve.axis)
 
-        self._items[curve.pv] = self.plot.addYChannel(
+        item = self.plot.addYChannel(
             y_channel=curve.pv,
             name=curve.label,
             color=QColor(*curve.color),
@@ -107,6 +107,13 @@ class ArchiverPlot(QWidget):
             yAxisName=curve.axis,
             useArchiveData=True,
         )
+        # Draw each sample as holding until the next one. The archiver hands
+        # back the last sample before the window, which can be months old;
+        # a straight line from it to the first live value drew a slope or a
+        # flat line at the new value across a time it never had.
+        item.opts["stepMode"] = "left"
+        item.updateItems(styleUpdate=True)
+        self._items[curve.pv] = item
         self._curves[curve.pv] = curve
 
     def remove_curve(self, pv: str) -> None:
