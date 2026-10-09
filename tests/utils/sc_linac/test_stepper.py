@@ -374,3 +374,33 @@ def test_failed_move_aborts_when_motor_moving_unreadable(stepper):
         stepper.move(1000)
 
     assert ("ABORT_REQ", 1) in writes
+
+
+def test_failed_abort_req_still_runs_cavity_abort(stepper):
+    """RF must still go off if the stepper ABORT_REQ write fails."""
+    _ready_to_move(stepper, motor_moving=1)
+    stepper._abort_pv_obj.put.side_effect = RuntimeError("ABORT_REQ down")
+    stepper.cavity.turn_off = MagicMock()
+    stepper.cavity.abort_flag = True
+
+    with pytest.raises(CavityAbortError):
+        stepper.check_abort()
+
+    stepper.cavity.turn_off.assert_called_once()
+
+
+def test_failed_limit_restore_still_restores_speed(stepper):
+    writes = _ready_to_move(stepper, motor_moving=0)
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    def max_steps_put(value, *args, **kwargs):
+        if value == DEFAULT_STEPPER_MAX_STEPS:
+            raise RuntimeError("NSTEPS.DRVH down")
+        writes.append(("NSTEPS.DRVH", value))
+
+    stepper._max_steps_pv_obj.put.side_effect = max_steps_put
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000, max_steps=5000)
+
+    assert writes[-1] == ("VELO", DEFAULT_STEPPER_SPEED)
