@@ -1,6 +1,6 @@
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from sc_linac_physics.utils.epics import PV
+from sc_linac_physics.utils.epics import LazyPV
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 if TYPE_CHECKING:
@@ -28,10 +28,8 @@ class Magnet(linac_utils.SCLinacObject):
         self.cryomodule: "Cryomodule" = cryomodule
 
         self.bdes_pv: str = self.pv_addr("BDES")
-        self._bdes_pv_obj: Optional[PV] = None
 
         self.control_pv: str = self.pv_addr("CTRL")
-        self._control_pv_obj: Optional[PV] = None
 
         self.interlock_pv: str = self.pv_addr("INTLKSUMY")
         self.ps_status_pv: str = self.pv_addr("STATE")
@@ -45,21 +43,17 @@ class Magnet(linac_utils.SCLinacObject):
     def pv_prefix(self):
         return self._pv_prefix
 
-    @property
-    def control_pv_obj(self) -> PV:
-        if not self._control_pv_obj:
-            self._control_pv_obj = PV(self.control_pv)
-        return self._control_pv_obj
+    control_pv_obj = LazyPV("control_pv")
+
+    bdes_pv_obj = LazyPV("bdes_pv")
 
     @property
     def bdes(self):
-        if not self._bdes_pv_obj:
-            self._bdes_pv_obj = PV(self.bdes_pv)
-        return self._bdes_pv_obj.get()
+        return self.bdes_pv_obj.get()
 
     @bdes.setter
     def bdes(self, value):
-        self._bdes_pv_obj.put(value)
+        self.bdes_pv_obj.put(value)
         self.control_pv_obj.put(linac_utils.MAGNET_TRIM_VALUE)
 
     def reset(self):

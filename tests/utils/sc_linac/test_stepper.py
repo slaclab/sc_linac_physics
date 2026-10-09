@@ -57,7 +57,7 @@ def test_step_signed_pv_obj_lazy_and_cached(stepper):
     assert stepper._step_signed_pv_obj is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.stepper.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = stepper.step_signed_pv_obj
         second = stepper.step_signed_pv_obj
@@ -70,7 +70,7 @@ def test_steps_cold_landing_pv_obj_lazy_and_cached(stepper):
     assert stepper._steps_cold_landing_pv_obj is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.stepper.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = stepper.steps_cold_landing_pv_obj
         second = stepper.steps_cold_landing_pv_obj
@@ -228,3 +228,214 @@ def test_issue_move_command_hl(stepper):
     stepper._motor_moving_pv_obj.get.assert_called()
     stepper._limit_switch_a_pv_obj.get.assert_called()
     stepper._limit_switch_b_pv_obj.get.assert_called()
+
+
+def test_issue_move_command_times_out_as_stepper_error(stepper, monkeypatch):
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    monkeypatch.setattr(linac_utils, "STEPPER_MOVE_TIMEOUT_MARGIN_S", 0)
+    monkeypatch.setattr(linac_utils, "STEPPER_MOVE_TIMEOUT_FACTOR", 0)
+    stepper.cavity.rack.cryomodule.is_harmonic_linearizer = False
+    stepper.cavity.check_abort = MagicMock()
+    stepper.check_abort = MagicMock()
+    stepper.move_positive = MagicMock()
+    stepper._speed_pv_obj = make_mock_pv(get_val=20000)
+    stepper._motor_moving_pv_obj = make_mock_pv(get_val=1)
+    with pytest.raises(linac_utils.StepperError, match="to stop moving"):
+        stepper.issue_move_command(1000, check_detune=False)
+
+
+def test_move_timeout_scales_with_steps_and_speed(stepper):
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    stepper._speed_pv_obj = make_mock_pv(get_val=20000)
+    expected = (
+        linac_utils.STEPPER_MOVE_TIMEOUT_MARGIN_S
+        + linac_utils.STEPPER_MOVE_TIMEOUT_FACTOR * 100000 / 20000
+    )
+    assert stepper._move_timeout(-100000) == expected
+
+
+def test_move_timeout_is_margin_when_speed_not_positive(stepper):
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    stepper._speed_pv_obj = make_mock_pv(get_val=0)
+    assert (
+        stepper._move_timeout(1000) == linac_utils.STEPPER_MOVE_TIMEOUT_MARGIN_S
+    )
+
+
+# --- Failed-move cleanup and abort ordering --------------------------------
+
+from sc_linac_physics.utils.sc_linac.linac_utils import (  # noqa: E402
+    CavityAbortError,
+    DetuneError,
+)
+
+
+def _ready_to_move(stepper, motor_moving=1):
+    """Mock every PV a move touches; return the shared write log."""
+    writes = []
+
+    def pv(name, get_val=0):
+        mock = make_mock_pv(get_val=get_val)
+        mock.put.side_effect = lambda value, *a, **k: writes.append(
+            (name, value)
+        )
+        return mock
+
+    stepper._max_steps_pv_obj = pv("NSTEPS.DRVH")
+    stepper._speed_pv_obj = pv("VELO", get_val=DEFAULT_STEPPER_SPEED)
+    stepper._step_des_pv_obj = pv("NSTEPS")
+    stepper._abort_pv_obj = pv("ABORT_REQ")
+    stepper._motor_moving_pv_obj = make_mock_pv(get_val=motor_moving)
+    stepper.cavity.rack.cryomodule.is_harmonic_linearizer = False
+    return writes
+
+
+def test_failed_move_aborts_moving_motor_and_restores_limits(stepper):
+    writes = _ready_to_move(stepper, motor_moving=1)
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000, max_steps=5000, speed=40000)
+
+    assert ("ABORT_REQ", 1) in writes
+    assert writes[-2:] == [
+        ("NSTEPS.DRVH", DEFAULT_STEPPER_MAX_STEPS),
+        ("VELO", DEFAULT_STEPPER_SPEED),
+    ]
+    assert writes.index(("ABORT_REQ", 1)) < len(writes) - 2
+
+
+def test_failed_move_skips_abort_when_motor_stopped(stepper):
+    writes = _ready_to_move(stepper, motor_moving=0)
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000)
+
+    assert ("ABORT_REQ", 1) not in writes
+
+
+def test_failed_move_without_limit_change_does_not_write_limits(stepper):
+    writes = _ready_to_move(stepper, motor_moving=0)
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000, change_limits=False)
+
+    assert not any(name in ("NSTEPS.DRVH", "VELO") for name, _ in writes)
+
+
+def test_stepper_abort_writes_abort_req_once(stepper):
+    writes = _ready_to_move(stepper, motor_moving=1)
+
+    def abort_mid_move(*args, **kwargs):
+        stepper.abort_flag = True
+        stepper.check_abort()
+
+    stepper.issue_move_command = MagicMock(side_effect=abort_mid_move)
+
+    with pytest.raises(StepperAbortError):
+        stepper.move(1000)
+
+    assert writes.count(("ABORT_REQ", 1)) == 1
+
+
+def test_cavity_abort_writes_abort_req_before_rf_off(stepper):
+    """Cavity.check_abort() turns RF off before raising; stop the motor first."""
+    writes = _ready_to_move(stepper, motor_moving=1)
+    stepper.cavity.turn_off = MagicMock(
+        side_effect=lambda: writes.append(("RF", "off"))
+    )
+
+    def cavity_abort_mid_move(*args, **kwargs):
+        stepper.cavity.abort_flag = True
+        stepper.check_abort()
+
+    stepper.issue_move_command = MagicMock(side_effect=cavity_abort_mid_move)
+
+    with pytest.raises(CavityAbortError):
+        stepper.move(1000)
+
+    assert writes.count(("ABORT_REQ", 1)) == 1
+    assert writes.index(("ABORT_REQ", 1)) < writes.index(("RF", "off"))
+
+
+def test_split_move_failure_cleans_up_once(stepper):
+    writes = _ready_to_move(stepper, motor_moving=1)
+    calls = [0]
+
+    def fail_on_second_segment(*args, **kwargs):
+        calls[0] += 1
+        if calls[0] == 2:
+            raise DetuneError("bad")
+
+    stepper.issue_move_command = MagicMock(side_effect=fail_on_second_segment)
+
+    with pytest.raises(DetuneError):
+        stepper.move(9000, max_steps=5000)
+
+    assert writes.count(("ABORT_REQ", 1)) == 1
+    assert writes.count(("VELO", DEFAULT_STEPPER_SPEED)) == 2  # set, restore
+
+
+def test_cleanup_failure_does_not_mask_original_error(stepper):
+    _ready_to_move(stepper, motor_moving=1)
+    stepper._abort_pv_obj.put.side_effect = RuntimeError("ABORT_REQ down")
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000)
+
+
+def test_successful_move_does_not_abort(stepper):
+    writes = _ready_to_move(stepper, motor_moving=0)
+    stepper.issue_move_command = MagicMock()
+
+    stepper.move(1000)
+
+    assert ("ABORT_REQ", 1) not in writes
+
+
+def test_failed_move_aborts_when_motor_moving_unreadable(stepper):
+    """Unknown motor state is treated as unsafe: write ABORT_REQ."""
+    writes = _ready_to_move(stepper)
+    stepper._motor_moving_pv_obj.get.side_effect = RuntimeError("PV down")
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000)
+
+    assert ("ABORT_REQ", 1) in writes
+
+
+def test_failed_abort_req_still_runs_cavity_abort(stepper):
+    """RF must still go off if the stepper ABORT_REQ write fails."""
+    _ready_to_move(stepper, motor_moving=1)
+    stepper._abort_pv_obj.put.side_effect = RuntimeError("ABORT_REQ down")
+    stepper.cavity.turn_off = MagicMock()
+    stepper.cavity.abort_flag = True
+
+    with pytest.raises(CavityAbortError):
+        stepper.check_abort()
+
+    stepper.cavity.turn_off.assert_called_once()
+
+
+def test_failed_limit_restore_still_restores_speed(stepper):
+    writes = _ready_to_move(stepper, motor_moving=0)
+    stepper.issue_move_command = MagicMock(side_effect=DetuneError("bad"))
+
+    def max_steps_put(value, *args, **kwargs):
+        if value == DEFAULT_STEPPER_MAX_STEPS:
+            raise RuntimeError("NSTEPS.DRVH down")
+        writes.append(("NSTEPS.DRVH", value))
+
+    stepper._max_steps_pv_obj.put.side_effect = max_steps_put
+
+    with pytest.raises(DetuneError):
+        stepper.move(1000, max_steps=5000)
+
+    assert writes[-1] == ("VELO", DEFAULT_STEPPER_SPEED)
