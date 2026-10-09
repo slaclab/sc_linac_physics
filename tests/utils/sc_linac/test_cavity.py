@@ -111,7 +111,7 @@ def test_stepper_temp_pv_obj_lazy_and_cached(cavity):
     assert cavity._stepper_temp_pv_obj is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = cavity.stepper_temp_pv_obj
         second = cavity.stepper_temp_pv_obj
@@ -124,7 +124,7 @@ def test_df_cold_pv_obj_lazy_and_cached(cavity):
     assert cavity._df_cold_pv_obj is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = cavity.df_cold_pv_obj
         second = cavity.df_cold_pv_obj
@@ -147,7 +147,7 @@ def test_cavity_fscan_pv_obj_lazy_and_cached(cavity, prop_name, addr_attr):
     assert getattr(cavity, f"_{prop_name}") is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = getattr(cavity, prop_name)
         second = getattr(cavity, prop_name)
@@ -164,13 +164,13 @@ def test_start_characterization(cavity):
 
 def test_cw_data_decimation(cavity):
     val = randint(0, 256)
-    cavity._cw_data_decim_pv_obj = make_mock_pv(get_val=val)
+    cavity._cw_data_decimation_pv_obj = make_mock_pv(get_val=val)
     assert cavity.cw_data_decimation == val
 
 
 def test_pulsed_data_decimation(cavity):
     val = randint(0, 256)
-    cavity._pulsed_data_decim_pv_obj = make_mock_pv(get_val=val)
+    cavity._pulsed_data_decimation_pv_obj = make_mock_pv(get_val=val)
     assert cavity.pulsed_data_decimation == val
 
 
@@ -761,7 +761,7 @@ def test_push_go_button_creates_go_pv_lazily(cavity):
     cavity._pulse_go_pv_obj = None
     go_pv = make_mock_pv(cavity.pulse_go_pv)
     with patch(
-        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=go_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=go_pv
     ) as pv_cls:
         cavity.push_go_button()
     pv_cls.assert_called_once_with(cavity.pulse_go_pv)
@@ -857,11 +857,11 @@ def test_setup_rf(cavity):
 
 
 def test_reset_data_decimation(cavity):
-    cavity._cw_data_decim_pv_obj = make_mock_pv()
-    cavity._pulsed_data_decim_pv_obj = make_mock_pv()
+    cavity._cw_data_decimation_pv_obj = make_mock_pv()
+    cavity._pulsed_data_decimation_pv_obj = make_mock_pv()
     cavity.reset_data_decimation()
-    cavity._cw_data_decim_pv_obj.put.assert_called_with(255)
-    cavity._pulsed_data_decim_pv_obj.put.assert_called_with(255)
+    cavity._cw_data_decimation_pv_obj.put.assert_called_with(255)
+    cavity._pulsed_data_decimation_pv_obj.put.assert_called_with(255)
 
 
 def test_setup_tuning_sela(cavity):
