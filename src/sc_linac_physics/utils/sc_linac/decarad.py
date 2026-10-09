@@ -1,6 +1,6 @@
-from typing import Dict, Optional
+from typing import Dict
 
-from sc_linac_physics.utils.epics import PV
+from sc_linac_physics.utils.epics import LazyPV
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     SCLinacObject,
     DECARAD_BACKGROUND_READING_AVG,
@@ -23,8 +23,6 @@ class DecaradHead(SCLinacObject):
 
         self.avg_dose_rate_pv: str = self.pv_addr("GAMMAAVE")
         self.raw_dose_rate_pv: str = self.pv_addr("GAMMA_DOSE_RATE")
-        self._avg_dose_rate_pv_obj: Optional[PV] = None
-        self._raw_dose_rate_pv_obj: Optional[PV] = None
 
         self.counter = 0
 
@@ -32,17 +30,9 @@ class DecaradHead(SCLinacObject):
     def pv_prefix(self):
         return self._pv_prefix
 
-    @property
-    def avg_dose_rate_pv_obj(self) -> PV:
-        if not self._avg_dose_rate_pv_obj:
-            self._avg_dose_rate_pv_obj = PV(self.avg_dose_rate_pv)
-        return self._avg_dose_rate_pv_obj
+    avg_dose_rate_pv_obj = LazyPV("avg_dose_rate_pv")
 
-    @property
-    def raw_dose_rate_pv_obj(self) -> PV:
-        if not self._raw_dose_rate_pv_obj:
-            self._raw_dose_rate_pv_obj = PV(self.raw_dose_rate_pv)
-        return self._raw_dose_rate_pv_obj
+    raw_dose_rate_pv_obj = LazyPV("raw_dose_rate_pv")
 
     @property
     def normalized_avg_dose(self) -> float:
@@ -64,7 +54,6 @@ class Decarad(SCLinacObject):
         self.number = number
         self._pv_prefix = "RADM:SYS0:{num}00:".format(num=self.number)
         self.power_control_pv = self.pv_addr("HVCTRL")
-        self._power_control_pv_obj: Optional[PV] = None
 
         self.power_status_pv = self.pv_addr("HVSTATUS")
         self.voltage_readback_pv = self.pv_addr("HVMON")
@@ -77,11 +66,7 @@ class Decarad(SCLinacObject):
     def __eq__(self, other):
         return isinstance(other, Decarad) and other.number == self.number
 
-    @property
-    def power_control_pv_obj(self) -> PV:
-        if not self._power_control_pv_obj:
-            self._power_control_pv_obj = PV(self.power_control_pv)
-        return self._power_control_pv_obj
+    power_control_pv_obj = LazyPV("power_control_pv")
 
     def turn_on(self):
         self.power_control_pv_obj.put(0)

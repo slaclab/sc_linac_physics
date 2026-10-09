@@ -360,3 +360,67 @@ class TestRatedPower:
     def test_rated_power_from_type(self, ssa, ssa_type, expected):
         ssa._type_pv_obj = make_mock_pv(get_val=ssa_type)
         assert ssa.rated_power_kw == expected
+
+
+@pytest.fixture
+def no_wait(monkeypatch):
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    for name in (
+        "SSA_TURN_ON_TIMEOUT_S",
+        "SSA_TURN_OFF_TIMEOUT_S",
+        "SSA_CALIBRATION_TIMEOUT_S",
+    ):
+        monkeypatch.setattr(linac_utils, name, 0)
+
+
+def test_turn_on_times_out_as_ssa_fault(ssa, no_wait):
+    from sc_linac_physics.utils.sc_linac.linac_utils import SSAFaultError
+
+    ssa.reset = MagicMock()
+    ssa.cavity.check_abort = MagicMock()
+    ssa._status_pv_obj = make_mock_pv(get_val="SSA Off")
+    ssa._turn_on_pv_obj = make_mock_pv()
+    with pytest.raises(SSAFaultError, match="to turn on"):
+        ssa.turn_on()
+
+
+def test_turn_off_times_out_as_ssa_fault(ssa, no_wait):
+    from sc_linac_physics.utils.sc_linac.linac_utils import SSAFaultError
+
+    ssa.cavity.check_abort = MagicMock()
+    ssa._status_pv_obj = make_mock_pv(get_val=SSA_STATUS_ON_VALUE)
+    ssa._turn_off_pv_obj = make_mock_pv()
+    with pytest.raises(SSAFaultError, match="to turn off"):
+        ssa.turn_off()
+
+
+def _start_stuck_calibration(ssa):
+    from sc_linac_physics.utils.sc_linac.linac_utils import (
+        SSA_CALIBRATION_RUNNING_VALUE,
+    )
+
+    ssa.reset = MagicMock()
+    ssa.turn_on = MagicMock()
+    ssa.cavity.reset_interlocks = MagicMock()
+    ssa.start_calibration = MagicMock()
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+    ssa._calibration_status_pv_obj = make_mock_pv(
+        get_val=SSA_CALIBRATION_RUNNING_VALUE
+    )
+
+
+def test_run_calibration_times_out(ssa, no_wait):
+    _start_stuck_calibration(ssa)
+    ssa.cavity.check_abort = MagicMock()
+    with pytest.raises(SSACalibrationError, match="calibration to finish"):
+        ssa.run_calibration()
+
+
+def test_run_calibration_wait_checks_abort(ssa):
+    from sc_linac_physics.utils.sc_linac.linac_utils import CavityAbortError
+
+    _start_stuck_calibration(ssa)
+    ssa.cavity.check_abort = MagicMock(side_effect=CavityAbortError("abort"))
+    with pytest.raises(CavityAbortError):
+        ssa.run_calibration()

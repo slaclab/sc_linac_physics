@@ -508,7 +508,7 @@ function stepperTolFactor(numSteps) {
 // _auto_tune calls move() without check_detune, which defaults to True
 // (stepper.py::StepperTuner.move “check_detune: bool = True”), and move()'s motor-moving poll loop calls
 // cavity.check_detune() every ~5 s while the motor is turning
-// (stepper.py::StepperTuner.issue_move_command “while self.motor_moving:”). So the chirp range can be widened SEVERAL TIMES
+// (stepper.py::StepperTuner.issue_move_command “poll_interval=5”). So the chirp range can be widened SEVERAL TIMES
 // during a single move, not just once per iteration as modeled here.
 //
 // Also not modeled: the pre-loop `if self.detune_invalid` guard
