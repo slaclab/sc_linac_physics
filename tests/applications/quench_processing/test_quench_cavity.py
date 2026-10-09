@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch, PropertyMock
 
 import numpy as np
 import pytest
-from lcls_tools.common.controls.pyepics.utils import EPICS_INVALID_VAL
+from sc_linac_physics.utils.epics import EPICS_INVALID_VAL
 
 from sc_linac_physics.applications.quench_processing.quench_cavity import (
     QuenchCavity,

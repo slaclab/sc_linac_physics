@@ -3,7 +3,7 @@ from random import randint, choice
 from unittest.mock import MagicMock, patch
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import make_mock_pv
+from sc_linac_physics.utils.epics import make_mock_pv
 
 from sc_linac_physics.displays.cavity_display.backend.backend_cavity import (
     BackendCavity,

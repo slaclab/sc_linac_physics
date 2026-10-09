@@ -3,7 +3,7 @@ from random import randint, choice
 from unittest.mock import MagicMock, patch
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import (
+from sc_linac_physics.utils.epics import (
     EPICS_INVALID_VAL,
     EPICS_NO_ALARM_VAL,
     make_mock_pv,
