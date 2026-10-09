@@ -27,6 +27,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     CHARACTERIZATION_RUNNING_VALUE,
     CHARACTERIZATION_CRASHED_VALUE,
     HW_MODE_ONLINE_VALUE,
+    MAX_STEPPER_SPEED,
     HW_MODE_OFFLINE_VALUE,
     TUNE_CONFIG_RESONANCE_VALUE,
     DetuneError,
@@ -625,6 +626,22 @@ def test__auto_tune_iteration_callback_invoked(cavity):
     assert len(calls) >= 1
 
 
+def test__auto_tune_moves_three_quarters_of_detune(cavity):
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    cavity.stepper_tuner.hz_per_microstep = 0.01
+    detunes = iter([1000, 0])
+
+    cavity._auto_tune(delta_hz_func=lambda: next(detunes))
+
+    # 0.75 * 1000 Hz / 0.01 Hz per microstep
+    cavity.stepper_tuner.move.assert_called_once_with(
+        75000, max_steps=82500, speed=MAX_STEPPER_SPEED
+    )
+
+
 class BoundedDetune:
     """
     Wraps a detune source and raises once ``limit`` calls are exceeded, so a
@@ -652,7 +669,7 @@ def test__auto_tune_zero_step_estimate_raises(cavity):
     cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
     cavity.stepper_tuner.move = MagicMock()
     # A SCALE three orders of magnitude too large (e.g. a defaulted or
-    # mis-measured SCALE_CALC.B) makes 0.9 * delta_hz * microsteps_per_hz
+    # mis-measured SCALE_CALC.B) makes 0.75 * delta_hz * microsteps_per_hz
     # truncate to zero, so the motor is commanded no motion and the detune
     # never changes.
     cavity.stepper_tuner.hz_per_microstep = 1e6

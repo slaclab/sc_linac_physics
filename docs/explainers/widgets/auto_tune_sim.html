@@ -190,7 +190,7 @@ const LOOP_ORACLE = [
     // while condition holds and a second move runs (8,229 steps, landing at
     // 5.0 Hz).
     //
-    // So the hard-coded 0.9 aims a perfectly-tuned cavity at precisely the
+    // So undershoot 0.9 aims a perfectly-tuned cavity at precisely the
     // tolerance boundary, and truncation always leaves it a hair outside.
     // A well-calibrated cavity at 10x tolerance therefore costs two moves,
     // never one.
@@ -337,7 +337,7 @@ const LOOP_ORACLE = [
     },
     // gain = 1.35, q = 0.35, travel wants 1.0/0.65 = 1.538x against the same
     // 1.369x budget, and it trips on move 3 at 1,346,283 steps. This pair is
-    // the cleanest statement of what the hard-coded 0.9 buys: identical
+    // the cleanest statement of what undershoot 0.9 buys: identical
     // hardware, identical miscalibration, and the only difference between
     // converging and a DetuneError is that one factor.
     expect: { outcome: "runaway", moves: 3 },
@@ -444,21 +444,21 @@ const FAULT_BASE = {
 // derivedFigures() formats them. selfCheck() recomputes each one, and
 // tests/docs/test_auto_tune_explainer.py checks the page states these values.
 const PROSE_FIGURES = {
-  "fig-example-detune": "500",
-  "fig-example-detune-b": "500",
-  "fig-exact-aim": "81,818.18",
-  "fig-truncated-aim": "81,818",
-  "fig-dropped-microsteps": "0.18",
-  "fig-residual": "50.0010",
-  "fig-residual-nominal": "50.0039",
-  "fig-example-expected": "90,909",
-  "fig-example-tol-factor": "2.753",
-  "fig-example-tol-factor-nominal": "2.738",
+  "fig-example-detune": "200",
+  "fig-example-detune-b": "200",
+  "fig-exact-aim": "27,272.73",
+  "fig-truncated-aim": "27,272",
+  "fig-dropped-microsteps": "0.73",
+  "fig-residual": "50.0040",
+  "fig-residual-nominal": "50.0031",
+  "fig-example-expected": "36,363",
+  "fig-example-tol-factor": "4.268",
+  "fig-example-tol-factor-nominal": "4.262",
   "fig-opened-detune": "5000",
   "fig-opened-expected": "909,090",
   "fig-opened-tol-factor": "1.376",
   "fig-opened-tol-factor-nominal": "1.369",
-  "fig-window-undershoot": "1.49",
+  "fig-window-undershoot": "1.94",
   "fig-window-unity": "1.27",
 };
 
@@ -498,7 +498,7 @@ function stepperTolFactor(numSteps) {
 //   1. check_abort()
 //   2. if max_stepper_temp is set and the stepper is hotter -> StepperTempError
 //   3. iteration_callback() (commissioning uses it for abort + the live plot)
-//   4. est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+//   4. est_steps = int(0.75 * delta_hz * microsteps_per_hz)
 //   5. stepper_tuner.move(est_steps, max_steps=|est_steps|*1.1, MAX SPEED)
 //   6. if cumulative steps > expected * tol_factor -> DetuneError (runaway)
 //   7. check_detune()  <- this is where the chirp range gets widened
@@ -536,7 +536,7 @@ function runAutoTune(opts) {
     scaleHzPerMicrostep,   // believed, from the SCALE PV
     trueHzPerMicrostep,    // actual cavity response
     tolerance,
-    undershoot = 0.9,
+    undershoot = 0.75,
     fault = null,
     faultAtIteration = 2,
   } = opts;
@@ -656,7 +656,7 @@ function runAutoTune(opts) {
       error = `DetuneError: step estimate rounded to zero with detune ` +
               `${deltaHz} Hz outside tolerance ${tolerance} Hz; ` +
               `check SCALE (hz_per_microstep=${hzPerMicrostep})`;
-      log.push("The believed SCALE is so large that 0.9 x detune x " +
+      log.push(`The believed SCALE is so large that ${undershoot} x detune x ` +
                "microsteps_per_hz truncates to zero microsteps. No motion is " +
                "commanded, so nothing can change -- the loop raises rather " +
                "than spinning.");
@@ -959,8 +959,8 @@ const SLIDERS = [
     min: 0.2, max: 3, step: 0.05, value: 1,
     note: "1.0 means SCALE is exactly right" },
   { id: "undershoot", label: "Undershoot factor", unit: "",
-    min: 0.5, max: 1.3, step: 0.05, value: 0.9,
-    note: "Hard-coded 0.9 in the real loop (cavity.py::Cavity._auto_tune “int(0.9 * delta_hz * microsteps_per_hz)”)" },
+    min: 0.5, max: 1.3, step: 0.05, value: 0.75,
+    note: "Hard-coded 0.75 in the real loop (cavity.py::Cavity._auto_tune “int(0.75 * delta_hz * microsteps_per_hz)”)" },
 ];
 
 // Option text for the fault picker. Keyed off FAULT_ORACLE so a fault added to
@@ -1030,7 +1030,7 @@ function fmtHz(value) {
 // construction, and no test has to police them.
 //
 // Sourced constants stay as literals with their citations — the 50 Hz
-// tolerance, the 0.9, the 1.1, 1.4/256. Those are facts about the source, not
+// tolerance, the 0.75, the 1.1, 1.4/256. Those are facts about the source, not
 // arithmetic this page performs.
 
 // HZ_PER_STEP / MICROSTEPS_PER_STEP (linac_utils.py::MICROSTEPS_PER_STEP, linac_utils.py::HZ_PER_STEP): what a 1.3 GHz
@@ -1038,9 +1038,11 @@ function fmtHz(value) {
 // measurement lands in the PV.
 const NOMINAL_HZ_PER_MICROSTEP = 1.4 / 256;
 
-// The truncation example is stated as "ten times tolerance", so the 10 lives
-// here and the prose reads the resulting detune back out of it.
-const EXAMPLE_TOLERANCE_MULTIPLE = 10;
+// The truncation example is stated as "four times tolerance", so the 4 lives
+// here and the prose reads the resulting detune back out of it. Four because
+// undershoot 0.75 leaves 1/4 of the detune, so 4x tolerance is aimed exactly
+// at the tolerance boundary.
+const EXAMPLE_TOLERANCE_MULTIPLE = 4;
 
 // Resolution of the convergence-window scan. The prose says "about"; this is
 // what "about" means.
