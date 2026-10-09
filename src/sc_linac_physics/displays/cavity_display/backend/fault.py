@@ -221,7 +221,6 @@ class Fault:
             self.pv,
             connection_timeout=self.connection_timeout,
             auto_monitor=False,  # Don't need continuous monitoring
-            require_connection=False,  # Don't fail if PV doesn't exist
         )
 
     @property

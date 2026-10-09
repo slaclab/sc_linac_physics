@@ -12,6 +12,7 @@ Key improvements over the raw class:
 - **Never returns `None`** — raises a typed exception instead
 - **Retry with backoff** — configurable `max_retries` (default 3) and `retry_delay`
 - **Thread-safe reconnection** — reentrant lock around reconnect logic
+- **No wait in the constructor** — `PV(name)` returns at once. The first `get()`/`put()` waits up to `connection_timeout` and raises `PVConnectionError` if the PV doesn't connect. Call `pv.ensure_connected()` to fail at a known point instead.
 - **Typed exceptions** — `PVConnectionError`, `PVGetError`, `PVPutError`, `PVInvalidError`
 
 ```python
@@ -65,7 +66,7 @@ Prefer `PVBatch` when touching more than ~5 PVs at once (e.g., reading all 296 c
 
 | Exception | When raised |
 |-----------|-------------|
-| `PVConnectionError` | CA connection failed after retries |
+| `PVConnectionError` | PV didn't connect within the timeout, on first `get()`/`put()` or `ensure_connected()` |
 | `PVGetError` | Read failed after retries |
 | `PVPutError` | Write failed after retries |
 | `PVInvalidError` | Value out of allowed range or alarm severity exceeded |

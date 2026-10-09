@@ -17,8 +17,9 @@ Basic Usage:
 Batch Operations:
     >>> from sc_linac_physics.utils.epics import PV, PVBatch
     >>>
-    >>> # Fast batch creation using PV class method
-    >>> pvs = PV.batch_create(["PV:1", "PV:2", "PV:3"])
+    >>> # PV() doesn't wait to connect, so creating several before using
+    >>> # any lets Channel Access search for them together
+    >>> pvs = [PV(name) for name in ["PV:1", "PV:2", "PV:3"]]
     >>>
     >>> # Low-level batch read (fastest for one-time operations)
     >>> values = PVBatch.get_values(["PV:1", "PV:2", "PV:3"])

@@ -30,6 +30,7 @@ def create_pv_safe(
     """
     try:
         pv = PV(pvname, connection_timeout=connection_timeout, **kwargs)
+        pv.ensure_connected()
         return pv
     except PVConnectionError as e:
         if raise_on_failure:
