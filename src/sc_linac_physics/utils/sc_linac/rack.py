@@ -1,7 +1,7 @@
 import time
-from typing import Type, Dict, Iterable, Optional, TYPE_CHECKING
+from typing import Type, Dict, Iterable, TYPE_CHECKING
 
-from sc_linac_physics.utils.epics import PV
+from sc_linac_physics.utils.epics import LazyPV
 from sc_linac_physics.utils.sc_linac import linac_utils
 from sc_linac_physics.utils.sc_linac.linac_utils import SCLinacObject
 from sc_linac_physics.utils.sc_linac.rfstation import RFStation
@@ -61,17 +61,11 @@ class Rack(SCLinacObject):
 
         # FSCAN (π-mode scan) rack-level PVs.
         self.fscan_freq_start_pv: str = self.pv_addr("FSCAN:FREQ_START")
-        self._fscan_freq_start_pv_obj: Optional[PV] = None
         self.fscan_freq_stop_pv: str = self.pv_addr("FSCAN:FREQ_STOP")
-        self._fscan_freq_stop_pv_obj: Optional[PV] = None
         self.fscan_rms_thresh_pv: str = self.pv_addr("FSCAN:RMS_THRESH")
-        self._fscan_rms_thresh_pv_obj: Optional[PV] = None
         self.fscan_mode_overlap_pv: str = self.pv_addr("FSCAN:MODE_OVERLAP")
-        self._fscan_mode_overlap_pv_obj: Optional[PV] = None
         self.fscan_start_pv: str = self.pv_addr("FSCAN:START")
-        self._fscan_start_pv_obj: Optional[PV] = None
         self.fscan_stat_pv: str = self.pv_addr("FSCAN:STAT")
-        self._fscan_stat_pv_obj: Optional[PV] = None
 
         # Hz. Shifts the RF frequency of every cavity on this rack, so each
         # reads CHIRP:DF relative to it (see Cavity.real_detune). Operators
@@ -79,7 +73,6 @@ class Rack(SCLinacObject):
         # 1.3 GHz racks it exists and is never changed (Lisa Zacarias,
         # 2026-11-02).
         self.freq_offset_pv: str = self.pv_addr("FREQ_OFFSET")
-        self._freq_offset_pv_obj: Optional[PV] = None
 
         if rack_name == "A":
             # rack A always has cavities 1 - 4
@@ -102,52 +95,24 @@ class Rack(SCLinacObject):
     def pv_prefix(self):
         return self._pv_prefix
 
-    @property
-    def freq_offset_pv_obj(self) -> PV:
-        if not self._freq_offset_pv_obj:
-            self._freq_offset_pv_obj = PV(self.freq_offset_pv)
-        return self._freq_offset_pv_obj
+    freq_offset_pv_obj = LazyPV("freq_offset_pv")
 
     @property
     def freq_offset(self) -> float:
         """The rack's FREQ_OFFSET, in Hz. Read only here."""
         return self.freq_offset_pv_obj.get()
 
-    @property
-    def fscan_freq_start_pv_obj(self) -> PV:
-        if not self._fscan_freq_start_pv_obj:
-            self._fscan_freq_start_pv_obj = PV(self.fscan_freq_start_pv)
-        return self._fscan_freq_start_pv_obj
+    fscan_freq_start_pv_obj = LazyPV("fscan_freq_start_pv")
 
-    @property
-    def fscan_freq_stop_pv_obj(self) -> PV:
-        if not self._fscan_freq_stop_pv_obj:
-            self._fscan_freq_stop_pv_obj = PV(self.fscan_freq_stop_pv)
-        return self._fscan_freq_stop_pv_obj
+    fscan_freq_stop_pv_obj = LazyPV("fscan_freq_stop_pv")
 
-    @property
-    def fscan_rms_thresh_pv_obj(self) -> PV:
-        if not self._fscan_rms_thresh_pv_obj:
-            self._fscan_rms_thresh_pv_obj = PV(self.fscan_rms_thresh_pv)
-        return self._fscan_rms_thresh_pv_obj
+    fscan_rms_thresh_pv_obj = LazyPV("fscan_rms_thresh_pv")
 
-    @property
-    def fscan_mode_overlap_pv_obj(self) -> PV:
-        if not self._fscan_mode_overlap_pv_obj:
-            self._fscan_mode_overlap_pv_obj = PV(self.fscan_mode_overlap_pv)
-        return self._fscan_mode_overlap_pv_obj
+    fscan_mode_overlap_pv_obj = LazyPV("fscan_mode_overlap_pv")
 
-    @property
-    def fscan_start_pv_obj(self) -> PV:
-        if not self._fscan_start_pv_obj:
-            self._fscan_start_pv_obj = PV(self.fscan_start_pv)
-        return self._fscan_start_pv_obj
+    fscan_start_pv_obj = LazyPV("fscan_start_pv")
 
-    @property
-    def fscan_stat_pv_obj(self) -> PV:
-        if not self._fscan_stat_pv_obj:
-            self._fscan_stat_pv_obj = PV(self.fscan_stat_pv)
-        return self._fscan_stat_pv_obj
+    fscan_stat_pv_obj = LazyPV("fscan_stat_pv")
 
     def run_fscan(
         self,
