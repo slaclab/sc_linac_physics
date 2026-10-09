@@ -121,3 +121,18 @@ def test_trim(cryomodule):
     magnet._control_pv_obj = make_mock_pv()
     magnet.trim()
     magnet._control_pv_obj.put.assert_called_with(MAGNET_TRIM_VALUE)
+
+
+def test_bdes_setter_works_before_any_read(cryomodule):
+    """The setter used to write through _bdes_pv_obj, which was None until read."""
+    from unittest.mock import patch
+
+    from sc_linac_physics.utils.epics import make_mock_pv as our_mock
+
+    magnet = cryomodule.quad
+    magnet._bdes_pv_obj = None
+    magnet._control_pv_obj = our_mock()
+    bdes_pv = our_mock()
+    with patch("sc_linac_physics.utils.epics.lazy.PV", return_value=bdes_pv):
+        magnet.bdes = 1.5
+    bdes_pv.put.assert_called_once_with(1.5)
