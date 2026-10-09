@@ -163,8 +163,9 @@ class PV(EPICS_PV):
                     timeout if timeout is not None else 0.0,
                     self._first_connect_timeout,
                 )
+                # Not logged: every PV's first use comes through here, and
+                # the shared pv_operations log would get one line per PV.
                 verb = "connect"
-                get_logger().debug(f"PV {self.pvname} connecting")
             else:
                 if timeout is None:
                     timeout = self.config.connection_timeout
