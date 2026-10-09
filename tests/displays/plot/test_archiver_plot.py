@@ -43,8 +43,12 @@ def test_back_to_auto_scale_after_fixed_range(plot):
     """The old plotter stayed clamped here because of setLimits."""
     plot.set_y_range("A", (1.0, 2.0))
     assert axis_item(plot, "A").auto_range is False
+    view = axis_item(plot, "A").linkedView()
+    assert not view.autoRangeEnabled()[1]
     plot.set_y_range("A", None)
     assert axis_item(plot, "A").auto_range is True
+    # auto_range reads the linked ViewBox, but check the view directly too.
+    assert view.autoRangeEnabled()[1]
     assert "A" not in plot.curve_set.y_ranges
 
 
