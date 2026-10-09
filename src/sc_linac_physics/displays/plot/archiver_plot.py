@@ -107,11 +107,12 @@ class ArchiverPlot(QWidget):
             yAxisName=curve.axis,
             useArchiveData=True,
         )
-        # Draw each sample as holding until the next one. The archiver hands
-        # back the last sample before the window, which can be months old;
-        # a straight line from it to the first live value drew a slope or a
-        # flat line at the new value across a time it never had.
-        item.opts["stepMode"] = "left"
+        # Draw each sample as holding until the next one ("right" in
+        # pyqtgraph; "left" jumps to the next value early). The archiver
+        # hands back the last sample before the window, which can be months
+        # old; a straight line from it to the first live value showed the
+        # new value back across the whole window.
+        item.opts["stepMode"] = "right"
         item.updateItems(styleUpdate=True)
         self._items[curve.pv] = item
         self._curves[curve.pv] = curve

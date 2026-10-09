@@ -119,4 +119,13 @@ def test_curves_hold_each_sample_until_the_next(plot):
     item.data_buffer[:, -1] = [5000.0, 16.6]
     item.points_accumulated = 1
     item.redrawCurve()
-    assert item.curve.opts["stepMode"] == "left"
+    x, y = item.curve._generateStepModeData(
+        item.curve.opts["stepMode"], *item.curve.getData(), baseline=None
+    )
+    # 0 holds from 1000 until 5000, then 16.6.
+    assert list(zip(x, y)) == [
+        (1000.0, 0.0),
+        (5000.0, 0.0),
+        (5000.0, 16.6),
+        (5000.0, 16.6),
+    ]
