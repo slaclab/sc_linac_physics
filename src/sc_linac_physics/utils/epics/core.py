@@ -444,6 +444,25 @@ class PV(EPICS_PV):
 
         return True
 
+    @property
+    def severity(self) -> int:
+        """
+        Alarm severity. Never None, and never read from a disconnected PV.
+
+        pyepics' severity returns its cached value. pyepics doesn't clear
+        that cache on disconnect, so it can be stale. It can also be None if
+        the time fields never arrived. This waits for the connection first,
+        and raises PVConnectionError if the PV doesn't connect. If pyepics
+        still has no severity after that, it returns EPICS_INVALID_VAL, so
+        unknown severity reads as invalid rather than fine.
+
+        Raises:
+            PVConnectionError: If the PV is not connected
+        """
+        self._ensure_connected()
+        severity = super().severity
+        return EPICS_INVALID_VAL if severity is None else severity
+
     def check_alarm(self, raise_on_alarm: bool = False) -> int:
         """
         Check PV alarm status.

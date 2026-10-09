@@ -365,21 +365,21 @@ class TestPVAlarmChecking:
     def test_check_alarm_minor(self):
         """Test check_alarm detects MINOR alarm"""
         pv = PV("TEST:PV")
-        pv.severity = EPICS_MINOR_VAL
+        pv._severity = EPICS_MINOR_VAL
         severity = pv.check_alarm()
         assert severity == EPICS_MINOR_VAL
 
     def test_check_alarm_major(self):
         """Test check_alarm detects MAJOR alarm"""
         pv = PV("TEST:PV")
-        pv.severity = EPICS_MAJOR_VAL
+        pv._severity = EPICS_MAJOR_VAL
         severity = pv.check_alarm()
         assert severity == EPICS_MAJOR_VAL
 
     def test_check_alarm_raise_on_major(self):
         """Test check_alarm raises on MAJOR when requested"""
         pv = PV("TEST:PV")
-        pv.severity = EPICS_MAJOR_VAL
+        pv._severity = EPICS_MAJOR_VAL
         with pytest.raises(PVInvalidError) as exc_info:
             pv.check_alarm(raise_on_alarm=True)
         assert "MAJOR" in str(exc_info.value)
@@ -597,3 +597,26 @@ class TestPVBatchOperations:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSeverity:
+    def test_connected_returns_pyepics_value(self):
+        pv = PV("TEST:PV")
+        pv._severity = EPICS_MINOR_VAL
+        assert pv.severity == EPICS_MINOR_VAL
+
+    def test_unknown_severity_reads_as_invalid(self):
+        from sc_linac_physics.utils.epics import EPICS_INVALID_VAL
+
+        pv = PV("TEST:PV")
+        pv._severity = None
+        assert pv.severity == EPICS_INVALID_VAL
+
+    def test_disconnected_raises_instead_of_stale_value(self):
+        """pyepics keeps the last severity after a disconnect."""
+        pv = PV("TEST:PV")
+        pv._severity = EPICS_NO_ALARM_VAL
+        pv.get()  # connected once
+        pv._connected = False
+        with pytest.raises(PVConnectionError):
+            _ = pv.severity

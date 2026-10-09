@@ -309,7 +309,7 @@ class FakeEPICS_PV:
         self._connected = True
         self._get_value = 42.0
         self._put_return = 1
-        self.severity = 0
+        self._severity = 0
         self.auto_monitor = auto_monitor
 
         self.callbacks = {}
@@ -325,6 +325,11 @@ class FakeEPICS_PV:
     @property
     def connected(self):
         return self._connected
+
+    @property
+    def severity(self):
+        """A property, as in pyepics; tests set _severity."""
+        return self._severity
 
     def wait_for_connection(self, timeout=None):
         return self._connected
