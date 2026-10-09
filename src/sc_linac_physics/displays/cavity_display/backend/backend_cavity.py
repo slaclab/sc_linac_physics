@@ -5,12 +5,9 @@ Backend cavity fault monitoring and management with batch PV initialization.
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from time import time
-from typing import DefaultDict, Optional, Dict, List, Tuple
+from typing import DefaultDict, Optional, Dict, Iterable, List, Tuple
 
-from lcls_tools.common.data.archiver import (
-    get_values_over_time_range,
-    ArchiveDataHandler,
-)
+import pandas as pd
 
 from sc_linac_physics.displays.cavity_display.backend.fault import (
     Fault,
@@ -28,8 +25,26 @@ from sc_linac_physics.displays.cavity_display.utils.utils import (
     display_hash,
     cavity_fault_logger,
 )
+from sc_linac_physics.utils.archiver import (
+    LOCAL_TZ,
+    get_values_over_time_range,
+)
 from sc_linac_physics.utils.epics import PV, PVBatch
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
+
+
+def _naive_pacific(stamps: Iterable[pd.Timestamp]) -> List[datetime]:
+    """Archiver timestamps as naive Pacific datetimes.
+
+    lcls_tools returned naive local times, and the heatmap compares fault
+    event times with naive times from its Qt date pickers. Converting here
+    keeps both as before. In the repeated November hour two samples can get
+    the same naive time; the events stay in archiver order.
+    """
+    return [
+        ts.to_pydatetime().astimezone(LOCAL_TZ).replace(tzinfo=None)
+        for ts in stamps
+    ]
 
 
 class FaultLevel:
@@ -350,10 +365,10 @@ class BackendCavity(Cavity):
         process_fault_history().
         """
         try:
-            data: Dict[str, ArchiveDataHandler] = get_values_over_time_range(
-                pv_list=[self.pv_addr("CUDSTATUS"), self.pv_addr("CUDSEVR")],
-                start_time=start_time,
-                end_time=end_time,
+            data: Dict[str, pd.DataFrame] = get_values_over_time_range(
+                [self.pv_addr("CUDSTATUS"), self.pv_addr("CUDSEVR")],
+                start_time,
+                end_time,
             )
         except Exception as e:
             cavity_fault_logger.error(
@@ -368,10 +383,14 @@ class BackendCavity(Cavity):
 
     def process_fault_history(
         self,
-        statuses: ArchiveDataHandler,
-        severities: ArchiveDataHandler,
+        statuses: pd.DataFrame,
+        severities: pd.DataFrame,
     ) -> Tuple[DefaultDict[str, FaultCounter], List[FaultEvent]]:
         """Aggregate archived status/severity samples into counts and events.
+
+        statuses and severities are frames from
+        utils.archiver.get_values_over_time_range. Every sample is used,
+        including ones the archiver marks invalid, as before.
 
         Note the archiver includes one sample from before the requested
         start (the last known value), so the first event can predate the
@@ -383,14 +402,17 @@ class BackendCavity(Cavity):
 
         # Both lists are chronological, so one merge pass finds the
         # severity in effect at each status (rescanning gets slow fast)
-        severity_values = severities.values
+        severity_values = severities["value"].tolist()
         severity_timestamps = [
-            self._round_to_10ms(ts) for ts in severities.timestamps
+            self._round_to_10ms(ts)
+            for ts in _naive_pacific(severities["timestamp"])
         ]
         severity_idx = 0
         current_severity = None
 
-        for status, status_ts in zip(statuses.values, statuses.timestamps):
+        for status, status_ts in zip(
+            statuses["value"].tolist(), _naive_pacific(statuses["timestamp"])
+        ):
             # The cavity number as status means OK; keep the event so
             # it's clear when a fault ended
             if status == str(self.number):

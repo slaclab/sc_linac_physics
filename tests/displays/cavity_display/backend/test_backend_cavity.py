@@ -1,7 +1,8 @@
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from random import randint, choice
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 from lcls_tools.common.controls.pyepics.utils import make_mock_pv
 
@@ -9,6 +10,7 @@ from sc_linac_physics.displays.cavity_display.backend.backend_cavity import (
     BackendCavity,
 )
 from sc_linac_physics.displays.cavity_display.backend.fault import Fault
+from sc_linac_physics.utils.archiver import LOCAL_TZ
 from tests.displays.cavity_display.test_utils.utils import mock_parse
 
 
@@ -76,24 +78,27 @@ def test_run_through_faults_faulted(cavity):
     )
 
 
-def _make_handler(samples):
-    """Build an ArchiveDataHandler-like mock from (value, timestamp) pairs."""
-    handler = MagicMock()
-    handler.values = [value for value, _ in samples]
-    handler.timestamps = [ts for _, ts in samples]
-    return handler
+def _make_frame(samples):
+    """A frame like utils.archiver returns, from (value, naive time) pairs.
+
+    Times are read as Pacific, as the archiver client returns them.
+    """
+    return pd.DataFrame(
+        {
+            "timestamp": [ts.replace(tzinfo=LOCAL_TZ) for _, ts in samples],
+            "value": [value for value, _ in samples],
+        }
+    )
 
 
-def _severity_at(timestamp, severities):
+def _severity_at(timestamp, severity_samples):
     """Reference scan: the last severity at or before timestamp.
 
     Copied from utils.severity_of_fault, removed from src as unused, so the
     merge pass in process_fault_history still has something to match.
     """
     sevr = None
-    for severity_timestamp, severity in zip(
-        severities.timestamps, severities.values
-    ):
+    for severity, severity_timestamp in severity_samples:
         try:
             rounded_ts = severity_timestamp.replace(
                 microsecond=round(severity_timestamp.microsecond / 10000)
@@ -112,14 +117,14 @@ class TestProcessFaultHistory:
     def test_counts_and_events_match_severities(self, cavity):
         """Statuses pick up the severity in effect at their timestamp."""
         base = datetime(2025, 6, 2, 12, 0, 0)
-        statuses = _make_handler(
+        statuses = _make_frame(
             [
                 ("SSA", base + timedelta(seconds=10)),
                 (str(cavity.number), base + timedelta(seconds=20)),
                 ("QCH", base + timedelta(seconds=30)),
             ]
         )
-        severities = _make_handler(
+        severities = _make_frame(
             [
                 (2, base + timedelta(seconds=10)),  # alarm during SSA
                 (0, base + timedelta(seconds=20)),
@@ -142,10 +147,11 @@ class TestProcessFaultHistory:
         """The merge pass must match a per-sample scan of the severities."""
         base = datetime(2025, 6, 2, 12, 0, 0)
         # offset timestamps so the matching isn't trivial
-        severities = _make_handler(
-            [(i % 4, base + timedelta(seconds=5 * i)) for i in range(40)]
-        )
-        statuses = _make_handler(
+        severity_samples = [
+            (i % 4, base + timedelta(seconds=5 * i)) for i in range(40)
+        ]
+        severities = _make_frame(severity_samples)
+        statuses = _make_frame(
             [("SSA", base + timedelta(seconds=3 + 7 * i)) for i in range(25)]
         )
 
@@ -153,15 +159,77 @@ class TestProcessFaultHistory:
 
         for event in events:
             ts = cavity._round_to_10ms(event.timestamp)
-            assert event.severity == _severity_at(ts, severities)
+            assert event.severity == _severity_at(ts, severity_samples)
 
     def test_status_before_any_severity_counts_invalid(self, cavity):
         """A status sample with no severity yet has severity None."""
         base = datetime(2025, 6, 2, 12, 0, 0)
-        statuses = _make_handler([("SSA", base)])
-        severities = _make_handler([(2, base + timedelta(seconds=10))])
+        statuses = _make_frame([("SSA", base)])
+        severities = _make_frame([(2, base + timedelta(seconds=10))])
 
         counts, events = cavity.process_fault_history(statuses, severities)
 
         assert counts["SSA"].invalid_count == 1
         assert events[0].severity is None
+
+    def test_event_times_are_naive_pacific(self, cavity):
+        """The heatmap compares event times with naive Qt times."""
+        base = datetime(2025, 6, 2, 12, 0, 0)
+        statuses = _make_frame([("SSA", base)])
+        severities = _make_frame([(2, base)])
+
+        _, events = cavity.process_fault_history(statuses, severities)
+
+        assert events[0].timestamp == base
+        assert events[0].timestamp.tzinfo is None
+
+    def test_fall_back_hour_keeps_archiver_order(self, cavity):
+        """Both 01:30s on 2024-11-03 become naive 01:30, still in order."""
+        pdt = datetime(2024, 11, 3, 8, 30, tzinfo=timezone.utc)
+        pst = datetime(2024, 11, 3, 9, 30, tzinfo=timezone.utc)
+        statuses = pd.DataFrame(
+            {"timestamp": [pdt, pst], "value": ["SSA", "QCH"]}
+        )
+        severities = pd.DataFrame({"timestamp": [pdt], "value": [2]})
+
+        _, events = cavity.process_fault_history(statuses, severities)
+
+        assert [e.status for e in events] == ["SSA", "QCH"]
+        assert [e.timestamp for e in events] == [
+            datetime(2024, 11, 3, 1, 30)
+        ] * 2
+
+
+class TestGetFaultHistory:
+    def test_fetches_status_and_severity_pvs(self, cavity):
+        start = datetime(2025, 6, 2, 12, 0)
+        end = datetime(2025, 6, 2, 13, 0)
+        status_pv = cavity.pv_addr("CUDSTATUS")
+        sevr_pv = cavity.pv_addr("CUDSEVR")
+        frames = {
+            status_pv: _make_frame([("SSA", start)]),
+            sevr_pv: _make_frame([(2, start)]),
+        }
+        with patch(
+            "sc_linac_physics.displays.cavity_display.backend.backend_cavity"
+            ".get_values_over_time_range",
+            return_value=frames,
+        ) as fetch:
+            counts, events = cavity.get_fault_history(start, end)
+
+        fetch.assert_called_once_with([status_pv, sevr_pv], start, end)
+        assert counts["SSA"].alarm_count == 1
+        assert events[0].timestamp == start
+
+    def test_archiver_error_returns_empty(self, cavity):
+        with patch(
+            "sc_linac_physics.displays.cavity_display.backend.backend_cavity"
+            ".get_values_over_time_range",
+            side_effect=RuntimeError("archiver down"),
+        ):
+            counts, events = cavity.get_fault_history(
+                datetime(2025, 6, 2, 12, 0), datetime(2025, 6, 2, 13, 0)
+            )
+
+        assert len(counts) == 0
+        assert events == []
