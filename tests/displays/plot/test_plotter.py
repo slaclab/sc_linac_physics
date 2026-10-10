@@ -320,11 +320,11 @@ def test_cryo_range_change_applies_to_all_and_survives_switch(cryo_display):
 
 def test_view_switch_shows_matching_controls(cryo_display):
     cryo_display.show()
-    assert cryo_display.cryo_box.isVisible()
-    assert not any(b.isVisible() for b in cryo_display.custom_boxes)
+    assert cryo_display.linac_combo.isVisible()
+    assert not cryo_display.selection_panel.isVisible()
     cryo_display.view_combo.setCurrentText(plotter.CUSTOM_VIEW)
-    assert not cryo_display.cryo_box.isVisible()
-    assert all(b.isVisible() for b in cryo_display.custom_boxes)
+    assert not cryo_display.linac_combo.isVisible()
+    assert cryo_display.selection_panel.isVisible()
     assert cryo_display.plots == [cryo_display.plot]
 
 

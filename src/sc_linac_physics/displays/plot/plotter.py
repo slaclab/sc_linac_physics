@@ -108,11 +108,13 @@ class PlotterDisplay(Display):
         self.pages.addWidget(self.plot)
         self.pages.addWidget(cryo_page)
 
+        self.selection_panel = self._selection_panel()
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(self._selection_panel())
+        splitter.addWidget(self.selection_panel)
         splitter.addWidget(self.pages)
         splitter.setSizes([300, 700])
         layout = QVBoxLayout()
+        layout.addLayout(self._control_bar())
         layout.addWidget(splitter)
         self.setLayout(layout)
 
@@ -131,25 +133,51 @@ class PlotterDisplay(Display):
     def ui_filename(self):
         return None
 
-    def _selection_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout()
-        panel.setLayout(layout)
-
+    def _control_bar(self) -> QHBoxLayout:
+        """View, linac, time range, legend and Y ranges, in one row."""
+        bar = QHBoxLayout()
         self.view_combo = QComboBox()
         self.view_combo.addItems([CUSTOM_VIEW, CRYO_VIEW])
         self.view_combo.currentTextChanged.connect(self._on_view_changed)
-        layout.addWidget(self.view_combo)
 
-        self.cryo_box = QGroupBox("Linac")
-        cryo_layout = QVBoxLayout()
-        self.cryo_box.setLayout(cryo_layout)
+        self.linac_label = QLabel("Linac:")
         self.linac_combo = QComboBox()
         for linac in self.machine.linacs:
             self.linac_combo.addItem(linac.name, linac)
         self.linac_combo.currentIndexChanged.connect(self.show_cryo_linac)
-        cryo_layout.addWidget(self.linac_combo)
-        layout.addWidget(self.cryo_box)
+
+        self.time_span_combo = QComboBox()
+        self.time_span_combo.addItems(TIME_SPANS)
+        self.time_span_combo.setCurrentText(DEFAULT_TIME_SPAN)
+        self.time_span_combo.currentTextChanged.connect(
+            lambda text: self._for_each_plot("set_time_span", TIME_SPANS[text])
+        )
+        self.legend_check = QCheckBox("Show legend")
+        self.legend_check.setChecked(True)
+        self.legend_check.toggled.connect(
+            lambda shown: self._for_each_plot("set_legend_visible", shown)
+        )
+        ranges = QPushButton("Y-axis ranges")
+        ranges.clicked.connect(self.open_axis_ranges)
+
+        for widget in (
+            QLabel("View:"),
+            self.view_combo,
+            self.linac_label,
+            self.linac_combo,
+            QLabel("Time range:"),
+            self.time_span_combo,
+            self.legend_check,
+            ranges,
+        ):
+            bar.addWidget(widget)
+        bar.addStretch()
+        return bar
+
+    def _selection_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout()
+        panel.setLayout(layout)
 
         pick = QGroupBox("Pick PVs")
         pick_layout = QVBoxLayout()
@@ -194,27 +222,6 @@ class PlotterDisplay(Display):
         pv_row.addWidget(add_pv)
         pick_layout.addLayout(pv_row)
         layout.addWidget(pick)
-        self.custom_boxes = [pick]
-
-        controls = QGroupBox("Plot")
-        controls_layout = QVBoxLayout()
-        controls.setLayout(controls_layout)
-        self.time_span_combo = QComboBox()
-        self.time_span_combo.addItems(TIME_SPANS)
-        self.time_span_combo.setCurrentText(DEFAULT_TIME_SPAN)
-        self.time_span_combo.currentTextChanged.connect(
-            lambda text: self._for_each_plot("set_time_span", TIME_SPANS[text])
-        )
-        self.legend_check = QCheckBox("Show legend")
-        self.legend_check.setChecked(True)
-        self.legend_check.toggled.connect(
-            lambda shown: self._for_each_plot("set_legend_visible", shown)
-        )
-        ranges = QPushButton("Y-axis ranges")
-        ranges.clicked.connect(self.open_axis_ranges)
-        for widget in (self.time_span_combo, self.legend_check, ranges):
-            controls_layout.addWidget(widget)
-        layout.addWidget(controls)
 
         plotted = QGroupBox("Plotted")
         plotted_layout = QVBoxLayout()
@@ -234,7 +241,6 @@ class PlotterDisplay(Display):
             buttons.addWidget(button)
         plotted_layout.addLayout(buttons)
         layout.addWidget(plotted)
-        self.custom_boxes.append(plotted)
 
         self._update_count()
         return panel
@@ -360,9 +366,9 @@ class PlotterDisplay(Display):
 
     def _on_view_changed(self, view: str) -> None:
         cryo = view == CRYO_VIEW
-        self.cryo_box.setVisible(cryo)
-        for box in self.custom_boxes:
-            box.setVisible(not cryo)
+        self.linac_label.setVisible(cryo)
+        self.linac_combo.setVisible(cryo)
+        self.selection_panel.setVisible(not cryo)
         self.pages.setCurrentIndex(1 if cryo else 0)
         if cryo and not self.cryo_plots:
             self.show_cryo_linac()
