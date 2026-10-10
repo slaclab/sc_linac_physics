@@ -1,14 +1,17 @@
 """`sc-linac plotter`: pick PVs from the linac hierarchy and plot them.
 
-The old display (`plot.py`) stays available as `sc-linac plotter-old`.
+The "Cryo signals" view is what `sc-linac cryo-signals` opens: one plot per
+cryomodule in a linac. The old displays stay available as
+`sc-linac plotter-old` and `sc-linac cryo-signals-old`.
 """
 
-from typing import Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QGridLayout,
     QDialog,
     QGroupBox,
     QHBoxLayout,
@@ -19,13 +22,21 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 from pydm import Display
 
 from sc_linac_physics.displays.plot.archiver_plot import ArchiverPlot
-from sc_linac_physics.displays.plot.curve_set import Curve
+from sc_linac_physics.displays.plot.cryo_signals import (
+    DEFAULT_AXIS_RANGES,
+    SELECTED_PV_ATTRIBUTES,
+    axis_label,
+    cryo_signals_curve_sets,
+    grid_dimensions,
+)
+from sc_linac_physics.displays.plot.curve_set import Curve, YRange
 from sc_linac_physics.displays.plot.utils import (
     AxisRangeDialog,
     PVGroup,
@@ -50,6 +61,9 @@ TIME_SPANS = {
 }
 DEFAULT_TIME_SPAN = "1 hour"
 
+CUSTOM_VIEW = "Custom"
+CRYO_VIEW = "Cryo signals"
+
 PVKey = Tuple[str, str]  # (source class name, attribute name)
 
 
@@ -71,17 +85,32 @@ def curves_for(group: PVGroup, keys: Iterable[PVKey]) -> List[Curve]:
 
 
 class PlotterDisplay(Display):
+    INITIAL_VIEW = CUSTOM_VIEW
+
     def __init__(self, parent=None, args=None, macros=None):
         super().__init__(parent=parent, args=args, macros=macros)
         self.setWindowTitle("SC Linac Plotter")
-        self.pv_groups = get_pvs_all_groupings(Machine())
+        self.machine = Machine()
+        self.pv_groups = get_pvs_all_groupings(self.machine)
 
         self.plot = ArchiverPlot()
         self.plot.set_time_span(TIME_SPANS[DEFAULT_TIME_SPAN])
+        # Cryo view: fixed ranges by cryomodule attribute, kept across
+        # linac switches so an operator's changes stay put.
+        self.cryo_ranges: Dict[str, Optional[YRange]] = dict(
+            DEFAULT_AXIS_RANGES
+        )
+        self.cryo_plots: List[ArchiverPlot] = []
+        self.cryo_grid = QGridLayout()
+        cryo_page = QWidget()
+        cryo_page.setLayout(self.cryo_grid)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self.plot)
+        self.pages.addWidget(cryo_page)
 
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(self._selection_panel())
-        splitter.addWidget(self.plot)
+        splitter.addWidget(self.pages)
         splitter.setSizes([300, 700])
         layout = QVBoxLayout()
         layout.addWidget(splitter)
@@ -89,6 +118,15 @@ class PlotterDisplay(Display):
 
         self.level_combo.setCurrentText("Machine")
         self._on_level_changed("Machine")
+        self.view_combo.setCurrentText(self.INITIAL_VIEW)
+        self._on_view_changed(self.INITIAL_VIEW)
+
+    @property
+    def plots(self) -> List[ArchiverPlot]:
+        """The plots in the current view."""
+        if self.view_combo.currentText() == CRYO_VIEW:
+            return self.cryo_plots
+        return [self.plot]
 
     def ui_filename(self):
         return None
@@ -97,6 +135,21 @@ class PlotterDisplay(Display):
         panel = QWidget()
         layout = QVBoxLayout()
         panel.setLayout(layout)
+
+        self.view_combo = QComboBox()
+        self.view_combo.addItems([CUSTOM_VIEW, CRYO_VIEW])
+        self.view_combo.currentTextChanged.connect(self._on_view_changed)
+        layout.addWidget(self.view_combo)
+
+        self.cryo_box = QGroupBox("Linac")
+        cryo_layout = QVBoxLayout()
+        self.cryo_box.setLayout(cryo_layout)
+        self.linac_combo = QComboBox()
+        for linac in self.machine.linacs:
+            self.linac_combo.addItem(linac.name, linac)
+        self.linac_combo.currentIndexChanged.connect(self.show_cryo_linac)
+        cryo_layout.addWidget(self.linac_combo)
+        layout.addWidget(self.cryo_box)
 
         pick = QGroupBox("Pick PVs")
         pick_layout = QVBoxLayout()
@@ -141,6 +194,7 @@ class PlotterDisplay(Display):
         pv_row.addWidget(add_pv)
         pick_layout.addLayout(pv_row)
         layout.addWidget(pick)
+        self.custom_boxes = [pick]
 
         controls = QGroupBox("Plot")
         controls_layout = QVBoxLayout()
@@ -149,11 +203,13 @@ class PlotterDisplay(Display):
         self.time_span_combo.addItems(TIME_SPANS)
         self.time_span_combo.setCurrentText(DEFAULT_TIME_SPAN)
         self.time_span_combo.currentTextChanged.connect(
-            lambda text: self.plot.set_time_span(TIME_SPANS[text])
+            lambda text: self._for_each_plot("set_time_span", TIME_SPANS[text])
         )
         self.legend_check = QCheckBox("Show legend")
         self.legend_check.setChecked(True)
-        self.legend_check.toggled.connect(self.plot.set_legend_visible)
+        self.legend_check.toggled.connect(
+            lambda shown: self._for_each_plot("set_legend_visible", shown)
+        )
         ranges = QPushButton("Y-axis ranges")
         ranges.clicked.connect(self.open_axis_ranges)
         for widget in (self.time_span_combo, self.legend_check, ranges):
@@ -178,6 +234,7 @@ class PlotterDisplay(Display):
             buttons.addWidget(button)
         plotted_layout.addLayout(buttons)
         layout.addWidget(plotted)
+        self.custom_boxes.append(plotted)
 
         self._update_count()
         return panel
@@ -297,27 +354,74 @@ class PlotterDisplay(Display):
         self.plotted_list.clear()
         self._update_count()
 
+    def _for_each_plot(self, method: str, value) -> None:
+        for plot in self.plots:
+            getattr(plot, method)(value)
+
+    def _on_view_changed(self, view: str) -> None:
+        cryo = view == CRYO_VIEW
+        self.cryo_box.setVisible(cryo)
+        for box in self.custom_boxes:
+            box.setVisible(not cryo)
+        self.pages.setCurrentIndex(1 if cryo else 0)
+        if cryo and not self.cryo_plots:
+            self.show_cryo_linac()
+
+    def show_cryo_linac(self, _index=None) -> None:
+        """Replace the cryo grid with one plot per cryomodule in the linac."""
+        for plot in self.cryo_plots:
+            plot.clear()
+            self.cryo_grid.removeWidget(plot)
+            plot.deleteLater()
+        self.cryo_plots = []
+        linac = self.linac_combo.currentData()
+        if linac is None:
+            return
+        curve_sets = cryo_signals_curve_sets(linac, self.cryo_ranges)
+        columns, _ = grid_dimensions(len(curve_sets))
+        span = TIME_SPANS[self.time_span_combo.currentText()]
+        for i, curve_set in enumerate(curve_sets):
+            plot = ArchiverPlot(curve_set, time_span=span)
+            plot.set_legend_visible(self.legend_check.isChecked())
+            self.cryo_grid.addWidget(plot, i // columns, i % columns)
+            self.cryo_plots.append(plot)
+
     def open_axis_ranges(self) -> None:
-        curve_set = self.plot.curve_set
-        if not curve_set.curves:
+        curve_sets = [plot.curve_set for plot in self.plots]
+        axes = list(
+            dict.fromkeys(a for cs in curve_sets for a in cs.axis_names)
+        )
+        if not axes:
             QMessageBox.information(self, "No axes", "Add some PVs first.")
             return
+        ranges = {}
+        for curve_set in curve_sets:
+            ranges.update(curve_set.y_ranges)
         current = {
-            axis: {
-                "auto_scale": axis not in curve_set.y_ranges,
-                "range": curve_set.y_ranges.get(axis),
-            }
-            for axis in curve_set.axis_names
+            axis: {"auto_scale": axis not in ranges, "range": ranges.get(axis)}
+            for axis in axes
         }
-        dialog = AxisRangeDialog(curve_set.axis_names, current, self)
+        dialog = AxisRangeDialog(axes, current, self)
         if dialog.exec_() != QDialog.Accepted:
             return
+        attribute_for = {axis_label(a): a for a in SELECTED_PV_ATTRIBUTES}
+        cryo = self.view_combo.currentText() == CRYO_VIEW
         for axis, setting in dialog.get_settings().items():
             fixed = not setting["auto_scale"] and setting["range"]
-            self.plot.set_y_range(axis, setting["range"] if fixed else None)
+            y_range = setting["range"] if fixed else None
+            for plot in self.plots:
+                plot.set_y_range(axis, y_range)
+            if cryo and axis in attribute_for:
+                self.cryo_ranges[attribute_for[axis]] = y_range
 
     def _update_count(self) -> None:
         count = len(self.plot.curve_set.curves)
         self.count_label.setText(
             f"{count} PV{'s' if count != 1 else ''} plotted"
         )
+
+
+class CryoSignalsDisplay(PlotterDisplay):
+    """The plotter, opened on the cryo signals view."""
+
+    INITIAL_VIEW = CRYO_VIEW
