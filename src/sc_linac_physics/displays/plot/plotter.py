@@ -102,8 +102,14 @@ class PlotterDisplay(Display):
         )
         self.cryo_plots: List[ArchiverPlot] = []
         self.cryo_grid = QGridLayout()
+        # One legend for the whole grid: every cryomodule plot has the same
+        # four curves in the same colors.
+        self.cryo_legend = QLabel()
+        cryo_layout = QVBoxLayout()
+        cryo_layout.addWidget(self.cryo_legend)
+        cryo_layout.addLayout(self.cryo_grid)
         cryo_page = QWidget()
-        cryo_page.setLayout(self.cryo_grid)
+        cryo_page.setLayout(cryo_layout)
         self.pages = QStackedWidget()
         self.pages.addWidget(self.plot)
         self.pages.addWidget(cryo_page)
@@ -154,9 +160,7 @@ class PlotterDisplay(Display):
         )
         self.legend_check = QCheckBox("Show legend")
         self.legend_check.setChecked(True)
-        self.legend_check.toggled.connect(
-            lambda shown: self._for_each_plot("set_legend_visible", shown)
-        )
+        self.legend_check.toggled.connect(self._on_legend_toggled)
         ranges = QPushButton("Y-axis ranges")
         ranges.clicked.connect(self.open_axis_ranges)
 
@@ -360,6 +364,10 @@ class PlotterDisplay(Display):
         self.plotted_list.clear()
         self._update_count()
 
+    def _on_legend_toggled(self, shown: bool) -> None:
+        self.plot.set_legend_visible(shown)
+        self.cryo_legend.setVisible(shown)
+
     def _for_each_plot(self, method: str, value) -> None:
         for plot in self.plots:
             getattr(plot, method)(value)
@@ -387,10 +395,18 @@ class PlotterDisplay(Display):
         columns, _ = grid_dimensions(len(curve_sets))
         span = TIME_SPANS[self.time_span_combo.currentText()]
         for i, curve_set in enumerate(curve_sets):
-            plot = ArchiverPlot(curve_set, time_span=span)
-            plot.set_legend_visible(self.legend_check.isChecked())
+            plot = ArchiverPlot(curve_set, time_span=span, axis_titles=False)
+            plot.set_legend_visible(False)
             self.cryo_grid.addWidget(plot, i // columns, i % columns)
             self.cryo_plots.append(plot)
+        self.cryo_legend.setText(
+            "&nbsp;&nbsp;&nbsp;".join(
+                f'<span style="color: rgb{c.color}">&#9632; {c.label}</span>'
+                for c in self.cryo_plots[0].curve_set.curves
+            )
+            if self.cryo_plots
+            else ""
+        )
 
     def open_axis_ranges(self) -> None:
         curve_sets = [plot.curve_set for plot in self.plots]

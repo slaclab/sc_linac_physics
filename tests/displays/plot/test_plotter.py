@@ -348,3 +348,23 @@ def test_curve_sets_without_ranges_use_defaults():
         "fake://CM01:AACT",
     ]
     assert curve_set.y_ranges["Aact Mean Sum"] == (0, 144)
+
+
+def test_cryo_grid_has_one_shared_legend(cryo_display):
+    cryo_display.show()
+    (plot,) = cryo_display.cryo_plots
+    assert not plot.plot.showLegend
+    text = cryo_display.cryo_legend.text()
+    for label in ("Jt Valve Readback", "Ds Level", "Us Level", "Aact Mean Sum"):
+        assert label in text
+    for curve in plot.curve_set.curves:
+        assert f"rgb{curve.color}" in text
+
+    cryo_display.legend_check.setChecked(False)
+    assert not cryo_display.cryo_legend.isVisible()
+
+
+def test_cryo_plots_have_no_axis_titles(cryo_display):
+    (plot,) = cryo_display.cryo_plots
+    axis = plot.plot.plotItem.axes["Ds Level"]["item"]
+    assert not axis.label.isVisible()
