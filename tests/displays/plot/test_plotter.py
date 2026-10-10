@@ -7,6 +7,9 @@ from PyQt5.QtCore import QEvent
 from PyQt5.QtWidgets import QApplication, QDialog, QMessageBox
 
 from sc_linac_physics.displays.plot import plotter
+from sc_linac_physics.displays.plot.cryo_signals_display import (
+    CryoSignalsDisplay,
+)
 from sc_linac_physics.displays.plot.plotter import (
     PlotterDisplay,
     axis_for,
@@ -255,7 +258,7 @@ def cryo_display(qtbot):
             plotter, "get_pvs_all_groupings", return_value=make_groups(2)
         ),
     ):
-        widget = plotter.CryoSignalsDisplay()
+        widget = CryoSignalsDisplay()
     qtbot.addWidget(widget)
     yield widget
     for plot in widget.cryo_plots + [widget.plot]:
@@ -368,3 +371,50 @@ def test_cryo_plots_have_no_axis_titles(cryo_display):
     (plot,) = cryo_display.cryo_plots
     axis = plot.plot.plotItem.axes["Ds Level"]["item"]
     assert not axis.label.isVisible()
+
+
+@pytest.mark.parametrize(
+    "module,expected",
+    [
+        ("sc_linac_physics.displays.plot.plotter", "PlotterDisplay"),
+        (
+            "sc_linac_physics.displays.plot.cryo_signals_display",
+            "CryoSignalsDisplay",
+        ),
+    ],
+)
+def test_each_display_file_has_one_display_class(module, expected):
+    """PyDM opens a display by file and takes the first Display it finds."""
+    import importlib
+    import inspect
+
+    from pydm import Display
+
+    found = [
+        name
+        for name, obj in inspect.getmembers(importlib.import_module(module))
+        if inspect.isclass(obj)
+        and issubclass(obj, Display)
+        and obj is not Display
+    ]
+    assert found == [expected]
+
+
+def test_open_file_limit_is_raised_within_hard_limit(monkeypatch):
+    calls = []
+    monkeypatch.setattr(plotter.resource, "getrlimit", lambda _: (256, 1024))
+    monkeypatch.setattr(
+        plotter.resource, "setrlimit", lambda _, limits: calls.append(limits)
+    )
+    plotter.raise_open_file_limit(4096)
+    assert calls == [(1024, 1024)]
+
+
+def test_open_file_limit_never_lowered(monkeypatch):
+    calls = []
+    monkeypatch.setattr(plotter.resource, "getrlimit", lambda _: (10000, 20000))
+    monkeypatch.setattr(
+        plotter.resource, "setrlimit", lambda _, limits: calls.append(limits)
+    )
+    plotter.raise_open_file_limit(4096)
+    assert calls == []

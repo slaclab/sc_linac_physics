@@ -223,7 +223,9 @@ def launch_fault_heatmap(standalone=True):
 @display
 def launch_cryo_signals(standalone=True):
     """Cryomodule JT valve, levels and AACT for every CM in a linac."""
-    from sc_linac_physics.displays.plot.plotter import CryoSignalsDisplay
+    from sc_linac_physics.displays.plot.cryo_signals_display import (
+        CryoSignalsDisplay,
+    )
 
     return launch_python_display(
         CryoSignalsDisplay, *sys.argv[1:], standalone=standalone
