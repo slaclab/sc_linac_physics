@@ -5,6 +5,7 @@ cryomodule in a linac. The old displays stay available as
 `sc-linac plotter-old` and `sc-linac cryo-signals-old`.
 """
 
+import resource
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from PyQt5.QtCore import Qt
@@ -61,6 +62,12 @@ TIME_SPANS = {
 }
 DEFAULT_TIME_SPAN = "1 hour"
 
+# Each ArchiverPlot holds about 8 open files (measured with 4 curves: PyDM
+# opens a network manager per archiver channel). L3B's 20-plot cryo grid
+# needs ~180, over half of macOS's default soft limit of 256, so the plotter
+# raises its own soft limit toward the hard limit at startup.
+OPEN_FILE_LIMIT = 4096
+
 CUSTOM_VIEW = "Custom"
 CRYO_VIEW = "Cryo signals"
 
@@ -84,11 +91,21 @@ def curves_for(group: PVGroup, keys: Iterable[PVKey]) -> List[Curve]:
     ]
 
 
+def raise_open_file_limit(wanted: int = OPEN_FILE_LIMIT) -> None:
+    """Raise this process's soft open-file limit to `wanted`, within the
+    hard limit. Never lowers it."""
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    target = wanted if hard == resource.RLIM_INFINITY else min(wanted, hard)
+    if soft != resource.RLIM_INFINITY and soft < target:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+
+
 class PlotterDisplay(Display):
     INITIAL_VIEW = CUSTOM_VIEW
 
     def __init__(self, parent=None, args=None, macros=None):
         super().__init__(parent=parent, args=args, macros=macros)
+        raise_open_file_limit()
         self.setWindowTitle("SC Linac Plotter")
         self.machine = Machine()
         self.pv_groups = get_pvs_all_groupings(self.machine)
@@ -441,9 +458,3 @@ class PlotterDisplay(Display):
         self.count_label.setText(
             f"{count} PV{'s' if count != 1 else ''} plotted"
         )
-
-
-class CryoSignalsDisplay(PlotterDisplay):
-    """The plotter, opened on the cryo signals view."""
-
-    INITIAL_VIEW = CRYO_VIEW
