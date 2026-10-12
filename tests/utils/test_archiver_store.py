@@ -114,6 +114,29 @@ def test_recent_month_is_fetched_fresh_and_not_written(store):
     assert not store.path("A:PV", month).exists()
 
 
+def test_recent_month_is_fetched_only_where_asked(store):
+    now = datetime.now(UTC)
+    month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    fake, served = _serve({"A:PV": []})
+    start = max(month, now - timedelta(hours=2))
+    with served:
+        store.read("A:PV", start, now)
+
+    assert [(c[1], c[2]) for c in fake.calls] == [(start, now)]
+
+
+def test_unwritable_cache_still_returns_data(tmp_path, caplog):
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("")  # a file where the cache directory should go
+    store = ArchiverStore(blocker)
+    fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
+    with served, caplog.at_level("WARNING", logger=archiver_store.__name__):
+        frame = store.read("A:PV", JAN, FEB)
+
+    assert _values(frame) == [1.0]
+    assert "cannot write" in caplog.text
+
+
 def test_empty_settled_month_is_recorded(store):
     fake, served = _serve({"A:PV": []})
     with served:

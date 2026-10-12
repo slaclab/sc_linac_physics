@@ -17,6 +17,7 @@ unreliable on NFS. CHECK: is /home/physics/srf NFS on the control-room
 machines?
 """
 
+import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,8 @@ from sc_linac_physics.utils.platform_paths import get_srf_base_dir
 SETTLE = timedelta(days=1)
 
 STORED_COLUMNS = [c for c in archiver.COLUMNS if c != "valid"]
+
+logger = logging.getLogger(__name__)
 
 
 def get_archiver_cache_dir() -> Path:
@@ -71,7 +74,7 @@ class ArchiverStore:
         before: Optional[pd.DataFrame] = None
         last = None
         for month_start, month_end in _months(start, end):
-            frame = self._month(pv, month_start, month_end)
+            frame = self._month(pv, month_start, month_end, start, end)
             # A month can start with the sample before it, which the month
             # before already returned.
             if last is not None:
@@ -119,7 +122,7 @@ class ArchiverStore:
             try:
                 for month_start, month_end in _months(start, end):
                     if _settled(month_end):
-                        self._month(pv, month_start, month_end)
+                        self._month(pv, month_start, month_end, start, end)
             except archiver.PVNotArchivedError:
                 return False
             return True
@@ -133,17 +136,37 @@ class ArchiverStore:
         return self.root / quote(pv, safe=":") / f"{month_start:%Y-%m}.parquet"
 
     def _month(
-        self, pv: str, month_start: datetime, month_end: datetime
+        self,
+        pv: str,
+        month_start: datetime,
+        month_end: datetime,
+        start: datetime,
+        end: datetime,
     ) -> pd.DataFrame:
-        """One month's samples, from the cache when the month is settled."""
+        """One month's samples, from the cache when the month is settled.
+
+        A month not yet settled is fetched only where it overlaps start..end,
+        and not written. If the cache can't be written (no permission, disk
+        full), the month is fetched without it: the cache only saves time.
+        """
         path = self.path(pv, month_start)
         if path.exists():
             return pq.read_table(path).to_pandas()
-        chunks = archiver.iter_range_chunks(pv, month_start, month_end)
         if not _settled(month_end):
-            frames = list(chunks)
-            return pd.concat(frames, ignore_index=True) if frames else _empty()
-        _write_atomically(path, chunks)
+            lo, hi = max(month_start, start), min(month_end, end)
+            return _join(archiver.iter_range_chunks(pv, lo, hi))
+        try:
+            _write_atomically(
+                path, archiver.iter_range_chunks(pv, month_start, month_end)
+            )
+        except OSError as e:
+            logger.warning(
+                "archiver cache: cannot write %s (%s); fetching %s without it",
+                path,
+                e,
+                pv,
+            )
+            return _join(archiver.iter_range_chunks(pv, month_start, month_end))
         return pq.read_table(path).to_pandas()
 
 
@@ -188,6 +211,11 @@ def _months(start: datetime, end: datetime) -> List[Tuple[datetime, datetime]]:
         months.append((month, following))
         month = following
     return months
+
+
+def _join(chunks: Iterator[pd.DataFrame]) -> pd.DataFrame:
+    frames = list(chunks)
+    return pd.concat(frames, ignore_index=True) if frames else _empty()
 
 
 def _settled(month_end: datetime) -> bool:
