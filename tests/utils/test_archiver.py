@@ -511,6 +511,20 @@ class TestChunkedRange:
 
         assert list(frame["value"]) == [0.0, 1.0, 2.0, 3.0, 4.0]
 
+    def test_empty_first_chunk_keeps_timestamp_dtype(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(100, 1.0)]}]),
+            _response(payload=[{"data": [_datum(200, 2.0)]}]),
+        ]
+
+        frame = get_values_over_time_range(["A:PV"], START, self.LONG_END)[
+            "A:PV"
+        ]
+
+        assert str(frame["timestamp"].dtype).startswith("datetime64")
+        assert list(frame["value"]) == [1.0, 2.0]
+
     def test_404_on_a_later_chunk_names_the_pv(self, session):
         session.request.side_effect = [
             _response(payload=[{"data": [_datum(100, 1.0)]}]),

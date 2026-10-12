@@ -174,8 +174,13 @@ def _fetch_range(
     site, 2026-10-12). So each chunk after the first keeps only samples after
     the last one already kept. Stitched that way, the chunks match one request
     for the whole window.
+
+    Each chunk becomes a DataFrame as it arrives. Holding every chunk's JSON
+    until the end peaked at 3.7 GB for a 156 MB result (60 days, 4.7 M
+    samples, measured 2026-10-12).
     """
-    data: List[dict] = []
+    frames: List[pd.DataFrame] = []
+    last: Optional[tuple] = None
     chunk_start, span = start, FIRST_CHUNK
     while True:
         chunk_end = min(chunk_start + span, end)
@@ -193,12 +198,18 @@ def _fetch_range(
             return None
         payload = response.json()
         chunk = payload[0]["data"] if payload else []
-        if data:
-            last = _key(data[-1])
+        if last is not None:
             chunk = [datum for datum in chunk if _key(datum) > last]
-        data.extend(chunk)
+        if chunk:
+            last = _key(chunk[-1])
+            frames.append(_to_frame(chunk))
+        del payload, chunk
         if chunk_end >= end:
-            return _to_frame(data)
+            # An empty frame's columns are object dtype; mixing one in would
+            # turn the timestamps into objects too.
+            if not frames:
+                return _to_frame([])
+            return pd.concat(frames, ignore_index=True)
         span = _next_span(span, len(response.content))
         chunk_start = chunk_end
 
