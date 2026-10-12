@@ -225,6 +225,12 @@ def _plan_chunks(
     window_start = start
     while window_start < end:
         window_end = min(window_start + COUNT_WINDOW, end)
+        # The archiver applies an operator to a PV when the operator wraps
+        # the PV's name in the "pv" parameter: "count_3600(ACCL:...)" returns
+        # how many samples fall in each 3600 s bin instead of the samples.
+        # That is the retrieval API's way to ask for processed data; see
+        # "Processing of data" in the user guide linked at the top. Built from
+        # COUNT_BIN so the bins asked for are the ones _group_bins walks.
         operator = f"count_{int(COUNT_BIN.total_seconds())}({pv})"
         payload = _get_json(operator, window_start, window_end, timeout)
         if payload is None:
