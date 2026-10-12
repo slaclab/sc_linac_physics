@@ -22,7 +22,8 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
 - PVs are fetched independently, up to `MAX_WORKERS` (8) at once. The
   archiver spends its time reading each PV, so this is much faster than one
   multi-PV request. A window up to an hour is one request per PV. A longer
-  one is one count request per 30 days, then one request per chunk.
+  one is one count request per 31 days (two for a string PV), then one
+  request per chunk.
 - Naive datetimes are read as Pacific time. Returned timestamps are
   timezone-aware. A naive time in a daylight-saving change hour (it happens
   twice, or not at all) raises `ValueError`; pass an aware datetime there.
@@ -33,7 +34,8 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   are planned from the archiver's own hourly sample counts (`count_3600`),
   at most `CHUNK_SAMPLES` (250k, about 25 MB) each:
   <span class="cite">archiver.py::_plan_chunks</span>. The result is the
-  same as one request. String PVs get no counts and stay one request.
+  same as one request. String PVs get no hourly counts, so they are
+  planned from totals (`ncount`), halving any window that is too big.
 - Live, 2026-10-12: 60 days of a 1 Hz PV took 21 requests, the largest 25 MB.
   A year of two fault PVs took 16, mostly counts.
 - `iter_range_chunks(pv, start, end)` yields the same samples one chunk at a

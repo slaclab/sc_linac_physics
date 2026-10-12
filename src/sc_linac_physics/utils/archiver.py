@@ -97,7 +97,10 @@ CHUNK_SAMPLES = 250_000
 # COUNT_WINDOW at a time to keep each request short. A window no longer than
 # COUNT_BIN is fetched in one request without counting.
 COUNT_BIN = timedelta(hours=1)
-COUNT_WINDOW = timedelta(days=30)
+# 31 days, so one calendar month is one window (utils/archiver_store.py).
+COUNT_WINDOW = timedelta(days=31)
+# _split_by_total stops halving here: 250k samples in a minute is over 4 kHz.
+MIN_SPLIT = timedelta(minutes=1)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
@@ -240,36 +243,70 @@ def _plan_chunks(
 ) -> Optional[List[datetime]]:
     """Return chunk boundaries from start to end; None if not archived.
 
-    String PVs get no counts back (checked on site: count_3600 of CUDSTATUS
-    was empty, of CUDSEVR, an enum, was not). A PV with no counts in any
-    window is fetched in one request, as before chunking. CHECK: is any
-    string PV archived at a high rate?
+    Planned COUNT_WINDOW at a time, from hourly counts where the archiver
+    gives them and from totals where it does not (_split_by_total).
     """
     if end - start <= COUNT_BIN:
         return [start, end]
-    counts: Dict[int, float] = {}
+    bounds = [start]
     window_start = start
     while window_start < end:
         window_end = min(window_start + COUNT_WINDOW, end)
-        # The archiver applies an operator to a PV when the operator wraps
-        # the PV's name in the "pv" parameter: "count_3600(ACCL:...)" returns
-        # how many samples fall in each 3600 s bin instead of the samples.
-        # That is the retrieval API's way to ask for processed data; see
-        # "Processing of data" in the user guide linked at the top. Built from
-        # COUNT_BIN so the bins asked for are the ones _group_bins walks.
-        operator = f"count_{int(COUNT_BIN.total_seconds())}({pv})"
-        payload = _get_json(operator, window_start, window_end, timeout)
-        if payload is None:
+        planned = _plan_window(pv, window_start, window_end, timeout)
+        if planned is None:
             return None
-        bins = payload[0]["data"] if payload else []
-        for datum in bins:
-            counts[_bin_start(datum["secs"])] = datum["val"]
+        bounds.extend(planned[1:])
         window_start = window_end
-    # Every window is counted before giving up on counts: a PV first
-    # archived partway through the range has none for its early windows.
-    if not counts:
-        return [start, end]
+    return bounds
+
+
+def _plan_window(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[List[datetime]]:
+    # The archiver applies an operator to a PV when the operator wraps the
+    # PV's name in the "pv" parameter: "count_3600(ACCL:...)" returns how
+    # many samples fall in each 3600 s bin instead of the samples. That is
+    # the retrieval API's way to ask for processed data; see "Processing of
+    # data" in the user guide linked at the top. Built from COUNT_BIN so the
+    # bins asked for are the ones _group_bins walks.
+    operator = f"count_{int(COUNT_BIN.total_seconds())}({pv})"
+    payload = _get_json(operator, start, end, timeout)
+    if payload is None:
+        return None
+    bins = payload[0]["data"] if payload else []
+    if not bins:
+        return _split_by_total(pv, start, end, timeout)
+    counts = {_bin_start(datum["secs"]): datum["val"] for datum in bins}
     return _group_bins(start, end, counts)
+
+
+def _split_by_total(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[List[datetime]]:
+    """Bound start..end for a PV count_3600 gives no bins for.
+
+    That is a string PV, or a PV with nothing archived in the window
+    (checked on site, 2026-10-12: count_3600 of CUDSTATUS was empty, of
+    CUDSEVR, an enum, was not). ncount(pv), one total for the window, does
+    work on strings, and matched the raw samples. A string PV can change
+    fast (a CUDSTATUS flapping between the cavity number and POT), so a
+    window over CHUNK_SAMPLES is halved, and each half counted again.
+    """
+    payload = _get_json(f"ncount({pv})", start, end, timeout)
+    if payload is None:
+        return None
+    data = payload[0]["data"] if payload else []
+    total = data[0]["val"] if data else 0
+    if total <= CHUNK_SAMPLES or end - start <= MIN_SPLIT:
+        return [start, end]
+    middle = start + (end - start) / 2
+    left = _split_by_total(pv, start, middle, timeout)
+    if left is None:
+        return None
+    right = _split_by_total(pv, middle, end, timeout)
+    if right is None:
+        return None
+    return left + right[1:]
 
 
 def _group_bins(
