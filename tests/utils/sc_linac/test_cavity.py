@@ -1227,6 +1227,28 @@ def test_wait_stops_when_the_caller_aborts(cavity):
     cavity.turn_off.assert_called_once()
 
 
+def test_wait_aborts_when_the_abort_arrives_as_the_run_completes(cavity):
+    """An abort during the last sleep still turns RF off."""
+    seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
+    pv = make_mock_pv()
+    pv.get = MagicMock(
+        side_effect=lambda *a, **k: (
+            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
+        )
+    )
+    cavity._characterization_status_pv_obj = pv
+    cavity.turn_off = MagicMock()
+    # False on the in-loop check, True by the time the run reads COMPLETE.
+    should_abort = MagicMock(side_effect=[False, True])
+
+    with pytest.raises(CavityAbortError):
+        cavity.wait_for_characterization(
+            poll_interval=0.01, should_abort=should_abort
+        )
+
+    cavity.turn_off.assert_called_once()
+
+
 def test_wait_ignores_a_caller_that_never_aborts(cavity):
     seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
     pv = make_mock_pv()
