@@ -1336,6 +1336,7 @@ class Cavity(linac_utils.SCLinacObject):
         timeout: Optional[float] = None,
         poll_interval: float = 1.0,
         max_result_age_seconds: float = 300.0,
+        should_abort: Optional[Callable[[], bool]] = None,
     ):
         """Block until the probe calibration settles, then vet the result.
 
@@ -1363,6 +1364,10 @@ class Cavity(linac_utils.SCLinacObject):
         @param poll_interval: seconds between status reads.
         @param max_result_age_seconds: how old PROBECALTS may be and still
             count as this run's result.
+        @param should_abort: checked each poll alongside check_abort(), for a
+            caller with its own abort flag (the commissioning phase passes
+            PhaseContext.is_abort_requested). True is handled like a cavity
+            abort: turn_off(), then CavityAbortError.
         @raise CavityCharacterizationError: crashed, timed out, or settled on
             a result older than max_result_age_seconds.
         @raise CavityAbortError: via check_abort(), each poll.
@@ -1370,6 +1375,16 @@ class Cavity(linac_utils.SCLinacObject):
         deadline = None if timeout is None else time.monotonic() + timeout
 
         while self.characterization_running:
+            if should_abort is not None and should_abort():
+                # Not via abort_flag: SetupCavity overrides check_abort() to
+                # read its abort PV instead, and would ignore the flag.
+                self.turn_off()
+                self.set_status_message(
+                    "Characterization wait aborted by caller", logging.ERROR
+                )
+                raise linac_utils.CavityAbortError(
+                    f"Abort requested for {self}"
+                )
             self.check_abort()
             if deadline is not None and time.monotonic() >= deadline:
                 self.set_status_message(
