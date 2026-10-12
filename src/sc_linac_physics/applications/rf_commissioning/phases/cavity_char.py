@@ -319,12 +319,17 @@ class CavityCharPhase(PhaseBase):
         PROBECALSTS until it stops reading RUNNING (2), then raises
         CavityCharacterizationError on CRASH (0), on a timeout, or on a
         PROBECALTS older than 300 s (a COMPLETE (1) left over from an earlier
-        run). PhaseBase.run() only checks the commissioning abort between
-        steps, so it is passed in as should_abort and checked each poll. Either
-        kind of abort calls turn_off() and raises CavityAbortError.
+        run). It calls check_abort() each poll, which on a plain Cavity reads
+        abort_flag: on abort it calls turn_off() and raises CavityAbortError.
 
-        Both abort paths return FAILED rather than raising, so PhaseBase
-        does not retry a step the operator asked to stop.
+        PhaseBase.run() only checks the commissioning abort between steps, so
+        an abort during this wait has to reach the cavity. The controller that
+        runs this phase must call cavity.request_abort() alongside
+        context.request_abort(), and clear cavity.abort_flag before starting,
+        as FrequencyTuningController does for the stepper.
+
+        An abort returns FAILED rather than raising, so PhaseBase does not
+        retry a step the operator asked to stop.
         """
         if self.context.dry_run:
             return PhaseStepResult(
@@ -337,7 +342,6 @@ class CavityCharPhase(PhaseBase):
             self.cavity.wait_for_characterization(
                 timeout=self.limits.characterization_timeout_seconds,
                 poll_interval=self.limits.status_poll_interval,
-                should_abort=self.context.is_abort_requested,
             )
         except CavityAbortError as exc:
             return PhaseStepResult(

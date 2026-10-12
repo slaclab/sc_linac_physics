@@ -241,27 +241,14 @@ def test_crash_is_reported(phase, mock_cavity):
 
 
 def test_wait_delegates_to_the_shared_cavity_wait(phase, mock_cavity):
-    """The same wait auto setup runs, with this phase's limits and abort."""
+    """The same wait auto setup runs, with this phase's limits."""
     result = phase.execute_step("wait_for_completion")
 
     assert result.result == PhaseResult.SUCCESS
     mock_cavity.wait_for_characterization.assert_called_once_with(
         timeout=phase.limits.characterization_timeout_seconds,
         poll_interval=phase.limits.status_poll_interval,
-        should_abort=phase.context.is_abort_requested,
     )
-
-
-def test_wait_passes_a_live_view_of_the_commissioning_abort(phase, mock_cavity):
-    """PhaseBase.run() only checks the context flag between steps."""
-    phase.execute_step("wait_for_completion")
-    should_abort = mock_cavity.wait_for_characterization.call_args.kwargs[
-        "should_abort"
-    ]
-
-    assert should_abort() is False
-    phase.context.request_abort()
-    assert should_abort() is True
 
 
 def test_stale_complete_from_an_earlier_run_fails(phase, mock_cavity):
@@ -277,7 +264,7 @@ def test_stale_complete_from_an_earlier_run_fails(phase, mock_cavity):
 
 
 def test_abort_is_terminal_not_retried(phase, mock_cavity):
-    """Either abort reaches the phase as CavityAbortError."""
+    """An abort reaches the phase as CavityAbortError."""
     mock_cavity.wait_for_characterization.side_effect = CavityAbortError(
         "abort"
     )
