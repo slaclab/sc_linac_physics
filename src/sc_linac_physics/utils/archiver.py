@@ -35,6 +35,7 @@ Endpoints: https://epicsarchiver.readthedocs.io/en/stable/user/userguide.html
 old; where it is silent, this follows what the LCLS archiver did when tested.
 """
 
+import math
 import queue
 import threading
 from dataclasses import dataclass
@@ -67,21 +68,27 @@ AT_TIME_TIMEOUT = 75.0
 MAX_RETRIES = 4
 RETRY_DELAY = 0.5
 
-# Measured on site (2026-10-12), ACCL:L2B:0410:AACTMEAN at about 0.9 Hz: a
-# range request takes time in proportion to its size, about 11.5 MB/s (60
-# days, 4.7 M samples, 468 MB of JSON, 41 s). The proxy's 60 s cutoff then
-# lands near 700 MB. So a long window is fetched in chunks, each sized from
-# the bytes the one before it returned, aiming at CHUNK_BYTES (about 9 s).
-# PVs are archived at different rates, and a waveform sample is many times a
-# scalar one, so no one span fits every PV; bytes per second covers both.
-# CHECK: does request time follow bytes for waveform PVs too? Measured on a
-# scalar PV only.
-CHUNK_BYTES = 100_000_000
-FIRST_CHUNK = timedelta(hours=1)
-# MAX_CHUNK bounds a chunk that follows a quiet stretch: at 10 Hz a day is
-# about 86 MB. MIN_CHUNK keeps a very fast PV from shrinking to nothing.
-MIN_CHUNK = timedelta(minutes=1)
-MAX_CHUNK = timedelta(days=1)
+# A proxy cuts every request off at 60 s, and a long window holds more samples
+# than one request can return in that time, so ranges are fetched in chunks.
+# Measured on site (2026-10-12), ACCL:L2B:0410:AACTMEAN, uncached windows:
+# requests of 8-94 MB ran at 20-25 MB/s plus about 0.2 s each; 234 MB and
+# 468 MB ran at about 12 MB/s. JSON is about 99 bytes per scalar sample.
+#
+# Memory sets the chunk size, not time: parsing a chunk peaks at 6.5x its JSON
+# size (one dict per sample), and MAX_WORKERS PVs fetch at once. At 250k
+# samples (about 25 MB) that is about 190 MB per PV, 1.5 GB for 8, with about
+# 2 s per request. CHECK: waveform samples are far bigger than scalar ones;
+# none were found archived for a cavity, so this counts samples only.
+CHUNK_SAMPLES = 250_000
+
+# Chunks are planned from the archiver's own sample counts, not guessed:
+# count_3600(pv) returns the samples in each UTC hour, timestamped at the
+# hour's midpoint (checked on site; counts matched raw). The archiver reads
+# every sample to count them, about 2 M samples/s, so counts are asked for
+# COUNT_WINDOW at a time to keep each request short. A window no longer than
+# COUNT_BIN is fetched in one request without counting.
+COUNT_BIN = timedelta(hours=1)
+COUNT_WINDOW = timedelta(days=30)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
@@ -180,24 +187,15 @@ def _fetch_range(
     until the end peaked at 3.7 GB for a 156 MB result (60 days, 4.7 M
     samples, measured 2026-10-12).
     """
+    bounds = _plan_chunks(pv, start, end, timeout)
+    if bounds is None:
+        return None
     frames: List[pd.DataFrame] = []
     last: Optional[tuple] = None
-    chunk_start, span = start, FIRST_CHUNK
-    while True:
-        chunk_end = min(chunk_start + span, end)
-        response = _request(
-            "GET",
-            f"{ARCHIVER_URL}/getData.json",
-            timeout,
-            params={
-                "pv": pv,
-                "from": _to_utc_iso(chunk_start),
-                "to": _to_utc_iso(chunk_end),
-            },
-        )
-        if response is None:
+    for chunk_start, chunk_end in zip(bounds, bounds[1:]):
+        payload = _get_json(pv, chunk_start, chunk_end, timeout)
+        if payload is None:
             return None
-        payload = response.json()
         chunk = payload[0]["data"] if payload else []
         if last is not None:
             chunk = [datum for datum in chunk if _key(datum) > last]
@@ -205,25 +203,87 @@ def _fetch_range(
             last = _key(chunk[-1])
             frames.append(_to_frame(chunk))
         del payload, chunk
-        if chunk_end >= end:
-            # An empty frame's columns are object dtype; mixing one in would
-            # turn the timestamps into objects too.
-            if not frames:
-                return _to_frame([])
-            return pd.concat(frames, ignore_index=True)
-        span = _next_span(span, len(response.content))
-        chunk_start = chunk_end
+    # An empty frame's columns are object dtype; mixing one in would turn
+    # the timestamps into objects too.
+    if not frames:
+        return _to_frame([])
+    return pd.concat(frames, ignore_index=True)
 
 
-def _next_span(span: timedelta, nbytes: int) -> timedelta:
-    """Return the span that should give CHUNK_BYTES, at the rate just seen.
+def _plan_chunks(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[List[datetime]]:
+    """Return chunk boundaries from start to end; None if not archived.
 
-    The last chunk returned nbytes over span, so this assumes the PV keeps
-    logging at that rate. Clamped to MIN_CHUNK..MAX_CHUNK.
+    String PVs get no counts back (checked on site: count_3600 of CUDSTATUS
+    was empty, of CUDSEVR, an enum, was not). They are fetched in one request,
+    as before chunking. CHECK: is any string PV archived at a high rate?
     """
-    if nbytes <= 0:
-        return MAX_CHUNK
-    return min(max(span * (CHUNK_BYTES / nbytes), MIN_CHUNK), MAX_CHUNK)
+    if end - start <= COUNT_BIN:
+        return [start, end]
+    counts: Dict[int, float] = {}
+    window_start = start
+    while window_start < end:
+        window_end = min(window_start + COUNT_WINDOW, end)
+        operator = f"count_{int(COUNT_BIN.total_seconds())}({pv})"
+        payload = _get_json(operator, window_start, window_end, timeout)
+        if payload is None:
+            return None
+        bins = payload[0]["data"] if payload else []
+        if not bins and not counts:
+            return [start, end]
+        for datum in bins:
+            counts[_bin_start(datum["secs"])] = datum["val"]
+        window_start = window_end
+    return _group_bins(start, end, counts)
+
+
+def _group_bins(
+    start: datetime, end: datetime, counts: Dict[int, float]
+) -> List[datetime]:
+    """Cut start..end into chunks of at most CHUNK_SAMPLES.
+
+    counts maps each COUNT_BIN's start (UTC epoch seconds) to its samples;
+    a missing bin has none. A bin with more than CHUNK_SAMPLES is split into
+    equal parts, assuming its samples are spread evenly.
+    """
+    step = int(COUNT_BIN.total_seconds())
+    bounds, in_chunk = [start], 0.0
+    t = _bin_start(start.timestamp())
+    while t < end.timestamp():
+        lo = max(_utc(t), start)
+        hi = min(_utc(t + step), end)
+        n = counts.get(t, 0.0)
+        if in_chunk and in_chunk + n > CHUNK_SAMPLES:
+            bounds.append(lo)
+            in_chunk = 0.0
+        parts = max(1, math.ceil(n / CHUNK_SAMPLES))
+        bounds.extend(lo + (hi - lo) * k / parts for k in range(1, parts))
+        in_chunk += n / parts
+        t += step
+    bounds.append(end)
+    return bounds
+
+
+def _get_json(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[list]:
+    response = _request(
+        "GET",
+        f"{ARCHIVER_URL}/getData.json",
+        timeout,
+        params={"pv": pv, "from": _to_utc_iso(start), "to": _to_utc_iso(end)},
+    )
+    return None if response is None else response.json()
+
+
+def _bin_start(secs: float) -> int:
+    step = int(COUNT_BIN.total_seconds())
+    return int(secs // step) * step
+
+
+def _utc(secs: int) -> datetime:
+    return datetime.fromtimestamp(secs, tz=timezone.utc)
 
 
 def _key(datum: dict) -> tuple:

@@ -342,17 +342,6 @@ def test_aware_time_during_dst_change_is_accepted(session):
     )
 
 
-def test_chunks_across_fall_back_skip_no_hour(session):
-    session.request.return_value = _response(payload=[])
-    first_0130 = datetime(2024, 11, 3, 1, 30, tzinfo=archiver.LOCAL_TZ)
-
-    get_values_over_time_range(["A:PV"], first_0130, datetime(2024, 11, 4))
-
-    first, second = session.request.call_args_list[:2]
-    assert first.kwargs["params"]["to"] == "2024-11-03T09:30:00.000000Z"
-    assert second.kwargs["params"]["from"] == "2024-11-03T09:30:00.000000Z"
-
-
 def test_pair_by_time_sorts_unsorted_input():
     x = _series("AMP", [(30, 3.0), (10, 1.0), (20, 2.0)])
     y = _series("RAD", [(25, 0.3), (5, 0.1)])
@@ -455,46 +444,84 @@ def test_no_workers_is_refused(session):
         get_values_over_time_range(["A:PV"], START, END, max_workers=0)
 
 
+HOUR = timedelta(hours=1)
+UTC_START = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+
+def _counts(*per_hour, start=UTC_START):
+    """count_3600 bins, timestamped at each hour's midpoint like the archiver."""
+    base = int(start.timestamp())
+    return [_datum(base + 3600 * i + 1800, n) for i, n in enumerate(per_hour)]
+
+
 class TestChunkedRange:
-    """Long windows are fetched in chunks and stitched back together."""
+    """Long windows are fetched in planned chunks and stitched back together."""
 
-    LONG_END = START + 3 * archiver.FIRST_CHUNK
+    LONG_END = START + 3 * HOUR
 
-    @pytest.fixture(autouse=True)
-    def fixed_span(self):
-        with patch.object(
-            archiver, "_next_span", side_effect=lambda span, samples: span
-        ):
+    @pytest.fixture
+    def three_chunks(self):
+        bounds = [START + i * HOUR for i in range(4)]
+        with patch.object(archiver, "_plan_chunks", return_value=bounds):
             yield
 
     @staticmethod
-    def _windows(session):
+    def _sent_pvs(session):
         return [
-            (c.kwargs["params"]["from"], c.kwargs["params"]["to"])
-            for c in session.request.call_args_list
+            c.kwargs["params"]["pv"] for c in session.request.call_args_list
         ]
 
-    def test_short_window_is_one_request(self, session):
+    def test_short_window_is_one_request_without_counting(self, session):
         session.request.return_value = _response(payload=[{"data": []}])
 
-        get_values_over_time_range(["A:PV"], START, END)
+        get_values_over_time_range(["A:PV"], START, START + HOUR)
 
-        assert session.request.call_count == 1
+        assert self._sent_pvs(session) == ["A:PV"]
 
-    def test_chunks_cover_the_window_end_to_end(self, session):
-        session.request.return_value = _response(payload=[{"data": []}])
+    def test_long_window_counts_first(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": _counts(5, 5, 5)}]),
+            _response(payload=[{"data": [_datum(100, 1.0)]}]),
+        ]
 
         get_values_over_time_range(["A:PV"], START, self.LONG_END)
 
-        windows = self._windows(session)
-        assert len(windows) == 3
-        assert windows[0][0] == archiver._to_utc_iso(START)
-        assert windows[-1][1] == archiver._to_utc_iso(self.LONG_END)
-        for (_, to), (frm, _) in zip(windows, windows[1:]):
-            assert to == frm
+        assert self._sent_pvs(session) == ["count_3600(A:PV)", "A:PV"]
 
-    def test_samples_repeated_across_a_boundary_are_kept_once(self, session):
-        # Each window repeats the sample before its start; the one on the
+    def test_counts_are_asked_for_a_window_at_a_time(self, session):
+        session.request.return_value = _response(payload=[{"data": _counts(1)}])
+        end = START + 2 * archiver.COUNT_WINDOW + HOUR
+
+        get_values_over_time_range(["A:PV"], START, end)
+
+        counted = [p for p in self._sent_pvs(session) if p.startswith("count")]
+        assert len(counted) == 3
+
+    def test_string_pv_with_no_counts_is_one_request(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(100, "1")]}]),
+        ]
+
+        frame = get_values_over_time_range(["A:PV"], START, self.LONG_END)[
+            "A:PV"
+        ]
+
+        assert self._sent_pvs(session) == ["count_3600(A:PV)", "A:PV"]
+        assert list(frame["value"]) == ["1"]
+
+    def test_pv_unknown_when_counting_is_not_archived(self, session):
+        session.request.return_value = _response(status=404)
+
+        with pytest.raises(PVNotArchivedError):
+            get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+        assert session.request.call_count == 1
+
+    def test_samples_repeated_across_a_boundary_are_kept_once(
+        self, session, three_chunks
+    ):
+        # Each window can repeat the sample before its start; the one on the
         # boundary (secs=200) comes back in both windows around it.
         chunks = [
             [_datum(50, 0.0), _datum(100, 1.0), _datum(200, 2.0)],
@@ -511,7 +538,9 @@ class TestChunkedRange:
 
         assert list(frame["value"]) == [0.0, 1.0, 2.0, 3.0, 4.0]
 
-    def test_empty_first_chunk_keeps_timestamp_dtype(self, session):
+    def test_empty_first_chunk_keeps_timestamp_dtype(
+        self, session, three_chunks
+    ):
         session.request.side_effect = [
             _response(payload=[{"data": []}]),
             _response(payload=[{"data": [_datum(100, 1.0)]}]),
@@ -525,7 +554,7 @@ class TestChunkedRange:
         assert str(frame["timestamp"].dtype).startswith("datetime64")
         assert list(frame["value"]) == [1.0, 2.0]
 
-    def test_404_on_a_later_chunk_names_the_pv(self, session):
+    def test_404_on_a_later_chunk_names_the_pv(self, session, three_chunks):
         session.request.side_effect = [
             _response(payload=[{"data": [_datum(100, 1.0)]}]),
             _response(status=404),
@@ -537,28 +566,54 @@ class TestChunkedRange:
         assert "A:PV" in str(excinfo.value)
 
 
-class TestNextSpan:
-    HOUR = timedelta(hours=1)
+class TestGroupBins:
+    LIMIT = archiver.CHUNK_SAMPLES
 
-    def test_scales_toward_chunk_bytes(self):
-        nbytes = archiver.CHUNK_BYTES * 4  # 4x too big: quarter the span
-        assert archiver._next_span(self.HOUR, nbytes) == self.HOUR / 4
+    @staticmethod
+    def _plan(hours, *per_hour, start=UTC_START):
+        counts = {
+            archiver._bin_start(d["secs"]): d["val"]
+            for d in _counts(*per_hour, start=start)
+        }
+        return archiver._group_bins(start, start + hours * HOUR, counts)
 
-    def test_quiet_pv_grows_to_max_chunk(self):
-        assert archiver._next_span(self.HOUR, 100) == archiver.MAX_CHUNK
-        assert archiver._next_span(self.HOUR, 0) == archiver.MAX_CHUNK
-
-    def test_very_fast_pv_stops_at_min_chunk(self):
-        nbytes = archiver.CHUNK_BYTES * 10_000
-        assert archiver._next_span(self.HOUR, nbytes) == archiver.MIN_CHUNK
-
-    def test_long_window_uses_bytes_from_each_response(self, session):
-        session.request.side_effect = [
-            _response(payload=[{"data": []}], nbytes=archiver.CHUNK_BYTES * 4),
-            _response(payload=[{"data": []}]),
+    def test_quiet_window_is_one_chunk(self):
+        assert self._plan(24 * 365, 3, 0, 1) == [
+            UTC_START,
+            UTC_START + 24 * 365 * HOUR,
         ]
-        end = START + archiver.FIRST_CHUNK + archiver.FIRST_CHUNK / 4
 
-        get_values_over_time_range(["A:PV"], START, end)
+    def test_chunks_cut_at_hour_edges_under_the_limit(self):
+        half = self.LIMIT // 2
+        bounds = self._plan(4, half, half, half, half)
 
-        assert session.request.call_count == 2
+        assert bounds == [UTC_START, UTC_START + 2 * HOUR, UTC_START + 4 * HOUR]
+
+    def test_hour_over_the_limit_is_split_evenly(self):
+        bounds = self._plan(1, 3 * self.LIMIT)
+
+        assert bounds == [UTC_START + i * HOUR / 3 for i in range(4)]
+
+    def test_window_starting_mid_hour_starts_at_start(self):
+        start = UTC_START + HOUR / 2
+        counts = {archiver._bin_start(start.timestamp()): 2 * self.LIMIT}
+
+        bounds = archiver._group_bins(start, start + HOUR / 2, counts)
+
+        assert bounds[0] == start
+        assert bounds[-1] == start + HOUR / 2
+
+    def test_bounds_across_fall_back_are_an_hour_apart(self, session):
+        # A Pacific datetime plus a timedelta is wall-clock time; chunking in
+        # UTC keeps every planned hour exactly an hour long.
+        first_0130 = datetime(2024, 11, 3, 1, 30, tzinfo=archiver.LOCAL_TZ)
+        start = first_0130.astimezone(timezone.utc)
+        counts = {
+            archiver._bin_start(start.timestamp()) + 3600 * i: self.LIMIT
+            for i in range(4)
+        }
+
+        bounds = archiver._group_bins(start, start + 3 * HOUR, counts)
+
+        assert all(b - a <= HOUR for a, b in zip(bounds, bounds[1:]))
+        assert bounds[-1] - bounds[0] == 3 * HOUR

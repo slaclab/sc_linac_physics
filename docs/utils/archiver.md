@@ -26,16 +26,17 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   twice, or not at all) raises `ValueError`; pass an aware datetime there.
 - A range may or may not include the last sample before `start`: the same
   query a few minutes apart did both. Don't rely on either.
-- Long windows are fetched in chunks, one PV's chunks one after another. A
-  request takes time in proportion to its size, and a proxy cuts it off at
-  60 s. The first chunk spans `FIRST_CHUNK` (1 h). Each later one is sized
-  from the bytes the last one returned, aiming at `CHUNK_BYTES` (100 MB), and
-  clamped to `MIN_CHUNK`..`MAX_CHUNK` (1 min..1 day). The result is the same
-  as one request: <span class="cite">archiver.py::_fetch_range</span>. A
-  60-day pull of a 1 Hz PV took 61 chunks, the slowest 1.4 s.
-- Memory: the result for that pull was 156 MB, but building it peaked at
-  about 0.8 GB. Raw pulls of a year or more don't fit in memory. A disk store
-  is planned.
+- Windows longer than an hour are fetched in chunks, one PV's chunks one
+  after another, so no request reaches the proxy's 60 s cutoff. The chunks
+  are planned from the archiver's own hourly sample counts (`count_3600`),
+  at most `CHUNK_SAMPLES` (250k, about 25 MB) each:
+  <span class="cite">archiver.py::_plan_chunks</span>. The result is the
+  same as one request. String PVs get no counts and stay one request.
+- Live, 2026-10-12: 60 days of a 1 Hz PV took 21 requests, the largest 25 MB.
+  A year of two fault PVs took 16, mostly counts.
+- Memory: parsing peaks at about 6.5x a chunk's JSON, about 190 MB per PV,
+  for up to `MAX_WORKERS` PVs at once. The 60-day result was 156 MB. Raw
+  pulls of a year or more don't fit in memory. A disk store is planned.
 - Errors: `PVNotArchivedError` (names every unknown PV), `ArchiverTimeoutError`,
   `ArchiverConnectionError`, all subclasses of `ArchiverError`. Timeouts,
   connection errors and 5xx responses are retried 3 times first.
