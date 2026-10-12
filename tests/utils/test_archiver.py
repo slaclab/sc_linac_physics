@@ -497,9 +497,10 @@ class TestChunkedRange:
         counted = [p for p in self._sent_pvs(session) if p.startswith("count")]
         assert len(counted) == 3
 
-    def test_string_pv_with_no_counts_is_one_request(self, session):
+    def test_quiet_string_pv_is_one_request_after_its_total(self, session):
         session.request.side_effect = [
             _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(0, 3)]}]),
             _response(payload=[{"data": [_datum(100, "1")]}]),
         ]
 
@@ -507,8 +508,48 @@ class TestChunkedRange:
             "A:PV"
         ]
 
-        assert self._sent_pvs(session) == ["count_3600(A:PV)", "A:PV"]
+        assert self._sent_pvs(session) == [
+            "count_3600(A:PV)",
+            "ncount(A:PV)",
+            "A:PV",
+        ]
         assert list(frame["value"]) == ["1"]
+
+    def test_busy_string_pv_is_halved_until_each_part_fits(self, session):
+        limit = archiver.CHUNK_SAMPLES
+        totals = {  # (from, to) -> ncount: the first half is still too big
+            (START, self.LONG_END): 3 * limit,
+            (START, START + 1.5 * HOUR): 2 * limit,
+            (START + 1.5 * HOUR, self.LONG_END): limit,
+            (START, START + 0.75 * HOUR): limit,
+            (START + 0.75 * HOUR, START + 1.5 * HOUR): limit,
+        }
+        by_window = {
+            (archiver._to_utc_iso(a), archiver._to_utc_iso(b)): n
+            for (a, b), n in totals.items()
+        }
+
+        def reply(method, url, timeout, params):
+            pv, window = params["pv"], (params["from"], params["to"])
+            if pv.startswith("ncount"):
+                return _response(
+                    payload=[{"data": [_datum(0, by_window[window])]}]
+                )
+            return _response(payload=[{"data": []}])
+
+        session.request.side_effect = reply
+
+        get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+        data = [
+            c.kwargs["params"]["from"]
+            for c in session.request.call_args_list
+            if c.kwargs["params"]["pv"] == "A:PV"
+        ]
+        assert data == [
+            archiver._to_utc_iso(t)
+            for t in (START, START + 0.75 * HOUR, START + 1.5 * HOUR)
+        ]
 
     def test_counts_found_only_in_a_later_window_still_plan_chunks(
         self, session
@@ -517,6 +558,7 @@ class TestChunkedRange:
         busy = [archiver.CHUNK_SAMPLES] * 2
         session.request.side_effect = [
             _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(0, 0)]}]),  # its ncount
             _response(payload=[{"data": _counts(*busy, start=later)}]),
         ] + [_response(payload=[{"data": []}])] * 4
         end = later + 2 * HOUR
@@ -525,6 +567,31 @@ class TestChunkedRange:
 
         data = [p for p in self._sent_pvs(session) if p == "A:PV"]
         assert len(data) > 1
+
+    def test_404_while_halving_is_not_archived(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(
+                payload=[{"data": [_datum(0, 2 * archiver.CHUNK_SAMPLES)]}]
+            ),
+            _response(status=404),
+        ]
+
+        with pytest.raises(PVNotArchivedError):
+            get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+    def test_404_on_the_second_half_is_not_archived(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(
+                payload=[{"data": [_datum(0, 2 * archiver.CHUNK_SAMPLES)]}]
+            ),
+            _response(payload=[{"data": [_datum(0, 1)]}]),
+            _response(status=404),
+        ]
+
+        with pytest.raises(PVNotArchivedError):
+            get_values_over_time_range(["A:PV"], START, self.LONG_END)
 
     def test_pv_unknown_when_counting_is_not_archived(self, session):
         session.request.return_value = _response(status=404)
