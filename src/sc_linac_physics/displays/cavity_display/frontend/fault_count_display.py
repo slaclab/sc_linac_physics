@@ -35,6 +35,7 @@ class FaultCountDisplay(Display):
     # where it is safe to update the display.
     counts_ready = pyqtSignal(int, object)
     fetch_failed = pyqtSignal(int, str)  # request id, error message
+    fetch_progress = pyqtSignal(int, str)  # request id, what it is doing
 
     fault_tlc_list: List[str] = sorted(
         set(map(lambda d: d["Three Letter Code"], utils.parse_csv()))
@@ -119,6 +120,7 @@ class FaultCountDisplay(Display):
         self._request_id = 0
         self.counts_ready.connect(self._on_counts_ready)
         self.fetch_failed.connect(self._on_fetch_failed)
+        self.fetch_progress.connect(self._on_fetch_progress)
         self.cm_combo_box.currentIndexChanged.connect(self.update_cavity)
         self.cav_combo_box.currentIndexChanged.connect(self.update_cavity)
 
@@ -176,10 +178,7 @@ class FaultCountDisplay(Display):
         self._request_id += 1
         request_id = self._request_id
         start, end = self._selected_range()
-        self.status_label.setText(
-            f"Loading fault counts for CM{self.cm_combo_box.currentText()} "
-            f"cavity {self.cav_combo_box.currentText()}..."
-        )
+        self.status_label.setText(f"{self._loading_text()}...")
         self._start_fetch(self._fetch, request_id, self.cavity, start, end)
 
     @staticmethod
@@ -202,7 +201,14 @@ class FaultCountDisplay(Display):
         """Runs on the fetch thread; hands the result to the main thread."""
         try:
             self.counts_ready.emit(
-                request_id, cavity.get_fault_counts(start, end)
+                request_id,
+                cavity.get_fault_counts(
+                    start,
+                    end,
+                    lambda message: self.fetch_progress.emit(
+                        request_id, message
+                    ),
+                ),
             )
         except Exception as e:
             # An archiver error doesn't land here: get_fault_counts logs it
@@ -245,6 +251,17 @@ class FaultCountDisplay(Display):
                 "No faults in this range (or the archiver query failed; "
                 "see the cavity fault log)"
             )
+
+    def _loading_text(self) -> str:
+        return (
+            f"Loading fault counts for CM{self.cm_combo_box.currentText()} "
+            f"cavity {self.cav_combo_box.currentText()}"
+        )
+
+    def _on_fetch_progress(self, request_id, message):
+        if request_id != self._request_id:
+            return
+        self.status_label.setText(f"{self._loading_text()}: {message}")
 
     def _on_fetch_failed(self, request_id, message):
         if request_id != self._request_id:
