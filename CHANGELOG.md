@@ -2,6 +2,47 @@
 
 <!-- version list -->
 
+## v9.41.7 (2026-10-12)
+
+### Bug Fixes
+
+- **cavity-display**: Run heatmap fetches on daemon threads
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+- **cavity-display**: Share archiver slots across heatmap fetches
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+- **tuning**: Lower auto-tune undershoot from 0.9 to 0.75
+  ([#346](https://github.com/slaclab/sc_linac_physics/pull/346),
+  [`29e9603`](https://github.com/slaclab/sc_linac_physics/commit/29e9603d64873d4fd9da9439a6dd54eeacb53463))
+
+### Documentation
+
+- **cavity-display**: Say what the repeated November hour is
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+- **tuning**: Mark tuner SCALE error report as CHECK
+  ([#346](https://github.com/slaclab/sc_linac_physics/pull/346),
+  [`29e9603`](https://github.com/slaclab/sc_linac_physics/commit/29e9603d64873d4fd9da9439a6dd54eeacb53463))
+
+- **tuning**: Record why auto-tune undershoot is 0.75
+  ([#346](https://github.com/slaclab/sc_linac_physics/pull/346),
+  [`29e9603`](https://github.com/slaclab/sc_linac_physics/commit/29e9603d64873d4fd9da9439a6dd54eeacb53463))
+
+### Refactoring
+
+- **cavity-display**: Read fault history through the in-repo archiver client
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+- **cavity-display**: Remove unused archiver fault functions
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+
 ## v9.41.6 (2026-10-09)
 
 ### Bug Fixes
