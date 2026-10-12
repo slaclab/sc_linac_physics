@@ -1213,43 +1213,8 @@ def test_wait_checks_abort_while_polling(cavity):
     cavity.check_abort.assert_called()
 
 
-def test_wait_stops_when_the_caller_aborts(cavity):
-    """should_abort is handled like a cavity abort: RF off, then raise."""
-    pv = make_mock_pv(get_val=CHARACTERIZATION_RUNNING_VALUE)
-    cavity._characterization_status_pv_obj = pv
-    cavity.turn_off = MagicMock()
-
-    with pytest.raises(CavityAbortError):
-        cavity.wait_for_characterization(
-            poll_interval=0.01, should_abort=lambda: True
-        )
-
-    cavity.turn_off.assert_called_once()
-
-
 def test_wait_aborts_when_the_abort_arrives_as_the_run_completes(cavity):
-    """An abort during the last sleep still turns RF off."""
-    seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
-    pv = make_mock_pv()
-    pv.get = MagicMock(
-        side_effect=lambda *a, **k: (
-            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
-        )
-    )
-    cavity._characterization_status_pv_obj = pv
-    cavity.turn_off = MagicMock()
-    # False on the in-loop check, True by the time the run reads COMPLETE.
-    should_abort = MagicMock(side_effect=[False, True])
-
-    with pytest.raises(CavityAbortError):
-        cavity.wait_for_characterization(
-            poll_interval=0.01, should_abort=should_abort
-        )
-
-    cavity.turn_off.assert_called_once()
-
-
-def test_wait_ignores_a_caller_that_never_aborts(cavity):
+    """An abort during the last sleep stops the wait; RF goes off."""
     seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
     pv = make_mock_pv()
     pv.get = MagicMock(
@@ -1261,10 +1226,17 @@ def test_wait_ignores_a_caller_that_never_aborts(cavity):
     cavity._char_timestamp_pv_obj = make_mock_pv(
         get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     )
-    should_abort = MagicMock(return_value=False)
+    cavity.turn_off = MagicMock()
 
-    cavity.wait_for_characterization(
-        poll_interval=0.01, should_abort=should_abort
-    )
+    # The abort lands while the wait sleeps, after the RUNNING read.
+    def request_during_sleep(_):
+        cavity.request_abort()
 
-    should_abort.assert_called()
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.time.sleep",
+        side_effect=request_during_sleep,
+    ):
+        with pytest.raises(CavityAbortError):
+            cavity.wait_for_characterization(poll_interval=0.01)
+
+    cavity.turn_off.assert_called_once()

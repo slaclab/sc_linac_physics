@@ -1336,7 +1336,6 @@ class Cavity(linac_utils.SCLinacObject):
         timeout: Optional[float] = None,
         poll_interval: float = 1.0,
         max_result_age_seconds: float = 300.0,
-        should_abort: Optional[Callable[[], bool]] = None,
     ):
         """Block until the probe calibration settles, then vet the result.
 
@@ -1364,31 +1363,19 @@ class Cavity(linac_utils.SCLinacObject):
         @param poll_interval: seconds between status reads.
         @param max_result_age_seconds: how old PROBECALTS may be and still
             count as this run's result.
-        @param should_abort: checked each poll alongside check_abort(), for a
-            caller with its own abort flag (the commissioning phase passes
-            PhaseContext.is_abort_requested). True is handled like a cavity
-            abort: turn_off(), then CavityAbortError. Checked each poll and
-            once more after the run settles.
         @raise CavityCharacterizationError: crashed, timed out, or settled on
             a result older than max_result_age_seconds.
-        @raise CavityAbortError: via check_abort(), each poll.
+        @raise CavityAbortError: via check_abort(), each poll and once more
+            before the settled status is accepted.
         """
         deadline = None if timeout is None else time.monotonic() + timeout
 
-        def abort_if_caller_asked():
-            if should_abort is None or not should_abort():
-                return
-            # Not via abort_flag: SetupCavity overrides check_abort() to
-            # read its abort PV instead, and would ignore the flag.
-            self.turn_off()
-            self.set_status_message(
-                "Characterization wait aborted by caller", logging.ERROR
-            )
-            raise linac_utils.CavityAbortError(f"Abort requested for {self}")
-
-        while self.characterization_running:
-            abort_if_caller_asked()
+        while True:
+            # Abort before reading the status, so an abort that arrives
+            # during the last sleep wins over a run that then reads COMPLETE.
             self.check_abort()
+            if not self.characterization_running:
+                break
             if deadline is not None and time.monotonic() >= deadline:
                 self.set_status_message(
                     "Characterization did not finish in time",
@@ -1411,11 +1398,6 @@ class Cavity(linac_utils.SCLinacObject):
                 },
             )
             time.sleep(poll_interval)
-
-        # Once more after the loop: an abort that arrives during the last
-        # sleep would otherwise be missed when the next read is COMPLETE,
-        # and the wait would return with RF still on.
-        abort_if_caller_asked()
 
         if self.characterization_crashed:
             self.set_status_message(
