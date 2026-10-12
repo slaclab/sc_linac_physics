@@ -38,8 +38,13 @@ def _naive_pacific(stamps: Iterable[pd.Timestamp]) -> List[datetime]:
 
     lcls_tools returned naive local times, and the heatmap compares fault
     event times with naive times from its Qt date pickers. Converting here
-    keeps both as before. In the repeated November hour two samples can get
-    the same naive time; the events stay in archiver order.
+    keeps both as before.
+
+    When daylight saving time ends (first Sunday of November), Pacific
+    clocks go from 01:59 PDT back to 01:00 PST, so 01:00-01:59 happens
+    twice. A sample from each pass can get the same naive time, e.g. two
+    "01:30"s an hour apart. The events stay in archiver order, which is
+    chronological.
     """
     return [
         ts.to_pydatetime().astimezone(LOCAL_TZ).replace(tzinfo=None)
