@@ -34,8 +34,9 @@ from sc_linac_physics.utils.epics.config import EPICS_INVALID_VAL
 from sc_linac_physics.utils.platform_paths import get_srf_base_dir
 
 # A month is written once it ended this long ago; until then it is fetched
-# fresh on every read. CHECK: can the archiver's data for a past month still
-# change, e.g. samples written late? If so, how late?
+# fresh on every read. Archived data doesn't change once written (Lisa
+# Zacarias, 2026-10-12), so this only leaves time for samples still on their
+# way in when a month ends. It delays caching only the month just finished.
 SETTLE = timedelta(days=1)
 
 STORED_COLUMNS = [c for c in archiver.COLUMNS if c != "valid"]
