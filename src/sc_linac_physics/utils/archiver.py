@@ -169,11 +169,12 @@ def _fetch_range(
 ) -> Optional[pd.DataFrame]:
     """Fetch one PV between start and end in chunks; None if not archived.
 
-    The archiver starts every window with the last sample before "from", and
-    a sample exactly on a boundary comes back in both windows (checked on
+    A window can start with the last sample before "from", and a sample
+    exactly on a boundary came back in both windows around it (checked on
     site, 2026-10-12). So each chunk after the first keeps only samples after
-    the last one already kept. Stitched that way, the chunks match one request
-    for the whole window.
+    the last one already kept. That holds whether or not the earlier sample
+    comes back. Stitched that way, the chunks matched one request for the
+    whole window (60 days, checked on site).
 
     Each chunk becomes a DataFrame as it arrives. Holding every chunk's JSON
     until the end peaked at 3.7 GB for a 156 MB result (60 days, 4.7 M
