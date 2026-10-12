@@ -86,8 +86,9 @@ RETRY_DELAY = 0.5
 # Memory sets the chunk size, not time: parsing a chunk peaks at 6.5x its JSON
 # size (one dict per sample), and MAX_WORKERS PVs fetch at once. At 250k
 # samples (about 25 MB) that is about 190 MB per PV, 1.5 GB for 8, with about
-# 2 s per request. CHECK: waveform samples are far bigger than scalar ones;
-# none were found archived for a cavity, so this counts samples only.
+# 2 s per request. Chunks count samples, which assumes scalar PVs: waveforms
+# are not archived (Lisa Zacarias, 2026-10-12). A waveform sample would be
+# many times bigger.
 CHUNK_SAMPLES = 250_000
 
 # Chunks are planned from the archiver's own sample counts, not guessed:
