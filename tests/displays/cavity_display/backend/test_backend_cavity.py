@@ -201,7 +201,12 @@ class TestProcessFaultHistory:
 
 
 class TestGetFaultHistory:
-    def test_fetches_status_and_severity_pvs(self, cavity):
+    READ = (
+        "sc_linac_physics.displays.cavity_display.backend.backend_cavity"
+        ".ArchiverStore.read"
+    )
+
+    def test_reads_status_and_severity_through_the_store(self, cavity):
         start = datetime(2025, 6, 2, 12, 0)
         end = datetime(2025, 6, 2, 13, 0)
         status_pv = cavity.pv_addr("CUDSTATUS")
@@ -211,22 +216,19 @@ class TestGetFaultHistory:
             sevr_pv: _make_frame([(2, start)]),
         }
         with patch(
-            "sc_linac_physics.displays.cavity_display.backend.backend_cavity"
-            ".get_values_over_time_range",
-            return_value=frames,
-        ) as fetch:
+            self.READ, autospec=True, side_effect=lambda _, pv, s, e: frames[pv]
+        ) as read:
             counts, events = cavity.get_fault_history(start, end)
 
-        fetch.assert_called_once_with([status_pv, sevr_pv], start, end)
+        assert [c.args[1:] for c in read.call_args_list] == [
+            (status_pv, start, end),
+            (sevr_pv, start, end),
+        ]
         assert counts["SSA"].alarm_count == 1
         assert events[0].timestamp == start
 
     def test_archiver_error_returns_empty(self, cavity):
-        with patch(
-            "sc_linac_physics.displays.cavity_display.backend.backend_cavity"
-            ".get_values_over_time_range",
-            side_effect=RuntimeError("archiver down"),
-        ):
+        with patch(self.READ, side_effect=RuntimeError("archiver down")):
             counts, events = cavity.get_fault_history(
                 datetime(2025, 6, 2, 12, 0), datetime(2025, 6, 2, 13, 0)
             )
