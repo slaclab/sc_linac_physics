@@ -20,6 +20,14 @@ on:
           The single Python version that should measure coverage and enforce the
           threshold. Other legs run with --no-cov. Leave empty to skip coverage
           on every leg (what the experimental matrix wants).
+      extra-apt-packages:
+        required: false
+        type: string
+        default: ''
+        description: >-
+          Extra apt packages to install before pip. The experimental matrix
+          uses this for libraries it has to build from source because no
+          wheel exists yet for that Python.
 
 jobs:
   test:
@@ -42,9 +50,11 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install system packages
+        env:
+          EXTRA_APT_PACKAGES: ${{ inputs.extra-apt-packages }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb libxkbcommon-x11-0 libglu1-mesa libxcb-xinerama0
+          sudo apt-get install -y xvfb libxkbcommon-x11-0 libglu1-mesa libxcb-xinerama0 $EXTRA_APT_PACKAGES
 
       - name: Install project
         run: |
