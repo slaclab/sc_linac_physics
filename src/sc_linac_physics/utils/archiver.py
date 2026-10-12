@@ -67,6 +67,22 @@ AT_TIME_TIMEOUT = 75.0
 MAX_RETRIES = 4
 RETRY_DELAY = 0.5
 
+# Measured on site (2026-10-12), ACCL:L2B:0410:AACTMEAN at about 0.9 Hz: a
+# range request takes time in proportion to its size, about 11.5 MB/s (60
+# days, 4.7 M samples, 468 MB of JSON, 41 s). The proxy's 60 s cutoff then
+# lands near 700 MB. So a long window is fetched in chunks, each sized from
+# the bytes the one before it returned, aiming at CHUNK_BYTES (about 9 s).
+# PVs are archived at different rates, and a waveform sample is many times a
+# scalar one, so no one span fits every PV; bytes per second covers both.
+# CHECK: does request time follow bytes for waveform PVs too? Measured on a
+# scalar PV only.
+CHUNK_BYTES = 100_000_000
+FIRST_CHUNK = timedelta(hours=1)
+# MAX_CHUNK bounds a chunk that follows a quiet stretch: at 10 Hz a day is
+# about 86 MB. MIN_CHUNK keeps a very fast PV from shrinking to nothing.
+MIN_CHUNK = timedelta(minutes=1)
+MAX_CHUNK = timedelta(days=1)
+
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 COLUMNS = ["timestamp", "value", "severity", "status", "valid"]
@@ -128,23 +144,17 @@ def get_values_over_time_range(
     finished. Timeouts and connection errors are retried, then raised.
     """
     pvs = list(pvs)
-    params = {"from": _to_utc_iso(start), "to": _to_utc_iso(end)}
+    # Chunk in UTC: adding a timedelta to a Pacific time is wall-clock
+    # arithmetic, which skips or repeats an hour across a DST change.
+    start = _aware(start).astimezone(timezone.utc)
+    end = _aware(end).astimezone(timezone.utc)
 
     def fetch(pv: str) -> Optional[pd.DataFrame]:
         try:
-            response = _request(
-                "GET",
-                f"{ARCHIVER_URL}/getData.json",
-                timeout,
-                params={**params, "pv": pv},
-            )
+            return _fetch_range(pv, start, end, timeout)
         except ArchiverError as e:
             # Every range request has the same URL; name the PV that failed.
             raise type(e)(f"{pv}: {e}") from e
-        if response is None:
-            return None
-        payload = response.json()
-        return _to_frame(payload[0]["data"] if payload else [])
 
     frames = dict(zip(pvs, _map_in_daemon_threads(fetch, pvs, max_workers)))
 
@@ -152,6 +162,60 @@ def get_values_over_time_range(
     if missing:
         raise PVNotArchivedError(missing)
     return frames
+
+
+def _fetch_range(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[pd.DataFrame]:
+    """Fetch one PV between start and end in chunks; None if not archived.
+
+    The archiver starts every window with the last sample before "from", and
+    a sample exactly on a boundary comes back in both windows (checked on
+    site, 2026-10-12). So each chunk after the first keeps only samples after
+    the last one already kept. Stitched that way, the chunks match one request
+    for the whole window.
+    """
+    data: List[dict] = []
+    chunk_start, span = start, FIRST_CHUNK
+    while True:
+        chunk_end = min(chunk_start + span, end)
+        response = _request(
+            "GET",
+            f"{ARCHIVER_URL}/getData.json",
+            timeout,
+            params={
+                "pv": pv,
+                "from": _to_utc_iso(chunk_start),
+                "to": _to_utc_iso(chunk_end),
+            },
+        )
+        if response is None:
+            return None
+        payload = response.json()
+        chunk = payload[0]["data"] if payload else []
+        if data:
+            last = _key(data[-1])
+            chunk = [datum for datum in chunk if _key(datum) > last]
+        data.extend(chunk)
+        if chunk_end >= end:
+            return _to_frame(data)
+        span = _next_span(span, len(response.content))
+        chunk_start = chunk_end
+
+
+def _next_span(span: timedelta, nbytes: int) -> timedelta:
+    """Return the span that should give CHUNK_BYTES, at the rate just seen.
+
+    The last chunk returned nbytes over span, so this assumes the PV keeps
+    logging at that rate. Clamped to MIN_CHUNK..MAX_CHUNK.
+    """
+    if nbytes <= 0:
+        return MAX_CHUNK
+    return min(max(span * (CHUNK_BYTES / nbytes), MIN_CHUNK), MAX_CHUNK)
+
+
+def _key(datum: dict) -> tuple:
+    return datum["secs"], datum.get("nanos", 0)
 
 
 def get_series(
@@ -308,10 +372,16 @@ def _request(
     raise last_error
 
 
+def _aware(moment: datetime) -> datetime:
+    return _localize(moment) if moment.tzinfo is None else moment
+
+
 def _to_utc_iso(moment: datetime) -> str:
-    if moment.tzinfo is None:
-        moment = _localize(moment)
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return (
+        _aware(moment)
+        .astimezone(timezone.utc)
+        .strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    )
 
 
 def _localize(naive: datetime) -> datetime:
