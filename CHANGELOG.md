@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v9.41.6 (2026-10-09)
+
+### Bug Fixes
+
+- **cavity-display**: Catch our PVInvalidError in EnumLabel
+  ([#358](https://github.com/slaclab/sc_linac_physics/pull/358),
+  [`c59ba31`](https://github.com/slaclab/sc_linac_physics/commit/c59ba31b9fcf1ac292c76a464b0cb4a2056da231))
+
+### Documentation
+
+- **claude-md**: Stacked PRs stay drafts until what they build on merges
+  ([#353](https://github.com/slaclab/sc_linac_physics/pull/353),
+  [`7921eed`](https://github.com/slaclab/sc_linac_physics/commit/7921eede5b369c3c645bd1cb8da9dda768bde83c))
+
+- **claude-md**: Write for every audience, not two named reviewers
+  ([#354](https://github.com/slaclab/sc_linac_physics/pull/354),
+  [`8b16a88`](https://github.com/slaclab/sc_linac_physics/commit/8b16a88ca009bc5bbf776ca0d76a271c51bbc41a))
+
+### Testing
+
+- Drop local qapp fixtures that shadow pytest-qt's
+  ([#351](https://github.com/slaclab/sc_linac_physics/pull/351),
+  [`9f86e4e`](https://github.com/slaclab/sc_linac_physics/commit/9f86e4eec0c2851a80f5872fd275b5d368e456ad))
+
+- Use our make_mock_pv and EPICS constants, not lcls_tools'
+  ([#359](https://github.com/slaclab/sc_linac_physics/pull/359),
+  [`f7f83a3`](https://github.com/slaclab/sc_linac_physics/commit/f7f83a3af617f22f15e9c519ede38a0aa51940fb))
+
+- **conftest**: Install fake epics at import so sub-conftests can't load real epics first
+  ([#361](https://github.com/slaclab/sc_linac_physics/pull/361),
+  [`784e08c`](https://github.com/slaclab/sc_linac_physics/commit/784e08c3feb04fe5747193ae627abc60c1059ac9))
+
+
 ## v9.41.5 (2026-10-08)
 
 ### Bug Fixes
