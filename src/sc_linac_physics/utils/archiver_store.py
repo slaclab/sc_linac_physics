@@ -12,9 +12,10 @@ Why Parquet: it is columnar and compressed (about 12 bytes per scalar sample
 with zstd, against 99 in the archiver's JSON; measured 2026-10-12 on 550k
 samples), and pandas, polars, DuckDB and MATLAB read it directly. Files are
 written whole and never edited, so a shared cache needs no locks: each file
-is written to a temporary name and renamed into place. HDF5's file locking is
-unreliable on NFS. CHECK: is /home/physics/srf NFS on the control-room
-machines?
+is written to a temporary name in the same directory and renamed into place.
+That matters because /home, and so /home/physics/srf, is NFS v4
+(mccfs2:/export/mccfs/home; findmnt on lcls-srv01, 2026-10-12), where
+HDF5's file locking is unreliable.
 """
 
 import logging
