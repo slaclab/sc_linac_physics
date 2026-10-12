@@ -582,6 +582,42 @@ class TestChunkedRange:
         assert "A:PV" in str(excinfo.value)
 
 
+class TestIterRangeChunks:
+    @pytest.fixture(autouse=True)
+    def three_chunks(self):
+        bounds = [START + i * HOUR for i in range(4)]
+        with patch.object(archiver, "_plan_chunks", return_value=bounds):
+            yield
+
+    def test_yields_one_frame_per_nonempty_chunk_lazily(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": [_datum(100, 1.0)]}]),
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(300, 3.0)]}]),
+        ]
+
+        chunks = archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR)
+        first = next(chunks)
+
+        assert session.request.call_count == 1
+        assert list(first["value"]) == [1.0]
+        assert [list(c["value"]) for c in chunks] == [[3.0]]
+
+    def test_not_archived_raises_naming_the_pv(self, session):
+        session.request.return_value = _response(status=404)
+
+        with pytest.raises(PVNotArchivedError) as excinfo:
+            list(archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR))
+
+        assert excinfo.value.pvs == ["A:PV"]
+
+    def test_other_errors_name_the_pv(self, session):
+        session.request.return_value = _response(status=400)
+
+        with pytest.raises(ArchiverError, match="A:PV"):
+            list(archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR))
+
+
 class TestGroupBins:
     LIMIT = archiver.CHUNK_SAMPLES
 

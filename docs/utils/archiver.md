@@ -36,6 +36,8 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   same as one request. String PVs get no counts and stay one request.
 - Live, 2026-10-12: 60 days of a 1 Hz PV took 21 requests, the largest 25 MB.
   A year of two fault PVs took 16, mostly counts.
+- `iter_range_chunks(pv, start, end)` yields the same samples one chunk at a
+  time, for processing or storing a long window without holding all of it.
 - Memory: parsing peaks at about 6.5x a chunk's JSON, about 190 MB per PV,
   for up to `MAX_WORKERS` PVs at once. The 60-day result was 156 MB. Raw
   pulls of a year or more don't fit in memory. A disk store is planned.
