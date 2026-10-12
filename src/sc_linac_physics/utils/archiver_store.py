@@ -17,8 +17,8 @@ unreliable on NFS. CHECK: is /home/physics/srf NFS on the control-room
 machines?
 """
 
-import logging
 import os
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -39,8 +39,6 @@ from sc_linac_physics.utils.platform_paths import get_srf_base_dir
 SETTLE = timedelta(days=1)
 
 STORED_COLUMNS = [c for c in archiver.COLUMNS if c != "valid"]
-
-logger = logging.getLogger(__name__)
 
 
 def get_archiver_cache_dir() -> Path:
@@ -73,7 +71,10 @@ class ArchiverStore:
         end = archiver._aware(end).astimezone(timezone.utc)
         before: Optional[pd.DataFrame] = None
         last = None
+        began, months, from_disk, samples = time.monotonic(), 0, 0, 0
         for month_start, month_end in _months(start, end):
+            months += 1
+            from_disk += self.path(pv, month_start).exists()
             frame = self._month(pv, month_start, month_end, start, end)
             # A month can start with the sample before it, which the month
             # before already returned.
@@ -91,9 +92,20 @@ class ArchiverStore:
             if before is not None:
                 body = pd.concat([before, body])
                 before = None
+            samples += len(body)
             yield _with_valid(body)
         if before is not None:
+            samples += 1
             yield _with_valid(before)
+        archiver.get_logger().info(
+            "cache: %s %s: %d samples, %d of %d month(s) from disk, %.2f s",
+            pv,
+            archiver._span(start, end),
+            samples,
+            from_disk,
+            months,
+            time.monotonic() - began,
+        )
 
     def read(self, pv: str, start: datetime, end: datetime) -> pd.DataFrame:
         """The PV's samples from start to end as one DataFrame."""
@@ -150,7 +162,9 @@ class ArchiverStore:
         full), the month is fetched without it: the cache only saves time.
         """
         path = self.path(pv, month_start)
+        log = archiver.get_logger()
         if path.exists():
+            log.debug("cache: %s %s from %s", pv, f"{month_start:%Y-%m}", path)
             return pq.read_table(path).to_pandas()
         if not _settled(month_end):
             lo, hi = max(month_start, start), min(month_end, end)
@@ -160,13 +174,19 @@ class ArchiverStore:
                 path, archiver.iter_range_chunks(pv, month_start, month_end)
             )
         except OSError as e:
-            logger.warning(
-                "archiver cache: cannot write %s (%s); fetching %s without it",
+            log.warning(
+                "cache: cannot write %s (%s); fetching %s without it",
                 path,
                 e,
                 pv,
             )
             return _join(archiver.iter_range_chunks(pv, month_start, month_end))
+        log.info(
+            "cache: wrote %s %s, %.0f kB",
+            pv,
+            f"{month_start:%Y-%m}",
+            path.stat().st_size / 1e3,
+        )
         return pq.read_table(path).to_pandas()
 
 

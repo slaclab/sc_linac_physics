@@ -49,6 +49,20 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   502 at 60 s, which is retried, so one cold lookup can block for about 4
   minutes before it fails. Keep these calls off the Qt main thread.
 
+## Logging
+
+`archiver.get_logger()` writes to the console and to `logfiles/archiver/`.
+INFO is one line per PV fetched, per month written to the cache, per cache
+read, and per value-at-time lookup. Retries and failed cache writes are
+WARNING. Every HTTP request and cache hit is DEBUG; to see them:
+
+```python
+import logging
+from sc_linac_physics.utils import archiver
+
+archiver.get_logger().setLevel(logging.DEBUG)
+```
+
 ## On-disk cache (`utils/archiver_store.py`)
 
 For analysis over months or years, read through `ArchiverStore`. Each month

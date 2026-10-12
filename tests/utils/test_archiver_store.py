@@ -125,16 +125,30 @@ def test_recent_month_is_fetched_only_where_asked(store):
     assert [(c[1], c[2]) for c in fake.calls] == [(start, now)]
 
 
-def test_unwritable_cache_still_returns_data(tmp_path, caplog):
+def test_unwritable_cache_still_returns_data(tmp_path):
     blocker = tmp_path / "not_a_dir"
     blocker.write_text("")  # a file where the cache directory should go
     store = ArchiverStore(blocker)
     fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
-    with served, caplog.at_level("WARNING", logger=archiver_store.__name__):
+    with served, patch.object(archiver, "get_logger") as get_logger:
         frame = store.read("A:PV", JAN, FEB)
 
     assert _values(frame) == [1.0]
-    assert "cannot write" in caplog.text
+    warning = get_logger.return_value.warning.call_args
+    assert "cannot write" in warning.args[0]
+
+
+def test_writing_a_month_is_logged(store):
+    fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
+    with served, patch.object(archiver, "get_logger") as get_logger:
+        store.read("A:PV", JAN, FEB)
+        store.read("A:PV", JAN, FEB)
+
+    log = get_logger.return_value
+    lines = [c.args[0] % c.args[1:] for c in log.info.call_args_list]
+    assert lines[0].startswith("cache: wrote A:PV 2024-01")
+    assert "0 of 1 month(s) from disk" in lines[1]
+    assert "1 samples, 1 of 1 month(s) from disk" in lines[2]
 
 
 def test_empty_settled_month_is_recorded(store):
