@@ -22,7 +22,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Tuple
+from typing import Callable, Iterable, Iterator, List, Optional, Tuple
 from urllib.parse import quote
 
 import pandas as pd
@@ -39,6 +39,11 @@ from sc_linac_physics.utils.platform_paths import get_srf_base_dir
 SETTLE = timedelta(days=1)
 
 STORED_COLUMNS = [c for c in archiver.COLUMNS if c != "valid"]
+
+# Called with a short message before each month, e.g. "May 2026 (2 of 3):
+# from disk", so a display can say more than "loading". Runs on the reading
+# thread.
+Progress = Optional[Callable[[str], None]]
 
 
 def get_archiver_cache_dir() -> Path:
@@ -57,7 +62,11 @@ class ArchiverStore:
         self.root = Path(root) if root else get_archiver_cache_dir()
 
     def iter_months(
-        self, pv: str, start: datetime, end: datetime
+        self,
+        pv: str,
+        start: datetime,
+        end: datetime,
+        progress: Progress = None,
     ) -> Iterator[pd.DataFrame]:
         """Yield the PV's samples from start to end, one month at a time.
 
@@ -65,16 +74,24 @@ class ArchiverStore:
         first time. Frames are in time order, never empty, with no sample
         twice. Naive datetimes are read as America/Los_Angeles.
         Raises archiver.PVNotArchivedError if the archiver does not know the
-        PV.
+        PV. progress, if given, is called before each month.
         """
         start = archiver._aware(start).astimezone(timezone.utc)
         end = archiver._aware(end).astimezone(timezone.utc)
         before: Optional[pd.DataFrame] = None
         last = None
         began, months, from_disk, samples = time.monotonic(), 0, 0, 0
-        for month_start, month_end in _months(start, end):
+        all_months = _months(start, end)
+        for month_start, month_end in all_months:
             months += 1
-            from_disk += self.path(pv, month_start).exists()
+            cached = self.path(pv, month_start).exists()
+            from_disk += cached
+            if progress:
+                where = "from disk" if cached else "fetching from the archiver"
+                progress(
+                    f"{month_start:%b %Y} ({months} of {len(all_months)}): "
+                    f"{where}"
+                )
             frame = self._month(pv, month_start, month_end, start, end)
             # A month can start with the sample before it, which the month
             # before already returned.
@@ -107,9 +124,15 @@ class ArchiverStore:
             time.monotonic() - began,
         )
 
-    def read(self, pv: str, start: datetime, end: datetime) -> pd.DataFrame:
+    def read(
+        self,
+        pv: str,
+        start: datetime,
+        end: datetime,
+        progress: Progress = None,
+    ) -> pd.DataFrame:
         """The PV's samples from start to end as one DataFrame."""
-        frames = list(self.iter_months(pv, start, end))
+        frames = list(self.iter_months(pv, start, end, progress))
         if not frames:
             return _with_valid(_empty())
         return pd.concat(frames, ignore_index=True)

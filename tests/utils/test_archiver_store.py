@@ -223,6 +223,19 @@ def test_fill_writes_settled_months_and_names_unknown_pvs(store):
     assert not store.path("A:PV", this_month).exists()
 
 
+def test_progress_names_each_month_and_where_it_comes_from(store):
+    fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
+    messages = []
+    with served:
+        store.read("A:PV", JAN, FEB)
+        store.read("A:PV", JAN, MAR, progress=messages.append)
+
+    assert messages == [
+        "Jan 2024 (1 of 2): from disk",
+        "Feb 2024 (2 of 2): fetching from the archiver",
+    ]
+
+
 def test_pv_names_are_safe_directory_names(store):
     path = store.path("A:B/C D", JAN)
 

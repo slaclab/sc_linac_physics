@@ -26,7 +26,7 @@ from sc_linac_physics.displays.cavity_display.utils.utils import (
     cavity_fault_logger,
 )
 from sc_linac_physics.utils.archiver import LOCAL_TZ
-from sc_linac_physics.utils.archiver_store import ArchiverStore
+from sc_linac_physics.utils.archiver_store import ArchiverStore, Progress
 from sc_linac_physics.utils.epics import PV, PVBatch
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 
@@ -351,20 +351,28 @@ class BackendCavity(Cavity):
         )
 
     def get_fault_counts(
-        self, start_time: datetime, end_time: datetime
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        progress: Progress = None,
     ) -> DefaultDict[str, FaultCounter]:
         """Fault counts by TLC over a time range; see get_fault_history."""
-        counts, _ = self.get_fault_history(start_time, end_time)
+        counts, _ = self.get_fault_history(start_time, end_time, progress)
         return counts
 
     def get_fault_history(
-        self, start_time: datetime, end_time: datetime
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        progress: Progress = None,
     ) -> Tuple[DefaultDict[str, FaultCounter], List[FaultEvent]]:
         """Fetch this cavity's fault history from the archiver.
 
         Reads through the shared ArchiverStore: months that ended over a
         day ago come from disk after the first read, and only newer data is
         asked of the archiver. The two PVs are read one after the other.
+        progress, if given, gets the store's per-month messages, prefixed
+        with which PV they are for.
 
         Returns (counts by TLC, chronological FaultEvents); both are
         empty if the archiver query fails. Callers fetching many
@@ -372,12 +380,22 @@ class BackendCavity(Cavity):
         process_fault_history().
         """
         store = ArchiverStore()
+
+        def labelled(what: str) -> Progress:
+            return progress and (lambda message: progress(f"{what}, {message}"))
+
         try:
             statuses = store.read(
-                self.pv_addr("CUDSTATUS"), start_time, end_time
+                self.pv_addr("CUDSTATUS"),
+                start_time,
+                end_time,
+                labelled("fault status"),
             )
             severities = store.read(
-                self.pv_addr("CUDSEVR"), start_time, end_time
+                self.pv_addr("CUDSEVR"),
+                start_time,
+                end_time,
+                labelled("severity"),
             )
         except Exception as e:
             cavity_fault_logger.error(
