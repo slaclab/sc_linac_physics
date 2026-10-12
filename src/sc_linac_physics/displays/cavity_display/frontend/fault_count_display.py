@@ -234,6 +234,10 @@ class FaultCountDisplay(Display):
     def _on_counts_ready(self, request_id, data):
         if request_id != self._request_id:
             return
+        if not data:
+            # get_fault_counts returns {} when the archiver query fails, so
+            # an empty result may be a failure; let the next edit retry
+            self._fetched_range = None
         self.data = data
         self._redraw_last_result()
 
@@ -306,7 +310,11 @@ class FaultCountDisplay(Display):
         self.plot_window.addItem(warning_bars)
 
         utils.cavity_fault_logger.debug(
-            "Displaying fault counts for %s cavity %s",
-            self.cavity.cryomodule,
-            self.cavity.number,
+            "Displaying fault counts",
+            extra={
+                "extra_data": {
+                    "cryomodule": str(self.cavity.cryomodule),
+                    "cavity": self.cavity.number,
+                }
+            },
         )

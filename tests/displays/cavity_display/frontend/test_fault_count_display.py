@@ -554,3 +554,12 @@ class TestRangeEdits:
         with patch.object(display.plot_window, "addItem"):
             display.end_selector.editingFinished.emit()
         assert display.cavity.get_fault_counts.call_count == 2
+
+    def test_edit_after_empty_result_retries(self, display):
+        """{} may be an archiver failure, which get_fault_counts swallows."""
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(return_value={})
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+            display.end_selector.editingFinished.emit()
+        assert display.cavity.get_fault_counts.call_count == 2
