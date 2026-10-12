@@ -216,8 +216,9 @@ def _plan_chunks(
     """Return chunk boundaries from start to end; None if not archived.
 
     String PVs get no counts back (checked on site: count_3600 of CUDSTATUS
-    was empty, of CUDSEVR, an enum, was not). They are fetched in one request,
-    as before chunking. CHECK: is any string PV archived at a high rate?
+    was empty, of CUDSEVR, an enum, was not). A PV with no counts in any
+    window is fetched in one request, as before chunking. CHECK: is any
+    string PV archived at a high rate?
     """
     if end - start <= COUNT_BIN:
         return [start, end]
@@ -236,11 +237,13 @@ def _plan_chunks(
         if payload is None:
             return None
         bins = payload[0]["data"] if payload else []
-        if not bins and not counts:
-            return [start, end]
         for datum in bins:
             counts[_bin_start(datum["secs"])] = datum["val"]
         window_start = window_end
+    # Every window is counted before giving up on counts: a PV first
+    # archived partway through the range has none for its early windows.
+    if not counts:
+        return [start, end]
     return _group_bins(start, end, counts)
 
 

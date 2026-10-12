@@ -510,6 +510,22 @@ class TestChunkedRange:
         assert self._sent_pvs(session) == ["count_3600(A:PV)", "A:PV"]
         assert list(frame["value"]) == ["1"]
 
+    def test_counts_found_only_in_a_later_window_still_plan_chunks(
+        self, session
+    ):
+        later = START + archiver.COUNT_WINDOW
+        busy = [archiver.CHUNK_SAMPLES] * 2
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": _counts(*busy, start=later)}]),
+        ] + [_response(payload=[{"data": []}])] * 4
+        end = later + 2 * HOUR
+
+        get_values_over_time_range(["A:PV"], START, end)
+
+        data = [p for p in self._sent_pvs(session) if p == "A:PV"]
+        assert len(data) > 1
+
     def test_pv_unknown_when_counting_is_not_archived(self, session):
         session.request.return_value = _response(status=404)
 

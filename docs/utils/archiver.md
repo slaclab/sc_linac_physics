@@ -19,14 +19,16 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
 # {pv: ArchiverSample(timestamp, value, severity, status)}; .valid
 ```
 
-- One request per PV, up to `MAX_WORKERS` (8) at once. The archiver spends its
-  time reading each PV, so this is much faster than one multi-PV request.
+- PVs are fetched independently, up to `MAX_WORKERS` (8) at once. The
+  archiver spends its time reading each PV, so this is much faster than one
+  multi-PV request. A window up to an hour is one request per PV. A longer
+  one is one count request per 30 days, then one request per chunk.
 - Naive datetimes are read as Pacific time. Returned timestamps are
   timezone-aware. A naive time in a daylight-saving change hour (it happens
   twice, or not at all) raises `ValueError`; pass an aware datetime there.
 - A range may or may not include the last sample before `start`: the same
   query a few minutes apart did both. Don't rely on either.
-- Windows longer than an hour are fetched in chunks, one PV's chunks one
+- Windows longer than an hour are fetched in chunks, each PV's chunks one
   after another, so no request reaches the proxy's 60 s cutoff. The chunks
   are planned from the archiver's own hourly sample counts (`count_3600`),
   at most `CHUNK_SAMPLES` (250k, about 25 MB) each:
