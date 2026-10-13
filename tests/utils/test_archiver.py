@@ -1,3 +1,4 @@
+import io
 import os
 import subprocess
 import sys
@@ -5,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 import requests
 
@@ -462,7 +464,8 @@ class TestChunkedRange:
     @pytest.fixture
     def three_chunks(self):
         bounds = [START + i * HOUR for i in range(4)]
-        with patch.object(archiver, "_plan_chunks", return_value=bounds):
+        plan = archiver._Plan(bounds, numeric=False)
+        with patch.object(archiver, "_plan_chunks", return_value=plan):
             yield
 
     @staticmethod
@@ -555,7 +558,7 @@ class TestChunkedRange:
         self, session
     ):
         later = START + archiver.COUNT_WINDOW
-        busy = [archiver.CHUNK_SAMPLES] * 2
+        busy = [archiver.CSV_CHUNK_SAMPLES] * 2
         session.request.side_effect = [
             _response(payload=[{"data": []}]),
             _response(payload=[{"data": [_datum(0, 0)]}]),  # its ncount
@@ -650,7 +653,7 @@ class TestChunkedRange:
 
 
 class TestGroupBins:
-    LIMIT = archiver.CHUNK_SAMPLES
+    LIMIT = archiver.CSV_CHUNK_SAMPLES
 
     @staticmethod
     def _plan(hours, *per_hour, start=UTC_START):
@@ -700,3 +703,110 @@ class TestGroupBins:
 
         assert all(b - a <= HOUR for a, b in zip(bounds, bounds[1:]))
         assert bounds[-1] - bounds[0] == 3 * HOUR
+
+
+def _csv_response(*rows):
+    """A getData.csv answer: secs, val, severity, status, nanos per line."""
+    body = "".join(",".join(str(f) for f in row) + "\n" for row in rows)
+    response = _response()
+    response.content = body.encode()
+    return response
+
+
+class TestCsv:
+    """Numeric PVs are read as CSV; the frame matches the JSON path."""
+
+    LONG_END = START + 3 * HOUR
+
+    @staticmethod
+    def _urls(session):
+        return [
+            c.args[1].rsplit("/", 1)[1] for c in session.request.call_args_list
+        ]
+
+    def test_numeric_pv_chunks_come_from_csv(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": _counts(5, 5, 5)}]),
+            _csv_response((1696263180, 1.5, 0, 0, 0)),
+        ]
+
+        frame = get_values_over_time_range(["A:PV"], START, self.LONG_END)[
+            "A:PV"
+        ]
+
+        assert self._urls(session) == ["getData.json", "getData.csv"]
+        assert list(frame["value"]) == [1.5]
+
+    def test_string_pv_chunks_stay_json(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(0, 1)]}]),
+            _response(payload=[{"data": [_datum(100, "1")]}]),
+        ]
+
+        frame = get_values_over_time_range(["A:PV"], START, self.LONG_END)[
+            "A:PV"
+        ]
+
+        assert self._urls(session)[-1] == "getData.json"
+        assert list(frame["value"]) == ["1"]
+
+    def test_csv_frame_matches_the_json_frame(self):
+        rows = [
+            (1696263180, 7.266542289786244e-4, 0, 0, 56679731),
+            (1696263181, 0.1 + 0.2, 2, 5, 500),  # rounds to the nearest us
+            (1696263182, -3.0, 3, 0, 999999999),  # invalid severity
+        ]
+        body = "".join(",".join(repr(f) for f in r) + "\n" for r in rows)
+        raw = pd.read_csv(
+            io.BytesIO(body.encode()),
+            header=None,
+            names=["secs", "value", "severity", "status", "nanos"],
+            float_precision="round_trip",
+        )
+        as_json = archiver._to_frame(
+            [
+                {"secs": s, "val": v, "severity": sv, "status": st, "nanos": n}
+                for s, v, sv, st, n in rows
+            ]
+        )
+
+        pd.testing.assert_frame_equal(archiver._csv_to_frame(raw), as_json)
+
+    def test_samples_repeated_across_csv_chunks_are_kept_once(self, session):
+        bounds = [START + i * HOUR for i in range(4)]
+        session.request.side_effect = [
+            _csv_response((100, 1.0, 0, 0, 0), (200, 2.0, 0, 0, 7)),
+            _csv_response((200, 2.0, 0, 0, 7), (200, 2.5, 0, 0, 8)),
+            _csv_response((200, 2.5, 0, 0, 8)),  # only the repeated sample
+        ]
+        plan = archiver._Plan(bounds, numeric=True)
+        with patch.object(archiver, "_plan_chunks", return_value=plan):
+            frame = get_values_over_time_range(["A:PV"], START, bounds[-1])[
+                "A:PV"
+            ]
+
+        assert list(frame["value"]) == [1.0, 2.0, 2.5]
+
+    def test_empty_csv_chunk_is_skipped(self, session):
+        bounds = [START, START + HOUR, START + 2 * HOUR]
+        session.request.side_effect = [
+            _csv_response(),
+            _csv_response((300, 3.0, 0, 0, 0)),
+        ]
+        plan = archiver._Plan(bounds, numeric=True)
+        with patch.object(archiver, "_plan_chunks", return_value=plan):
+            frame = get_values_over_time_range(["A:PV"], START, bounds[-1])[
+                "A:PV"
+            ]
+
+        assert list(frame["value"]) == [3.0]
+        assert str(frame["timestamp"].dtype).startswith("datetime64")
+
+    def test_csv_404_is_not_archived(self, session):
+        bounds = [START, START + 2 * HOUR]
+        session.request.return_value = _response(status=404)
+        plan = archiver._Plan(bounds, numeric=True)
+        with patch.object(archiver, "_plan_chunks", return_value=plan):
+            with pytest.raises(PVNotArchivedError):
+                get_values_over_time_range(["A:PV"], START, bounds[-1])
