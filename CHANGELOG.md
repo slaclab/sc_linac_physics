@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v9.42.2 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+
+## v9.42.1 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: Lock the SSA calibration and stepper move start checks
+  ([#387](https://github.com/slaclab/sc_linac_physics/pull/387),
+  [`607a459`](https://github.com/slaclab/sc_linac_physics/commit/607a459f24541e8289b8414c2a45f19efe2b97d6))
+
+- **sim**: SSA calibration and stepper moves run as tasks; INTLK_RESET_ALL resets
+  ([#387](https://github.com/slaclab/sc_linac_physics/pull/387),
+  [`607a459`](https://github.com/slaclab/sc_linac_physics/commit/607a459f24541e8289b8414c2a45f19efe2b97d6))
+
+
 ## v9.42.0 (2026-10-13)
 
 ### Features
