@@ -1,0 +1,96 @@
+/* Shared styles for explainer widgets.
+
+   A widget is a small page that runs on its own, offline, and is also shown
+   inside its explainer on the docs site. Opened on its own it is dark. Inside
+   the site, docs/javascripts/explainer_widgets.js sets data-theme on <html> to
+   follow the site's light/dark toggle, and the body is transparent so the
+   site's background shows through. */
+
+:root {
+  --bg: #14161a;
+  --panel: #1c1f25;
+  --ink: #e6e8ec;
+  --dim: #9aa3b2;
+  --line: #2b303a;
+  --edge: #656f7e;
+  --accent: #6ea8fe;
+  --warn: #e0a458;
+  --bad: #e06c75;
+  --ok: #7fb069;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --panel: #f5f6f8;
+  --ink: #1d1f23;
+  --dim: #5c6370;
+  --line: #d8dce2;
+  /* 3.4:1 against --panel, so control borders stay visible (dark: 3.25:1) */
+  --edge: #7d8592;
+  --accent: #2f6fd6;
+  --warn: #b7791f;
+  --bad: #c0392b;
+  --ok: #3c8d40;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  /* flow-root so the frame height includes children's margins */
+  display: flow-root;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+:root[data-theme] body { background: transparent; }
+main { max-width: 62rem; margin: 0 auto; padding: 1.5rem; }
+:root[data-theme] main { padding: 0; }
+/* Shown only when the widget is opened on its own, not inside the site. */
+:root[data-theme] .standalone-only { display: none; }
+
+code, .mono, pre { font-family: var(--mono); font-size: .9em; }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+.note { font-size: .85rem; color: var(--dim); margin: .35rem 0 0; }
+.verdict { font-weight: 600; margin: .9rem 0 .2rem; }
+.bad { color: var(--bad); }
+.good { color: var(--ok); }
+.legend {
+  display: flex; flex-wrap: wrap; gap: 1rem;
+  font-size: .82rem; color: var(--dim); margin-top: .75rem;
+}
+.legend i {
+  display: inline-block; width: .8rem; height: .8rem; border-radius: 2px;
+  vertical-align: -1px; margin-right: .3rem; border: 1px solid var(--line);
+}
+
+select, input[type="range"] { accent-color: var(--accent); }
+select {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: 5px;
+  padding: .25rem .4rem;
+  font: inherit;
+  font-size: .88rem;
+}
+input[type="range"] { width: 100%; margin: 0; }
+.ctl {
+  display: grid;
+  grid-template-columns: 14rem 1fr 9rem;
+  gap: .4rem .9rem;
+  align-items: center;
+}
+.ctl > label { font-size: .92rem; }
+.ctl > .val { font-family: var(--mono); font-size: .85rem; text-align: right; }
+@media (max-width: 36rem) {
+  .ctl { grid-template-columns: 1fr; }
+  .ctl > .val { text-align: left; }
+}
+.grids { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+@media (max-width: 36rem) { .grids { grid-template-columns: 1fr; } }
+.grid-title { font-size: .9rem; font-weight: 600; margin: .75rem 0 .35rem; }

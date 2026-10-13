@@ -35,12 +35,22 @@ Endpoints: https://epicsarchiver.readthedocs.io/en/stable/user/userguide.html
 old; where it is silent, this follows what the LCLS archiver did when tested.
 """
 
+import math
+import queue
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from time import sleep
-from typing import Dict, Iterable, List, Optional, Union
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+)
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -67,11 +77,40 @@ AT_TIME_TIMEOUT = 75.0
 MAX_RETRIES = 4
 RETRY_DELAY = 0.5
 
+# A proxy cuts every request off at 60 s, and a long window holds more samples
+# than one request can return in that time, so ranges are fetched in chunks.
+# Measured on site (2026-10-12), ACCL:L2B:0410:AACTMEAN, uncached windows:
+# requests of 8-94 MB ran at 20-25 MB/s plus about 0.2 s each; 234 MB and
+# 468 MB ran at about 12 MB/s. JSON is about 99 bytes per scalar sample.
+#
+# Memory sets the chunk size, not time: parsing a chunk peaks at 6.5x its JSON
+# size (one dict per sample), and MAX_WORKERS PVs fetch at once. At 250k
+# samples (about 25 MB) that is about 190 MB per PV, 1.5 GB for 8, with about
+# 2 s per request. Chunks count samples, which assumes scalar PVs: waveforms
+# are not archived (Lisa Zacarias, 2026-10-12). A waveform sample would be
+# many times bigger.
+CHUNK_SAMPLES = 250_000
+
+# Chunks are planned from the archiver's own sample counts, not guessed:
+# count_3600(pv) returns the samples in each UTC hour, timestamped at the
+# hour's midpoint (checked on site; counts matched raw). The archiver reads
+# every sample to count them, about 2 M samples/s, so counts are asked for
+# COUNT_WINDOW at a time to keep each request short. A window no longer than
+# COUNT_BIN is fetched in one request without counting.
+COUNT_BIN = timedelta(hours=1)
+# 31 days, so one calendar month is one window (utils/archiver_store.py).
+COUNT_WINDOW = timedelta(days=31)
+# _split_by_total stops halving here: 250k samples in a minute is over 4 kHz.
+MIN_SPLIT = timedelta(minutes=1)
+
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 COLUMNS = ["timestamp", "value", "severity", "status", "valid"]
 
 Value = Union[float, int, str]
+
+T = TypeVar("T")
+R = TypeVar("R")
 
 
 class ArchiverError(Exception):
@@ -125,31 +164,202 @@ def get_values_over_time_range(
     finished. Timeouts and connection errors are retried, then raised.
     """
     pvs = list(pvs)
-    params = {"from": _to_utc_iso(start), "to": _to_utc_iso(end)}
 
     def fetch(pv: str) -> Optional[pd.DataFrame]:
         try:
-            response = _request(
-                "GET",
-                f"{ARCHIVER_URL}/getData.json",
-                timeout,
-                params={**params, "pv": pv},
-            )
-        except ArchiverError as e:
-            # Every range request has the same URL; name the PV that failed.
-            raise type(e)(f"{pv}: {e}") from e
-        if response is None:
+            frames = list(iter_range_chunks(pv, start, end, timeout))
+        except PVNotArchivedError:
             return None
-        payload = response.json()
-        return _to_frame(payload[0]["data"] if payload else [])
+        # An empty frame's columns are object dtype; mixing one in would turn
+        # the timestamps into objects too, so chunks are never empty.
+        return pd.concat(frames, ignore_index=True) if frames else _to_frame([])
 
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        frames = dict(zip(pvs, pool.map(fetch, pvs)))
+    frames = dict(zip(pvs, _map_in_daemon_threads(fetch, pvs, max_workers)))
 
     missing = [pv for pv, frame in frames.items() if frame is None]
     if missing:
         raise PVNotArchivedError(missing)
     return frames
+
+
+def iter_range_chunks(
+    pv: str, start: datetime, end: datetime, timeout: float = RANGE_TIMEOUT
+) -> Iterator[pd.DataFrame]:
+    """Yield one PV's samples between start and end, a chunk at a time.
+
+    Chunks come in time order, none empty, with no sample twice. Joined with
+    pd.concat they equal get_values_over_time_range's frame for the PV. Use
+    this to process or store a long window without holding all of it.
+    Naive datetimes are read as America/Los_Angeles.
+
+    Raises PVNotArchivedError if the archiver does not know the PV, before
+    the first chunk or partway through. Other errors name the PV.
+
+    A window can start with the last sample before "from", and a sample
+    exactly on a boundary came back in both windows around it (checked on
+    site, 2026-10-12). So each chunk after the first keeps only samples after
+    the last one already kept. That holds whether or not the earlier sample
+    comes back. Stitched that way, the chunks matched one request for the
+    whole window (60 days, checked on site).
+
+    Each chunk becomes a DataFrame as it arrives. Holding every chunk's JSON
+    until the end peaked at 3.7 GB for a 156 MB result (60 days, 4.7 M
+    samples, measured 2026-10-12).
+    """
+    # Chunk in UTC: adding a timedelta to a Pacific time is wall-clock
+    # arithmetic, which skips or repeats an hour across a DST change.
+    start = _aware(start).astimezone(timezone.utc)
+    end = _aware(end).astimezone(timezone.utc)
+    try:
+        yield from _iter_chunks(pv, start, end, timeout)
+    except PVNotArchivedError:
+        raise
+    except ArchiverError as e:
+        # Every range request has the same URL; name the PV that failed.
+        raise type(e)(f"{pv}: {e}") from e
+
+
+def _iter_chunks(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Iterator[pd.DataFrame]:
+    bounds = _plan_chunks(pv, start, end, timeout)
+    if bounds is None:
+        raise PVNotArchivedError([pv])
+    last: Optional[tuple] = None
+    for chunk_start, chunk_end in zip(bounds, bounds[1:]):
+        payload = _get_json(pv, chunk_start, chunk_end, timeout)
+        if payload is None:
+            raise PVNotArchivedError([pv])
+        chunk = payload[0]["data"] if payload else []
+        if last is not None:
+            chunk = [datum for datum in chunk if _key(datum) > last]
+        if chunk:
+            last = _key(chunk[-1])
+            yield _to_frame(chunk)
+        del payload, chunk
+
+
+def _plan_chunks(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[List[datetime]]:
+    """Return chunk boundaries from start to end; None if not archived.
+
+    Planned COUNT_WINDOW at a time, from hourly counts where the archiver
+    gives them and from totals where it does not (_split_by_total).
+    """
+    if end - start <= COUNT_BIN:
+        return [start, end]
+    bounds = [start]
+    window_start = start
+    while window_start < end:
+        window_end = min(window_start + COUNT_WINDOW, end)
+        planned = _plan_window(pv, window_start, window_end, timeout)
+        if planned is None:
+            return None
+        bounds.extend(planned[1:])
+        window_start = window_end
+    return bounds
+
+
+def _plan_window(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[List[datetime]]:
+    # The archiver applies an operator to a PV when the operator wraps the
+    # PV's name in the "pv" parameter: "count_3600(ACCL:...)" returns how
+    # many samples fall in each 3600 s bin instead of the samples. That is
+    # the retrieval API's way to ask for processed data; see "Processing of
+    # data" in the user guide linked at the top. Built from COUNT_BIN so the
+    # bins asked for are the ones _group_bins walks.
+    operator = f"count_{int(COUNT_BIN.total_seconds())}({pv})"
+    payload = _get_json(operator, start, end, timeout)
+    if payload is None:
+        return None
+    bins = payload[0]["data"] if payload else []
+    if not bins:
+        return _split_by_total(pv, start, end, timeout)
+    counts = {_bin_start(datum["secs"]): datum["val"] for datum in bins}
+    return _group_bins(start, end, counts)
+
+
+def _split_by_total(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[List[datetime]]:
+    """Bound start..end for a PV count_3600 gives no bins for.
+
+    That is a string PV, or a PV with nothing archived in the window
+    (checked on site, 2026-10-12: count_3600 of CUDSTATUS was empty, of
+    CUDSEVR, an enum, was not). ncount(pv), one total for the window, does
+    work on strings, and matched the raw samples. A string PV can change
+    fast (a CUDSTATUS flapping between the cavity number and POT), so a
+    window over CHUNK_SAMPLES is halved, and each half counted again.
+    """
+    payload = _get_json(f"ncount({pv})", start, end, timeout)
+    if payload is None:
+        return None
+    data = payload[0]["data"] if payload else []
+    total = data[0]["val"] if data else 0
+    if total <= CHUNK_SAMPLES or end - start <= MIN_SPLIT:
+        return [start, end]
+    middle = start + (end - start) / 2
+    left = _split_by_total(pv, start, middle, timeout)
+    if left is None:
+        return None
+    right = _split_by_total(pv, middle, end, timeout)
+    if right is None:
+        return None
+    return left + right[1:]
+
+
+def _group_bins(
+    start: datetime, end: datetime, counts: Dict[int, float]
+) -> List[datetime]:
+    """Cut start..end into chunks of at most CHUNK_SAMPLES.
+
+    counts maps each COUNT_BIN's start (UTC epoch seconds) to its samples;
+    a missing bin has none. A bin with more than CHUNK_SAMPLES is split into
+    equal parts, assuming its samples are spread evenly.
+    """
+    step = int(COUNT_BIN.total_seconds())
+    bounds, in_chunk = [start], 0.0
+    t = _bin_start(start.timestamp())
+    while t < end.timestamp():
+        lo = max(_utc(t), start)
+        hi = min(_utc(t + step), end)
+        n = counts.get(t, 0.0)
+        if in_chunk and in_chunk + n > CHUNK_SAMPLES:
+            bounds.append(lo)
+            in_chunk = 0.0
+        parts = max(1, math.ceil(n / CHUNK_SAMPLES))
+        bounds.extend(lo + (hi - lo) * k / parts for k in range(1, parts))
+        in_chunk += n / parts
+        t += step
+    bounds.append(end)
+    return bounds
+
+
+def _get_json(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Optional[list]:
+    response = _request(
+        "GET",
+        f"{ARCHIVER_URL}/getData.json",
+        timeout,
+        params={"pv": pv, "from": _to_utc_iso(start), "to": _to_utc_iso(end)},
+    )
+    return None if response is None else response.json()
+
+
+def _bin_start(secs: float) -> int:
+    step = int(COUNT_BIN.total_seconds())
+    return int(secs // step) * step
+
+
+def _utc(secs: int) -> datetime:
+    return datetime.fromtimestamp(secs, tz=timezone.utc)
+
+
+def _key(datum: dict) -> tuple:
+    return datum["secs"], datum.get("nanos", 0)
 
 
 def get_series(
@@ -212,6 +422,59 @@ def get_values_at_time(
     return {pv: _to_sample(datum) for pv, datum in response.json().items()}
 
 
+def _map_in_daemon_threads(
+    fn: Callable[[T], R], items: List[T], max_workers: int
+) -> List[R]:
+    """Return [fn(item) for item in items], running up to max_workers at once.
+
+    Waits for every call, then raises the first error in item order, as
+    ThreadPoolExecutor.map did.
+
+    Not ThreadPoolExecutor: Python joins its worker threads at exit, so one
+    request stuck for its ~5 minutes of retries kept the app open after its
+    window closed. These threads are daemons, so exit drops them.
+
+    A fixed set of workers pulls items from a queue, rather than one thread
+    per item, so each worker reuses its session's connection across PVs as
+    the pool's workers did.
+    """
+    if max_workers <= 0:
+        raise ValueError("max_workers must be greater than 0")
+    results: List[Optional[R]] = [None] * len(items)
+    errors: List[Optional[BaseException]] = [None] * len(items)
+    todo: "queue.SimpleQueue" = queue.SimpleQueue()
+    for index, item in enumerate(items):
+        todo.put((index, item))
+
+    workers = [
+        threading.Thread(
+            target=_work, args=(fn, todo, results, errors), daemon=True
+        )
+        for _ in range(min(max_workers, len(items)))
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+    first_error = next((e for e in errors if e is not None), None)
+    if first_error is not None:
+        raise first_error
+    return results
+
+
+def _work(fn, todo, results, errors) -> None:
+    """Run fn on queued (index, item) pairs until the queue is empty."""
+    while True:
+        try:
+            index, item = todo.get_nowait()
+        except queue.Empty:
+            return
+        try:
+            results[index] = fn(item)
+        except BaseException as e:  # raised again in the caller's thread
+            errors[index] = e
+
+
 _local = threading.local()
 
 
@@ -253,10 +516,16 @@ def _request(
     raise last_error
 
 
+def _aware(moment: datetime) -> datetime:
+    return _localize(moment) if moment.tzinfo is None else moment
+
+
 def _to_utc_iso(moment: datetime) -> str:
-    if moment.tzinfo is None:
-        moment = _localize(moment)
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return (
+        _aware(moment)
+        .astimezone(timezone.utc)
+        .strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    )
 
 
 def _localize(naive: datetime) -> datetime:

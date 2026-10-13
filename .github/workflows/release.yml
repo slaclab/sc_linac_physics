@@ -32,6 +32,9 @@ jobs:
     with:
       python-versions: ${{ needs.get-versions.outputs.experimental }}
       continue-on-error: true
+      # h5py has no wheel for the newest Python yet, so pip builds it from
+      # source and needs the HDF5 headers and pkg-config to find them.
+      extra-apt-packages: libhdf5-dev pkg-config
 
   package:
     uses: ./.github/workflows/_package.yml

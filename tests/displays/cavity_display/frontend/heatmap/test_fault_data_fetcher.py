@@ -1,7 +1,16 @@
+import os
+import subprocess
+import sys
+import threading
+import time
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import Mock
 
 from sc_linac_physics.displays.cavity_display.backend.fault import FaultCounter
+from sc_linac_physics.displays.cavity_display.frontend.heatmap import (
+    fault_data_fetcher,
+)
 from sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_data_fetcher import (
     CavityFaultResult,
     FaultDataFetcher,
@@ -170,8 +179,66 @@ class TestFaultDataFetcherAbort:
         fetcher.finished_all.connect(finished_spy)
         fetcher.run()
 
-        assert 1 <= result_spy.call_count < 5
+        # run() can see the abort before handling any result
+        assert result_spy.call_count < 5
         finished_spy.assert_called_once()
+
+    def test_abort_does_not_wait_for_stuck_requests(self):
+        machine = make_machine(num_cavities=3)
+        release = threading.Event()
+
+        def stuck(*args, **kwargs):
+            release.wait(10)
+            return {}, []
+
+        for cav in machine.linacs[0].cryomodules["01"].cavities.values():
+            cav.get_fault_history = stuck
+
+        fetcher = FaultDataFetcher(machine, datetime.now(), datetime.now())
+        finished_spy = Mock()
+        fetcher.finished_all.connect(finished_spy)
+        threading.Timer(0.3, fetcher.abort).start()
+
+        began = time.monotonic()
+        fetcher.run()
+        elapsed = time.monotonic() - began
+        release.set()
+
+        assert elapsed < 2
+        finished_spy.assert_called_once_with([])
+
+    def test_refetch_waits_for_aborted_requests(self, monkeypatch):
+        """An aborted fetch's stuck request keeps its archiver slot."""
+        monkeypatch.setattr(
+            FaultDataFetcher, "_archiver_slots", threading.BoundedSemaphore(1)
+        )
+        release = threading.Event()
+        first_machine = make_machine(num_cavities=1)
+        first_cav = first_machine.linacs[0].cryomodules["01"].cavities[1]
+
+        def stuck(*args):
+            release.wait(10)
+            return {}, []
+
+        first_cav.get_fault_history = stuck
+        first = FaultDataFetcher(first_machine, datetime.now(), datetime.now())
+        threading.Timer(0.3, first.abort).start()
+        first.run()  # returns on abort; its request still holds the slot
+
+        second_machine = make_machine(num_cavities=1)
+        second_cav = second_machine.linacs[0].cryomodules["01"].cavities[1]
+        second_cav.get_fault_history = Mock(return_value=({}, []))
+        second = FaultDataFetcher(
+            second_machine, datetime.now(), datetime.now()
+        )
+        runner = threading.Thread(target=second.run, daemon=True)
+        runner.start()
+        time.sleep(0.5)
+        assert second_cav.get_fault_history.call_count == 0
+
+        release.set()
+        runner.join(5)
+        assert second_cav.get_fault_history.call_count == 1
 
 
 class TestFaultDataFetcherErrors:
@@ -305,3 +372,49 @@ class TestFaultDataFetcherParallel:
         ok_results = [r for r in results if not r.is_error]
         assert len(error_results) == 2
         assert len(ok_results) == 2
+
+
+# A cavity whose archiver request never answers. run() goes on a daemon
+# thread, as a stand-in for the display closing mid-fetch; the main thread
+# then returns, so the interpreter should exit.
+_STUCK_FETCH = """
+import threading
+from datetime import datetime
+from unittest.mock import Mock
+
+from sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_data_fetcher import (
+    FaultDataFetcher,
+)
+
+started = threading.Event()
+
+
+def stuck(*args):
+    started.set()
+    threading.Event().wait()
+
+
+cavity = Mock()
+cavity.get_fault_history = stuck
+machine = Mock()
+machine.linacs = [Mock(cryomodules={"01": Mock(cavities={1: cavity})})]
+fetcher = FaultDataFetcher(machine, datetime.now(), datetime.now())
+threading.Thread(target=fetcher.run, daemon=True).start()
+assert started.wait(10)
+"""
+
+
+def test_stuck_request_does_not_block_exit():
+    src = Path(fault_data_fetcher.__file__).parents[5]
+    env = {**os.environ, "PYTHONPATH": str(src)}
+
+    # Import time is most of this; the old pool hung here until killed.
+    result = subprocess.run(
+        [sys.executable, "-c", _STUCK_FETCH],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
