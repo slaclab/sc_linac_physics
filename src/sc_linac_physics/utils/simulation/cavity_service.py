@@ -638,8 +638,9 @@ class CavityPVGroup(PVGroup):
                 await self.aact.write(self.ades.value)
                 await self.amean.write(self.ades.value)
             await self._update_amplitude_alarm()
-            # Reset the command back to default
-            await self.interlock_reset.write(0)
+            # Returning 0 is what resets INTLK_RESET_ALL, as for PROBECALSTRT.
+            # Writing 0 here was overwritten by the 1 being put.
+            return 0
 
     @ades.putter
     async def ades(self, instance, value):
