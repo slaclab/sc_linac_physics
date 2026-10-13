@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QSplitter,
@@ -103,12 +104,14 @@ class PVPicker(QWidget):
         where_layout = QVBoxLayout()
         where.setLayout(where_layout)
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("CM02 cavity 1")
+        self.search_edit.setPlaceholderText("Search, e.g. CM02 cavity 1")
+        self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._search)
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
+        self.tree.setIndentation(14)
         self.tree.currentItemChanged.connect(self._fill_attributes)
-        where_layout.addLayout(_labeled("Search:", self.search_edit))
+        where_layout.addWidget(self.search_edit)
         where_layout.addWidget(self.tree)
         self.splitter = QSplitter(Qt.Vertical)
         self.splitter.addWidget(where)
@@ -117,11 +120,16 @@ class PVPicker(QWidget):
         what_layout = QVBoxLayout()
         what.setLayout(what_layout)
         self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText("ades")
+        self.filter_edit.setPlaceholderText("Filter, e.g. ades")
+        self.filter_edit.setClearButtonEnabled(True)
         self.filter_edit.textChanged.connect(self._filter_attributes)
         self.attributes = QTreeWidget()
-        self.attributes.setHeaderLabels(["Name", "PV"])
+        self.attributes.setHeaderHidden(True)
+        self.attributes.setColumnCount(2)
         self.attributes.setRootIsDecorated(False)
+        self.attributes.setToolTip(
+            "Double-click to plot, or select several and add."
+        )
         self.attributes.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.attributes.itemDoubleClicked.connect(
             lambda item: self._request([item])
@@ -130,18 +138,19 @@ class PVPicker(QWidget):
         add.clicked.connect(
             lambda: self._request(self.attributes.selectedItems())
         )
-        what_layout.addLayout(_labeled("Filter:", self.filter_edit))
-        what_layout.addWidget(
-            QLabel("Double-click to plot, or select several and add.")
-        )
+        what_layout.addWidget(self.filter_edit)
+        hint = QLabel("Double-click to plot, or select several and add.")
+        hint.setObjectName("hint")
+        what_layout.addWidget(hint)
         what_layout.addWidget(self.attributes)
         what_layout.addWidget(add)
         self.pv_edit = QLineEdit()
-        self.pv_edit.setPlaceholderText("ACCL:L1B:0210:GACT")
+        self.pv_edit.setPlaceholderText("Any PV, e.g. ACCL:L1B:0210:GACT")
         self.pv_edit.returnPressed.connect(self.add_typed_pv)
         add_pv = QPushButton("Add")
         add_pv.clicked.connect(self.add_typed_pv)
-        pv_row = _labeled("Any PV:", self.pv_edit)
+        pv_row = QHBoxLayout()
+        pv_row.addWidget(self.pv_edit)
         pv_row.addWidget(add_pv)
         what_layout.addLayout(pv_row)
         self.splitter.addWidget(what)
@@ -190,6 +199,9 @@ class PVPicker(QWidget):
             item = QTreeWidgetItem([readable(attribute), where])
             item.setData(0, Qt.UserRole, key)
             item.setToolTip(0, f"{source}.{attribute}")
+            item.setForeground(
+                1, self.palette().color(QPalette.PlaceholderText)
+            )
             self.attributes.addTopLevelItem(item)
         self.attributes.resizeColumnToContents(0)
         self._filter_attributes(self.filter_edit.text())

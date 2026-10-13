@@ -4,7 +4,7 @@ button. Emits signals; the display that owns the plot acts on them."""
 from typing import Dict
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QIcon, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QPalette, QPixmap
 from PyQt5.QtWidgets import (
     QHeaderView,
     QGroupBox,
@@ -29,14 +29,15 @@ class PlottedList(QGroupBox):
         super().__init__("Plotted", parent)
         self._items: Dict[str, QTreeWidgetItem] = {}
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Curve", "Axis", ""])
+        self.tree.setHeaderHidden(True)
+        self.tree.setColumnCount(3)
         self.tree.setRootIsDecorated(False)
         header = self.tree.header()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.Fixed)
-        header.resizeSection(2, 28)
+        header.resizeSection(2, 22)
         self.tree.itemChanged.connect(self._on_item_changed)
         self.count_label = QLabel()
         clear = QPushButton("Clear all")
@@ -59,8 +60,10 @@ class PlottedList(QGroupBox):
         item.setIcon(0, _swatch(curve.color))
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
         item.setCheckState(0, Qt.Checked)
+        item.setForeground(1, self.palette().color(QPalette.PlaceholderText))
         self.tree.addTopLevelItem(item)
         remove = QToolButton()
+        remove.setAutoRaise(True)
         remove.setText("×")
         remove.setToolTip(f"Remove {curve.label}")
         remove.clicked.connect(lambda: self.remove_requested.emit(curve.pv))
