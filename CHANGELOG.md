@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.42.1 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: Lock the SSA calibration and stepper move start checks
+  ([#387](https://github.com/slaclab/sc_linac_physics/pull/387),
+  [`607a459`](https://github.com/slaclab/sc_linac_physics/commit/607a459f24541e8289b8414c2a45f19efe2b97d6))
+
+- **sim**: SSA calibration and stepper moves run as tasks; INTLK_RESET_ALL resets
+  ([#387](https://github.com/slaclab/sc_linac_physics/pull/387),
+  [`607a459`](https://github.com/slaclab/sc_linac_physics/commit/607a459f24541e8289b8414c2a45f19efe2b97d6))
+
+
 ## v9.42.0 (2026-10-13)
 
 ### Features
