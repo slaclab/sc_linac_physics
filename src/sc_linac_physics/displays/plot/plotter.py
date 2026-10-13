@@ -6,21 +6,16 @@ cryomodule in a linac. The old displays stay available as
 """
 
 import resource
-from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QGridLayout,
     QDialog,
-    QGroupBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -39,9 +34,10 @@ from sc_linac_physics.displays.plot.cryo_signals import (
     grid_dimensions,
 )
 from sc_linac_physics.displays.plot.curve_set import Curve, YRange
+from sc_linac_physics.displays.plot.plotted_list import PlottedList
+from sc_linac_physics.displays.plot.pv_picker import PVPicker
 from sc_linac_physics.displays.plot.utils import (
     AxisRangeDialog,
-    PVGroup,
     get_pvs_all_groupings,
 )
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
@@ -73,30 +69,6 @@ OPEN_FILE_LIMIT = 4096
 CUSTOM_VIEW = "Custom"
 CRYO_VIEW = "Cryo signals"
 
-PVKey = Tuple[str, str]  # (source class name, attribute name)
-
-
-def axis_for(attribute: str) -> str:
-    """One Y axis per attribute: 'ades_pv' and 'ades_pvs' -> 'ades'."""
-    for suffix in ("_pvs", "_pv"):
-        if attribute.endswith(suffix):
-            return attribute[: -len(suffix)]
-    return attribute
-
-
-def curves_for(
-    group: PVGroup,
-    keys: Iterable[PVKey],
-    labels: Optional[Dict[str, str]] = None,
-) -> List[Curve]:
-    """Curves for every PV under `keys`, labeled from `labels` or by PV."""
-    labels = labels or {}
-    return [
-        Curve(pv=pv, label=labels.get(pv, pv), axis=axis_for(attribute))
-        for source, attribute in keys
-        for pv in group[(source, attribute)]
-    ]
-
 
 def raise_open_file_limit(wanted: int = OPEN_FILE_LIMIT) -> None:
     """Raise this process's soft open-file limit to `wanted`, within the
@@ -105,52 +77,6 @@ def raise_open_file_limit(wanted: int = OPEN_FILE_LIMIT) -> None:
     target = wanted if hard == resource.RLIM_INFINITY else min(wanted, hard)
     if soft != resource.RLIM_INFINITY and soft < target:
         resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
-
-
-@dataclass
-class DecaradPVs:
-    """Dose-rate PVs for one decarad or one head, with curve labels.
-
-    Heads are labeled by number only. Decarads are wheeled between
-    cryomodules, so no head maps to a fixed cavity.
-    """
-
-    pvs: PVGroup
-    labels: Dict[str, str] = field(default_factory=dict)
-
-
-def decarad_entries(
-    decarads: Iterable[Decarad],
-) -> List[Tuple[str, DecaradPVs]]:
-    """Picker entries: each decarad with all 10 heads, then each head."""
-    entries = []
-    for decarad in decarads:
-        heads = list(decarad.heads.values())
-        entries.append((f"Decarad {decarad.number}", _decarad_pvs(heads)))
-        entries.extend(
-            (
-                f"Decarad {decarad.number} head {head.number}",
-                _decarad_pvs([head]),
-            )
-            for head in heads
-        )
-    return entries
-
-
-def _decarad_pvs(heads) -> DecaradPVs:
-    group = PVGroup()
-    labels = {}
-    for attribute, kind in (
-        ("avg_dose_rate_pv", "avg"),
-        ("raw_dose_rate_pv", "raw"),
-    ):
-        pvs = [getattr(head, attribute) for head in heads]
-        group.pvs[("DecaradHead", attribute)] = pvs
-        for head, pv in zip(heads, pvs):
-            labels[pv] = (
-                f"Decarad {head.decarad.number} head {head.number} {kind}"
-            )
-    return DecaradPVs(pvs=group, labels=labels)
 
 
 class PlotterDisplay(Display):
@@ -165,7 +91,9 @@ class PlotterDisplay(Display):
         # Not part of Machine: two units moved between cryomodules.
         self.decarads = [Decarad(1), Decarad(2)]
 
-        self.plot = ArchiverPlot()
+        self.plot = ArchiverPlot(
+            empty_hint="Pick where and what on the left to plot."
+        )
         self.plot.set_time_span(TIME_SPANS[DEFAULT_TIME_SPAN])
         # Cryo view: fixed ranges by cryomodule attribute, kept across
         # linac switches so an operator's changes stay put.
@@ -196,8 +124,6 @@ class PlotterDisplay(Display):
         layout.addWidget(splitter)
         self.setLayout(layout)
 
-        self.level_combo.setCurrentText("Machine")
-        self._on_level_changed("Machine")
         self.view_combo.setCurrentText(self.INITIAL_VIEW)
         self._on_view_changed(self.INITIAL_VIEW)
 
@@ -253,149 +179,19 @@ class PlotterDisplay(Display):
     def _selection_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         panel.setLayout(layout)
-
-        pick = QGroupBox("Pick PVs")
-        pick_layout = QVBoxLayout()
-        pick.setLayout(pick_layout)
-        self.level_combo = QComboBox()
-        self.level_combo.addItems(
-            ["Machine", "Linac", "Cryomodule", "Rack", "Cavity", "Decarad"]
-        )
-        self.level_combo.currentTextChanged.connect(self._on_level_changed)
-        self.object_combo = QComboBox()
-        self.object_combo.currentIndexChanged.connect(self._fill_attributes)
-        self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText("ades")
-        self.filter_edit.textChanged.connect(self._filter_attributes)
-        self.attribute_list = QListWidget()
-        self.attribute_list.setSelectionMode(QListWidget.MultiSelection)
-        for widget in (
-            self.level_combo,
-            self.object_combo,
-            self.filter_edit,
-            self.attribute_list,
-        ):
-            pick_layout.addWidget(widget)
-        buttons = QHBoxLayout()
-        for text, slot in (
-            ("Select all", self._select_all_visible),
-            ("Select none", self.attribute_list.clearSelection),
-            ("Add to plot", self.add_selected),
-        ):
-            button = QPushButton(text)
-            button.clicked.connect(slot)
-            buttons.addWidget(button)
-        pick_layout.addLayout(buttons)
-
-        pv_row = QHBoxLayout()
-        self.pv_edit = QLineEdit()
-        self.pv_edit.setPlaceholderText("ACCL:L1B:0210:GACT")
-        self.pv_edit.returnPressed.connect(self.add_typed_pv)
-        add_pv = QPushButton("Add PV")
-        add_pv.clicked.connect(self.add_typed_pv)
-        pv_row.addWidget(self.pv_edit)
-        pv_row.addWidget(add_pv)
-        pick_layout.addLayout(pv_row)
-        layout.addWidget(pick)
-
-        plotted = QGroupBox("Plotted")
-        plotted_layout = QVBoxLayout()
-        plotted.setLayout(plotted_layout)
-        self.plotted_list = QListWidget()
-        self.plotted_list.setSelectionMode(QListWidget.MultiSelection)
-        self.count_label = QLabel()
-        plotted_layout.addWidget(self.plotted_list)
-        plotted_layout.addWidget(self.count_label)
-        buttons = QHBoxLayout()
-        for text, slot in (
-            ("Remove selected", self.remove_selected),
-            ("Clear all", self.clear),
-        ):
-            button = QPushButton(text)
-            button.clicked.connect(slot)
-            buttons.addWidget(button)
-        plotted_layout.addLayout(buttons)
-        layout.addWidget(plotted)
-
-        self._update_count()
+        self.picker = PVPicker(self.pv_groups, self.decarads)
+        self.picker.curves_requested.connect(self.add_curves)
+        self.plotted = PlottedList()
+        self.plotted.remove_requested.connect(self.remove_curve)
+        self.plotted.clear_requested.connect(self.clear)
+        self.plotted.visibility_changed.connect(self.plot.set_curve_visible)
+        # One splitter for where, what and plotted, so each can be resized.
+        self.picker.splitter.addWidget(self.plotted)
+        self.picker.splitter.setSizes([300, 300, 200])
+        layout.addWidget(self.picker)
         return panel
-
-    def _on_level_changed(self, level: str) -> None:
-        # The combo's item data is the PV group itself, so nothing is parsed
-        # back out of the display text.
-        groups = self.pv_groups
-        if level == "Machine":
-            entries = [("Machine", groups.get_machine())]
-        elif level == "Linac":
-            entries = [
-                (name, groups.linacs[name]) for name in sorted(groups.linacs)
-            ]
-        elif level == "Cryomodule":
-            entries = [
-                (f"CM{name}", groups.cryomodules[name])
-                for name in sorted(groups.cryomodules)
-            ]
-        elif level == "Decarad":
-            entries = decarad_entries(self.decarads)
-        elif level == "Rack":
-            entries = [
-                (f"CM{cm} rack {rack}", groups.racks[(cm, rack)])
-                for cm, rack in sorted(groups.racks)
-            ]
-        else:
-            entries = [
-                (f"CM{cm} cavity {cav}", groups.cavities[(cm, cav)])
-                for cm, cav in sorted(groups.cavities)
-            ]
-        self.object_combo.blockSignals(True)
-        self.object_combo.clear()
-        for text, group in entries:
-            self.object_combo.addItem(text, group)
-        self.object_combo.blockSignals(False)
-        self._fill_attributes()
-
-    def _current_group(self) -> PVGroup:
-        holder = self.object_combo.currentData()
-        return holder.pvs if holder is not None else PVGroup()
-
-    def _fill_attributes(self) -> None:
-        self.attribute_list.clear()
-        group = self._current_group()
-        for key in sorted(group.pvs):
-            source, attribute = key
-            item = QListWidgetItem(
-                f"[{source}] {attribute} ({len(group.pvs[key])})"
-            )
-            item.setData(Qt.UserRole, key)
-            self.attribute_list.addItem(item)
-        self._filter_attributes(self.filter_edit.text())
-
-    def _filter_attributes(self, text: str) -> None:
-        for i in range(self.attribute_list.count()):
-            item = self.attribute_list.item(i)
-            item.setHidden(text.lower() not in item.text().lower())
-
-    def _select_all_visible(self) -> None:
-        for i in range(self.attribute_list.count()):
-            item = self.attribute_list.item(i)
-            if not item.isHidden():
-                item.setSelected(True)
-
-    def add_selected(self) -> None:
-        keys = [
-            item.data(Qt.UserRole)
-            for item in self.attribute_list.selectedItems()
-        ]
-        holder = self.object_combo.currentData()
-        labels = getattr(holder, "labels", None)
-        self.add_curves(curves_for(self._current_group(), keys, labels))
-
-    def add_typed_pv(self) -> None:
-        pv = self.pv_edit.text().strip()
-        if pv:
-            self.add_curves([Curve(pv=pv, label=pv, axis=pv)])
-            self.pv_edit.clear()
 
     def add_curves(self, curves: List[Curve]) -> None:
         plotted = {c.pv for c in self.plot.curve_set.curves}
@@ -416,10 +212,7 @@ class PlotterDisplay(Display):
             return
         for curve in new:
             self.plot.add_curve(curve)
-            item = QListWidgetItem(curve.pv)
-            item.setData(Qt.UserRole, curve.pv)
-            self.plotted_list.addItem(item)
-        self._update_count()
+            self.plotted.add(self.plot.curve(curve.pv))
 
     def _confirm(self, total: int) -> bool:
         answer = QMessageBox.question(
@@ -429,16 +222,13 @@ class PlotterDisplay(Display):
         )
         return answer == QMessageBox.Yes
 
-    def remove_selected(self) -> None:
-        for item in self.plotted_list.selectedItems():
-            self.plot.remove_curve(item.data(Qt.UserRole))
-            self.plotted_list.takeItem(self.plotted_list.row(item))
-        self._update_count()
+    def remove_curve(self, pv: str) -> None:
+        self.plot.remove_curve(pv)
+        self.plotted.remove(pv)
 
     def clear(self) -> None:
         self.plot.clear()
-        self.plotted_list.clear()
-        self._update_count()
+        self.plotted.clear()
 
     def _on_legend_toggled(self, shown: bool) -> None:
         self.plot.set_legend_visible(shown)
@@ -511,9 +301,3 @@ class PlotterDisplay(Display):
                 plot.set_y_range(axis, y_range)
             if cryo and axis in attribute_for:
                 self.cryo_ranges[attribute_for[axis]] = y_range
-
-    def _update_count(self) -> None:
-        count = len(self.plot.curve_set.curves)
-        self.count_label.setText(
-            f"{count} PV{'s' if count != 1 else ''} plotted"
-        )

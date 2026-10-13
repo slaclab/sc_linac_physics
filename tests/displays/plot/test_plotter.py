@@ -10,16 +10,14 @@ from sc_linac_physics.displays.plot import plotter
 from sc_linac_physics.displays.plot.cryo_signals_display import (
     CryoSignalsDisplay,
 )
-from sc_linac_physics.displays.plot.plotter import (
-    PlotterDisplay,
-    axis_for,
-    curves_for,
-)
+from sc_linac_physics.displays.plot.plotter import PlotterDisplay
 from sc_linac_physics.displays.plot.utils import (
     CavityPVs,
     CryomodulePVs,
     HierarchicalPVs,
+    LinacPVs,
     PVGroup,
+    RackPVs,
 )
 
 
@@ -52,7 +50,19 @@ def make_groups(n_cavities=2):
             }
         ),
     )
-    groups = HierarchicalPVs(cryomodules={"02": cm}, cavities=cavities)
+    groups = HierarchicalPVs(
+        linacs={"L1B": LinacPVs(name="L1B", pvs=cm.pvs)},
+        cryomodules={"02": cm},
+        racks={
+            ("02", "A"): RackPVs(
+                rack_name="A",
+                cryomodule_name="02",
+                linac_name="L1B",
+                pvs=cm.pvs,
+            )
+        },
+        cavities=cavities,
+    )
     groups.machine.pvs = cm.pvs
     return groups
 
@@ -83,125 +93,156 @@ def plotted_pvs(display):
     return [c.pv for c in display.plot.curve_set.curves]
 
 
-def select(display, level, obj, attribute):
-    display.level_combo.setCurrentText(level)
-    display.object_combo.setCurrentText(obj)
-    for i in range(display.attribute_list.count()):
-        item = display.attribute_list.item(i)
-        item.setSelected(item.data(0x0100)[1] == attribute)
+def find(tree, path):
+    """The tree item at `path`, e.g. ["L1B", "CM02", "Rack A", "Cavity 1"]."""
+    items = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
+    for name in path:
+        (item,) = [i for i in items if i.text(0) == name]
+        items = [item.child(i) for i in range(item.childCount())]
+    return item
 
 
-@pytest.mark.parametrize(
-    "attribute,axis",
-    [("ades_pv", "ades"), ("detune_pvs", "detune"), ("odd", "odd")],
-)
-def test_axis_for(attribute, axis):
-    assert axis_for(attribute) == axis
+def pick(display, path, *names):
+    """Choose a tree node, then plot the attributes named `names`."""
+    picker = display.picker
+    picker.tree.setCurrentItem(find(picker.tree, path))
+    attrs = picker.attributes
+    rows = [attrs.topLevelItem(i) for i in range(attrs.topLevelItemCount())]
+    picker._request([row for row in rows if row.text(0) in names])
 
 
-def test_curves_for_puts_one_attribute_on_one_axis():
-    group = make_groups(2).cryomodules["02"].pvs
-    curves = curves_for(group, [("Cavity", "ades_pv")])
-    assert [c.pv for c in curves] == [
-        "fake://CM02:CAV1:ADES",
-        "fake://CM02:CAV2:ADES",
+CAV = ["L1B", "CM02", "Rack A"]
+CM = ["L1B", "CM02"]
+
+
+def plotted_rows(display):
+    tree = display.plotted.tree
+    return [
+        tree.topLevelItem(i).text(0) for i in range(tree.topLevelItemCount())
     ]
-    assert {c.axis for c in curves} == {"ades"}
 
 
-def test_object_combo_carries_groups_not_strings(display):
-    display.level_combo.setCurrentText("Cavity")
-    assert display.object_combo.currentText() == "CM02 cavity 1"
-    assert display.object_combo.currentData().number == 1
+def test_starts_at_first_cavity(display):
+    assert display.picker.tree.currentItem().text(0) == "Cavity 1"
 
 
-def test_add_selected(display):
-    select(display, "Cavity", "CM02 cavity 3", "aact_pv")
-    display.add_selected()
+def test_pick_one_cavity_attribute(display):
+    pick(display, CAV + ["Cavity 3"], "aact")
     assert plotted_pvs(display) == ["fake://CM02:CAV3:AACT"]
-    assert display.plotted_list.count() == 1
-    assert display.count_label.text() == "1 PV plotted"
+    assert plotted_rows(display) == ["CM02 Cavity 3 aact"]
+    assert display.plotted.count_label.text() == "1 curve"
 
 
 def test_adding_again_skips_plotted_pvs(display):
-    select(display, "Cavity", "CM02 cavity 1", "ades_pv")
-    display.add_selected()
-    display.add_selected()
+    pick(display, CAV + ["Cavity 1"], "ades")
+    pick(display, CAV + ["Cavity 1"], "ades")
     assert plotted_pvs(display) == ["fake://CM02:CAV1:ADES"]
-    assert display.plotted_list.count() == 1
+    assert len(plotted_rows(display)) == 1
 
 
 def test_typed_pv_gets_its_own_axis(display):
-    display.pv_edit.setText("  fake://ANY:PV  ")
-    display.add_typed_pv()
+    display.picker.pv_edit.setText("  fake://ANY:PV  ")
+    display.picker.add_typed_pv()
     (curve,) = display.plot.curve_set.curves
     assert (curve.pv, curve.label, curve.axis) == ("fake://ANY:PV",) * 3
-    assert display.pv_edit.text() == ""
+    assert display.picker.pv_edit.text() == ""
 
 
 def test_blank_typed_pv_does_nothing(display):
-    display.pv_edit.setText("   ")
-    display.add_typed_pv()
+    display.picker.pv_edit.setText("   ")
+    display.picker.add_typed_pv()
     assert plotted_pvs(display) == []
 
 
 def test_over_confirm_threshold_asks_first(display):
-    select(display, "Cryomodule", "CM02", "ades_pv")
     with patch.object(
         QMessageBox, "question", return_value=QMessageBox.No
     ) as ask:
-        display.add_selected()
+        pick(display, CM, "ades")
     ask.assert_called_once()
     assert "60 curves" in ask.call_args.args[2]
     assert plotted_pvs(display) == []
 
     with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
-        display.add_selected()
+        pick(display, CM, "ades")
     assert len(plotted_pvs(display)) == 60
 
 
 def test_over_max_is_refused(display, monkeypatch):
     monkeypatch.setattr(plotter, "MAX_CURVES", 10)
-    select(display, "Cryomodule", "CM02", "ades_pv")
     with (
         patch.object(QMessageBox, "warning") as warn,
         patch.object(QMessageBox, "question") as ask,
     ):
-        display.add_selected()
+        pick(display, CM, "ades")
     warn.assert_called_once()
     ask.assert_not_called()
     assert plotted_pvs(display) == []
 
 
-def test_remove_selected_and_clear(display):
+def test_remove_button_and_clear(display):
     for n in (1, 2):
-        select(display, "Cavity", f"CM02 cavity {n}", "ades_pv")
-        display.add_selected()
-    display.plotted_list.item(0).setSelected(True)
-    display.remove_selected()
+        pick(display, CAV + [f"Cavity {n}"], "ades")
+    tree = display.plotted.tree
+    tree.itemWidget(tree.topLevelItem(0), 2).click()
     assert plotted_pvs(display) == ["fake://CM02:CAV2:ADES"]
-    assert display.plotted_list.count() == 1
+    assert plotted_rows(display) == ["CM02 Cavity 2 ades"]
 
-    display.clear()
+    display.plotted.clear_requested.emit()
     assert plotted_pvs(display) == []
-    assert display.count_label.text() == "0 PVs plotted"
+    assert display.plotted.count_label.text() == "0 curves"
+
+
+def test_unchecking_hides_curve_and_keeps_it(display):
+    pick(display, CAV + ["Cavity 1"], "ades")
+    item = display.plotted.tree.topLevelItem(0)
+    item.setCheckState(0, plotter.Qt.Unchecked)
+    assert not display.plot._items["fake://CM02:CAV1:ADES"].isVisible()
+    assert plotted_pvs(display) == ["fake://CM02:CAV1:ADES"]
+
+
+def test_plotted_row_shows_curve_color(display):
+    pick(display, CAV + ["Cavity 1"], "ades")
+    (curve,) = display.plot.curve_set.curves
+    icon = display.plotted.tree.topLevelItem(0).icon(0)
+    color = icon.pixmap(12, 12).toImage().pixelColor(6, 6)
+    assert color.getRgb()[:3] == curve.color
 
 
 def test_filter_hides_attributes(display):
-    display.level_combo.setCurrentText("Cavity")
-    display.filter_edit.setText("aact")
+    display.picker.filter_edit.setText("aact")
+    attrs = display.picker.attributes
     hidden = {
-        display.attribute_list.item(i).data(0x0100)[1]: (
-            display.attribute_list.item(i).isHidden()
-        )
-        for i in range(display.attribute_list.count())
+        attrs.topLevelItem(i).text(0): attrs.topLevelItem(i).isHidden()
+        for i in range(attrs.topLevelItemCount())
     }
-    assert hidden == {"aact_pv": False, "ades_pv": True}
+    assert hidden == {"aact": False, "ades": True}
+
+
+def test_search_matches_word_starts(display):
+    picker = display.picker
+    picker.search_edit.setText("cm02 cav 1")
+    cavities = find(picker.tree, CAV)
+    shown = [
+        cavities.child(i).text(0)
+        for i in range(cavities.childCount())
+        if not cavities.child(i).isHidden()
+    ]
+    # "1" must start a word: "Cavity 10" matches, "Cavity 21" doesn't.
+    assert "Cavity 1" in shown and "Cavity 10" in shown
+    assert "Cavity 21" not in shown and "Cavity 2" not in shown
+
+
+def test_empty_plot_shows_hint(display):
+    assert display.plot._pages.currentIndex() == 1
+    pick(display, CAV + ["Cavity 1"], "ades")
+    assert display.plot._pages.currentIndex() == 0
+    display.clear()
+    assert display.plot._pages.currentIndex() == 1
 
 
 def test_axis_range_dialog_sets_ranges(display):
-    select(display, "Cavity", "CM02 cavity 1", "ades_pv")
-    display.add_selected()
+    pick(display, CAV + ["Cavity 1"], "ades")
     with (
         patch.object(
             plotter.AxisRangeDialog, "exec_", return_value=QDialog.Accepted
@@ -420,26 +461,16 @@ def test_open_file_limit_never_lowered(monkeypatch):
     assert calls == []
 
 
-def test_decarad_entries_cover_both_units_and_every_head():
-    from sc_linac_physics.utils.sc_linac.decarad import Decarad
-
-    entries = plotter.decarad_entries([Decarad(1), Decarad(2)])
-    names = [name for name, _ in entries]
-    assert names[:3] == ["Decarad 1", "Decarad 1 head 1", "Decarad 1 head 2"]
-    assert len(names) == 22
-    whole = dict(entries)["Decarad 2"]
-    avg = whole.pvs[("DecaradHead", "avg_dose_rate_pv")]
-    assert avg[0] == "RADM:SYS0:200:01:GAMMAAVE"
-    assert len(avg) == 10
-    assert whole.labels["RADM:SYS0:200:10:GAMMA_DOSE_RATE"] == (
-        "Decarad 2 head 10 raw"
-    )
-
-
 def test_add_decarad_head_curves(display):
-    select(display, "Decarad", "Decarad 1 head 3", "avg_dose_rate_pv")
-    display.add_selected()
+    pick(display, ["Decarads", "Decarad 1", "Head 3"], "avg dose rate")
     (curve,) = display.plot.curve_set.curves
     assert curve.pv == "RADM:SYS0:100:03:GAMMAAVE"
     assert curve.label == "Decarad 1 head 3 avg"
     assert curve.axis == "avg_dose_rate"
+
+
+def test_whole_decarad_offers_all_ten_heads(display):
+    pick(display, ["Decarads", "Decarad 2"], "raw dose rate")
+    curves = display.plot.curve_set.curves
+    assert len(curves) == 10
+    assert curves[-1].label == "Decarad 2 head 10 raw"
