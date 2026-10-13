@@ -3,7 +3,6 @@ from caproto.server import (
     PVGroup,
     PvpropertyEnum,
     PvpropertyFloat,
-    PvpropertyInteger,
     pvproperty,
 )
 
@@ -34,11 +33,11 @@ class MAGNETPVGroup(PVGroup):
     )
 
     # The rest of the PVs Magnet (utils/sc_linac/magnet.py) names. Writes are
-    # accepted and do nothing else. In this repo, Magnet writes BDES and CTRL
-    # (CTRL values: linac_utils.MAGNET_*_VALUE), and nothing reads the
-    # others.
-    # CHECK: the real field types of CTRL, STATE and INTLKSUMY. They're
-    # served as integers here.
+    # accepted and do nothing else: Magnet writes BDES and CTRL, and nothing
+    # in this repo reads the others. CTRL, STATE and INTLKSUMY are the real
+    # enums, from probes of QUAD:L0B:0185 on lcls-daemon0 (2026-10-13). The
+    # sim starts healthy (Ready, ON, OK). The probed magnet read Ready, OFF,
+    # FAULT at the time.
     bdes: PvpropertyFloat = pvproperty(
         value=0.0, name="BDES", dtype=ChannelType.FLOAT
     )
@@ -51,12 +50,37 @@ class MAGNETPVGroup(PVGroup):
     iact: PvpropertyFloat = pvproperty(
         value=0.0, name="IACT", dtype=ChannelType.FLOAT
     )
-    control: PvpropertyInteger = pvproperty(
-        value=0, name="CTRL", dtype=ChannelType.INT
+    control: PvpropertyEnum = pvproperty(
+        value="Ready",
+        name="CTRL",
+        dtype=ChannelType.ENUM,
+        enum_strings=(
+            "Ready",
+            "TRIM",
+            "PERTURB",
+            "BCON_TO_BDES",
+            "BACT_TO_BDES",
+            "SAVE_BDES",
+            "LOAD_BDES",
+            "UNDO_BDES",
+            "DAC_ZERO",
+            "CALB",
+            "STDZ",
+            "RESET",
+            "TURN_ON",
+            "TURN_OFF",
+            "DEGAUSS",
+        ),
     )
-    ps_state: PvpropertyInteger = pvproperty(
-        value=0, name="STATE", dtype=ChannelType.INT
+    ps_state: PvpropertyEnum = pvproperty(
+        value="ON",
+        name="STATE",
+        dtype=ChannelType.ENUM,
+        enum_strings=("OFF", "ON"),
     )
-    interlock: PvpropertyInteger = pvproperty(
-        value=0, name="INTLKSUMY", dtype=ChannelType.INT
+    interlock: PvpropertyEnum = pvproperty(
+        value="OK",
+        name="INTLKSUMY",
+        dtype=ChannelType.ENUM,
+        enum_strings=("OK", "FAULT"),
     )
