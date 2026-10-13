@@ -22,18 +22,7 @@ from sc_linac_physics.utils.sc_linac.linac import MACHINE
 from sc_linac_physics.utils.sc_linac.linac_utils import SCLinacObject
 
 # (class name, attribute) -> why it isn't served yet.
-KNOWN_GAPS = {
-    ("Cryomodule", "ds_pressure_pv"): "cryo: no CPT:...:DS:PRESS group",
-    ("Cryomodule", "jt_valve_readback_pv"): "cryo: HL JT valve readback",
-    ("Cryomodule", "heater_readback_pv"): "cryo: HL heater readback",
-    ("Machine", "global_heater_feedback_pv"): "cryo: CHTR:CM00 total",
-    # The sim serves vacuum as ACCL:...:00:/10: groups, not these VGXX gauge
-    # names. The plot display picks them up through PVExtractor.
-    ("Cryomodule", "vacuum_pvs"): "vacuum: no VGXX:...:COMBO_P gauges",
-    ("Cryomodule", "coupler_vacuum_pvs"): "vacuum: no VGXX:...:COMBO_P",
-    ("Linac", "beamline_vacuum_pvs"): "vacuum: no VGXX:...:COMBO_P gauges",
-    ("Linac", "insulating_vacuum_pvs"): "vacuum: no VGXX:...:COMBO_P",
-}
+KNOWN_GAPS = {}
 
 
 def _is_model_node(value) -> bool:
