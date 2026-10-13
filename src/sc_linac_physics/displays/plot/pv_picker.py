@@ -162,21 +162,19 @@ class PVPicker(QWidget):
         self.splitter.addWidget(what)
         layout.addWidget(self.splitter)
 
-        first_cavity = self._build_tree(pv_groups, list(decarads))
+        machine = self._build_tree(pv_groups, list(decarads))
         self.labels = _owner_labels(self.tree)
-        if first_cavity is not None:
-            self.tree.setCurrentItem(first_cavity)
+        # Start on Machine with the tree collapsed, so every top-level
+        # choice is visible at once. Machine-level picks can be large; the
+        # display's curve cap asks before plotting many.
+        self.tree.setCurrentItem(machine)
 
-    def _build_tree(
-        self, groups: HierarchicalPVs, decarads
-    ) -> Optional[QTreeWidgetItem]:
+    def _build_tree(self, groups: HierarchicalPVs, decarads) -> QTreeWidgetItem:
         """Machine > linac > CM > rack > cavity, then decarads > heads.
 
-        Returns the first cavity, where the picker starts. Starting at
-        Machine would offer every PV in the linac at once.
+        Returns the Machine node.
         """
-        _node(self.tree, "Machine", NodePVs(groups.get_machine().pvs))
-        cavities = []
+        machine = _node(self.tree, "Machine", NodePVs(groups.get_machine().pvs))
         for linac_name in sorted(groups.linacs):
             linac = _node(
                 self.tree, linac_name, NodePVs(groups.linacs[linac_name].pvs)
@@ -185,10 +183,10 @@ class PVPicker(QWidget):
                 cm = groups.cryomodules[cm_name]
                 if cm.linac_name == linac_name:
                     cm_item = _node(linac, f"CM{cm_name}", NodePVs(cm.pvs))
-                    cavities += _add_racks(cm_item, cm_name, groups)
+                    _add_racks(cm_item, cm_name, groups)
         if decarads:
             _add_decarads(_node(self.tree, "Decarads", None), decarads)
-        return cavities[0] if cavities else None
+        return machine
 
     def _current(self) -> Optional[NodePVs]:
         item = self.tree.currentItem()
