@@ -2,6 +2,314 @@
 
 <!-- version list -->
 
+## v9.42.0 (2026-10-13)
+
+### Features
+
+- **rf-commissioning**: Record cavity char tolerance; out of range is not passed
+  ([#370](https://github.com/slaclab/sc_linac_physics/pull/370),
+  [`3882cc4`](https://github.com/slaclab/sc_linac_physics/commit/3882cc425dd8c795865df1a8d56c8f34a37e47e2))
+
+### Performance Improvements
+
+- **field-emission**: Fetch each run through the in-repo archiver client
+  ([#328](https://github.com/slaclab/sc_linac_physics/pull/328),
+  [`6f4b026`](https://github.com/slaclab/sc_linac_physics/commit/6f4b026bfd80108b208d17978a036c46fe585719))
+
+
+## v9.41.8 (2026-10-13)
+
+### Bug Fixes
+
+- **utils**: Small bugs in cavity, logger and the EPICS wrapper
+  ([#350](https://github.com/slaclab/sc_linac_physics/pull/350),
+  [`93a824e`](https://github.com/slaclab/sc_linac_physics/commit/93a824ec58c9583caf27f9710b1b2fabcff08328))
+
+### Continuous Integration
+
+- Install HDF5 headers for the experimental Python test leg
+  ([#373](https://github.com/slaclab/sc_linac_physics/pull/373),
+  [`61923ac`](https://github.com/slaclab/sc_linac_physics/commit/61923acaeba2aeb350e0c9f3afe5bf62b10196c4))
+
+- Pass HDF5 packages to the release workflow's experimental leg
+  ([#373](https://github.com/slaclab/sc_linac_physics/pull/373),
+  [`61923ac`](https://github.com/slaclab/sc_linac_physics/commit/61923acaeba2aeb350e0c9f3afe5bf62b10196c4))
+
+### Documentation
+
+- **tuning**: Define SELA, the step budget and truncation in the auto-tune explainer
+  ([#357](https://github.com/slaclab/sc_linac_physics/pull/357),
+  [`da43bda`](https://github.com/slaclab/sc_linac_physics/commit/da43bda6fa015cf6ac0c5945b26ef10a3723cdc5))
+
+- **tuning**: Define SELA, the step budget and truncation in the auto-tune explainer
+  ([#357](https://github.com/slaclab/sc_linac_physics/pull/357),
+  [`73e0e0d`](https://github.com/slaclab/sc_linac_physics/commit/73e0e0dfbda52c5a680fd01d86465477e6b5938d))
+
+### Testing
+
+- **heatmap**: Make refetch-waits-for-abort test deterministic
+  ([#375](https://github.com/slaclab/sc_linac_physics/pull/375),
+  [`1705dbc`](https://github.com/slaclab/sc_linac_physics/commit/1705dbc9653cb9112464fecaebd2ed46f350df64))
+
+
+## v9.41.7 (2026-10-12)
+
+### Bug Fixes
+
+- **cavity-display**: Run heatmap fetches on daemon threads
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+- **cavity-display**: Share archiver slots across heatmap fetches
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+- **tuning**: Lower auto-tune undershoot from 0.9 to 0.75
+  ([#346](https://github.com/slaclab/sc_linac_physics/pull/346),
+  [`29e9603`](https://github.com/slaclab/sc_linac_physics/commit/29e9603d64873d4fd9da9439a6dd54eeacb53463))
+
+### Documentation
+
+- **cavity-display**: Say what the repeated November hour is
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+- **tuning**: Mark tuner SCALE error report as CHECK
+  ([#346](https://github.com/slaclab/sc_linac_physics/pull/346),
+  [`29e9603`](https://github.com/slaclab/sc_linac_physics/commit/29e9603d64873d4fd9da9439a6dd54eeacb53463))
+
+- **tuning**: Record why auto-tune undershoot is 0.75
+  ([#346](https://github.com/slaclab/sc_linac_physics/pull/346),
+  [`29e9603`](https://github.com/slaclab/sc_linac_physics/commit/29e9603d64873d4fd9da9439a6dd54eeacb53463))
+
+### Refactoring
+
+- **cavity-display**: Read fault history through the in-repo archiver client
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+- **cavity-display**: Remove unused archiver fault functions
+  ([#332](https://github.com/slaclab/sc_linac_physics/pull/332),
+  [`b7b2d49`](https://github.com/slaclab/sc_linac_physics/commit/b7b2d498df326fa94e9561f5dd8288da7ebc6285))
+
+
+## v9.41.6 (2026-10-09)
+
+### Bug Fixes
+
+- **cavity-display**: Catch our PVInvalidError in EnumLabel
+  ([#358](https://github.com/slaclab/sc_linac_physics/pull/358),
+  [`c59ba31`](https://github.com/slaclab/sc_linac_physics/commit/c59ba31b9fcf1ac292c76a464b0cb4a2056da231))
+
+### Documentation
+
+- **claude-md**: Stacked PRs stay drafts until what they build on merges
+  ([#353](https://github.com/slaclab/sc_linac_physics/pull/353),
+  [`7921eed`](https://github.com/slaclab/sc_linac_physics/commit/7921eede5b369c3c645bd1cb8da9dda768bde83c))
+
+- **claude-md**: Write for every audience, not two named reviewers
+  ([#354](https://github.com/slaclab/sc_linac_physics/pull/354),
+  [`8b16a88`](https://github.com/slaclab/sc_linac_physics/commit/8b16a88ca009bc5bbf776ca0d76a271c51bbc41a))
+
+### Testing
+
+- Drop local qapp fixtures that shadow pytest-qt's
+  ([#351](https://github.com/slaclab/sc_linac_physics/pull/351),
+  [`9f86e4e`](https://github.com/slaclab/sc_linac_physics/commit/9f86e4eec0c2851a80f5872fd275b5d368e456ad))
+
+- Use our make_mock_pv and EPICS constants, not lcls_tools'
+  ([#359](https://github.com/slaclab/sc_linac_physics/pull/359),
+  [`f7f83a3`](https://github.com/slaclab/sc_linac_physics/commit/f7f83a3af617f22f15e9c519ede38a0aa51940fb))
+
+- **conftest**: Install fake epics at import so sub-conftests can't load real epics first
+  ([#361](https://github.com/slaclab/sc_linac_physics/pull/361),
+  [`784e08c`](https://github.com/slaclab/sc_linac_physics/commit/784e08c3feb04fe5747193ae627abc60c1059ac9))
+
+
+## v9.41.5 (2026-10-08)
+
+### Bug Fixes
+
+- **cavity-display**: Fetch fault counts off the Qt main thread
+  ([#325](https://github.com/slaclab/sc_linac_physics/pull/325),
+  [`488e0bc`](https://github.com/slaclab/sc_linac_physics/commit/488e0bc1e688ddfc916aa12653aea6ce21fc7501))
+
+- **cavity-display**: Fetch fault counts on a daemon thread
+  ([#325](https://github.com/slaclab/sc_linac_physics/pull/325),
+  [`488e0bc`](https://github.com/slaclab/sc_linac_physics/commit/488e0bc1e688ddfc916aa12653aea6ce21fc7501))
+
+- **cavity-display**: Hide a fault without refetching
+  ([#325](https://github.com/slaclab/sc_linac_physics/pull/325),
+  [`488e0bc`](https://github.com/slaclab/sc_linac_physics/commit/488e0bc1e688ddfc916aa12653aea6ce21fc7501))
+
+- **cavity-display**: Show when fault counts are loading
+  ([#325](https://github.com/slaclab/sc_linac_physics/pull/325),
+  [`488e0bc`](https://github.com/slaclab/sc_linac_physics/commit/488e0bc1e688ddfc916aa12653aea6ce21fc7501))
+
+### Refactoring
+
+- **cavity-display**: Remove unused archiver fault functions
+  ([#330](https://github.com/slaclab/sc_linac_physics/pull/330),
+  [`02e0a34`](https://github.com/slaclab/sc_linac_physics/commit/02e0a34f19751e1b381a3261468681d19f19cc04))
+
+
+## v9.41.4 (2026-10-08)
+
+### Bug Fixes
+
+- **explainers**: Redraw widgets when the site theme changes
+  ([#345](https://github.com/slaclab/sc_linac_physics/pull/345),
+  [`0d87aed`](https://github.com/slaclab/sc_linac_physics/commit/0d87aeddec9c27682644473a05a97ac75d25ad85))
+
+### Continuous Integration
+
+- **explainers**: Link the rendered view of markdown explainers in the preview comment
+  ([#344](https://github.com/slaclab/sc_linac_physics/pull/344),
+  [`b78774a`](https://github.com/slaclab/sc_linac_physics/commit/b78774a7932c44a7c45c6aa0599e076bffe6d19c))
+
+### Documentation
+
+- **tuning**: Turn the auto-tune explainer into a docs page with an inline simulator
+  ([#345](https://github.com/slaclab/sc_linac_physics/pull/345),
+  [`0d87aed`](https://github.com/slaclab/sc_linac_physics/commit/0d87aeddec9c27682644473a05a97ac75d25ad85))
+
+
+## v9.41.3 (2026-10-07)
+
+### Bug Fixes
+
+- **explainers**: Embed only same-origin, single-link widget paragraphs; darken light-theme edges
+  ([#343](https://github.com/slaclab/sc_linac_physics/pull/343),
+  [`273e784`](https://github.com/slaclab/sc_linac_physics/commit/273e7849a61a5f8732a90e237633bd94b25f6f93))
+
+### Continuous Integration
+
+- **explainers**: Post preview links for widgets too
+  ([#342](https://github.com/slaclab/sc_linac_physics/pull/342),
+  [`5bf3a5e`](https://github.com/slaclab/sc_linac_physics/commit/5bf3a5e1115b3511b37c280c41e82617bae41052))
+
+### Documentation
+
+- Give explainers their own column, nav section and back-links
+  ([#340](https://github.com/slaclab/sc_linac_physics/pull/340),
+  [`1d5798c`](https://github.com/slaclab/sc_linac_physics/commit/1d5798c3907e560ee488b6655dfc926da8aee3ff))
+
+- **claude-md**: Explainers are markdown pages with inline widgets
+  ([#343](https://github.com/slaclab/sc_linac_physics/pull/343),
+  [`273e784`](https://github.com/slaclab/sc_linac_physics/commit/273e7849a61a5f8732a90e237633bd94b25f6f93))
+
+- **claude-md**: Let an explainer cover a piece several apps share
+  ([#337](https://github.com/slaclab/sc_linac_physics/pull/337),
+  [`c95f027`](https://github.com/slaclab/sc_linac_physics/commit/c95f027e7a864e300a68dd118617effd7b59f234))
+
+- **explainers**: Record the explainer-vs-docs-page rule; check every explainer offline
+  ([#337](https://github.com/slaclab/sc_linac_physics/pull/337),
+  [`c95f027`](https://github.com/slaclab/sc_linac_physics/commit/c95f027e7a864e300a68dd118617effd7b59f234))
+
+- **explainers**: Show widgets inline on explainer pages
+  ([#343](https://github.com/slaclab/sc_linac_physics/pull/343),
+  [`273e784`](https://github.com/slaclab/sc_linac_physics/commit/273e7849a61a5f8732a90e237633bd94b25f6f93))
+
+
+## v9.41.2 (2026-10-07)
+
+### Bug Fixes
+
+- **tests**: Match log paths by directory and suffix, not substring
+  ([#339](https://github.com/slaclab/sc_linac_physics/pull/339),
+  [`ac2cba5`](https://github.com/slaclab/sc_linac_physics/commit/ac2cba59601e5a4a0fe266606f1b610050eb441a))
+
+
+## v9.41.1 (2026-10-07)
+
+### Bug Fixes
+
+- **archiver**: Run parallel fetches on daemon threads
+  ([#334](https://github.com/slaclab/sc_linac_physics/pull/334),
+  [`2c17a0c`](https://github.com/slaclab/sc_linac_physics/commit/2c17a0c24565ead793d50eaa610a29b5b8bea272))
+
+### Chores
+
+- **codeowners**: Add Derikka as a cavity display owner
+  ([#331](https://github.com/slaclab/sc_linac_physics/pull/331),
+  [`27a89c5`](https://github.com/slaclab/sc_linac_physics/commit/27a89c51ab2bd4eeaa5d3f91edbf9efcdd0dfedf))
+
+- **codeowners**: Add Sebastian and Ryan as field emission owners
+  ([#329](https://github.com/slaclab/sc_linac_physics/pull/329),
+  [`57e7452`](https://github.com/slaclab/sc_linac_physics/commit/57e7452cfcad1f099196e94b5ab9f92cde42a9fc))
+
+
+## v9.41.0 (2026-10-07)
+
+### Bug Fixes
+
+- **archiver**: Address review comments
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Keep exact microseconds in sample timestamps
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Keep PST on samples from the fall-back hour
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+### Documentation
+
+- **archiver**: Add a time-axis plot and use a run with real field emission
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Channel-to-cavity mapping depends on the decarad setup
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Cite why getDataForPVs is slower
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Move decarad setup out of the archiver docs
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Show the plots in the examples
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: The sample before start is not guaranteed
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **claude-md**: Daemon thread, not an executor, for calls that can hang
+  ([#327](https://github.com/slaclab/sc_linac_physics/pull/327),
+  [`728fe50`](https://github.com/slaclab/sc_linac_physics/commit/728fe50621dbea7d421acbb93fe55874edeb7202))
+
+- **claude-md**: Point archiver reads at utils/archiver.py
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **claude-md**: Use an executor and a signal for background work, not QThread
+  ([#327](https://github.com/slaclab/sc_linac_physics/pull/327),
+  [`728fe50`](https://github.com/slaclab/sc_linac_physics/commit/728fe50621dbea7d421acbb93fe55874edeb7202))
+
+### Features
+
+- **archiver**: Add an archiver client to replace lcls_tools'
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+- **archiver**: Add get_series, pair_by_time and plot_over_time
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+### Performance Improvements
+
+- **archiver**: Tune timeouts and retries from on-site measurements
+  ([#324](https://github.com/slaclab/sc_linac_physics/pull/324),
+  [`28105a1`](https://github.com/slaclab/sc_linac_physics/commit/28105a1805470b850141445b00faebdd0b965ada))
+
+
 ## v9.40.0 (2026-10-06)
 
 ### Continuous Integration
