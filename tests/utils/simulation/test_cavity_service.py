@@ -460,6 +460,14 @@ class TestInterlockSystem:
         mock_amean.assert_called_once_with(18.0)
 
 
+class TestInterlockResetReadback:
+    @pytest.mark.asyncio
+    async def test_reads_back_zero_after_a_reset(self, regular_cavity):
+        """Through caproto's write path, as a client put goes."""
+        await regular_cavity.interlock_reset.write(1)
+        assert regular_cavity.interlock_reset.value in (0, "")
+
+
 class TestCalibrationAndMaintenance:
     """Test calibration and maintenance functionality."""
 
