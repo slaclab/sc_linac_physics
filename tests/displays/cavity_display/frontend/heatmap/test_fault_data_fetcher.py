@@ -213,17 +213,27 @@ class TestFaultDataFetcherAbort:
             FaultDataFetcher, "_archiver_slots", threading.BoundedSemaphore(1)
         )
         release = threading.Event()
+        holding_slot = threading.Event()
         first_machine = make_machine(num_cavities=1)
         first_cav = first_machine.linacs[0].cryomodules["01"].cavities[1]
 
         def stuck(*args):
+            holding_slot.set()
             release.wait(10)
             return {}, []
 
         first_cav.get_fault_history = stuck
         first = FaultDataFetcher(first_machine, datetime.now(), datetime.now())
-        threading.Timer(0.3, first.abort).start()
+
+        def abort_once_holding_slot():
+            # Abort only after the request holds the slot. A fixed delay
+            # let a slow runner abort before the worker started.
+            holding_slot.wait(5)
+            first.abort()
+
+        threading.Thread(target=abort_once_holding_slot, daemon=True).start()
         first.run()  # returns on abort; its request still holds the slot
+        assert holding_slot.is_set()
 
         second_machine = make_machine(num_cavities=1)
         second_cav = second_machine.linacs[0].cryomodules["01"].cavities[1]
