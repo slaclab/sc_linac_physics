@@ -371,7 +371,15 @@ def get_series(
     directly. Samples with INVALID severity are dropped. Keyword arguments go
     to get_values_over_time_range.
     """
-    frames = get_values_over_time_range(pvs, start, end, **kwargs)
+    return series_from_frames(
+        get_values_over_time_range(pvs, start, end, **kwargs)
+    )
+
+
+def series_from_frames(
+    frames: Dict[str, pd.DataFrame],
+) -> Dict[str, pd.Series]:
+    """get_series' Series, from frames such as ArchiverStore.read_windows'."""
     return {
         pv: pd.Series(
             frame.loc[frame["valid"], "value"].to_numpy(),

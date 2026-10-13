@@ -1,6 +1,5 @@
 import re
 from pathlib import Path
-from sc_linac_physics.utils.platform_paths import get_field_emission_dir
 from sc_linac_physics.utils.sc_linac.linac_utils import LINAC_CM_DICT
 
 # Default File Paths
@@ -9,10 +8,9 @@ _DATA_DIR = Path(__file__).resolve().parent
 CSV_OUTPUT_DIR = _DATA_DIR
 H5_PATH = _DATA_DIR / "field_emission_data.hdf5"
 
-# Runs known to git. The data for each is fetched from the archiver and kept,
-# one file per run, in a shared directory outside the package.
+# Runs known to git. The data for each is read through the shared archiver
+# cache (utils/archiver_store.py), outside the package.
 RUN_LIST_PATH = _DATA_DIR / "field_emission_runs.csv"
-RUN_CACHE_DIR = get_field_emission_dir() / "runs"
 
 # HDF5 Group Paths
 H5_MEASUREMENT_PATH = "CM{cm}/{date}"
@@ -34,7 +32,6 @@ RAD_READ_TYPES = ["average", "instant"]
 
 # Date Formatting
 CSV_DATE_FORMAT = "%y_%m_%d_%H_%M"
-H5_DATE_FORMAT = "%Y-%m-%d_%H%M"
 DISPLAY_DATE_FORMAT = "%A, %B %d, %Y"
 STANDARD_DATE_FORMAT = "%m/%d/%y %H:%M"
 

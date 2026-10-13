@@ -1,37 +1,34 @@
-"""Field emission runs: the run list, and a per-run cache of archiver data.
+"""Field emission runs: the run list, and the archiver data for each run.
 
-The run list (field_emission_runs.csv) says which runs exist. The data for
-a run is fetched from the archiver the first time it is needed and kept in
-RUN_CACHE_DIR, one HDF5 file per run, so it stays viewable when the archiver
-is down and is shared by everyone using that directory.
+The run list (field_emission_runs.csv) says which runs exist. A run's data
+is read through the shared ArchiverStore (utils/archiver_store.py), which
+caches each PV's samples for the run's exact window on disk the first time.
+A cached run stays viewable when the archiver is down, and is shared by
+everyone using that cache.
 
-One file per run, not one file for all runs: a run is written to a
-temporary file and renamed into place, so a display closed mid-write leaves
-no half-written run, and two people fetching different runs never write the
-same file. If two people fetch the same run, the second rename wins and
-both files hold the same data.
+The cache holds the archiver's samples, not the aligned frames, so the
+alignment in amp_vs_radiation.fetch_run runs on every load. A change to it
+applies to cached runs too.
 """
 
 import csv
-import os
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import h5py
 import numpy as np
 
 from sc_linac_physics.applications.field_emission.amp_vs_radiation import (
     fetch_run,
+    run_pvs,
 )
 from sc_linac_physics.applications.field_emission.constants import (
-    H5_DATE_FORMAT,
-    RUN_CACHE_DIR,
     RUN_LIST_PATH,
     STANDARD_DATE_FORMAT,
 )
+from sc_linac_physics.utils.archiver import series_from_frames
+from sc_linac_physics.utils.archiver_store import ArchiverStore
 
 # (cavity number, readout) -> (values, column PV names). values has the
 # amplitude in column 0 and decarad heads 1-10 after it, as the old bundled
@@ -97,56 +94,29 @@ def find_run(cm: str, start: datetime, runs: List[Run]) -> Optional[Run]:
     )
 
 
-def run_path(run: Run, cache_dir: Path = RUN_CACHE_DIR) -> Path:
-    return cache_dir / f"cm{run.cm}_{run.start.strftime(H5_DATE_FORMAT)}.h5"
-
-
-def is_cached(run: Run, cache_dir: Path = RUN_CACHE_DIR) -> bool:
-    return run_path(run, cache_dir).exists()
-
-
-def load_run(run: Run, cache_dir: Path = RUN_CACHE_DIR) -> RunData:
-    """A run's data, from the cache, fetching it from the archiver first if
-    it is not cached. Fetching blocks; keep it off the Qt main thread."""
-    path = run_path(run, cache_dir)
-    if not path.exists():
-        frames = fetch_run(run.cm, run.start, run.end, run.decarad)
-        _write_run(run, frames, path)
-    return _read_run(path)
-
-
-def _write_run(run: Run, frames, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        prefix=path.stem + ".", suffix=".tmp", dir=path.parent
+def is_cached(run: Run, store: Optional[ArchiverStore] = None) -> bool:
+    """Whether load_run can read the run from disk alone."""
+    store = store or ArchiverStore()
+    return all(
+        store.has_window(pv, run.start, run.end)
+        for pv in run_pvs(run.cm, run.decarad)
     )
-    os.close(fd)
-    try:
-        with h5py.File(tmp_name, "w") as h5f:
-            h5f.attrs["cm"] = run.cm
-            h5f.attrs["start"] = run.start.isoformat()
-            h5f.attrs["end"] = run.end.isoformat()
-            h5f.attrs["decarad"] = run.decarad
-            h5f.attrs["fetched"] = datetime.now().isoformat()
-            for (cav, readout), frame in frames.items():
-                dset = h5f.create_dataset(
-                    f"CAV{cav}/{readout}",
-                    data=frame.to_numpy(dtype="float64"),
-                    compression="gzip",
-                )
-                dset.attrs["columns"] = [str(c) for c in frame.columns]
-        os.replace(tmp_name, path)
-    except BaseException:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
 
 
-def _read_run(path: Path) -> RunData:
-    data: RunData = {}
-    with h5py.File(path, "r") as h5f:
-        for cav_name, cav_group in h5f.items():
-            cav = int(cav_name.removeprefix("CAV"))
-            for readout, dset in cav_group.items():
-                columns = [str(c) for c in dset.attrs["columns"]]
-                data[cav, readout] = (dset[...], columns)
-    return data
+def load_run(run: Run, store: Optional[ArchiverStore] = None) -> RunData:
+    """A run's data, aligned per cavity and readout.
+
+    Reads through the store, so the first load fetches from the archiver and
+    later ones come from disk. Fetching blocks; keep it off the Qt main
+    thread.
+    """
+    store = store or ArchiverStore()
+
+    def fetch(pvs, start, end):
+        return series_from_frames(store.read_windows(pvs, start, end))
+
+    frames = fetch_run(run.cm, run.start, run.end, run.decarad, fetch=fetch)
+    return {
+        key: (frame.to_numpy(dtype="float64"), [str(c) for c in frame.columns])
+        for key, frame in frames.items()
+    }
