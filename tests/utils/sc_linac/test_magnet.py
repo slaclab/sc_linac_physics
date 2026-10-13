@@ -123,8 +123,8 @@ def test_trim(cryomodule):
     magnet._control_pv_obj.put.assert_called_with(MAGNET_TRIM_VALUE)
 
 
-# The real QUAD:L0B:0185:CTRL enum states (probe on lcls-daemon0,
-# 2026-10-13). Written out here, not derived from linac_utils, so a wrong
+# The real CTRL enum states, the same on QUAD, XCOR and YCOR:L0B:0185
+# (probes on lcls-daemon0, 2026-10-13). Written out here, not derived from linac_utils, so a wrong
 # constant can't pass by agreeing with itself.
 CTRL_STATES = [
     "Ready",
