@@ -809,3 +809,33 @@ class TestMoveRunsAsTask:
         mv.assert_not_called()
         assert stepper_group._move_task is running
         stepper_group.log.warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_pos_and_neg_start_one_move(self, stepper_group):
+        """MOVE_POS and MOVE_NEG at once must not start opposing moves."""
+        stepper_group.log = Mock()
+        release = asyncio.Event()
+
+        async def slow_move(sign):
+            await release.wait()
+
+        real_write = stepper_group.motor_moving.write
+
+        async def yielding_write(*args, **kwargs):
+            # With subscribed clients, caproto's write yields while publishing.
+            await asyncio.sleep(0)
+            return await real_write(*args, **kwargs)
+
+        with (
+            patch.object(stepper_group, "move", side_effect=slow_move) as mv,
+            patch.object(
+                stepper_group.motor_moving, "write", side_effect=yielding_write
+            ),
+        ):
+            await asyncio.gather(
+                stepper_group.move_pos.putter(None, 1),
+                stepper_group.move_neg.putter(None, 1),
+            )
+            release.set()
+            await stepper_group._move_task
+        assert mv.call_count == 1

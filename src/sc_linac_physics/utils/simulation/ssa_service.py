@@ -123,6 +123,9 @@ class SSAPVGroup(PVGroup):
         super().__init__(prefix)
         self.cavityGroup: CavityPVGroup = cavityGroup
         self._calibration_task: asyncio.Task | None = None
+        # Held from the running check until the task exists. The status write
+        # in between yields, so without it two starts could both pass.
+        self._calibration_start_lock = asyncio.Lock()
 
     CALIBRATION_DURATION_S = 5
     CALIBRATION_BAD_RESULT_PROBABILITY = 0.2
@@ -135,19 +138,21 @@ class SSAPVGroup(PVGroup):
         client can poll CALSTS meanwhile. A start while one is running is
         ignored. Returns 0, the same CALSTRT readback as PROBECALSTRT.
         """
-        if (
-            self._calibration_task is not None
-            and not self._calibration_task.done()
-        ):
-            self.log.warning(
-                f"{self.prefix} SSA calibration already running; start ignored"
+        async with self._calibration_start_lock:
+            if (
+                self._calibration_task is not None
+                and not self._calibration_task.done()
+            ):
+                self.log.warning(
+                    f"{self.prefix} SSA calibration already running; "
+                    "start ignored"
+                )
+                return 0
+            self.log.info(f"{self.prefix} SSA calibration started")
+            await self.cal_status.write("Running")
+            self._calibration_task = asyncio.get_running_loop().create_task(
+                self._finish_calibration()
             )
-            return 0
-        self.log.info(f"{self.prefix} SSA calibration started")
-        await self.cal_status.write("Running")
-        self._calibration_task = asyncio.get_running_loop().create_task(
-            self._finish_calibration()
-        )
         return 0
 
     async def _finish_calibration(self):
