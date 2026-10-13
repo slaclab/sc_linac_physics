@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.42.2 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+
 ## v9.42.1 (2026-10-13)
 
 ### Bug Fixes
