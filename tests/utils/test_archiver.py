@@ -700,3 +700,171 @@ class TestGroupBins:
 
         assert all(b - a <= HOUR for a, b in zip(bounds, bounds[1:]))
         assert bounds[-1] - bounds[0] == 3 * HOUR
+
+
+class TestBinnedValues:
+    STEP = 3600
+    # A UTC hour boundary, so bins line up with whole hours here.
+    T0 = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    @staticmethod
+    def _bins(step, *pairs, start):
+        """Archiver-style bins: timestamped at each bin's middle."""
+        base = int(start.timestamp())
+        return [
+            _datum(base + i * step + step // 2, v) for i, v in enumerate(pairs)
+        ]
+
+    def _reply(self, values, counts):
+        def reply(method, url, timeout, params):
+            pv = params["pv"]
+            if pv.startswith("count_") and "planning" not in reply.__dict__:
+                reply.planning = True  # the planner's count comes first
+                return _response(payload=[{"data": []}])
+            if pv.startswith("ncount"):
+                return _response(payload=[{"data": [_datum(0, 1)]}])
+            data = counts if pv.startswith("count_") else values
+            return _response(payload=[{"data": data}])
+
+        return reply
+
+    def test_bins_without_samples_and_before_the_window_are_dropped(
+        self, session
+    ):
+        start = self.T0 + timedelta(hours=1)
+        end = start + timedelta(hours=3)
+        before = start - timedelta(hours=1)
+        # Hour before the window, then three hours; the last one is empty and
+        # the archiver repeats the previous bin's value in it.
+        values = self._bins(self.STEP, 9.0, 1.0, 2.0, 2.0, start=before)
+        counts = self._bins(self.STEP, 1, 10, 20, 0, start=before)
+        session.request.side_effect = self._reply(values, counts)
+
+        frame = archiver.get_binned_values(
+            ["A:PV"], start, end, timedelta(hours=1)
+        )["A:PV"]
+
+        assert list(frame["value"]) == [1.0, 2.0]
+        assert list(frame["count"]) == [10, 20]
+        assert list(frame["timestamp"]) == [
+            start.astimezone(archiver.LOCAL_TZ),
+            (start + timedelta(hours=1)).astimezone(archiver.LOCAL_TZ),
+        ]
+
+    def test_statistic_and_bin_size_are_in_the_operator(self, session):
+        session.request.return_value = _response(payload=[{"data": []}])
+
+        archiver.get_binned_values(
+            ["A:PV"],
+            self.T0,
+            self.T0 + timedelta(minutes=30),
+            timedelta(minutes=10),
+            "max",
+        )
+
+        sent = [
+            c.kwargs["params"]["pv"] for c in session.request.call_args_list
+        ]
+        assert sent == ["max_600(A:PV)", "count_600(A:PV)"]
+
+    def test_chunk_edges_are_moved_to_bin_edges(self, session):
+        step = timedelta(hours=1)
+        bounds = [
+            self.T0,
+            self.T0 + timedelta(minutes=90),  # mid-bin: moved to 1:00
+            self.T0 + timedelta(hours=3),
+        ]
+        session.request.return_value = _response(payload=[{"data": []}])
+        with patch.object(archiver, "_plan_chunks", return_value=bounds):
+            archiver.get_binned_values(["A:PV"], self.T0, bounds[-1], step)
+
+        starts = sorted(
+            {c.kwargs["params"]["from"] for c in session.request.call_args_list}
+        )
+        assert starts == [
+            archiver._to_utc_iso(self.T0),
+            archiver._to_utc_iso(self.T0 + step),
+        ]
+
+    def test_long_window_is_planned_with_the_binned_limit(self, session):
+        session.request.return_value = _response(payload=[{"data": []}])
+        with patch.object(
+            archiver, "_plan_chunks", return_value=[self.T0, self.T0]
+        ) as plan:
+            archiver.get_binned_values(
+                ["A:PV"],
+                self.T0,
+                self.T0 + timedelta(days=2),
+                timedelta(hours=1),
+            )
+
+        assert plan.call_args.args[-1] == archiver.BINNED_CHUNK_SAMPLES
+
+    @pytest.mark.parametrize(
+        "statistic, bin_size",
+        [
+            ("median", timedelta(hours=1)),
+            ("mean", timedelta(0)),
+            ("mean", timedelta(seconds=1.5)),
+        ],
+    )
+    def test_bad_arguments_are_refused(self, session, statistic, bin_size):
+        with pytest.raises(ValueError):
+            archiver.get_binned_values(
+                ["A:PV"],
+                self.T0,
+                self.T0 + timedelta(hours=1),
+                bin_size,
+                statistic,
+            )
+
+    def test_unknown_pv_is_named(self, session):
+        session.request.return_value = _response(status=404)
+
+        with pytest.raises(PVNotArchivedError) as excinfo:
+            archiver.get_binned_values(
+                ["A:PV"],
+                self.T0,
+                self.T0 + timedelta(hours=1),
+                timedelta(minutes=10),
+            )
+
+        assert excinfo.value.pvs == ["A:PV"]
+
+    def test_unknown_pv_found_while_planning_is_named(self, session):
+        session.request.return_value = _response(status=404)
+
+        with pytest.raises(PVNotArchivedError):
+            archiver.get_binned_values(
+                ["A:PV"],
+                self.T0,
+                self.T0 + timedelta(days=2),
+                timedelta(hours=1),
+            )
+
+        assert session.request.call_count == 1
+
+    def test_404_on_the_count_names_the_pv(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(status=404),
+        ]
+
+        with pytest.raises(PVNotArchivedError):
+            archiver.get_binned_values(
+                ["A:PV"],
+                self.T0,
+                self.T0 + timedelta(minutes=30),
+                timedelta(minutes=10),
+            )
+
+    def test_other_errors_name_the_pv(self, session):
+        session.request.return_value = _response(status=400)
+
+        with pytest.raises(ArchiverError, match="A:PV"):
+            archiver.get_binned_values(
+                ["A:PV"],
+                self.T0,
+                self.T0 + timedelta(minutes=30),
+                timedelta(minutes=10),
+            )
