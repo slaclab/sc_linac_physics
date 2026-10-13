@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v9.42.4 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve magnet CTRL, STATE and INTLKSUMY as the real enums
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve the cryo and vacuum PVs the model names; HL cryo prefixes match the model
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve the magnet PVs the model names
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+### Documentation
+
+- **sim**: 2 K is the operating temperature; drop the DS pressure CHECK
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+
 ## v9.42.3 (2026-10-13)
 
 ### Bug Fixes
