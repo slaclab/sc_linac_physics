@@ -61,3 +61,41 @@ def test_short_path(qtbot, path, expected):
     for name in path[1:]:
         item = QTreeWidgetItem(item, [name])
     assert short_path(item) == expected
+
+
+def test_cm_pv_in_a_cavity_group_is_labeled_by_the_cm(qtbot):
+    """Cavity groups also hold their CM's PVs; the label must say CM."""
+    from sc_linac_physics.displays.plot.pv_picker import PVPicker
+    from sc_linac_physics.displays.plot.utils import (
+        CavityPVs,
+        CryomodulePVs,
+        HierarchicalPVs,
+        LinacPVs,
+        RackPVs,
+    )
+
+    cm_key = ("Cryomodule", "aact_mean_sum_pv")
+    cavity = CavityPVs(
+        number=1,
+        rack_name="A",
+        cryomodule_name="02",
+        linac_name="L1B",
+        pvs=PVGroup({cm_key: ["CM02:SUM"], ("Cavity", "ades_pv"): ["C1:ADES"]}),
+    )
+    cm = CryomodulePVs(
+        name="02", linac_name="L1B", pvs=PVGroup({cm_key: ["CM02:SUM"]})
+    )
+    groups = HierarchicalPVs(
+        linacs={"L1B": LinacPVs(name="L1B")},
+        cryomodules={"02": cm},
+        racks={
+            ("02", "A"): RackPVs(
+                rack_name="A", cryomodule_name="02", linac_name="L1B"
+            )
+        },
+        cavities={("02", 1): cavity},
+    )
+    picker = PVPicker(groups)
+    qtbot.addWidget(picker)
+    assert picker.labels["CM02:SUM"] == "CM02 aact mean sum"
+    assert picker.labels["C1:ADES"] == "CM02 Cavity 1 ades"

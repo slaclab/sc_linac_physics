@@ -4,6 +4,7 @@
 nothing itself, so any display can embed it next to an `ArchiverPlot`.
 """
 
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -50,7 +51,7 @@ def curves_for(
     """Curves for every PV under `keys`, labeled from `labels` or by PV."""
     labels = labels or {}
     return [
-        Curve(pv=pv, label=labels.get(pv, pv), axis=axis_for(attribute))
+        Curve(pv=pv, label=labels.get(pv, pv), axis=readable(attribute))
         for source, attribute in keys
         for pv in group[(source, attribute)]
     ]
@@ -162,6 +163,7 @@ class PVPicker(QWidget):
         layout.addWidget(self.splitter)
 
         first_cavity = self._build_tree(pv_groups, list(decarads))
+        self.labels = _owner_labels(self.tree)
         if first_cavity is not None:
             self.tree.setCurrentItem(first_cavity)
 
@@ -229,15 +231,7 @@ class PVPicker(QWidget):
         keys = [item.data(0, Qt.UserRole) for item in items]
         if node is None or not keys:
             return
-        # A PV that is the only one under its attribute gets a readable
-        # label, e.g. "CM02 Cavity 1 aact". Several PVs keep their names,
-        # since the node alone doesn't say which cavity each belongs to.
-        labels = dict(node.labels)
-        where = short_path(self.tree.currentItem())
-        for source, attribute in keys:
-            pvs = node.pvs[(source, attribute)]
-            if len(pvs) == 1 and pvs[0] not in labels:
-                labels[pvs[0]] = f"{where} {readable(attribute)}"
+        labels = {**self.labels, **node.labels}
         self.curves_requested.emit(curves_for(node.pvs, keys, labels))
 
     def add_typed_pv(self) -> None:
@@ -269,6 +263,30 @@ def _add_decarads(parent, decarads) -> None:
         unit = _node(parent, f"Decarad {decarad.number}", decarad_pvs(heads))
         for head in heads:
             _node(unit, f"Head {head.number}", decarad_pvs([head]))
+
+
+def _owner_labels(tree: QTreeWidget) -> Dict[str, str]:
+    """A readable label for every PV, from the shallowest node that has it
+    as the only PV for its attribute, e.g. "CM02 Cavity 1 aact" or
+    "L0B aact mean sum". A pick of many PVs then still gets labels.
+
+    Shallowest, not deepest: a cavity's group also holds its cryomodule's
+    PVs, and the CM sum is not that cavity's.
+    """
+    labels: Dict[str, str] = {}
+    queue = deque(tree.topLevelItem(i) for i in range(tree.topLevelItemCount()))
+    while queue:
+        item = queue.popleft()
+        queue.extend(item.child(i) for i in range(item.childCount()))
+        node = item.data(0, Qt.UserRole)
+        if node is None:
+            continue
+        for (_, attribute), pvs in node.pvs.pvs.items():
+            if len(pvs) == 1:
+                labels.setdefault(
+                    pvs[0], f"{short_path(item)} {readable(attribute)}"
+                )
+    return labels
 
 
 def short_path(item: QTreeWidgetItem) -> str:
