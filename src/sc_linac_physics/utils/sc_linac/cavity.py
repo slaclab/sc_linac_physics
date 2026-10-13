@@ -879,7 +879,13 @@ class Cavity(linac_utils.SCLinacObject):
                 iteration_callback()
 
             microsteps_per_hz = self.microsteps_per_hz
-            est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+            # Aim for 75% of the measured detune per move (was 90%). A move
+            # passes resonance when 0.75 * (true / believed SCALE) > 1, so
+            # 0.75 tolerates a tuner that moves up to 1/0.75 = 1.33x what
+            # SCALE says without overshooting. 0.9 overshoots past 1.11x.
+            # CHECK: Ryan reports some tuners move ~30% more than SCALE
+            # says. Is there a measurement or tuner report to cite here?
+            est_steps = int(0.75 * delta_hz * microsteps_per_hz)
 
             # A zero step estimate commands no motion, so the detune cannot
             # change and steps_moved cannot grow -- so the runaway guard below
