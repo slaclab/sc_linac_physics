@@ -122,8 +122,12 @@ def plotted_rows(display):
     ]
 
 
-def test_starts_at_first_cavity(display):
-    assert display.picker.tree.currentItem().text(0) == "Cavity 1"
+def test_starts_at_machine_with_tree_collapsed(display):
+    tree = display.picker.tree
+    assert tree.currentItem().text(0) == "Machine"
+    tops = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
+    assert [t.text(0) for t in tops] == ["Machine", "L1B", "Decarads"]
+    assert not any(t.isExpanded() for t in tops)
 
 
 def test_pick_one_cavity_attribute(display):
@@ -210,6 +214,9 @@ def test_plotted_row_shows_curve_color(display):
 
 
 def test_filter_hides_attributes(display):
+    display.picker.tree.setCurrentItem(
+        find(display.picker.tree, CAV + ["Cavity 1"])
+    )
     display.picker.filter_edit.setText("aact")
     attrs = display.picker.attributes
     hidden = {
