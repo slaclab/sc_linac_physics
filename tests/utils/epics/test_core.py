@@ -1,6 +1,7 @@
 # tests/utils/epics/test_core.py
 # Get reference to the FakeEPICS_PV that was injected
 import sys
+from unittest.mock import patch
 
 import pytest
 
@@ -661,6 +662,41 @@ class TestSeverity:
         pv = PV("TEST:PV")
         pv._severity = None
         assert pv.severity == EPICS_INVALID_VAL
+
+    def test_reconnect_refreshes_stale_cached_severity(self):
+        """Disconnected at the call, then reconnects: don't use the old value."""
+        pv = PV("TEST:PV")
+        pv.get()
+        pv._severity = EPICS_NO_ALARM_VAL  # cached before the disconnect
+        pv._ioc_severity = EPICS_MAJOR_VAL  # what the IOC says now
+        pv._connected = False
+
+        def reconnect(self, timeout=None):
+            self._connected = True
+            return True
+
+        with patch.object(FakeEPICS_PV, "wait_for_connection", reconnect):
+            assert pv.severity == EPICS_MAJOR_VAL
+
+    def test_unmonitored_pv_refreshes_every_read(self):
+        pv = PV("TEST:PV", auto_monitor=False)
+        pv._severity = EPICS_NO_ALARM_VAL
+        pv._ioc_severity = EPICS_MINOR_VAL
+        assert pv.severity == EPICS_MINOR_VAL
+
+    def test_monitored_connected_pv_uses_cache(self):
+        pv = PV("TEST:PV")
+        pv._severity = EPICS_MINOR_VAL
+        pv._ioc_severity = EPICS_MAJOR_VAL
+        assert pv.severity == EPICS_MINOR_VAL
+
+    def test_failed_refresh_reads_as_invalid(self):
+        from sc_linac_physics.utils.epics import EPICS_INVALID_VAL
+
+        pv = PV("TEST:PV", auto_monitor=False)
+        pv._severity = EPICS_NO_ALARM_VAL
+        with patch.object(FakeEPICS_PV, "get_timevars", return_value=None):
+            assert pv.severity == EPICS_INVALID_VAL
 
     def test_disconnected_raises_instead_of_stale_value(self):
         """pyepics keeps the last severity after a disconnect."""

@@ -452,14 +452,28 @@ class PV(EPICS_PV):
         pyepics' severity returns its cached value. pyepics doesn't clear
         that cache on disconnect, so it can be stale. It can also be None if
         the time fields never arrived. This waits for the connection first,
-        and raises PVConnectionError if the PV doesn't connect. If pyepics
-        still has no severity after that, it returns EPICS_INVALID_VAL, so
-        unknown severity reads as invalid rather than fine.
+        and raises PVConnectionError if the PV doesn't connect.
+
+        The cache is then refreshed with get_timevars() in two cases where
+        it can't be trusted:
+          - the PV was disconnected at the start of this call: a monitored
+            PV's cache predates the reconnect until its first new update;
+          - the PV is not monitored (auto_monitor=False, e.g. the cavity
+            fault PVs): its cache is from its last get().
+        If that refresh fails, or pyepics still has no severity, this
+        returns EPICS_INVALID_VAL, so unknown reads as invalid, not fine.
 
         Raises:
             PVConnectionError: If the PV is not connected
         """
+        was_connected = self.connected
         self._ensure_connected()
+        if not was_connected or not self.auto_monitor:
+            refreshed = self.get_timevars(
+                timeout=self.config.get_timeout, warn=False
+            )
+            if refreshed is None:
+                return EPICS_INVALID_VAL
         severity = super().severity
         return EPICS_INVALID_VAL if severity is None else severity
 
