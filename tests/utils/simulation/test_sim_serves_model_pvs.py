@@ -23,13 +23,6 @@ from sc_linac_physics.utils.sc_linac.linac_utils import SCLinacObject
 
 # (class name, attribute) -> why it isn't served yet.
 KNOWN_GAPS = {
-    ("Magnet", "bdes_pv"): "magnets: sim serves only STATMSG",
-    ("Magnet", "bact_pv"): "magnets: sim serves only STATMSG",
-    ("Magnet", "control_pv"): "magnets: sim serves only STATMSG",
-    ("Magnet", "interlock_pv"): "magnets: sim serves only STATMSG",
-    ("Magnet", "ps_status_pv"): "magnets: sim serves only STATMSG",
-    ("Magnet", "iact_pv"): "magnets: sim serves only STATMSG",
-    ("Magnet", "ides_pv"): "magnets: sim serves only STATMSG",
     ("Cryomodule", "ds_pressure_pv"): "cryo: no CPT:...:DS:PRESS group",
     ("Cryomodule", "jt_valve_readback_pv"): "cryo: HL JT valve readback",
     ("Cryomodule", "heater_readback_pv"): "cryo: HL heater readback",
