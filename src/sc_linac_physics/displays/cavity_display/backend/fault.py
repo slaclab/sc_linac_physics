@@ -9,8 +9,6 @@ import dataclasses
 from datetime import datetime
 from typing import Union, Optional
 
-from lcls_tools.common.data.archiver import ArchiverValue
-
 from sc_linac_physics.utils.epics import (
     PV,
     EPICS_INVALID_VAL,
@@ -277,8 +275,8 @@ class Fault:
                 f"Fault for {self.pv} has neither 'ok_value' nor 'fault_value' parameter"
             )
 
-    def is_faulted(self, obj: Union[PV, ArchiverValue]) -> bool:
-        """Determine if a PV object or archiver value indicates a fault.
+    def is_faulted(self, obj: PV) -> bool:
+        """Determine if a PV object indicates a fault.
 
         EPICS severity values:
             NO_ALARM = 0
@@ -287,7 +285,7 @@ class Fault:
             INVALID = 3
 
         Args:
-            obj: PV object or ArchiverValue to check
+            obj: PV object to check
 
         Returns:
             True if the value indicates a fault, False if OK.

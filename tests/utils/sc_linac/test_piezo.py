@@ -2,7 +2,7 @@ from random import randint
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import make_mock_pv
+from sc_linac_physics.utils.epics import make_mock_pv
 
 from sc_linac_physics.utils.epics import PVGetError
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
