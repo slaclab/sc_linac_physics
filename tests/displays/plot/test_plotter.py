@@ -466,7 +466,7 @@ def test_add_decarad_head_curves(display):
     (curve,) = display.plot.curve_set.curves
     assert curve.pv == "RADM:SYS0:100:03:GAMMAAVE"
     assert curve.label == "Decarad 1 head 3 avg"
-    assert curve.axis == "avg_dose_rate"
+    assert curve.axis == "avg dose rate"
 
 
 def test_whole_decarad_offers_all_ten_heads(display):
@@ -474,3 +474,15 @@ def test_whole_decarad_offers_all_ten_heads(display):
     curves = display.plot.curve_set.curves
     assert len(curves) == 10
     assert curves[-1].label == "Decarad 2 head 10 raw"
+
+
+def test_many_pv_pick_gets_per_cavity_labels(display):
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        pick(display, CM, "ades")  # 60 PVs
+    labels = [c.label for c in display.plot.curve_set.curves[:2]]
+    assert labels == ["CM02 Cavity 1 ades", "CM02 Cavity 2 ades"]
+
+
+def test_axis_names_are_readable(display):
+    pick(display, ["Decarads", "Decarad 1", "Head 1"], "avg dose rate")
+    assert display.plot.curve_set.axis_names == ["avg dose rate"]
