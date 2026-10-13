@@ -474,8 +474,11 @@ class TestPulseGo:
         self, regular_cavity
     ):
         """Cavity.push_go_button() puts 1, then waits for PULSE_STATUS >= 2."""
+        assert regular_cavity.pulse_status.value == "Pulsing off"
         await regular_cavity.pulse_go.write(1)
-        assert regular_cavity.pulse_status.value == 2
+        assert regular_cavity.pulse_status.value == "Pulsing on"
+        # Cavity.push_go_button() compares the index: 2 means done.
+        assert regular_cavity.pulse_status.enum_strings.index("Pulsing on") == 2
         assert regular_cavity.pulse_go.value == 0
 
 

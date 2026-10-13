@@ -340,13 +340,24 @@ class CavityPVGroup(PVGroup):
 
     # Pulsed mode. Cavity.push_go_button() puts PULSE_DIFF_SUM=1, then waits
     # for PULSE_STATUS >= 2, and treats > 2 as a failed pulse.
-    # CHECK: what the real PULSE_STATUS values mean beyond the model's
-    # "< 2 waiting, 2 done, > 2 failed".
+    # PULSE_STATUS is a 5-state enum on the real IOC (probe of
+    # ACCL:L0B:0110:PULSE_STATUS on cpu-l0b-rf01, 2026-10-13): Awaiting
+    # request, Pulse request, Pulsing on, Stop request, Pulsing off. It read
+    # Pulsing off at the time, so the sim starts there.
     pulse_on_time: PvpropertyInteger = pvproperty(
         value=NOMINAL_PULSED_ONTIME, name="PULSE_ONTIME", dtype=ChannelType.INT
     )
-    pulse_status: PvpropertyInteger = pvproperty(
-        value=0, name="PULSE_STATUS", dtype=ChannelType.INT
+    pulse_status: PvpropertyEnum = pvproperty(
+        value="Pulsing off",
+        name="PULSE_STATUS",
+        dtype=ChannelType.ENUM,
+        enum_strings=(
+            "Awaiting request",
+            "Pulse request",
+            "Pulsing on",
+            "Stop request",
+            "Pulsing off",
+        ),
     )
     pulse_go: PvpropertyInteger = pvproperty(
         value=0, name="PULSE_DIFF_SUM", dtype=ChannelType.INT
@@ -354,9 +365,9 @@ class CavityPVGroup(PVGroup):
 
     @pulse_go.putter
     async def pulse_go(self, instance, value):
-        """Report the pulse done (PULSE_STATUS 2) at once; reads back 0."""
+        """Go straight to Pulsing on (index 2); PULSE_DIFF_SUM reads back 0."""
         if value:
-            await self.pulse_status.write(2)
+            await self.pulse_status.write("Pulsing on")
         return 0
 
     data_decim_a: PvpropertyInteger = pvproperty(
