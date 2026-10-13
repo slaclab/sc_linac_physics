@@ -66,6 +66,15 @@ DEFAULT_TIME_SPAN = "1 hour"
 # raises its own soft limit toward the hard limit at startup.
 OPEN_FILE_LIMIT = 4096
 
+# Section titles instead of framed boxes, quieter lists, roomier rows.
+PANEL_STYLE = """
+QGroupBox { border: none; margin-top: 18px; font-weight: bold; }
+QGroupBox::title { subcontrol-origin: margin; left: 2px; padding: 0; }
+QTreeWidget { border: 1px solid palette(mid); border-radius: 4px; }
+QTreeWidget::item { padding: 2px 0; }
+QLabel#hint { color: palette(dark); }
+"""
+
 CUSTOM_VIEW = "Custom"
 CRYO_VIEW = "Cryo signals"
 
@@ -178,6 +187,7 @@ class PlotterDisplay(Display):
 
     def _selection_panel(self) -> QWidget:
         panel = QWidget()
+        panel.setStyleSheet(PANEL_STYLE)
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         panel.setLayout(layout)
