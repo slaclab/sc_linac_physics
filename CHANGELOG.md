@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v9.41.8 (2026-10-13)
+
+### Bug Fixes
+
+- **utils**: Small bugs in cavity, logger and the EPICS wrapper
+  ([#350](https://github.com/slaclab/sc_linac_physics/pull/350),
+  [`93a824e`](https://github.com/slaclab/sc_linac_physics/commit/93a824ec58c9583caf27f9710b1b2fabcff08328))
+
+### Continuous Integration
+
+- Install HDF5 headers for the experimental Python test leg
+  ([#373](https://github.com/slaclab/sc_linac_physics/pull/373),
+  [`61923ac`](https://github.com/slaclab/sc_linac_physics/commit/61923acaeba2aeb350e0c9f3afe5bf62b10196c4))
+
+- Pass HDF5 packages to the release workflow's experimental leg
+  ([#373](https://github.com/slaclab/sc_linac_physics/pull/373),
+  [`61923ac`](https://github.com/slaclab/sc_linac_physics/commit/61923acaeba2aeb350e0c9f3afe5bf62b10196c4))
+
+### Documentation
+
+- **tuning**: Define SELA, the step budget and truncation in the auto-tune explainer
+  ([#357](https://github.com/slaclab/sc_linac_physics/pull/357),
+  [`da43bda`](https://github.com/slaclab/sc_linac_physics/commit/da43bda6fa015cf6ac0c5945b26ef10a3723cdc5))
+
+- **tuning**: Define SELA, the step budget and truncation in the auto-tune explainer
+  ([#357](https://github.com/slaclab/sc_linac_physics/pull/357),
+  [`73e0e0d`](https://github.com/slaclab/sc_linac_physics/commit/73e0e0dfbda52c5a680fd01d86465477e6b5938d))
+
+### Testing
+
+- **heatmap**: Make refetch-waits-for-abort test deterministic
+  ([#375](https://github.com/slaclab/sc_linac_physics/pull/375),
+  [`1705dbc`](https://github.com/slaclab/sc_linac_physics/commit/1705dbc9653cb9112464fecaebd2ed46f350df64))
+
+
 ## v9.41.7 (2026-10-12)
 
 ### Bug Fixes
