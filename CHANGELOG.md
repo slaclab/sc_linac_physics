@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.42.0 (2026-10-13)
+
+### Features
+
+- **rf-commissioning**: Record cavity char tolerance; out of range is not passed
+  ([#370](https://github.com/slaclab/sc_linac_physics/pull/370),
+  [`3882cc4`](https://github.com/slaclab/sc_linac_physics/commit/3882cc425dd8c795865df1a8d56c8f34a37e47e2))
+
+### Performance Improvements
+
+- **field-emission**: Fetch each run through the in-repo archiver client
+  ([#328](https://github.com/slaclab/sc_linac_physics/pull/328),
+  [`6f4b026`](https://github.com/slaclab/sc_linac_physics/commit/6f4b026bfd80108b208d17978a036c46fe585719))
+
+
 ## v9.41.8 (2026-10-13)
 
 ### Bug Fixes
