@@ -54,20 +54,30 @@ def align_pvs_to_common_time(series):
     return aligned
 
 
-def fetch_run(cm, start, end, decarad):
+def run_pvs(cm, decarad):
+    """Every PV fetch_run reads: 8 amplitudes, then 10 heads x 2 readouts."""
+    rad_pvs = [
+        pv
+        for readout in RAD_READ_TYPES
+        for pv in rad_readout_pvs(decarad, readout)
+    ]
+    return amplitude_pvs(cm) + rad_pvs
+
+
+def fetch_run(cm, start, end, decarad, fetch=None):
     """fetch one run, aligned per cavity and readout
 
     Returns {(cavity number, readout): DataFrame}, columns amplitude PV then
     the 10 decarad head PVs. Every cavity shares the decarad PVs, so each
     distinct PV is fetched once: 8 amplitudes + 10 heads x 2 readouts, 28
-    PVs, in parallel by get_series.
+    PVs, in parallel. fetch(pvs, start, end) returns {pv: Series} like
+    get_series; run_cache passes one that reads through ArchiverStore.
     """
     amp_pvs = amplitude_pvs(cm)
     rad_pvs = {
         readout: rad_readout_pvs(decarad, readout) for readout in RAD_READ_TYPES
     }
-    all_pvs = amp_pvs + [pv for pvs in rad_pvs.values() for pv in pvs]
-    fetched = get_series(all_pvs, start, end)
+    fetched = (fetch or get_series)(run_pvs(cm, decarad), start, end)
 
     frames = {}
     for readout in RAD_READ_TYPES:

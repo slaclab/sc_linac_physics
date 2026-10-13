@@ -2,10 +2,13 @@ from datetime import datetime
 from unittest.mock import patch
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from sc_linac_physics.applications.field_emission import run_cache
+from sc_linac_physics.applications.field_emission.amp_vs_radiation import (
+    fetch_run,
+    run_pvs,
+)
 from sc_linac_physics.applications.field_emission.constants import (
     RUN_LIST_PATH,
 )
@@ -16,8 +19,9 @@ from sc_linac_physics.applications.field_emission.run_cache import (
     is_cached,
     load_run,
     read_run_list,
-    run_path,
 )
+from sc_linac_physics.utils import archiver
+from sc_linac_physics.utils.archiver_store import ArchiverStore
 
 HEADER = (
     "Cryomodule,Start Date,Start Time,End Date,End Time,Decarad #,"
@@ -29,19 +33,6 @@ def _write_list(tmp_path, rows):
     path = tmp_path / "runs.csv"
     path.write_text(HEADER + "".join(row + "\n" for row in rows))
     return path
-
-
-def _frames():
-    columns = ["ACCL:L1B:0310:AACTMEAN"] + [
-        f"RADM:SYS0:100:{h:02d}:GAMMAAVE" for h in range(1, 11)
-    ]
-    return {
-        (cav, readout): pd.DataFrame(
-            np.arange(22, dtype=float).reshape(2, 11) + cav, columns=columns
-        )
-        for cav in (1, 2)
-        for readout in ("average", "instant")
-    }
 
 
 RUN = Run(
@@ -111,51 +102,73 @@ def test_find_run():
     assert find_run("04", RUN.start, [RUN]) is None
 
 
-def test_run_path_names_cm_and_start(tmp_path):
-    assert run_path(RUN, tmp_path) == tmp_path / "cm03_2023-10-02_0913.h5"
+def _samples(pv, start, end, timeout=None):
+    """A fake archiver: two valid samples per PV inside the window."""
+    value = float(sum(map(ord, pv)) % 97)
+    yield archiver._to_frame(
+        [
+            {"secs": int(start.timestamp()) + 60, "val": value},
+            {"secs": int(start.timestamp()) + 120, "val": value + 1},
+        ]
+    )
+
+
+@pytest.fixture
+def served():
+    with patch.object(
+        archiver, "iter_range_chunks", side_effect=_samples
+    ) as fetch:
+        yield fetch
+
+
+def test_run_pvs_are_every_amplitude_and_decarad_head_once():
+    pvs = run_pvs(RUN.cm, RUN.decarad)
+    assert len(pvs) == len(set(pvs)) == 8 + 10 * 2
 
 
 class TestLoadRun:
-    def test_fetches_once_then_reads_cache(self, tmp_path):
+    def test_first_load_fetches_each_pv_then_reads_disk(self, tmp_path, served):
+        store = ArchiverStore(tmp_path)
+        assert not is_cached(RUN, store)
+
+        first = load_run(RUN, store)
+        fetched = served.call_count
+        second = load_run(RUN, store)
+
+        assert fetched == 28 and served.call_count == 28
+        assert is_cached(RUN, store)
+        assert first.keys() == second.keys()
+        for key in first:
+            np.testing.assert_array_equal(first[key][0], second[key][0])
+
+    def test_data_is_fetch_runs_alignment_of_the_cached_samples(
+        self, tmp_path, served
+    ):
+        data = load_run(RUN, ArchiverStore(tmp_path))
+
+        def series(pvs, start, end):
+            return archiver.series_from_frames(
+                {pv: next(_samples(pv, start, end)) for pv in pvs}
+            )
+
+        expected = fetch_run(RUN.cm, RUN.start, RUN.end, RUN.decarad, series)
+        assert data.keys() == expected.keys()
+        for key, frame in expected.items():
+            values, columns = data[key]
+            np.testing.assert_array_equal(values, frame.to_numpy("float64"))
+            assert columns == [str(c) for c in frame.columns]
+
+    def test_failed_fetch_caches_nothing(self, tmp_path):
+        store = ArchiverStore(tmp_path)
         with patch.object(
-            run_cache, "fetch_run", return_value=_frames()
-        ) as fetch:
-            first = load_run(RUN, tmp_path)
-            second = load_run(RUN, tmp_path)
-
-        fetch.assert_called_once_with("03", RUN.start, RUN.end, RUN.decarad)
-        assert is_cached(RUN, tmp_path)
-        assert first.keys() == second.keys() == _frames().keys()
-
-    def test_round_trip_keeps_values_and_columns(self, tmp_path):
-        frames = _frames()
-        with patch.object(run_cache, "fetch_run", return_value=frames):
-            data = load_run(RUN, tmp_path)
-
-        values, columns = data[2, "instant"]
-        np.testing.assert_array_equal(values, frames[2, "instant"].to_numpy())
-        assert columns == list(frames[2, "instant"].columns)
-
-    def test_failed_fetch_leaves_nothing(self, tmp_path):
-        with patch.object(
-            run_cache, "fetch_run", side_effect=RuntimeError("archiver down")
+            archiver,
+            "iter_range_chunks",
+            side_effect=archiver.ArchiverTimeoutError("down"),
         ):
-            with pytest.raises(RuntimeError):
-                load_run(RUN, tmp_path)
-        assert list(tmp_path.iterdir()) == []
-
-    def test_failed_write_leaves_no_temp_file(self, tmp_path):
-        bad = {(1, "average"): object()}  # no to_numpy: write fails
-        with patch.object(run_cache, "fetch_run", return_value=bad):
-            with pytest.raises(AttributeError):
-                load_run(RUN, tmp_path)
-        assert list(tmp_path.iterdir()) == []
-
-    def test_creates_cache_dir(self, tmp_path):
-        cache = tmp_path / "srf" / "field_emission" / "runs"
-        with patch.object(run_cache, "fetch_run", return_value=_frames()):
-            load_run(RUN, cache)
-        assert is_cached(RUN, cache)
+            with pytest.raises(archiver.ArchiverTimeoutError):
+                load_run(RUN, store)
+        assert not is_cached(RUN, store)
+        assert not list(tmp_path.rglob("*.parquet"))
 
 
 class TestAddedRuns:
@@ -203,25 +216,33 @@ class TestFillCache:
             Run(**{**vars(RUN), "cm": "04"}),
         ]
 
-    def test_fetches_only_missing_runs_with_progress(self, tmp_path):
+    def test_fetches_only_missing_runs_with_progress(self, tmp_path, served):
+        store = ArchiverStore(tmp_path)
         runs = self._runs()
-        with patch.object(run_cache, "fetch_run", return_value=_frames()):
-            load_run(runs[0], tmp_path)
-            calls = []
-            with patch.object(
-                run_cache, "load_run", wraps=run_cache.load_run
-            ) as load:
-                fetched = run_cache.fill_cache(
-                    runs, lambda *a: calls.append(a), tmp_path
-                )
+        load_run(runs[0], store)
+        calls = []
+        with patch.object(
+            run_cache, "load_run", wraps=run_cache.load_run
+        ) as load:
+            fetched = run_cache.fill_cache(
+                runs, lambda *a: calls.append(a), store
+            )
         assert fetched == 1
-        load.assert_called_once_with(runs[1], tmp_path)
+        load.assert_called_once_with(runs[1], store)
         assert calls == [(0, 1, runs[1])]
+        assert all(is_cached(run, store) for run in runs)
 
     def test_stops_at_first_failure(self, tmp_path):
         with patch.object(
-            run_cache, "fetch_run", side_effect=ConnectionError("down")
+            archiver,
+            "iter_range_chunks",
+            side_effect=archiver.ArchiverTimeoutError("down"),
         ) as fetch:
-            with pytest.raises(ConnectionError):
-                run_cache.fill_cache(self._runs(), cache_dir=tmp_path)
-        assert fetch.call_count == 1
+            with pytest.raises(archiver.ArchiverTimeoutError):
+                run_cache.fill_cache(
+                    self._runs(), store=ArchiverStore(tmp_path)
+                )
+        # The first run's PVs are all tried (in parallel); the second run's
+        # are never asked for.
+        asked = {c.args[0] for c in fetch.call_args_list}
+        assert asked == set(run_pvs(RUN.cm, RUN.decarad))
