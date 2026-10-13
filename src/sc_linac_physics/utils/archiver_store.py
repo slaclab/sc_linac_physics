@@ -23,7 +23,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 from urllib.parse import quote
 
 import pandas as pd
@@ -134,8 +134,71 @@ class ArchiverStore:
         if missing:
             raise archiver.PVNotArchivedError(missing)
 
+    def read_window(
+        self, pv: str, start: datetime, end: datetime
+    ) -> pd.DataFrame:
+        """The PV's samples from start to end, caching this exact window.
+
+        For a short window read again and again, such as a field emission
+        run: reading it through months would fetch every month it touches.
+        If those months are all cached already, they are used. Otherwise
+        the window is fetched alone, and written once it ended more than
+        SETTLE ago. Returns what read would.
+        """
+        start = archiver._aware(start).astimezone(timezone.utc)
+        end = archiver._aware(end).astimezone(timezone.utc)
+        if all(self.path(pv, m).exists() for m, _ in _months(start, end)):
+            return self.read(pv, start, end)
+        frame = self._cached(self.window_path(pv, start, end), pv, start, end)
+        return _with_valid(frame)
+
+    def read_windows(
+        self,
+        pvs: Iterable[str],
+        start: datetime,
+        end: datetime,
+        max_workers: int = archiver.MAX_WORKERS,
+    ) -> Dict[str, pd.DataFrame]:
+        """read_window for each PV, up to max_workers at once.
+
+        Raises archiver.PVNotArchivedError naming every unknown PV once all
+        finish.
+        """
+        pvs = list(pvs)
+
+        def read_one(pv: str) -> Optional[pd.DataFrame]:
+            try:
+                return self.read_window(pv, start, end)
+            except archiver.PVNotArchivedError:
+                return None
+
+        frames = dict(
+            zip(
+                pvs, archiver._map_in_daemon_threads(read_one, pvs, max_workers)
+            )
+        )
+        missing = [pv for pv, frame in frames.items() if frame is None]
+        if missing:
+            raise archiver.PVNotArchivedError(missing)
+        return frames
+
+    def has_window(self, pv: str, start: datetime, end: datetime) -> bool:
+        """Whether read_window can answer from disk alone."""
+        start = archiver._aware(start).astimezone(timezone.utc)
+        end = archiver._aware(end).astimezone(timezone.utc)
+        months = _months(start, end)
+        return all(self.path(pv, m).exists() for m, _ in months) or (
+            self.window_path(pv, start, end).exists()
+        )
+
     def path(self, pv: str, month_start: datetime) -> Path:
         return self.root / quote(pv, safe=":") / f"{month_start:%Y-%m}.parquet"
+
+    def window_path(self, pv: str, start: datetime, end: datetime) -> Path:
+        """<root>/<pv>/windows/<start>_<end>.parquet, times in UTC."""
+        fmt = "%Y%m%dT%H%M%S.%fZ"
+        name = f"{start.astimezone(timezone.utc):{fmt}}_{end.astimezone(timezone.utc):{fmt}}"
+        return self.root / quote(pv, safe=":") / "windows" / f"{name}.parquet"
 
     def _month(
         self,
@@ -151,16 +214,28 @@ class ArchiverStore:
         and not written. If the cache can't be written (no permission, disk
         full), the month is fetched without it: the cache only saves time.
         """
-        path = self.path(pv, month_start)
-        if path.exists():
-            return pq.read_table(path).to_pandas()
         if not _settled(month_end):
             lo, hi = max(month_start, start), min(month_end, end)
             return _join(archiver.iter_range_chunks(pv, lo, hi))
+        return self._cached(
+            self.path(pv, month_start), pv, month_start, month_end
+        )
+
+    def _cached(
+        self, path: Path, pv: str, start: datetime, end: datetime
+    ) -> pd.DataFrame:
+        """start..end from path, fetching and writing it first if needed.
+
+        Written only once end is SETTLE ago. If the cache can't be written
+        (no permission, disk full), it is fetched without it: the cache
+        only saves time.
+        """
+        if path.exists():
+            return pq.read_table(path).to_pandas()
+        if not _settled(end):
+            return _join(archiver.iter_range_chunks(pv, start, end))
         try:
-            _write_atomically(
-                path, archiver.iter_range_chunks(pv, month_start, month_end)
-            )
+            _write_atomically(path, archiver.iter_range_chunks(pv, start, end))
         except OSError as e:
             logger.warning(
                 "archiver cache: cannot write %s (%s); fetching %s without it",
@@ -168,7 +243,7 @@ class ArchiverStore:
                 e,
                 pv,
             )
-            return _join(archiver.iter_range_chunks(pv, month_start, month_end))
+            return _join(archiver.iter_range_chunks(pv, start, end))
         return pq.read_table(path).to_pandas()
 
 

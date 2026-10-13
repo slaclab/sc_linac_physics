@@ -240,3 +240,91 @@ def test_cached_month_reads_back_identical_frame(store):
         cached = store.read("A:PV", JAN, FEB)
 
     pd.testing.assert_frame_equal(fetched, cached)
+
+
+RUN_START = JAN + timedelta(days=9, hours=13)
+RUN_END = RUN_START + timedelta(minutes=20)
+HOUR_ = timedelta(hours=1)
+
+
+def test_window_is_fetched_alone_and_cached(store):
+    fake, served = _serve({"A:PV": [(RUN_START + timedelta(minutes=5), 1.0)]})
+    with served:
+        first = store.read_window("A:PV", RUN_START, RUN_END)
+        second = store.read_window("A:PV", RUN_START, RUN_END)
+
+    assert [(c[1], c[2]) for c in fake.calls] == [(RUN_START, RUN_END)]
+    assert store.window_path("A:PV", RUN_START, RUN_END).exists()
+    assert not store.path("A:PV", JAN).exists()
+    pd.testing.assert_frame_equal(first, second)
+    assert list(first.columns) == archiver.COLUMNS
+
+
+def test_window_inside_cached_months_reads_the_months(store):
+    fake, served = _serve({"A:PV": [(RUN_START + timedelta(minutes=5), 1.0)]})
+    with served:
+        store.read("A:PV", JAN, FEB)
+        frame = store.read_window("A:PV", RUN_START, RUN_END)
+
+    assert len(fake.calls) == 1  # only the month
+    assert not store.window_path("A:PV", RUN_START, RUN_END).exists()
+    assert _values(frame) == [1.0]
+
+
+def test_recent_window_is_not_written(store):
+    end = datetime.now(UTC)
+    start = end - timedelta(minutes=20)
+    fake, served = _serve({"A:PV": []})
+    with served:
+        store.read_window("A:PV", start, end)
+        store.read_window("A:PV", start, end)
+
+    assert len(fake.calls) == 2
+    assert not store.window_path("A:PV", start, end).exists()
+
+
+def test_has_window(store):
+    fake, served = _serve({"A:PV": [], "B:PV": []})
+    with served:
+        store.read_window("A:PV", RUN_START, RUN_END)
+        store.read("B:PV", JAN, FEB)
+
+    assert store.has_window("A:PV", RUN_START, RUN_END)
+    assert store.has_window("B:PV", RUN_START, RUN_END)
+    assert not store.has_window("A:PV", RUN_START, RUN_END + HOUR_)
+
+
+def test_read_windows_reads_each_pv_and_names_unknown_ones(store):
+    fake, served = _serve(
+        {"A:PV": [(RUN_START, 1.0)], "B:PV": [(RUN_START, 2.0)]}
+    )
+    with served:
+        frames = store.read_windows(["A:PV", "B:PV"], RUN_START, RUN_END)
+        with pytest.raises(PVNotArchivedError) as excinfo:
+            store.read_windows(["A:PV", "C:PV"], RUN_START, RUN_END)
+
+    assert {pv: _values(f) for pv, f in frames.items()} == {
+        "A:PV": [1.0],
+        "B:PV": [2.0],
+    }
+    assert excinfo.value.pvs == ["C:PV"]
+
+
+def test_window_path_is_named_by_its_utc_times(store):
+    path = store.window_path("A:PV", RUN_START, RUN_END)
+
+    assert path.parent == store.root / "A:PV" / "windows"
+    assert path.name == (
+        "20240110T130000.000000Z_20240110T132000.000000Z.parquet"
+    )
+
+
+def test_unwritable_cache_still_returns_the_window(tmp_path):
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("")
+    store = ArchiverStore(blocker)
+    fake, served = _serve({"A:PV": [(RUN_START + timedelta(minutes=1), 1.0)]})
+    with served:
+        frame = store.read_window("A:PV", RUN_START, RUN_END)
+
+    assert _values(frame) == [1.0]

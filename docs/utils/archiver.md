@@ -82,6 +82,13 @@ frame = store.read("ACCL:L2B:0410:AACTMEAN", datetime(2025, 3, 1), datetime(2025
   with the last sample before `start`.
 - Size and speed, measured 2026-10-12 on a 1 Hz PV: 32 MB per month on disk.
   Five weeks read from the cache in 0.1 s, against 35 s from the archiver.
+- For a short window read again and again, such as a field emission run, use
+  `read_window(pv, start, end)` or `read_windows(pvs, start, end)`. Reading a
+  20-minute run through months would fetch every month it touches. This
+  caches the exact window as `<root>/<pv>/windows/<start>_<end>.parquet`, or
+  uses the months if they are cached already. `has_window` says whether a
+  read would come from disk alone. A 23-minute run of 9 PVs: 12.3 s cold,
+  0.01 s cached.
 - `iter_months` holds one month in memory at a time: about 100 MB at 1 Hz,
   about 860 MB at 10 Hz.
 
