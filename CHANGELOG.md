@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v9.42.3 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve magnet CTRL, STATE and INTLKSUMY as the real enums
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve the magnet PVs the model names
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+
 ## v9.42.2 (2026-10-13)
 
 ### Bug Fixes
