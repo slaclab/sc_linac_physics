@@ -1,4 +1,8 @@
+import os
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,8 +22,9 @@ START = datetime(2023, 10, 2, 9, 13)  # naive: read as Pacific (PDT, -07:00)
 END = datetime(2023, 10, 2, 10, 0)
 
 
-def _response(status=200, payload=None):
+def _response(status=200, payload=None, nbytes=0):
     response = MagicMock()
+    response.content = b"x" * nbytes
     response.status_code = status
     response.ok = status < 400
     response.json.return_value = payload
@@ -332,7 +337,7 @@ def test_aware_time_during_dst_change_is_accepted(session):
     get_values_over_time_range(["A:PV"], first_0130, datetime(2024, 11, 4))
 
     assert (
-        session.request.call_args.kwargs["params"]["from"]
+        session.request.call_args_list[0].kwargs["params"]["from"]
         == "2024-11-03T08:30:00.000000Z"
     )
 
@@ -361,3 +366,373 @@ def test_timestamp_in_fall_back_hour_keeps_pst():
 
     assert stamp.utcoffset() == timedelta(hours=-8)
     assert stamp.timestamp() == secs + 0.0005
+
+
+# ---------------------------------------------------------------------------
+# Daemon threads
+# ---------------------------------------------------------------------------
+# A request that never answers. The fetch runs on a daemon thread, as the
+# displays run it; the main thread then returns, so the interpreter should exit.
+_STUCK_FETCH = """
+import threading
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+from sc_linac_physics.utils import archiver
+
+started = threading.Event()
+
+
+def stuck(*args, **kwargs):
+    started.set()
+    threading.Event().wait()
+
+
+session = MagicMock()
+session.request.side_effect = stuck
+with patch.object(archiver, "_session", return_value=session):
+    threading.Thread(
+        target=archiver.get_values_over_time_range,
+        args=(["A:PV"], datetime(2023, 10, 2, 9), datetime(2023, 10, 2, 10)),
+        daemon=True,
+    ).start()
+    assert started.wait(10)
+"""
+
+
+def test_stuck_request_does_not_block_exit():
+    src = Path(archiver.__file__).parents[2]
+    env = {**os.environ, "PYTHONPATH": str(src)}
+
+    # Import time is most of this; the old pool hung here until killed.
+    result = subprocess.run(
+        [sys.executable, "-c", _STUCK_FETCH],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_errors_raise_in_pv_order_after_every_request(session):
+    def respond(method, url, timeout, params):
+        if params["pv"] == "GOOD:PV":
+            return _response(payload=[])
+        raise requests.exceptions.ConnectionError()
+
+    session.request.side_effect = respond
+
+    with pytest.raises(ArchiverConnectionError, match="^BAD:A: "):
+        get_values_over_time_range(["BAD:A", "GOOD:PV", "BAD:B"], START, END)
+
+    assert session.request.call_count == 1 + 2 * archiver.MAX_RETRIES
+
+
+def test_results_keep_pv_order(session):
+    pvs = [f"PV:{i}" for i in range(20)]
+    session.request.return_value = _response(payload=[])
+
+    frames = get_values_over_time_range(pvs, START, END, max_workers=3)
+
+    assert list(frames) == pvs
+
+
+def test_no_workers_is_refused(session):
+    with pytest.raises(ValueError):
+        get_values_over_time_range(["A:PV"], START, END, max_workers=0)
+
+
+HOUR = timedelta(hours=1)
+UTC_START = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+
+def _counts(*per_hour, start=UTC_START):
+    """count_3600 bins, timestamped at each hour's midpoint like the archiver."""
+    base = int(start.timestamp())
+    return [_datum(base + 3600 * i + 1800, n) for i, n in enumerate(per_hour)]
+
+
+class TestChunkedRange:
+    """Long windows are fetched in planned chunks and stitched back together."""
+
+    LONG_END = START + 3 * HOUR
+
+    @pytest.fixture
+    def three_chunks(self):
+        bounds = [START + i * HOUR for i in range(4)]
+        with patch.object(archiver, "_plan_chunks", return_value=bounds):
+            yield
+
+    @staticmethod
+    def _sent_pvs(session):
+        return [
+            c.kwargs["params"]["pv"] for c in session.request.call_args_list
+        ]
+
+    def test_short_window_is_one_request_without_counting(self, session):
+        session.request.return_value = _response(payload=[{"data": []}])
+
+        get_values_over_time_range(["A:PV"], START, START + HOUR)
+
+        assert self._sent_pvs(session) == ["A:PV"]
+
+    def test_long_window_counts_first(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": _counts(5, 5, 5)}]),
+            _response(payload=[{"data": [_datum(100, 1.0)]}]),
+        ]
+
+        get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+        assert self._sent_pvs(session) == ["count_3600(A:PV)", "A:PV"]
+
+    def test_counts_are_asked_for_a_window_at_a_time(self, session):
+        session.request.return_value = _response(payload=[{"data": _counts(1)}])
+        end = START + 2 * archiver.COUNT_WINDOW + HOUR
+
+        get_values_over_time_range(["A:PV"], START, end)
+
+        counted = [p for p in self._sent_pvs(session) if p.startswith("count")]
+        assert len(counted) == 3
+
+    def test_quiet_string_pv_is_one_request_after_its_total(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(0, 3)]}]),
+            _response(payload=[{"data": [_datum(100, "1")]}]),
+        ]
+
+        frame = get_values_over_time_range(["A:PV"], START, self.LONG_END)[
+            "A:PV"
+        ]
+
+        assert self._sent_pvs(session) == [
+            "count_3600(A:PV)",
+            "ncount(A:PV)",
+            "A:PV",
+        ]
+        assert list(frame["value"]) == ["1"]
+
+    def test_busy_string_pv_is_halved_until_each_part_fits(self, session):
+        limit = archiver.CHUNK_SAMPLES
+        totals = {  # (from, to) -> ncount: the first half is still too big
+            (START, self.LONG_END): 3 * limit,
+            (START, START + 1.5 * HOUR): 2 * limit,
+            (START + 1.5 * HOUR, self.LONG_END): limit,
+            (START, START + 0.75 * HOUR): limit,
+            (START + 0.75 * HOUR, START + 1.5 * HOUR): limit,
+        }
+        by_window = {
+            (archiver._to_utc_iso(a), archiver._to_utc_iso(b)): n
+            for (a, b), n in totals.items()
+        }
+
+        def reply(method, url, timeout, params):
+            pv, window = params["pv"], (params["from"], params["to"])
+            if pv.startswith("ncount"):
+                return _response(
+                    payload=[{"data": [_datum(0, by_window[window])]}]
+                )
+            return _response(payload=[{"data": []}])
+
+        session.request.side_effect = reply
+
+        get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+        data = [
+            c.kwargs["params"]["from"]
+            for c in session.request.call_args_list
+            if c.kwargs["params"]["pv"] == "A:PV"
+        ]
+        assert data == [
+            archiver._to_utc_iso(t)
+            for t in (START, START + 0.75 * HOUR, START + 1.5 * HOUR)
+        ]
+
+    def test_counts_found_only_in_a_later_window_still_plan_chunks(
+        self, session
+    ):
+        later = START + archiver.COUNT_WINDOW
+        busy = [archiver.CHUNK_SAMPLES] * 2
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(0, 0)]}]),  # its ncount
+            _response(payload=[{"data": _counts(*busy, start=later)}]),
+        ] + [_response(payload=[{"data": []}])] * 4
+        end = later + 2 * HOUR
+
+        get_values_over_time_range(["A:PV"], START, end)
+
+        data = [p for p in self._sent_pvs(session) if p == "A:PV"]
+        assert len(data) > 1
+
+    def test_404_while_halving_is_not_archived(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(
+                payload=[{"data": [_datum(0, 2 * archiver.CHUNK_SAMPLES)]}]
+            ),
+            _response(status=404),
+        ]
+
+        with pytest.raises(PVNotArchivedError):
+            get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+    def test_404_on_the_second_half_is_not_archived(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(
+                payload=[{"data": [_datum(0, 2 * archiver.CHUNK_SAMPLES)]}]
+            ),
+            _response(payload=[{"data": [_datum(0, 1)]}]),
+            _response(status=404),
+        ]
+
+        with pytest.raises(PVNotArchivedError):
+            get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+    def test_pv_unknown_when_counting_is_not_archived(self, session):
+        session.request.return_value = _response(status=404)
+
+        with pytest.raises(PVNotArchivedError):
+            get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+        assert session.request.call_count == 1
+
+    def test_samples_repeated_across_a_boundary_are_kept_once(
+        self, session, three_chunks
+    ):
+        # Each window can repeat the sample before its start; the one on the
+        # boundary (secs=200) comes back in both windows around it.
+        chunks = [
+            [_datum(50, 0.0), _datum(100, 1.0), _datum(200, 2.0)],
+            [_datum(200, 2.0), _datum(300, 3.0)],
+            [_datum(300, 3.0), _datum(400, 4.0, nanos=5)],
+        ]
+        session.request.side_effect = [
+            _response(payload=[{"data": c}]) for c in chunks
+        ]
+
+        frame = get_values_over_time_range(["A:PV"], START, self.LONG_END)[
+            "A:PV"
+        ]
+
+        assert list(frame["value"]) == [0.0, 1.0, 2.0, 3.0, 4.0]
+
+    def test_empty_first_chunk_keeps_timestamp_dtype(
+        self, session, three_chunks
+    ):
+        session.request.side_effect = [
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(100, 1.0)]}]),
+            _response(payload=[{"data": [_datum(200, 2.0)]}]),
+        ]
+
+        frame = get_values_over_time_range(["A:PV"], START, self.LONG_END)[
+            "A:PV"
+        ]
+
+        assert str(frame["timestamp"].dtype).startswith("datetime64")
+        assert list(frame["value"]) == [1.0, 2.0]
+
+    def test_404_on_a_later_chunk_names_the_pv(self, session, three_chunks):
+        session.request.side_effect = [
+            _response(payload=[{"data": [_datum(100, 1.0)]}]),
+            _response(status=404),
+        ]
+
+        with pytest.raises(PVNotArchivedError) as excinfo:
+            get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
+        assert "A:PV" in str(excinfo.value)
+
+
+class TestIterRangeChunks:
+    @pytest.fixture(autouse=True)
+    def three_chunks(self):
+        bounds = [START + i * HOUR for i in range(4)]
+        with patch.object(archiver, "_plan_chunks", return_value=bounds):
+            yield
+
+    def test_yields_one_frame_per_nonempty_chunk_lazily(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": [_datum(100, 1.0)]}]),
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(300, 3.0)]}]),
+        ]
+
+        chunks = archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR)
+        first = next(chunks)
+
+        assert session.request.call_count == 1
+        assert list(first["value"]) == [1.0]
+        assert [list(c["value"]) for c in chunks] == [[3.0]]
+
+    def test_not_archived_raises_naming_the_pv(self, session):
+        session.request.return_value = _response(status=404)
+
+        with pytest.raises(PVNotArchivedError) as excinfo:
+            list(archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR))
+
+        assert excinfo.value.pvs == ["A:PV"]
+
+    def test_other_errors_name_the_pv(self, session):
+        session.request.return_value = _response(status=400)
+
+        with pytest.raises(ArchiverError, match="A:PV"):
+            list(archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR))
+
+
+class TestGroupBins:
+    LIMIT = archiver.CHUNK_SAMPLES
+
+    @staticmethod
+    def _plan(hours, *per_hour, start=UTC_START):
+        counts = {
+            archiver._bin_start(d["secs"]): d["val"]
+            for d in _counts(*per_hour, start=start)
+        }
+        return archiver._group_bins(start, start + hours * HOUR, counts)
+
+    def test_quiet_window_is_one_chunk(self):
+        assert self._plan(24 * 365, 3, 0, 1) == [
+            UTC_START,
+            UTC_START + 24 * 365 * HOUR,
+        ]
+
+    def test_chunks_cut_at_hour_edges_under_the_limit(self):
+        half = self.LIMIT // 2
+        bounds = self._plan(4, half, half, half, half)
+
+        assert bounds == [UTC_START, UTC_START + 2 * HOUR, UTC_START + 4 * HOUR]
+
+    def test_hour_over_the_limit_is_split_evenly(self):
+        bounds = self._plan(1, 3 * self.LIMIT)
+
+        assert bounds == [UTC_START + i * HOUR / 3 for i in range(4)]
+
+    def test_window_starting_mid_hour_starts_at_start(self):
+        start = UTC_START + HOUR / 2
+        counts = {archiver._bin_start(start.timestamp()): 2 * self.LIMIT}
+
+        bounds = archiver._group_bins(start, start + HOUR / 2, counts)
+
+        assert bounds[0] == start
+        assert bounds[-1] == start + HOUR / 2
+
+    def test_bounds_across_fall_back_are_an_hour_apart(self, session):
+        # A Pacific datetime plus a timedelta is wall-clock time; chunking in
+        # UTC keeps every planned hour exactly an hour long.
+        first_0130 = datetime(2024, 11, 3, 1, 30, tzinfo=archiver.LOCAL_TZ)
+        start = first_0130.astimezone(timezone.utc)
+        counts = {
+            archiver._bin_start(start.timestamp()) + 3600 * i: self.LIMIT
+            for i in range(4)
+        }
+
+        bounds = archiver._group_bins(start, start + 3 * HOUR, counts)
+
+        assert all(b - a <= HOUR for a, b in zip(bounds, bounds[1:]))
+        assert bounds[-1] - bounds[0] == 3 * HOUR

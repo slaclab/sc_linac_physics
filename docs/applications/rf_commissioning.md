@@ -2,6 +2,8 @@
 
 `applications/rf_commissioning/` implements the acceptance workflow for newly-installed or returned cavities. It enforces an ordered, phase-gated process with persistent records, phase-attempt history, artifacts, and operator audit data in SQLite.
 
+For how the auto-tune loop converges, its guards, and how it fails, see the explainer: [How auto-tune works](../explainers/auto_tune.md).
+
 Related in-source architecture docs:
 - `src/sc_linac_physics/applications/rf_commissioning/ARCHITECTURE.md`
 - `src/sc_linac_physics/applications/rf_commissioning/PHASE_WORKFLOW.md`

@@ -2,9 +2,6 @@ import json
 from unittest.mock import Mock, patch
 
 import pytest
-from PyQt5.QtWidgets import (
-    QApplication,
-)
 
 
 # Mock the dependencies that might not be available in test environment
@@ -61,16 +58,6 @@ def mock_dependencies():
             "enum_label": mock_enum,
             "fault_button": mock_fault_btn,
         }
-
-
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication for testing."""
-    if not QApplication.instance():
-        app = QApplication([])
-    else:
-        app = QApplication.instance()
-    yield app
 
 
 @pytest.fixture

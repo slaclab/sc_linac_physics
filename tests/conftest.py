@@ -2,12 +2,13 @@ import builtins
 import logging
 import logging.handlers
 import os
+import re
 import socket
 import subprocess
 import sys
 import tempfile
 from io import StringIO
-from pathlib import Path
+from pathlib import Path, PurePath
 from unittest.mock import MagicMock, patch, Mock
 
 import pyqtgraph as pg
@@ -29,9 +30,21 @@ _original_path_mkdir = Path.mkdir
 _original_path_open = Path.open
 
 
+# Matched by path component and suffix, not substring. A substring match on
+# "log" also caught "dialog", "catalog" and "logic", so pytest read those test
+# files through the mock below, got "", and collected 0 tests without error.
+# "logfiles" is the directory name from `get_log_base_dir()`; `.log` and
+# `.jsonl` are the files `custom_logger()` writes, plus rotated `.1`, `.2`, ...
+_LOG_DIR_NAMES = frozenset({"logfiles"})
+_LOG_FILE_RE = re.compile(r"\.(log|jsonl)(\.\d+)?$")
+
+
 def _is_log_path(path_str):
-    """Check if path is related to logging."""
-    return "log" in path_str.lower() or path_str.endswith(".log")
+    """True for paths under a log directory or naming a log file."""
+    path = PurePath(path_str)
+    if _LOG_DIR_NAMES.intersection(path.parts):
+        return True
+    return bool(_LOG_FILE_RE.search(path.name))
 
 
 def _is_physics_path(path_str):
@@ -232,7 +245,8 @@ def block_network(request):
 def pytest_configure(config):
     """
     Pytest hook that runs before test collection.
-    Sets up environment and mocks before any imports.
+    Sets up environment and registers markers. The fake EPICS module is
+    installed earlier, at import of this file; see _setup_fake_epics().
     """
     # Disable PyDM plugins and configure Qt
     os.environ.setdefault("PYDM_DATA_PLUGINS_DISABLED", "1")
@@ -244,9 +258,6 @@ def pytest_configure(config):
         "markers",
         "allow_network: permit outbound network access for this test",
     )
-
-    # Inject fake EPICS module
-    _setup_fake_epics()
 
 
 def pytest_unconfigure(config):
@@ -386,6 +397,16 @@ class FakeCASeverityException(Exception):
 def fake_with_initial_context(func):
     """Fake decorator for withInitialContext."""
     return func
+
+
+# Installed at import, not in pytest_configure. When a test directory is passed
+# on the command line, pytest imports that directory's conftest before
+# pytest_configure runs. tests/applications/auto_setup/conftest.py imports
+# gui_cavity, which pulls in real epics, so utils.epics.core.PV subclassed the
+# real epics.pv.PV. Swapping sys.modules["epics"] afterwards left real epics.ca
+# unable to import epics.clibs, and every PV a test had not mocked raised
+# ChannelAccessException. pytest always imports this file first.
+_setup_fake_epics()
 
 
 # ============================================================================

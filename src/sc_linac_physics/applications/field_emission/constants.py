@@ -9,10 +9,9 @@ _DATA_DIR = Path(__file__).resolve().parent
 CSV_OUTPUT_DIR = _DATA_DIR
 H5_PATH = _DATA_DIR / "field_emission_data.hdf5"
 
-# Runs known to git. The data for each is fetched from the archiver and kept,
-# one file per run, in a shared directory outside the package.
+# Runs known to git. The data for each is read through the shared archiver
+# cache (utils/archiver_store.py), outside the package.
 RUN_LIST_PATH = _DATA_DIR / "field_emission_runs.csv"
-RUN_CACHE_DIR = get_field_emission_dir() / "runs"
 # Runs operators add from the display, same columns as RUN_LIST_PATH
 ADDED_RUNS_PATH = get_field_emission_dir() / "added_runs.csv"
 
@@ -36,7 +35,6 @@ RAD_READ_TYPES = ["average", "instant"]
 
 # Date Formatting
 CSV_DATE_FORMAT = "%y_%m_%d_%H_%M"
-H5_DATE_FORMAT = "%Y-%m-%d_%H%M"
 DISPLAY_DATE_FORMAT = "%A, %B %d, %Y"
 STANDARD_DATE_FORMAT = "%m/%d/%y %H:%M"
 
