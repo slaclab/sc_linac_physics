@@ -6,6 +6,7 @@ cryomodule in a linac. The old displays stay available as
 """
 
 import resource
+from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from PyQt5.QtCore import Qt
@@ -43,6 +44,7 @@ from sc_linac_physics.displays.plot.utils import (
     PVGroup,
     get_pvs_all_groupings,
 )
+from sc_linac_physics.utils.sc_linac.decarad import Decarad
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 # Above CONFIRM_ABOVE curves the operator is asked first; MAX_CURVES is a hard
@@ -82,10 +84,15 @@ def axis_for(attribute: str) -> str:
     return attribute
 
 
-def curves_for(group: PVGroup, keys: Iterable[PVKey]) -> List[Curve]:
-    """Curves for every PV under `keys`, labeled by PV name."""
+def curves_for(
+    group: PVGroup,
+    keys: Iterable[PVKey],
+    labels: Optional[Dict[str, str]] = None,
+) -> List[Curve]:
+    """Curves for every PV under `keys`, labeled from `labels` or by PV."""
+    labels = labels or {}
     return [
-        Curve(pv=pv, label=pv, axis=axis_for(attribute))
+        Curve(pv=pv, label=labels.get(pv, pv), axis=axis_for(attribute))
         for source, attribute in keys
         for pv in group[(source, attribute)]
     ]
@@ -100,6 +107,52 @@ def raise_open_file_limit(wanted: int = OPEN_FILE_LIMIT) -> None:
         resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
 
 
+@dataclass
+class DecaradPVs:
+    """Dose-rate PVs for one decarad or one head, with curve labels.
+
+    Heads are labeled by number only. Decarads are wheeled between
+    cryomodules, so no head maps to a fixed cavity.
+    """
+
+    pvs: PVGroup
+    labels: Dict[str, str] = field(default_factory=dict)
+
+
+def decarad_entries(
+    decarads: Iterable[Decarad],
+) -> List[Tuple[str, DecaradPVs]]:
+    """Picker entries: each decarad with all 10 heads, then each head."""
+    entries = []
+    for decarad in decarads:
+        heads = list(decarad.heads.values())
+        entries.append((f"Decarad {decarad.number}", _decarad_pvs(heads)))
+        entries.extend(
+            (
+                f"Decarad {decarad.number} head {head.number}",
+                _decarad_pvs([head]),
+            )
+            for head in heads
+        )
+    return entries
+
+
+def _decarad_pvs(heads) -> DecaradPVs:
+    group = PVGroup()
+    labels = {}
+    for attribute, kind in (
+        ("avg_dose_rate_pv", "avg"),
+        ("raw_dose_rate_pv", "raw"),
+    ):
+        pvs = [getattr(head, attribute) for head in heads]
+        group.pvs[("DecaradHead", attribute)] = pvs
+        for head, pv in zip(heads, pvs):
+            labels[pv] = (
+                f"Decarad {head.decarad.number} head {head.number} {kind}"
+            )
+    return DecaradPVs(pvs=group, labels=labels)
+
+
 class PlotterDisplay(Display):
     INITIAL_VIEW = CUSTOM_VIEW
 
@@ -109,6 +162,8 @@ class PlotterDisplay(Display):
         self.setWindowTitle("SC Linac Plotter")
         self.machine = Machine()
         self.pv_groups = get_pvs_all_groupings(self.machine)
+        # Not part of Machine: two units moved between cryomodules.
+        self.decarads = [Decarad(1), Decarad(2)]
 
         self.plot = ArchiverPlot()
         self.plot.set_time_span(TIME_SPANS[DEFAULT_TIME_SPAN])
@@ -205,7 +260,7 @@ class PlotterDisplay(Display):
         pick.setLayout(pick_layout)
         self.level_combo = QComboBox()
         self.level_combo.addItems(
-            ["Machine", "Linac", "Cryomodule", "Rack", "Cavity"]
+            ["Machine", "Linac", "Cryomodule", "Rack", "Cavity", "Decarad"]
         )
         self.level_combo.currentTextChanged.connect(self._on_level_changed)
         self.object_combo = QComboBox()
@@ -281,6 +336,8 @@ class PlotterDisplay(Display):
                 (f"CM{name}", groups.cryomodules[name])
                 for name in sorted(groups.cryomodules)
             ]
+        elif level == "Decarad":
+            entries = decarad_entries(self.decarads)
         elif level == "Rack":
             entries = [
                 (f"CM{cm} rack {rack}", groups.racks[(cm, rack)])
@@ -330,7 +387,9 @@ class PlotterDisplay(Display):
             item.data(Qt.UserRole)
             for item in self.attribute_list.selectedItems()
         ]
-        self.add_curves(curves_for(self._current_group(), keys))
+        holder = self.object_combo.currentData()
+        labels = getattr(holder, "labels", None)
+        self.add_curves(curves_for(self._current_group(), keys, labels))
 
     def add_typed_pv(self) -> None:
         pv = self.pv_edit.text().strip()
