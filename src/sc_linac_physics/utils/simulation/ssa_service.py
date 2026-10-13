@@ -1,3 +1,4 @@
+import asyncio
 from asyncio import sleep
 from random import uniform, random
 
@@ -121,28 +122,53 @@ class SSAPVGroup(PVGroup):
     def __init__(self, prefix, cavityGroup: CavityPVGroup):
         super().__init__(prefix)
         self.cavityGroup: CavityPVGroup = cavityGroup
+        self._calibration_task: asyncio.Task | None = None
+
+    CALIBRATION_DURATION_S = 5
+    CALIBRATION_BAD_RESULT_PROBABILITY = 0.2
 
     @cal_start.putter
     async def cal_start(self, instance, value):
+        """Start a simulated SSA calibration; the put returns at once.
+
+        Sets CALSTS to Running here and finishes the run in a task, so the
+        client can poll CALSTS meanwhile. A start while one is running is
+        ignored. Returns 0, the same CALSTRT readback as PROBECALSTRT.
         """
-        Trying to simulate SSA Calibration with 20% chance of failing. Needs
-        some work to make the PV enums are actually right
-        """
+        if (
+            self._calibration_task is not None
+            and not self._calibration_task.done()
+        ):
+            self.log.warning(
+                f"{self.prefix} SSA calibration already running; start ignored"
+            )
+            return 0
+        self.log.info(f"{self.prefix} SSA calibration started")
         await self.cal_status.write("Running")
-        print("Calibration Status: ", self.cal_status.value)
-        await sleep(5)
-        await self.cal_status.write("Complete")
-        print("Calibration Status: ", self.cal_status.value)
+        self._calibration_task = asyncio.get_running_loop().create_task(
+            self._finish_calibration()
+        )
+        return 0
+
+    async def _finish_calibration(self):
+        """Write the results, then CALSTS Complete.
+
+        Results come first so a client that sees Complete reads this run's
+        SLOPE_NEW, DRV_MAX_NEW and CALSTAT. CALSTAT is Crash with
+        CALIBRATION_BAD_RESULT_PROBABILITY, which the model reports as a bad
+        result (SSA.calibration_result_good). CALSTS itself always ends at
+        Complete.
+        """
+        await sleep(self.CALIBRATION_DURATION_S)
         await self.slope_new.write(uniform(0.5, 1.5))
-        print("New Slope: ", self.slope_new.value)
         await self.drive_max_new.write(self.drive_max.value)
-        print("New Drive Max: ", self.drive_max_new.value)
-        if random() < 0.2:
+        if random() < self.CALIBRATION_BAD_RESULT_PROBABILITY:
             await self.cal_stat.write("Crash")
-            print("Calibration Crashed")
+            self.log.warning(f"{self.prefix} SSA calibration result: Crash")
         else:
             await self.cal_stat.write("Success")
-            print("Calibration Successful")
+        await self.cal_status.write("Complete")
+        self.log.info(f"{self.prefix} SSA calibration complete")
 
     @on.putter
     async def on(self, instance, value):

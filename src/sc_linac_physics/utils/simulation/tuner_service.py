@@ -1,3 +1,4 @@
+import asyncio
 from asyncio import sleep
 from random import uniform
 
@@ -151,6 +152,7 @@ class StepperPVGroup(PVGroup):
         super().__init__(prefix)
         self.cavity_group: CavityPVGroup = cavity_group
         self.piezo_group: PiezoPVGroup = piezo_group
+        self._move_task: asyncio.Task | None = None
         # Same values as the former literal 256/1.4 and 256/18.3, via the
         # shared constants so the nominal slope cannot drift from linac_utils.
         if not self.cavity_group.is_hl:
@@ -250,14 +252,33 @@ class StepperPVGroup(PVGroup):
         await self.motor_moving.write("Not Moving")
         await self.motor_done.write("Done")
 
+    async def _start_move(self, move_sign_des: int):
+        """Run move() as a task so the put returns at once.
+
+        A move can take NSTEPS / VELO seconds, minutes for a park move.
+        Awaiting it in the putter held the client's put that long. MOTOR_MOVING
+        is set here, before the task starts, so a client polling right after
+        the put sees Moving. A move requested while one is running is ignored,
+        so two moves never write step and detune PVs at the same time.
+        """
+        if self._move_task is not None and not self._move_task.done():
+            self.log.warning(
+                f"{self.prefix} stepper already moving; move ignored"
+            )
+            return
+        await self.motor_moving.write("Moving")
+        self._move_task = asyncio.get_running_loop().create_task(
+            self.move(move_sign_des)
+        )
+
     @move_neg.putter
     async def move_neg(self, instance, value):
-        await self.move(-1)
+        await self._start_move(-1)
         return value
 
     @move_pos.putter
     async def move_pos(self, instance, value):
-        await self.move(1)
+        await self._start_move(1)
         return value
 
 
