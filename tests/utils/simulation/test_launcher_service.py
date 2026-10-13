@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -441,3 +442,77 @@ def off_cm_group():
 def setup_cavity_group():
     """Fixture providing a SetupCavityPVGroup instance"""
     return SetupCavityPVGroup(prefix="TEST:", cm_name="CM01", cav_num=1)
+
+
+class TestStopAndMissingScripts:
+    @pytest.mark.asyncio
+    async def test_missing_script_reports_failed_instead_of_raising(self):
+        """No sc-park-cm entry point exists; starting it must not crash."""
+        from sc_linac_physics.utils.simulation.launcher_service import (
+            ParkCMPVGroup,
+        )
+
+        group = ParkCMPVGroup(prefix="TEST:", cm_name="01")
+        with patch(
+            "sc_linac_physics.utils.simulation.launcher_service"
+            ".create_subprocess_exec",
+            side_effect=FileNotFoundError("sc-park-cm"),
+        ):
+            await group.trigger_start()
+        assert group.status.value == "Failed: sc-park-cm not found"
+
+    @pytest.mark.asyncio
+    async def test_stop_in_process_run_aborts_and_reports_stopped(self):
+        """The run can't be killed: stop writes ABORT, and the run ends."""
+        import threading
+
+        group = SetupCMPVGroup(prefix="TEST:", cm_name="CM01")
+        aborted = threading.Event()
+
+        def run_until_aborted(cm_name):
+            assert aborted.wait(timeout=5)
+
+        with patch(
+            "sc_linac_physics.utils.simulation.launcher_service._run_setup_cm",
+            side_effect=run_until_aborted,
+        ):
+            await group.trigger_start()
+            await group.trigger_stop()
+            assert group.status.value == "Stopping"
+            assert group.abort.value == "Abort request"
+            aborted.set()  # what the setup code does when it sees ABORT
+            await group._monitor_task
+        assert group.status.value == "Stopped"
+
+    @pytest.mark.asyncio
+    async def test_stop_subprocess_reports_stopped_not_exit_code(self):
+        from sc_linac_physics.utils.simulation.launcher_service import (
+            ColdCMPVGroup,
+        )
+
+        class FakeProcess:
+            returncode = None
+
+            def terminate(self):
+                self.returncode = -15
+
+            async def wait(self):
+                while self.returncode is None:
+                    await asyncio.sleep(0)
+                return self.returncode
+
+        group = ColdCMPVGroup(prefix="TEST:", cm_name="01")
+
+        async def fake_exec(*args):
+            return FakeProcess()
+
+        with patch(
+            "sc_linac_physics.utils.simulation.launcher_service"
+            ".create_subprocess_exec",
+            side_effect=fake_exec,
+        ):
+            await group.trigger_start()
+            assert isinstance(group._monitor_task, asyncio.Task)
+            await group.trigger_stop()
+            await group._monitor_task
+        assert group.status.value == "Stopped"

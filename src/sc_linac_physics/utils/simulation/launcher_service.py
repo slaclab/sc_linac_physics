@@ -387,6 +387,11 @@ class BaseScriptPVGroup(LauncherPVGroup):
         self.extra_flags = []
         self.process = None
         self._future = None
+        # Kept so asyncio can't garbage-collect a monitor before it runs.
+        self._monitor_task: asyncio.Task | None = None
+        # Set by trigger_stop, so the monitors report Stopped rather than
+        # Completed or a terminate exit code.
+        self._stop_requested = False
 
     def get_command_args(self):
         """Build command arguments from script name, args, and extra flags"""
@@ -403,65 +408,85 @@ class BaseScriptPVGroup(LauncherPVGroup):
     def _get_executor(self):
         return _ORCHESTRATOR_EXECUTOR
 
-    async def trigger_start(self):
-        run_fn = self._get_run_fn()
-        if run_fn is not None:
-            if self._future is not None and not self._future.done():
-                await self.status.write("Already running")
-                return
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            await self.status.write("Running")
-            self._future = asyncio.get_running_loop().run_in_executor(
-                self._get_executor(), run_fn
-            )
-            asyncio.create_task(self._monitor_future())
-        else:
-            if self.process and self.process.returncode is None:
-                await self.status.write("Already running")
-                return
-            args = self.get_command_args()
-            self.process = await create_subprocess_exec(*args)
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            await self.status.write("Running")
-            asyncio.create_task(self._monitor_process())
-
-    async def trigger_stop(self):
-        if self.process:
-            self.process.terminate()
-            await self.process.wait()
+    async def _stamp(self, status: str):
         await self.timestamp.write(
             datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
         )
-        await self.status.write("Stopped")
+        await self.status.write(status)
+
+    def _running_in_process(self) -> bool:
+        return self._future is not None and not self._future.done()
+
+    def _running_subprocess(self) -> bool:
+        return self.process is not None and self.process.returncode is None
+
+    async def trigger_start(self):
+        run_fn = self._get_run_fn()
+        if self._running_in_process() or self._running_subprocess():
+            await self.status.write("Already running")
+            return
+        self._stop_requested = False
+        if run_fn is not None:
+            await self._stamp("Running")
+            self._future = asyncio.get_running_loop().run_in_executor(
+                self._get_executor(), run_fn
+            )
+            self._monitor_task = asyncio.create_task(self._monitor_future())
+            return
+        args = self.get_command_args()
+        try:
+            self.process = await create_subprocess_exec(*args)
+        except FileNotFoundError:
+            # e.g. sc-park-cm: no such entry point in pyproject.toml.
+            await self._stamp(f"Failed: {self.script_name} not found")
+            return
+        except OSError as e:
+            await self._stamp(f"Failed: {type(e).__name__}")
+            return
+        await self._stamp("Running")
+        self._monitor_task = asyncio.create_task(self._monitor_process())
+
+    async def trigger_stop(self):
+        """Stop the run, and report Stopped once it has actually ended.
+
+        A subprocess is terminated. An in-process run can't be killed, so
+        it's asked to stop through this group's AUTO:ABORT, which the setup
+        code polls. handle_abort also passes that to the subgroups. The
+        status reads Stopping until the run ends.
+        """
+        if self._running_subprocess():
+            self._stop_requested = True
+            self.process.terminate()
+            await self.process.wait()
+            return  # _monitor_process writes Stopped
+        if self._running_in_process():
+            self._stop_requested = True
+            await self.status.write("Stopping")
+            await self.abort.write(1)
+            return  # _monitor_future writes Stopped
+        await self._stamp("Stopped")
 
     async def _monitor_process(self):
         """Monitor process and update status when complete"""
         if self.process:
             returncode = await self.process.wait()
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            if returncode == 0:
-                await self.status.write("Completed")
+            if self._stop_requested:
+                await self._stamp("Stopped")
+            elif returncode == 0:
+                await self._stamp("Completed")
             else:
-                await self.status.write(f"Failed (exit code: {returncode})")
+                await self._stamp(f"Failed (exit code: {returncode})")
 
     async def _monitor_future(self):
         try:
             await self._future
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            await self.status.write("Completed")
         except Exception as e:
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            await self.status.write(f"Failed: {type(e).__name__}")
+            if self._stop_requested:
+                await self._stamp("Stopped")
+            else:
+                await self._stamp(f"Failed: {type(e).__name__}")
+            return
+        await self._stamp("Stopped" if self._stop_requested else "Completed")
 
 
 class BaseCMPVGroup(BaseScriptPVGroup):
