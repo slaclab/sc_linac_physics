@@ -418,3 +418,28 @@ def test_open_file_limit_never_lowered(monkeypatch):
     )
     plotter.raise_open_file_limit(4096)
     assert calls == []
+
+
+def test_decarad_entries_cover_both_units_and_every_head():
+    from sc_linac_physics.utils.sc_linac.decarad import Decarad
+
+    entries = plotter.decarad_entries([Decarad(1), Decarad(2)])
+    names = [name for name, _ in entries]
+    assert names[:3] == ["Decarad 1", "Decarad 1 head 1", "Decarad 1 head 2"]
+    assert len(names) == 22
+    whole = dict(entries)["Decarad 2"]
+    avg = whole.pvs[("DecaradHead", "avg_dose_rate_pv")]
+    assert avg[0] == "RADM:SYS0:200:01:GAMMAAVE"
+    assert len(avg) == 10
+    assert whole.labels["RADM:SYS0:200:10:GAMMA_DOSE_RATE"] == (
+        "Decarad 2 head 10 raw"
+    )
+
+
+def test_add_decarad_head_curves(display):
+    select(display, "Decarad", "Decarad 1 head 3", "avg_dose_rate_pv")
+    display.add_selected()
+    (curve,) = display.plot.curve_set.curves
+    assert curve.pv == "RADM:SYS0:100:03:GAMMAAVE"
+    assert curve.label == "Decarad 1 head 3 avg"
+    assert curve.axis == "avg_dose_rate"
