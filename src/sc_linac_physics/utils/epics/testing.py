@@ -2,6 +2,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from sc_linac_physics.utils.epics.config import EPICS_NO_ALARM_VAL
+from sc_linac_physics.utils.epics.exceptions import PVGetError, PVPutError
 
 
 def make_mock_pv(
@@ -19,7 +20,8 @@ def make_mock_pv(
         get_val: Value to return from get()
         connected: Connection status
         severity: Alarm severity
-        fail_count: Number of times get/put should fail before succeeding
+        fail_count: Number of times get/put raise PVGetError/PVPutError
+            before succeeding, matching how the real PV wrapper fails
 
     Returns:
         MagicMock configured to behave like a PV
@@ -46,13 +48,13 @@ def make_mock_pv(
         def get_with_failures(*args, **kwargs):
             call_counts["get"] += 1
             if call_counts["get"] <= fail_count:
-                return None  # Simulate failure
+                raise PVGetError(f"{pv_name} get failed (mock)")
             return get_val
 
         def put_with_failures(*args, **kwargs):
             call_counts["put"] += 1
             if call_counts["put"] <= fail_count:
-                return 0  # Simulate failure
+                raise PVPutError(f"{pv_name} put failed (mock)")
             return 1  # Success
 
         mock_pv.get.side_effect = get_with_failures

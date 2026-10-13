@@ -2,7 +2,7 @@ from random import randint, choice
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import make_mock_pv
+from sc_linac_physics.utils.epics import make_mock_pv
 
 from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
 from sc_linac_physics.applications.tuning.tune_stepper import TuneStepper
