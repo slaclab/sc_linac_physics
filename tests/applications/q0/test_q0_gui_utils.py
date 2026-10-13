@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, mock_open
 
 import pytest
-from PyQt5.QtWidgets import QApplication
 
 # Import the classes to test
 from sc_linac_physics.applications.q0.q0_gui_utils import (
@@ -53,15 +52,6 @@ def mock_cavity():
     mock_cav.ades_max = 21.0
     mock_cav.aact_pv = "ACCL:L1B:0110:AACT"
     return mock_cav
-
-
-@pytest.fixture
-def qapp():
-    """QApplication fixture for GUI tests"""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    return app
 
 
 class TestCryoParamSetupWorker:

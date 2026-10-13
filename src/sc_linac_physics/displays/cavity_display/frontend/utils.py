@@ -1,6 +1,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QFrame, QSizePolicy, QGridLayout, QLabel
-from lcls_tools.common.controls.pyepics.utils import PVInvalidError
+from sc_linac_physics.utils.epics import PVInvalidError
 from pydm.widgets import PyDMLabel, PyDMRelatedDisplayButton
 
 from sc_linac_physics.displays.cavity_display.backend.fault import Fault

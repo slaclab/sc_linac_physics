@@ -5,7 +5,7 @@ import pytest
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtGui import QCloseEvent
 from PyQt5.QtTest import QTest
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QWidget
 
 from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
     MeasurementConfig,
@@ -19,15 +19,6 @@ from sc_linac_physics.applications.microphonics.gui.main_window import (
 class SignalEmitter(QObject):
     dataLoaded = pyqtSignal(dict)
     loadError = pyqtSignal(str)
-
-
-# Single QApplication instance for all tests
-@pytest.fixture(scope="session")
-def qapp():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
 
 
 class MockWidget(QWidget):

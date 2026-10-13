@@ -1,25 +1,13 @@
 # "test_fault_count_display.py"
-import sys
 from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
-from PyQt5.QtWidgets import QApplication
 
 from sc_linac_physics.displays.cavity_display.backend.fault import FaultCounter
 from sc_linac_physics.displays.cavity_display.frontend.fault_count_display import (
     FaultCountDisplay,
 )
-
-
-# Fixtures
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication instance for tests."""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-    yield app
 
 
 @pytest.fixture

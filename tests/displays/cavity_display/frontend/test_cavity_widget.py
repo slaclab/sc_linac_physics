@@ -1,4 +1,3 @@
-import sys
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -6,7 +5,6 @@ import pytest
 from PyQt5.QtWidgets import QMessageBox
 from qtpy.QtCore import Qt, QPoint
 from qtpy.QtGui import QColor, QMouseEvent
-from qtpy.QtWidgets import QApplication
 
 # Import your module with the correct path
 from sc_linac_physics.displays.cavity_display.frontend.cavity_widget import (
@@ -17,17 +15,6 @@ from sc_linac_physics.displays.cavity_display.frontend.cavity_widget import (
     BLACK_TEXT_COLOR,
     RED_FILL_COLOR,
 )
-
-
-# Fixture to ensure QApplication exists
-@pytest.fixture(scope="session")
-def qapp():
-    """Create QApplication for testing."""
-    if not QApplication.instance():
-        app = QApplication(sys.argv)
-    else:
-        app = QApplication.instance()
-    yield app
 
 
 @pytest.fixture
