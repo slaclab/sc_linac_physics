@@ -95,8 +95,12 @@ class SSAPVGroup(PVGroup):
     saved_slope: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE_SAVE", dtype=ChannelType.FLOAT
     )
-    # Enum index read by SSA.rated_power_kw. 2 is a standard LCLS-II SSA and
-    # 3 the 3.9 GHz HL SSA, per linac_utils.SSA_TYPE_RATED_POWER_KW.
+    # Enum index read by SSA.rated_power_kw, per
+    # linac_utils.SSA_TYPE_RATED_POWER_KW: 0 the 7 kW HE SSA, 2 a standard
+    # LCLS-II SSA, 3 the 3.9 GHz HL SSA. The sim picks by cryomodule: HL,
+    # then high energy (L4B, Cryomodule.is_high_energy), then standard. The
+    # real machine has 191 index-0 SSAs to L4B's 184, plus 4 index-1 HE
+    # prototypes, so this is close but not exact.
     ssa_type: PvpropertyInteger = pvproperty(
         value=2, name="Type", dtype=ChannelType.INT
     )
@@ -105,6 +109,8 @@ class SSAPVGroup(PVGroup):
     async def ssa_type(self, instance, async_lib):
         if self.cavityGroup.is_hl:
             await instance.write(3)
+        elif self.is_high_energy:
+            await instance.write(0)
 
     drive_max: PvpropertyFloat = pvproperty(
         name="DRV_MAX_REQ", value=0.8, dtype=ChannelType.FLOAT
@@ -139,9 +145,15 @@ class SSAPVGroup(PVGroup):
         name="FaultSummary",
     )
 
-    def __init__(self, prefix, cavityGroup: CavityPVGroup):
+    def __init__(
+        self,
+        prefix,
+        cavityGroup: CavityPVGroup,
+        is_high_energy: bool = False,
+    ):
         super().__init__(prefix)
         self.cavityGroup: CavityPVGroup = cavityGroup
+        self.is_high_energy = is_high_energy
         self._calibration_task: asyncio.Task | None = None
         # Held from the running check until the task exists. The status write
         # in between yields, so without it two starts could both pass.

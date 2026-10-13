@@ -14,6 +14,7 @@ from caproto.server import ioc_arg_parser, run
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     L1BHL,
+    L4B,
     LINAC_CM_DICT,
     LINAC_TUPLES,
 )
@@ -447,7 +448,9 @@ class SCLinacPhysicsService(Service):
 
         # Other cavity-related groups
         ssa_group = SSAPVGroup(
-            prefix=f"{cav_prefix}SSA:", cavityGroup=cavity_group
+            prefix=f"{cav_prefix}SSA:",
+            cavityGroup=cavity_group,
+            is_high_energy=cm_name in L4B,
         )
         cavity_group.ssa_group = ssa_group
         self.add_pvs(ssa_group)
