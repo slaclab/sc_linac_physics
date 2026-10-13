@@ -318,8 +318,8 @@ class SCLinacPhysicsService(Service):
 
         # Cryomodule.ds_pressure_pv, in mbar: Q0 averages it into calc_q0,
         # which maps P to T = 0.750062 * P * 0.0125 + 1.705 (q0_utils.py).
-        # 31.46 mbar gives 2.0 K there.
-        # CHECK: is 2.0 K the right nominal for the sim's DS pressure?
+        # 31.46 mbar gives 2.0 K there, the operating temperature (Lisa
+        # Zacarias, 2026-10-13).
         self[f"CPT:CM{cm_name}:2302:DS:PRESS"] = ChannelFloat(value=31.46)
 
         # liquid level group
