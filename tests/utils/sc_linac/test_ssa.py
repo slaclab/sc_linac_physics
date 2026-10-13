@@ -413,7 +413,13 @@ def _start_stuck_calibration(ssa):
 def test_run_calibration_times_out(ssa, no_wait):
     _start_stuck_calibration(ssa)
     ssa.cavity.check_abort = MagicMock()
-    with pytest.raises(SSACalibrationError, match="calibration to finish"):
+    from sc_linac_physics.utils.sc_linac.linac_utils import (
+        SSACalibrationTimeoutError,
+    )
+
+    with pytest.raises(
+        SSACalibrationTimeoutError, match="calibration to finish"
+    ):
         ssa.run_calibration()
 
 
@@ -424,3 +430,29 @@ def test_run_calibration_wait_checks_abort(ssa):
     ssa.cavity.check_abort = MagicMock(side_effect=CavityAbortError("abort"))
     with pytest.raises(CavityAbortError):
         ssa.run_calibration()
+
+
+def test_calibrate_does_not_retry_a_timed_out_calibration(ssa):
+    """A stuck CALSTS must not be met with another CALSTRT."""
+    from sc_linac_physics.utils.sc_linac.linac_utils import (
+        SSACalibrationTimeoutError,
+    )
+
+    ssa.cavity.check_abort = MagicMock()
+    ssa._drive_max_setpoint_pv_obj = make_mock_pv()
+    ssa.run_calibration = MagicMock(
+        side_effect=SSACalibrationTimeoutError("stuck")
+    )
+    with pytest.raises(SSACalibrationTimeoutError):
+        ssa.calibrate(0.8)
+    ssa.run_calibration.assert_called_once()
+
+
+def test_calibrate_still_retries_a_bad_result(ssa):
+    ssa.cavity.check_abort = MagicMock()
+    ssa._drive_max_setpoint_pv_obj = make_mock_pv()
+    ssa.run_calibration = MagicMock(
+        side_effect=[SSACalibrationError("bad"), None]
+    )
+    ssa.calibrate(0.8)
+    assert ssa.run_calibration.call_count == 2

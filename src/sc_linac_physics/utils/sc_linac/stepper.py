@@ -353,6 +353,50 @@ class StepperTuner(linac_utils.SCLinacObject):
             )
         return timeout
 
+    def _wait_until_stopped(
+        self, num_steps: int, check_detune: bool, move_start_time: datetime
+    ):
+        """Poll MOTOR_MOVING until 0; on timeout write ABORT_REQ and raise."""
+
+        def check_abort_and_detune():
+            self.check_abort()
+            if check_detune:
+                self.cavity.check_detune()
+
+        def log_progress():
+            elapsed = (datetime.now() - move_start_time).total_seconds()
+            self.cavity.logger.debug(
+                "Motor still moving (%.0fs elapsed)",
+                elapsed,
+                extra={
+                    "extra_data": {
+                        "elapsed_seconds": elapsed,
+                        "stepper": str(self),
+                    }
+                },
+            )
+
+        try:
+            linac_utils.wait_until(
+                lambda: not self.motor_moving,
+                timeout=self._move_timeout(num_steps),
+                description=f"{self} to stop moving",
+                error_class=linac_utils.StepperMoveTimeoutError,
+                poll_interval=5,
+                check_abort=check_abort_and_detune,
+                on_poll=log_progress,
+            )
+        except linac_utils.StepperMoveTimeoutError:
+            # The motor may still be moving: write ABORT_REQ before reporting.
+            # A failed abort is logged so the timeout is still what's raised.
+            try:
+                self.abort()
+            except Exception as e:
+                self.cavity.logger.error(
+                    "Failed to abort stepper after move timeout: %s", e
+                )
+            raise
+
     def issue_move_command(self, num_steps: int, check_detune: bool = True):
         """
         Determine whether to move positive or negative depending on the requested
@@ -400,35 +444,7 @@ class StepperTuner(linac_utils.SCLinacObject):
 
         move_start_time = datetime.now()
 
-        def check_abort_and_detune():
-            self.check_abort()
-            if check_detune:
-                self.cavity.check_detune()
-
-        def log_progress():
-            elapsed = (datetime.now() - move_start_time).total_seconds()
-            self.cavity.logger.debug(
-                "Motor still moving (%.0fs elapsed)",
-                elapsed,
-                extra={
-                    "extra_data": {
-                        "elapsed_seconds": elapsed,
-                        "stepper": str(self),
-                    }
-                },
-            )
-
-        # CHECK: on timeout this raises StepperError without writing ABORT_REQ,
-        # so the motor may still be moving. Should it abort the motor first?
-        linac_utils.wait_until(
-            lambda: not self.motor_moving,
-            timeout=self._move_timeout(num_steps),
-            description=f"{self} to stop moving",
-            error_class=linac_utils.StepperError,
-            poll_interval=5,
-            check_abort=check_abort_and_detune,
-            on_poll=log_progress,
-        )
+        self._wait_until_stopped(num_steps, check_detune, move_start_time)
 
         total_move_time = (datetime.now() - move_start_time).total_seconds()
         self.cavity.logger.info(
