@@ -47,14 +47,37 @@ def curves_for(
     group: PVGroup,
     keys: Iterable[PVKey],
     labels: Optional[Dict[str, str]] = None,
+    shared: Iterable[str] = (),
 ) -> List[Curve]:
-    """Curves for every PV under `keys`, labeled from `labels` or by PV."""
+    """Curves for every PV under `keys`, labeled from `labels` or by PV.
+
+    One Y axis per attribute. An attribute in `shared` is defined by more
+    than one source class (a linac and a CM both have aact_mean_sum_pv),
+    so its axis also names the source and the two don't share a scale.
+    """
     labels = labels or {}
+    shared = set(shared)
     return [
-        Curve(pv=pv, label=labels.get(pv, pv), axis=readable(attribute))
+        Curve(
+            pv=pv,
+            label=labels.get(pv, pv),
+            axis=(
+                f"{readable(attribute)} ({source})"
+                if attribute in shared
+                else readable(attribute)
+            ),
+        )
         for source, attribute in keys
         for pv in group[(source, attribute)]
     ]
+
+
+def shared_attributes(group: PVGroup) -> set:
+    """Attributes that more than one source class defines."""
+    seen: Dict[str, set] = {}
+    for source, attribute in group.pvs:
+        seen.setdefault(attribute, set()).add(source)
+    return {a for a, sources in seen.items() if len(sources) > 1}
 
 
 @dataclass
@@ -164,6 +187,7 @@ class PVPicker(QWidget):
 
         machine = self._build_tree(pv_groups, list(decarads))
         self.labels = _owner_labels(self.tree)
+        self.shared = shared_attributes(pv_groups.get_machine().pvs)
         # Start on Machine with the tree collapsed, so every top-level
         # choice is visible at once. Machine-level picks can be large; the
         # display's curve cap asks before plotting many.
@@ -230,7 +254,9 @@ class PVPicker(QWidget):
         if node is None or not keys:
             return
         labels = {**self.labels, **node.labels}
-        self.curves_requested.emit(curves_for(node.pvs, keys, labels))
+        self.curves_requested.emit(
+            curves_for(node.pvs, keys, labels, self.shared)
+        )
 
     def add_typed_pv(self) -> None:
         pv = self.pv_edit.text().strip()
