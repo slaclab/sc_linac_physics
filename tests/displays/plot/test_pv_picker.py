@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem
 
 from sc_linac_physics.displays.plot.pv_picker import (
     axis_for,
+    shared_attributes,
     curves_for,
     decarad_pvs,
     readable,
@@ -99,3 +100,21 @@ def test_cm_pv_in_a_cavity_group_is_labeled_by_the_cm(qtbot):
     qtbot.addWidget(picker)
     assert picker.labels["CM02:SUM"] == "CM02 aact mean sum"
     assert picker.labels["C1:ADES"] == "CM02 Cavity 1 ades"
+
+
+def test_attribute_from_two_sources_gets_two_axes():
+    group = PVGroup(
+        {
+            ("Linac", "aact_mean_sum_pv"): ["L:SUM"],
+            ("Cryomodule", "aact_mean_sum_pv"): ["CM:SUM"],
+            ("Cavity", "ades_pv"): ["C:ADES"],
+        }
+    )
+    shared = shared_attributes(group)
+    assert shared == {"aact_mean_sum_pv"}
+    curves = curves_for(group, list(group.pvs), shared=shared)
+    assert {c.pv: c.axis for c in curves} == {
+        "L:SUM": "aact mean sum (Linac)",
+        "CM:SUM": "aact mean sum (Cryomodule)",
+        "C:ADES": "ades",
+    }
