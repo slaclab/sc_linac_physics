@@ -468,6 +468,17 @@ class TestInterlockResetReadback:
         assert regular_cavity.interlock_reset.value in (0, "")
 
 
+class TestPulseGo:
+    @pytest.mark.asyncio
+    async def test_go_reports_pulse_done_and_reads_back_zero(
+        self, regular_cavity
+    ):
+        """Cavity.push_go_button() puts 1, then waits for PULSE_STATUS >= 2."""
+        await regular_cavity.pulse_go.write(1)
+        assert regular_cavity.pulse_status.value == 2
+        assert regular_cavity.pulse_go.value == 0
+
+
 class TestCalibrationAndMaintenance:
     """Test calibration and maintenance functionality."""
 

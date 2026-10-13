@@ -3,7 +3,13 @@ from asyncio import sleep
 from random import uniform, random
 
 from caproto import ChannelType
-from caproto.server import PVGroup, PvpropertyEnum, pvproperty, PvpropertyFloat
+from caproto.server import (
+    PVGroup,
+    PvpropertyEnum,
+    PvpropertyFloat,
+    PvpropertyInteger,
+    pvproperty,
+)
 
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
@@ -86,6 +92,20 @@ class SSAPVGroup(PVGroup):
     slope_new: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE_NEW", dtype=ChannelType.FLOAT
     )
+    saved_slope: PvpropertyFloat = pvproperty(
+        value=0.0, name="SLOPE_SAVE", dtype=ChannelType.FLOAT
+    )
+    # Enum index read by SSA.rated_power_kw. 2 is a standard LCLS-II SSA and
+    # 3 the 3.9 GHz HL SSA, per linac_utils.SSA_TYPE_RATED_POWER_KW.
+    ssa_type: PvpropertyInteger = pvproperty(
+        value=2, name="Type", dtype=ChannelType.INT
+    )
+
+    @ssa_type.startup
+    async def ssa_type(self, instance, async_lib):
+        if self.cavityGroup.is_hl:
+            await instance.write(3)
+
     drive_max: PvpropertyFloat = pvproperty(
         name="DRV_MAX_REQ", value=0.8, dtype=ChannelType.FLOAT
     )

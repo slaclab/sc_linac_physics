@@ -19,6 +19,10 @@ from caproto.server import (
     SubGroup,
 )
 
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    NOMINAL_PULSED_ONTIME,
+)
+
 if TYPE_CHECKING:
     from sc_linac_physics.utils.simulation.cryomodule_service import (
         CryomodulePVGroup,
@@ -258,6 +262,7 @@ class CavityPVGroup(PVGroup):
         await self.qloaded.write(initial_q)
         # HL scale tolerance [5, 25]; regular [10, 125]
         await self.scale_new.write(15.0 if self.is_hl else 30.0)
+        await self.current_cav_scale.write(15.0 if self.is_hl else 30.0)
 
     scale_new = pvproperty(name="CAV:CAL_SCALEB_NEW", value=30)
     quench_bypass: PvpropertyEnum = pvproperty(
@@ -316,6 +321,44 @@ class CavityPVGroup(PVGroup):
         value=0, name="PUSH_CAV_SCALE.PROC", dtype=ChannelType.INT
     )
 
+    # Served so the model's PV names all resolve (see
+    # tests/utils/simulation/test_sim_serves_model_pvs.py). Writes are
+    # accepted and do nothing else. Only SAVE_SSA_SLOPE.PROC has a writer
+    # in this repo: Cavity.save_ssa_slope(), from SSA.calibrate(save_slope).
+    save_ssa_slope: PvpropertyInteger = pvproperty(
+        value=0, name="SAVE_SSA_SLOPE.PROC", dtype=ChannelType.INT
+    )
+    save_q_loaded: PvpropertyInteger = pvproperty(
+        value=0, name="SAVE_QLOADED.PROC", dtype=ChannelType.INT
+    )
+    save_cav_scale: PvpropertyInteger = pvproperty(
+        value=0, name="SAVE_CAV_SCALE.PROC", dtype=ChannelType.INT
+    )
+    current_cav_scale: PvpropertyFloat = pvproperty(
+        value=30.0, name="CAV:SCALER_SEL.B", dtype=ChannelType.FLOAT
+    )
+
+    # Pulsed mode. Cavity.push_go_button() puts PULSE_DIFF_SUM=1, then waits
+    # for PULSE_STATUS >= 2, and treats > 2 as a failed pulse.
+    # CHECK: what the real PULSE_STATUS values mean beyond the model's
+    # "< 2 waiting, 2 done, > 2 failed".
+    pulse_on_time: PvpropertyInteger = pvproperty(
+        value=NOMINAL_PULSED_ONTIME, name="PULSE_ONTIME", dtype=ChannelType.INT
+    )
+    pulse_status: PvpropertyInteger = pvproperty(
+        value=0, name="PULSE_STATUS", dtype=ChannelType.INT
+    )
+    pulse_go: PvpropertyInteger = pvproperty(
+        value=0, name="PULSE_DIFF_SUM", dtype=ChannelType.INT
+    )
+
+    @pulse_go.putter
+    async def pulse_go(self, instance, value):
+        """Report the pulse done (PULSE_STATUS 2) at once; reads back 0."""
+        if value:
+            await self.pulse_status.write(2)
+        return 0
+
     data_decim_a: PvpropertyInteger = pvproperty(
         value=255, name="ACQ_DECIM_SEL.A", dtype=ChannelType.INT
     )
@@ -334,6 +377,30 @@ class CavityPVGroup(PVGroup):
         value=randrange(int(2.5e10), int(3.5e10), step=int(0.1e10)),
         name="Q0",
         dtype=ChannelType.FLOAT,
+    )
+
+    # RF waveforms. Nothing in this repo reads them; served as zeros, same
+    # length as CAV:FLTAWF below.
+    cav_awf = pvproperty(
+        value=np.zeros(2048, dtype=np.float64),
+        name="CAV:AWF",
+        dtype=ChannelType.DOUBLE,
+        max_length=2048,
+        read_only=True,
+    )
+    fwd_awf = pvproperty(
+        value=np.zeros(2048, dtype=np.float64),
+        name="FWD:AWF",
+        dtype=ChannelType.DOUBLE,
+        max_length=2048,
+        read_only=True,
+    )
+    rev_awf = pvproperty(
+        value=np.zeros(2048, dtype=np.float64),
+        name="REV:AWF",
+        dtype=ChannelType.DOUBLE,
+        max_length=2048,
+        read_only=True,
     )
 
     # Fault waveforms
