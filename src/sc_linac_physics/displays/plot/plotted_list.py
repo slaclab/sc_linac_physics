@@ -7,7 +7,6 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QIcon, QPalette, QPixmap
 from PyQt5.QtWidgets import (
     QHeaderView,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -15,23 +14,26 @@ from PyQt5.QtWidgets import (
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from sc_linac_physics.displays.plot.curve_set import Curve
+from sc_linac_physics.displays.plot.pv_picker import section
 
 
-class PlottedList(QGroupBox):
+class PlottedList(QWidget):
     remove_requested = pyqtSignal(str)
     clear_requested = pyqtSignal()
     visibility_changed = pyqtSignal(str, bool)
 
     def __init__(self, parent=None):
-        super().__init__("Plotted", parent)
+        super().__init__(parent)
         self._items: Dict[str, QTreeWidgetItem] = {}
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setColumnCount(3)
         self.tree.setRootIsDecorated(False)
+        self.tree.setMinimumHeight(80)
         header = self.tree.header()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -47,9 +49,12 @@ class PlottedList(QGroupBox):
         bottom.addWidget(self.count_label)
         bottom.addStretch()
         bottom.addWidget(clear)
+        box, box_layout = section("Plotted")
+        box_layout.addWidget(self.tree)
+        box_layout.addLayout(bottom)
         layout = QVBoxLayout()
-        layout.addWidget(self.tree)
-        layout.addLayout(bottom)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(box)
         self.setLayout(layout)
         self._update_count()
 

@@ -12,7 +12,6 @@ from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QSplitter,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -99,10 +98,11 @@ class PVPicker(QWidget):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
+        # Plain section titles, not framed boxes, and tight spacing so the
+        # lists get the height. No stylesheet: on macOS one on a parent
+        # drops native rendering of every field inside it.
 
-        where = QGroupBox("Where")
-        where_layout = QVBoxLayout()
-        where.setLayout(where_layout)
+        where, where_layout = section("Where")
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search, e.g. CM02 cavity 1")
         self.search_edit.setClearButtonEnabled(True)
@@ -110,15 +110,14 @@ class PVPicker(QWidget):
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(14)
+        self.tree.setMinimumHeight(120)
         self.tree.currentItemChanged.connect(self._fill_attributes)
         where_layout.addWidget(self.search_edit)
         where_layout.addWidget(self.tree)
         self.splitter = QSplitter(Qt.Vertical)
         self.splitter.addWidget(where)
 
-        what = QGroupBox("What")
-        what_layout = QVBoxLayout()
-        what.setLayout(what_layout)
+        what, what_layout = section("What")
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Filter, e.g. ades")
         self.filter_edit.setClearButtonEnabled(True)
@@ -127,6 +126,7 @@ class PVPicker(QWidget):
         self.attributes.setHeaderHidden(True)
         self.attributes.setColumnCount(2)
         self.attributes.setRootIsDecorated(False)
+        self.attributes.setMinimumHeight(120)
         self.attributes.setToolTip(
             "Double-click to plot, or select several and add."
         )
@@ -140,7 +140,12 @@ class PVPicker(QWidget):
         )
         what_layout.addWidget(self.filter_edit)
         hint = QLabel("Double-click to plot, or select several and add.")
-        hint.setObjectName("hint")
+        hint.setWordWrap(True)
+        muted = hint.palette()
+        muted.setColor(
+            QPalette.WindowText, muted.color(QPalette.PlaceholderText)
+        )
+        hint.setPalette(muted)
         what_layout.addWidget(hint)
         what_layout.addWidget(self.attributes)
         what_layout.addWidget(add)
@@ -282,11 +287,23 @@ def short_path(item: QTreeWidgetItem) -> str:
     return " ".join(names)
 
 
-def _labeled(text: str, widget: QWidget) -> QHBoxLayout:
-    row = QHBoxLayout()
-    row.addWidget(QLabel(text))
-    row.addWidget(widget)
-    return row
+def section(title: str):
+    """A bold title over a tight layout; returns (widget, layout).
+
+    A plain widget, not a QGroupBox: a group box's frame and margins cost
+    the lists height, and a bold group box font would bold every child.
+    """
+    widget = QWidget()
+    layout = QVBoxLayout()
+    layout.setContentsMargins(0, 6, 0, 0)
+    layout.setSpacing(4)
+    label = QLabel(title)
+    font = label.font()
+    font.setBold(True)
+    label.setFont(font)
+    layout.addWidget(label)
+    widget.setLayout(layout)
+    return widget, layout
 
 
 def _node(parent, text: str, pvs: Optional[NodePVs]) -> QTreeWidgetItem:
