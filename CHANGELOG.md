@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v9.45.1 (2026-10-14)
+
+### Bug Fixes
+
+- **sim**: A run is active until its monitor writes the result; STOP reaches running children
+  ([#392](https://github.com/slaclab/sc_linac_physics/pull/392),
+  [`24cd769`](https://github.com/slaclab/sc_linac_physics/commit/24cd7691362134cfcace603ce8f53eb827887af9))
+
+- **sim**: Launcher stop actually stops, and a missing script reports Failed
+  ([#392](https://github.com/slaclab/sc_linac_physics/pull/392),
+  [`24cd769`](https://github.com/slaclab/sc_linac_physics/commit/24cd7691362134cfcace603ce8f53eb827887af9))
+
+- **sim**: Stamp PROBECALTS when a characterization starts
+  ([#394](https://github.com/slaclab/sc_linac_physics/pull/394),
+  [`8b75e58`](https://github.com/slaclab/sc_linac_physics/commit/8b75e586cc9adc8571fa596214881cd63a47a4fe))
+
+
 ## v9.45.0 (2026-10-14)
 
 ### Bug Fixes
