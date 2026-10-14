@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v9.44.1 (2026-10-14)
+
+### Bug Fixes
+
+- **stepper**: A failed write in abort cleanup can't skip the RF-off or VELO
+  ([#355](https://github.com/slaclab/sc_linac_physics/pull/355),
+  [`5750c2f`](https://github.com/slaclab/sc_linac_physics/commit/5750c2f99bd89e9f9e2097182cc55be6d7e8ede5))
+
+- **stepper**: Stop the motor and restore limits when a move fails
+  ([#355](https://github.com/slaclab/sc_linac_physics/pull/355),
+  [`5750c2f`](https://github.com/slaclab/sc_linac_physics/commit/5750c2f99bd89e9f9e2097182cc55be6d7e8ede5))
+
+### Documentation
+
+- **stepper**: Record why stepper and cavity aborts stay separate
+  ([#355](https://github.com/slaclab/sc_linac_physics/pull/355),
+  [`5750c2f`](https://github.com/slaclab/sc_linac_physics/commit/5750c2f99bd89e9f9e2097182cc55be6d7e8ede5))
+
+### Testing
+
+- **stepper**: Abort when MOTOR_MOVING can't be read after a failed move
+  ([#355](https://github.com/slaclab/sc_linac_physics/pull/355),
+  [`5750c2f`](https://github.com/slaclab/sc_linac_physics/commit/5750c2f99bd89e9f9e2097182cc55be6d7e8ede5))
+
+
 ## v9.44.0 (2026-10-14)
 
 ### Bug Fixes
