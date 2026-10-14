@@ -459,6 +459,12 @@ class StepperError(Exception):
     pass
 
 
+class StepperMoveTimeoutError(StepperError):
+    """MOTOR_MOVING stayed 1 past the move timeout (StepperTuner._move_timeout)."""
+
+    pass
+
+
 class StepperTempError(StepperError):
     """Exception thrown when the stepper motor exceeds its temperature limit."""
 
@@ -474,6 +480,17 @@ class FSCANError(Exception):
 class SSACalibrationError(Exception):
     """
     Exception thrown during cavity SSA calibration
+    """
+
+    pass
+
+
+class SSACalibrationTimeoutError(SSACalibrationError):
+    """CALSTS stayed Running past SSA_CALIBRATION_TIMEOUT_S.
+
+    SSA.calibrate() retries other SSACalibrationErrors with a lower drive
+    max. It re-raises this one instead, so a stuck calibration isn't
+    restarted.
     """
 
     pass

@@ -460,6 +460,28 @@ class TestInterlockSystem:
         mock_amean.assert_called_once_with(18.0)
 
 
+class TestInterlockResetReadback:
+    @pytest.mark.asyncio
+    async def test_reads_back_zero_after_a_reset(self, regular_cavity):
+        """Through caproto's write path, as a client put goes."""
+        await regular_cavity.interlock_reset.write(1)
+        assert regular_cavity.interlock_reset.value in (0, "")
+
+
+class TestPulseGo:
+    @pytest.mark.asyncio
+    async def test_go_reports_pulse_done_and_reads_back_zero(
+        self, regular_cavity
+    ):
+        """Cavity.push_go_button() puts 1, then waits for PULSE_STATUS >= 2."""
+        assert regular_cavity.pulse_status.value == "Pulsing off"
+        await regular_cavity.pulse_go.write(1)
+        assert regular_cavity.pulse_status.value == "Pulsing on"
+        # Cavity.push_go_button() compares the index: 2 means done.
+        assert regular_cavity.pulse_status.enum_strings.index("Pulsing on") == 2
+        assert regular_cavity.pulse_go.value == 0
+
+
 class TestCalibrationAndMaintenance:
     """Test calibration and maintenance functionality."""
 
