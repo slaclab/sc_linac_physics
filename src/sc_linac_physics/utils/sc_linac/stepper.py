@@ -77,7 +77,17 @@ class StepperTuner(linac_utils.SCLinacObject):
         self.hz_per_step_calc_pv: str = self.pv_addr("SCALE_CALC.B")
         self._hz_per_step_calc_pv_obj: Optional[PV] = None
 
+        # Stepper-only abort: writes ABORT_REQ and leaves RF as it is.
+        # Cavity.abort_flag also stops the motor, but turns RF off too.
+        # Kept separate on purpose (decided 2026-10-08). Dropping RF does
+        # not help stop the motor, and leaving it on makes retuning after
+        # the abort easier. The RF commissioning frequency-tuning Abort
+        # button uses this flag.
         self.abort_flag: bool = False
+        # Per move(): whether ABORT_REQ was written, and whether move()
+        # changed NSTEPS.DRVH / VELO. Read by _clean_up_failed_move().
+        self._abort_written: bool = False
+        self._limits_changed: bool = False
 
     def __str__(self):
         return f"{self.cavity} Stepper Tuner"
@@ -130,8 +140,24 @@ class StepperTuner(linac_utils.SCLinacObject):
         """
         This function raises an error if either a stepper abort or a cavity abort
         has been requested.
+
+        A pending cavity abort_flag writes the stepper ABORT_REQ first.
+        Cavity.check_abort() runs turn_off() and waits for RF off before it
+        raises, so without this the motor would keep moving through that
+        wait. TuneCavity.check_abort already writes ABORT_REQ first in the
+        same way.
         @return: None
         """
+        if self.cavity.abort_flag:
+            # A failed ABORT_REQ must not skip the cavity abort below, which
+            # turns RF off. Log it and carry on.
+            try:
+                self.abort()
+            except Exception as e:
+                self.cavity.logger.error(
+                    "Failed to write stepper ABORT_REQ before cavity abort: %s",
+                    e,
+                )
         self.cavity.check_abort()
         if self.abort_flag:
             self.cavity.logger.warning("Stepper abort requested")
@@ -144,6 +170,7 @@ class StepperTuner(linac_utils.SCLinacObject):
         if not self._abort_pv_obj:
             self._abort_pv_obj = PV(self.abort_pv)
         self._abort_pv_obj.put(1)
+        self._abort_written = True
 
     def move_positive(self):
         if not self._move_pos_pv_obj:
@@ -259,12 +286,77 @@ class StepperTuner(linac_utils.SCLinacObject):
         :param change_limits: whether to change the speed and steps
         :param check_detune: whether to check for valid detune after each move
         :return: None
-        """
 
+        If the move raises for any reason (abort, DetuneError, limit switch,
+        PV error), _clean_up_failed_move() first writes ABORT_REQ if the
+        motor is still moving, then restores NSTEPS.DRVH and VELO if this
+        move changed them. The original exception is then re-raised.
+        """
+        self._abort_written = False
+        self._limits_changed = False
+        try:
+            self._move(num_steps, max_steps, speed, change_limits, check_detune)
+        except BaseException:
+            self._clean_up_failed_move()
+            raise
+
+    def _clean_up_failed_move(self):
+        """Stop a still-moving motor and undo limit changes after a failure.
+
+        Never raises: a failure here is logged so the original exception
+        from the move is the one the caller sees.
+        """
+        if not self._abort_written:
+            self._abort_if_maybe_moving()
+        if self._limits_changed:
+            self._restore_limits_one_by_one()
+
+    def _abort_if_maybe_moving(self):
+        try:
+            moving = self.motor_moving
+        except Exception:
+            # Can't read MOTOR_MOVING: write ABORT_REQ anyway. Not knowing
+            # whether the motor is moving is itself an unsafe state.
+            moving = True
+        if not moving:
+            return
+        try:
+            self.abort()
+        except Exception as e:
+            self.cavity.logger.error(
+                "Failed to abort stepper after failed move: %s", e
+            )
+
+    def _restore_limits_one_by_one(self):
+        # Each write on its own, so a failed NSTEPS.DRVH still restores VELO.
+        for pv_field, attr, value in (
+            ("NSTEPS.DRVH", "max_steps", linac_utils.DEFAULT_STEPPER_MAX_STEPS),
+            ("VELO", "speed", linac_utils.DEFAULT_STEPPER_SPEED),
+        ):
+            try:
+                setattr(self, attr, value)
+            except Exception as e:
+                self.cavity.logger.error(
+                    "Failed to restore stepper %s after failed move: %s",
+                    pv_field,
+                    e,
+                )
+
+    def _move(
+        self,
+        num_steps: int,
+        max_steps: int,
+        speed: int,
+        change_limits: bool,
+        check_detune: bool,
+    ):
+        """Body of move(). Recurses for moves larger than max_steps."""
         self.check_abort()
         max_steps = abs(max_steps)
 
         if change_limits:
+            # Set before the first write, so a failure partway still restores.
+            self._limits_changed = True
             # on the off chance that someone tries to write a negative maximum
             self.max_steps = max_steps
 
@@ -331,7 +423,7 @@ class StepperTuner(linac_utils.SCLinacObject):
                 "Continuing with remaining %d steps", remaining_steps
             )
 
-            self.move(
+            self._move(
                 remaining_steps,
                 max_steps,
                 speed,
