@@ -420,9 +420,18 @@ class BaseScriptPVGroup(LauncherPVGroup):
     def _running_subprocess(self) -> bool:
         return self.process is not None and self.process.returncode is None
 
+    def _active(self) -> bool:
+        """A run counts as active until its monitor has written the result.
+
+        The process or future can finish a moment before its monitor stamps
+        the status. A start in that gap would reset _stop_requested and
+        replace process/_future while the old monitor still reads them.
+        """
+        return self._monitor_task is not None and not self._monitor_task.done()
+
     async def trigger_start(self):
         run_fn = self._get_run_fn()
-        if self._running_in_process() or self._running_subprocess():
+        if self._active():
             await self.status.write("Already running")
             return
         self._stop_requested = False
@@ -431,7 +440,9 @@ class BaseScriptPVGroup(LauncherPVGroup):
             self._future = asyncio.get_running_loop().run_in_executor(
                 self._get_executor(), run_fn
             )
-            self._monitor_task = asyncio.create_task(self._monitor_future())
+            self._monitor_task = asyncio.create_task(
+                self._monitor_future(self._future)
+            )
             return
         args = self.get_command_args()
         try:
@@ -444,7 +455,9 @@ class BaseScriptPVGroup(LauncherPVGroup):
             await self._stamp(f"Failed: {type(e).__name__}")
             return
         await self._stamp("Running")
-        self._monitor_task = asyncio.create_task(self._monitor_process())
+        self._monitor_task = asyncio.create_task(
+            self._monitor_process(self.process)
+        )
 
     async def trigger_stop(self):
         """Stop the run, and report Stopped once it has actually ended.
@@ -464,12 +477,27 @@ class BaseScriptPVGroup(LauncherPVGroup):
             await self.status.write("Stopping")
             await self.abort.write(1)
             return  # _monitor_future writes Stopped
+        if self._active():
+            return  # finished; its monitor is writing the result now
+        # A CM/rack/linac/global run only starts its subgroups' runs and
+        # returns (about 0.1 s per cavity), so they can still be going after
+        # this one has finished. Stop those, and leave idle ones alone.
+        await self._stop_running_subgroups()
         await self._stamp("Stopped")
 
-    async def _monitor_process(self):
-        """Monitor process and update status when complete"""
-        if self.process:
-            returncode = await self.process.wait()
+    async def _stop_running_subgroups(self):
+        for subgroup in self.subgroups:
+            if not isinstance(subgroup, BaseScriptPVGroup):
+                continue
+            if subgroup._active():
+                await subgroup.trigger_stop()
+            else:
+                await subgroup._stop_running_subgroups()
+
+    async def _monitor_process(self, process):
+        """Wait for this run's process, then write its result."""
+        if process:
+            returncode = await process.wait()
             if self._stop_requested:
                 await self._stamp("Stopped")
             elif returncode == 0:
@@ -477,9 +505,10 @@ class BaseScriptPVGroup(LauncherPVGroup):
             else:
                 await self._stamp(f"Failed (exit code: {returncode})")
 
-    async def _monitor_future(self):
+    async def _monitor_future(self, future):
+        """Wait for this run's future, then write its result."""
         try:
-            await self._future
+            await future
         except Exception as e:
             if self._stop_requested:
                 await self._stamp("Stopped")

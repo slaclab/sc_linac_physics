@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from caproto import ChannelType
@@ -516,3 +516,59 @@ class TestStopAndMissingScripts:
             await group.trigger_stop()
             await group._monitor_task
         assert group.status.value == "Stopped"
+
+    @pytest.mark.asyncio
+    async def test_start_refused_until_previous_monitor_has_written_result(
+        self,
+    ):
+        """The run is done but its monitor hasn't stamped yet: no new start."""
+        group = SetupCMPVGroup(prefix="TEST:", cm_name="CM01")
+        release = asyncio.Event()
+        real_stamp = group._stamp
+
+        async def held_stamp(status):
+            if status != "Running":
+                await release.wait()
+            await real_stamp(status)
+
+        with (
+            patch(
+                "sc_linac_physics.utils.simulation.launcher_service"
+                "._run_setup_cm"
+            ) as run,
+            patch.object(group, "_stamp", side_effect=held_stamp),
+        ):
+            await group.trigger_start()
+            first_monitor = group._monitor_task
+            await group._future  # the run itself is finished
+            assert not first_monitor.done()
+
+            await group.trigger_start()  # in the gap before the result
+            assert group.status.value == "Already running"
+            assert run.call_count == 1
+            assert group._monitor_task is first_monitor
+
+            release.set()
+            await first_monitor
+        assert group.status.value == "Completed"
+
+    @pytest.mark.asyncio
+    async def test_stop_after_aggregate_dispatch_stops_running_children(self):
+        """A CM run finishes once it has started its cavities. STOP must
+        still reach the cavity that is running, and leave idle ones alone."""
+        running = SetupCavityPVGroup(prefix="TEST:C1:", cm_name="01", cav_num=1)
+        idle = SetupCavityPVGroup(prefix="TEST:C2:", cm_name="01", cav_num=2)
+        cm = SetupCMPVGroup(
+            prefix="TEST:", cm_name="01", cavity_groups=[running, idle]
+        )
+        busy = Mock()
+        busy.done.return_value = False
+        running._monitor_task = busy
+        running.trigger_stop = AsyncMock()
+        idle.trigger_stop = AsyncMock()
+
+        await cm.trigger_stop()
+
+        running.trigger_stop.assert_awaited_once()
+        idle.trigger_stop.assert_not_awaited()
+        assert cm.status.value == "Stopped"
