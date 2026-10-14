@@ -233,6 +233,19 @@ class CavityCharController(QObject):
                 )
         except Exception as exc:
             self._log_signal.emit(f"Warning: failed to save: {exc}")
+        self._refresh_stored_data()
+
+    def _refresh_stored_data(self) -> None:
+        """Show this run's values in Stored Data.
+
+        The panel is filled when a record loads. A run changes
+        record.cavity_char (CavityCharPhase._store_phase_fields, or
+        _clear_measured_fields on a new start), and without this the panel
+        keeps showing the values it loaded.
+        """
+        record = self.session.get_active_record()
+        if record is not None:
+            self.view.refresh_from_record(record)
 
     def _on_phase_run_finished(self, success: bool, error_msg: str) -> None:
         if success and self.context is not None:
@@ -261,6 +274,7 @@ class CavityCharController(QObject):
             )
         finally:
             self._active_phase_instance_id = None
+        self._refresh_stored_data()
         self.view.show_error(error_msg)
 
     # ------------------------------------------------------------------

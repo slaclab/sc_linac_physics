@@ -714,6 +714,26 @@ def test_measurement_saves_the_record(view, monkeypatch):
     c.session.save_active_record.assert_called_once()
 
 
+def test_measurement_refreshes_stored_data(view, monkeypatch):
+    """Stored Data showed the values loaded with the record, not this run's."""
+    c = _ready_controller(view, monkeypatch)
+    c.context = Mock()
+    c._on_measurement_finished()
+    view.refresh_from_record.assert_called_once_with(
+        c.session.get_active_record.return_value
+    )
+
+
+def test_a_failed_run_refreshes_stored_data(view, monkeypatch):
+    """A new start clears the previous values from the record."""
+    c = _ready_controller(view, monkeypatch)
+    c.context = Mock()
+    c._on_phase_run_finished(False, "boom")
+    view.refresh_from_record.assert_called_once_with(
+        c.session.get_active_record.return_value
+    )
+
+
 def test_measurement_does_not_complete_the_phase_instance(view, monkeypatch):
     """Completion waits for the push, which is PR 3."""
     c = _ready_controller(view, monkeypatch)

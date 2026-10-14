@@ -538,9 +538,8 @@ class SSACharUI(PhaseUIBase):
 class CavityCharUI(PhaseUIBase):
     """Builds the Cavity Characterization display UI.
 
-    Drive level is the only operator input. There is no probe Q row:
-    CavityCharPhase._read_probe_q() returns None because the hardware model
-    has no probe Q readback PV and no PUSH_QPROBE to pair with one.
+    Drive level is the only operator input. The measured values, probe Q
+    included, appear in the generic Stored Data section.
     """
 
     def build(self) -> QHBoxLayout:

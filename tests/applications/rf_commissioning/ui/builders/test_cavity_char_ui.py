@@ -39,12 +39,8 @@ def test_drive_level_is_a_plain_spinbox_that_writes_nothing(qapp_global):
     assert not isinstance(spin, PyDMSpinbox)
 
 
-def test_no_probe_q_row(qapp_global):
-    """CavityCharPhase._read_probe_q() returns None by design.
-
-    There is no probe Q readback PV and no PUSH_QPROBE, so the panel omits
-    the row rather than showing a field that can never fill.
-    """
+def test_no_probe_q_input(qapp_global):
+    """Probe Q is a result, shown in Stored Data, not an operator input."""
     parent = QWidget()
     ui = CavityCharUI(parent, callbacks={})
     ui.build()
