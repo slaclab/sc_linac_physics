@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v9.44.0 (2026-10-14)
+
+### Bug Fixes
+
+- **rf-commissioning**: Require PROBECALTS to advance past the pre-start value
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+### Documentation
+
+- **rf-commissioning**: Record that PROBECALTS is stamped at run start
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+### Features
+
+- **rf-commissioning**: Cavity characterization phase, steps 1-4
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+### Refactoring
+
+- **rf-commissioning**: Abort the characterization wait through abort_flag
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+
 ## v9.43.0 (2026-10-14)
 
 ### Bug Fixes
