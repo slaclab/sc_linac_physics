@@ -157,8 +157,8 @@ class PiezoWithRFPhase(PhaseBase):
           - ssa.calibrate(ssa.drive_max)
           - move_to_resonance()
           - characterize(): finish_characterization() pushes loaded Q and
-            scale factor when in tolerance, and sets the piezo feedback
-            setpoint to 0
+            scale factor, and raises if either is out of tolerance; it also
+            sets the piezo feedback setpoint to 0
           - calculate_probe_q()
           - reset_data_decimation(): both decimations to 255
           - ADES = min(5, amplitude), SEL, piezo.enable_feedback(), SELA
@@ -191,14 +191,14 @@ class PiezoWithRFPhase(PhaseBase):
             loaded_q = float(self.cavity.measured_loaded_q)
             scale_factor = float(self.cavity.measured_scale_factor)
         except CavityAbortError as exc:
-            return self._failed(f"Aborted during RF setup: {exc}")
+            return self._failed(f"Aborted during RF setup — RF is off: {exc}")
         except Exception as exc:
             return self._failed(f"RF setup failed: {exc}")
 
         note = (
             "setup_rf() re-ran SSA calibration and characterization: loaded "
-            f"Q {loaded_q:.3e}, scale factor {scale_factor:.1f} (pushed if in "
-            "tolerance, not reviewed)"
+            f"Q {loaded_q:.3e}, scale factor {scale_factor:.1f} (pushed, not "
+            "reviewed)"
         )
         self._append_note(note)
         return PhaseStepResult(
