@@ -527,6 +527,20 @@ class CavityCharController(QObject):
         self._set_running_ui_state(True)
         threading.Thread(target=self._push_in_background, daemon=True).start()
 
+    def drop_reviewed_measurement(self) -> None:
+        """Forget an unpushed measurement when another record loads.
+
+        Its phase instance belongs to the previous record. It is left as it
+        is rather than failed, because the session's active record (which
+        fail_active_phase_instance uses) has already changed.
+        A run in progress is left alone.
+        """
+        if self._running:
+            return
+        self.phase = None
+        self.context = None
+        self._active_phase_instance_id = None
+
     def _push_in_background(self) -> None:
         try:
             for step_name in PUSH_STEPS:

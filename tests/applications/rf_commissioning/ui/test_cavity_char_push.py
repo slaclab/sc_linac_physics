@@ -307,3 +307,31 @@ def test_a_loaded_record_shows_values_but_cannot_push(display):
     display.refresh_from_record(record)
     assert display.loaded_q_label.text() == "4.100e+07"
     assert not display.push_results_button.isEnabled()
+
+
+def test_loading_another_record_drops_the_reviewed_measurement(display):
+    """Otherwise Push stays live after the operator picks another cavity.
+
+    The push would go to the cavity the phase measured, while the dialog
+    and the header show the new selection.
+    """
+    display.on_results_ready(_in_window())
+    display.controller.phase = Mock()
+    display.controller.context = Mock()
+    display.controller._active_phase_instance_id = 42
+
+    record = CommissioningRecord(linac=0, cryomodule="02", cavity_number=3)
+    with patch.object(display.controller, "update_pv_addresses"):
+        display.on_record_loaded(record, 9)
+
+    assert not display.push_results_button.isEnabled()
+    assert display.controller.phase is None
+    assert display.controller.context is None
+    assert display.controller._active_phase_instance_id is None
+
+
+def test_confirm_names_the_cavity_that_was_measured(display):
+    display.controller.phase = Mock()
+    display.controller.phase.cavity.__str__ = lambda self: "L0B CM01 Cavity 1"
+    text = display._confirm_push_text(_in_window())
+    assert "L0B CM01 Cavity 1" in text

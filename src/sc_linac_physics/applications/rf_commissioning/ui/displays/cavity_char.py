@@ -102,6 +102,11 @@ class CavityCharDisplay(BasePlaceholderDisplay):
     def on_record_loaded(
         self, record: CommissioningRecord, record_id: int
     ) -> None:
+        # A measurement reviewed for the previous record must not stay
+        # pushable: the push would go to the cavity that phase measured.
+        self.controller.drop_reviewed_measurement()
+        self._last_results = None
+        self.push_results_button.setEnabled(False)
         self.controller.update_pv_addresses(
             record.cryomodule, str(record.cavity_number)
         )
@@ -160,11 +165,11 @@ class CavityCharDisplay(BasePlaceholderDisplay):
         return f"Outside tolerance: {', '.join(outside)}"
 
     def _cavity_label(self) -> str:
-        selection = self.get_current_cavity()
-        if not selection:
-            return "the selected cavity"
-        cryomodule, cavity_number = selection
-        return f"CM{cryomodule} cavity {cavity_number}"
+        """The cavity the push writes to: the one the phase measured."""
+        phase = self.controller.phase
+        if phase is None or phase.cavity is None:
+            return "the measured cavity"
+        return str(phase.cavity)
 
     def _confirm_push_text(self, data: dict) -> str:
         """Spell out the three writes CavityCharPhase._push_results makes."""
