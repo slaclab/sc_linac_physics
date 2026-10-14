@@ -441,3 +441,49 @@ def test_results_keep_pv_order(session):
 def test_no_workers_is_refused(session):
     with pytest.raises(ValueError):
         get_values_over_time_range(["A:PV"], START, END, max_workers=0)
+
+
+class TestErrorContract:
+    """Every failure is an ArchiverError, as the module promises."""
+
+    def _not_json(self):
+        response = _response()
+        response.json.side_effect = requests.exceptions.JSONDecodeError(
+            "Expecting value", "<html>login</html>", 0
+        )
+        return response
+
+    def test_range_non_json_body_raises_archiver_error_naming_pv(self, session):
+        session.request.return_value = self._not_json()
+        with pytest.raises(ArchiverError, match="TEST:PV1.*not JSON"):
+            archiver.get_values_over_time_range(
+                ["TEST:PV1"], datetime(2025, 6, 2, 12), datetime(2025, 6, 2, 13)
+            )
+
+    def test_range_unexpected_shape_raises_archiver_error(self, session):
+        session.request.return_value = _response(payload=[{"meta": {}}])
+        with pytest.raises(ArchiverError, match="TEST:PV1.*unexpected"):
+            archiver.get_values_over_time_range(
+                ["TEST:PV1"], datetime(2025, 6, 2, 12), datetime(2025, 6, 2, 13)
+            )
+
+    def test_at_time_non_json_body_raises_archiver_error(self, session):
+        session.request.return_value = self._not_json()
+        with pytest.raises(ArchiverError, match="not JSON"):
+            archiver.get_values_at_time(["TEST:PV1"], datetime(2025, 6, 2, 12))
+
+    def test_at_time_with_no_pvs_sends_nothing(self, session):
+        assert archiver.get_values_at_time([], datetime(2025, 6, 2, 12)) == {}
+        session.request.assert_not_called()
+
+    def test_500_is_not_retried(self, session):
+        session.request.return_value = _response(500)
+        with pytest.raises(ArchiverError, match="HTTP 500"):
+            archiver.get_values_at_time(["TEST:PV1"], datetime(2025, 6, 2, 12))
+        assert session.request.call_count == 1
+
+    @pytest.mark.parametrize("status", [502, 503, 504])
+    def test_gateway_errors_are_retried(self, session, status):
+        session.request.side_effect = [_response(status), _response(payload={})]
+        archiver.get_values_at_time(["TEST:PV1"], datetime(2025, 6, 2, 12))
+        assert session.request.call_count == 2
