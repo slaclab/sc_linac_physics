@@ -1,4 +1,5 @@
-from unittest.mock import patch
+import asyncio
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from caproto import ChannelType
@@ -441,3 +442,133 @@ def off_cm_group():
 def setup_cavity_group():
     """Fixture providing a SetupCavityPVGroup instance"""
     return SetupCavityPVGroup(prefix="TEST:", cm_name="CM01", cav_num=1)
+
+
+class TestStopAndMissingScripts:
+    @pytest.mark.asyncio
+    async def test_missing_script_reports_failed_instead_of_raising(self):
+        """No sc-park-cm entry point exists; starting it must not crash."""
+        from sc_linac_physics.utils.simulation.launcher_service import (
+            ParkCMPVGroup,
+        )
+
+        group = ParkCMPVGroup(prefix="TEST:", cm_name="01")
+        with patch(
+            "sc_linac_physics.utils.simulation.launcher_service"
+            ".create_subprocess_exec",
+            side_effect=FileNotFoundError("sc-park-cm"),
+        ):
+            await group.trigger_start()
+        assert group.status.value == "Failed: sc-park-cm not found"
+
+    @pytest.mark.asyncio
+    async def test_stop_in_process_run_aborts_and_reports_stopped(self):
+        """The run can't be killed: stop writes ABORT, and the run ends."""
+        import threading
+
+        group = SetupCMPVGroup(prefix="TEST:", cm_name="CM01")
+        aborted = threading.Event()
+
+        def run_until_aborted(cm_name):
+            assert aborted.wait(timeout=5)
+
+        with patch(
+            "sc_linac_physics.utils.simulation.launcher_service._run_setup_cm",
+            side_effect=run_until_aborted,
+        ):
+            await group.trigger_start()
+            await group.trigger_stop()
+            assert group.status.value == "Stopping"
+            assert group.abort.value == "Abort request"
+            aborted.set()  # what the setup code does when it sees ABORT
+            await group._monitor_task
+        assert group.status.value == "Stopped"
+
+    @pytest.mark.asyncio
+    async def test_stop_subprocess_reports_stopped_not_exit_code(self):
+        from sc_linac_physics.utils.simulation.launcher_service import (
+            ColdCMPVGroup,
+        )
+
+        class FakeProcess:
+            returncode = None
+
+            def terminate(self):
+                self.returncode = -15
+
+            async def wait(self):
+                while self.returncode is None:
+                    await asyncio.sleep(0)
+                return self.returncode
+
+        group = ColdCMPVGroup(prefix="TEST:", cm_name="01")
+
+        async def fake_exec(*args):
+            return FakeProcess()
+
+        with patch(
+            "sc_linac_physics.utils.simulation.launcher_service"
+            ".create_subprocess_exec",
+            side_effect=fake_exec,
+        ):
+            await group.trigger_start()
+            assert isinstance(group._monitor_task, asyncio.Task)
+            await group.trigger_stop()
+            await group._monitor_task
+        assert group.status.value == "Stopped"
+
+    @pytest.mark.asyncio
+    async def test_start_refused_until_previous_monitor_has_written_result(
+        self,
+    ):
+        """The run is done but its monitor hasn't stamped yet: no new start."""
+        group = SetupCMPVGroup(prefix="TEST:", cm_name="CM01")
+        release = asyncio.Event()
+        real_stamp = group._stamp
+
+        async def held_stamp(status):
+            if status != "Running":
+                await release.wait()
+            await real_stamp(status)
+
+        with (
+            patch(
+                "sc_linac_physics.utils.simulation.launcher_service"
+                "._run_setup_cm"
+            ) as run,
+            patch.object(group, "_stamp", side_effect=held_stamp),
+        ):
+            await group.trigger_start()
+            first_monitor = group._monitor_task
+            await group._future  # the run itself is finished
+            assert not first_monitor.done()
+
+            await group.trigger_start()  # in the gap before the result
+            assert group.status.value == "Already running"
+            assert run.call_count == 1
+            assert group._monitor_task is first_monitor
+
+            release.set()
+            await first_monitor
+        assert group.status.value == "Completed"
+
+    @pytest.mark.asyncio
+    async def test_stop_after_aggregate_dispatch_stops_running_children(self):
+        """A CM run finishes once it has started its cavities. STOP must
+        still reach the cavity that is running, and leave idle ones alone."""
+        running = SetupCavityPVGroup(prefix="TEST:C1:", cm_name="01", cav_num=1)
+        idle = SetupCavityPVGroup(prefix="TEST:C2:", cm_name="01", cav_num=2)
+        cm = SetupCMPVGroup(
+            prefix="TEST:", cm_name="01", cavity_groups=[running, idle]
+        )
+        busy = Mock()
+        busy.done.return_value = False
+        running._monitor_task = busy
+        running.trigger_stop = AsyncMock()
+        idle.trigger_stop = AsyncMock()
+
+        await cm.trigger_stop()
+
+        running.trigger_stop.assert_awaited_once()
+        idle.trigger_stop.assert_not_awaited()
+        assert cm.status.value == "Stopped"
