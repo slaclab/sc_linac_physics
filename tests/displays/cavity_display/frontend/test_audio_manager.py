@@ -1245,15 +1245,5 @@ class TestInvalidSeverity:
         assert "16_1" not in audio_manager.acknowledged_cavities
 
 
-# Pytest configuration for Qt testing
-@pytest.fixture(scope="session")
-def qapp():
-    """Session-wide QApplication instance"""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

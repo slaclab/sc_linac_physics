@@ -3,7 +3,7 @@ from random import randint, choice
 from unittest.mock import MagicMock, patch
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import (
+from sc_linac_physics.utils.epics import (
     EPICS_INVALID_VAL,
     EPICS_NO_ALARM_VAL,
     make_mock_pv,
@@ -27,6 +27,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     CHARACTERIZATION_RUNNING_VALUE,
     CHARACTERIZATION_CRASHED_VALUE,
     HW_MODE_ONLINE_VALUE,
+    MAX_STEPPER_SPEED,
     HW_MODE_OFFLINE_VALUE,
     TUNE_CONFIG_RESONANCE_VALUE,
     DetuneError,
@@ -625,6 +626,22 @@ def test__auto_tune_iteration_callback_invoked(cavity):
     assert len(calls) >= 1
 
 
+def test__auto_tune_moves_three_quarters_of_detune(cavity):
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    cavity.stepper_tuner.hz_per_microstep = 0.01
+    detunes = iter([1000, 0])
+
+    cavity._auto_tune(delta_hz_func=lambda: next(detunes))
+
+    # 0.75 * 1000 Hz / 0.01 Hz per microstep
+    cavity.stepper_tuner.move.assert_called_once_with(
+        75000, max_steps=82500, speed=MAX_STEPPER_SPEED
+    )
+
+
 class BoundedDetune:
     """
     Wraps a detune source and raises once ``limit`` calls are exceeded, so a
@@ -652,7 +669,7 @@ def test__auto_tune_zero_step_estimate_raises(cavity):
     cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
     cavity.stepper_tuner.move = MagicMock()
     # A SCALE three orders of magnitude too large (e.g. a defaulted or
-    # mis-measured SCALE_CALC.B) makes 0.9 * delta_hz * microsteps_per_hz
+    # mis-measured SCALE_CALC.B) makes 0.75 * delta_hz * microsteps_per_hz
     # truncate to zero, so the motor is commanded no motion and the detune
     # never changes.
     cavity.stepper_tuner.hz_per_microstep = 1e6
@@ -751,6 +768,21 @@ def test_check_and_set_on_time(cavity):
     cavity.check_and_set_on_time()
     cavity._pulse_on_time_pv_obj.put.assert_called_with(NOMINAL_PULSED_ONTIME)
     cavity.push_go_button.assert_called()
+
+
+def test_push_go_button_creates_go_pv_lazily(cavity):
+    """push_go_button must not depend on something else creating the PV."""
+    cavity._pulse_status_pv_obj = make_mock_pv(
+        cavity.pulse_status_pv, get_val=2
+    )
+    cavity._pulse_go_pv_obj = None
+    go_pv = make_mock_pv(cavity.pulse_go_pv)
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=go_pv
+    ) as pv_cls:
+        cavity.push_go_button()
+    pv_cls.assert_called_once_with(cavity.pulse_go_pv)
+    go_pv.put.assert_called_with(1, wait=False)
 
 
 def test_push_go_button(cavity):
@@ -1213,21 +1245,8 @@ def test_wait_checks_abort_while_polling(cavity):
     cavity.check_abort.assert_called()
 
 
-def test_wait_stops_when_the_caller_aborts(cavity):
-    """should_abort is handled like a cavity abort: RF off, then raise."""
-    pv = make_mock_pv(get_val=CHARACTERIZATION_RUNNING_VALUE)
-    cavity._characterization_status_pv_obj = pv
-    cavity.turn_off = MagicMock()
-
-    with pytest.raises(CavityAbortError):
-        cavity.wait_for_characterization(
-            poll_interval=0.01, should_abort=lambda: True
-        )
-
-    cavity.turn_off.assert_called_once()
-
-
-def test_wait_ignores_a_caller_that_never_aborts(cavity):
+def test_wait_aborts_when_the_abort_arrives_as_the_run_completes(cavity):
+    """An abort during the last sleep stops the wait; RF goes off."""
     seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
     pv = make_mock_pv()
     pv.get = MagicMock(
@@ -1239,10 +1258,17 @@ def test_wait_ignores_a_caller_that_never_aborts(cavity):
     cavity._char_timestamp_pv_obj = make_mock_pv(
         get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     )
-    should_abort = MagicMock(return_value=False)
+    cavity.turn_off = MagicMock()
 
-    cavity.wait_for_characterization(
-        poll_interval=0.01, should_abort=should_abort
-    )
+    # The abort lands while the wait sleeps, after the RUNNING read.
+    def request_during_sleep(_):
+        cavity.request_abort()
 
-    should_abort.assert_called()
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.time.sleep",
+        side_effect=request_during_sleep,
+    ):
+        with pytest.raises(CavityAbortError):
+            cavity.wait_for_characterization(poll_interval=0.01)
+
+    cavity.turn_off.assert_called_once()

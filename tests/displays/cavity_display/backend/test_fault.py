@@ -1,9 +1,6 @@
-from datetime import datetime
 from random import randint
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
-
-from lcls_tools.common.data.archiver import ArchiverValue, ArchiveDataHandler
+from unittest.mock import MagicMock
 
 from sc_linac_physics.displays.cavity_display.backend.fault import (
     Fault,
@@ -15,18 +12,7 @@ from sc_linac_physics.utils.epics import (
     PVInvalidError,
 )
 
-archiver_value = ArchiverValue()
-get_data_at_time_mock = MagicMock(return_value={"PV": archiver_value})
-get_values_over_time_range_mock = MagicMock(
-    return_value={"PV": ArchiveDataHandler([archiver_value])}
-)
 
-
-@patch.multiple(
-    "lcls_tools.common.data.archiver",
-    get_data_at_time=get_data_at_time_mock,
-    get_values_over_time_range=get_values_over_time_range_mock,
-)
 class TestFault(TestCase):
     def setUp(self):
         self.fault = Fault(
@@ -101,15 +87,6 @@ class TestFault(TestCase):
         self.fault.fault_value = None
 
         self.assertRaises(RuntimeError, self.fault.is_faulted, pv)
-
-    @patch(
-        "sc_linac_physics.displays.cavity_display.backend.fault.get_data_at_time"
-    )
-    def test_was_faulted(self, mock_get_data):
-        mock_get_data.return_value = {self.fault.pv: MagicMock()}
-        self.fault.is_faulted = MagicMock()
-        self.fault.was_faulted(datetime.now())
-        self.fault.is_faulted.assert_called_once()
 
 
 class TestFaultCounter(TestCase):

@@ -879,7 +879,13 @@ class Cavity(linac_utils.SCLinacObject):
                 iteration_callback()
 
             microsteps_per_hz = self.microsteps_per_hz
-            est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+            # Aim for 75% of the measured detune per move (was 90%). A move
+            # passes resonance when 0.75 * (true / believed SCALE) > 1, so
+            # 0.75 tolerates a tuner that moves up to 1/0.75 = 1.33x what
+            # SCALE says without overshooting. 0.9 overshoots past 1.11x.
+            # CHECK: Ryan reports some tuners move ~30% more than SCALE
+            # says. Is there a measurement or tuner report to cite here?
+            est_steps = int(0.75 * delta_hz * microsteps_per_hz)
 
             # A zero step estimate commands no motion, so the detune cannot
             # change and steps_moved cannot grow -- so the runaway guard below
@@ -1007,7 +1013,7 @@ class Cavity(linac_utils.SCLinacObject):
     @property
     def pulse_go_pv_obj(self) -> PV:
         if not self._pulse_go_pv_obj:
-            self._pulse_go_pv_obj = PV(self._pv_prefix + "PULSE_DIFF_SUM")
+            self._pulse_go_pv_obj = PV(self.pulse_go_pv)
         return self._pulse_go_pv_obj
 
     def push_go_button(self):
@@ -1016,7 +1022,7 @@ class Cavity(linac_utils.SCLinacObject):
         go button is pressed
         :return:
         """
-        self._pulse_go_pv_obj.put(1, wait=False)
+        self.pulse_go_pv_obj.put(1, wait=False)
         while self.pulse_status < 2:
             self.check_abort()
             self.set_status_message(
@@ -1336,7 +1342,6 @@ class Cavity(linac_utils.SCLinacObject):
         timeout: Optional[float] = None,
         poll_interval: float = 1.0,
         max_result_age_seconds: float = 300.0,
-        should_abort: Optional[Callable[[], bool]] = None,
     ):
         """Block until the probe calibration settles, then vet the result.
 
@@ -1364,28 +1369,19 @@ class Cavity(linac_utils.SCLinacObject):
         @param poll_interval: seconds between status reads.
         @param max_result_age_seconds: how old PROBECALTS may be and still
             count as this run's result.
-        @param should_abort: checked each poll alongside check_abort(), for a
-            caller with its own abort flag (the commissioning phase passes
-            PhaseContext.is_abort_requested). True is handled like a cavity
-            abort: turn_off(), then CavityAbortError.
         @raise CavityCharacterizationError: crashed, timed out, or settled on
             a result older than max_result_age_seconds.
-        @raise CavityAbortError: via check_abort(), each poll.
+        @raise CavityAbortError: via check_abort(), each poll and once more
+            before the settled status is accepted.
         """
         deadline = None if timeout is None else time.monotonic() + timeout
 
-        while self.characterization_running:
-            if should_abort is not None and should_abort():
-                # Not via abort_flag: SetupCavity overrides check_abort() to
-                # read its abort PV instead, and would ignore the flag.
-                self.turn_off()
-                self.set_status_message(
-                    "Characterization wait aborted by caller", logging.ERROR
-                )
-                raise linac_utils.CavityAbortError(
-                    f"Abort requested for {self}"
-                )
+        while True:
+            # Abort before reading the status, so an abort that arrives
+            # during the last sleep wins over a run that then reads COMPLETE.
             self.check_abort()
+            if not self.characterization_running:
+                break
             if deadline is not None and time.monotonic() >= deadline:
                 self.set_status_message(
                     "Characterization did not finish in time",
