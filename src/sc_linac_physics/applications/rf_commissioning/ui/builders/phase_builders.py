@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 from pydm.widgets import PyDMEnumComboBox, PyDMLabel, PyDMSpinbox
+from pydm.widgets.display_format import DisplayFormat
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
@@ -564,6 +565,7 @@ class CavityCharUI(PhaseUIBase):
                 self._get_parent_stored_data_fields()
             )
         )
+        right_panel.addWidget(self._build_char_live_pvs())
         right_panel.addStretch()
 
         columns = QHBoxLayout()
@@ -574,6 +576,57 @@ class CavityCharUI(PhaseUIBase):
         main_layout.addLayout(columns)
         main_layout.addWidget(self._build_history(), stretch=1)
         return main_layout
+
+    def _build_char_live_pvs(self) -> QGroupBox:
+        """Live readbacks of the PVs this phase reads and writes.
+
+        Read-only PyDMLabels. CavityCharController.update_pv_addresses sets
+        each channel from the selected Cavity's *_pv attributes.
+        """
+        group = QGroupBox("Live PVs")
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        grid.setContentsMargins(8, 8, 8, 8)
+        grid.addWidget(QLabel("New"), 0, 1, alignment=Qt.AlignCenter)
+        grid.addWidget(QLabel("Current"), 0, 2, alignment=Qt.AlignCenter)
+
+        def pv_label(name: str, exponential: bool = False) -> PyDMLabel:
+            label = self._register(name, PyDMLabel(parent=self.parent))
+            label.setStyleSheet(PV_LABEL_STYLE)
+            label.setAlignment(Qt.AlignCenter)
+            if exponential:
+                label.displayFormat = DisplayFormat.Exponential
+                label.precisionFromPV = False
+                label.precision = 3
+            return label
+
+        rows = (
+            # caption, New widget, Current widget (None: nothing to show)
+            ("Status:", ("pydm_char_status", False), None),
+            ("Last run:", ("pydm_char_timestamp", False), None),
+            (
+                "Loaded Q:",
+                ("pydm_loaded_q_new", True),
+                ("pydm_loaded_q_current", True),
+            ),
+            (
+                "Scale factor:",
+                ("pydm_scale_new", False),
+                ("pydm_scale_current", False),
+            ),
+            # The hardware model has no PV for the operational probe Q.
+            ("Probe Q:", ("pydm_probe_q_new", True), None),
+            ("Drive level:", ("pydm_drive_level", False), None),
+            ("RF state:", ("pydm_rf_state", False), None),
+        )
+        for row, (caption, new, current) in enumerate(rows, start=1):
+            grid.addWidget(QLabel(caption), row, 0)
+            grid.addWidget(pv_label(*new), row, 1)
+            if current is not None:
+                grid.addWidget(pv_label(*current), row, 2)
+
+        group.setLayout(grid)
+        return group
 
     def _build_char_results(self) -> QGroupBox:
         """This run's values for review, and the button that pushes them.

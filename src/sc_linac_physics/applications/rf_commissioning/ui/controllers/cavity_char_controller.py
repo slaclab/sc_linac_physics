@@ -28,6 +28,7 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
+    apply_pv_mapping,
     resolve_cavity_selection,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
@@ -60,6 +61,20 @@ MEASURE_STEPS = (
 # written to the machine — which looks from the outside like the button did
 # nothing. ssa_char_controller uses the same limit.
 MAX_STEP_ATTEMPTS = 3
+
+# Live PV readouts on the panel: widget name -> the Cavity attribute holding
+# the PV address. Read-only; nothing here writes.
+LIVE_PV_WIDGETS = (
+    ("pydm_char_status", "characterization_status_pv"),  # PROBECALSTS
+    ("pydm_char_timestamp", "char_timestamp_pv"),  # PROBECALTS
+    ("pydm_loaded_q_new", "measured_loaded_q_pv"),  # QLOADED_NEW
+    ("pydm_loaded_q_current", "current_q_loaded_pv"),  # QLOADED
+    ("pydm_scale_new", "measured_scale_factor_pv"),  # CAV:CAL_SCALEB_NEW
+    ("pydm_scale_current", "current_cavity_scale_pv"),  # CAV:SCALER_SEL.B
+    ("pydm_probe_q_new", "measured_probe_q_pv"),  # QPROBE_CALC2
+    ("pydm_drive_level", "drive_level_pv"),  # SEL_ASET
+    ("pydm_rf_state", "rf_state_pv"),  # RFSTATE
+)
 
 # Run from the Push button, on the same CavityCharPhase that ran
 # MEASURE_STEPS: _push_results compares against the values that phase read.
@@ -165,6 +180,13 @@ class CavityCharController(QObject):
                 int(cryomodule), int(cavity_number)
             )
             self._cavity = cavity
+            apply_pv_mapping(
+                {
+                    getattr(self.view, widget): getattr(cavity, attr)
+                    for widget, attr in LIVE_PV_WIDGETS
+                    if hasattr(self.view, widget)
+                }
+            )
             self.view.cavity_loaded_q_window = (
                 cavity.loaded_q_lower_limit,
                 cavity.loaded_q_upper_limit,
