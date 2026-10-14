@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.43.0 (2026-10-14)
+
+### Bug Fixes
+
+- **sc-linac**: Check abort before accepting a settled characterization
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+### Features
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+
 ## v9.42.4 (2026-10-13)
 
 ### Bug Fixes
