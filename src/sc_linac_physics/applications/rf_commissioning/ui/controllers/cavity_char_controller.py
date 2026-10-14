@@ -172,18 +172,25 @@ class CavityCharController(QObject):
     # ------------------------------------------------------------------
 
     def on_abort(self) -> None:
-        """End the wait for a result. Writes nothing to the machine.
+        """Abort the run, both between steps and during the wait.
 
-        Cavity exposes PROBECALSTRT, PROBECALSTS and PROBECALTS for this
-        measurement and nothing else, so there is no abort to send.
-        request_abort() sets abort_flag, which check_abort() reads inside
-        CavityCharPhase._wait_for_completion.
+        context.request_abort() stops the step loop at the next step
+        boundary. cavity.request_abort() sets abort_flag, which check_abort()
+        reads each poll inside Cavity.wait_for_characterization(); there it
+        calls turn_off(), which writes RFCTRL = 0, and raises
+        CavityAbortError. CavityCharPhase._wait_for_completion asks its
+        controller for both.
+
+        Outside the wait no PV is written: the run stops before its next step.
         """
+        if self.context is not None:
+            self.context.request_abort()
         if self._cavity is not None:
             self._cavity.request_abort()
         self.view.log_message(
-            "Abort requested. This stops waiting for the result; the "
-            "characterization itself continues in the IOC."
+            "Abort requested. If the run is waiting for the result, RF is "
+            "turned off (RFCTRL = 0); otherwise the run stops before its "
+            "next step."
         )
 
     def on_pause_test(self) -> None:
@@ -277,6 +284,10 @@ class CavityCharController(QObject):
         if self._cavity is None:
             self.view.show_error("No cavity selected")
             return
+
+        # A flag left from an Abort pressed after the last wait would make
+        # this run's wait call turn_off() straight away.
+        self._cavity.abort_flag = False
 
         if not self._prepare_phase_context(self._cavity, operator, drive_level):
             return

@@ -71,25 +71,64 @@ def test_drive_level_of_zero_is_rejected(controller, view):
 # ---------------------------------------------------------------------------
 
 
-def test_abort_sets_the_flag_and_writes_no_pv(controller):
+def test_abort_reaches_both_the_cavity_and_the_context(controller):
+    """CavityCharPhase._wait_for_completion asks for both.
+
+    cavity.request_abort() is what check_abort() reads during the wait;
+    context.request_abort() is what the loop checks between steps.
+    """
     cavity = Mock()
     controller._cavity = cavity
+    controller.context = Mock()
     controller.on_abort()
     cavity.request_abort.assert_called_once()
+    controller.context.request_abort.assert_called_once()
     cavity.start_characterization.assert_not_called()
 
 
-def test_abort_says_it_only_stops_waiting(controller, view):
-    """There is no characterization abort PV — see the spec.
+def test_abort_says_rf_is_turned_off_during_the_wait(controller, view):
+    """An abort during the wait ends in Cavity.turn_off() (RFCTRL = 0).
 
-    An operator told "aborted" who believes the measurement stopped will
-    misread the cavity's state, so the copy has to be explicit.
+    The operator has to be told RF goes off, not that the run carries on.
     """
     controller._cavity = Mock()
     controller.on_abort()
     message = view.log_message.call_args[0][0].lower()
-    assert "stops waiting" in message or "stops the wait" in message
-    assert "continues" in message
+    assert "rf" in message and "off" in message
+    assert "continues" not in message
+
+
+def test_abort_with_no_run_in_progress_does_not_touch_a_context(
+    controller,
+):
+    controller._cavity = Mock()
+    controller.context = None
+    controller.on_abort()
+
+
+def test_a_stale_abort_flag_is_cleared_before_a_run(view, monkeypatch):
+    """An Abort pressed after the last wait leaves abort_flag set.
+
+    Left alone, the next run's wait would read it, turn RF off and abort.
+    """
+    controller = CavityCharController(view, _session_ready())
+    cavity = Mock()
+    cavity.abort_flag = True
+    controller._cavity = cavity
+    seen = {}
+
+    def fake_prepare(cav, operator, drive_level):
+        seen["flag_at_prepare"] = cav.abort_flag
+        return True
+
+    monkeypatch.setattr(controller, "_prepare_phase_context", fake_prepare)
+    monkeypatch.setattr(controller, "_execute_phase_async", lambda: None)
+    monkeypatch.setattr(controller, "_get_drive_level", lambda: 10.0)
+    view.get_current_operator.return_value = "operator"
+
+    controller.on_run_characterization()
+
+    assert seen == {"flag_at_prepare": False}
 
 
 def test_abort_with_no_cavity_selected_does_not_raise(controller):
