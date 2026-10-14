@@ -31,6 +31,8 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityCharacterizationError,
 )
 
+PRIOR_RESULT_TIME = datetime(2026, 10, 14, 12, 0, 0)
+
 
 @pytest.fixture(autouse=True)
 def no_sleep(monkeypatch):
@@ -46,6 +48,7 @@ def mock_cavity():
     cavity.ssa.calibration_running = False
     cavity.characterization_running = False
     cavity.characterization_crashed = False
+    cavity.characterization_timestamp = PRIOR_RESULT_TIME
     cavity.measured_loaded_q = 4.0e7
     cavity.measured_scale_factor = 30.0
     cavity.measured_loaded_q_in_tolerance = True
@@ -261,6 +264,47 @@ def test_stale_complete_from_an_earlier_run_fails(phase, mock_cavity):
     result = phase.execute_step("wait_for_completion")
     assert result.result == PhaseResult.FAILED
     assert "PROBECALTS" in result.message
+
+
+def test_recent_complete_from_before_the_start_fails(phase, mock_cavity):
+    """A COMPLETE under 300 s old passes the cavity wait; it must not pass here.
+
+    The start put does not wait, so the wait can read the previous run's
+    status before PROBECALSTS goes to RUNNING.
+    """
+    phase.execute_step("start_characterization")
+    # PROBECALTS unchanged: the result is the one read before the start.
+
+    result = phase.execute_step("wait_for_completion")
+
+    assert result.result == PhaseResult.FAILED
+    assert "PROBECALTS" in result.message
+
+
+def test_a_result_newer_than_the_start_passes(phase, mock_cavity):
+    phase.execute_step("start_characterization")
+    mock_cavity.characterization_timestamp = PRIOR_RESULT_TIME + timedelta(
+        seconds=40
+    )
+
+    result = phase.execute_step("wait_for_completion")
+
+    assert result.result == PhaseResult.SUCCESS
+
+
+def test_unreadable_prior_timestamp_retries_without_starting(
+    phase, mock_cavity, record
+):
+    type(mock_cavity).characterization_timestamp = property(
+        Mock(side_effect=RuntimeError("no CA"))
+    )
+    record.cavity_char = CavityCharacterization(probe_q=2.0e9)
+
+    result = phase.execute_step("start_characterization")
+
+    assert result.result == PhaseResult.RETRY
+    mock_cavity.start_characterization.assert_not_called()
+    assert record.cavity_char.probe_q == 2.0e9
 
 
 def test_abort_is_terminal_not_retried(phase, mock_cavity):

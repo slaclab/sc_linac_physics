@@ -29,7 +29,8 @@ Sequence:
   3. start_characterization  – kick off PROBECALSTRT; clear the previous
                                run's results from the record
   4. wait_for_completion     – poll PROBECALSTS until it settles, then reject a
-                               crash or a PROBECALTS too old to be this run
+                               crash, or a PROBECALTS too old or not later
+                               than the one read before the start
 """
 
 import time
@@ -58,10 +59,9 @@ class CavityCharLimits:
     """Configurable limits for the cavity characterization phase."""
 
     # Ryan's outline calls for 10% drive on 7 kW SSAs and 15% on 3.8 kW ones.
-    # There is no SSA power rating anywhere in the hardware model — no rated
-    # power PV, and fwd_power_lower_limit is a calibration floor rather than a
-    # rating — so the per-SSA default cannot be derived yet. Until that question
-    # is answered the phase starts from the existing safe pulsed level and the
+    # SSA.rated_power_kw reads the rating from SSA:Type, but the outline gives
+    # no drive level for the 4.6 kW and 1 kW SSAs. Until that is decided the
+    # phase starts from the existing safe pulsed level for every SSA, and the
     # operator can change it, which the outline asks for regardless.
     default_drive_level: float = linac_utils.SAFE_PULSED_DRIVE_LEVEL
     max_drive_level: float = 15.0
@@ -90,6 +90,9 @@ class CavityCharPhase(PhaseBase):
         self._loaded_q: float | None = None
         self._scale_factor: float | None = None
         self._probe_q: float | None = None
+        # PROBECALTS read just before this phase wrote PROBECALSTRT. None until
+        # then, and after a session resumed past start_characterization.
+        self._prestart_timestamp: datetime | None = None
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -286,6 +289,16 @@ class CavityCharPhase(PhaseBase):
                 message="Dry run: characterization start simulated",
                 data={"dry_run": True},
             )
+        # The last result's timestamp, so the wait step can tell this run's
+        # result from the previous one. Read before the start PV is written.
+        try:
+            prestart_timestamp = self.cavity.characterization_timestamp
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read PROBECALTS before starting: {exc}",
+                retry_delay_seconds=3.0,
+            )
         try:
             self.cavity.start_characterization()
         except Exception as exc:
@@ -303,9 +316,12 @@ class CavityCharPhase(PhaseBase):
         # previous run's probe Q (or loaded Q). A session resumed past this
         # step does not come back through here, so its values survive.
         self._clear_measured_fields()
+        self._prestart_timestamp = prestart_timestamp
 
-        # The status PV does not go busy instantly; without this the wait step
-        # can see the previous run's COMPLETE and return immediately.
+        # The status PV does not go busy instantly, and the start put does not
+        # wait for it. This sleep makes it less likely the wait step reads the
+        # previous run's COMPLETE; the PROBECALTS check after the wait is what
+        # rejects it if it does.
         time.sleep(self.limits.status_settle_delay)
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
@@ -343,6 +359,7 @@ class CavityCharPhase(PhaseBase):
                 timeout=self.limits.characterization_timeout_seconds,
                 poll_interval=self.limits.status_poll_interval,
             )
+            result_timestamp = self.cavity.characterization_timestamp
         except CavityAbortError as exc:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
@@ -361,6 +378,25 @@ class CavityCharPhase(PhaseBase):
                 result=PhaseResult.RETRY,
                 message=f"Could not read characterization status: {exc}",
                 retry_delay_seconds=3.0,
+            )
+
+        # wait_for_characterization() accepts any COMPLETE under 300 s old, so
+        # a run that finished a minute before this one started would pass it.
+        # Require PROBECALTS to be later than the value read before the start.
+        # A session resumed past start_characterization has no pre-start value
+        # and gets only the 300 s check.
+        # CHECK: does the IOC update PROBECALTS on every run that ends COMPLETE?
+        if (
+            self._prestart_timestamp is not None
+            and result_timestamp <= self._prestart_timestamp
+        ):
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    f"PROBECALTS is still {result_timestamp.isoformat()}, the "
+                    "result from before this run started — the status settled "
+                    "without a new characterization"
+                ),
             )
 
         return PhaseStepResult(
