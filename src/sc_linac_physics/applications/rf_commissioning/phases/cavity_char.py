@@ -385,7 +385,12 @@ class CavityCharPhase(PhaseBase):
         # Require PROBECALTS to be later than the value read before the start.
         # A session resumed past start_characterization has no pre-start value
         # and gets only the 300 s check.
-        # CHECK: does the IOC update PROBECALTS on every run that ends COMPLETE?
+        #
+        # PROBECALTS is stamped when a run starts, not when it completes.
+        # ACCL:L0B:0110:PROBECALTS read 2025-11-27-12:35:05 on 2026-10-14; the
+        # archiver has that cavity's PROBECALSTS going to RUNNING at 12:35:05
+        # and to COMPLETE at 12:35:25, its last run. PROBECALTS itself is not
+        # archived, so this is one cavity's run.
         if (
             self._prestart_timestamp is not None
             and result_timestamp <= self._prestart_timestamp
