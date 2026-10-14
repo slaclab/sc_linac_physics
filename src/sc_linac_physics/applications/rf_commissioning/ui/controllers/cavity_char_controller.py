@@ -179,6 +179,19 @@ class CavityCharController(QObject):
             cavity = self._get_machine_cavity(
                 int(cryomodule), int(cavity_number)
             )
+            if cavity is not self._cavity and self._cavity is not None:
+                if self._running:
+                    # on_abort() goes to self._cavity, so it stays the
+                    # cavity being characterized until the run ends.
+                    self.view.log_message(
+                        f"Cavity selection changed during a run; this panel "
+                        f"stays on {self._cavity} until the run ends"
+                    )
+                    return
+                # The header switch reaches here via start_new_record, which
+                # does not call on_record_loaded.
+                self.drop_reviewed_measurement()
+                self.view.on_cavity_changed()
             self._cavity = cavity
             apply_pv_mapping(
                 {

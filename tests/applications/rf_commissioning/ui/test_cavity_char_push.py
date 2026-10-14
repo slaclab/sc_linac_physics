@@ -335,3 +335,71 @@ def test_confirm_names_the_cavity_that_was_measured(display):
     display.controller.phase.cavity.__str__ = lambda self: "L0B CM01 Cavity 1"
     text = display._confirm_push_text(_in_window())
     assert "L0B CM01 Cavity 1" in text
+
+
+# ---------------------------------------------------------------------------
+# Switching cavity in the header
+# ---------------------------------------------------------------------------
+
+
+def _switch_to(controller, monkeypatch, cavity):
+    monkeypatch.setattr(
+        controller, "_get_machine_cavity", lambda cm, cav: cavity
+    )
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "cavity_char_controller.resolve_cavity_selection",
+        lambda v, cm, cav: ("01", "2"),
+    )
+    controller.update_pv_addresses("01", "2")
+
+
+def test_switching_cavity_resets_the_panel(view, monkeypatch):
+    """The header switch goes through start_new_record, not on_record_loaded.
+
+    update_pv_addresses is the call both paths share, so the reset lives there.
+    """
+    c = _measured_controller(view, monkeypatch)
+    c._cavity = Mock(name="cavity 1")
+    _switch_to(c, monkeypatch, Mock(name="cavity 2"))
+
+    view.on_cavity_changed.assert_called_once()
+    assert c.phase is None
+    assert c.context is None
+    assert c._active_phase_instance_id is None
+
+
+def test_reselecting_the_same_cavity_keeps_the_panel(view, monkeypatch):
+    c = _measured_controller(view, monkeypatch)
+    cavity = Mock(name="cavity 1")
+    c._cavity = cavity
+    _switch_to(c, monkeypatch, cavity)
+
+    view.on_cavity_changed.assert_not_called()
+    assert c.phase is not None
+
+
+def test_switching_mid_run_leaves_the_run_alone(view, monkeypatch):
+    """Abort goes to self._cavity, so it must stay the running cavity."""
+    c = _measured_controller(view, monkeypatch)
+    running_cavity = Mock(name="cavity 1")
+    c._cavity = running_cavity
+    c._running = True
+    _switch_to(c, monkeypatch, Mock(name="cavity 2"))
+
+    view.on_cavity_changed.assert_not_called()
+    assert c.phase is not None
+    assert c._cavity is running_cavity
+
+
+def test_cavity_change_clears_history_and_push(display):
+    display.log_message("read_results: Loaded Q 4.000e+07")
+    display.on_results_ready(_in_window())
+    display.char_status_label.setText("Measurement complete")
+
+    display.on_cavity_changed()
+
+    assert display.history_text.count() == 0
+    assert not display.push_results_button.isEnabled()
+    assert display.loaded_q_label.text() == "-"
+    assert display.char_status_label.text() == "-"

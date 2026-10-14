@@ -207,6 +207,20 @@ class CavityCharDisplay(BasePlaceholderDisplay):
         if self._ask_confirm(self._confirm_push_text(data)):
             self.controller.on_push_results()
 
+    def on_cavity_changed(self) -> None:
+        """Another cavity was selected: clear what belonged to the last one.
+
+        Phase History is this session's log for the previous cavity, and an
+        unpushed measurement is no longer pushable (the controller has
+        already dropped it).
+        """
+        self.clear_results()
+        self._last_results = None
+        self.push_results_button.setEnabled(False)
+        self._render_results({})
+        for name in ("char_status_label", "elapsed_label"):
+            getattr(self, name).setText("-")
+
     def _on_push_finished(self, success: bool, message: str) -> None:
         if success:
             self._last_results = None
