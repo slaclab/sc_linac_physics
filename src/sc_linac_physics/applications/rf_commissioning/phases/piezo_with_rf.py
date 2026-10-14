@@ -16,6 +16,7 @@ The phase leaves the cavity as the test left it: RF on in SEL at the test
 ADES, piezo enabled in manual.
 """
 
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -86,6 +87,9 @@ class PiezoWithRFPhase(PhaseBase):
             "verify_initial_state": self._verify_initial_state,
             "setup_rf": self._setup_rf,
             "setup_piezo": self._setup_piezo,
+            "check_detune": self._check_detune,
+            "start_test": self._start_test,
+            "wait_for_completion": self._wait_for_completion,
         }
 
     def get_phase_steps(self) -> list[str]:
@@ -234,9 +238,111 @@ class PiezoWithRFPhase(PhaseBase):
             message="Piezo enabled, in manual",
         )
 
+    def _check_detune(self) -> PhaseStepResult:
+        """Refuse to test if the detune is INVALID or over max_detune_hz.
+
+        cavity.detune reads DFBEST in SEL (DF_CHIRP only in chirp mode).
+        CHECK: the old worker read the RFS detune here, with its own TODO
+        asking whether DFBEST was right. Which one should gate the test?
+        """
+        if self.context.dry_run:
+            return self._dry_run_result("detune check")
+        try:
+            if self.cavity.detune_invalid:
+                return self._failed("Detune is INVALID — cannot run test")
+            detune = float(self.cavity.detune)
+        except Exception as exc:
+            return self._retry(f"Could not read detune: {exc}")
+        if abs(detune) > self.limits.max_detune_hz:
+            return self._failed(
+                f"Detune {detune:.1f} Hz is over "
+                f"{self.limits.max_detune_hz:.0f} Hz — tune the cavity first"
+            )
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=f"Detune {detune:.1f} Hz",
+            data={"detune_hz": detune},
+        )
+
+    def _start_test(self) -> PhaseStepResult:
+        """Write RFTESTSTRT = 1, unless RFTESTSTS already reads Running."""
+        if self.context.dry_run:
+            return self._dry_run_result("test start")
+        piezo = self.cavity.piezo
+        try:
+            running = linac_utils.PIEZO_SCRIPT_RUNNING_VALUE
+            if self._test_run_status() == running:
+                return self._failed(
+                    "A with-RF test is already running (RFTESTSTS = Running)"
+                )
+            piezo.withrf_run_check_pv_obj.put(1)
+        except Exception as exc:
+            return self._retry(f"Could not start the with-RF test: {exc}")
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS, message="With-RF test started"
+        )
+
+    def _wait_for_completion(self) -> PhaseStepResult:
+        """Wait for RFTESTSTS to read Running, then to stop reading Running.
+
+        Polls every poll_interval and calls cavity.check_abort() on every
+        poll. Seeing Running first is what tells this run from the last one:
+        RFTESTSTS holds its last value (Complete or Crash) until the script
+        starts, and the IOC has no timestamp for the with-RF run.
+
+        If the script runs start to finish inside one poll_interval, Running
+        is never seen and this step fails rather than pass a stale result.
+        Crash ends the wait; read_results fails on it.
+        """
+        if self.context.dry_run:
+            return self._dry_run_result("test completion")
+        running = linac_utils.PIEZO_SCRIPT_RUNNING_VALUE
+        try:
+            if not self._poll_until(
+                lambda s: s == running, self.limits.start_timeout_seconds
+            ):
+                return self._failed(
+                    "RFTESTSTS never read Running within "
+                    f"{self.limits.start_timeout_seconds:.0f} s of RFTESTSTRT "
+                    "— the test did not start, or finished between polls"
+                )
+            if not self._poll_until(
+                lambda s: s != running, self.limits.test_timeout_seconds
+            ):
+                return self._failed(
+                    "Timed out after "
+                    f"{self.limits.test_timeout_seconds:.0f} s with RFTESTSTS "
+                    "still Running"
+                )
+        except CavityAbortError as exc:
+            return self._failed(f"Aborted while waiting for the test: {exc}")
+        except Exception as exc:
+            return self._retry(f"Could not read RFTESTSTS: {exc}")
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS, message="With-RF test finished"
+        )
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _test_run_status(self) -> int:
+        """RFTESTSTS: 0 Crash, 1 Complete, 2 Running."""
+        return int(self.cavity.piezo.withrf_check_status_pv_obj.get())
+
+    def _poll_until(self, done: Callable[[int], bool], timeout: float) -> bool:
+        """Poll RFTESTSTS until done(status), for at most timeout seconds.
+
+        Counts polls rather than reading a clock, so it runs the same under
+        a patched sleep in tests.
+        """
+        polls = max(1, math.ceil(timeout / self.limits.poll_interval))
+        for _ in range(polls):
+            self.cavity.check_abort()
+            if done(self._test_run_status()):
+                return True
+            time.sleep(self.limits.poll_interval)
+        return False
 
     def _append_note(self, note: str) -> None:
         """Append a line to record.piezo_with_rf.notes; keeps what is there."""

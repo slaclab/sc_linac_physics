@@ -32,7 +32,9 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityHWModeError,
 )
 
+CRASH = 0
 COMPLETE = 1
+RUNNING = 2
 
 
 @pytest.fixture(autouse=True)
@@ -187,3 +189,103 @@ def test_dry_run_writes_nothing(mock_cavity, record, step):
     mock_cavity.set_sel_mode.assert_not_called()
     mock_cavity.piezo.enable.assert_not_called()
     mock_cavity.piezo.set_to_manual.assert_not_called()
+
+
+def test_steps_in_order(phase):
+    assert phase.get_phase_steps() == [
+        "verify_initial_state",
+        "setup_rf",
+        "setup_piezo",
+        "check_detune",
+        "start_test",
+        "wait_for_completion",
+    ]
+
+
+@pytest.mark.parametrize(
+    "detune, invalid, expected",
+    [
+        (100.0, False, PhaseResult.SUCCESS),
+        (-100.0, False, PhaseResult.SUCCESS),
+        (101.0, False, PhaseResult.FAILED),
+        (-101.0, False, PhaseResult.FAILED),
+        (0.0, True, PhaseResult.FAILED),
+    ],
+)
+def test_check_detune(phase, mock_cavity, detune, invalid, expected):
+    mock_cavity.detune = detune
+    mock_cavity.detune_invalid = invalid
+    assert phase.execute_step("check_detune").result == expected
+
+
+def test_start_test_writes_rfteststrt(phase, mock_cavity):
+    result = phase.execute_step("start_test")
+    assert result.result == PhaseResult.SUCCESS
+    mock_cavity.piezo.withrf_run_check_pv_obj.put.assert_called_once_with(1)
+
+
+def test_start_test_refuses_while_a_test_is_running(phase, mock_cavity):
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.return_value = RUNNING
+    result = phase.execute_step("start_test")
+    assert result.result == PhaseResult.FAILED
+    mock_cavity.piezo.withrf_run_check_pv_obj.put.assert_not_called()
+
+
+def test_wait_sees_running_then_complete(phase, mock_cavity):
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.side_effect = [
+        CRASH,
+        RUNNING,
+        RUNNING,
+        COMPLETE,
+    ]
+    assert (
+        phase.execute_step("wait_for_completion").result == PhaseResult.SUCCESS
+    )
+
+
+def test_wait_accepts_crash_as_finished(phase, mock_cavity):
+    """Leaving Running ends the wait; read_results judges Crash."""
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.side_effect = [
+        RUNNING,
+        CRASH,
+    ]
+    assert (
+        phase.execute_step("wait_for_completion").result == PhaseResult.SUCCESS
+    )
+
+
+def test_status_never_seen_running_fails(mock_cavity, record):
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.return_value = COMPLETE
+    phase = make_phase(mock_cavity, record)
+    phase.limits.start_timeout_seconds = 3
+    result = phase.execute_step("wait_for_completion")
+    assert result.result == PhaseResult.FAILED
+    assert "RFTESTSTS" in result.message
+    assert mock_cavity.piezo.withrf_check_status_pv_obj.get.call_count == 3
+
+
+def test_wait_times_out_while_running(mock_cavity, record):
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.return_value = RUNNING
+    phase = make_phase(mock_cavity, record)
+    phase.limits.test_timeout_seconds = 5
+    result = phase.execute_step("wait_for_completion")
+    assert result.result == PhaseResult.FAILED
+    assert "timed out" in result.message.lower()
+
+
+def test_wait_abort_fails(phase, mock_cavity):
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.return_value = RUNNING
+    mock_cavity.check_abort.side_effect = [None, CavityAbortError("abort")]
+    result = phase.execute_step("wait_for_completion")
+    assert result.result == PhaseResult.FAILED
+    assert "Abort" in result.message
+
+
+@pytest.mark.parametrize(
+    "step", ["check_detune", "start_test", "wait_for_completion"]
+)
+def test_dry_run_reads_and_writes_nothing(mock_cavity, record, step):
+    phase = make_phase(mock_cavity, record, dry_run=True)
+    assert phase.execute_step(step).result == PhaseResult.SUCCESS
+    mock_cavity.piezo.withrf_run_check_pv_obj.put.assert_not_called()
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.assert_not_called()
