@@ -27,6 +27,17 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     PIEZO_SCRIPT_RUNNING_VALUE,
 )
 
+# PZT:CHA_TESTSTAT / CHB_TESTSTAT enum states, read from production
+# (lcls-srv01, 2026-10-14). Only 0 counts as a pass.
+_CHANNEL_STATUS_LABELS = {0: "Pass", 1: "Warning", 2: "Fail"}
+
+
+def _status_label(status) -> str:
+    """Enum label for a channel status, given its index or its label."""
+    if isinstance(status, str):
+        return status
+    return _CHANNEL_STATUS_LABELS.get(status, f"status={status}")
+
 
 @dataclass
 class PiezoTestLimits:
@@ -161,7 +172,10 @@ class PiezoPreRFPhase(PhaseBase):
                 == PIEZO_PRE_RF_CHECKOUT_PASS_VALUE,
                 channel_b_passed=data.get("channel_b_status")
                 == PIEZO_PRE_RF_CHECKOUT_PASS_VALUE,
-                notes=f"Ch A: {data.get('channel_a_message', '')}, Ch B: {data.get('channel_b_message', '')}",
+                notes=(
+                    f"Ch A: {_status_label(data.get('channel_a_status'))}, "
+                    f"Ch B: {_status_label(data.get('channel_b_status'))}"
+                ),
             )
 
     # =========================================================================
@@ -363,10 +377,6 @@ class PiezoPreRFPhase(PhaseBase):
             cha_status = piezo.prerf_cha_status_pv_obj.get()
             chb_status = piezo.prerf_chb_status_pv_obj.get()
 
-            # Get messages for diagnostics
-            cha_msg = piezo.prerf_cha_testmsg_pv_obj.get()
-            chb_msg = piezo.prerf_chb_testmsg_pv_obj.get()
-
             # Get capacitance values
             cap_a = piezo.capacitance_a_pv_obj.get()
             cap_b = piezo.capacitance_b_pv_obj.get()
@@ -387,11 +397,11 @@ class PiezoPreRFPhase(PhaseBase):
                 messages = []
                 if not cha_passed:
                     messages.append(
-                        f"Channel A failed (status={cha_status}): {cha_msg}"
+                        f"Channel A failed ({_status_label(cha_status)})"
                     )
                 if not chb_passed:
                     messages.append(
-                        f"Channel B failed (status={chb_status}): {chb_msg}"
+                        f"Channel B failed ({_status_label(chb_status)})"
                     )
                 message = "; ".join(messages)
                 result = PhaseResult.FAILED
@@ -405,8 +415,6 @@ class PiezoPreRFPhase(PhaseBase):
                 data={
                     "channel_a_status": cha_status,
                     "channel_b_status": chb_status,
-                    "channel_a_message": cha_msg,
-                    "channel_b_message": chb_msg,
                     "capacitance_a_nf": cap_a,
                     "capacitance_b_nf": cap_b,
                 },

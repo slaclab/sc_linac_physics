@@ -36,11 +36,10 @@ class CommissioningPiezo(Piezo):
         self.prerf_chb_status_pv: str = self.pv_addr("CHB_TESTSTAT")
         self._prerf_chb_status_pv_obj: PV | None = None
 
-        self.prerf_cha_testmsg_pv: str = self.pv_addr("CHA_TESTMSG1")
-        self._prerf_cha_testmsg_pv_obj: PV | None = None
-
-        self.prerf_chb_testmsg_pv: str = self.pv_addr("CHA_TESTMSG2")
-        self._prerf_chb_testmsg_pv_obj: PV | None = None
+        # Production has no per-channel test message PV: CHA_TESTMSG1/2 do not
+        # connect and are not archived (checked on lcls-srv01, 2026-10-14).
+        # CHECK: does the pre-RF test leave a message anywhere, e.g. PZT:STAT
+        # or PZT:STATWRD?
 
         self.capacitance_a_pv: str = self.pv_addr("CHA_C")
         self._capacitance_a_pv_obj: PV | None = None
@@ -55,7 +54,7 @@ class CommissioningPiezo(Piezo):
         self.withrf_check_status_pv: str = self.pv_addr("RFTESTSTS")
         self._withrf_check_status_pv_obj: PV | None = None
 
-        self.withrf_status_pv: str = self.pv_addr("RFSTESTSTAT")
+        self.withrf_status_pv: str = self.pv_addr("RFTESTSTAT")
         self._withrf_status_pv_obj: PV | None = None
 
         self.amplifiergain_a_pv: str = self.pv_addr("CHA_AMPGAIN")
@@ -100,18 +99,6 @@ class CommissioningPiezo(Piezo):
         if not self._prerf_chb_status_pv_obj:
             self._prerf_chb_status_pv_obj = PV(self.prerf_chb_status_pv)
         return self._prerf_chb_status_pv_obj
-
-    @property
-    def prerf_cha_testmsg_pv_obj(self) -> PV:
-        if not self._prerf_cha_testmsg_pv_obj:
-            self._prerf_cha_testmsg_pv_obj = PV(self.prerf_cha_testmsg_pv)
-        return self._prerf_cha_testmsg_pv_obj
-
-    @property
-    def prerf_chb_testmsg_pv_obj(self) -> PV:
-        if not self._prerf_chb_testmsg_pv_obj:
-            self._prerf_chb_testmsg_pv_obj = PV(self.prerf_chb_testmsg_pv)
-        return self._prerf_chb_testmsg_pv_obj
 
     @property
     def capacitance_a_pv_obj(self) -> PV:

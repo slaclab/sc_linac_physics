@@ -347,14 +347,6 @@ class PiezoPVGroup(PVGroup):
         value=2,
         enum_strings=("Pass", "Fail", "Not Tested"),
     )
-    prerf_cha_testmsg = pvproperty(
-        name="CHA_TESTMSG1", value="", dtype=ChannelType.STRING
-    )
-    prerf_chb_testmsg = pvproperty(
-        name="CHA_TESTMSG2",
-        value="",
-        dtype=ChannelType.STRING,
-    )
     capacitance_a: PvpropertyFloat = pvproperty(
         name="CHA_C", value=0.0, dtype=ChannelType.FLOAT
     )
@@ -377,7 +369,7 @@ class PiezoPVGroup(PVGroup):
         enum_strings=("Idle", "Complete", "Running"),
     )
     withrf_status = pvproperty(
-        name="RFSTESTSTAT",
+        name="RFTESTSTAT",
         dtype=ChannelType.ENUM,
         value=0,
         enum_strings=("Not Tested", "Pass", "Fail"),
@@ -462,8 +454,6 @@ class PiezoPVGroup(PVGroup):
         await self.prerf_chb_status.write(2)  # Not Tested
         await self.capacitance_a.write(0.0)
         await self.capacitance_b.write(0.0)
-        await self.prerf_cha_testmsg.write("Testing...")
-        await self.prerf_chb_testmsg.write("Testing...")
 
         await sleep(1)
 
@@ -478,54 +468,40 @@ class PiezoPVGroup(PVGroup):
             await self.prerf_chb_status.write(0)  # Pass
             await self.capacitance_a.write(25.3)
             await self.capacitance_b.write(24.8)
-            await self.prerf_cha_testmsg.write("Test passed")
-            await self.prerf_chb_testmsg.write("Test passed")
 
         elif fail_mode == 1:  # Channel A fails
             await self.prerf_cha_status.write(1)  # Fail
             await self.prerf_chb_status.write(0)  # Pass
             await self.capacitance_a.write(10.5)
             await self.capacitance_b.write(24.8)
-            await self.prerf_cha_testmsg.write("Low capacitance detected")
-            await self.prerf_chb_testmsg.write("Test passed")
 
         elif fail_mode == 2:  # Channel B fails
             await self.prerf_cha_status.write(0)
             await self.prerf_chb_status.write(1)
             await self.capacitance_a.write(25.3)
             await self.capacitance_b.write(5.2)
-            await self.prerf_cha_testmsg.write("Test passed")
-            await self.prerf_chb_testmsg.write("Low capacitance detected")
 
         elif fail_mode == 3:  # Both channels fail
             await self.prerf_cha_status.write(1)
             await self.prerf_chb_status.write(1)
             await self.capacitance_a.write(0.1)
             await self.capacitance_b.write(0.2)
-            await self.prerf_cha_testmsg.write("No connection detected")
-            await self.prerf_chb_testmsg.write("No connection detected")
 
         elif fail_mode == 4:  # High capacitance
             await self.prerf_cha_status.write(1)
             await self.prerf_chb_status.write(0)
             await self.capacitance_a.write(45.7)
             await self.capacitance_b.write(24.8)
-            await self.prerf_cha_testmsg.write("High capacitance detected")
-            await self.prerf_chb_testmsg.write("Test passed")
 
         elif fail_mode == 5:  # Timeout
             await self.prerf_cha_status.write(1)
             await self.prerf_chb_status.write(1)
             await self.capacitance_a.write(0.0)
             await self.capacitance_b.write(0.0)
-            await self.prerf_cha_testmsg.write("Test timeout")
-            await self.prerf_chb_testmsg.write("Test timeout")
 
         else:  # Unknown
             await self.prerf_cha_status.write(1)
             await self.prerf_chb_status.write(1)
-            await self.prerf_cha_testmsg.write("Unknown failure mode")
-            await self.prerf_chb_testmsg.write("Unknown failure mode")
 
         # Set test status to Complete
         await self.prerf_test_status.write(1)  # Complete
