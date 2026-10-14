@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.45.2 (2026-10-14)
+
+### Bug Fixes
+
+- **utils**: Small bugs in cavity, logger and the EPICS wrapper
+  ([#360](https://github.com/slaclab/sc_linac_physics/pull/360),
+  [`eb17670`](https://github.com/slaclab/sc_linac_physics/commit/eb17670a351b325b7a5b8d35483ea00ecbf73b10))
+
+### Testing
+
+- Use our make_mock_pv and EPICS constants, not lcls_tools'
+  ([#360](https://github.com/slaclab/sc_linac_physics/pull/360),
+  [`eb17670`](https://github.com/slaclab/sc_linac_physics/commit/eb17670a351b325b7a5b8d35483ea00ecbf73b10))
+
+- **epics**: Make_mock_pv mocks with spec=PV
+  ([#360](https://github.com/slaclab/sc_linac_physics/pull/360),
+  [`eb17670`](https://github.com/slaclab/sc_linac_physics/commit/eb17670a351b325b7a5b8d35483ea00ecbf73b10))
+
+
 ## v9.45.1 (2026-10-14)
 
 ### Bug Fixes
