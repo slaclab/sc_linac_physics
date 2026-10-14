@@ -489,16 +489,27 @@ class TestCalibrationAndMaintenance:
     async def test_probe_cal_start_sets_running_and_schedules_the_run(
         self, regular_cavity
     ):
-        """Start flips PROBECALSTS to Running and returns PROBECALSTRT to 0."""
+        """Start stamps PROBECALTS, flips PROBECALSTS to Running, returns 0."""
         regular_cavity.log = Mock()
-        with patch.object(
-            regular_cavity, "_finish_characterization", new_callable=AsyncMock
-        ) as mock_finish:
+        with (
+            patch.object(
+                regular_cavity,
+                "_finish_characterization",
+                new_callable=AsyncMock,
+            ) as mock_finish,
+            patch(
+                "sc_linac_physics.utils.simulation.cavity_service.datetime"
+            ) as mock_datetime,
+        ):
+            mock_datetime.now.return_value.strftime.return_value = (
+                "2023-12-01-14:30:00"
+            )
             result = await regular_cavity.probe_cal_start.putter(None, 1)
             await regular_cavity._characterization_task
 
         assert result == 0
         assert regular_cavity.probe_cal_stat.value == "Running"
+        assert regular_cavity.probe_cal_time.value == "2023-12-01-14:30:00"
         mock_finish.assert_awaited_once()
         regular_cavity.log.info.assert_called_once_with(
             "TEST:CAV: cavity characterization started"
@@ -530,11 +541,12 @@ class TestCalibrationAndMaintenance:
         assert regular_cavity.probe_cal_stat.value == before
 
     @pytest.mark.asyncio
-    async def test_characterization_completes_with_fresh_timestamp(
+    async def test_characterization_completes_keeping_start_timestamp(
         self, regular_cavity
     ):
-        """A run that does not crash stamps PROBECALTS, then reports Complete."""
+        """A run that does not crash reports Complete; PROBECALTS unchanged."""
         regular_cavity.log = Mock()
+        before = regular_cavity.probe_cal_time.value
         await regular_cavity.probe_cal_stat.write("Running")
         with (
             patch(
@@ -545,23 +557,17 @@ class TestCalibrationAndMaintenance:
                 "sc_linac_physics.utils.simulation.cavity_service.np.random.random",
                 return_value=0.99,
             ),
-            patch(
-                "sc_linac_physics.utils.simulation.cavity_service.datetime"
-            ) as mock_datetime,
         ):
-            mock_datetime.now.return_value.strftime.return_value = (
-                "2023-12-01-14:30:00"
-            )
             await regular_cavity._finish_characterization()
 
         assert regular_cavity.probe_cal_stat.value == "Complete"
-        assert regular_cavity.probe_cal_time.value == "2023-12-01-14:30:00"
+        assert regular_cavity.probe_cal_time.value == before
 
     @pytest.mark.asyncio
-    async def test_characterization_crash_leaves_timestamp(
+    async def test_characterization_crash_keeps_start_timestamp(
         self, regular_cavity
     ):
-        """A crashed run reports Crash and does not refresh PROBECALTS."""
+        """A crashed run reports Crash; PROBECALTS keeps the start stamp."""
         regular_cavity.log = Mock()
         before = regular_cavity.probe_cal_time.value
         await regular_cavity.probe_cal_stat.write("Running")

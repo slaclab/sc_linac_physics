@@ -667,8 +667,9 @@ class CavityPVGroup(PVGroup):
     async def probe_cal_start(self, instance, value):
         """Start a simulated characterization; PROBECALSTRT reads back 0.
 
-        Sets PROBECALSTS to Running here and finishes the run in a task, so
-        the put returns at once and clients can poll the status meanwhile.
+        Stamps PROBECALTS with the start time, then sets PROBECALSTS to
+        Running, and finishes the run in a task, so the put returns at once
+        and clients can poll the status meanwhile.
         """
         if value != 1:
             return None
@@ -682,6 +683,13 @@ class CavityPVGroup(PVGroup):
             )
             return 0
         self.log.info(f"{self.prefix} cavity characterization started")
+        # The real IOC stamps PROBECALTS when a run starts, not when it
+        # completes (e0ecb030, checked against ACCL:L0B:0110 in the archiver).
+        # CHECK: does the IOC write PROBECALTS before or after PROBECALSTS
+        # goes to Running? Both landed in the same second on ACCL:L0B:0110.
+        await self.probe_cal_time.write(
+            datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        )
         await self.probe_cal_stat.write("Running")
         self._characterization_task = asyncio.get_running_loop().create_task(
             self._finish_characterization()
@@ -691,12 +699,14 @@ class CavityPVGroup(PVGroup):
         return 0
 
     async def _finish_characterization(self):
-        """End the run after a random delay: Crash or a fresh Complete.
+        """End the run after a random delay: Crash or Complete.
 
-        On Complete, PROBECALTS is stamped before PROBECALSTS changes, so a
-        client that sees Complete also sees this run's timestamp. A crash
-        leaves PROBECALTS at the last good result.
+        PROBECALTS is not touched here; the putter stamped it at start. So a
+        crashed run keeps its start stamp, and PROBECALTS no longer marks the
+        last good result.
         """
+        # CHECK: does a crashed run on the real IOC keep its start stamp in
+        # PROBECALTS? e0ecb030 only looked at a run that completed.
         await asyncio.sleep(
             np.random.uniform(*self.CHARACTERIZATION_DURATION_RANGE_S)
         )
@@ -706,9 +716,6 @@ class CavityPVGroup(PVGroup):
             )
             await self.probe_cal_stat.write("Crash")
             return
-        await self.probe_cal_time.write(
-            datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        )
         await self.probe_cal_stat.write("Complete")
         self.log.info(f"{self.prefix} cavity characterization complete")
 
