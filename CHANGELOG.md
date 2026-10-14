@@ -2,6 +2,53 @@
 
 <!-- version list -->
 
+## v9.45.0 (2026-10-14)
+
+### Bug Fixes
+
+- **rf-commissioning**: Require PROBECALTS to advance past the pre-start value
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Documentation
+
+- **rf-commissioning**: Record that PROBECALTS is stamped at run start
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Features
+
+- **rf-commissioning**: Cavity characterization phase, steps 1-4
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Cavity characterization phase, steps 5-7
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Read and push probe Q; revalidate results before push
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Record cavity char tolerance; out of range is not passed
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Refactoring
+
+- **rf-commissioning**: Abort the characterization wait through abort_flag
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+
 ## v9.44.1 (2026-10-14)
 
 ### Bug Fixes
