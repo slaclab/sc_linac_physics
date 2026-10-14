@@ -1,6 +1,7 @@
 """Cavity Characterization commissioning display."""
 
 from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtWidgets import QMessageBox
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CavityCharacterization,
@@ -43,6 +44,8 @@ class CavityCharDisplay(BasePlaceholderDisplay):
         self.controller.phase_completed.connect(
             self._on_controller_phase_completed
         )
+        self.controller.results_ready.connect(self.on_results_ready)
+        self.controller.push_finished.connect(self._on_push_finished)
 
         # BasePlaceholderDisplay.__init__ calls setup_ui() before this point,
         # so the controller does not exist while the widgets are built. The
@@ -62,6 +65,7 @@ class CavityCharDisplay(BasePlaceholderDisplay):
             "on_run_automated_test": self.on_run_characterization,
             "on_pause_test": self.on_pause_test,
             "on_abort_test": self.on_abort,
+            "on_push_results": self.on_push_results,
         }
         self.ui = self.UI_CLASS(self, callbacks)
         main_layout = self.ui.build()
@@ -74,7 +78,26 @@ class CavityCharDisplay(BasePlaceholderDisplay):
     # ------------------------------------------------------------------
 
     def refresh_from_record(self, record: CommissioningRecord) -> None:
+        """Fill Stored Data and the review rows. Never enables Push.
+
+        The push gate lives on the phase that read the values, so values
+        loaded from the database need a fresh measurement before a push.
+        """
         self._update_stored_readout(record.cavity_char)
+        data = record.cavity_char
+        self._render_results(
+            {
+                "loaded_q": getattr(data, "loaded_q", None),
+                "scale_factor": getattr(data, "scale_factor", None),
+                "probe_q": getattr(data, "probe_q", None),
+                "loaded_q_in_tolerance": getattr(
+                    data, "loaded_q_in_tolerance", None
+                ),
+                "scale_factor_in_tolerance": getattr(
+                    data, "scale_factor_in_tolerance", None
+                ),
+            }
+        )
 
     def on_record_loaded(
         self, record: CommissioningRecord, record_id: int
@@ -98,6 +121,91 @@ class CavityCharDisplay(BasePlaceholderDisplay):
                 parent.on_phase_advanced(record)
                 break
             parent = parent.parent()
+
+    # ------------------------------------------------------------------
+    # Review and push
+    # ------------------------------------------------------------------
+
+    def on_results_ready(self, data: dict) -> None:
+        """A run just read its values: show them and allow a push."""
+        self._render_results(data)
+        self._last_results = data
+        self.push_results_button.setEnabled(data.get("loaded_q") is not None)
+
+    def _render_results(self, data: dict) -> None:
+        def fmt(value, spec):
+            return "-" if value is None else format(value, spec)
+
+        self.loaded_q_label.setText(fmt(data.get("loaded_q"), ".3e"))
+        self.scale_factor_label.setText(fmt(data.get("scale_factor"), ".1f"))
+        self.probe_q_label.setText(fmt(data.get("probe_q"), ".3e"))
+        window = self.cavity_loaded_q_window
+        self.q_window_label.setText(
+            "-" if window is None else f"{window[0]:.2e} – {window[1]:.2e}"
+        )
+        self.tolerance_label.setText(self._tolerance_text(data))
+
+    @staticmethod
+    def _tolerance_text(data: dict) -> str:
+        """From the flags read_results recorded, not recomputed here."""
+        flags = (
+            ("loaded Q", data.get("loaded_q_in_tolerance")),
+            ("scale factor", data.get("scale_factor_in_tolerance")),
+        )
+        if any(ok is None for _, ok in flags):
+            return "-"
+        outside = [name for name, ok in flags if not ok]
+        if not outside:
+            return "Both in tolerance"
+        return f"Outside tolerance: {', '.join(outside)}"
+
+    def _cavity_label(self) -> str:
+        selection = self.get_current_cavity()
+        if not selection:
+            return "the selected cavity"
+        cryomodule, cavity_number = selection
+        return f"CM{cryomodule} cavity {cavity_number}"
+
+    def _confirm_push_text(self, data: dict) -> str:
+        """Spell out the three writes CavityCharPhase._push_results makes."""
+        text = (
+            f"Push these values to {self._cavity_label()}?\n\n"
+            f"  loaded Q {data['loaded_q']:.3e}  ->  PUSH_QLOADED.PROC\n"
+            f"  scale factor {data['scale_factor']:.1f}  ->  "
+            "PUSH_CAV_SCALE.PROC\n"
+            f"  probe Q {data['probe_q']:.3e}  ->  PUSH_QPROBECALC.PROC\n\n"
+            "Each is processed with 1. This replaces the cavity's "
+            "operational values."
+        )
+        tolerance = self._tolerance_text(data)
+        if tolerance.startswith("Outside"):
+            text += f"\n\n{tolerance}. Pushing anyway is your call."
+        return text
+
+    def _ask_confirm(self, text: str) -> bool:
+        return (
+            QMessageBox.question(
+                self,
+                "Push characterization results",
+                text,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            == QMessageBox.Yes
+        )
+
+    @pyqtSlot()
+    def on_push_results(self):
+        data = getattr(self, "_last_results", None)
+        if data is None:
+            return
+        if self._ask_confirm(self._confirm_push_text(data)):
+            self.controller.on_push_results()
+
+    def _on_push_finished(self, success: bool, message: str) -> None:
+        if success:
+            self._last_results = None
+            self.push_results_button.setEnabled(False)
 
     # ------------------------------------------------------------------
     # Live status

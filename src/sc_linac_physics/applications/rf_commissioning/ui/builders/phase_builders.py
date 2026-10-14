@@ -542,8 +542,11 @@ class CavityCharUI(PhaseUIBase):
     included, appear in the generic Stored Data section.
     """
 
-    def build(self) -> QHBoxLayout:
-        main_layout = QHBoxLayout()
+    def build(self) -> QVBoxLayout:
+        # Phase History spans the full width under the two columns. With it
+        # in the left column (the SSA layout) the right column ended in a
+        # tall empty space below Stored Data.
+        main_layout = QVBoxLayout()
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(8)
 
@@ -551,7 +554,8 @@ class CavityCharUI(PhaseUIBase):
         left_panel.setSpacing(6)
         left_panel.addLayout(self._build_main_toolbar())
         left_panel.addWidget(self._build_char_inputs())
-        left_panel.addWidget(self._build_history(), stretch=1)
+        left_panel.addWidget(self._build_char_results())
+        left_panel.addStretch()
 
         right_panel = QVBoxLayout()
         right_panel.setSpacing(6)
@@ -562,9 +566,51 @@ class CavityCharUI(PhaseUIBase):
         )
         right_panel.addStretch()
 
-        main_layout.addLayout(left_panel, 1)
-        main_layout.addLayout(right_panel, 1)
+        columns = QHBoxLayout()
+        columns.setSpacing(8)
+        columns.addLayout(left_panel, 1)
+        columns.addLayout(right_panel, 1)
+
+        main_layout.addLayout(columns)
+        main_layout.addWidget(self._build_history(), stretch=1)
         return main_layout
+
+    def _build_char_results(self) -> QGroupBox:
+        """This run's values for review, and the button that pushes them.
+
+        The button is built disabled. CavityCharDisplay enables it when
+        read_results succeeds, because the push gate lives on the phase that
+        read the values (CavityCharPhase._push_results).
+        """
+        group = QGroupBox("Review and Push")
+        layout = QGridLayout()
+        layout.setSpacing(6)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        for row, (caption, name) in enumerate(
+            (
+                ("Loaded Q:", "loaded_q_label"),
+                ("Q window:", "q_window_label"),
+                ("Scale factor:", "scale_factor_label"),
+                ("Probe Q:", "probe_q_label"),
+                ("Tolerance:", "tolerance_label"),
+            )
+        ):
+            layout.addWidget(QLabel(caption), row, 0)
+            layout.addWidget(
+                self._register(name, self._make_local_label("-")), row, 1
+            )
+
+        button = self._register(
+            "push_results_button",
+            QPushButton("Push to Cavity…", parent=self.parent),
+        )
+        button.setEnabled(False)
+        self._connect(button, "on_push_results")
+        layout.addWidget(button, 5, 0, 1, 2)
+
+        group.setLayout(layout)
+        return group
 
     def _build_char_inputs(self) -> QGroupBox:
         group = QGroupBox("Cavity Characterization")

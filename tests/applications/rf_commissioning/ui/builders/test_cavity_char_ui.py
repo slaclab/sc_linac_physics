@@ -39,14 +39,6 @@ def test_drive_level_is_a_plain_spinbox_that_writes_nothing(qapp_global):
     assert not isinstance(spin, PyDMSpinbox)
 
 
-def test_no_probe_q_input(qapp_global):
-    """Probe Q is a result, shown in Stored Data, not an operator input."""
-    parent = QWidget()
-    ui = CavityCharUI(parent, callbacks={})
-    ui.build()
-    assert "probe_q_label" not in ui.widgets
-
-
 def test_run_abort_and_pause_callbacks_are_connected(qapp_global):
     calls = []
     parent = QWidget()

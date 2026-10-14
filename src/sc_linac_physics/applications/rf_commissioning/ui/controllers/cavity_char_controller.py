@@ -1,9 +1,9 @@
 """Controller for the Cavity Characterization display.
 
-Drives CavityCharPhase and owns every write this phase makes to the machine:
-SEL_ASET (drive level) and PROBECALSTRT (start) here, and in a later change
-PUSH_QLOADED.PROC / PUSH_CAV_SCALE.PROC once the operator has reviewed the
-measurement.
+Drives CavityCharPhase and owns every write this phase makes to the machine.
+Start Test writes INTLK_RESET_ALL and SEL_ASET (drive level), then
+PROBECALSTRT. Push, after the operator confirms the values on screen,
+processes PUSH_QLOADED.PROC, PUSH_CAV_SCALE.PROC and PUSH_QPROBECALC.PROC.
 """
 
 import threading
@@ -61,6 +61,10 @@ MEASURE_STEPS = (
 # nothing. ssa_char_controller uses the same limit.
 MAX_STEP_ATTEMPTS = 3
 
+# Run from the Push button, on the same CavityCharPhase that ran
+# MEASURE_STEPS: _push_results compares against the values that phase read.
+PUSH_STEPS = ("push_results", "record_results")
+
 
 class CavityCharController(QObject):
     """Owns CavityCharPhase execution for the Cavity Characterization display."""
@@ -71,6 +75,10 @@ class CavityCharController(QObject):
     phase_run_finished = pyqtSignal(bool, str)
     # The measurement is read and on the record, awaiting operator review.
     measurement_finished = pyqtSignal()
+    # read_results' data (CavityCharPhase._result_data), for the review panel.
+    results_ready = pyqtSignal(dict)
+    # Push outcome: success, and the step's message on failure.
+    push_finished = pyqtSignal(bool, str)
     # Seconds since the characterization started. Emitted from the poll
     # thread so the elapsed label updates on the GUI thread.
     elapsed_updated = pyqtSignal(float)
@@ -96,11 +104,13 @@ class CavityCharController(QObject):
         self._running = False
         self._active_phase_instance_id: int | None = None
         self._steps: list[str] = list(MEASURE_STEPS)
+        self._last_step_message = ""
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
         # Queued: measurement_finished is emitted from the worker thread and
         # this slot lives on the controller, whose affinity is the GUI thread.
         self.measurement_finished.connect(self._on_measurement_finished)
+        self.push_finished.connect(self._on_push_finished)
         if hasattr(self.view, "log_message"):
             self._log_signal.connect(self.view.log_message)
         if hasattr(self.view, "set_char_status"):
@@ -204,6 +214,9 @@ class CavityCharController(QObject):
         and PROBECALSTRT writes.
         """
         self.view.run_button.setEnabled(not running)
+        if running:
+            # Re-enabled by the display when read_results succeeds.
+            self.view.push_results_button.setEnabled(False)
         self.view.pause_button.setEnabled(running)
         self.view.abort_button.setEnabled(running)
 
@@ -323,7 +336,10 @@ class CavityCharController(QObject):
             self.view.show_error(f"Cannot run CAVITY_CHAR phase: {reason}")
             return False
 
-        if record_id is not None:
+        # A measurement that was never pushed leaves its instance open.
+        # Measuring again continues that attempt rather than opening a second
+        # one that would leave the first in_progress for good.
+        if record_id is not None and self._active_phase_instance_id is None:
             phase_start = self.session.start_active_phase_instance(
                 CommissioningPhase.CAVITY_CHAR, operator=operator
             )
@@ -408,6 +424,7 @@ class CavityCharController(QObject):
         for attempt in range(1, MAX_STEP_ATTEMPTS + 1):
             result = self.phase.execute_step(step_name)
             self._create_step_checkpoint(step_name, result)
+            self._last_step_message = result.message
 
             if result.result is PhaseResult.RETRY:
                 self._report(
@@ -427,6 +444,8 @@ class CavityCharController(QObject):
 
             if result.result is PhaseResult.SUCCESS:
                 self._report(f"{step_name}: {result.message}", result.message)
+                if step_name == "read_results":
+                    self.results_ready.emit(dict(result.data or {}))
                 return True
 
             # A crash and a timeout both arrive as FAILED with different
@@ -475,9 +494,85 @@ class CavityCharController(QObject):
         the cavity has not completed.
         """
         self._status_signal.emit(
-            "Measurement complete — review the values before pushing"
+            "Measurement complete — review the values, then Push to Cavity"
         )
         self.measurement_finished.emit()
+
+    # ------------------------------------------------------------------
+    # Push
+    # ------------------------------------------------------------------
+
+    def on_push_results(self) -> None:
+        """Push the values the operator just confirmed. Runs PUSH_STEPS.
+
+        The display calls this only after its confirm dialog. Setting
+        confirmed_loaded_q to the loaded Q the phase read is what opens
+        CavityCharPhase._push_results' gate. That step re-reads the result
+        PVs and refuses if any changed, then processes PUSH_QLOADED.PROC,
+        PUSH_CAV_SCALE.PROC and PUSH_QPROBECALC.PROC, each with 1.
+        """
+        if self._running:
+            return
+        if (
+            self.phase is None
+            or self.context is None
+            or self.phase._loaded_q is None
+        ):
+            self.view.show_error(
+                "Nothing measured yet — run the characterization first"
+            )
+            return
+        self.context.parameters["confirmed_loaded_q"] = self.phase._loaded_q
+        self._running = True
+        self._set_running_ui_state(True)
+        threading.Thread(target=self._push_in_background, daemon=True).start()
+
+    def _push_in_background(self) -> None:
+        try:
+            for step_name in PUSH_STEPS:
+                if not self._execute_single_step(step_name):
+                    self.push_finished.emit(False, self._last_step_message)
+                    return
+            self.phase.finalize_phase()
+            self.phase._mark_phase_completed()
+            self.push_finished.emit(True, "")
+        except Exception as exc:
+            self.push_finished.emit(False, str(exc))
+
+    def _on_push_finished(self, success: bool, message: str) -> None:
+        """Complete the phase after a push, or leave it open after a refusal.
+
+        A refused push wrote nothing (the gate and the re-read come before
+        the PUSH_*.PROC writes), so the instance stays open for another
+        measurement and push.
+        """
+        self._running = False
+        self._set_running_ui_state(False)
+        if not success:
+            self.view.show_error(message)
+            return
+        record = self.session.get_active_record()
+        try:
+            if self._active_phase_instance_id is not None:
+                self.session.complete_active_phase_instance(
+                    phase_instance_id=self._active_phase_instance_id,
+                    phase=CommissioningPhase.CAVITY_CHAR,
+                    artifact_payload=self.context.record.cavity_char.to_dict(),
+                )
+            self.session.save_active_record()
+            self.session.add_measurement_to_history(
+                CommissioningPhase.CAVITY_CHAR,
+                self.context.record.cavity_char,
+                operator=self.context.operator,
+                phase_instance_id=self._active_phase_instance_id,
+            )
+        except Exception as exc:
+            self._log_signal.emit(f"Warning: failed to save the push: {exc}")
+        finally:
+            self._active_phase_instance_id = None
+        self._log_signal.emit("Pushed to the cavity; phase complete")
+        self._refresh_stored_data()
+        self.phase_completed.emit(record)
 
     def _emit_elapsed_until_done(self, started_at: float) -> None:
         """Emit elapsed seconds while the characterization runs.
