@@ -380,6 +380,12 @@ class CavityPVGroup(PVGroup):
     calc_probe_q: PvpropertyInteger = pvproperty(
         value=0, name="QPROBE_CALC1.PROC", dtype=ChannelType.INT
     )
+    measured_probe_q: PvpropertyFloat = pvproperty(
+        value=8.5e11, name="QPROBE_CALC2", dtype=ChannelType.FLOAT
+    )
+    push_probe_q: PvpropertyInteger = pvproperty(
+        value=0, name="PUSH_QPROBECALC.PROC", dtype=ChannelType.INT
+    )
     sel_poff: PvpropertyFloat = pvproperty(
         value=0.0, name="SEL_POFF", dtype=ChannelType.FLOAT
     )

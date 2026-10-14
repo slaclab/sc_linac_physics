@@ -16,6 +16,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CavityCharacterization,
     CommissioningPhase,
     CommissioningRecord,
+    PhaseStatus,
     SSACharacterization,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.cavity_char import (
@@ -57,9 +58,7 @@ def mock_cavity():
     cavity.scale_factor_upper_limit = 50.0
     cavity.loaded_q_lower_limit = 2.5e7
     cavity.loaded_q_upper_limit = 5.1e7
-    # Deliberately does NOT set probe_q: the real Cavity has no such
-    # attribute and no probe-Q readback PV. Setting it on the Mock is what
-    # previously made this suite pass against an API that does not exist.
+    cavity.measured_probe_q = 8.5e11
     return cavity
 
 
@@ -151,6 +150,37 @@ def test_push_step_pushes(phase, mock_cavity):
     assert result.result == PhaseResult.SUCCESS
     mock_cavity.push_loaded_q.assert_called_once()
     mock_cavity.push_scale_factor.assert_called_once()
+    mock_cavity.push_probe_q.assert_called_once()
+
+
+def test_push_refuses_if_scale_factor_changed_after_review(phase, mock_cavity):
+    """The push PVs process the IOC's current values, not the reviewed ones."""
+    phase.execute_step("read_results")
+    _confirm(phase)
+    mock_cavity.measured_scale_factor = 31.0
+
+    result = phase.execute_step("push_results")
+
+    assert result.result == PhaseResult.FAILED
+    assert "CAV:CAL_SCALEB_NEW" in result.message
+    mock_cavity.push_loaded_q.assert_not_called()
+    mock_cavity.push_scale_factor.assert_not_called()
+    mock_cavity.push_probe_q.assert_not_called()
+
+
+def test_push_refuses_if_a_new_run_started_after_review(phase, mock_cavity):
+    """Same values, different run: PROBECALTS moved, so nothing is pushed."""
+    phase.execute_step("read_results")
+    _confirm(phase)
+    mock_cavity.characterization_timestamp = PRIOR_RESULT_TIME + timedelta(
+        minutes=1
+    )
+
+    result = phase.execute_step("push_results")
+
+    assert result.result == PhaseResult.FAILED
+    assert "PROBECALTS" in result.message
+    mock_cavity.push_loaded_q.assert_not_called()
 
 
 def test_push_before_measuring_fails(phase, mock_cavity):
@@ -192,10 +222,25 @@ def test_confirming_an_older_measurement_does_not_push(phase, mock_cavity):
     mock_cavity.push_loaded_q.assert_not_called()
 
 
-def test_full_run_without_confirmation_never_pushes(phase, mock_cavity):
+def test_full_run_without_confirmation_never_pushes(phase, mock_cavity, record):
+    """Runs every step up to the gate, so the gate is what stops it."""
+    record.set_phase_status(
+        CommissioningPhase.FREQUENCY_TUNING, PhaseStatus.COMPLETE
+    )
+
+    def start():
+        mock_cavity.characterization_timestamp = PRIOR_RESULT_TIME + timedelta(
+            seconds=40
+        )
+
+    mock_cavity.start_characterization.side_effect = start
+
     assert phase.run() is False
+    mock_cavity.wait_for_characterization.assert_called_once()
+    assert record.cavity_char.loaded_q == 4.0e7  # read_results ran
     mock_cavity.push_loaded_q.assert_not_called()
     mock_cavity.push_scale_factor.assert_not_called()
+    mock_cavity.push_probe_q.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -213,29 +258,20 @@ def test_results_are_stored_on_the_record_as_they_are_read(phase, record):
     assert data.loaded_q_in_tolerance is True
 
 
-def test_probe_q_is_not_invented_when_no_readback_exists(phase, record):
-    """QPROBE_CALC1.PROC triggers the calculation; nothing reads it back.
-
-    There is no probe-Q value PV and no push PV for it anywhere in the codebase.
-    The record must be left empty rather than carrying a fabricated number — an
-    earlier version of this suite passed only because the Mock supplied a
-    probe_q attribute the real Cavity does not have.
-    """
+def test_probe_q_is_read_and_stored(phase, record):
     phase.execute_step("read_results")
 
-    assert record.cavity_char.probe_q is None
+    assert record.cavity_char.probe_q == 8.5e11
 
 
-def test_real_cavity_has_no_probe_q_readback():
-    """Pins the gap, so this fails the day the PV is added and can be wired up."""
+def test_real_cavity_probe_q_pvs():
+    """Names from Sebastian Aderhold on #372."""
     from sc_linac_physics.utils.sc_linac.linac import Machine
 
     cavity = Machine().cryomodules["37"].cavities[1]
 
-    assert not hasattr(cavity, "probe_q")
-    assert not hasattr(cavity, "measured_probe_q")
-    # The trigger does exist; only the readback is missing.
-    assert hasattr(cavity, "calc_probe_q_pv")
+    assert cavity.measured_probe_q_pv.endswith(":QPROBE_CALC2")
+    assert cavity.push_probe_q_pv.endswith(":PUSH_QPROBECALC.PROC")
 
 
 def test_scale_factor_out_of_tolerance_is_flagged_and_recorded(
@@ -291,6 +327,30 @@ def test_finalize_keeps_values_when_steps_ran_in_an_earlier_session(
     assert record.cavity_char.loaded_q == 4.0e7
     assert record.cavity_char.scale_factor == 30.0
     assert record.cavity_char.probe_q == 2.0e9
+
+
+def test_finalize_keeps_the_measurement_time_from_an_earlier_session(
+    phase, record
+):
+    """Resuming must not relabel an old measurement as taken now."""
+    measured_at = datetime(2026, 10, 1, 9, 0, 0)
+    record.cavity_char = CavityCharacterization(
+        loaded_q=4.0e7, scale_factor=30.0, timestamp=measured_at
+    )
+
+    phase.finalize_phase()
+
+    assert record.cavity_char.timestamp == measured_at
+
+
+def test_reading_results_stamps_the_record(phase, record):
+    record.cavity_char = CavityCharacterization(
+        timestamp=datetime(2026, 10, 1, 9, 0, 0)
+    )
+
+    phase.execute_step("read_results")
+
+    assert record.cavity_char.timestamp > datetime(2026, 10, 1, 9, 0, 0)
 
 
 def test_starting_a_new_run_clears_the_previous_results(phase, record):

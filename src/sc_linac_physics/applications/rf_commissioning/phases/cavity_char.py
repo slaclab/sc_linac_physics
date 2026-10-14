@@ -24,12 +24,6 @@ happens:
 - An operator may push an out-of-tolerance value after confirming
   (`_push_results`). `finish_characterization()` refuses.
 
-Known gap: probe Q. QPROBE_CALC1.PROC triggers the calculation and is the only
-probe-Q PV that exists — there is no value record to read the result from and no
-push PV for it. Ryan's outline asks for probe Q to be displayed and pushed, so
-those PVs presumably exist on the machine and are missing from the model. Until
-they are added, probe_q stays None on the record rather than being invented.
-
 Sequence:
   1. verify_initial_state    – cavity online, stepper idle, SSA on and not
                                calibrating; warn if SSA calibration or tuning
@@ -42,11 +36,13 @@ Sequence:
                                crash, or a PROBECALTS too old or not later
                                than the one read before the start
   5. read_results            – read loaded Q and scale factor, trigger the
-                               probe-Q calculation, flag either one out of
-                               tolerance. Nothing is pushed.
+                               probe-Q calculation and read probe Q, flag
+                               loaded Q or scale factor out of tolerance.
+                               Nothing is pushed.
   6. push_results            – refused unless parameters["confirmed_loaded_q"]
-                               matches the loaded Q read in step 5; then push
-                               loaded Q and scale factor to the cavity
+                               matches the loaded Q read in step 5 and the
+                               cavity's result is unchanged since; then push
+                               loaded Q, scale factor and probe Q
   7. record_results          – write CavityCharacterization onto the record
 """
 
@@ -113,6 +109,9 @@ class CavityCharPhase(PhaseBase):
         # PROBECALTS read just before this phase wrote PROBECALSTRT. None until
         # then, and after a session resumed past start_characterization.
         self._prestart_timestamp: datetime | None = None
+        # PROBECALTS as of read_results: identifies the run the operator
+        # reviewed, so push_results can refuse if another run started since.
+        self._reviewed_run_timestamp: datetime | None = None
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -455,6 +454,9 @@ class CavityCharPhase(PhaseBase):
             )
 
         try:
+            self._reviewed_run_timestamp = (
+                self.cavity.characterization_timestamp
+            )
             self._loaded_q = float(self.cavity.measured_loaded_q)
             self._scale_factor = float(self.cavity.measured_scale_factor)
             # The same checks finish_characterization() makes before pushing.
@@ -482,6 +484,9 @@ class CavityCharPhase(PhaseBase):
             probe_q=self._probe_q,
             loaded_q_in_tolerance=self._loaded_q_in_tolerance,
             scale_factor_in_tolerance=self._scale_factor_in_tolerance,
+            # When these values were read. finalize_phase() leaves it alone,
+            # so a session resumed after this step keeps the real read time.
+            timestamp=datetime.now(),
         )
 
         summary = (
@@ -513,20 +518,13 @@ class CavityCharPhase(PhaseBase):
             data=self._result_data(),
         )
 
-    def _read_probe_q(self) -> float | None:
-        """Always None today: there is no probe-Q readback PV.
+    def _read_probe_q(self) -> float:
+        """Read QPROBE_CALC2, the probe Q that QPROBE_CALC1.PROC calculates.
 
-        `calculate_probe_q()` processes QPROBE_CALC1.PROC, which triggers the
-        calculation, and that is the only probe-Q PV in the codebase — there is
-        no value record to read the result from, and no PUSH_QPROBE to push it
-        with (only PUSH_QLOADED and PUSH_CAV_SCALE exist).
-
-        Ryan's outline asks for probe Q to be displayed and pushed, so the PV
-        names are presumably known to the SRF group and simply absent from the
-        hardware model. Returning None keeps the record honest until they are
-        added: better an empty field than a fabricated number.
+        PV names from Sebastian Aderhold on #372. No tolerance check: the
+        Cavity model has no probe-Q limits.
         """
-        return None
+        return float(self.cavity.measured_probe_q)
 
     def _push_results(self) -> PhaseStepResult:
         """Push the reviewed values to the cavity, if the operator confirmed.
@@ -538,9 +536,17 @@ class CavityCharPhase(PhaseBase):
         does not match and is refused too. The UI sets the parameter when the
         operator confirms the values on screen.
 
-        On success it processes PUSH_QLOADED.PROC (push_loaded_q) and
-        PUSH_CAV_SCALE.PROC (push_scale_factor), in that order, whether or
-        not either value is in tolerance.
+        The push PVs process whatever the IOC's result PVs hold now, not the
+        numbers this phase read. So just before pushing it re-reads PROBECALTS,
+        QLOADED_NEW, CAV:CAL_SCALEB_NEW and QPROBE_CALC2, and refuses if any
+        differs from what read_results stored: a run started during the review
+        would otherwise push values the operator never saw.
+
+        On success it processes PUSH_QLOADED.PROC (push_loaded_q),
+        PUSH_CAV_SCALE.PROC (push_scale_factor) and PUSH_QPROBECALC.PROC
+        (push_probe_q), in that order, whether or not either value is in
+        tolerance. Cavity.finish_characterization() does not push probe Q;
+        this phase does because Ryan's outline asks for it.
 
         This differs from auto setup on purpose. Cavity.finish_characterization()
         refuses to push an out-of-tolerance loaded Q or scale factor. In
@@ -574,8 +580,26 @@ class CavityCharPhase(PhaseBase):
             )
 
         try:
+            changed = self._results_changed_since_read()
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not re-read results before pushing: {exc}",
+                retry_delay_seconds=3.0,
+            )
+        if changed:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    f"{', '.join(changed)} changed since the values were "
+                    "reviewed — nothing pushed. Rerun the characterization."
+                ),
+            )
+
+        try:
             self.cavity.push_loaded_q()
             self.cavity.push_scale_factor()
+            self.cavity.push_probe_q()
         except Exception as exc:
             return PhaseStepResult(
                 result=PhaseResult.RETRY,
@@ -585,9 +609,28 @@ class CavityCharPhase(PhaseBase):
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message="Loaded Q and cavity scale factor pushed",
+            message="Loaded Q, cavity scale factor and probe Q pushed",
             data=self._result_data(),
         )
+
+    def _results_changed_since_read(self) -> list[str]:
+        """PV names whose current value differs from what read_results stored."""
+        current = {
+            "PROBECALTS": (
+                self.cavity.characterization_timestamp,
+                self._reviewed_run_timestamp,
+            ),
+            "QLOADED_NEW": (
+                float(self.cavity.measured_loaded_q),
+                self._loaded_q,
+            ),
+            "CAV:CAL_SCALEB_NEW": (
+                float(self.cavity.measured_scale_factor),
+                self._scale_factor,
+            ),
+            "QPROBE_CALC2": (self._read_probe_q(), self._probe_q),
+        }
+        return [name for name, (now, read) in current.items() if now != read]
 
     def _record_results(self) -> PhaseStepResult:
         """Placeholder step — population happens in finalize_phase()."""
@@ -659,5 +702,4 @@ class CavityCharPhase(PhaseBase):
         data.probe_q = (
             self._probe_q if self._probe_q is not None else data.probe_q
         )
-        data.timestamp = datetime.now()
         record.cavity_char = data

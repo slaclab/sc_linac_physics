@@ -90,6 +90,11 @@ class Cavity(linac_utils.SCLinacObject):
 
         self._calc_probe_q_pv_obj: Optional[PV] = None
         self.calc_probe_q_pv: str = self.pv_addr("QPROBE_CALC1.PROC")
+        # PV names from Sebastian Aderhold on #372.
+        self._measured_probe_q_pv_obj: Optional[PV] = None
+        self.measured_probe_q_pv: str = self.pv_addr("QPROBE_CALC2")
+        self._push_probe_q_pv_obj: Optional[PV] = None
+        self.push_probe_q_pv: str = self.pv_addr("PUSH_QPROBECALC.PROC")
 
         self._push_ssa_slope_pv_obj: Optional[PV] = None
         self.push_ssa_slope_pv: str = self.pv_addr("PUSH_SSA_SLOPE.PROC")
@@ -673,6 +678,17 @@ class Cavity(linac_utils.SCLinacObject):
 
     def calculate_probe_q(self):
         self.calc_probe_q_pv_obj.put(1, wait=False)
+
+    @property
+    def measured_probe_q(self) -> float:
+        if not self._measured_probe_q_pv_obj:
+            self._measured_probe_q_pv_obj = PV(self.measured_probe_q_pv)
+        return self._measured_probe_q_pv_obj.get()
+
+    def push_probe_q(self):
+        if not self._push_probe_q_pv_obj:
+            self._push_probe_q_pv_obj = PV(self.push_probe_q_pv)
+        self._push_probe_q_pv_obj.put(1, wait=False)
 
     def set_chirp_range(self, offset: int):
         offset = abs(offset)
