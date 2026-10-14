@@ -2,6 +2,245 @@
 
 <!-- version list -->
 
+## v9.45.1 (2026-10-14)
+
+### Bug Fixes
+
+- **sim**: A run is active until its monitor writes the result; STOP reaches running children
+  ([#392](https://github.com/slaclab/sc_linac_physics/pull/392),
+  [`24cd769`](https://github.com/slaclab/sc_linac_physics/commit/24cd7691362134cfcace603ce8f53eb827887af9))
+
+- **sim**: Launcher stop actually stops, and a missing script reports Failed
+  ([#392](https://github.com/slaclab/sc_linac_physics/pull/392),
+  [`24cd769`](https://github.com/slaclab/sc_linac_physics/commit/24cd7691362134cfcace603ce8f53eb827887af9))
+
+- **sim**: Stamp PROBECALTS when a characterization starts
+  ([#394](https://github.com/slaclab/sc_linac_physics/pull/394),
+  [`8b75e58`](https://github.com/slaclab/sc_linac_physics/commit/8b75e586cc9adc8571fa596214881cd63a47a4fe))
+
+
+## v9.45.0 (2026-10-14)
+
+### Bug Fixes
+
+- **rf-commissioning**: Require PROBECALTS to advance past the pre-start value
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Documentation
+
+- **rf-commissioning**: Record that PROBECALTS is stamped at run start
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Features
+
+- **rf-commissioning**: Cavity characterization phase, steps 1-4
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Cavity characterization phase, steps 5-7
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Read and push probe Q; revalidate results before push
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Record cavity char tolerance; out of range is not passed
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Refactoring
+
+- **rf-commissioning**: Abort the characterization wait through abort_flag
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+
+## v9.44.1 (2026-10-14)
+
+### Bug Fixes
+
+- **stepper**: A failed write in abort cleanup can't skip the RF-off or VELO
+  ([#355](https://github.com/slaclab/sc_linac_physics/pull/355),
+  [`5750c2f`](https://github.com/slaclab/sc_linac_physics/commit/5750c2f99bd89e9f9e2097182cc55be6d7e8ede5))
+
+- **stepper**: Stop the motor and restore limits when a move fails
+  ([#355](https://github.com/slaclab/sc_linac_physics/pull/355),
+  [`5750c2f`](https://github.com/slaclab/sc_linac_physics/commit/5750c2f99bd89e9f9e2097182cc55be6d7e8ede5))
+
+### Documentation
+
+- **stepper**: Record why stepper and cavity aborts stay separate
+  ([#355](https://github.com/slaclab/sc_linac_physics/pull/355),
+  [`5750c2f`](https://github.com/slaclab/sc_linac_physics/commit/5750c2f99bd89e9f9e2097182cc55be6d7e8ede5))
+
+### Testing
+
+- **stepper**: Abort when MOTOR_MOVING can't be read after a failed move
+  ([#355](https://github.com/slaclab/sc_linac_physics/pull/355),
+  [`5750c2f`](https://github.com/slaclab/sc_linac_physics/commit/5750c2f99bd89e9f9e2097182cc55be6d7e8ede5))
+
+
+## v9.44.0 (2026-10-14)
+
+### Bug Fixes
+
+- **rf-commissioning**: Require PROBECALTS to advance past the pre-start value
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+### Documentation
+
+- **rf-commissioning**: Record that PROBECALTS is stamped at run start
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+### Features
+
+- **rf-commissioning**: Cavity characterization phase, steps 1-4
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+### Refactoring
+
+- **rf-commissioning**: Abort the characterization wait through abort_flag
+  ([#371](https://github.com/slaclab/sc_linac_physics/pull/371),
+  [`f41eccb`](https://github.com/slaclab/sc_linac_physics/commit/f41eccb4a251e9e56204282b049af9eca4e8feae))
+
+
+## v9.43.0 (2026-10-14)
+
+### Bug Fixes
+
+- **sc-linac**: Check abort before accepting a settled characterization
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+### Features
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+
+## v9.42.4 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve magnet CTRL, STATE and INTLKSUMY as the real enums
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve the cryo and vacuum PVs the model names; HL cryo prefixes match the model
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve the magnet PVs the model names
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+### Documentation
+
+- **sim**: 2 K is the operating temperature; drop the DS pressure CHECK
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+
+## v9.42.3 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve magnet CTRL, STATE and INTLKSUMY as the real enums
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve the magnet PVs the model names
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+
+## v9.42.2 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+
+## v9.42.1 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: Lock the SSA calibration and stepper move start checks
+  ([#387](https://github.com/slaclab/sc_linac_physics/pull/387),
+  [`607a459`](https://github.com/slaclab/sc_linac_physics/commit/607a459f24541e8289b8414c2a45f19efe2b97d6))
+
+- **sim**: SSA calibration and stepper moves run as tasks; INTLK_RESET_ALL resets
+  ([#387](https://github.com/slaclab/sc_linac_physics/pull/387),
+  [`607a459`](https://github.com/slaclab/sc_linac_physics/commit/607a459f24541e8289b8414c2a45f19efe2b97d6))
+
+
 ## v9.42.0 (2026-10-13)
 
 ### Features

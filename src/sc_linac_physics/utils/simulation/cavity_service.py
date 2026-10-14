@@ -19,6 +19,10 @@ from caproto.server import (
     SubGroup,
 )
 
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    NOMINAL_PULSED_ONTIME,
+)
+
 if TYPE_CHECKING:
     from sc_linac_physics.utils.simulation.cryomodule_service import (
         CryomodulePVGroup,
@@ -258,6 +262,7 @@ class CavityPVGroup(PVGroup):
         await self.qloaded.write(initial_q)
         # HL scale tolerance [5, 25]; regular [10, 125]
         await self.scale_new.write(15.0 if self.is_hl else 30.0)
+        await self.current_cav_scale.write(15.0 if self.is_hl else 30.0)
 
     scale_new = pvproperty(name="CAV:CAL_SCALEB_NEW", value=30)
     quench_bypass: PvpropertyEnum = pvproperty(
@@ -316,6 +321,55 @@ class CavityPVGroup(PVGroup):
         value=0, name="PUSH_CAV_SCALE.PROC", dtype=ChannelType.INT
     )
 
+    # Served so the model's PV names all resolve (see
+    # tests/utils/simulation/test_sim_serves_model_pvs.py). Writes are
+    # accepted and do nothing else. Only SAVE_SSA_SLOPE.PROC has a writer
+    # in this repo: Cavity.save_ssa_slope(), from SSA.calibrate(save_slope).
+    save_ssa_slope: PvpropertyInteger = pvproperty(
+        value=0, name="SAVE_SSA_SLOPE.PROC", dtype=ChannelType.INT
+    )
+    save_q_loaded: PvpropertyInteger = pvproperty(
+        value=0, name="SAVE_QLOADED.PROC", dtype=ChannelType.INT
+    )
+    save_cav_scale: PvpropertyInteger = pvproperty(
+        value=0, name="SAVE_CAV_SCALE.PROC", dtype=ChannelType.INT
+    )
+    current_cav_scale: PvpropertyFloat = pvproperty(
+        value=30.0, name="CAV:SCALER_SEL.B", dtype=ChannelType.FLOAT
+    )
+
+    # Pulsed mode. Cavity.push_go_button() puts PULSE_DIFF_SUM=1, then waits
+    # for PULSE_STATUS >= 2, and treats > 2 as a failed pulse.
+    # PULSE_STATUS is a 5-state enum on the real IOC (probe of
+    # ACCL:L0B:0110:PULSE_STATUS on cpu-l0b-rf01, 2026-10-13): Awaiting
+    # request, Pulse request, Pulsing on, Stop request, Pulsing off. It read
+    # Pulsing off at the time, so the sim starts there.
+    pulse_on_time: PvpropertyInteger = pvproperty(
+        value=NOMINAL_PULSED_ONTIME, name="PULSE_ONTIME", dtype=ChannelType.INT
+    )
+    pulse_status: PvpropertyEnum = pvproperty(
+        value="Pulsing off",
+        name="PULSE_STATUS",
+        dtype=ChannelType.ENUM,
+        enum_strings=(
+            "Awaiting request",
+            "Pulse request",
+            "Pulsing on",
+            "Stop request",
+            "Pulsing off",
+        ),
+    )
+    pulse_go: PvpropertyInteger = pvproperty(
+        value=0, name="PULSE_DIFF_SUM", dtype=ChannelType.INT
+    )
+
+    @pulse_go.putter
+    async def pulse_go(self, instance, value):
+        """Go straight to Pulsing on (index 2); PULSE_DIFF_SUM reads back 0."""
+        if value:
+            await self.pulse_status.write("Pulsing on")
+        return 0
+
     data_decim_a: PvpropertyInteger = pvproperty(
         value=255, name="ACQ_DECIM_SEL.A", dtype=ChannelType.INT
     )
@@ -326,6 +380,12 @@ class CavityPVGroup(PVGroup):
     calc_probe_q: PvpropertyInteger = pvproperty(
         value=0, name="QPROBE_CALC1.PROC", dtype=ChannelType.INT
     )
+    measured_probe_q: PvpropertyFloat = pvproperty(
+        value=8.5e11, name="QPROBE_CALC2", dtype=ChannelType.FLOAT
+    )
+    push_probe_q: PvpropertyInteger = pvproperty(
+        value=0, name="PUSH_QPROBECALC.PROC", dtype=ChannelType.INT
+    )
     sel_poff: PvpropertyFloat = pvproperty(
         value=0.0, name="SEL_POFF", dtype=ChannelType.FLOAT
     )
@@ -334,6 +394,30 @@ class CavityPVGroup(PVGroup):
         value=randrange(int(2.5e10), int(3.5e10), step=int(0.1e10)),
         name="Q0",
         dtype=ChannelType.FLOAT,
+    )
+
+    # RF waveforms. Nothing in this repo reads them; served as zeros, same
+    # length as CAV:FLTAWF below.
+    cav_awf = pvproperty(
+        value=np.zeros(2048, dtype=np.float64),
+        name="CAV:AWF",
+        dtype=ChannelType.DOUBLE,
+        max_length=2048,
+        read_only=True,
+    )
+    fwd_awf = pvproperty(
+        value=np.zeros(2048, dtype=np.float64),
+        name="FWD:AWF",
+        dtype=ChannelType.DOUBLE,
+        max_length=2048,
+        read_only=True,
+    )
+    rev_awf = pvproperty(
+        value=np.zeros(2048, dtype=np.float64),
+        name="REV:AWF",
+        dtype=ChannelType.DOUBLE,
+        max_length=2048,
+        read_only=True,
     )
 
     # Fault waveforms
@@ -583,8 +667,9 @@ class CavityPVGroup(PVGroup):
     async def probe_cal_start(self, instance, value):
         """Start a simulated characterization; PROBECALSTRT reads back 0.
 
-        Sets PROBECALSTS to Running here and finishes the run in a task, so
-        the put returns at once and clients can poll the status meanwhile.
+        Stamps PROBECALTS with the start time, then sets PROBECALSTS to
+        Running, and finishes the run in a task, so the put returns at once
+        and clients can poll the status meanwhile.
         """
         if value != 1:
             return None
@@ -598,6 +683,13 @@ class CavityPVGroup(PVGroup):
             )
             return 0
         self.log.info(f"{self.prefix} cavity characterization started")
+        # The real IOC stamps PROBECALTS when a run starts, not when it
+        # completes (e0ecb030, checked against ACCL:L0B:0110 in the archiver).
+        # CHECK: does the IOC write PROBECALTS before or after PROBECALSTS
+        # goes to Running? Both landed in the same second on ACCL:L0B:0110.
+        await self.probe_cal_time.write(
+            datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        )
         await self.probe_cal_stat.write("Running")
         self._characterization_task = asyncio.get_running_loop().create_task(
             self._finish_characterization()
@@ -607,12 +699,14 @@ class CavityPVGroup(PVGroup):
         return 0
 
     async def _finish_characterization(self):
-        """End the run after a random delay: Crash or a fresh Complete.
+        """End the run after a random delay: Crash or Complete.
 
-        On Complete, PROBECALTS is stamped before PROBECALSTS changes, so a
-        client that sees Complete also sees this run's timestamp. A crash
-        leaves PROBECALTS at the last good result.
+        PROBECALTS is not touched here; the putter stamped it at start. So a
+        crashed run keeps its start stamp, and PROBECALTS no longer marks the
+        last good result.
         """
+        # CHECK: does a crashed run on the real IOC keep its start stamp in
+        # PROBECALTS? e0ecb030 only looked at a run that completed.
         await asyncio.sleep(
             np.random.uniform(*self.CHARACTERIZATION_DURATION_RANGE_S)
         )
@@ -622,9 +716,6 @@ class CavityPVGroup(PVGroup):
             )
             await self.probe_cal_stat.write("Crash")
             return
-        await self.probe_cal_time.write(
-            datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        )
         await self.probe_cal_stat.write("Complete")
         self.log.info(f"{self.prefix} cavity characterization complete")
 
@@ -638,8 +729,9 @@ class CavityPVGroup(PVGroup):
                 await self.aact.write(self.ades.value)
                 await self.amean.write(self.ades.value)
             await self._update_amplitude_alarm()
-            # Reset the command back to default
-            await self.interlock_reset.write(0)
+            # Returning 0 is what resets INTLK_RESET_ALL, as for PROBECALSTRT.
+            # Writing 0 here was overwritten by the 1 being put.
+            return 0
 
     @ades.putter
     async def ades(self, instance, value):
