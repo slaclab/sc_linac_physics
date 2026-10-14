@@ -647,3 +647,17 @@ class TestSmallFixes:
         with pytest.raises(PVPutError):
             mock.put(1)
         assert mock.put(1) == 1
+
+
+class TestMakeMockPvSpec:
+    def test_unknown_attribute_raises(self):
+        mock = make_mock_pv("TEST:PV")
+        with pytest.raises(AttributeError):
+            mock.get_valu()
+
+    def test_real_pv_methods_work(self):
+        mock = make_mock_pv("TEST:PV", get_val=3.0)
+        assert mock.get() == 3.0
+        mock.put(1)
+        mock.put.assert_called_once_with(1)
+        assert mock.status == 0

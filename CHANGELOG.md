@@ -2,6 +2,89 @@
 
 <!-- version list -->
 
+## v9.45.2 (2026-10-14)
+
+### Bug Fixes
+
+- **utils**: Small bugs in cavity, logger and the EPICS wrapper
+  ([#360](https://github.com/slaclab/sc_linac_physics/pull/360),
+  [`eb17670`](https://github.com/slaclab/sc_linac_physics/commit/eb17670a351b325b7a5b8d35483ea00ecbf73b10))
+
+### Testing
+
+- Use our make_mock_pv and EPICS constants, not lcls_tools'
+  ([#360](https://github.com/slaclab/sc_linac_physics/pull/360),
+  [`eb17670`](https://github.com/slaclab/sc_linac_physics/commit/eb17670a351b325b7a5b8d35483ea00ecbf73b10))
+
+- **epics**: Make_mock_pv mocks with spec=PV
+  ([#360](https://github.com/slaclab/sc_linac_physics/pull/360),
+  [`eb17670`](https://github.com/slaclab/sc_linac_physics/commit/eb17670a351b325b7a5b8d35483ea00ecbf73b10))
+
+
+## v9.45.1 (2026-10-14)
+
+### Bug Fixes
+
+- **sim**: A run is active until its monitor writes the result; STOP reaches running children
+  ([#392](https://github.com/slaclab/sc_linac_physics/pull/392),
+  [`24cd769`](https://github.com/slaclab/sc_linac_physics/commit/24cd7691362134cfcace603ce8f53eb827887af9))
+
+- **sim**: Launcher stop actually stops, and a missing script reports Failed
+  ([#392](https://github.com/slaclab/sc_linac_physics/pull/392),
+  [`24cd769`](https://github.com/slaclab/sc_linac_physics/commit/24cd7691362134cfcace603ce8f53eb827887af9))
+
+- **sim**: Stamp PROBECALTS when a characterization starts
+  ([#394](https://github.com/slaclab/sc_linac_physics/pull/394),
+  [`8b75e58`](https://github.com/slaclab/sc_linac_physics/commit/8b75e586cc9adc8571fa596214881cd63a47a4fe))
+
+
+## v9.45.0 (2026-10-14)
+
+### Bug Fixes
+
+- **rf-commissioning**: Require PROBECALTS to advance past the pre-start value
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Documentation
+
+- **rf-commissioning**: Record that PROBECALTS is stamped at run start
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Features
+
+- **rf-commissioning**: Cavity characterization phase, steps 1-4
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Cavity characterization phase, steps 5-7
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Read and push probe Q; revalidate results before push
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **rf-commissioning**: Record cavity char tolerance; out of range is not passed
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+### Refactoring
+
+- **rf-commissioning**: Abort the characterization wait through abort_flag
+  ([#372](https://github.com/slaclab/sc_linac_physics/pull/372),
+  [`2410e9d`](https://github.com/slaclab/sc_linac_physics/commit/2410e9d15f18d24bd540098e005255e41b2eb935))
+
+
 ## v9.44.1 (2026-10-14)
 
 ### Bug Fixes
