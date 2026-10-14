@@ -441,27 +441,6 @@ def test_a_broken_cavity_lookup_is_logged_not_raised(view, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_elapsed_is_emitted_while_running_then_stops(controller, monkeypatch):
-    cavity = Mock()
-    cavity.characterization_running = True
-
-    emitted = []
-    controller.elapsed_updated.connect(emitted.append)
-    controller._cavity = cavity
-
-    def stop_after_two(_):
-        if len(emitted) >= 2:
-            cavity.characterization_running = False
-
-    monkeypatch.setattr(
-        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
-        "cavity_char_controller.time.sleep",
-        stop_after_two,
-    )
-    controller._emit_elapsed_until_done(0.0)
-    assert len(emitted) == 2
-
-
 # ---------------------------------------------------------------------------
 # Start Test must not push
 #
@@ -573,6 +552,7 @@ def test_each_step_lands_a_checkpoint_on_the_record(controller):
     controller.context.is_abort_requested.return_value = False
     phase = Mock()
     phase.phase_type = "cavity_char"
+    phase.get_phase_steps.return_value = BACKEND_STEPS
     phase.execute_step.return_value = _step_result(
         PhaseResult.SUCCESS, "Loaded Q 4.100e+07"
     )
@@ -597,6 +577,7 @@ def test_a_failed_step_is_checkpointed_too(controller):
     controller.context.is_abort_requested.return_value = False
     phase = Mock()
     phase.phase_type = "cavity_char"
+    phase.get_phase_steps.return_value = BACKEND_STEPS
     phase.execute_step.return_value = _step_result(
         PhaseResult.FAILED, "Characterization did not finish within 300 s"
     )
@@ -652,6 +633,7 @@ def test_retry_gives_up_instead_of_looping_forever(controller, monkeypatch):
     controller.context.is_abort_requested.return_value = False
     phase = Mock()
     phase.phase_type = "cavity_char"
+    phase.get_phase_steps.return_value = BACKEND_STEPS
     phase.execute_step.return_value = _step_result(
         PhaseResult.RETRY, "Could not read cavity state: boom", retry_delay=0
     )

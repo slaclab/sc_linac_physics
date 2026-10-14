@@ -120,6 +120,7 @@ class CavityCharDisplay(BasePlaceholderDisplay):
         self._apply_phase_specific_readouts(result)
 
     def _on_controller_phase_completed(self, record):
+        self._reset_push_button()
         parent = self.parent()
         while parent:
             if hasattr(parent, "on_phase_advanced"):
@@ -201,11 +202,32 @@ class CavityCharDisplay(BasePlaceholderDisplay):
 
     @pyqtSlot()
     def on_push_results(self):
+        if self.controller._unsaved_push:
+            # Retry Save: database writes only, so no confirm.
+            self.controller.on_push_results()
+            return
         data = getattr(self, "_last_results", None)
         if data is None:
             return
         if self._ask_confirm(self._confirm_push_text(data)):
             self.controller.on_push_results()
+
+    def offer_save_retry(self) -> None:
+        """A push reached the cavity but saving it failed."""
+        self.push_results_button.setText("Retry Save")
+        self.push_results_button.setEnabled(True)
+
+    def _reset_push_button(self) -> None:
+        self.push_results_button.setText("Push to Cavity…")
+        self.push_results_button.setEnabled(False)
+
+    def is_running_phase(self) -> bool:
+        """True while a measurement or push is running.
+
+        The container refuses to change the active record meanwhile: every
+        save and phase-instance call goes to the session's active record.
+        """
+        return self.controller._running
 
     def on_cavity_changed(self) -> None:
         """Another cavity was selected: clear what belonged to the last one.

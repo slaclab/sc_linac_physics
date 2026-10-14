@@ -94,9 +94,13 @@ class CavityCharController(QObject):
     results_ready = pyqtSignal(dict)
     # Push outcome: success, and the step's message on failure.
     push_finished = pyqtSignal(bool, str)
-    # Seconds since the characterization started. Emitted from the poll
-    # thread so the elapsed label updates on the GUI thread.
+    # Seconds since PROBECALSTRT was started, ticked by _elapsed_timer on
+    # the GUI thread from start_characterization until the wait settles.
     elapsed_updated = pyqtSignal(float)
+    # Emitted by the worker to start and stop _elapsed_timer, which has to
+    # run on the GUI thread.
+    _char_started = pyqtSignal()
+    _char_settled = pyqtSignal()
     # Everything the worker thread wants to show goes through these. The
     # steps run on a daemon thread, and calling view.log_message() or
     # view.set_char_status() from there would mutate Qt widgets off the GUI
@@ -120,6 +124,16 @@ class CavityCharController(QObject):
         self._active_phase_instance_id: int | None = None
         self._steps: list[str] = list(MEASURE_STEPS)
         self._last_step_message = ""
+        # Persistence calls still owed after a push that reached the cavity:
+        # a subset of {"complete", "save", "history"}. Retry Save runs these
+        # and nothing else, so it never repeats a PUSH_*.PROC write.
+        self._unsaved_push: set[str] = set()
+        self._elapsed_started_at = 0.0
+        self._elapsed_timer = QTimer(self)
+        self._elapsed_timer.setInterval(1000)
+        self._elapsed_timer.timeout.connect(self._tick_elapsed)
+        self._char_started.connect(self._on_char_started)
+        self._char_settled.connect(self._on_char_settled)
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
         # Queued: measurement_finished is emitted from the worker thread and
@@ -176,9 +190,7 @@ class CavityCharController(QObject):
         if cryomodule is None or cavity_number is None:
             return
         try:
-            cavity = self._get_machine_cavity(
-                int(cryomodule), int(cavity_number)
-            )
+            cavity = self._get_machine_cavity(cryomodule, int(cavity_number))
             if cavity is not self._cavity and self._cavity is not None:
                 if self._running:
                     # on_abort() goes to self._cavity, so it stays the
@@ -206,11 +218,17 @@ class CavityCharController(QObject):
             )
         except Exception as exc:
             self.view.log_message(f"Error setting PVs: {exc}")
+            if not self._running:
+                # Leaving the last good cavity cached would let Start Test
+                # drive it while the header names another.
+                self._cavity = None
 
-    def _get_machine_cavity(self, cm: int, cav: int):
+    def _get_machine_cavity(self, cm: str, cav: int):
+        """Machine.cryomodules is keyed "01".."35", "H1", "H2"."""
         if not self.machine:
             self.machine = Machine()
-        return self.machine.cryomodules[f"{cm:02d}"].cavities[cav]
+        key = f"{int(cm):02d}" if str(cm).isdigit() else str(cm)
+        return self.machine.cryomodules[key].cavities[cav]
 
     # ------------------------------------------------------------------
     # Abort and pause
@@ -421,9 +439,17 @@ class CavityCharController(QObject):
                             False, f"Step failed: {step_name}"
                         )
                         return
+                    if step_name == "start_characterization":
+                        self._char_started.emit()
+                    elif step_name == "wait_for_completion":
+                        self._char_settled.emit()
                 self._finish_measurement()
             except Exception as exc:
                 self.phase_run_finished.emit(False, str(exc))
+            finally:
+                # Stops the timer on failure, abort or timeout too. A second
+                # emit after a normal settle is harmless.
+                self._char_settled.emit()
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -456,7 +482,14 @@ class CavityCharController(QObject):
         MAX_STEP_ATTEMPTS, so a cavity that cannot be read fails the run
         instead of retrying out of sight.
         """
+        self._report_progress(step_name)
         for attempt in range(1, MAX_STEP_ATTEMPTS + 1):
+            # Before every attempt, not only between steps: a retry delay
+            # must not end in another SEL_ASET, PROBECALSTRT or PUSH_* write.
+            if not self._check_pause_and_abort():
+                self._last_step_message = f"Aborted before {step_name}"
+                self._report(self._last_step_message, "Aborted")
+                return False
             result = self.phase.execute_step(step_name)
             self._create_step_checkpoint(step_name, result)
             self._last_step_message = result.message
@@ -494,6 +527,20 @@ class CavityCharController(QObject):
         # Unreachable: the RETRY branch returns on the final attempt. Explicit
         # so the function never falls out with an implicit None.
         return False
+
+    def _report_progress(self, step_name: str) -> None:
+        """Drive the container's current-step label and progress bar.
+
+        PhaseBase._execute_step_with_retry would call progress_callback, but
+        this controller runs steps itself, so it reports them itself: the
+        step's index in CavityCharPhase.get_phase_steps() over its length.
+        """
+        callback = getattr(self.context, "progress_callback", None)
+        if callback is None:
+            return
+        steps = self.phase.get_phase_steps()
+        index = steps.index(step_name) if step_name in steps else 0
+        callback(step_name, int(index / len(steps) * 100))
 
     def _create_step_checkpoint(self, step_name: str, result) -> None:
         """Append the step to record.phase_history.
@@ -548,6 +595,9 @@ class CavityCharController(QObject):
         """
         if self._running:
             return
+        if self._unsaved_push:
+            self._persist_push()
+            return
         if (
             self.phase is None
             or self.context is None
@@ -558,6 +608,9 @@ class CavityCharController(QObject):
             )
             return
         self.context.parameters["confirmed_loaded_q"] = self.phase._loaded_q
+        # An Abort pressed after the measurement would stop this push before
+        # its first attempt.
+        self.context.abort_requested = False
         self._running = True
         self._set_running_ui_state(True)
         threading.Thread(target=self._push_in_background, daemon=True).start()
@@ -575,6 +628,7 @@ class CavityCharController(QObject):
         self.phase = None
         self.context = None
         self._active_phase_instance_id = None
+        self._unsaved_push = set()
 
     def _push_in_background(self) -> None:
         try:
@@ -589,7 +643,7 @@ class CavityCharController(QObject):
             self.push_finished.emit(False, str(exc))
 
     def _on_push_finished(self, success: bool, message: str) -> None:
-        """Complete the phase after a push, or leave it open after a refusal.
+        """Record a push that reached the cavity, or report a refusal.
 
         A refused push wrote nothing (the gate and the re-read come before
         the PUSH_*.PROC writes), so the instance stays open for another
@@ -600,38 +654,74 @@ class CavityCharController(QObject):
         if not success:
             self.view.show_error(message)
             return
-        record = self.session.get_active_record()
-        try:
-            if self._active_phase_instance_id is not None:
-                self.session.complete_active_phase_instance(
+        self._unsaved_push = {"complete", "save", "history"}
+        self._persist_push()
+
+    def _persist_push(self) -> None:
+        """Complete the instance, save the record and add the history entry.
+
+        Each call's result is checked. Whatever fails stays in _unsaved_push
+        for Retry Save, along with the instance id, and the phase is not
+        reported complete.
+        """
+        record = self.context.record
+        steps = {
+            "complete": lambda: (
+                self._active_phase_instance_id is None
+                or self.session.complete_active_phase_instance(
                     phase_instance_id=self._active_phase_instance_id,
                     phase=CommissioningPhase.CAVITY_CHAR,
-                    artifact_payload=self.context.record.cavity_char.to_dict(),
+                    artifact_payload=record.cavity_char.to_dict(),
                 )
-            self.session.save_active_record()
-            self.session.add_measurement_to_history(
+            ),
+            "save": self.session.save_active_record,
+            "history": lambda: self.session.add_measurement_to_history(
                 CommissioningPhase.CAVITY_CHAR,
-                self.context.record.cavity_char,
+                record.cavity_char,
                 operator=self.context.operator,
                 phase_instance_id=self._active_phase_instance_id,
-            )
-        except Exception as exc:
-            self._log_signal.emit(f"Warning: failed to save the push: {exc}")
-        finally:
-            self._active_phase_instance_id = None
-        self._log_signal.emit("Pushed to the cavity; phase complete")
-        self._refresh_stored_data()
-        self.phase_completed.emit(record)
+            ),
+        }
+        for name in ("complete", "save", "history"):
+            if name not in self._unsaved_push:
+                continue
+            try:
+                ok = steps[name]()
+            except Exception as exc:
+                self._log_signal.emit(f"Warning: {name} failed: {exc}")
+                ok = False
+            if ok:
+                self._unsaved_push.discard(name)
 
-    def _emit_elapsed_until_done(self, started_at: float) -> None:
-        """Emit elapsed seconds while the characterization runs.
+        self._refresh_stored_data()
+        if self._unsaved_push:
+            self.view.show_error(
+                "The values were pushed to the cavity but not saved "
+                f"({', '.join(sorted(self._unsaved_push))} failed). "
+                "Retry Save writes nothing to the cavity."
+            )
+            self.view.offer_save_retry()
+            return
+        self._active_phase_instance_id = None
+        self._log_signal.emit("Pushed to the cavity; phase complete")
+        self.phase_completed.emit(self.session.get_active_record())
+
+    # ------------------------------------------------------------------
+    # Elapsed
+    # ------------------------------------------------------------------
+
+    def _on_char_started(self) -> None:
+        self._elapsed_started_at = time.monotonic()
+        self._elapsed_timer.start()
+
+    def _on_char_settled(self) -> None:
+        self._elapsed_timer.stop()
+
+    def _tick_elapsed(self) -> None:
+        """Time since PROBECALSTRT, against the wait's timeout.
 
         PROBECALSTS reports running or crashed and nothing in between, so
-        elapsed time against the timeout is the only progress the panel can
-        honestly show.
+        elapsed time is the only progress the panel can show. No PV is read
+        here; it runs on the GUI thread.
         """
-        while (
-            self._cavity is not None and self._cavity.characterization_running
-        ):
-            self.elapsed_updated.emit(time.monotonic() - started_at)
-            time.sleep(self.limits.status_poll_interval)
+        self.elapsed_updated.emit(time.monotonic() - self._elapsed_started_at)

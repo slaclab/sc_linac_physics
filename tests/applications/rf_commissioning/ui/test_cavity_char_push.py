@@ -101,9 +101,19 @@ def _measured_controller(view, monkeypatch):
     c = CavityCharController(view, session)
     c.context = Mock()
     c.context.parameters = {}
+    c.context.is_abort_requested.return_value = False
     c.context.record.cavity_char = CavityCharacterization(loaded_q=4.1e7)
     c.phase = Mock()
     c.phase._loaded_q = 4.1e7
+    c.phase.get_phase_steps.return_value = [
+        "verify_initial_state",
+        "set_drive_level",
+        "start_characterization",
+        "wait_for_completion",
+        "read_results",
+        "push_results",
+        "record_results",
+    ]
     c._active_phase_instance_id = 42
     monkeypatch.setattr("threading.Thread", RunInline)
     return c
