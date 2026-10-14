@@ -56,3 +56,23 @@ def test_selecting_a_cavity_points_each_readout_at_its_pv(cavity, monkeypatch):
     c.update_pv_addresses("01", "1")
     for widget, attr in LIVE_PVS.items():
         assert getattr(view, widget).channel == f"ca://ACCL:L0B:0110:{attr}"
+
+
+def test_side_by_side_boxes_share_their_edges(qtbot):
+    """Review and Push lines up with Live PVs; inputs end with Stored Data."""
+    from PyQt5.QtWidgets import QGroupBox
+
+    host = QWidget()
+    qtbot.addWidget(host)
+    host.setLayout(CavityCharUI(host, callbacks={}).build())
+    host.resize(1300, 900)
+    host.show()
+    qtbot.waitExposed(host)
+
+    boxes = {b.title(): b.geometry() for b in host.findChildren(QGroupBox)}
+    review, live = boxes["Review and Push"], boxes["Live PVs"]
+    assert (review.top(), review.bottom()) == (live.top(), live.bottom())
+    assert (
+        boxes["Cavity Characterization"].bottom()
+        == boxes["Stored Data"].bottom()
+    )

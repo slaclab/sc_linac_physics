@@ -544,36 +544,35 @@ class CavityCharUI(PhaseUIBase):
     """
 
     def build(self) -> QVBoxLayout:
-        # Phase History spans the full width under the two columns. With it
-        # in the left column (the SSA layout) the right column ended in a
-        # tall empty space below Stored Data.
+        # One grid for the two columns, so boxes side by side share their top
+        # and bottom edges: toolbar and inputs against Stored Data, then
+        # Review and Push against Live PVs. Phase History spans the full
+        # width below. With it in the left column (the SSA layout) the right
+        # column ended in a tall empty space.
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(8)
 
-        left_panel = QVBoxLayout()
-        left_panel.setSpacing(6)
-        left_panel.addLayout(self._build_main_toolbar())
-        left_panel.addWidget(self._build_char_inputs())
-        left_panel.addWidget(self._build_char_results())
-        left_panel.addStretch()
-
-        right_panel = QVBoxLayout()
-        right_panel.setSpacing(6)
-        right_panel.addWidget(
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
+        grid.addLayout(self._build_main_toolbar(), 0, 0)
+        grid.addWidget(self._build_char_inputs(), 1, 0)
+        grid.addWidget(
             self._build_stored_data_section(
                 self._get_parent_stored_data_fields()
-            )
+            ),
+            0,
+            1,
+            2,
+            1,
         )
-        right_panel.addWidget(self._build_char_live_pvs())
-        right_panel.addStretch()
+        grid.addWidget(self._build_char_results(), 2, 0)
+        grid.addWidget(self._build_char_live_pvs(), 2, 1)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
 
-        columns = QHBoxLayout()
-        columns.setSpacing(8)
-        columns.addLayout(left_panel, 1)
-        columns.addLayout(right_panel, 1)
-
-        main_layout.addLayout(columns)
+        main_layout.addLayout(grid)
         main_layout.addWidget(self._build_history(), stretch=1)
         return main_layout
 
