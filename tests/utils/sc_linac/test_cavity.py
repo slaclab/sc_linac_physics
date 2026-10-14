@@ -1282,3 +1282,32 @@ def test_turn_off_times_out_as_cavity_fault(cavity, no_wait):
     cavity._rf_state_pv_obj = make_mock_pv(get_val=1)
     with pytest.raises(CavityFaultError, match="RF to turn off"):
         cavity.turn_off()
+
+
+def test_wait_aborts_when_the_abort_arrives_as_the_run_completes(cavity):
+    """An abort during the last sleep stops the wait; RF goes off."""
+    seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
+    pv = make_mock_pv()
+    pv.get = MagicMock(
+        side_effect=lambda *a, **k: (
+            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
+        )
+    )
+    cavity._characterization_status_pv_obj = pv
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    cavity.turn_off = MagicMock()
+
+    # The abort lands while the wait sleeps, after the RUNNING read.
+    def request_during_sleep(_):
+        cavity.request_abort()
+
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.time.sleep",
+        side_effect=request_during_sleep,
+    ):
+        with pytest.raises(CavityAbortError):
+            cavity.wait_for_characterization(poll_interval=0.01)
+
+    cavity.turn_off.assert_called_once()

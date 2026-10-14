@@ -212,6 +212,11 @@ class SSA(linac_utils.SCLinacObject):
             self.cavity.check_abort()
             self.run_calibration()
 
+        except linac_utils.SSACalibrationTimeoutError:
+            # Stuck, not a bad result: retrying would issue CALSTRT again
+            # against the same stuck status.
+            raise
+
         except (
             linac_utils.SSACalibrationToleranceError,
             linac_utils.SSACalibrationError,
@@ -476,7 +481,7 @@ class SSA(linac_utils.SCLinacObject):
             lambda: not self.calibration_running,
             timeout=linac_utils.SSA_CALIBRATION_TIMEOUT_S,
             description=f"{self} calibration to finish",
-            error_class=linac_utils.SSACalibrationError,
+            error_class=linac_utils.SSACalibrationTimeoutError,
             check_abort=self.cavity.check_abort,
             on_poll=lambda: self.cavity.logger.debug(
                 "Waiting for SSA calibration to complete",

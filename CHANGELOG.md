@@ -2,6 +2,121 @@
 
 <!-- version list -->
 
+## v9.43.0 (2026-10-14)
+
+### Bug Fixes
+
+- **sc-linac**: Check abort before accepting a settled characterization
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+### Features
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#369](https://github.com/slaclab/sc_linac_physics/pull/369),
+  [`de851fb`](https://github.com/slaclab/sc_linac_physics/commit/de851fbd52f7fe69cacf5895d26fbcde6b071e2a))
+
+
+## v9.42.4 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve magnet CTRL, STATE and INTLKSUMY as the real enums
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve the cryo and vacuum PVs the model names; HL cryo prefixes match the model
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+- **sim**: Serve the magnet PVs the model names
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+### Documentation
+
+- **sim**: 2 K is the operating temperature; drop the DS pressure CHECK
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#390](https://github.com/slaclab/sc_linac_physics/pull/390),
+  [`ab7582b`](https://github.com/slaclab/sc_linac_physics/commit/ab7582bd9789e4c5c1afc96d542d01bc6c5f3155))
+
+
+## v9.42.3 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve magnet CTRL, STATE and INTLKSUMY as the real enums
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+- **sim**: Serve the magnet PVs the model names
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#389](https://github.com/slaclab/sc_linac_physics/pull/389),
+  [`157e07b`](https://github.com/slaclab/sc_linac_physics/commit/157e07bdc7f3c10f68a17107cf07e7bdcc74149e))
+
+
+## v9.42.2 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: L4B SSAs report the 7 kW type; coverage walk includes *_pvs lists
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+- **sim**: Serve PULSE_STATUS as the real 5-state enum
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+### Testing
+
+- **sim**: Check sc-sim serves every PV the hardware model names; add the cavity and SSA ones
+  ([#388](https://github.com/slaclab/sc_linac_physics/pull/388),
+  [`f420b84`](https://github.com/slaclab/sc_linac_physics/commit/f420b846a261d9e333a74d22a3cd4817eaf24f45))
+
+
+## v9.42.1 (2026-10-13)
+
+### Bug Fixes
+
+- **sim**: Lock the SSA calibration and stepper move start checks
+  ([#387](https://github.com/slaclab/sc_linac_physics/pull/387),
+  [`607a459`](https://github.com/slaclab/sc_linac_physics/commit/607a459f24541e8289b8414c2a45f19efe2b97d6))
+
+- **sim**: SSA calibration and stepper moves run as tasks; INTLK_RESET_ALL resets
+  ([#387](https://github.com/slaclab/sc_linac_physics/pull/387),
+  [`607a459`](https://github.com/slaclab/sc_linac_physics/commit/607a459f24541e8289b8414c2a45f19efe2b97d6))
+
+
 ## v9.42.0 (2026-10-13)
 
 ### Features
