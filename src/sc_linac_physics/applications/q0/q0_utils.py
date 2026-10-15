@@ -122,8 +122,16 @@ class DataRun:
 
     @fit_window.setter
     def fit_window(self, window: Optional[Tuple[float, float]]):
-        if window is not None and window[0] > window[1]:
-            raise ValueError(f"Fit window start is after its end: {window}")
+        if window is not None:
+            lo, hi = window
+            if lo > hi:
+                raise ValueError(f"Fit window start is after its end: {window}")
+            n_samples = sum(lo <= t <= hi for t in self.ll_data)
+            if n_samples < 2:
+                raise DataError(
+                    f"Fit window {window} holds {n_samples} liquid level"
+                    " sample(s); a dLL/dt fit needs at least 2"
+                )
         self._fit_window = window
         self._dll_dt = None
 
