@@ -245,7 +245,8 @@ def block_network(request):
 def pytest_configure(config):
     """
     Pytest hook that runs before test collection.
-    Sets up environment and mocks before any imports.
+    Sets up environment and registers markers. The fake EPICS module is
+    installed earlier, at import of this file; see _setup_fake_epics().
     """
     # Disable PyDM plugins and configure Qt
     os.environ.setdefault("PYDM_DATA_PLUGINS_DISABLED", "1")
@@ -257,9 +258,6 @@ def pytest_configure(config):
         "markers",
         "allow_network: permit outbound network access for this test",
     )
-
-    # Inject fake EPICS module
-    _setup_fake_epics()
 
 
 def pytest_unconfigure(config):
@@ -311,7 +309,7 @@ class FakeEPICS_PV:
         self._connected = True
         self._get_value = 42.0
         self._put_return = 1
-        self.severity = 0
+        self._severity = 0
         self.auto_monitor = auto_monitor
 
         self.callbacks = {}
@@ -327,6 +325,22 @@ class FakeEPICS_PV:
     @property
     def connected(self):
         return self._connected
+
+    @property
+    def severity(self):
+        """A property, as in pyepics; tests set _severity."""
+        return self._severity
+
+    def get_timevars(self, timeout=None, warn=True):
+        """As pyepics: fetch severity/status/timestamp, update the cache.
+
+        Tests set _ioc_severity to the value the IOC would return now;
+        it defaults to the cached _severity. Returns None if not connected.
+        """
+        if not self._connected:
+            return None
+        self._severity = getattr(self, "_ioc_severity", self._severity)
+        return {"severity": self._severity, "status": 0, "timestamp": None}
 
     def wait_for_connection(self, timeout=None):
         return self._connected
@@ -399,6 +413,16 @@ class FakeCASeverityException(Exception):
 def fake_with_initial_context(func):
     """Fake decorator for withInitialContext."""
     return func
+
+
+# Installed at import, not in pytest_configure. When a test directory is passed
+# on the command line, pytest imports that directory's conftest before
+# pytest_configure runs. tests/applications/auto_setup/conftest.py imports
+# gui_cavity, which pulls in real epics, so utils.epics.core.PV subclassed the
+# real epics.pv.PV. Swapping sys.modules["epics"] afterwards left real epics.ca
+# unable to import epics.clibs, and every PV a test had not mocked raised
+# ChannelAccessException. pytest always imports this file first.
+_setup_fake_epics()
 
 
 # ============================================================================

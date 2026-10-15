@@ -2,10 +2,9 @@ import json
 import os
 import tempfile
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock, patch, mock_open, PropertyMock
 
 import pytest
-from PyQt5.QtWidgets import QApplication
 
 # Import the classes to test
 from sc_linac_physics.applications.q0.q0_gui_utils import (
@@ -55,23 +54,12 @@ def mock_cavity():
     return mock_cav
 
 
-@pytest.fixture
-def qapp():
-    """QApplication fixture for GUI tests"""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    return app
-
-
 class TestCryoParamSetupWorker:
     """Test CryoParamSetupWorker functionality"""
 
-    @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
-    @patch("sc_linac_physics.applications.q0.q0_gui_utils.caput")
-    def test_successful_setup(self, mock_caput, mock_caget, mock_cryomodule):
+    def test_successful_setup(self, mock_cryomodule):
         # Arrange
-        mock_caget.return_value = 1  # Assuming CRYO_ACCESS_VALUE is 1
+        mock_cryomodule.cryo_access_granted = True
         with patch(
             "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
         ):
@@ -96,14 +84,11 @@ class TestCryoParamSetupWorker:
             )
             assert mock_cryomodule.heater_power == 50
             assert mock_cryomodule.jt_position == 40
-            mock_caput.assert_called_with(
-                mock_cryomodule.jt_auto_select_pv, 1, wait=True
-            )
+            mock_cryomodule.select_jt_auto.assert_called_once_with()
 
-    @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
-    def test_insufficient_permissions(self, mock_caget, mock_cryomodule):
+    def test_insufficient_permissions(self, mock_cryomodule):
         # Arrange
-        mock_caget.return_value = 0  # No access
+        mock_cryomodule.cryo_access_granted = False
         with patch(
             "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
         ):
@@ -122,10 +107,9 @@ class TestCryoParamSetupWorker:
 class TestQ0Worker:
     """Test Q0Worker functionality"""
 
-    @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
-    def test_successful_q0_measurement(self, mock_caget, mock_cryomodule):
+    def test_successful_q0_measurement(self, mock_cryomodule):
         # Arrange
-        mock_caget.return_value = 1
+        mock_cryomodule.cryo_access_granted = True
         with patch(
             "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
         ):
@@ -162,14 +146,11 @@ class TestQ0Worker:
                 f"Recorded Q0: {mock_cryomodule.q0_measurement.q0:.2e}"
             )
 
-    @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
-    def test_q0_measurement_with_cavity_abort(
-        self, mock_caget, mock_cryomodule
-    ):
+    def test_q0_measurement_with_cavity_abort(self, mock_cryomodule):
         # Arrange
         from sc_linac_physics.utils.sc_linac.linac_utils import CavityAbortError
 
-        mock_caget.return_value = 1
+        mock_cryomodule.cryo_access_granted = True
         mock_cryomodule.takeNewQ0Measurement.side_effect = CavityAbortError(
             "Cavity aborted"
         )
@@ -235,10 +216,9 @@ class TestCavityRampWorker:
 class TestCalibrationWorker:
     """Test CalibrationWorker functionality"""
 
-    @patch("sc_linac_physics.applications.q0.q0_gui_utils.caget")
-    def test_successful_calibration(self, mock_caget, mock_cryomodule):
+    def test_successful_calibration(self, mock_cryomodule):
         # Arrange
-        mock_caget.return_value = 1
+        mock_cryomodule.cryo_access_granted = True
         with patch(
             "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
         ):
@@ -455,14 +435,10 @@ class TestIntegration:
 
     def test_complete_q0_workflow(self, mock_cryomodule):
         """Test a complete Q0 measurement workflow"""
+        mock_cryomodule.cryo_access_granted = True
 
         with (
             patch("time.sleep"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_gui_utils.caget",
-                return_value=1,
-            ),
-            patch("sc_linac_physics.applications.q0.q0_gui_utils.caput"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.CRYO_ACCESS_VALUE", 1
             ),
@@ -545,12 +521,9 @@ class TestPerformance:
         worker.error = Mock()
         worker.finished = Mock()
 
+        mock_cryomodule.cryo_access_granted = False  # No permissions
         start_time = time.time()
-        with patch(
-            "sc_linac_physics.applications.q0.q0_gui_utils.caget",
-            return_value=0,
-        ):  # No permissions
-            worker.run()
+        worker.run()
         end_time = time.time()
 
         # Should complete quickly when permissions denied
@@ -594,3 +567,56 @@ def sample_calibration_data():
 if __name__ == "__main__":
     # Run tests with pytest
     pytest.main([__file__, "-v"])
+
+
+class TestPVErrorsReachTheErrorSignal:
+    """Q0Cryomodule raises PV errors now; workers must report, not crash."""
+
+    @pytest.mark.parametrize(
+        "worker_cls",
+        [
+            "CryoParamSetupWorker",
+            "Q0Worker",
+            "Q0SetupWorker",
+            "CalibrationWorker",
+        ],
+    )
+    def test_unreadable_cryo_access_is_reported(
+        self, worker_cls, mock_cryomodule
+    ):
+        from sc_linac_physics.applications.q0 import q0_gui_utils
+        from sc_linac_physics.utils.epics import PVConnectionError
+
+        type(mock_cryomodule).cryo_access_granted = PropertyMock(
+            side_effect=PVConnectionError("CAS_ACCESS down")
+        )
+        cls = getattr(q0_gui_utils, worker_cls)
+        if worker_cls == "CryoParamSetupWorker":
+            worker = cls(mock_cryomodule)
+        elif worker_cls == "CalibrationWorker":
+            worker = cls(mock_cryomodule, None, None, 90, 5, 4, 40, 112)
+        else:
+            worker = cls(mock_cryomodule, None, None, 90, 4, {1: 16.0})
+        worker.status = Mock()
+        worker.error = Mock()
+        worker.finished = Mock()
+
+        worker.run()
+
+        worker.error.emit.assert_called_once_with("CAS_ACCESS down")
+        worker.finished.emit.assert_not_called()
+
+    def test_failed_jt_write_is_reported(self, mock_cryomodule):
+        from sc_linac_physics.utils.epics import PVPutError
+
+        mock_cryomodule.cryo_access_granted = True
+        mock_cryomodule.select_jt_auto.side_effect = PVPutError("JT AUTO")
+        worker = CryoParamSetupWorker(mock_cryomodule)
+        worker.status = Mock()
+        worker.error = Mock()
+        worker.finished = Mock()
+
+        worker.run()
+
+        worker.error.emit.assert_called_once_with("JT AUTO")
+        worker.finished.emit.assert_not_called()

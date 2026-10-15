@@ -2,11 +2,11 @@ from caproto import ChannelType
 from caproto.server import (
     PVGroup,
     pvproperty,
-    PvpropertyFloat,
+    PvpropertyInteger,
 )
 
 
 class RFStationPVGroup(PVGroup):
-    rfs: PvpropertyFloat = pvproperty(
-        value=5.0, name="DAC_AMPLITUDE", dtype=ChannelType.FLOAT
+    rfs: PvpropertyInteger = pvproperty(
+        value=5, name="DAC_AMPLITUDE", dtype=ChannelType.LONG
     )

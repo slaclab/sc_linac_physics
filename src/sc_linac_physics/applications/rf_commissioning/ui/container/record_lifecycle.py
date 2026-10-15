@@ -1,9 +1,33 @@
 """Record lifecycle helpers for multi-phase commissioning container."""
 
+from PyQt5.QtWidgets import QMessageBox
+
 
 class _RecordLifecycleMixin:
+    def _refuse_if_phase_running(self) -> bool:
+        """Keep the active record fixed while any phase is running.
+
+        Phase controllers save, add history and complete phase instances
+        through the session's active record. Replacing it mid-run would
+        attach one cavity's measurement to another cavity's record.
+        """
+        running = any(
+            getattr(display, "is_running_phase", lambda: False)()
+            for display in self._phase_displays
+        )
+        if running:
+            QMessageBox.warning(
+                self,
+                "Phase running",
+                "A phase is running on the current cavity. Let it finish or "
+                "abort it before changing cavity or record.",
+            )
+        return running
+
     def start_new_record(self, cryomodule: str, cavity_number: str) -> bool:
         """Start a new commissioning record."""
+        if self._refuse_if_phase_running():
+            return False
         record, _record_id, created = self.session.start_new_record(
             cryomodule, cavity_number
         )
@@ -32,6 +56,8 @@ class _RecordLifecycleMixin:
 
     def load_record(self, record_id: int) -> bool:
         """Load an existing commissioning record."""
+        if self._refuse_if_phase_running():
+            return False
         record = self.session.load_record(record_id)
         if not record:
             return False

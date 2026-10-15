@@ -1,7 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from lcls_tools.common.controls.pyepics.utils import make_mock_pv
+from sc_linac_physics.utils.epics import make_mock_pv
 
 from sc_linac_physics.utils.sc_linac.linac import MACHINE
 from sc_linac_physics.utils.sc_linac.linac_utils import (
