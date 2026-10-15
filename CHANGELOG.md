@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.45.3 (2026-10-15)
+
+### Bug Fixes
+
+- **sim**: Leave CHA/CHB_TESTSTAT to #397
+  ([#398](https://github.com/slaclab/sc_linac_physics/pull/398),
+  [`5f263de`](https://github.com/slaclab/sc_linac_physics/commit/5f263de1d80ede21593b0c7cd7ea5e6a9c0bd4ed))
+
+- **sim**: Serve production types and enum states for cavity and tuner PVs
+  ([#398](https://github.com/slaclab/sc_linac_physics/pull/398),
+  [`5f263de`](https://github.com/slaclab/sc_linac_physics/commit/5f263de1d80ede21593b0c7cd7ea5e6a9c0bd4ed))
+
+
 ## v9.45.2 (2026-10-14)
 
 ### Bug Fixes
