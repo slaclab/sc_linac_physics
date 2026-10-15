@@ -9,11 +9,10 @@ import dataclasses
 from datetime import datetime
 from typing import Union, Optional
 
-from lcls_tools.common.data.archiver import ArchiverValue
-
 from sc_linac_physics.utils.epics import (
     PV,
     EPICS_INVALID_VAL,
+    PVConnectionError,
     PVInvalidError,
 )
 
@@ -277,8 +276,8 @@ class Fault:
                 f"Fault for {self.pv} has neither 'ok_value' nor 'fault_value' parameter"
             )
 
-    def is_faulted(self, obj: Union[PV, ArchiverValue]) -> bool:
-        """Determine if a PV object or archiver value indicates a fault.
+    def is_faulted(self, obj: PV) -> bool:
+        """Determine if a PV object indicates a fault.
 
         EPICS severity values:
             NO_ALARM = 0
@@ -287,7 +286,7 @@ class Fault:
             INVALID = 3
 
         Args:
-            obj: PV object or ArchiverValue to check
+            obj: PV object to check
 
         Returns:
             True if the value indicates a fault, False if OK.
@@ -295,7 +294,13 @@ class Fault:
         Raises:
             PVInvalidError: If the PV severity is invalid or status is None.
         """
-        if obj.severity == EPICS_INVALID_VAL or obj.status is None:
+        try:
+            invalid = obj.severity == EPICS_INVALID_VAL or obj.status is None
+        except PVConnectionError as e:
+            # PV.severity raises when disconnected. Callers (EnumLabel, the
+            # runner) handle PVInvalidError, so report it the same way.
+            raise PVInvalidError(self.pv) from e
+        if invalid:
             raise PVInvalidError(self.pv)
 
         if self.ok_value is not None:
