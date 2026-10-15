@@ -738,7 +738,18 @@ class Cavity(linac_utils.SCLinacObject):
             else -delta_hz
         )
 
-    def move_to_resonance(self, reset_signed_steps=False, use_sela=False):
+    def move_to_resonance(
+        self,
+        reset_signed_steps=False,
+        use_sela=False,
+        max_stepper_temp: Optional[float] = None,
+    ):
+        """Tune to resonance with the stepper.
+
+        max_stepper_temp is passed to every _auto_tune pass; None (auto setup's
+        default) means no stepper temperature guard.
+        """
+
         def delta_detune():
             return self.detune
 
@@ -758,6 +769,7 @@ class Cavity(linac_utils.SCLinacObject):
             delta_hz_func=delta_detune,
             tolerance=(500 if self.cryomodule.is_harmonic_linearizer else 50),
             reset_signed_steps=reset_signed_steps,
+            max_stepper_temp=max_stepper_temp,
         )
 
         if use_sela:
@@ -766,6 +778,7 @@ class Cavity(linac_utils.SCLinacObject):
                 delta_hz_func=self.delta_piezo,
                 tolerance=5 * self.piezo.hz_per_v,
                 reset_signed_steps=False,
+                max_stepper_temp=max_stepper_temp,
             )
 
         self.tune_config_pv_obj.put(linac_utils.TUNE_CONFIG_RESONANCE_VALUE)
