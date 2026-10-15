@@ -21,14 +21,11 @@ class TestRackScreen:
         """Test detune plot receives cavity data."""
         from sc_linac_physics.applications.tuning.tuning_gui import RackScreen
 
-        mock_plot = rack_screen_patches
-        screen = RackScreen(mock_rack)  # Now used in assertion below
-
-        # Verify screen was created
-        assert screen is not None
+        screen = RackScreen(mock_rack)
+        curves = screen.detune_plot.curve_set.curves
 
         # 2 cavities * 2 PVs each (detune + cold)
-        assert mock_plot.return_value.add_pv.call_count == 4
+        assert len(curves) == 4
 
     @pytest.mark.parametrize("use_rf,expected", [(True, 1), (False, 0)])
     def test_rack_cold_button(
@@ -59,3 +56,23 @@ class TestRackScreen:
         screen = RackScreen(mock_rack)
         screen.abort_button.click()
         mock_rack.trigger_abort.assert_called_once()
+
+
+def test_rack_detune_curve_set(mock_rack):
+    """Detune solid, cold landing dashed, one shared color per cavity."""
+    from sc_linac_physics.applications.tuning.tuning_gui import (
+        rack_detune_curve_set,
+    )
+
+    curve_set = rack_detune_curve_set(mock_rack)
+    pvs = [c.pv for c in curve_set.curves]
+    assert pvs == [
+        "TEST:DETUNE",
+        "TEST:DF_COLD",
+        "TEST:CAV2:DETUNE",
+        "TEST:CAV2:DF_COLD",
+    ]
+    detune, cold, detune_2, _ = curve_set.curves
+    assert [c.dashed for c in curve_set.curves] == [False, True, False, True]
+    assert detune.color == cold.color != detune_2.color
+    assert curve_set.axis_names == ["Detune (Hz)"]
