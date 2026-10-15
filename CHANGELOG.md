@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.45.5 (2026-10-15)
+
+### Bug Fixes
+
+- **sc-linac**: Magnet CTRL command values match the real enum
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+### Documentation
+
+- **sc-linac**: Magnet CTRL enum checked on every linac; drop the CHECK
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+- **sc-linac**: XCOR and YCOR CTRL enums match the QUAD's
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+
 ## v9.45.4 (2026-10-15)
 
 ### Bug Fixes
