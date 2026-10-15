@@ -142,6 +142,49 @@ class TestDataRun(unittest.TestCase):
         self.assertEqual(self.data_run.dll_dt, -0.25)
 
 
+class TestDataRunFitWindow(unittest.TestCase):
+    """dll_dt fits only the ll_data inside fit_window; ll_data is untouched."""
+
+    def setUp(self):
+        self.data_run = DataRun()
+        # Slope -1 for t in [0, 4], then -3 for t in [5, 9]
+        self.data_run.ll_data = {
+            float(t): 95.0 - t if t <= 4 else 91.0 - 3 * (t - 4)
+            for t in range(10)
+        }
+
+    def test_no_window_fits_all_data(self):
+        self.assertIsNone(self.data_run.fit_window)
+        self.assertEqual(self.data_run.fit_ll_data, self.data_run.ll_data)
+
+    def test_window_is_inclusive(self):
+        self.data_run.fit_window = (2.0, 5.0)
+        self.assertEqual(
+            sorted(self.data_run.fit_ll_data), [2.0, 3.0, 4.0, 5.0]
+        )
+
+    def test_window_leaves_ll_data_alone(self):
+        self.data_run.fit_window = (0.0, 4.0)
+        self.assertEqual(len(self.data_run.ll_data), 10)
+
+    def test_setting_window_refits_dll_dt(self):
+        full_slope = self.data_run.dll_dt
+        self.data_run.fit_window = (0.0, 4.0)
+        self.assertAlmostEqual(self.data_run.dll_dt, -1.0)
+        self.assertNotAlmostEqual(full_slope, -1.0)
+
+    def test_clearing_window_refits_dll_dt(self):
+        full_slope = self.data_run.dll_dt
+        self.data_run.fit_window = (0.0, 4.0)
+        _ = self.data_run.dll_dt
+        self.data_run.fit_window = None
+        self.assertAlmostEqual(self.data_run.dll_dt, full_slope)
+
+    def test_reversed_window_raises(self):
+        with self.assertRaises(ValueError):
+            self.data_run.fit_window = (5.0, 2.0)
+
+
 class TestHeaterRun(unittest.TestCase):
     def test_initialization(self):
         """Test HeaterRun initialization"""

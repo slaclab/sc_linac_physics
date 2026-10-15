@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from os import devnull
 from os.path import isfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -109,6 +109,31 @@ class DataRun:
         self._end_time: Optional[datetime] = None
         self._average_heat = None
         self.reference_heat = reference_heat
+        self._fit_window: Optional[Tuple[float, float]] = None
+
+    @property
+    def fit_window(self) -> Optional[Tuple[float, float]]:
+        """(lo, hi) timestamps that limit the dll_dt fit, or None for all.
+
+        View-only: ll_data keeps every sample, and the save methods refuse
+        to run while a window is set (see require_no_fit_windows).
+        """
+        return self._fit_window
+
+    @fit_window.setter
+    def fit_window(self, window: Optional[Tuple[float, float]]):
+        if window is not None and window[0] > window[1]:
+            raise ValueError(f"Fit window start is after its end: {window}")
+        self._fit_window = window
+        self._dll_dt = None
+
+    @property
+    def fit_ll_data(self) -> Dict[float, float]:
+        """The ll_data samples inside fit_window, inclusive."""
+        if self._fit_window is None:
+            return self.ll_data
+        lo, hi = self._fit_window
+        return {t: ll for t, ll in self.ll_data.items() if lo <= t <= hi}
 
     @property
     def average_heat(self) -> float:
@@ -147,11 +172,13 @@ class DataRun:
         if not self._dll_dt:
             if USE_SIEGELSLOPES:
                 slope, intercept = siegelslopes(
-                    list(self.ll_data.values()), list(self.ll_data.keys())
+                    list(self.fit_ll_data.values()),
+                    list(self.fit_ll_data.keys()),
                 )
             else:
                 slope, intercept, r_val, p_val, std_err = linregress(
-                    list(self.ll_data.keys()), list(self.ll_data.values())
+                    list(self.fit_ll_data.keys()),
+                    list(self.fit_ll_data.values()),
                 )
             self._dll_dt = slope
         return self._dll_dt
@@ -165,6 +192,17 @@ class HeaterRun(DataRun):
     def __init__(self, heat_load: float, reference_heat=0):
         super().__init__(reference_heat=reference_heat)
         self.heat_load_des: float = heat_load
+
+
+def require_no_fit_windows(runs: Iterable[DataRun]) -> None:
+    """Raise DataError if any run has a fit window set.
+
+    Fit windows only change what the GUI shows. Saving while one is set would
+    write a dLL/dt or Q0 fitted to part of the data next to the full ll_data,
+    with nothing in the file saying so.
+    """
+    if any(run.fit_window is not None for run in runs):
+        raise DataError("Clear the fit windows before saving")
 
 
 def update_json_data(filepath, time_stamp, new_data):
