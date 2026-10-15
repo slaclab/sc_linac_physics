@@ -13,7 +13,7 @@ and say so. For the phase list, session API and database tables, see the
 Commissioning is nine phases run in a fixed order per cavity. Each phase has a
 stored value, a record attribute and a data model, all declared in one registry
 <span class="cite">`models/registry.py::create_phase_registry`</span>. Today
-three phases are real. The rest have a tab with a placeholder display whose Run
+four phases are real. The rest have a tab with a placeholder display whose Run
 button only logs
 <span class="cite">`ui/displays/base_placeholder.py::BasePlaceholderDisplay.on_run_automated_test “This is a placeholder implementation”`</span>.
 
@@ -22,8 +22,8 @@ button only logs
 | 1 | `PIEZO_PRE_RF` | `PiezoPreRFPhase` | `PiezoPreRFController`, plus a batch window | Implemented |
 | 2 | `SSA_CHAR` | `SSACharPhase` | `SSACharController` | Implemented |
 | 3 | `FREQUENCY_TUNING` | `FrequencyTuningPhase` | `FrequencyTuningController` (4 stages) | Implemented |
-| 4 | `CAVITY_CHAR` | — | — | Placeholder. Backend in open PR #285, UI in progress |
-| 5 | `PIEZO_WITH_RF` | — | — | Placeholder |
+| 4 | `CAVITY_CHAR` | `CavityCharPhase` | `CavityCharController` | Implemented |
+| 5 | `PIEZO_WITH_RF` | — | — | Placeholder. Backend in open PRs #408 and #409; UI waits for the shared step runner |
 | 6 | `HIGH_POWER_RAMP` | — | — | Placeholder |
 | 7 | `MP_PROCESSING` | — | — | Placeholder |
 | 8 | `ONE_HOUR_RUN` | — | — | Placeholder |
@@ -84,20 +84,22 @@ A phase subclasses `PhaseBase` and implements five members: `phase_type`,
 - Abort is a flag, not an interrupt
   <span class="cite">`phases/phase_base.py::PhaseContext.request_abort “self.abort_requested = True”`</span>. A long step has to check it itself.
 
-!!! note "Five step loops"
+!!! note "Six step loops"
 
-    `PhaseBase.run()` exists but no controller calls it. Each of the three
+    `PhaseBase.run()` exists but no controller calls it. Each of the four
     controllers has its own step loop and calls private phase methods directly,
     for example
-    <span class="cite">`ui/controllers/ssa_char_controller.py::SSACharController._run_phase_in_background “self.phase._mark_phase_started()”`</span>. The batch Piezo window has one more. So there are five step loops, and
+    <span class="cite">`ui/controllers/ssa_char_controller.py::SSACharController._run_phase_in_background “self.phase._mark_phase_started()”, ui/controllers/cavity_char_controller.py::CavityCharController._run_phase_in_background “self.phase._mark_phase_started()”`</span>. The batch Piezo window has one more. So there are six step loops, and
     they do not all do the same bookkeeping. One example: `PhaseBase.run()` and
     the batch window reset the attempt counter before each step
     <span class="cite">`phases/phase_base.py::PhaseBase.run “self._retry_count = 0”, ui/controllers/batch_piezo_pre_rf_controller.py::BatchPiezoPreRFController._run_step “state.phase._retry_count = 0”`</span>. The single-cavity Piezo controller does not, so exceptions add up across
     the whole phase there. Read the controller for the phase you are touching,
     not just `PhaseBase`.
 
-    Decided 2026-10-02: one shared step runner will replace these loops, before
-    any placeholder phase is implemented.
+    Decided 2026-10-02: one shared step runner will replace these loops. It
+    was meant to land before any placeholder phase was implemented. Cavity
+    char went first anyway, and the piezo with RF backend (#408, #409) is going
+    in ahead of it too. Only the piezo with RF UI waits for the runner.
 
 ## 4. What gets stored
 
