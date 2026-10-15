@@ -1613,7 +1613,6 @@ if __name__ == "__main__":
     import logging
     import sys
 
-    import lcls_tools.common.data.archiver as _archiver
     from PyQt5.QtWidgets import QApplication as _QApp
 
     from sc_linac_physics.displays.cavity_display.backend.backend_machine import (
@@ -1625,8 +1624,6 @@ if __name__ == "__main__":
     )
 
     cavity_fault_logger.setLevel(logging.WARNING)
-
-    _archiver.TIMEOUT = 30
 
     app = _QApp(sys.argv)
     machine = BackendMachine(lazy_fault_pvs=True)

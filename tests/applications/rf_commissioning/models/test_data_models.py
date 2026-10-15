@@ -164,6 +164,29 @@ class TestPhaseModels:
             is True
         )
 
+    def test_cavity_char_out_of_tolerance_is_complete_but_not_passed(self):
+        for field in ("loaded_q_in_tolerance", "scale_factor_in_tolerance"):
+            model = CavityCharacterization(
+                loaded_q=3e7, scale_factor=2.5, **{field: False}
+            )
+            assert model.is_complete is True
+            assert model.passed is False
+
+    def test_cavity_char_unchecked_tolerance_keeps_passing(self):
+        # None: a record written before the tolerance fields existed.
+        model = CavityCharacterization(loaded_q=3e7, scale_factor=2.5)
+        assert model.loaded_q_in_tolerance is None
+        assert model.passed is True
+        assert (
+            CavityCharacterization(
+                loaded_q=3e7,
+                scale_factor=2.5,
+                loaded_q_in_tolerance=True,
+                scale_factor_in_tolerance=True,
+            ).passed
+            is True
+        )
+
 
 class TestCommissioningRecord:
     """Tests for commissioning record workflow behavior."""
