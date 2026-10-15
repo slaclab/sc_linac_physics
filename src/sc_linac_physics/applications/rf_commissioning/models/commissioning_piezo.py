@@ -55,7 +55,7 @@ class CommissioningPiezo(Piezo):
         self.withrf_check_status_pv: str = self.pv_addr("RFTESTSTS")
         self._withrf_check_status_pv_obj: PV | None = None
 
-        self.withrf_status_pv: str = self.pv_addr("RFSTESTSTAT")
+        self.withrf_status_pv: str = self.pv_addr("RFTESTSTAT")
         self._withrf_status_pv_obj: PV | None = None
 
         self.amplifiergain_a_pv: str = self.pv_addr("CHA_AMPGAIN")

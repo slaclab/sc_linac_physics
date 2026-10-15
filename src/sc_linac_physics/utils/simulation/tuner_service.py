@@ -374,13 +374,13 @@ class PiezoPVGroup(PVGroup):
         name="RFTESTSTS",
         dtype=ChannelType.ENUM,
         value=0,
-        enum_strings=("Idle", "Complete", "Running"),
+        enum_strings=("Crash", "Complete", "Running"),
     )
     withrf_status = pvproperty(
-        name="RFSTESTSTAT",
+        name="RFTESTSTAT",
         dtype=ChannelType.ENUM,
         value=0,
-        enum_strings=("Not Tested", "Pass", "Fail"),
+        enum_strings=("Pass", "Warning", "Fail"),
     )
     amplifiergain_a = pvproperty(
         name="CHA_AMPGAIN", value=0.0, dtype=ChannelType.FLOAT
@@ -576,14 +576,15 @@ class PiezoPVGroup(PVGroup):
 
         print("Starting With-RF test simulation...")
         await self.withrf_check_status.write(2)  # Running
-        await self.withrf_status.write(0)  # Reset status
 
         await sleep(3)
 
         # Simulate successful with-RF test
-        await self.withrf_status.write(1)  # Pass
+        await self.withrf_status.write(0)  # Pass
         await self.amplifiergain_a.write(1.05)
         await self.amplifiergain_b.write(0.98)
+        # Arbitrary sim value, so the phase has a detune gain to review.
+        await self.detunegain_new.write(0.85)
 
         await self.withrf_check_status.write(1)  # Complete
         print("With-RF test complete: PASS")
