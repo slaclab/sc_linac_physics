@@ -287,6 +287,7 @@ def _add_real_methods_to_mock_class(mock_class):
         "_attempt_each",
         "_select_heater_sequencer",
         "_save_starting_ds_level_setpoint",
+        "_restore_ds_level_setpoint",
     ]
 
     for method_name in methods_to_copy:
@@ -2817,3 +2818,49 @@ class TestDsLevelSetpoint:
 
         cavity.turn_off.assert_called_once()
         cavity.ssa.turn_off.assert_not_called()
+
+    def test_shut_off_restores_saved_setpoint(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from tests.applications.q0 import pyepics_shim
+
+        fast_q0_cryo._starting_ds_level_setpoint = 88.0
+        cavity = Mock()
+        fast_q0_cryo.cavities = {1: cavity}
+
+        with self._real_ds_liquid_level(fast_q0_cryo), patch("builtins.print"):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        assert [c.args[0] for c in pyepics_shim.caput.call_args_list] == [
+            fast_q0_cryo.heater_sequencer_pv,
+            fast_q0_cryo.jt_auto_select_pv,
+            fast_q0_cryo.ds_liq_lev_setpoint_pv,
+        ]
+        pyepics_shim.caput.assert_any_call(
+            fast_q0_cryo.ds_liq_lev_setpoint_pv, 88.0, wait=True
+        )
+        cavity.turn_off.assert_called_once()
+
+    def test_shut_off_turns_cavities_off_after_failed_restore(
+        self, fast_q0_cryo
+    ):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from sc_linac_physics.utils.epics import PVPutError
+        from tests.applications.q0 import pyepics_shim
+
+        def fail_sp_rqst(pv_name, *args, **kwargs):
+            if pv_name.endswith("SP_RQST"):
+                raise PVPutError("SP_RQST")
+
+        fast_q0_cryo._starting_ds_level_setpoint = 88.0
+        cavity = Mock()
+        fast_q0_cryo.cavities = {1: cavity}
+        pyepics_shim.caput.side_effect = fail_sp_rqst
+
+        with (
+            self._real_ds_liquid_level(fast_q0_cryo),
+            patch("builtins.print"),
+            pytest.raises(PVPutError),
+        ):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        cavity.turn_off.assert_called_once()

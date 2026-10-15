@@ -203,15 +203,31 @@ class Q0Cryomodule(Cryomodule):
         """Hand the heaters back to the sequencer (SEQUENCER=1, waited)."""
         self._pv(self.heater_sequencer_pv).put(1, wait=True)
 
+    def _restore_ds_level_setpoint(self) -> None:
+        """Put the saved starting value back to SP_RQST, if one was saved."""
+        if self._starting_ds_level_setpoint is None:
+            print(
+                f"{self}: no starting liquid level setpoint saved,"
+                " leaving SP_RQST as is"
+            )
+            return
+        self.ds_liquid_level = self._starting_ds_level_setpoint
+
     def shut_off(self):
         """Restore cryo, then turn every cavity off. SSAs are left on.
 
-        Each step is attempted even if an earlier one fails.
+        Order: heater SEQUENCER, JT AUTO, SP_RQST back to its starting
+        value, then each cavity off. Each step is attempted even if an
+        earlier one fails.
         """
         print("Restoring cryo, turning cavities off")
         steps = [
             ("heater SEQUENCER", self._select_heater_sequencer),
             ("JT AUTO", self.select_jt_auto),
+            (
+                f"ds_liquid_level = {self._starting_ds_level_setpoint}",
+                self._restore_ds_level_setpoint,
+            ),
         ]
         for cavity in self.cavities.values():
             steps.append((f"{cavity} turn_off", cavity.turn_off))
@@ -561,21 +577,13 @@ class Q0Cryomodule(Cryomodule):
         one fails.
         """
         print("Restoring initial cryo conditions")
-        starting_level = self._starting_ds_level_setpoint
-
-        def restore_ds_level():
-            if starting_level is None:
-                print(
-                    f"{self}: no starting liquid level setpoint saved,"
-                    " leaving SP_RQST as is"
-                )
-                return
-            self.ds_liquid_level = starting_level
-
         self._attempt_each(
             [
                 ("JT AUTO", self.select_jt_auto),
-                (f"ds_liquid_level = {starting_level}", restore_ds_level),
+                (
+                    f"ds_liquid_level = {self._starting_ds_level_setpoint}",
+                    self._restore_ds_level_setpoint,
+                ),
                 ("heater SEQUENCER", self._select_heater_sequencer),
             ]
         )
