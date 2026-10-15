@@ -81,6 +81,11 @@ AT_TIME_TIMEOUT = 75.0
 MAX_RETRIES = 4
 RETRY_DELAY = 0.5
 
+# Only gateway errors are retried: the proxy's 502 at 60 s above, and 503/504
+# from it or the archiver. Other 5xx, like a 500, fail the same way each time,
+# so retrying them only turned one failure into about 5 minutes of waiting.
+RETRY_STATUS = frozenset({502, 503, 504})
+
 # A proxy cuts every request off at 60 s, and a long window holds more samples
 # than one request can return in that time, so ranges are fetched in chunks.
 # Measured on site (2026-10-12), ACCL:L2B:0410:AACTMEAN, uncached windows:
@@ -185,7 +190,9 @@ def get_values_over_time_range(
     America/Los_Angeles.
 
     Raises PVNotArchivedError, naming every unknown PV, once all requests have
-    finished. Timeouts and connection errors are retried, then raised.
+    finished. Timeouts, connection errors and HTTP 502/503/504 are retried,
+    then raised. Any other error, including a 200 whose body isn't the
+    expected JSON, raises ArchiverError naming the PV.
     """
     pvs = list(pvs)
 
@@ -241,6 +248,9 @@ def iter_range_chunks(
     except ArchiverError as e:
         # Every range request has the same URL; name the PV that failed.
         raise type(e)(f"{pv}: {e}") from e
+    except (KeyError, IndexError, TypeError) as e:
+        # A 200 whose JSON isn't the shape planning and fetching read.
+        raise ArchiverError(f"{pv}: unexpected response: {e!r}") from e
 
 
 def _iter_chunks(
@@ -392,7 +402,7 @@ def _get_json(
         len(response.content) / 1e6,
         time.monotonic() - began,
     )
-    return response.json()
+    return _json(response, "getData.json")
 
 
 def _span(start: datetime, end: datetime) -> str:
@@ -462,21 +472,27 @@ def get_values_at_time(
     get_values_over_time_range.
 
     A PV the archiver has no value for is left out of the result. Naive
-    datetimes are read as America/Los_Angeles.
+    datetimes are read as America/Los_Angeles. No PVs means no request.
     """
     pvs = list(pvs)
+    if not pvs:
+        return {}
     began = time.monotonic()
     response = _request(
         "POST",
         f"{ARCHIVER_URL}/getDataAtTime",
         timeout,
         params={"at": _to_utc_iso(at), "includeProxies": "true"},
-        json=list(pvs),  # the Save/Restore API takes a JSON list of names
+        json=pvs,  # the Save/Restore API takes a JSON list of names
     )
     if response is None:  # 404: none of the PVs are known
         get_logger().info("value at %s: none of %d PVs known", at, len(pvs))
         return {}
-    samples = {pv: _to_sample(d) for pv, d in response.json().items()}
+    payload = _json(response, "getDataAtTime")
+    try:
+        samples = {pv: _to_sample(d) for pv, d in payload.items()}
+    except (AttributeError, KeyError, TypeError) as e:
+        raise ArchiverError(f"getDataAtTime: unexpected response: {e!r}") from e
     get_logger().info(
         "value at %s: %d of %d PVs, %.1f s",
         at,
@@ -567,15 +583,12 @@ def _request(
         else:
             if response.status_code == 404:
                 return None
-            if response.status_code < 500:
-                if not response.ok:
-                    raise ArchiverError(
-                        f"HTTP {response.status_code} from {url}"
-                    )
+            if response.ok:
                 return response
-            last_error = ArchiverError(
-                f"HTTP {response.status_code} from {url}"
-            )
+            error = ArchiverError(f"HTTP {response.status_code} from {url}")
+            if response.status_code not in RETRY_STATUS:
+                raise error
+            last_error = error
         if attempt < MAX_RETRIES:
             get_logger().warning(
                 "attempt %d of %d failed (%s); retrying",
@@ -585,6 +598,17 @@ def _request(
             )
             sleep(RETRY_DELAY * attempt)
     raise last_error
+
+
+def _json(response: requests.Response, what: str):
+    """response.json(), raising ArchiverError if the body isn't JSON.
+
+    A proxy can answer 200 with an HTML page (a login or error page).
+    """
+    try:
+        return response.json()
+    except ValueError as e:  # requests' JSONDecodeError is a ValueError
+        raise ArchiverError(f"{what}: response is not JSON: {e}") from e
 
 
 def _aware(moment: datetime) -> datetime:
