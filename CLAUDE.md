@@ -30,6 +30,7 @@ Set `PYDM_DEFAULT_PROTOCOL=fake` to run UI code without live EPICS hardware.
 Full documentation lives in [`docs/`](docs/index.md):
 - [`docs/utils/linac_model.md`](docs/utils/linac_model.md) — hardware model, PV naming, all constants
 - [`docs/utils/shared_utilities.md`](docs/utils/shared_utilities.md) — EPICS `PV`/`PVBatch`, logger, Qt helpers
+- [`docs/utils/archiver.md`](docs/utils/archiver.md) — reading archived PV data
 - [`docs/applications/auto_setup.md`](docs/applications/auto_setup.md) — automated cavity turn-on
 - [`docs/applications/rf_commissioning.md`](docs/applications/rf_commissioning.md) — phase-gated acceptance workflow
 - [`docs/applications/q0.md`](docs/applications/q0.md), [`microphonics.md`](docs/applications/microphonics.md), [`quench_processing.md`](docs/applications/quench_processing.md), [`tuning.md`](docs/applications/tuning.md)

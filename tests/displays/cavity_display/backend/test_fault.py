@@ -88,6 +88,20 @@ class TestFault(TestCase):
 
         self.assertRaises(RuntimeError, self.fault.is_faulted, pv)
 
+    def test_is_faulted_disconnected_pv_reports_invalid(self):
+        """PV.severity raises PVConnectionError; callers expect PVInvalidError."""
+        from unittest.mock import PropertyMock
+
+        from sc_linac_physics.utils.epics import (
+            PVConnectionError,
+            PVInvalidError,
+        )
+
+        pv = MagicMock()
+        type(pv).severity = PropertyMock(side_effect=PVConnectionError("down"))
+        with self.assertRaises(PVInvalidError):
+            self.fault.is_faulted(pv)
+
 
 class TestFaultCounter(TestCase):
     def setUp(self):
