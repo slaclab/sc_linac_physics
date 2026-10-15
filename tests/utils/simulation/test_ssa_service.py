@@ -38,9 +38,7 @@ class TestCalibration:
         ssa.log.warning.assert_called_once()
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "roll, expected", [(0.9, "Success"), (0.1, "Crash")]
-    )
+    @pytest.mark.parametrize("roll, expected", [(0.9, "Good"), (0.1, "Error")])
     async def test_results_written_before_complete(self, ssa, roll, expected):
         """A client that sees CALSTS Complete must read this run's results."""
         seen_at_complete = {}
