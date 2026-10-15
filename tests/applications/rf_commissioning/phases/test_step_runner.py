@@ -673,3 +673,30 @@ def test_abort_hook_error_still_aborts_context():
     run.request_abort()
 
     assert phase.context.is_abort_requested()
+
+
+def test_exception_attempt_is_reported_and_kept_in_results():
+    phase, run, listener = _make({"a": [_retry(), RuntimeError("PV gone")]})
+
+    result = run.run_steps(["a"])
+
+    assert result.results["a"].result is PhaseResult.FAILED
+    assert "PV gone" in result.results["a"].message
+    assert listener.of("attempt") == [
+        ("attempt", "a", 1, PhaseResult.RETRY),
+        ("attempt", "a", 2, PhaseResult.FAILED),
+    ]
+
+
+def test_reserved_run_counts_as_running_and_refuses_another_reserve():
+    _, run, _ = _make({"a": [_ok()]})
+
+    assert run.try_reserve() is True
+    assert run.running is True
+    assert run.try_reserve() is False
+    with pytest.raises(RuntimeError):
+        run.skip_step("a", "Ryan", "reason")
+
+    run.release()
+    assert run.running is False
+    assert run.try_reserve() is True
