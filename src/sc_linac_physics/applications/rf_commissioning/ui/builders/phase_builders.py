@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 from pydm.widgets import PyDMEnumComboBox, PyDMLabel, PyDMSpinbox
+from pydm.widgets.display_format import DisplayFormat
 from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
@@ -532,6 +533,182 @@ class SSACharUI(PhaseUIBase):
         outer.addLayout(btn_row)
 
         group.setLayout(outer)
+        return group
+
+
+class CavityCharUI(PhaseUIBase):
+    """Builds the Cavity Characterization display UI.
+
+    Drive level is the only operator input. The measured values, probe Q
+    included, appear in the generic Stored Data section.
+    """
+
+    def build(self) -> QVBoxLayout:
+        # One grid for the two columns, so boxes side by side share their top
+        # and bottom edges: toolbar and inputs against Stored Data, then
+        # Review and Push against Live PVs. Phase History spans the full
+        # width below. With it in the left column (the SSA layout) the right
+        # column ended in a tall empty space.
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
+        grid.addLayout(self._build_main_toolbar(), 0, 0)
+        grid.addWidget(self._build_char_inputs(), 1, 0)
+        grid.addWidget(
+            self._build_stored_data_section(
+                self._get_parent_stored_data_fields()
+            ),
+            0,
+            1,
+            2,
+            1,
+        )
+        grid.addWidget(self._build_char_results(), 2, 0)
+        grid.addWidget(self._build_char_live_pvs(), 2, 1)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+
+        main_layout.addLayout(grid)
+        main_layout.addWidget(self._build_history(), stretch=1)
+        return main_layout
+
+    def _build_char_live_pvs(self) -> QGroupBox:
+        """Live readbacks of the PVs this phase reads and writes.
+
+        Read-only PyDMLabels. CavityCharController.update_pv_addresses sets
+        each channel from the selected Cavity's *_pv attributes.
+        """
+        group = QGroupBox("Live PVs")
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        grid.setContentsMargins(8, 8, 8, 8)
+        grid.addWidget(QLabel("New"), 0, 1, alignment=Qt.AlignCenter)
+        grid.addWidget(QLabel("Current"), 0, 2, alignment=Qt.AlignCenter)
+
+        def pv_label(name: str, numeric=None) -> PyDMLabel:
+            """numeric: None (text/enum), "e" (exponential) or "f"."""
+            label = self._register(name, PyDMLabel(parent=self.parent))
+            label.setStyleSheet(PV_LABEL_STYLE)
+            label.setAlignment(Qt.AlignCenter)
+            if numeric is not None:
+                # One figure after the decimal point, asked for in review.
+                if numeric == "e":
+                    label.displayFormat = DisplayFormat.Exponential
+                label.precisionFromPV = False
+                label.precision = 1
+            return label
+
+        rows = (
+            # caption, New widget, Current widget (None: nothing to show)
+            ("Status:", ("pydm_char_status", None), None),
+            ("Last run:", ("pydm_char_timestamp", None), None),
+            (
+                "Loaded Q:",
+                ("pydm_loaded_q_new", "e"),
+                ("pydm_loaded_q_current", "e"),
+            ),
+            (
+                "Scale factor:",
+                ("pydm_scale_new", "f"),
+                ("pydm_scale_current", "f"),
+            ),
+            # The hardware model has no PV for the operational probe Q.
+            ("Probe Q:", ("pydm_probe_q_new", "e"), None),
+            ("Drive level:", ("pydm_drive_level", "f"), None),
+            ("RF state:", ("pydm_rf_state", None), None),
+        )
+        for row, (caption, new, current) in enumerate(rows, start=1):
+            grid.addWidget(QLabel(caption), row, 0)
+            grid.addWidget(pv_label(*new), row, 1)
+            if current is not None:
+                grid.addWidget(pv_label(*current), row, 2)
+
+        group.setLayout(grid)
+        return group
+
+    def _build_char_results(self) -> QGroupBox:
+        """This run's values for review, and the button that pushes them.
+
+        The button is built disabled. CavityCharDisplay enables it when
+        read_results succeeds, because the push gate lives on the phase that
+        read the values (CavityCharPhase._push_results).
+        """
+        group = QGroupBox("Review and Push")
+        layout = QGridLayout()
+        layout.setSpacing(6)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        for row, (caption, name) in enumerate(
+            (
+                ("Loaded Q:", "loaded_q_label"),
+                ("Loaded Q window:", "q_window_label"),
+                ("Scale factor:", "scale_factor_label"),
+                ("Probe Q:", "probe_q_label"),
+                ("Tolerance:", "tolerance_label"),
+            )
+        ):
+            layout.addWidget(QLabel(caption), row, 0)
+            layout.addWidget(
+                self._register(name, self._make_local_label("-")), row, 1
+            )
+
+        button = self._register(
+            "push_results_button",
+            QPushButton("Push to Cavity…", parent=self.parent),
+        )
+        button.setEnabled(False)
+        self._connect(button, "on_push_results")
+        layout.addWidget(button, 5, 0, 1, 2)
+
+        group.setLayout(layout)
+        return group
+
+    def _build_char_inputs(self) -> QGroupBox:
+        group = QGroupBox("Cavity Characterization")
+        layout = QGridLayout()
+        layout.setSpacing(6)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        layout.addWidget(QLabel("Drive level:"), 0, 0)
+        # A plain QDoubleSpinBox, deliberately not a PyDMSpinbox. The PyDM
+        # spinboxes in this file are wired writeOnPress/send_value, which puts
+        # the value to the PV as the operator edits. Here the phase owns the
+        # write: CavityCharPhase._set_drive_level validates first, then puts
+        # SEL_ASET. The maximum is applied by CavityCharDisplay, which can see
+        # CavityCharLimits; builders in this package do not import phases.
+        spin = self._register(
+            "drive_level_spinbox", QDoubleSpinBox(parent=self.parent)
+        )
+        spin.setRange(0.01, 100.0)
+        spin.setSingleStep(1.0)
+        spin.setDecimals(2)
+        spin.setValue(linac_utils.SAFE_PULSED_DRIVE_LEVEL)
+        spin.setFixedWidth(90)
+        layout.addWidget(spin, 0, 1)
+        layout.addWidget(QLabel("% forward power"), 0, 2)
+
+        for row, (caption, name) in enumerate(
+            (
+                ("Status:", "char_status_label"),
+                ("Elapsed:", "elapsed_label"),
+                ("Phase:", "local_phase_status"),
+            ),
+            start=1,
+        ):
+            layout.addWidget(QLabel(caption), row, 0)
+            layout.addWidget(
+                self._register(name, self._make_local_label("-")),
+                row,
+                1,
+                1,
+                2,
+            )
+
+        group.setLayout(layout)
         return group
 
 
