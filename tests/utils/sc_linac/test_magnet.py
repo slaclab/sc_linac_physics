@@ -136,3 +136,44 @@ def test_bdes_setter_works_before_any_read(cryomodule):
     with patch("sc_linac_physics.utils.epics.lazy.PV", return_value=bdes_pv):
         magnet.bdes = 1.5
     bdes_pv.put.assert_called_once_with(1.5)
+
+
+# The real CTRL enum states, the same on QUAD, XCOR and YCOR across L0B to
+# L4B (caget on lcls-srv01, 2026-10-13). L4B QUADs label state 9 CALIB.
+# Written out here, not derived from linac_utils, so a wrong constant
+# can't pass by agreeing with itself.
+CTRL_STATES = [
+    "Ready",
+    "TRIM",
+    "PERTURB",
+    "BCON_TO_BDES",
+    "BACT_TO_BDES",
+    "SAVE_BDES",
+    "LOAD_BDES",
+    "UNDO_BDES",
+    "DAC_ZERO",
+    "CALB",
+    "STDZ",
+    "RESET",
+    "TURN_ON",
+    "TURN_OFF",
+    "DEGAUSS",
+]
+
+
+@pytest.mark.parametrize(
+    "method, state",
+    [
+        ("trim", "TRIM"),
+        ("reset", "RESET"),
+        ("turn_on", "TURN_ON"),
+        ("turn_off", "TURN_OFF"),
+        ("degauss", "DEGAUSS"),
+    ],
+)
+def test_ctrl_writes_the_matching_enum_state(cryomodule, method, state):
+    magnet = cryomodule.quad
+    magnet._control_pv_obj = make_mock_pv()
+    getattr(magnet, method)()
+    (written,), _ = magnet._control_pv_obj.put.call_args
+    assert CTRL_STATES[written] == state

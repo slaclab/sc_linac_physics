@@ -93,6 +93,9 @@ class Cavity(linac_utils.SCLinacObject):
         self.piezo: "Piezo" = self.rack.piezo_class(cavity=self)
 
         self.calc_probe_q_pv: str = self.pv_addr("QPROBE_CALC1.PROC")
+        # PV names from Sebastian Aderhold on #372.
+        self.measured_probe_q_pv: str = self.pv_addr("QPROBE_CALC2")
+        self.push_probe_q_pv: str = self.pv_addr("PUSH_QPROBECALC.PROC")
 
         self.push_ssa_slope_pv: str = self.pv_addr("PUSH_SSA_SLOPE.PROC")
 
@@ -563,6 +566,17 @@ class Cavity(linac_utils.SCLinacObject):
 
     def calculate_probe_q(self):
         self.calc_probe_q_pv_obj.put(1, wait=False)
+
+    measured_probe_q_pv_obj = LazyPV("measured_probe_q_pv")
+
+    @property
+    def measured_probe_q(self) -> float:
+        return self.measured_probe_q_pv_obj.get()
+
+    push_probe_q_pv_obj = LazyPV("push_probe_q_pv")
+
+    def push_probe_q(self):
+        self.push_probe_q_pv_obj.put(1, wait=False)
 
     def set_chirp_range(self, offset: int):
         offset = abs(offset)
