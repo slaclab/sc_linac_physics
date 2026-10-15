@@ -530,15 +530,16 @@ class TestCalibrationAndMaintenance:
         regular_cavity.log.warning.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_probe_cal_start_putter_no_action_for_zero(
+    async def test_probe_cal_start_putter_starts_on_blank_label(
         self, regular_cavity
     ):
-        """Putting 0 does not start a characterization."""
-        before = regular_cavity.probe_cal_stat.value
-        await regular_cavity.probe_cal_start.putter(None, 0)
+        """PROBECALSTRT's two labels are blank, so a put of 0 or 1 arrives
+        as "" and either starts a characterization."""
+        await regular_cavity.probe_cal_start.putter(None, "")
 
-        assert regular_cavity._characterization_task is None
-        assert regular_cavity.probe_cal_stat.value == before
+        assert regular_cavity._characterization_task is not None
+        assert regular_cavity.probe_cal_stat.value == "Running"
+        regular_cavity._characterization_task.cancel()
 
     @pytest.mark.asyncio
     async def test_characterization_completes_keeping_start_timestamp(
@@ -676,7 +677,7 @@ class TestChannelTypeSpecifications:
             (regular_cavity.rf_state_act, ["Off", "On"]),
             (regular_cavity.rfPermit, ["RF inhibit", "RF allow"]),
             (regular_cavity.parked, ["Not parked", "Parked"]),
-            (regular_cavity.rf_ready_for_beam, ["Not Ready", "Ready"]),
+            (regular_cavity.rf_ready_for_beam, ["Not ready", "Ready"]),
         ]
 
         for prop, expected_strings in enum_props:
