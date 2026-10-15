@@ -12,9 +12,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
 from .base_placeholder import BasePlaceholderDisplay
 from .piezo_pre_rf import PiezoPreRFDisplay
 from .ssa_char import SSACharDisplay
+from .cavity_char import CavityCharDisplay
 from .frequency_tuning import FrequencyTuningDisplay
 from .standard import (
-    CavityCharDisplay,
     HighPowerMPProcessingDisplay,
     HighPowerOneHourRunDisplay,
     HighPowerRampDisplay,

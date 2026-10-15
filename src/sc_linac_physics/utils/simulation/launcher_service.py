@@ -276,11 +276,14 @@ class LauncherPVGroupMeta(PVGroupMeta):
                 value="",
             )
 
-            # Status property
+            # Status property. An enum on lcls-srv01 (2026-10-14), the same
+            # three states as PROBECALSTS. A fresh sim reads Complete: index 0
+            # is Crash.
             namespace["status"] = pvproperty(
                 name=f"{launcher_name}STS",
-                dtype=ChannelType.STRING,
-                value="Ready",
+                dtype=ChannelType.ENUM,
+                enum_strings=("Crash", "Complete", "Running"),
+                value=1,
             )
 
             # Add Setup-specific properties (SETUP is the most complex)
@@ -288,25 +291,25 @@ class LauncherPVGroupMeta(PVGroupMeta):
                 namespace["ssa_cal"] = pvproperty(
                     name=f"{launcher_name}_SSAREQ",
                     dtype=ChannelType.ENUM,
-                    enum_strings=("False", "True"),
+                    enum_strings=("No request", "Request"),
                     value=1,
                 )
                 namespace["tune"] = pvproperty(
                     name=f"{launcher_name}_TUNEREQ",
                     dtype=ChannelType.ENUM,
-                    enum_strings=("False", "True"),
+                    enum_strings=("No request", "Request"),
                     value=1,
                 )
                 namespace["cav_char"] = pvproperty(
                     name=f"{launcher_name}_CHARREQ",
                     dtype=ChannelType.ENUM,
-                    enum_strings=("False", "True"),
+                    enum_strings=("No request", "Request"),
                     value=1,
                 )
                 namespace["ramp"] = pvproperty(
                     name=f"{launcher_name}_RAMPREQ",
                     dtype=ChannelType.ENUM,
-                    enum_strings=("False", "True"),
+                    enum_strings=("No request", "Request"),
                     value=1,
                 )
 
@@ -387,6 +390,11 @@ class BaseScriptPVGroup(LauncherPVGroup):
         self.extra_flags = []
         self.process = None
         self._future = None
+        # Kept so asyncio can't garbage-collect a monitor before it runs.
+        self._monitor_task: asyncio.Task | None = None
+        # Set by trigger_stop, so the monitors report Stopped rather than
+        # Completed or a terminate exit code.
+        self._stop_requested = False
 
     def get_command_args(self):
         """Build command arguments from script name, args, and extra flags"""
@@ -403,65 +411,122 @@ class BaseScriptPVGroup(LauncherPVGroup):
     def _get_executor(self):
         return _ORCHESTRATOR_EXECUTOR
 
-    async def trigger_start(self):
-        run_fn = self._get_run_fn()
-        if run_fn is not None:
-            if self._future is not None and not self._future.done():
-                await self.status.write("Already running")
-                return
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            await self.status.write("Running")
-            self._future = asyncio.get_running_loop().run_in_executor(
-                self._get_executor(), run_fn
-            )
-            asyncio.create_task(self._monitor_future())
-        else:
-            if self.process and self.process.returncode is None:
-                await self.status.write("Already running")
-                return
-            args = self.get_command_args()
-            self.process = await create_subprocess_exec(*args)
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            await self.status.write("Running")
-            asyncio.create_task(self._monitor_process())
-
-    async def trigger_stop(self):
-        if self.process:
-            self.process.terminate()
-            await self.process.wait()
+    # CHECK: what does STS read after an operator stop? The sim writes
+    # Complete (the run ended, it did not crash); Crash is the other fit.
+    async def _stamp(self, status: str, detail: str = ""):
+        """Write TS and STS (Crash, Complete or Running); log the detail."""
+        if detail:
+            self.log.info(f"{self.prefix} {status}: {detail}")
         await self.timestamp.write(
             datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
         )
-        await self.status.write("Stopped")
+        await self.status.write(status)
 
-    async def _monitor_process(self):
-        """Monitor process and update status when complete"""
-        if self.process:
-            returncode = await self.process.wait()
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
+    def _running_in_process(self) -> bool:
+        return self._future is not None and not self._future.done()
+
+    def _running_subprocess(self) -> bool:
+        return self.process is not None and self.process.returncode is None
+
+    def _active(self) -> bool:
+        """A run counts as active until its monitor has written the result.
+
+        The process or future can finish a moment before its monitor stamps
+        the status. A start in that gap would reset _stop_requested and
+        replace process/_future while the old monitor still reads them.
+        """
+        return self._monitor_task is not None and not self._monitor_task.done()
+
+    async def trigger_start(self):
+        run_fn = self._get_run_fn()
+        if self._active():
+            # STS has no state for this; it stays Running.
+            self.log.warning(f"{self.prefix} already running; start ignored")
+            return
+        self._stop_requested = False
+        if run_fn is not None:
+            await self._stamp("Running")
+            self._future = asyncio.get_running_loop().run_in_executor(
+                self._get_executor(), run_fn
             )
-            if returncode == 0:
-                await self.status.write("Completed")
-            else:
-                await self.status.write(f"Failed (exit code: {returncode})")
-
-    async def _monitor_future(self):
+            self._monitor_task = asyncio.create_task(
+                self._monitor_future(self._future)
+            )
+            return
+        args = self.get_command_args()
         try:
-            await self._future
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            await self.status.write("Completed")
+            self.process = await create_subprocess_exec(*args)
+        except FileNotFoundError:
+            # e.g. sc-park-cm: no such entry point in pyproject.toml.
+            await self._stamp("Crash", f"{self.script_name} not found")
+            return
+        except OSError as e:
+            await self._stamp("Crash", type(e).__name__)
+            return
+        await self._stamp("Running")
+        self._monitor_task = asyncio.create_task(
+            self._monitor_process(self.process)
+        )
+
+    async def trigger_stop(self):
+        """Stop the run, and report it once it has actually ended.
+
+        A subprocess is terminated. An in-process run can't be killed, so
+        it's asked to stop through this group's AUTO:ABORT, which the setup
+        code polls. handle_abort also passes that to the subgroups. The
+        status stays Running until the run ends.
+        """
+        if self._running_subprocess():
+            self._stop_requested = True
+            self.process.terminate()
+            await self.process.wait()
+            return  # _monitor_process writes the result
+        if self._running_in_process():
+            self._stop_requested = True
+            await self.abort.write(1)
+            return  # _monitor_future writes the result
+        if self._active():
+            return  # finished; its monitor is writing the result now
+        # A CM/rack/linac/global run only starts its subgroups' runs and
+        # returns (about 0.1 s per cavity), so they can still be going after
+        # this one has finished. Stop those, and leave idle ones alone.
+        await self._stop_running_subgroups()
+        await self._stamp("Complete", "stopped")
+
+    async def _stop_running_subgroups(self):
+        for subgroup in self.subgroups:
+            if not isinstance(subgroup, BaseScriptPVGroup):
+                continue
+            if subgroup._active():
+                await subgroup.trigger_stop()
+            else:
+                await subgroup._stop_running_subgroups()
+
+    async def _monitor_process(self, process):
+        """Wait for this run's process, then write its result."""
+        if process:
+            returncode = await process.wait()
+            if self._stop_requested:
+                await self._stamp("Complete", "stopped")
+            elif returncode == 0:
+                await self._stamp("Complete")
+            else:
+                await self._stamp("Crash", f"exit code {returncode}")
+
+    async def _monitor_future(self, future):
+        """Wait for this run's future, then write its result."""
+        try:
+            await future
         except Exception as e:
-            await self.timestamp.write(
-                datetime.now().strftime("%m/%d/%y %H:%M:%S.%f")
-            )
-            await self.status.write(f"Failed: {type(e).__name__}")
+            if self._stop_requested:
+                await self._stamp("Complete", "stopped")
+            else:
+                await self._stamp("Crash", type(e).__name__)
+            return
+        if self._stop_requested:
+            await self._stamp("Complete", "stopped")
+        else:
+            await self._stamp("Complete")
 
 
 class BaseCMPVGroup(BaseScriptPVGroup):
