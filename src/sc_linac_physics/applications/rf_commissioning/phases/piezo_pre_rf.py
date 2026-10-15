@@ -173,8 +173,10 @@ class PiezoPreRFPhase(PhaseBase):
                 channel_b_passed=data.get("channel_b_status")
                 == PIEZO_PRE_RF_CHECKOUT_PASS_VALUE,
                 notes=(
-                    f"Ch A: {_status_label(data.get('channel_a_status'))}, "
-                    f"Ch B: {_status_label(data.get('channel_b_status'))}"
+                    f"Ch A: {_status_label(data.get('channel_a_status'))} "
+                    f"({data.get('channel_a_message', '')}), "
+                    f"Ch B: {_status_label(data.get('channel_b_status'))} "
+                    f"({data.get('channel_b_message', '')})"
                 ),
             )
 
@@ -377,6 +379,10 @@ class PiezoPreRFPhase(PhaseBase):
             cha_status = piezo.prerf_cha_status_pv_obj.get()
             chb_status = piezo.prerf_chb_status_pv_obj.get()
 
+            # Get messages for diagnostics
+            cha_msg = piezo.prerf_cha_testmsg_pv_obj.get()
+            chb_msg = piezo.prerf_chb_testmsg_pv_obj.get()
+
             # Get capacitance values
             cap_a = piezo.capacitance_a_pv_obj.get()
             cap_b = piezo.capacitance_b_pv_obj.get()
@@ -397,11 +403,13 @@ class PiezoPreRFPhase(PhaseBase):
                 messages = []
                 if not cha_passed:
                     messages.append(
-                        f"Channel A failed ({_status_label(cha_status)})"
+                        f"Channel A failed ({_status_label(cha_status)}): "
+                        f"{cha_msg}"
                     )
                 if not chb_passed:
                     messages.append(
-                        f"Channel B failed ({_status_label(chb_status)})"
+                        f"Channel B failed ({_status_label(chb_status)}): "
+                        f"{chb_msg}"
                     )
                 message = "; ".join(messages)
                 result = PhaseResult.FAILED
@@ -415,6 +423,8 @@ class PiezoPreRFPhase(PhaseBase):
                 data={
                     "channel_a_status": cha_status,
                     "channel_b_status": chb_status,
+                    "channel_a_message": cha_msg,
+                    "channel_b_message": chb_msg,
                     "capacitance_a_nf": cap_a,
                     "capacitance_b_nf": cap_b,
                 },

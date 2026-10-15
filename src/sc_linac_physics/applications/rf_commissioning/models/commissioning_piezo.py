@@ -36,10 +36,17 @@ class CommissioningPiezo(Piezo):
         self.prerf_chb_status_pv: str = self.pv_addr("CHB_TESTSTAT")
         self._prerf_chb_status_pv_obj: PV | None = None
 
-        # Production has no per-channel test message PV: CHA_TESTMSG1/2 do not
-        # connect and are not archived (checked on lcls-srv01, 2026-10-14).
-        # CHECK: does the pre-RF test leave a message anywhere, e.g. PZT:STAT
-        # or PZT:STATWRD?
+        # Production names these PZT:TESTMSG1/2, read-only strings (cainfo on
+        # ACCL:L3B:3010, 2026-10-14). CHA_TESTMSG1/2 do not exist.
+        # The EDM pre-RF panel shows them as two full-width rows under the
+        # Channel A / Channel B summary, so it does not say which is which.
+        # 1 = A, 2 = B is Lisa Zacarias's best guess (2026-10-14).
+        # CHECK: is TESTMSG1 channel A and TESTMSG2 channel B?
+        self.prerf_cha_testmsg_pv: str = self.pv_addr("TESTMSG1")
+        self._prerf_cha_testmsg_pv_obj: PV | None = None
+
+        self.prerf_chb_testmsg_pv: str = self.pv_addr("TESTMSG2")
+        self._prerf_chb_testmsg_pv_obj: PV | None = None
 
         self.capacitance_a_pv: str = self.pv_addr("CHA_C")
         self._capacitance_a_pv_obj: PV | None = None
@@ -99,6 +106,18 @@ class CommissioningPiezo(Piezo):
         if not self._prerf_chb_status_pv_obj:
             self._prerf_chb_status_pv_obj = PV(self.prerf_chb_status_pv)
         return self._prerf_chb_status_pv_obj
+
+    @property
+    def prerf_cha_testmsg_pv_obj(self) -> PV:
+        if not self._prerf_cha_testmsg_pv_obj:
+            self._prerf_cha_testmsg_pv_obj = PV(self.prerf_cha_testmsg_pv)
+        return self._prerf_cha_testmsg_pv_obj
+
+    @property
+    def prerf_chb_testmsg_pv_obj(self) -> PV:
+        if not self._prerf_chb_testmsg_pv_obj:
+            self._prerf_chb_testmsg_pv_obj = PV(self.prerf_chb_testmsg_pv)
+        return self._prerf_chb_testmsg_pv_obj
 
     @property
     def capacitance_a_pv_obj(self) -> PV:

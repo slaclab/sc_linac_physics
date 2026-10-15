@@ -40,6 +40,8 @@ def piezo(monkeypatch: pytest.MonkeyPatch) -> CommissioningPiezo:
         ("prerf_test_status_pv", "prerf_test_status_pv_obj"),
         ("prerf_cha_status_pv", "prerf_cha_status_pv_obj"),
         ("prerf_chb_status_pv", "prerf_chb_status_pv_obj"),
+        ("prerf_cha_testmsg_pv", "prerf_cha_testmsg_pv_obj"),
+        ("prerf_chb_testmsg_pv", "prerf_chb_testmsg_pv_obj"),
         ("capacitance_a_pv", "capacitance_a_pv_obj"),
         ("capacitance_b_pv", "capacitance_b_pv_obj"),
         ("withrf_run_check_pv", "withrf_run_check_pv_obj"),
@@ -78,11 +80,12 @@ def test_pre_rf_pv_names_use_expected_suffixes(
     assert piezo.capacitance_b_pv.endswith("CHB_C")
 
 
-def test_no_test_message_pvs(piezo: CommissioningPiezo) -> None:
-    # Production has no PZT:CHA_TESTMSG1/2; reading them failed the phase.
-    pv_names = [v for k, v in vars(piezo).items() if k.endswith("_pv")]
-    assert pv_names
-    assert not any("TESTMSG" in name for name in pv_names)
+def test_test_message_pvs_use_production_names(
+    piezo: CommissioningPiezo,
+) -> None:
+    # Production has PZT:TESTMSG1/2; CHA_TESTMSG1/2 do not exist.
+    assert piezo.prerf_cha_testmsg_pv.endswith("PZT:TESTMSG1")
+    assert piezo.prerf_chb_testmsg_pv.endswith("PZT:TESTMSG2")
 
 
 def test_with_rf_pv_names_use_expected_suffixes(

@@ -65,6 +65,8 @@ def mock_piezo_pvs(mock_cavity):
     piezo.prerf_test_start_pv_obj = Mock()
 
     # Result PVs
+    piezo.prerf_cha_testmsg_pv_obj = Mock()
+    piezo.prerf_chb_testmsg_pv_obj = Mock()
     piezo.capacitance_a_pv_obj = Mock()
     piezo.capacitance_b_pv_obj = Mock()
 
@@ -170,6 +172,8 @@ class TestPiezoPreRFPhase:
         )
 
         # Messages
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "OK"
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "OK"
 
         # Capacitance values
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 25.3
@@ -347,6 +351,8 @@ class TestPiezoPreRFPhase:
         mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = (
             PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
         )
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "OK"
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "OK"
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 25.3
         mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 24.8
 
@@ -371,6 +377,10 @@ class TestPiezoPreRFPhase:
         mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = (
             PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
         )
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = (
+            "Low capacitance"
+        )
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "OK"
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 5.2
         mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 24.8
 
@@ -378,7 +388,7 @@ class TestPiezoPreRFPhase:
 
         assert result.result == PhaseResult.FAILED
         assert "Channel A failed" in result.message
-        assert "Channel A failed (Warning)" in result.message
+        assert "Channel A failed (Warning): Low capacitance" in result.message
 
     def test_validate_results_channel_b_fails(self, phase, mock_piezo_pvs):
         """Test validate_results with Channel B failure."""
@@ -388,6 +398,10 @@ class TestPiezoPreRFPhase:
             PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
         )
         mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = 2  # Not pass
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "OK"
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = (
+            "Connection error"
+        )
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 25.3
         mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 0.0
 
@@ -395,7 +409,7 @@ class TestPiezoPreRFPhase:
 
         assert result.result == PhaseResult.FAILED
         assert "Channel B failed" in result.message
-        assert "Channel B failed (Fail)" in result.message
+        assert "Channel B failed (Fail): Connection error" in result.message
 
     def test_validate_results_both_channels_fail(self, phase, mock_piezo_pvs):
         """Test validate_results with both channels failing."""
@@ -403,6 +417,8 @@ class TestPiezoPreRFPhase:
 
         mock_piezo_pvs.prerf_cha_status_pv_obj.get.return_value = 1
         mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = 2
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "Error A"
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "Error B"
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 0.0
         mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 0.0
 
@@ -439,6 +455,8 @@ class TestPiezoPreRFPhase:
         mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = (
             PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
         )
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "OK"
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "OK"
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 25.3
         mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 24.8
 
@@ -473,7 +491,7 @@ class TestPiezoPreRFPhase:
             abs(piezo_result.capacitance_a - 25.3e-9) < 1e-12
         )  # Check nF to F conversion
         assert abs(piezo_result.capacitance_b - 24.8e-9) < 1e-12
-        assert piezo_result.notes == "Ch A: Pass, Ch B: Pass"
+        assert piezo_result.notes == "Ch A: Pass (OK), Ch B: Pass (OK)"
 
     def test_custom_limits(self, context):
         """Test phase with custom test limits."""
@@ -513,6 +531,8 @@ class TestPiezoPreRFPhase:
         mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = (
             PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
         )
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "OK"
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "OK"
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 25.3
         mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 24.8
 
@@ -561,6 +581,8 @@ class TestPiezoPreRFPhase:
         mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = (
             PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
         )
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "Error"
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "OK"
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 0.0
         mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 24.8
 
@@ -606,6 +628,8 @@ class TestPiezoPreRFPhase:
             mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = (
                 PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
             )
+            mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "OK"
+            mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "OK"
             mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 25.3
             mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 24.8
 
@@ -661,6 +685,8 @@ class TestPiezoPreRFPhase:
         mock_piezo_pvs.prerf_chb_status_pv_obj.get.return_value = (
             PIEZO_PRE_RF_CHECKOUT_PASS_VALUE
         )
+        mock_piezo_pvs.prerf_cha_testmsg_pv_obj.get.return_value = "OK"
+        mock_piezo_pvs.prerf_chb_testmsg_pv_obj.get.return_value = "OK"
         mock_piezo_pvs.capacitance_a_pv_obj.get.return_value = 25.3
         mock_piezo_pvs.capacitance_b_pv_obj.get.return_value = 24.8
 
