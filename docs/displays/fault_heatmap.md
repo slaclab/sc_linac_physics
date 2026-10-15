@@ -41,7 +41,7 @@ The frontend never talks to the archiver directly. `FaultDataFetcher` calls `Bac
 ## How the Data Flows
 
 1. User picks a time range and clicks **Load All Faults**
-2. `FaultDataFetcher` spins up a thread pool (8 workers), queries the archiver for each cavity
+2. `FaultDataFetcher` queries the archiver for each cavity, up to 8 at once on daemon threads
 3. As results come back, the display gets `cavity_result` signals and widgets show a pending state
 4. When all queries finish, the display calculates the global max, updates `ColorMapper`'s range, and colors every cavity
 5. Severity checkboxes and the TLC dropdown filter counts on the fly without re-fetching
@@ -85,7 +85,7 @@ python -m sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_heatma
 PYDM_DEFAULT_PROTOCOL=fake python -m sc_linac_physics.displays.cavity_display.frontend.heatmap.fault_heatmap_display
 ```
 
-The display needs a `BackendMachine` instance. When run as `__main__`, it creates one with `lazy_fault_pvs=True` and sets the archiver timeout to 30 seconds.
+The display needs a `BackendMachine` instance. When run as `__main__`, it creates one with `lazy_fault_pvs=True`.
 
 ## Linac Layout
 
