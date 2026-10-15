@@ -17,6 +17,15 @@ END = START + timedelta(minutes=10)
 AMP = "ACCL:L1B:0210:AACTMEAN"
 
 
+@pytest.fixture(autouse=True)
+def no_ioc(monkeypatch):
+    """Never ask a real IOC, whatever is running on this machine."""
+    monkeypatch.setattr(
+        "sc_linac_physics.utils.archiver_mock.generator.ioc_kind",
+        lambda pv: None,
+    )
+
+
 @pytest.fixture
 def store(tmp_path):
     """Shipped rules only, whatever is in the developer's home directory."""
@@ -119,13 +128,6 @@ def test_aware_utc_time_is_accepted(store):
     )
 
 
-@pytest.mark.parametrize("suffix", ["CUDSTATUS", "CUDSEVR"])
-def test_fault_history_pvs_are_empty_for_now(store, suffix):
-    frame = _get(f"ACCL:L1B:0210:{suffix}", store)
-    assert frame.empty
-    assert list(frame.columns) == archiver.COLUMNS
-
-
 def test_empty_window_and_no_pvs(store):
     assert _get(AMP, store, END, START).empty
     assert mock_values_over_time_range([], START, END, store=store) == {}
@@ -134,3 +136,14 @@ def test_empty_window_and_no_pvs(store):
 def test_repeated_pvs_returned_once(store):
     result = mock_values_over_time_range([AMP, AMP], START, END, store=store)
     assert list(result) == [AMP]
+
+
+def test_ioc_kind_used_when_no_rule(store, monkeypatch):
+    monkeypatch.setattr(
+        "sc_linac_physics.utils.archiver_mock.generator.ioc_kind",
+        lambda pv: "ENUM",
+    )
+    values = _get("ACCL:L1B:0210:SOMETHING", store)["value"]
+    assert set(values) <= {0, 1, 2}
+    # a rule's kind still wins over the IOC's
+    assert _get(AMP, store)["value"].median() == pytest.approx(16.5, abs=0.05)
