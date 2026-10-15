@@ -210,11 +210,19 @@ DEFAULT_STEPPER_SPEED = 20000
 MAX_STEPPER_SPEED = 60000
 STEPPER_ON_LIMIT_SWITCH_VALUE = 1
 
-# these values are based on the list of enum states found by probing {magnet_type}:L{x}B:{cm}85:CTRL
-MAGNET_RESET_VALUE = 10
-MAGNET_ON_VALUE = 11
-MAGNET_OFF_VALUE = 12
-MAGNET_DEGAUSS_VALUE = 13
+# Indices into the magnet CTRL enum (DBF_ENUM, 15 states): 0 Ready, 1 TRIM,
+# 2 PERTURB, 3 BCON_TO_BDES, 4 BACT_TO_BDES, 5 SAVE_BDES, 6 LOAD_BDES,
+# 7 UNDO_BDES, 8 DAC_ZERO, 9 CALB, 10 STDZ, 11 RESET, 12 TURN_ON,
+# 13 TURN_OFF, 14 DEGAUSS. Checked with caget -d DBR_CTRL_ENUM on
+# lcls-srv01 (2026-10-13) for QUAD, XCOR and YCOR on L0B:01 and on the
+# first and last cryomodule of L1B through L4B. All match, except that on
+# the L4B QUADs state 9 reads CALIB. Magnet never sends 9.
+# RESET through DEGAUSS were one lower before, which pointed each at the
+# state below it (turn_off sent TURN_ON).
+MAGNET_RESET_VALUE = 11
+MAGNET_ON_VALUE = 12
+MAGNET_OFF_VALUE = 13
+MAGNET_DEGAUSS_VALUE = 14
 MAGNET_TRIM_VALUE = 1
 
 PIEZO_ENABLE_VALUE = 1
