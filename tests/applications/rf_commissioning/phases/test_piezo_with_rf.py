@@ -166,6 +166,49 @@ def test_setup_rf_abort_fails(phase, mock_cavity):
     assert "Aborted" in result.message
 
 
+def test_setup_rf_failure_notes_what_it_may_have_pushed(
+    phase, mock_cavity, record
+):
+    mock_cavity.measured_loaded_q = 4.1e7
+    mock_cavity.measured_scale_factor = 31.0
+    mock_cavity.setup_rf.side_effect = CavityCharacterizationError("crashed")
+    result = phase.execute_step("setup_rf")
+    assert result.result == PhaseResult.FAILED
+    notes = record.piezo_with_rf.notes
+    assert "setup_rf() failed: crashed" in notes
+    assert "4.100e+07" in notes
+    assert "31.0" in notes
+    assert "may have been pushed" in notes
+
+
+def test_setup_rf_abort_notes_what_it_may_have_pushed(
+    phase, mock_cavity, record
+):
+    mock_cavity.setup_rf.side_effect = CavityAbortError("abort")
+    assert phase.execute_step("setup_rf").result == PhaseResult.FAILED
+    assert "may have been pushed" in record.piezo_with_rf.notes
+
+
+def test_setup_rf_failure_without_readback_adds_no_note(
+    phase, mock_cavity, record
+):
+    mock_cavity.setup_rf.side_effect = CavityCharacterizationError("crashed")
+    type(mock_cavity).measured_loaded_q = PropertyMock(
+        side_effect=RuntimeError("no read")
+    )
+    result = phase.execute_step("setup_rf")
+    assert result.result == PhaseResult.FAILED
+    assert record.piezo_with_rf is None
+
+
+def test_setup_piezo_abort_fails_with_rf_off(phase, mock_cavity):
+    mock_cavity.piezo.enable.side_effect = CavityAbortError("abort")
+    result = phase.execute_step("setup_piezo")
+    assert result.result == PhaseResult.FAILED
+    assert "Aborted during piezo setup — RF is off" in result.message
+    mock_cavity.piezo.set_to_manual.assert_not_called()
+
+
 def test_setup_piezo_enables_then_manual(phase, mock_cavity):
     order = []
     mock_cavity.piezo.enable.side_effect = lambda: order.append("enable")
@@ -224,7 +267,9 @@ def test_check_detune(phase, mock_cavity, detune, invalid, expected):
 def test_start_test_writes_rfteststrt(phase, mock_cavity):
     result = phase.execute_step("start_test")
     assert result.result == PhaseResult.SUCCESS
-    mock_cavity.piezo.withrf_run_check_pv_obj.put.assert_called_once_with(1)
+    mock_cavity.piezo.withrf_run_check_pv_obj.put.assert_called_once_with(
+        1, wait=False
+    )
 
 
 def test_start_test_refuses_while_a_test_is_running(phase, mock_cavity):
