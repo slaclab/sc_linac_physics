@@ -48,11 +48,11 @@ def test_show_adds_one_region_per_run_spanning_its_data(regions, run):
 
 
 def test_region_starts_at_existing_window(regions, run):
-    run.fit_window = (15.0, 25.0)
+    run.fit_window = (10.0, 20.0)
     regions.set_runs([run])
     regions.button.click()
     (region,) = _regions_on_plot(regions)
-    assert region.getRegion() == pytest.approx((15.0, 25.0))
+    assert region.getRegion() == pytest.approx((10.0, 20.0))
 
 
 def test_drag_finish_reports_window(regions, run):
@@ -67,7 +67,7 @@ def test_drag_finish_reports_window(regions, run):
 def test_hide_removes_regions_and_clears_windows(regions, run):
     other = q0_utils.DataRun()
     other.ll_data = {0.0: 95.0, 1.0: 94.0}
-    run.fit_window = (15.0, 25.0)
+    run.fit_window = (10.0, 20.0)
     regions.set_runs([run, other])
     regions.button.click()
     regions.button.click()
