@@ -184,6 +184,16 @@ class TestDataRunFitWindow(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.data_run.fit_window = (5.0, 2.0)
 
+    def test_window_outside_data_raises(self):
+        with self.assertRaises(DataError):
+            self.data_run.fit_window = (20.0, 30.0)
+        self.assertIsNone(self.data_run.fit_window)
+
+    def test_single_sample_window_raises(self):
+        with self.assertRaises(DataError):
+            self.data_run.fit_window = (4.0, 4.0)
+        self.assertIsNone(self.data_run.fit_window)
+
 
 class TestHeaterRun(unittest.TestCase):
     def test_initialization(self):
