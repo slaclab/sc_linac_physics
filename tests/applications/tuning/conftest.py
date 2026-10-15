@@ -57,14 +57,13 @@ class MockPyDMEDMDisplayButton(QWidget):
         pass
 
 
-class MockEmbeddableArchiverPlot(QWidget):
-    """Mock EmbeddableArchiverPlot."""
+class MockArchiverPlot(QWidget):
+    """Mock ArchiverPlot."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, curve_set=None, *args, **kwargs):
         super().__init__()
-        self.title = kwargs.get("title", "")
+        self.curve_set = curve_set
         self.time_span = kwargs.get("time_span", 3600)
-        self.add_pv = Mock()
 
 
 class MockCollapsibleGroupBox(QWidget):
@@ -225,11 +224,11 @@ def cavity_section_patches():
 @pytest.fixture
 def rack_screen_patches():
     """Patches needed for RackScreen tests."""
-    mock_plot_class = Mock(return_value=MockEmbeddableArchiverPlot())
+    mock_plot_class = Mock(side_effect=MockArchiverPlot)
 
     with (
         patch(
-            "sc_linac_physics.applications.tuning.tuning_gui.EmbeddableArchiverPlot",
+            "sc_linac_physics.applications.tuning.tuning_gui.ArchiverPlot",
             mock_plot_class,
         ),
         patch(

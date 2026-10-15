@@ -264,7 +264,7 @@ class ExtraDataMixin:
             elif isinstance(value, (int, float)):
                 extra_items.append(f"{key}={value}")
             elif isinstance(value, dict):
-                extra_items.append(f"{key}={json.dumps(value)}")
+                extra_items.append(f"{key}={json.dumps(value, default=str)}")
             else:
                 extra_items.append(f"{key}={value}")
 
@@ -335,7 +335,8 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(log_data, ensure_ascii=False)
+        # default=str: extra_data may hold Path, numpy, datetime values
+        return json.dumps(log_data, ensure_ascii=False, default=str)
 
 
 def _create_console_handler(level: int) -> logging.StreamHandler:

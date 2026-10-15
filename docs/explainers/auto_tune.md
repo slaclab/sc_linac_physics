@@ -22,7 +22,7 @@ Two actuators, with a clear division of labor:
 
     The code gives a
     closed-loop mode, an integrator setpoint, and a centering pass that runs
-    under SELA
+    under SELA (an RF mode, defined in section 3)
     <span class="cite">`INTEG_SP, piezo.py::Piezo.feedback_setpoint_pv; cavity.py::Cavity.move_to_resonance “if use_sela:”`</span>. None of that fixes a bandwidth, and no figure appears anywhere in `src/`.
 
     CHECK: what is the cutoff in Hz, and does the loop reject microphonics or
@@ -101,6 +101,15 @@ while |delta_hz| > tolerance:
 
 <span class="cite">`cavity.py::Cavity._auto_tune`</span>
 
+**The step budget.** Before the first move, the loop works out how many
+microsteps the whole tune should take, from the starting detune
+(`expected_steps`). It multiplies that by a slack factor from
+`stepper_tol_factor` to get the budget. Each move adds to `steps_moved`. If that
+total ever exceeds the budget, the loop decides something is wrong, for example
+a bad `SCALE` or a slipping tuner, and raises `DetuneError` rather than keep
+driving the motor. The page calls this the runaway guard.
+<span class="cite">`cavity.py::Cavity._auto_tune “expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))”, cavity.py::Cavity._auto_tune “if steps_moved > expected_steps * stepper_tol_factor:”`</span>
+
 ### Drive it
 
 [Drive the auto-tune loop](widgets/auto_tune_sim.html)
@@ -108,7 +117,9 @@ while |delta_hz| > tolerance:
 ### Two things the trace will not tell you
 
 **Truncation means a perfect cavity lands a hair outside tolerance.**
-`est_steps` is an `int(...)`, and 0.75 leaves a quarter of the detune behind — so
+`est_steps` is an `int(...)`. `int()` drops everything after the decimal point
+instead of rounding; that is truncation. And 0.75 leaves a quarter of the
+detune behind — so
 a perfectly calibrated cavity starting at exactly four times tolerance is aimed
 precisely at the tolerance boundary, and the truncated step always drops it
 just outside. Set the starting detune to
@@ -174,7 +185,12 @@ that one factor.
 
 `_auto_tune` does not read the machine itself — it calls a `delta_hz_func`
 handed to it, and is indifferent to where the number came from. There are two
-sources.
+sources, one per RF mode. *Chirp* (`RF_MODE_CHIRP`) sweeps the RF frequency
+within one waveform to measure the detune over a wide range. *SELA*
+(`RF_MODE_SELA`) is the Self-Excited Loop Amplitude mode. Both definitions are
+from the [Linac Hardware Model](../utils/linac_model.md#rf-modes)
+<span class="cite">`linac_utils.py::RF_MODE_CHIRP, linac_utils.py::RF_MODE_SELA`</span>.
+Only auto setup tunes in SELA.
 
 |  | Chirp mode | SELA mode |
 |---|---|---|
@@ -335,4 +351,5 @@ simulator, so you can watch the loop react.
 | Stepper over temperature | `StepperTempError` | **There is no cool-down and no retry.** The loop raises and stops; a human has to let the motor cool and re-run tuning <span class="cite">`cavity.py::Cavity._auto_tune “Optional stepper motor temperature guard”`</span>. | `hot_motor` |
 | Limit switch hit | `StepperError` | Checked after every completed move — the motor stopped for a bad reason rather than because it arrived <span class="cite">`stepper.py::StepperTuner.issue_move_command “if self.on_limit_switch:”`</span>. | `limit_switch` |
 | Operator abort, stepper | `StepperAbortError` | Setting `stepper_tuner.abort_flag` stops a move *already in progress*: the polling loop in `issue_move_command` checks it every 5 s while the motor runs, writes 1 to `ABORT_REQ`, and raises. Worst case about 10 s from the request — a 5 s settle sleep before polling starts, plus the 5 s interval <span class="cite">`stepper.py::StepperTuner.check_abort, stepper.py::StepperTuner.issue_move_command “while self.motor_moving:”`</span>. |  |
-| Operator abort, cavity | `CavityAbortError` | Setting `cavity.abort_flag` is the path that also turns the RF *off* — `check_abort()` calls `turn_off()` before it raises <span class="cite">`cavity.py::Cavity.check_abort`</span>. A caller that stops the stepper without setting this leaves the cavity powered. | `abort` |
+| Any failure during a move | the original error | `move()` writes `ABORT_REQ` if `MOTOR_MOVING` still reads 1 (or can't be read), then restores `NSTEPS.DRVH` and `VELO` if it changed them, then re-raises <span class="cite">`stepper.py::StepperTuner._clean_up_failed_move`</span>. |  |
+| Operator abort, cavity | `CavityAbortError` | Setting `cavity.abort_flag` is the path that also turns the RF *off* — `check_abort()` calls `turn_off()` before it raises <span class="cite">`cavity.py::Cavity.check_abort`</span>. A caller that stops the stepper without setting this leaves the cavity powered. During a move, `StepperTuner.check_abort` writes `ABORT_REQ` before calling it, so the motor stops before the RF-off wait <span class="cite">`stepper.py::StepperTuner.check_abort “if self.cavity.abort_flag:”`</span>. | `abort` |
