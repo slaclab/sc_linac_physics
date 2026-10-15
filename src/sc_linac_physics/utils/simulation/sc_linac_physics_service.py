@@ -8,12 +8,16 @@ import sys
 import time
 import warnings
 
-from caproto import ChannelEnum, ChannelFloat, ChannelInteger
+from caproto import ChannelDouble, ChannelEnum, ChannelFloat
 from caproto.server import ioc_arg_parser, run
 
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
 from sc_linac_physics.utils.sc_linac.linac_utils import (
+    BEAMLINE_VACUUM_INFIXES,
+    CRYO_NAME_MAP,
+    INSULATING_VACUUM_CRYOMODULES,
     L1BHL,
+    L4B,
     LINAC_CM_DICT,
     LINAC_TUPLES,
 )
@@ -152,6 +156,11 @@ class LauncherGroups:
         }
 
 
+def _cryo_name(cm_name: str) -> str:
+    """Same rule as Cryomodule.cryo_name."""
+    return CRYO_NAME_MAP.get(cm_name, f"CM{cm_name}")
+
+
 class SCLinacPhysicsService(Service):
     def __init__(self):
         super().__init__()
@@ -163,7 +172,8 @@ class SCLinacPhysicsService(Service):
         """Set up system-level PVs for heartbeats and alarms."""
         # Heartbeat channels
         for channel in HEARTBEAT_CHANNELS:
-            self[f"PHYS:SYS0:1:{channel}"] = ChannelInteger(value=0)
+            # Doubles on lcls-srv01 (2026-10-14).
+            self[f"PHYS:SYS0:1:{channel}"] = ChannelDouble(value=0.0)
 
         # Alarm channels
         for channel in ALARM_CHANNELS:
@@ -174,6 +184,8 @@ class SCLinacPhysicsService(Service):
         # System-level groups
         self.add_pvs(BSOICPVGroup(prefix="BSOC:SYSW:2:"))
         self.add_pvs(PPSPVGroup(prefix="PPS:SYSW:1:"))
+        # Machine.global_heater_feedback_pv. Nothing in this repo reads it.
+        self["CHTR:CM00:0:HTR_POWER_TOT"] = ChannelFloat(value=0.0)
 
     def _setup_decarad_pvs(self):
         """Set up Decarad-related PVs."""
@@ -215,6 +227,14 @@ class SCLinacPhysicsService(Service):
             LauncherGroups: Container with all launcher types
         """
         linac_prefix = f"ACCL:{linac_name}:1:"
+
+        # Vacuum gauges Linac names (beamline_vacuum_pvs,
+        # insulating_vacuum_pvs), from the same linac_utils lists. Only the
+        # plot display reads them, so they read 0.
+        for infix in BEAMLINE_VACUUM_INFIXES[linac_idx]:
+            self[f"VGXX:{linac_name}:{infix}:COMBO_P"] = ChannelFloat(value=0.0)
+        for cm in INSULATING_VACUUM_CRYOMODULES[linac_idx]:
+            self[f"VGXX:{linac_name}:{cm}96:COMBO_P"] = ChannelFloat(value=0.0)
 
         # Linac-level channels
         self[f"{linac_prefix}AACTMEANSUM"] = ChannelFloat(
@@ -262,6 +282,12 @@ class SCLinacPhysicsService(Service):
         is_hl = cm_name in L1BHL
         cm_prefix = f"ACCL:{linac_name}:{cm_name}"
 
+        # Cryomodule.coupler_vacuum_pvs: two gauges on HL, one elsewhere.
+        for suffix in ("09", "19") if is_hl else ("14",):
+            self[f"VGXX:{linac_name}:{cm_name}{suffix}:COMBO_P"] = ChannelFloat(
+                value=0.0
+            )
+
         # Set up cryomodule-level PVs
         self._setup_cryomodule_level_pvs(cm_name, cm_prefix, linac_name)
 
@@ -291,6 +317,12 @@ class SCLinacPhysicsService(Service):
             self._cm_group = {}
         self._cm_group[cm_name] = cm_group
 
+        # Cryomodule.ds_pressure_pv, in mbar: Q0 averages it into calc_q0,
+        # which maps P to T = 0.750062 * P * 0.0125 + 1.705 (q0_utils.py).
+        # 31.46 mbar gives 2.0 K there, the operating temperature (Lisa
+        # Zacarias, 2026-10-13).
+        self[f"CPT:CM{cm_name}:2302:DS:PRESS"] = ChannelFloat(value=31.46)
+
         # liquid level group
         liquid_level_prefix = f"CLL:CM{cm_name}:"
         ll_group = LiquidLevelPVGroup(prefix=liquid_level_prefix)
@@ -299,7 +331,8 @@ class SCLinacPhysicsService(Service):
             cm_group.ll_group = ll_group
 
         # heater group
-        heater_prefix = f"CPIC:CM{cm_name}:0000:EHCV:"
+        # Cryomodule.cryo_name: HL01/HL02 for H1/H2 (CRYO_NAME_MAP), else CMxx.
+        heater_prefix = f"CPIC:{_cryo_name(cm_name)}:0000:EHCV:"
         heater_group = HeaterPVGroup(prefix=heater_prefix, cm_group=cm_group)
         self.add_pvs(heater_group)
 
@@ -307,8 +340,10 @@ class SCLinacPhysicsService(Service):
         if cm_group:
             cm_group.heater = heater_group
 
-        self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(
-            enum_strings=("Close", "Open"), value=1
+        # q0_cryomodule.py names this through cryo_name, so H1/H2 are
+        # CRYO:HL01/HL02. lcls-srv01 has no CRYO:CMH1/CMH2 (2026-10-14).
+        self[f"CRYO:{_cryo_name(cm_name)}:0:CAS_ACCESS"] = ChannelEnum(
+            enum_strings=("Disable", "Enable"), value=1
         )
         self[f"{cm_prefix}00:ADES_MAX"] = ChannelFloat(value=168.0)
 
@@ -447,12 +482,14 @@ class SCLinacPhysicsService(Service):
 
         # Other cavity-related groups
         ssa_group = SSAPVGroup(
-            prefix=f"{cav_prefix}SSA:", cavityGroup=cavity_group
+            prefix=f"{cav_prefix}SSA:",
+            cavityGroup=cavity_group,
+            is_high_energy=cm_name in L4B,
         )
         cavity_group.ssa_group = ssa_group
         self.add_pvs(ssa_group)
         self.add_pvs(CavFaultPVGroup(prefix=cav_prefix))
-        jt_prefix = f"CLIC:CM{cm_name}:3001:PVJT:"
+        jt_prefix = f"CLIC:{_cryo_name(cm_name)}:3001:PVJT:"
         jt_group = JTPVGroup(prefix=jt_prefix, cm_group=cm_group)
         self.add_pvs(jt_group)
         self.add_pvs(HOMPVGroup(prefix=f"CTE:CM{cm_name}:1{cav_num}"))

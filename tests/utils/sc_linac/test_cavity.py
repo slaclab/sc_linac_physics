@@ -770,6 +770,21 @@ def test_check_and_set_on_time(cavity):
     cavity.push_go_button.assert_called()
 
 
+def test_push_go_button_creates_go_pv_lazily(cavity):
+    """push_go_button must not depend on something else creating the PV."""
+    cavity._pulse_status_pv_obj = make_mock_pv(
+        cavity.pulse_status_pv, get_val=2
+    )
+    cavity._pulse_go_pv_obj = None
+    go_pv = make_mock_pv(cavity.pulse_go_pv)
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.PV", return_value=go_pv
+    ) as pv_cls:
+        cavity.push_go_button()
+    pv_cls.assert_called_once_with(cavity.pulse_go_pv)
+    go_pv.put.assert_called_with(1, wait=False)
+
+
 def test_push_go_button(cavity):
     cavity._pulse_status_pv_obj = make_mock_pv(
         cavity.pulse_status_pv, get_val=2
@@ -1228,3 +1243,32 @@ def test_wait_checks_abort_while_polling(cavity):
     cavity.check_abort = MagicMock()
     cavity.wait_for_characterization(poll_interval=0.01)
     cavity.check_abort.assert_called()
+
+
+def test_wait_aborts_when_the_abort_arrives_as_the_run_completes(cavity):
+    """An abort during the last sleep stops the wait; RF goes off."""
+    seq = [CHARACTERIZATION_RUNNING_VALUE, CALIBRATION_COMPLETE_VALUE]
+    pv = make_mock_pv()
+    pv.get = MagicMock(
+        side_effect=lambda *a, **k: (
+            seq.pop(0) if seq else CALIBRATION_COMPLETE_VALUE
+        )
+    )
+    cavity._characterization_status_pv_obj = pv
+    cavity._char_timestamp_pv_obj = make_mock_pv(
+        get_val=datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    )
+    cavity.turn_off = MagicMock()
+
+    # The abort lands while the wait sleeps, after the RUNNING read.
+    def request_during_sleep(_):
+        cavity.request_abort()
+
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.time.sleep",
+        side_effect=request_during_sleep,
+    ):
+        with pytest.raises(CavityAbortError):
+            cavity.wait_for_characterization(poll_interval=0.01)
+
+    cavity.turn_off.assert_called_once()

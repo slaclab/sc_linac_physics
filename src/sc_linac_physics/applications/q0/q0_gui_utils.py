@@ -12,7 +12,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QRadioButton,
 )
-from epics import caget, caput
 from pydm.widgets import PyDMLabel
 from requests import ConnectTimeout
 from urllib3.exceptions import ConnectTimeoutError
@@ -20,6 +19,11 @@ from urllib3.exceptions import ConnectTimeoutError
 from sc_linac_physics.applications.q0 import q0_utils
 from sc_linac_physics.applications.q0.q0_cavity import Q0Cavity
 from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+from sc_linac_physics.utils.epics import (
+    PVConnectionError,
+    PVGetError,
+    PVPutError,
+)
 from sc_linac_physics.utils.qt import Worker, get_dimensions
 from sc_linac_physics.utils.sc_linac.linac_utils import CavityAbortError
 
@@ -31,6 +35,12 @@ DEFAULT_NUM_CAL_POINTS = 5
 DEFAULT_POST_RF_HEAT = 24
 DEFAULT_JT_START_DELTA = timedelta(hours=24)
 DEFAULT_LL_BUFFER_SIZE = 10
+
+# Q0Cryomodule reads and writes through PV, which raises these instead of
+# returning None. Each worker reports them through its error signal.
+PV_ERRORS = (PVConnectionError, PVGetError, PVPutError)
+
+NO_CRYO_ACCESS = "Required cryo permissions not granted - call cryo ops"
 
 
 class CryoParamSetupWorker(Worker):
@@ -46,17 +56,20 @@ class CryoParamSetupWorker(Worker):
         self.jt_setpoint = jt_setpoint
 
     def run(self) -> None:
-        self.status.emit("Checking for required cryo permissions")
-        if caget(self.cryomodule.cryo_access_pv) != q0_utils.CRYO_ACCESS_VALUE:
-            self.error.emit(
-                "Required cryo permissions not granted - call cryo ops"
-            )
-            return
+        try:
+            self.status.emit("Checking for required cryo permissions")
+            if not self.cryomodule.cryo_access_granted:
+                self.error.emit(NO_CRYO_ACCESS)
+                return
 
-        self.cryomodule.heater_power = self.heater_setpoint
-        self.cryomodule.jt_position = self.jt_setpoint
-        caput(self.cryomodule.jt_auto_select_pv, 1, wait=True)
-        self.finished.emit("Cryo setup for new reference parameters in ~1 hour")
+            self.cryomodule.heater_power = self.heater_setpoint
+            self.cryomodule.jt_position = self.jt_setpoint
+            self.cryomodule.select_jt_auto()
+            self.finished.emit(
+                "Cryo setup for new reference parameters in ~1 hour"
+            )
+        except (CavityAbortError, q0_utils.Q0AbortError, *PV_ERRORS) as e:
+            self.error.emit(str(e))
 
 
 class CryoParamWorker(Worker):
@@ -75,7 +88,7 @@ class CryoParamWorker(Worker):
                 start_time=self.start_time, end_time=self.end_time
             )
             self.finished.emit("New reference cryo params loaded")
-        except (CavityAbortError, q0_utils.Q0AbortError) as e:
+        except (CavityAbortError, q0_utils.Q0AbortError, *PV_ERRORS) as e:
             self.error.emit(str(e))
 
 
@@ -100,13 +113,10 @@ class RFWorker(Worker):
 
 class Q0Worker(RFWorker):
     def run(self) -> None:
-        if caget(self.cryomodule.cryo_access_pv) != q0_utils.CRYO_ACCESS_VALUE:
-            self.error.emit(
-                "Required cryo permissions not granted - call cryo ops"
-            )
-            return
-
         try:
+            if not self.cryomodule.cryo_access_granted:
+                self.error.emit(NO_CRYO_ACCESS)
+                return
             self.status.emit("Taking new Q0 Measurement")
             self.cryomodule.takeNewQ0Measurement(
                 desiredAmplitudes=self.desired_amplitudes,
@@ -116,19 +126,21 @@ class Q0Worker(RFWorker):
             self.finished.emit(
                 f"Recorded Q0: {self.cryomodule.q0_measurement.q0:.2e}"
             )
-        except (TypeError, CavityAbortError, q0_utils.Q0AbortError) as e:
+        except (
+            TypeError,
+            CavityAbortError,
+            q0_utils.Q0AbortError,
+            *PV_ERRORS,
+        ) as e:
             self.error.emit(str(e))
 
 
 class Q0SetupWorker(RFWorker):
     def run(self) -> None:
-        if caget(self.cryomodule.cryo_access_pv) != q0_utils.CRYO_ACCESS_VALUE:
-            self.error.emit(
-                "Required cryo permissions not granted - call cryo ops"
-            )
-            return
-
         try:
+            if not self.cryomodule.cryo_access_granted:
+                self.error.emit(NO_CRYO_ACCESS)
+                return
             self.status.emit(
                 f"CM{self.cryomodule.name} setting up for RF measurement"
             )
@@ -141,7 +153,7 @@ class Q0SetupWorker(RFWorker):
             self.finished.emit(
                 f"CM{self.cryomodule.name} ready for cavity ramp up"
             )
-        except (CavityAbortError, q0_utils.Q0AbortError) as e:
+        except (CavityAbortError, q0_utils.Q0AbortError, *PV_ERRORS) as e:
             self.error.emit(str(e))
 
 
@@ -160,7 +172,7 @@ class CavityRampWorker(Worker):
             self.finished.emit(
                 f"Cavity {self.cavity.number} ramped up to {self.des_amp}"
             )
-        except (CavityAbortError, q0_utils.Q0AbortError) as e:
+        except (CavityAbortError, q0_utils.Q0AbortError, *PV_ERRORS) as e:
             self.error.emit(str(e))
 
 
@@ -187,12 +199,10 @@ class CalibrationWorker(Worker):
         self.ll_drop = ll_drop
 
     def run(self) -> None:
-        if caget(self.cryomodule.cryo_access_pv) != q0_utils.CRYO_ACCESS_VALUE:
-            self.error.emit(
-                "Required cryo permissions not granted - call cryo ops"
-            )
-            return
         try:
+            if not self.cryomodule.cryo_access_granted:
+                self.error.emit(NO_CRYO_ACCESS)
+                return
             self.status.emit("Taking new calibration")
             self.cryomodule.take_new_calibration(
                 jt_search_start=self.jt_search_start,
@@ -209,6 +219,7 @@ class CalibrationWorker(Worker):
             ConnectTimeout,
             q0_utils.CryoError,
             q0_utils.Q0AbortError,
+            *PV_ERRORS,
         ) as e:
             self.error.emit(str(e))
 
