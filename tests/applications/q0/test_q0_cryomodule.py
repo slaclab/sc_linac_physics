@@ -252,6 +252,8 @@ def _create_mock_q0_cryomodule_class():
             self.cavity_amplitudes = {}
             self.fill_data_run_buffer = False
             self.abort_flag = False
+            self._pvs = {}
+            self._monitor_indices = {}
 
     # Add all properties and methods via helper functions
     _add_buffer_properties(FastMockQ0Cryomodule)
@@ -276,6 +278,13 @@ def _add_real_methods_to_mock_class(mock_class):
         "fill_pressure_buffer",
         "monitor_ll",
         "clear_ll_buffer",
+        "_pv",
+        "_monitor",
+        "_clear_monitor",
+        "select_jt_auto",
+        "cryo_access_granted",
+        "_attempt_each",
+        "_select_heater_sequencer",
     ]
 
     for method_name in methods_to_copy:
@@ -289,10 +298,6 @@ def fast_q0_cryo(cryo_name, mock_linac_object):
 
     with patch.multiple(
         "sc_linac_physics.applications.q0.q0_cryomodule",
-        caget=Mock(return_value=50.0),
-        caput=Mock(),
-        camonitor=Mock(),
-        camonitor_clear=Mock(),
         sleep=Mock(),
         isfile=Mock(return_value=True),
     ):
@@ -406,10 +411,8 @@ class TestQ0CryomoduleHeaterRunsFast:
             patch(
                 "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
             ),  # Prevent any sleep calls
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
                 return_value=mock_data_run,
@@ -446,10 +449,8 @@ class TestQ0CryomoduleHeaterRunsFast:
             patch(
                 "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
             ),  # Prevent any sleep calls
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
                 return_value=mock_data_run,
@@ -483,10 +484,10 @@ class TestQ0CryomoduleHeaterRunsFast:
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor"
+                "tests.applications.q0.pyepics_shim.camonitor"
             ) as mock_camonitor,
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+                "tests.applications.q0.pyepics_shim.camonitor_clear"
             ) as mock_camonitor_clear,
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
@@ -562,14 +563,12 @@ class TestQ0CryomoduleMeasurementFast:
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 return_value=15.0,
             ),  # Cavity amplitude
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.caput"),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.FULL_MODULE_CALIBRATION_LOAD",
                 80,
@@ -651,14 +650,12 @@ class TestQ0CryomoduleMeasurementFast:
                 "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
             ) as mock_sleep,
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 side_effect=mock_caget,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.caput"),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
                 return_value=Mock(),
@@ -723,15 +720,15 @@ class TestQ0CryomoduleMeasurementFast:
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 return_value=16.0,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor"
+                "tests.applications.q0.pyepics_shim.camonitor"
             ) as mock_camonitor,
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
+                "tests.applications.q0.pyepics_shim.camonitor_clear"
             ) as mock_camonitor_clear,
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
@@ -816,14 +813,12 @@ class TestQ0CryomoduleMeasurementFast:
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 side_effect=mock_caget,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.caput"),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
                 return_value=Mock(),
@@ -900,14 +895,12 @@ class TestQ0CryomoduleMeasurementFast:
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 return_value=18.0,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.caput"),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
                 return_value=mock_heater_run,
@@ -1003,14 +996,12 @@ class TestQ0CryomoduleMeasurementFast:
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 side_effect=mock_caget,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.caput"),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch("builtins.print"),
         ):
             mock_datetime_module.now.return_value = start_time
@@ -1062,14 +1053,12 @@ class TestQ0CryomoduleMeasurementPerformance:
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 return_value=15.0,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.caput"),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
                 return_value=Mock(),
@@ -1121,14 +1110,12 @@ class TestQ0CryomoduleCalibrationFast:
                 "sc_linac_physics.applications.q0.q0_cryomodule.sleep"
             ),  # Prevent any sleep
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 return_value=92.0,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.caput"),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_cryomodule.linspace",
                 return_value=[130.0, 160.0],
@@ -1171,7 +1158,7 @@ class TestQ0CryomoduleJTPositionCoverage:
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
         with patch(
-            "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+            "tests.applications.q0.pyepics_shim.caget",
             return_value=75.5,
         ) as mock_caget:
             result = Q0Cryomodule.jt_position.fget(fast_q0_cryo)
@@ -1207,12 +1194,10 @@ class TestQ0CryomoduleJTPositionCoverage:
         try:
             with (
                 patch(
-                    "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                    "tests.applications.q0.pyepics_shim.caget",
                     side_effect=ultra_safe_caget,
                 ),
-                patch(
-                    "sc_linac_physics.applications.q0.q0_cryomodule.caput"
-                ) as mock_caput,
+                patch("tests.applications.q0.pyepics_shim.caput") as mock_caput,
                 patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
                 patch("builtins.print"),
             ):
@@ -1522,10 +1507,8 @@ class TestQ0CryomodulePerformance:
                 "sc_linac_physics.applications.q0.q0_cryomodule.datetime"
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
                 return_value=Mock(),
@@ -1557,14 +1540,12 @@ class TestQ0CryomodulePerformance:
             ) as mock_datetime_module,
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 return_value=92.0,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.camonitor"),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.camonitor_clear"
-            ),
+            patch("tests.applications.q0.pyepics_shim.caput"),
+            patch("tests.applications.q0.pyepics_shim.camonitor"),
+            patch("tests.applications.q0.pyepics_shim.camonitor_clear"),
             patch(
                 "sc_linac_physics.applications.q0.q0_cryomodule.linspace",
                 return_value=[130.0],
@@ -1613,9 +1594,7 @@ class TestQ0CryomoduleFillMethods:
         fast_q0_cryo.cavities = {"1": mock_cavity}
 
         with (
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caput"
-            ) as mock_caput,
+            patch("tests.applications.q0.pyepics_shim.caput") as mock_caput,
             patch("builtins.print"),
         ):
             Q0Cryomodule.fill(fast_q0_cryo, desired_level)
@@ -1640,7 +1619,7 @@ class TestQ0CryomoduleFillMethods:
         fast_q0_cryo.cavities = {"1": mock_cavity}
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print"),
         ):
             # Call without specifying level (should use default)
@@ -1660,7 +1639,7 @@ class TestQ0CryomoduleFillMethods:
         fast_q0_cryo.cavities = {"1": mock_cavity}
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print"),
         ):
             Q0Cryomodule.fill(
@@ -1682,7 +1661,7 @@ class TestQ0CryomoduleFillMethods:
         fast_q0_cryo.cavities = {"1": mock_cavity1, "2": mock_cavity2}
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print"),
         ):
             Q0Cryomodule.fill(fast_q0_cryo, desired_level)
@@ -1702,7 +1681,7 @@ class TestQ0CryomoduleFillMethods:
             heater_power_calls.append(value)
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch.object(
                 type(fast_q0_cryo),
                 "heater_power",
@@ -1724,7 +1703,7 @@ class TestQ0CryomoduleFillMethods:
         desired_level = 87.0
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print"),
         ):
             Q0Cryomodule.fill(fast_q0_cryo, desired_level)
@@ -2191,9 +2170,7 @@ class TestQ0CryomoduleFillMethodsSafe:
 
         desired_level = 85.0
 
-        with patch(
-            "sc_linac_physics.applications.q0.q0_cryomodule.caput"
-        ) as mock_caput:
+        with patch("tests.applications.q0.pyepics_shim.caput") as mock_caput:
             # Simulate what fill does
             fast_q0_cryo.ds_liquid_level = (
                 desired_level  # This uses our mock setter
@@ -2252,9 +2229,7 @@ class TestQ0CryomoduleShutOff:
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
         with (
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caput"
-            ) as mock_caput,
+            patch("tests.applications.q0.pyepics_shim.caput") as mock_caput,
             patch("builtins.print"),
         ):
             Q0Cryomodule.shut_off(fast_q0_cryo)
@@ -2277,7 +2252,7 @@ class TestQ0CryomoduleShutOff:
         fast_q0_cryo.cavities = {"1": mock_cavity1, "2": mock_cavity2}
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print"),
         ):
             Q0Cryomodule.shut_off(fast_q0_cryo)
@@ -2291,7 +2266,7 @@ class TestQ0CryomoduleShutOff:
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print") as mock_print,
         ):
             Q0Cryomodule.shut_off(fast_q0_cryo)
@@ -2307,7 +2282,7 @@ class TestQ0CryomoduleShutOff:
         fast_q0_cryo.cavities = {}
 
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print"),
         ):
             # Should not raise exception with no cavities
@@ -2322,7 +2297,7 @@ class TestQ0CryomoduleHeaterPowerProperty:
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 
         with patch(
-            "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+            "tests.applications.q0.pyepics_shim.caget",
             return_value=125.5,
         ) as mock_caget:
             result = Q0Cryomodule.heater_power.fget(fast_q0_cryo)
@@ -2344,12 +2319,10 @@ class TestQ0CryomoduleHeaterPowerProperty:
 
         with (
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 side_effect=mock_caget,
             ),
-            patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caput"
-            ) as mock_caput,
+            patch("tests.applications.q0.pyepics_shim.caput") as mock_caput,
         ):
             Q0Cryomodule.heater_power.fset(fast_q0_cryo, target_power)
 
@@ -2452,7 +2425,7 @@ class TestQ0CryomoduleSetupForQ0:
 
         with (
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 side_effect=mock_caget,
             ),
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
@@ -2524,14 +2497,14 @@ class TestQ0CryomoduleMethodIntegration:
 
         # shut_off should be usable for cleanup
         with (
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print"),
         ):
             Q0Cryomodule.shut_off(fast_q0_cryo)
 
         # heater_power should be readable
         with patch(
-            "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+            "tests.applications.q0.pyepics_shim.caget",
             return_value=100.0,
         ):
             power = Q0Cryomodule.heater_power.fget(fast_q0_cryo)
@@ -2549,10 +2522,10 @@ class TestQ0CryomoduleMethodIntegration:
 
         with (
             patch(
-                "sc_linac_physics.applications.q0.q0_cryomodule.caget",
+                "tests.applications.q0.pyepics_shim.caget",
                 return_value=15.0,
             ),
-            patch("sc_linac_physics.applications.q0.q0_cryomodule.caput"),
+            patch("tests.applications.q0.pyepics_shim.caput"),
             patch("builtins.print"),
         ):
             start_time = time.time()
@@ -2641,3 +2614,114 @@ class TestQ0CryomoduleMethodDocumentation:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--durations=10"])
+
+
+class TestPVHelpers:
+    """_pv/_monitor replace caget/caput/camonitor; same calls, PV errors."""
+
+    def test_cryo_access_granted_reads_cas_access(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0 import q0_utils
+        from tests.applications.q0 import pyepics_shim
+
+        pyepics_shim.caget.side_effect = lambda pv: q0_utils.CRYO_ACCESS_VALUE
+        assert fast_q0_cryo.cryo_access_granted is True
+        pyepics_shim.caget.side_effect = lambda pv: 0
+        assert fast_q0_cryo.cryo_access_granted is False
+
+    def test_one_pv_object_per_name(self, fast_q0_cryo):
+        assert fast_q0_cryo._pv("A:B") is fast_q0_cryo._pv("A:B")
+
+    def test_second_monitor_replaces_the_first(self, fast_q0_cryo):
+        from tests.applications.q0 import pyepics_shim
+
+        first, second = Mock(), Mock()
+        fast_q0_cryo._monitor("A:LVL", first)
+        fast_q0_cryo._monitor("A:LVL", second)
+        # camonitor's own behavior: one monitor per PV.
+        assert pyepics_shim.camonitor_clear.call_count == 1
+        assert pyepics_shim.camonitor.call_args_list[-1].kwargs == {
+            "callback": second
+        }
+
+    def test_clear_without_monitor_does_nothing(self, fast_q0_cryo):
+        from tests.applications.q0 import pyepics_shim
+
+        fast_q0_cryo._clear_monitor("A:LVL")
+        pyepics_shim.camonitor_clear.assert_not_called()
+
+    def test_select_jt_auto_waits(self, fast_q0_cryo):
+        from tests.applications.q0 import pyepics_shim
+
+        fast_q0_cryo.select_jt_auto()
+        pyepics_shim.caput.assert_called_once_with(
+            fast_q0_cryo.jt_auto_select_pv, 1, wait=True
+        )
+
+
+class TestCleanupAttemptsEveryStep:
+    """A failed cryo write must not skip later cleanup or abort flags."""
+
+    @staticmethod
+    def _fail_jt_auto(pv_name, *args, **kwargs):
+        from sc_linac_physics.utils.epics import PVPutError
+
+        if pv_name.endswith("AUTO"):
+            raise PVPutError("JT AUTO")
+
+    def test_shut_off_turns_rf_off_after_failed_cryo_write(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from sc_linac_physics.utils.epics import PVPutError
+        from tests.applications.q0 import pyepics_shim
+
+        cavity = Mock()
+        fast_q0_cryo.cavities = {1: cavity}
+        pyepics_shim.caput.side_effect = self._fail_jt_auto
+
+        with patch("builtins.print"), pytest.raises(PVPutError):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        cavity.turn_off.assert_called_once()
+        cavity.ssa.turn_off.assert_called_once()
+
+    def test_shut_off_continues_after_a_cavity_fails(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+
+        first, second = Mock(), Mock()
+        first.turn_off.side_effect = RuntimeError("cav 1")
+        fast_q0_cryo.cavities = {1: first, 2: second}
+
+        with patch("builtins.print"), pytest.raises(RuntimeError, match="1"):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        first.ssa.turn_off.assert_called_once()
+        second.turn_off.assert_called_once()
+        second.ssa.turn_off.assert_called_once()
+
+    def test_restore_cryo_writes_sequencer_after_failed_jt(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from sc_linac_physics.utils.epics import PVPutError
+        from tests.applications.q0 import pyepics_shim
+
+        pyepics_shim.caput.side_effect = self._fail_jt_auto
+
+        with patch("builtins.print"), pytest.raises(PVPutError):
+            Q0Cryomodule.restore_cryo(fast_q0_cryo)
+
+        pyepics_shim.caput.assert_any_call(
+            fast_q0_cryo.heater_sequencer_pv, 1, wait=True
+        )
+
+    def test_check_abort_flags_cavities_when_restore_fails(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from sc_linac_physics.utils.epics import PVPutError
+
+        cavity = Mock(abort_flag=False)
+        fast_q0_cryo.cavities = {1: cavity}
+        fast_q0_cryo.abort_flag = True
+        fast_q0_cryo.restore_cryo = Mock(side_effect=PVPutError("JT AUTO"))
+
+        with pytest.raises(PVPutError):
+            Q0Cryomodule.check_abort(fast_q0_cryo)
+
+        assert cavity.abort_flag is True
+        assert fast_q0_cryo.abort_flag is False

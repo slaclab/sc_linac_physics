@@ -16,7 +16,9 @@ class CryomodulePVGroup(PVGroup):
     nrp = pvproperty(
         value=0, name="NRP:STATSUMY", dtype=ChannelType.DOUBLE, record="ai"
     )
-    aact_mean_sum = pvproperty(value=0, name="AACTMEANSUM")
+    aact_mean_sum = pvproperty(
+        value=0.0, name="AACTMEANSUM", dtype=ChannelType.DOUBLE
+    )
     # TODO - find this and see what type pv it is on bcs/ops_lcls2_bcs_main.edl
     bcs = pvproperty(value=0, name="BCSDRVSUM", dtype=ChannelType.DOUBLE)
 
