@@ -69,6 +69,10 @@ class PiezoWithRFPhase(PhaseBase):
         # retry after a read error then resumes the wait for it to finish,
         # rather than waiting for Running again.
         self._test_seen_running = False
+        self._gain_a: float | None = None
+        self._gain_b: float | None = None
+        self._detune_gain: float | None = None
+        self._rf_test_status: str | None = None
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -94,6 +98,9 @@ class PiezoWithRFPhase(PhaseBase):
             "check_detune": self._check_detune,
             "start_test": self._start_test,
             "wait_for_completion": self._wait_for_completion,
+            "read_results": self._read_results,
+            "push_detune_gain": self._push_detune_gain,
+            "record_results": self._record_results,
         }
 
     def get_phase_steps(self) -> list[str]:
@@ -113,7 +120,12 @@ class PiezoWithRFPhase(PhaseBase):
         return step()
 
     def finalize_phase(self) -> None:
-        """Writes no PVs: the cavity is left as the test left it."""
+        """Write this run's results onto the record. Writes no PVs.
+
+        The cavity is left as the test left it: RF on in SEL, piezo enabled
+        in manual.
+        """
+        self._store_phase_fields(**self._result_data())
 
     # ------------------------------------------------------------------
     # Steps
@@ -337,9 +349,179 @@ class PiezoWithRFPhase(PhaseBase):
             result=PhaseResult.SUCCESS, message="With-RF test finished"
         )
 
+    _TEST_STATUS_LABELS = {
+        linac_utils.PIEZO_WITH_RF_PASS_VALUE: "Pass",
+        linac_utils.PIEZO_WITH_RF_WARNING_VALUE: "Warning",
+    }
+
+    def _read_results(self) -> PhaseStepResult:
+        """Judge RFTESTSTS and RFTESTSTAT, then read the gains. Pushes nothing.
+
+        RFTESTSTS must read Complete (1); Crash (0) fails. RFTESTSTAT Pass (0)
+        and Warning (1) store CHA_AMPGAIN, CHB_AMPGAIN and DFGAIN_NEW with
+        the status; a Warning is recorded as complete but not passed. Fail (2)
+        fails and stores nothing.
+
+        CHECK: does the with-RF script write DFGAIN_NEW before the push? The
+        old worker read it only after processing PUSH_DFGAIN.
+        """
+        if self.context.dry_run:
+            return self._dry_run_result("result read")
+        self._clear_measured_fields()
+        piezo = self.cavity.piezo
+        try:
+            run_status = self._test_run_status()
+            test_status = int(piezo.withrf_status_pv_obj.get())
+        except Exception as exc:
+            return self._retry(f"Could not read the test status: {exc}")
+
+        if run_status != linac_utils.PIEZO_SCRIPT_COMPLETE_VALUE:
+            name = (
+                "Crash"
+                if run_status == linac_utils.PIEZO_SCRIPT_CRASH_VALUE
+                else str(run_status)
+            )
+            return self._failed(
+                f"RFTESTSTS reads {name}, not Complete — the with-RF script "
+                "did not finish"
+            )
+        label = self._TEST_STATUS_LABELS.get(test_status)
+        if label is None:
+            return self._failed(
+                f"RFTESTSTAT reads {test_status} (Fail is 2) — the with-RF "
+                "test failed"
+            )
+
+        try:
+            self._gain_a = float(piezo.amplifiergain_a_pv_obj.get())
+            self._gain_b = float(piezo.amplifiergain_b_pv_obj.get())
+            self._detune_gain = float(piezo.detunegain_new_pv_obj.get())
+        except Exception as exc:
+            return self._retry(f"Could not read the gains: {exc}")
+        self._rf_test_status = label
+        self._store_phase_fields(
+            amplifier_gain_a=self._gain_a,
+            amplifier_gain_b=self._gain_b,
+            detune_gain=self._detune_gain,
+            rf_test_status=label,
+        )
+
+        verdict = (
+            "passed"
+            if label == "Pass"
+            else "ended in Warning — recorded as not passed"
+        )
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=(
+                f"With-RF test {verdict}. Review detune gain "
+                f"{self._detune_gain:.6f} before pushing"
+            ),
+            data=self._result_data(),
+        )
+
+    def _push_detune_gain(self) -> PhaseStepResult:
+        """Push the reviewed detune gain, if the operator confirmed it.
+
+        PhaseBase.run() goes straight from read_results to here, so the gate
+        is in this step: it refuses unless
+        context.parameters["confirmed_detune_gain"] equals the DFGAIN_NEW that
+        read_results stored. Just before pushing it re-reads DFGAIN_NEW and
+        RFTESTSTS, and refuses if the gain changed or a new test is running.
+
+        On success it writes PUSH_DFGAIN.PROC = 1, then SAVE_DFGAIN.PROC = 1.
+        Both are ao records whose DESC reads "Push calc-ed to live PV". A
+        Warning still lets the operator push; passed stays False.
+
+        CHECK: where do PUSH_DFGAIN and SAVE_DFGAIN write (.DOL, .OMSL, .OUT)?
+        If SAVE only keeps a copy for a human, as the cavity char SAVE PVs
+        do (#285), drop the SAVE write.
+        """
+        if self.context.dry_run:
+            return self._dry_run_result("detune gain push")
+        if self._detune_gain is None:
+            return self._failed("Nothing read yet — run the with-RF test first")
+        confirmed = self.context.parameters.get("confirmed_detune_gain")
+        if confirmed != self._detune_gain:
+            return self._failed(
+                "Push not confirmed for this result — review detune gain "
+                f"{self._detune_gain:.6f} and confirm before pushing"
+            )
+
+        piezo = self.cavity.piezo
+        try:
+            now_gain = float(piezo.detunegain_new_pv_obj.get())
+            now_status = self._test_run_status()
+        except Exception as exc:
+            return self._retry(f"Could not re-read before pushing: {exc}")
+        if now_status == linac_utils.PIEZO_SCRIPT_RUNNING_VALUE:
+            return self._failed(
+                "A new with-RF test is running — nothing pushed"
+            )
+        if now_gain != self._detune_gain:
+            return self._failed(
+                f"DFGAIN_NEW changed from {self._detune_gain:.6f} to "
+                f"{now_gain:.6f} since review — nothing pushed. Rerun the test."
+            )
+
+        try:
+            piezo.withrf_push_dfgain_pv_obj.put(1)
+            piezo.withrf_save_dfgain_pv_obj.put(1)
+        except Exception as exc:
+            return self._retry(f"Could not push the detune gain: {exc}")
+        self._store_phase_fields(detune_gain_pushed=True)
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=f"Detune gain {self._detune_gain:.6f} pushed",
+            data=self._result_data(),
+        )
+
+    def _record_results(self) -> PhaseStepResult:
+        """No PV access; finalize_phase() writes the record."""
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message="Results collected; ready to finalize",
+        )
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _result_data(self) -> dict:
+        return {
+            "amplifier_gain_a": self._gain_a,
+            "amplifier_gain_b": self._gain_b,
+            "detune_gain": self._detune_gain,
+            "rf_test_status": self._rf_test_status,
+        }
+
+    def _clear_measured_fields(self) -> None:
+        """Blank this phase's results, in memory and on the record."""
+        self._gain_a = self._gain_b = self._detune_gain = None
+        self._rf_test_status = None
+        record = getattr(self.context, "record", None)
+        if record is None or record.piezo_with_rf is None:
+            return
+        data = record.piezo_with_rf
+        data.amplifier_gain_a = data.amplifier_gain_b = None
+        data.detune_gain = None
+        data.rf_test_status = None
+        data.detune_gain_pushed = False
+
+    def _store_phase_fields(self, **fields) -> None:
+        """Merge step results onto record.piezo_with_rf; None is skipped.
+
+        Same pattern as CavityCharPhase: record.phase_history is in memory
+        only, so results go on the record as each step produces them.
+        """
+        record = getattr(self.context, "record", None)
+        if record is None:
+            return
+        data = record.piezo_with_rf or PiezoWithRFTest()
+        for name, value in fields.items():
+            if value is not None:
+                setattr(data, name, value)
+        record.piezo_with_rf = data
 
     def _test_run_status(self) -> int:
         """RFTESTSTS: 0 Crash, 1 Complete, 2 Running."""

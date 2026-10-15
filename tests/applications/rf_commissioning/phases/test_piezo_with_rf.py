@@ -199,6 +199,9 @@ def test_steps_in_order(phase):
         "check_detune",
         "start_test",
         "wait_for_completion",
+        "read_results",
+        "push_detune_gain",
+        "record_results",
     ]
 
 
@@ -319,3 +322,141 @@ def test_wait_first_read_error_retries(phase, mock_cavity):
         "CA"
     )
     assert phase.execute_step("wait_for_completion").result == PhaseResult.RETRY
+
+
+PASS, WARNING, FAIL = 0, 1, 2
+
+
+@pytest.fixture
+def finished(mock_cavity):
+    """A cavity whose with-RF test just completed with a Pass."""
+    piezo = mock_cavity.piezo
+    piezo.withrf_check_status_pv_obj.get.return_value = COMPLETE
+    piezo.withrf_status_pv_obj.get.return_value = PASS
+    piezo.amplifiergain_a_pv_obj.get.return_value = 1.05
+    piezo.amplifiergain_b_pv_obj.get.return_value = 0.98
+    piezo.detunegain_new_pv_obj.get.return_value = 0.85
+    return mock_cavity
+
+
+def test_read_pass_stores_gains(phase, finished, record):
+    result = phase.execute_step("read_results")
+    assert result.result == PhaseResult.SUCCESS
+    data = record.piezo_with_rf
+    assert (data.amplifier_gain_a, data.amplifier_gain_b) == (1.05, 0.98)
+    assert data.detune_gain == 0.85
+    assert data.rf_test_status == "Pass"
+    assert data.passed
+
+
+def test_read_warning_is_complete_not_passed(phase, finished, record):
+    finished.piezo.withrf_status_pv_obj.get.return_value = WARNING
+    assert phase.execute_step("read_results").result == PhaseResult.SUCCESS
+    assert record.piezo_with_rf.is_complete
+    assert not record.piezo_with_rf.passed
+
+
+def test_read_fail_fails_and_stores_no_gains(phase, finished, record):
+    finished.piezo.withrf_status_pv_obj.get.return_value = FAIL
+    assert phase.execute_step("read_results").result == PhaseResult.FAILED
+    assert record.piezo_with_rf is None or (
+        record.piezo_with_rf.detune_gain is None
+    )
+
+
+def test_read_crash_fails(phase, finished):
+    finished.piezo.withrf_check_status_pv_obj.get.return_value = CRASH
+    result = phase.execute_step("read_results")
+    assert result.result == PhaseResult.FAILED
+    assert "Crash" in result.message
+
+
+def test_reading_pushes_nothing(phase, finished):
+    phase.execute_step("read_results")
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+    finished.piezo.withrf_save_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_push_without_confirmation_is_refused(phase, finished):
+    phase.execute_step("read_results")
+    result = phase.execute_step("push_detune_gain")
+    assert result.result == PhaseResult.FAILED
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_push_before_reading_fails(mock_cavity, record):
+    phase = make_phase(mock_cavity, record, confirmed_detune_gain=0.85)
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.FAILED
+    mock_cavity.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_confirming_another_value_does_not_push(finished, record):
+    phase = make_phase(finished, record, confirmed_detune_gain=0.80)
+    phase.execute_step("read_results")
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.FAILED
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_push_processes_push_then_save(finished, record):
+    order = []
+    piezo = finished.piezo
+    piezo.withrf_push_dfgain_pv_obj.put.side_effect = lambda v: order.append(
+        ("PUSH_DFGAIN.PROC", v)
+    )
+    piezo.withrf_save_dfgain_pv_obj.put.side_effect = lambda v: order.append(
+        ("SAVE_DFGAIN.PROC", v)
+    )
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.SUCCESS
+    assert order == [("PUSH_DFGAIN.PROC", 1), ("SAVE_DFGAIN.PROC", 1)]
+    assert record.piezo_with_rf.detune_gain_pushed is True
+
+
+def test_push_refuses_if_detune_gain_changed(finished, record):
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    finished.piezo.detunegain_new_pv_obj.get.return_value = 0.91
+    result = phase.execute_step("push_detune_gain")
+    assert result.result == PhaseResult.FAILED
+    assert "DFGAIN_NEW" in result.message
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_push_refuses_if_a_new_test_is_running(finished, record):
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    finished.piezo.withrf_check_status_pv_obj.get.return_value = RUNNING
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.FAILED
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_warning_still_lets_the_operator_push(finished, record):
+    finished.piezo.withrf_status_pv_obj.get.return_value = WARNING
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.SUCCESS
+
+
+def test_full_run_without_confirmation_never_pushes(phase, finished):
+    finished.piezo.withrf_check_status_pv_obj.get.side_effect = [
+        COMPLETE,
+        RUNNING,
+        COMPLETE,
+    ] + [COMPLETE] * 10
+    phase.run()
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_record_results_is_a_no_op_step(phase, finished):
+    result = phase.execute_step("record_results")
+    assert result.result == PhaseResult.SUCCESS
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+
+
+@pytest.mark.parametrize("step", ["read_results", "push_detune_gain"])
+def test_dry_run_reads_results_and_pushes_nothing(finished, record, step):
+    phase = make_phase(finished, record, dry_run=True)
+    assert phase.execute_step(step).result == PhaseResult.SUCCESS
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+    finished.piezo.withrf_save_dfgain_pv_obj.put.assert_not_called()
