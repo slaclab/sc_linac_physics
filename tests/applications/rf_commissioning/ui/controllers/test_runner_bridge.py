@@ -213,3 +213,30 @@ def test_holding_and_progress_signals(qtbot):
         run.next_step()
 
     qtbot.waitUntil(lambda: progress == [("a", 25)])
+
+
+def test_failed_result_without_message_still_finishes(qtbot):
+    bridge = RunnerBridge()
+    _, run = _run({"a": [PhaseStepResult(PhaseResult.FAILED, None)]})
+
+    with qtbot.waitSignal(bridge.segment_finished, timeout=2000) as blocker:
+        bridge.start_segment(run, ["a"])
+
+    assert blocker.args[0].outcome is SegmentOutcome.FAILED
+    qtbot.waitUntil(lambda: not bridge.running)
+
+
+def test_start_segment_refuses_a_run_already_running(qtbot):
+    cleared = []
+    hook = AbortHook(request=lambda: None, clear=lambda: cleared.append(1))
+    phase, run = _run({"a": [_ok()]}, abort_hooks=[hook])
+    phase.gate = threading.Event()
+    first, second = RunnerBridge(), RunnerBridge()
+
+    with qtbot.waitSignal(first.segment_finished, timeout=2000):
+        first.start_segment(run, ["a"])
+        qtbot.waitUntil(lambda: run.running)
+        cleared.clear()
+        assert second.start_segment(run, ["a"]) is False
+        assert cleared == []
+        phase.gate.set()

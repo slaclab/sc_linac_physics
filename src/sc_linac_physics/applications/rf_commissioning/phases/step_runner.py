@@ -302,7 +302,15 @@ class PhaseRun:
             results: dict[str, PhaseStepResult] = {}
             for index, step in enumerate(steps):
                 position = (index, len(steps), progress_offset + index, total)
-                ended = self._run_step(step, position, results)
+                try:
+                    ended = self._run_step(step, position, results)
+                except Exception as exc:
+                    # A fault in the bookkeeping, not in the step. The phase
+                    # must still end FAILED rather than stay IN_PROGRESS.
+                    logger.exception("Running step %s failed", step)
+                    message = f"{step}: {type(exc).__name__}: {exc}"
+                    self.fail(message, step=step)
+                    ended = SegmentResult(SegmentOutcome.FAILED, message, step)
                 if ended is not None:
                     ended.results = results
                     return ended
@@ -334,28 +342,9 @@ class PhaseRun:
                 )
             attempt += 1
 
-            try:
-                result = self.phase.execute_step(step)
-            except Exception as exc:
-                logger.exception("Step %s raised", step)
-                message = f"{step} raised {type(exc).__name__}: {exc}"
-                self.phase._create_checkpoint(
-                    step_name=step,
-                    success=False,
-                    notes=message,
-                    error_message=str(exc),
-                )
-                return self._step_failed(
-                    step, PhaseStepResult(PhaseResult.FAILED, message)
-                )
-
-            self.phase._create_checkpoint(
-                step_name=step,
-                success=result.result
-                in (PhaseResult.SUCCESS, PhaseResult.SKIP),
-                notes=result.message,
-                measurements=result.data,
-            )
+            result, raised = self._execute(step)
+            if raised:
+                return self._step_failed(step, result)
             results[step] = result
             self._notify("on_attempt", step, attempt, result)
 
@@ -380,14 +369,47 @@ class PhaseRun:
             if not self._wait(delay):
                 return self._abort_before(step)
 
+    def _execute(self, step: str) -> tuple[PhaseStepResult, bool]:
+        """One attempt and its checkpoint. True alongside if the step raised."""
+        try:
+            result = self.phase.execute_step(step)
+            if not isinstance(result, PhaseStepResult):
+                raise TypeError(
+                    f"execute_step returned {type(result).__name__}, "
+                    "not a PhaseStepResult"
+                )
+        except Exception as exc:
+            logger.exception("Step %s raised", step)
+            message = f"{step} raised {type(exc).__name__}: {exc}"
+            self.phase._create_checkpoint(
+                step_name=step,
+                success=False,
+                notes=message,
+                error_message=str(exc),
+            )
+            return PhaseStepResult(PhaseResult.FAILED, message), True
+        self.phase._create_checkpoint(
+            step_name=step,
+            success=result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP),
+            notes=result.message,
+            measurements=result.data,
+        )
+        return result, False
+
     def _step_failed(
         self, step: str, result: PhaseStepResult, message: str | None = None
     ) -> SegmentResult:
         self._set_failed()
         self._notify("on_step_finished", step, result)
-        return SegmentResult(
-            SegmentOutcome.FAILED, message or result.message, step
+        # The phases turn an abort inside a hardware wait (CavityAbortError,
+        # a stepper abort) into FAILED. Reported as ABORTED so the panel can
+        # tell the operator's Abort from a fault.
+        outcome = (
+            SegmentOutcome.ABORTED
+            if self.context.is_abort_requested()
+            else SegmentOutcome.FAILED
         )
+        return SegmentResult(outcome, message or result.message or "", step)
 
     def _abort_before(self, step: str) -> SegmentResult:
         self._set_failed()

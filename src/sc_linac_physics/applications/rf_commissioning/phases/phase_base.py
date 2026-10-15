@@ -231,7 +231,12 @@ class PhaseBase(ABC):
             listener=_ProgressCallback(),
             sleep_fn=self._injected_sleep_fn,
         )
-        segment = run.run_steps(self.get_phase_steps())
+        try:
+            steps = self.get_phase_steps()
+        except Exception as e:
+            self._handle_exception(e)
+            return False
+        segment = run.run_steps(steps)
         if segment.outcome is not SegmentOutcome.COMPLETED:
             return False
         return run.complete().outcome is SegmentOutcome.COMPLETED

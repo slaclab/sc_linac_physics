@@ -103,3 +103,18 @@ def test_progress_callback_still_called():
     assert context.record.get_phase_status(phase.phase_type) is (
         PhaseStatus.COMPLETE
     )
+
+
+def test_get_phase_steps_error_fails_phase():
+    context = _new_context()
+    phase = _RetryBehaviorPhase(context=context, outcomes=[], sleep_calls=[])
+
+    def broken():
+        raise RuntimeError("bad step list")
+
+    phase.get_phase_steps = broken
+
+    assert phase.run() is False
+    assert context.record.get_phase_status(phase.phase_type) is (
+        PhaseStatus.FAILED
+    )

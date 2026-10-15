@@ -65,7 +65,9 @@ class RunnerBridge(QObject, StepListener):
         completes is followed by run.complete() (finalize_phase and COMPLETE)
         on the same thread.
         """
-        if self._busy:
+        # run.running catches a PhaseRun another bridge or thread is driving:
+        # clear_abort() below would otherwise cancel that run's Abort.
+        if self._busy or run.running:
             return False
         self._busy = True
         steps = list(steps)
@@ -74,6 +76,7 @@ class RunnerBridge(QObject, StepListener):
         run.clear_abort()
 
         def work() -> None:
+            result = SegmentResult(SegmentOutcome.FAILED, "Run did not finish")
             try:
                 result = run.run_steps(
                     steps,
@@ -90,11 +93,15 @@ class RunnerBridge(QObject, StepListener):
                     SegmentOutcome.FAILED,
                     f"Run failed: {type(exc).__name__}: {exc}",
                 )
-            self._log_outcome(result)
-            # Cleared before the emit, so a segment_finished slot may start
-            # the next segment straight away.
-            self._busy = False
-            self.segment_finished.emit(result)
+            finally:
+                try:
+                    self._log_outcome(result)
+                except Exception:
+                    logger.exception("Logging the segment outcome failed")
+                # Cleared before the emit, so a segment_finished slot may
+                # start the next segment straight away.
+                self._busy = False
+                self.segment_finished.emit(result)
 
         threading.Thread(
             target=work, name="phase-step-runner", daemon=True
@@ -104,7 +111,7 @@ class RunnerBridge(QObject, StepListener):
     def _log_outcome(self, result: SegmentResult) -> None:
         if result.outcome is SegmentOutcome.COMPLETED:
             return
-        message = result.message
+        message = result.message or "failed"
         if result.step and not message.startswith(result.step):
             message = f"{result.step}: {message}"
         mark = "✗" if result.outcome is SegmentOutcome.FAILED else "⊘"

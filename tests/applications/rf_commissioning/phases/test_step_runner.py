@@ -634,3 +634,42 @@ def test_empty_segment_completes():
     _, run, _ = _make()
 
     assert run.run_steps([]).outcome is SegmentOutcome.COMPLETED
+
+
+# ------------------------------------------------- review fixes (final)
+
+
+def test_step_returning_none_fails_phase():
+    """A step method missing its return must fail the phase, not escape."""
+    phase, run, _ = _make({"a": [None]})
+
+    result = run.run_steps(["a"])
+
+    assert result.outcome is SegmentOutcome.FAILED
+    assert result.step == "a"
+    assert _status(phase) is PhaseStatus.FAILED
+    assert _checkpoints(phase, "a")[-1].success is False
+    assert run.running is False
+
+
+def test_abort_during_step_reports_aborted():
+    """Phases turn an abort inside a hardware wait into FAILED."""
+    phase, run, _ = _make({"wait": [_failed("Aborted during wait")]})
+    phase.before_step = lambda step: run.request_abort()
+
+    result = run.run_steps(["wait"])
+
+    assert result.outcome is SegmentOutcome.ABORTED
+    assert result.message == "Aborted during wait"
+    assert _status(phase) is PhaseStatus.FAILED
+
+
+def test_abort_hook_error_still_aborts_context():
+    def boom():
+        raise RuntimeError("CA down")
+
+    phase, run, _ = _make(abort_hooks=[AbortHook(request=boom, clear=boom)])
+
+    run.request_abort()
+
+    assert phase.context.is_abort_requested()
