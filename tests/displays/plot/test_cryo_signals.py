@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from qtpy.QtCore import QEvent
-from qtpy.QtWidgets import QApplication, QDialog
+from qtpy.QtWidgets import QApplication, QDialog, QWidget
 
 from sc_linac_physics.displays.plot.cryo_signals import (
     LinacGroupedCryomodulePlotDisplay,
@@ -78,6 +78,18 @@ def mock_machine():
     return machine
 
 
+class FakeArchiverPlot(QWidget):
+    """Records what the display hands each plot, without PyDM."""
+
+    def __init__(self, curve_set=None, *args, **kwargs):
+        super().__init__()
+        self.curve_set = curve_set
+        self.y_range_calls = []
+
+    def set_y_range(self, axis, y_range):
+        self.y_range_calls.append((axis, y_range))
+
+
 @pytest.fixture
 def display(qtbot, mock_machine):
     """Create LinacGroupedCryomodulePlotDisplay instance with mocked data.
@@ -93,40 +105,12 @@ def display(qtbot, mock_machine):
             "sc_linac_physics.displays.plot.cryo_signals.Machine"
         ) as MockMachine,
         patch(
-            "sc_linac_physics.displays.plot.embeddable_plots.PyDMArchiverTimePlot"
-        ) as MockArchiverPlot,
+            "sc_linac_physics.displays.plot.cryo_signals.ArchiverPlot",
+            FakeArchiverPlot,
+        ),
     ):
 
         MockMachine.return_value = mock_machine
-
-        # Create a mock archiver time plot that IS a QWidget
-        def create_mock_archiver_plot(*args, **kwargs):
-            """Factory function to create mock archiver plot."""
-            from PyQt5.QtWidgets import QWidget
-
-            # Create a real QWidget as the base
-            mock_archiver = QWidget()
-
-            # Mock plot item
-            mock_plot_item = Mock()
-            mock_plot_item.axes = {}
-            mock_plot_item.curves = []
-            mock_plot_item.update = Mock()
-
-            # Add mock methods as attributes
-            mock_archiver.getPlotItem = Mock(return_value=mock_plot_item)
-            mock_archiver.addYChannel = Mock()
-            mock_archiver.setTimeSpan = Mock()
-            mock_archiver.setPlotTitle = Mock()
-            mock_archiver.clearCurves = Mock()
-            mock_archiver.removeYChannel = Mock()
-            mock_archiver.update = Mock()
-            mock_archiver.showLegend = True
-            mock_archiver.updateMode = None
-
-            return mock_archiver
-
-        MockArchiverPlot.side_effect = create_mock_archiver_plot
 
         display = LinacGroupedCryomodulePlotDisplay()
         qtbot.addWidget(display)
@@ -502,3 +486,46 @@ class TestMemoryManagement:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestCurveSetsReachPlots:
+    """What each cryomodule plot is actually given."""
+
+    def test_each_plot_gets_the_four_pvs(self, display):
+        plot = display.cryomodule_plots[("L0B", "01")]
+        assert [c.pv for c in plot.curve_set.curves] == [
+            "CLIC:CM01:3001:PVJT:ORBV",
+            "CLL:CM01:2301:DS:LVL",
+            "CLL:CM01:2601:US:LVL",
+            "ACCL:L0B:0100:AACTMEANSUM",
+        ]
+
+    def test_default_ranges_are_fixed_on_new_plots(self, display):
+        plot = display.cryomodule_plots[("L0B", "01")]
+        assert plot.curve_set.y_ranges == {
+            "Jt Valve Readback": (0, 80),
+            "Ds Level": (80, 100),
+            "Us Level": (60, 80),
+            "Aact Mean Sum": (0, 144),
+        }
+
+    def test_apply_sends_ranges_to_every_plot(self, display):
+        display.apply_global_axis_settings(
+            {
+                "ds_level_pv": {"auto_scale": False, "range": (20, 80)},
+                "us_level_pv": {"auto_scale": True, "range": None},
+            }
+        )
+        for plot in display.cryomodule_plots.values():
+            assert plot.y_range_calls == [
+                ("Ds Level", (20, 80)),
+                ("Us Level", None),
+            ]
+
+    def test_new_plots_use_changed_ranges_after_linac_switch(self, display):
+        display.apply_global_axis_settings(
+            {"ds_level_pv": {"auto_scale": False, "range": (20, 80)}}
+        )
+        display.linac_combo.setCurrentIndex(1)
+        plot = display.cryomodule_plots[("L1B", "02")]
+        assert plot.curve_set.y_ranges == {"Ds Level": (20, 80)}

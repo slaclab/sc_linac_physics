@@ -2,10 +2,11 @@ import asyncio
 import random
 from asyncio import sleep
 
+from caproto import ChannelType
 from caproto.server import (
     PVGroup,
     pvproperty,
-    PvpropertyBoolEnum,
+    PvpropertyEnum,
     PvpropertyString,
 )
 
@@ -25,12 +26,25 @@ class HeaterPVGroup(PVGroup):
 
     setpoint = pvproperty(name="MANPOS_RQST", value=0.0, precision=2)
     readback = pvproperty(name="ORBV", value=0.0, precision=2)
-    mode = pvproperty(name="MODE", value=2)  # 0=MANUAL, 2=SEQUENCER
+    # MODE is a double on lcls-srv01 (2026-10-14).
+    mode = pvproperty(
+        name="MODE", value=2.0, dtype=ChannelType.DOUBLE
+    )  # 0=MANUAL, 2=SEQUENCER
     mode_string: PvpropertyString = pvproperty(
         name="MODE_STRING", value="SEQUENCER"
     )
-    manual: PvpropertyBoolEnum = pvproperty(name="MANUAL", value=0)
-    sequencer: PvpropertyBoolEnum = pvproperty(name="SEQUENCER", value=1)
+    # MANUAL and SEQUENCER are enums on production. CHECK: their labels. The
+    # sim uses two blank ones, so the putters can't tell a 0 from a 1: any
+    # put switches mode. MODE and MODE_STRING carry the state.
+    manual: PvpropertyEnum = pvproperty(
+        name="MANUAL", value=0, dtype=ChannelType.ENUM, enum_strings=("", "")
+    )
+    sequencer: PvpropertyEnum = pvproperty(
+        name="SEQUENCER",
+        value=1,
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
+    )
 
     stable_heat = 48.0  # Watts - baseline heat load
 
@@ -73,19 +87,19 @@ class HeaterPVGroup(PVGroup):
 
     @manual.putter
     async def manual(self, instance, value):
-        if value == 1:
-            print("Heater feedback status: Manual")
-            await self.sequencer.write(0)
-            await self.mode.write(0)
-            await self.mode_string.write("MANUAL")
+        print("Heater feedback status: Manual")
+        # verify_value=False skips the other PV's putter, which would switch
+        # the mode straight back.
+        await self.sequencer.write(0, verify_value=False)
+        await self.mode.write(0)
+        await self.mode_string.write("MANUAL")
 
     @sequencer.putter
     async def sequencer(self, instance, value):
-        if value == 1:
-            print("Heater feedback status: Sequencer")
-            await self.manual.write(0)
-            await self.mode.write(2)
-            await self.mode_string.write("SEQUENCER")
+        print("Heater feedback status: Sequencer")
+        await self.manual.write(0, verify_value=False)
+        await self.mode.write(2)
+        await self.mode_string.write("SEQUENCER")
 
     async def manual_mode_start(self):
         """
@@ -123,9 +137,17 @@ class JTPVGroup(PVGroup):
     readback = pvproperty(name="ORBV", value=30.0, precision=2)
     ds_setpoint = pvproperty(name="SP_RQST", value=93.0, precision=2)
     manual_pos = pvproperty(name="MANPOS_RQST", value=40.0, precision=2)
-    manual: PvpropertyBoolEnum = pvproperty(name="MANUAL", value=0)
-    auto: PvpropertyBoolEnum = pvproperty(name="AUTO", value=1)
-    mode = pvproperty(name="MODE", value=1, read_only=True)
+    # MANUAL and AUTO: same blank-label caveat as the heater's MANUAL and
+    # SEQUENCER above. MODE is a double on lcls-srv01 (2026-10-14).
+    manual: PvpropertyEnum = pvproperty(
+        name="MANUAL", value=0, dtype=ChannelType.ENUM, enum_strings=("", "")
+    )
+    auto: PvpropertyEnum = pvproperty(
+        name="AUTO", value=1, dtype=ChannelType.ENUM, enum_strings=("", "")
+    )
+    mode = pvproperty(
+        name="MODE", value=1.0, dtype=ChannelType.DOUBLE, read_only=True
+    )
     mode_string: PvpropertyString = pvproperty(
         name="MODE_STRING", value="AUTO", read_only=True
     )
@@ -136,45 +158,44 @@ class JTPVGroup(PVGroup):
     async def auto(self, instance, async_lib):
         """Initialize auto feedback on startup"""
         self.async_lib = async_lib
-        if self.auto.value == 1:
+        # The sim starts in AUTO (MODE 1).
+        if self.mode.value == 1:
             self._auto_task = async_lib.library.create_task(
                 self.auto_feedback_start()
             )
 
     @manual.putter
     async def manual(self, instance, value):
-        if value == 1:
-            print("JT valve status: Manual")
-            # Update mode
-            await self.auto.write(0)
-            await self.mode.write(0)
-            await self.mode_string.write("MANUAL")
+        print("JT valve status: Manual")
+        # Update mode. verify_value=False skips the other PV's putter.
+        await self.auto.write(0, verify_value=False)
+        await self.mode.write(0)
+        await self.mode_string.write("MANUAL")
 
-            # Cancel auto feedback
-            if self._auto_task:
-                self._auto_task.cancel()
-                self._auto_task = None
+        # Cancel auto feedback
+        if self._auto_task:
+            self._auto_task.cancel()
+            self._auto_task = None
 
     @auto.putter
     async def auto(self, instance, value):
-        if value == 1:
-            print("JT valve status: Auto")
-            # Update mode
-            await self.manual.write(0)
-            await self.mode.write(1)
-            await self.mode_string.write("AUTO")
+        print("JT valve status: Auto")
+        # Update mode
+        await self.manual.write(0, verify_value=False)
+        await self.mode.write(1)
+        await self.mode_string.write("AUTO")
 
-            # Cancel any manual tasks
-            if self._manual_task:
-                self._manual_task.cancel()
-                self._manual_task = None
+        # Cancel any manual tasks
+        if self._manual_task:
+            self._manual_task.cancel()
+            self._manual_task = None
 
-            # Start auto feedback as background task
-            if self._auto_task:
-                self._auto_task.cancel()
-            self._auto_task = self.async_lib.library.create_task(
-                self.auto_feedback_start()
-            )
+        # Start auto feedback as background task
+        if self._auto_task:
+            self._auto_task.cancel()
+        self._auto_task = self.async_lib.library.create_task(
+            self.auto_feedback_start()
+        )
 
     @manual_pos.putter
     async def manual_pos(self, instance, value):

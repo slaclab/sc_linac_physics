@@ -2,7 +2,7 @@ import subprocess
 from unittest.mock import Mock, patch
 
 import pytest
-from caproto import ChannelEnum, ChannelFloat, ChannelInteger
+from caproto import ChannelDouble, ChannelEnum, ChannelFloat
 
 from sc_linac_physics.utils.simulation.sc_linac_physics_service import (
     LauncherGroups,
@@ -224,7 +224,7 @@ class TestSCLinacPhysicsService:
         for channel in HEARTBEAT_CHANNELS:
             pv_name = f"PHYS:SYS0:1:{channel}"
             assert pv_name in service
-            assert isinstance(service[pv_name], ChannelInteger)
+            assert isinstance(service[pv_name], ChannelDouble)
 
         # Check alarm channels
         for channel in ALARM_CHANNELS:
