@@ -2,6 +2,126 @@
 
 <!-- version list -->
 
+## v9.46.0 (2026-10-15)
+
+### Bug Fixes
+
+- **cavity-display**: Catch our PVInvalidError in EnumLabel
+  ([#365](https://github.com/slaclab/sc_linac_physics/pull/365),
+  [`46e8c65`](https://github.com/slaclab/sc_linac_physics/commit/46e8c653a22dca6c84b1a31c371fcb826ec86087))
+
+- **epics**: PV.severity is never None and never stale
+  ([#365](https://github.com/slaclab/sc_linac_physics/pull/365),
+  [`46e8c65`](https://github.com/slaclab/sc_linac_physics/commit/46e8c653a22dca6c84b1a31c371fcb826ec86087))
+
+- **epics**: Refresh severity after a reconnect and on unmonitored PVs
+  ([#365](https://github.com/slaclab/sc_linac_physics/pull/365),
+  [`46e8c65`](https://github.com/slaclab/sc_linac_physics/commit/46e8c653a22dca6c84b1a31c371fcb826ec86087))
+
+- **plot**: Draw archived and live samples as steps
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+- **plot**: Hold each sample until the next, not the reverse
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+### Features
+
+- **plot**: Default PYDM_ARCHIVER_URL to utils.archiver's archiver
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+### Refactoring
+
+- **plot**: Draw plots from a CurveSet; drop EmbeddableArchiverPlot
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+### Testing
+
+- **plot**: Check the linked ViewBox re-enables auto-range
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+
+## v9.45.5 (2026-10-15)
+
+### Bug Fixes
+
+- **sc-linac**: Magnet CTRL command values match the real enum
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+### Documentation
+
+- **sc-linac**: Magnet CTRL enum checked on every linac; drop the CHECK
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+- **sc-linac**: XCOR and YCOR CTRL enums match the QUAD's
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+
+## v9.45.4 (2026-10-15)
+
+### Bug Fixes
+
+- **archiver**: Chunk string PVs from their ncount totals
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Count every window before falling back to one request
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Fetch long windows in chunks planned from sample counts
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Fetch long windows in chunks sized by bytes
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+### Documentation
+
+- **archiver**: Give the archiver client its own page
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Record that waveforms are not archived
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Say why the PV is wrapped in count_3600(...)
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+### Performance Improvements
+
+- **archiver**: Build each chunk's frame as it arrives
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Plan chunks from the archiver's own sample counts
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+
+## v9.45.3 (2026-10-15)
+
+### Bug Fixes
+
+- **sim**: Leave CHA/CHB_TESTSTAT to #397
+  ([#398](https://github.com/slaclab/sc_linac_physics/pull/398),
+  [`5f263de`](https://github.com/slaclab/sc_linac_physics/commit/5f263de1d80ede21593b0c7cd7ea5e6a9c0bd4ed))
+
+- **sim**: Serve production types and enum states for cavity and tuner PVs
+  ([#398](https://github.com/slaclab/sc_linac_physics/pull/398),
+  [`5f263de`](https://github.com/slaclab/sc_linac_physics/commit/5f263de1d80ede21593b0c7cd7ea5e6a9c0bd4ed))
+
+
 ## v9.45.2 (2026-10-14)
 
 ### Bug Fixes

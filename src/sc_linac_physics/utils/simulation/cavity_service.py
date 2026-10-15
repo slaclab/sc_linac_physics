@@ -14,6 +14,7 @@ from caproto.server import (
     PvpropertyEnumRO,
     PvpropertyString,
     PvpropertyChar,
+    PvpropertyDouble,
     PvpropertyInteger,
     PvpropertyBoolEnum,
     SubGroup,
@@ -27,6 +28,9 @@ if TYPE_CHECKING:
     from sc_linac_physics.utils.simulation.cryomodule_service import (
         CryomodulePVGroup,
     )
+
+
+WAVEFORM_POINTS = 16384
 
 
 def _enum_to_int(value, enum_strings) -> int:
@@ -147,11 +151,23 @@ class CavityPVGroup(PVGroup):
         read_only=False,
     )
     # Defaults to pulse
+    # 16 states, as on lcls-srv01 (2026-10-14): six named modes, Tone, eight
+    # blank states, then Unknown. RFMODECTRL above keeps its six.
     rf_mode_act: PvpropertyEnumRO = pvproperty(
         value=0,
         name="RFMODE",
         dtype=ChannelType.ENUM,
-        enum_strings=("SELAP", "SELA", "SEL", "SEL Raw", "Pulse", "Chirp"),
+        enum_strings=(
+            "SELAP",
+            "SELA",
+            "SEL",
+            "SEL Raw",
+            "Pulse",
+            "Chirp",
+            "Tone",
+            *[""] * 8,
+            "Unknown",
+        ),
         read_only=True,
     )
     adesMaxSRF: PvpropertyFloat = pvproperty(
@@ -174,7 +190,7 @@ class CavityPVGroup(PVGroup):
         value=1,
         name="RFREADYFORBEAM",
         dtype=ChannelType.ENUM,
-        enum_strings=("Not Ready", "Ready"),
+        enum_strings=("Not ready", "Ready"),
     )
     parked: PvpropertyEnum = pvproperty(
         value=0,
@@ -190,20 +206,20 @@ class CavityPVGroup(PVGroup):
         value=0,
         name="SSA_LTCH",
         dtype=ChannelType.ENUM,
-        enum_strings=("OK", "Fault"),
+        enum_strings=("Ok", "Fault"),
         record="mbbi",
     )
     sel_aset: PvpropertyFloat = pvproperty(
         value=0.0, name="SEL_ASET", dtype=ChannelType.FLOAT
     )
-    detune: PvpropertyInteger = pvproperty(
-        value=0, name="DFBEST", dtype=ChannelType.INT
+    detune: PvpropertyDouble = pvproperty(
+        value=0.0, name="DFBEST", dtype=ChannelType.DOUBLE
     )
-    detune_rfs: PvpropertyInteger = pvproperty(
-        value=0, name="DF", dtype=ChannelType.INT
+    detune_rfs: PvpropertyDouble = pvproperty(
+        value=0.0, name="DF", dtype=ChannelType.DOUBLE
     )
-    detune_chirp: PvpropertyInteger = pvproperty(
-        value=0, name="CHIRP:DF", dtype=ChannelType.INT
+    detune_chirp: PvpropertyDouble = pvproperty(
+        value=0.0, name="CHIRP:DF", dtype=ChannelType.DOUBLE
     )
     tune_config: PvpropertyEnum = pvproperty(
         name="TUNE_CONFIG",
@@ -212,8 +228,8 @@ class CavityPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("On resonance", "Cold landing", "Parked", "Other"),
     )
-    df_cold: PvpropertyFloat = pvproperty(
-        value=0, name="DF_COLD", dtype=ChannelType.FLOAT
+    df_cold: PvpropertyInteger = pvproperty(
+        value=0, name="DF_COLD", dtype=ChannelType.LONG
     )
     step_temp: PvpropertyFloat = pvproperty(
         value=35.0,
@@ -239,10 +255,14 @@ class CavityPVGroup(PVGroup):
         name="FSCAN:SEL",
         value=0,
         dtype=ChannelType.ENUM,
-        enum_strings=("Not Selected", "Selected"),
+        enum_strings=("Not selected", "Selected"),
     )
-    fscan_res_8pi9 = pvproperty(name="FSCAN:8PI9MODE", value=-800000)
-    fscan_res_7pi9 = pvproperty(name="FSCAN:7PI9MODE", value=-900000)
+    fscan_res_8pi9 = pvproperty(
+        name="FSCAN:8PI9MODE", value=-800000.0, dtype=ChannelType.DOUBLE
+    )
+    fscan_res_7pi9 = pvproperty(
+        name="FSCAN:7PI9MODE", value=-900000.0, dtype=ChannelType.DOUBLE
+    )
     fscan_push_8pi9 = pvproperty(name="FSCAN:PUSH_8PI9.PROC", value=0)
     fscan_push_7pi9 = pvproperty(name="FSCAN:PUSH_7PI9.PROC", value=0)
     chirp_start: PvpropertyInteger = pvproperty(
@@ -264,7 +284,9 @@ class CavityPVGroup(PVGroup):
         await self.scale_new.write(15.0 if self.is_hl else 30.0)
         await self.current_cav_scale.write(15.0 if self.is_hl else 30.0)
 
-    scale_new = pvproperty(name="CAV:CAL_SCALEB_NEW", value=30)
+    scale_new = pvproperty(
+        name="CAV:CAL_SCALEB_NEW", value=30.0, dtype=ChannelType.DOUBLE
+    )
     quench_bypass: PvpropertyEnum = pvproperty(
         name="QUENCH_BYP",
         value=0,
@@ -283,8 +305,13 @@ class CavityPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=("Ok", "Fault"),
     )
-    probe_cal_start: PvpropertyInteger = pvproperty(
-        name="PROBECALSTRT", value=0
+    # Command PVs are two-state enums with blank labels on production, so a
+    # putter can't tell a 0 from a 1: any put starts the run.
+    probe_cal_start: PvpropertyEnum = pvproperty(
+        name="PROBECALSTRT",
+        value=0,
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
     )
     probe_cal_stat: PvpropertyEnum = pvproperty(
         name="PROBECALSTS",
@@ -344,8 +371,10 @@ class CavityPVGroup(PVGroup):
     # ACCL:L0B:0110:PULSE_STATUS on cpu-l0b-rf01, 2026-10-13): Awaiting
     # request, Pulse request, Pulsing on, Stop request, Pulsing off. It read
     # Pulsing off at the time, so the sim starts there.
-    pulse_on_time: PvpropertyInteger = pvproperty(
-        value=NOMINAL_PULSED_ONTIME, name="PULSE_ONTIME", dtype=ChannelType.INT
+    pulse_on_time: PvpropertyDouble = pvproperty(
+        value=float(NOMINAL_PULSED_ONTIME),
+        name="PULSE_ONTIME",
+        dtype=ChannelType.DOUBLE,
     )
     pulse_status: PvpropertyEnum = pvproperty(
         value="Pulsing off",
@@ -359,8 +388,8 @@ class CavityPVGroup(PVGroup):
             "Pulsing off",
         ),
     )
-    pulse_go: PvpropertyInteger = pvproperty(
-        value=0, name="PULSE_DIFF_SUM", dtype=ChannelType.INT
+    pulse_go: PvpropertyDouble = pvproperty(
+        value=0.0, name="PULSE_DIFF_SUM", dtype=ChannelType.DOUBLE
     )
 
     @pulse_go.putter
@@ -370,11 +399,11 @@ class CavityPVGroup(PVGroup):
             await self.pulse_status.write("Pulsing on")
         return 0
 
-    data_decim_a: PvpropertyInteger = pvproperty(
-        value=255, name="ACQ_DECIM_SEL.A", dtype=ChannelType.INT
+    data_decim_a: PvpropertyDouble = pvproperty(
+        value=255.0, name="ACQ_DECIM_SEL.A", dtype=ChannelType.DOUBLE
     )
-    data_decim_c: PvpropertyInteger = pvproperty(
-        value=255, name="ACQ_DECIM_SEL.C", dtype=ChannelType.INT
+    data_decim_c: PvpropertyDouble = pvproperty(
+        value=255.0, name="ACQ_DECIM_SEL.C", dtype=ChannelType.DOUBLE
     )
 
     calc_probe_q: PvpropertyInteger = pvproperty(
@@ -397,44 +426,45 @@ class CavityPVGroup(PVGroup):
     )
 
     # RF waveforms. Nothing in this repo reads them; served as zeros, same
-    # length as CAV:FLTAWF below.
+    # length as CAV:FLTAWF below. WAVEFORM_POINTS is 16384, the length on
+    # lcls-srv01 (2026-10-14).
     cav_awf = pvproperty(
-        value=np.zeros(2048, dtype=np.float64),
+        value=np.zeros(WAVEFORM_POINTS, dtype=np.float64),
         name="CAV:AWF",
         dtype=ChannelType.DOUBLE,
-        max_length=2048,
+        max_length=WAVEFORM_POINTS,
         read_only=True,
     )
     fwd_awf = pvproperty(
-        value=np.zeros(2048, dtype=np.float64),
+        value=np.zeros(WAVEFORM_POINTS, dtype=np.float64),
         name="FWD:AWF",
         dtype=ChannelType.DOUBLE,
-        max_length=2048,
+        max_length=WAVEFORM_POINTS,
         read_only=True,
     )
     rev_awf = pvproperty(
-        value=np.zeros(2048, dtype=np.float64),
+        value=np.zeros(WAVEFORM_POINTS, dtype=np.float64),
         name="REV:AWF",
         dtype=ChannelType.DOUBLE,
-        max_length=2048,
+        max_length=WAVEFORM_POINTS,
         read_only=True,
     )
 
     # Fault waveforms
     fltawf = pvproperty(
-        value=np.zeros(2048, dtype=np.float64),
+        value=np.zeros(WAVEFORM_POINTS, dtype=np.float64),
         name="CAV:FLTAWF",
         dtype=ChannelType.DOUBLE,
-        max_length=2048,
+        max_length=WAVEFORM_POINTS,
         read_only=True,
         doc="Fault amplitude waveform (exponential decay during quench)",
     )
 
     flttwf = pvproperty(
-        value=np.zeros(2048, dtype=np.float64),
+        value=np.zeros(WAVEFORM_POINTS, dtype=np.float64),
         name="CAV:FLTTWF",
         dtype=ChannelType.DOUBLE,
-        max_length=2048,
+        max_length=WAVEFORM_POINTS,
         read_only=True,
         doc="Fault time waveform (relative to quench event, t=0)",
     )
@@ -603,7 +633,7 @@ class CavityPVGroup(PVGroup):
 
         self.log.info(
             f"Waveforms written: {len(amplitude_wf)} points, "
-            f"A0={amplitude_wf[512]:.3f} MV"
+            f"A0={amplitude_wf[WAVEFORM_POINTS // 4]:.3f} MV"
         )
 
     def _generate_decay_waveform(
@@ -617,8 +647,8 @@ class CavityPVGroup(PVGroup):
         Returns:
             Tuple of (time_array_in_seconds, amplitude_array)
         """
-        total_points = 2048
-        pre_quench_points = 512  # 25% before quench
+        total_points = WAVEFORM_POINTS
+        pre_quench_points = WAVEFORM_POINTS // 4  # 25% before quench
         post_quench_points = total_points - pre_quench_points
 
         # Time in SECONDS (not microseconds)
@@ -671,8 +701,6 @@ class CavityPVGroup(PVGroup):
         Running, and finishes the run in a task, so the put returns at once
         and clients can poll the status meanwhile.
         """
-        if value != 1:
-            return None
         if (
             self._characterization_task is not None
             and not self._characterization_task.done()
