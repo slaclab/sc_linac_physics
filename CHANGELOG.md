@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.47.3 (2026-10-15)
+
+### Bug Fixes
+
+- **epics**: Never re-send a put that already went out
+  ([#349](https://github.com/slaclab/sc_linac_physics/pull/349),
+  [`3f9eff9`](https://github.com/slaclab/sc_linac_physics/commit/3f9eff979ee438daea24f862e4898c1179cf35ab))
+
+
 ## v9.47.2 (2026-10-15)
 
 ### Bug Fixes
