@@ -134,3 +134,32 @@ def test_empty_window_and_no_pvs(store):
 def test_repeated_pvs_returned_once(store):
     result = mock_values_over_time_range([AMP, AMP], START, END, store=store)
     assert list(result) == [AMP]
+
+
+def test_saved_override_of_a_shipped_rule_survives_reload(tmp_path):
+    saved = tmp_path / "saved.yaml"
+    store = ProfileStore(user_file=tmp_path / "none.yaml")
+    store.set_override(AMP, base=5.0)  # *AACTMEAN* ships with base 16.5
+    store.save_overrides(saved)
+
+    reloaded = ProfileStore(user_file=saved)
+    assert reloaded.resolve(AMP, "FLOAT").base == 5.0
+
+
+def test_overlapping_saved_overrides_still_merge(tmp_path):
+    saved = tmp_path / "saved.yaml"
+    store = ProfileStore(user_file=tmp_path / "none.yaml")
+    store.set_override("ACCL:*", base=1.0, noise=0.0)
+    store.set_override(AMP, base=2.0)
+    store.save_overrides(saved)
+
+    profile = ProfileStore(user_file=saved).resolve(AMP, "FLOAT")
+    assert (profile.base, profile.noise) == (2.0, 0.0)  # later wins, both apply
+
+
+def test_user_rule_wins_over_shipped_rule(tmp_path):
+    user = tmp_path / "mine.yaml"
+    user.write_text(
+        'rules:\n  - match: "*AACTMEAN*"\n    profile: {base: 9.0}\n'
+    )
+    assert ProfileStore(user_file=user).resolve(AMP, "FLOAT").base == 9.0

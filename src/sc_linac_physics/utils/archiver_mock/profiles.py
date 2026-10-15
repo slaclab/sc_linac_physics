@@ -2,10 +2,13 @@
 
 A PV's profile is built from, lowest precedence first:
 
-1. ``defaults`` in the shipped defaults.yaml, by the PV's kind
-2. the first matching ``rules`` entry, from defaults.yaml or a user file
-   ($SC_ARCHIVER_PROFILE, else ~/.config/sc_linac/mock_archiver.yaml)
-3. runtime overrides set with ProfileStore.set_override
+1. ``defaults``, by the PV's kind
+2. the first matching ``rules`` entry; a user file's rules are checked
+   before the shipped ones
+3. ``overrides``, every match applied in order: set at runtime with
+   ProfileStore.set_override, or loaded from a file save_overrides wrote
+
+The user file is $SC_ARCHIVER_PROFILE, else ~/.config/sc_linac/mock_archiver.yaml.
 
 Ported from #280 (Sandy Paez Olivarez).
 """
@@ -62,21 +65,29 @@ class ProfileStore:
         self._rules: List[Tuple[str, dict]] = []
         self._kind_defaults: Dict[str, dict] = {}
         self._overrides: Dict[str, dict] = {}
-        self._ingest(_read_yaml(DEFAULTS_PATH))
+        self._ingest(_read_yaml(DEFAULTS_PATH), user=False)
         path = user_file or os.getenv(USER_PROFILE_ENV) or USER_PROFILE_PATH
         if Path(path).exists():
             self.load_user_file(path)
 
     def load_user_file(self, path) -> None:
-        """Add a YAML file's rules after the shipped ones, and its kind
-        defaults over the shipped ones."""
-        self._ingest(_read_yaml(Path(path)))
+        """Load a YAML file's rules (checked before the shipped ones), kind
+        defaults (over the shipped ones) and overrides."""
+        self._ingest(_read_yaml(Path(path)), user=True)
 
-    def _ingest(self, data: dict) -> None:
-        for rule in data.get("rules") or []:
-            self._rules.append((rule["match"], rule.get("profile") or {}))
+    def _ingest(self, data: dict, user: bool) -> None:
+        rules = [
+            (r["match"], r.get("profile") or {})
+            for r in data.get("rules") or []
+        ]
+        # First match wins, so a user's rule must come before a shipped one
+        self._rules = rules + self._rules if user else self._rules + rules
         for kind, fields in (data.get("defaults") or {}).items():
             self._kind_defaults.setdefault(kind, {}).update(fields or {})
+        for override in data.get("overrides") or []:
+            self.set_override(
+                override["match"], **(override.get("profile") or {})
+            )
 
     def set_override(self, pv_or_glob: str, **fields) -> None:
         self._overrides.setdefault(pv_or_glob, {}).update(fields)
@@ -88,9 +99,17 @@ class ProfileStore:
         self._overrides.clear()
 
     def save_overrides(self, path) -> None:
-        """Write the current overrides as a user file other people can load."""
-        rules = [{"match": k, "profile": v} for k, v in self._overrides.items()]
-        Path(path).write_text(yaml.safe_dump({"rules": rules}, sort_keys=False))
+        """Write the current overrides as a user file other people can load.
+
+        They load back as overrides, in the same order, so they keep their
+        precedence over rules and still merge where patterns overlap.
+        """
+        overrides = [
+            {"match": k, "profile": v} for k, v in self._overrides.items()
+        ]
+        Path(path).write_text(
+            yaml.safe_dump({"overrides": overrides}, sort_keys=False)
+        )
 
     def resolve(self, pv: str, kind: str) -> PVProfile:
         """The effective profile for a PV whose kind is already known."""
