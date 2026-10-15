@@ -6,7 +6,7 @@ refuses to go on.
 """
 
 import time
-from unittest.mock import Mock
+from unittest.mock import Mock, PropertyMock
 
 import pytest
 
@@ -289,3 +289,33 @@ def test_dry_run_reads_and_writes_nothing(mock_cavity, record, step):
     assert phase.execute_step(step).result == PhaseResult.SUCCESS
     mock_cavity.piezo.withrf_run_check_pv_obj.put.assert_not_called()
     mock_cavity.piezo.withrf_check_status_pv_obj.get.assert_not_called()
+
+
+def test_wait_resumes_after_running_on_retry(phase, mock_cavity):
+    """A read error after Running was seen retries the wait for the finish."""
+    status = mock_cavity.piezo.withrf_check_status_pv_obj.get
+    status.side_effect = [RUNNING, Exception("CA timeout")]
+    assert phase.execute_step("wait_for_completion").result == PhaseResult.RETRY
+    status.side_effect = [COMPLETE]
+    assert (
+        phase.execute_step("wait_for_completion").result == PhaseResult.SUCCESS
+    )
+
+
+def test_check_detune_read_error_retries(phase, mock_cavity):
+    type(mock_cavity).detune = PropertyMock(side_effect=RuntimeError("CA"))
+    assert phase.execute_step("check_detune").result == PhaseResult.RETRY
+
+
+def test_start_test_put_error_retries(phase, mock_cavity):
+    mock_cavity.piezo.withrf_run_check_pv_obj.put.side_effect = RuntimeError(
+        "CA"
+    )
+    assert phase.execute_step("start_test").result == PhaseResult.RETRY
+
+
+def test_wait_first_read_error_retries(phase, mock_cavity):
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.side_effect = RuntimeError(
+        "CA"
+    )
+    assert phase.execute_step("wait_for_completion").result == PhaseResult.RETRY

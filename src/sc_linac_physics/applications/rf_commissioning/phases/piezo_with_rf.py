@@ -65,6 +65,10 @@ class PiezoWithRFPhase(PhaseBase):
         super().__init__(context)
         self.limits = limits or PiezoWithRFLimits()
         self.cavity = None
+        # True once wait_for_completion has seen this run reach Running. A
+        # retry after a read error then resumes the wait for it to finish,
+        # rather than waiting for Running again.
+        self._test_seen_running = False
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -275,6 +279,7 @@ class PiezoWithRFPhase(PhaseBase):
                 return self._failed(
                     "A with-RF test is already running (RFTESTSTS = Running)"
                 )
+            self._test_seen_running = False
             piezo.withrf_run_check_pv_obj.put(1)
         except Exception as exc:
             return self._retry(f"Could not start the with-RF test: {exc}")
@@ -286,26 +291,36 @@ class PiezoWithRFPhase(PhaseBase):
         """Wait for RFTESTSTS to read Running, then to stop reading Running.
 
         Polls every poll_interval and calls cavity.check_abort() on every
-        poll. Seeing Running first is what tells this run from the last one:
-        RFTESTSTS holds its last value (Complete or Crash) until the script
-        starts, and the IOC has no timestamp for the with-RF run.
+        poll. Seeing Running first is how this step tells this run from the
+        last one. CHECK: does RFTESTSTS hold its last value (Complete or
+        Crash) until the script starts, and does the IOC timestamp the
+        with-RF run anywhere? If it does, compare that timestamp instead, as
+        cavity char does with PROBECALTS.
 
         If the script runs start to finish inside one poll_interval, Running
         is never seen and this step fails rather than pass a stale result.
         Crash ends the wait; read_results fails on it.
+
+        A RETRY after a read error resumes after Running was seen, so the
+        retry waits only for the test to finish. Without this, a script that
+        finished while the read was failing would never show Running again,
+        and the retry would fail a test that passed.
         """
         if self.context.dry_run:
             return self._dry_run_result("test completion")
         running = linac_utils.PIEZO_SCRIPT_RUNNING_VALUE
         try:
-            if not self._poll_until(
-                lambda s: s == running, self.limits.start_timeout_seconds
-            ):
-                return self._failed(
-                    "RFTESTSTS never read Running within "
-                    f"{self.limits.start_timeout_seconds:.0f} s of RFTESTSTRT "
-                    "— the test did not start, or finished between polls"
-                )
+            if not self._test_seen_running:
+                if not self._poll_until(
+                    lambda s: s == running, self.limits.start_timeout_seconds
+                ):
+                    return self._failed(
+                        "RFTESTSTS never read Running within "
+                        f"{self.limits.start_timeout_seconds:.0f} s of "
+                        "RFTESTSTRT — the test did not start, or finished "
+                        "between polls"
+                    )
+                self._test_seen_running = True
             if not self._poll_until(
                 lambda s: s != running, self.limits.test_timeout_seconds
             ):
