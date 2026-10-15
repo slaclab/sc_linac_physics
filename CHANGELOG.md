@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.47.1 (2026-10-15)
+
+### Bug Fixes
+
+- **sim**: Serve production types and enum states for SSA, rack, cryo and system PVs
+  ([#399](https://github.com/slaclab/sc_linac_physics/pull/399),
+  [`b8bb662`](https://github.com/slaclab/sc_linac_physics/commit/b8bb66242917db815cb4636cc7e3099096ea3319))
+
+
 ## v9.47.0 (2026-10-15)
 
 ### Bug Fixes
