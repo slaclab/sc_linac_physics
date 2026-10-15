@@ -401,14 +401,30 @@ def _csv_chunk(
         return None
     if not response.content.strip():
         return None, None
+    try:
+        return _parse_csv_chunk(response.content, last)
+    except (ValueError, TypeError) as e:
+        # A 200 that isn't this CSV, like a proxy's HTML page: the same
+        # contract as _json. pandas' ParserError is a ValueError.
+        raise ArchiverError(
+            f"getData.csv: response is not the expected CSV: {e}"
+        ) from e
+
+
+def _parse_csv_chunk(content: bytes, last) -> tuple:
     # Columns secs, val, severity, status, nanos, with no header (checked
     # on site). round_trip: the default parser can be a bit off.
     raw = pd.read_csv(
-        io.BytesIO(response.content),
+        io.BytesIO(content),
         header=None,
         names=["secs", "value", "severity", "status", "nanos"],
         float_precision="round_trip",
     )
+    # Check before any arithmetic: on a text column, raw["secs"] * 10**9
+    # repeats the string a billion times. A proxy's HTML page parses that way.
+    columns = ["secs", "value", "severity", "status", "nanos"]
+    if not all(pd.api.types.is_numeric_dtype(raw[c]) for c in columns):
+        raise ValueError(f"non-numeric columns: {dict(raw.dtypes.astype(str))}")
     if last is not None:
         secs, nanos = last
         raw = raw[

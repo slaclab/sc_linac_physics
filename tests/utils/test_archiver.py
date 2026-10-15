@@ -798,6 +798,25 @@ class TestCsv:
         assert self._urls(session) == ["getData.json", "getData.csv"]
         assert list(frame["value"]) == [1.5]
 
+    @pytest.mark.parametrize(
+        "body",
+        [
+            b"<html><body>Proxy login</body></html>\n",
+            b"secs,val\nnot,numbers\n",
+            b"1,2\n3,4,5,6,7,8,9\n",  # pandas ParserError, a ValueError
+        ],
+    )
+    def test_csv_that_isnt_csv_raises_archiver_error(self, session, body):
+        page = _response()
+        page.content = body
+        session.request.side_effect = [
+            _response(payload=[{"data": _counts(5, 5, 5)}]),
+            page,
+        ]
+
+        with pytest.raises(ArchiverError, match="A:PV.*getData.csv"):
+            get_values_over_time_range(["A:PV"], START, self.LONG_END)
+
     def test_string_pv_chunks_stay_json(self, session):
         session.request.side_effect = [
             _response(payload=[{"data": []}]),
