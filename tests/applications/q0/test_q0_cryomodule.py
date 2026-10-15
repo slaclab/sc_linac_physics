@@ -283,6 +283,8 @@ def _add_real_methods_to_mock_class(mock_class):
         "_clear_monitor",
         "select_jt_auto",
         "cryo_access_granted",
+        "_attempt_each",
+        "_select_heater_sequencer",
     ]
 
     for method_name in methods_to_copy:
@@ -2654,3 +2656,72 @@ class TestPVHelpers:
         pyepics_shim.caput.assert_called_once_with(
             fast_q0_cryo.jt_auto_select_pv, 1, wait=True
         )
+
+
+class TestCleanupAttemptsEveryStep:
+    """A failed cryo write must not skip later cleanup or abort flags."""
+
+    @staticmethod
+    def _fail_jt_auto(pv_name, *args, **kwargs):
+        from sc_linac_physics.utils.epics import PVPutError
+
+        if pv_name.endswith("AUTO"):
+            raise PVPutError("JT AUTO")
+
+    def test_shut_off_turns_rf_off_after_failed_cryo_write(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from sc_linac_physics.utils.epics import PVPutError
+        from tests.applications.q0 import pyepics_shim
+
+        cavity = Mock()
+        fast_q0_cryo.cavities = {1: cavity}
+        pyepics_shim.caput.side_effect = self._fail_jt_auto
+
+        with patch("builtins.print"), pytest.raises(PVPutError):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        cavity.turn_off.assert_called_once()
+        cavity.ssa.turn_off.assert_called_once()
+
+    def test_shut_off_continues_after_a_cavity_fails(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+
+        first, second = Mock(), Mock()
+        first.turn_off.side_effect = RuntimeError("cav 1")
+        fast_q0_cryo.cavities = {1: first, 2: second}
+
+        with patch("builtins.print"), pytest.raises(RuntimeError, match="1"):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        first.ssa.turn_off.assert_called_once()
+        second.turn_off.assert_called_once()
+        second.ssa.turn_off.assert_called_once()
+
+    def test_restore_cryo_writes_sequencer_after_failed_jt(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from sc_linac_physics.utils.epics import PVPutError
+        from tests.applications.q0 import pyepics_shim
+
+        pyepics_shim.caput.side_effect = self._fail_jt_auto
+
+        with patch("builtins.print"), pytest.raises(PVPutError):
+            Q0Cryomodule.restore_cryo(fast_q0_cryo)
+
+        pyepics_shim.caput.assert_any_call(
+            fast_q0_cryo.heater_sequencer_pv, 1, wait=True
+        )
+
+    def test_check_abort_flags_cavities_when_restore_fails(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from sc_linac_physics.utils.epics import PVPutError
+
+        cavity = Mock(abort_flag=False)
+        fast_q0_cryo.cavities = {1: cavity}
+        fast_q0_cryo.abort_flag = True
+        fast_q0_cryo.restore_cryo = Mock(side_effect=PVPutError("JT AUTO"))
+
+        with pytest.raises(PVPutError):
+            Q0Cryomodule.check_abort(fast_q0_cryo)
+
+        assert cavity.abort_flag is True
+        assert fast_q0_cryo.abort_flag is False

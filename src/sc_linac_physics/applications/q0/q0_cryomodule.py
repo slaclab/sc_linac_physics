@@ -78,9 +78,10 @@ class Q0Cryomodule(Cryomodule):
     def check_abort(self):
         if self.abort_flag:
             self.abort_flag = False
-            self.restore_cryo()
+            # Flag the cavities first, so a failed cryo restore can't skip it.
             for cavity in self.cavities.values():
                 cavity.abort_flag = True
+            self.restore_cryo()
             raise q0_utils.Q0AbortError(f"Abort requested for {self}")
 
     @property
@@ -176,14 +177,41 @@ class Q0Cryomodule(Cryomodule):
 
         return self._calib_idx_file
 
-    def shut_off(self):
-        print("Restoring cryo")
+    def _attempt_each(self, steps) -> None:
+        """Run every (description, step), even after one raises.
+
+        Then raise the first failure. Used for cleanup: the old caput calls
+        failed silently, so the steps after a failed write still ran.
+        """
+        first_error = None
+        for description, step in steps:
+            try:
+                step()
+            except Exception as e:
+                print(f"{self}: {description} failed: {e}")
+                if first_error is None:
+                    first_error = e
+        if first_error is not None:
+            raise first_error
+
+    def _select_heater_sequencer(self) -> None:
+        """Hand the heaters back to the sequencer (SEQUENCER=1, waited)."""
         self._pv(self.heater_sequencer_pv).put(1, wait=True)
-        self._pv(self.jt_auto_select_pv).put(1, wait=True)
-        print("Turning cavities and SSAs off")
+
+    def shut_off(self):
+        """Restore cryo, then turn every cavity and SSA off.
+
+        Each step is attempted even if an earlier one fails.
+        """
+        print("Restoring cryo, turning cavities and SSAs off")
+        steps = [
+            ("heater SEQUENCER", self._select_heater_sequencer),
+            ("JT AUTO", self.select_jt_auto),
+        ]
         for cavity in self.cavities.values():
-            cavity.turn_off()
-            cavity.ssa.turn_off()
+            steps.append((f"{cavity} turn_off", cavity.turn_off))
+            steps.append((f"{cavity} SSA turn_off", cavity.ssa.turn_off))
+        self._attempt_each(steps)
 
     @property
     def heater_power(self):
@@ -508,10 +536,22 @@ class Q0Cryomodule(Cryomodule):
         self._clear_monitor(self.ds_level_pv)
 
     def restore_cryo(self):
+        """JT AUTO, ds_liquid_level = 92, heater SEQUENCER, in that order.
+
+        Each step is attempted even if an earlier one fails.
+        """
         print("Restoring initial cryo conditions")
-        self._pv(self.jt_auto_select_pv).put(1, wait=True)
-        self.ds_liquid_level = 92
-        self._pv(self.heater_sequencer_pv).put(1, wait=True)
+
+        def set_ds_level_92():
+            self.ds_liquid_level = 92
+
+        self._attempt_each(
+            [
+                ("JT AUTO", self.select_jt_auto),
+                ("ds_liquid_level = 92", set_ds_level_92),
+                ("heater SEQUENCER", self._select_heater_sequencer),
+            ]
+        )
 
     def setup_cryo_for_measurement(
         self, desired_ll, turn_cavities_off: bool = True

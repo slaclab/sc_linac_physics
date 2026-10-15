@@ -581,7 +581,10 @@ class Q0GUI(Display):
                     "Q0 Measurement Error", msg
                 )
             )
-            self.q0_meas_worker.error.connect(self.selected_cm.shut_off)
+            cm = self.selected_cm
+            self.q0_meas_worker.error.connect(
+                lambda _msg: self._shut_off_after_error(cm)
+            )
             self.q0_meas_worker.status.connect(self.handle_rf_status)
             self.q0_meas_worker.finished.connect(self.handle_rf_status)
             self.q0_meas_worker.finished.connect(self._clear_q0_meas_worker)
@@ -594,6 +597,18 @@ class Q0GUI(Display):
     def _clear_ramp_worker(self, cav_num):
         """Clear ramp worker reference."""
         self.q0_ramp_workers[cav_num] = None
+
+    def _shut_off_after_error(self, cm):
+        """Run cm.shut_off() after a failed Q0 measurement.
+
+        A failure is shown in a popup rather than raised out of the slot.
+        """
+        try:
+            cm.shut_off()
+        except Exception as e:
+            make_non_blocking_error_popup(
+                "Q0 Shutdown Error", f"{cm} shut_off failed: {e}"
+            )
 
     def _clear_q0_meas_worker(self, *_):
         """Clear Q0 measurement worker reference."""
