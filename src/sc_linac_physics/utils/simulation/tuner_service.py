@@ -6,6 +6,7 @@ from caproto import ChannelType
 from caproto.server import (
     PVGroup,
     pvproperty,
+    PvpropertyDouble,
     PvpropertyInteger,
     PvpropertyBoolEnum,
     PvpropertyEnum,
@@ -56,16 +57,44 @@ def _enum_to_int(value, enum_strings):
 
 
 class StepperPVGroup(PVGroup):
-    move_pos = pvproperty(name="MOV_REQ_POS")
-    move_neg = pvproperty(name="MOV_REQ_NEG")
-    abort = pvproperty(name="ABORT_REQ")
+    # The command PVs (MOV_REQ_*, ABORT_REQ, TOT*_RESET) are two-state enums
+    # with blank labels on lcls-srv01 (2026-10-14). A putter can't tell a 0
+    # from a 1, so any put counts as a request.
+    move_pos = pvproperty(
+        value=0,
+        name="MOV_REQ_POS",
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
+    )
+    move_neg = pvproperty(
+        value=0,
+        name="MOV_REQ_NEG",
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
+    )
+    abort = pvproperty(
+        value=0,
+        name="ABORT_REQ",
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
+    )
     step_des: PvpropertyInteger = pvproperty(value=0, name="NSTEPS")
     max_steps = pvproperty(name="NSTEPS.DRVH")
     speed: PvpropertyInteger = pvproperty(value=20000, name="VELO")
     step_tot: PvpropertyInteger = pvproperty(value=0, name="REG_TOTABS")
     step_signed: PvpropertyInteger = pvproperty(value=0, name="REG_TOTSGN")
-    reset_tot = pvproperty(name="TOTABS_RESET")
-    reset_signed = pvproperty(name="TOTSGN_RESET")
+    reset_tot = pvproperty(
+        value=0,
+        name="TOTABS_RESET",
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
+    )
+    reset_signed = pvproperty(
+        value=0,
+        name="TOTSGN_RESET",
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
+    )
     steps_cold_landing = pvproperty(name="NSTEPS_COLD")
     nsteps_park = pvproperty(name="NSTEPS_PARK", value=5000000)
     push_signed_cold = pvproperty(name="PUSH_NSTEPS_COLD.PROC")
@@ -73,32 +102,29 @@ class StepperPVGroup(PVGroup):
     motor_moving: PvpropertyBoolEnum = pvproperty(
         value=0,
         name="STAT_MOV",
-        enum_strings=("Not Moving", "Moving"),
+        enum_strings=("Not moving", "Moving"),
         dtype=ChannelType.ENUM,
     )
     motor_done: PvpropertyBoolEnum = pvproperty(
         value=1,
         name="STAT_DONE",
-        enum_strings=("Not Done", "Done"),
+        enum_strings=("Not done", "Done"),
         dtype=ChannelType.ENUM,
     )
     hardware_sum = pvproperty(
-        value=0,
-        name="HWSTATSUM",
-        dtype=ChannelType.ENUM,
-        enum_strings=("", "", "Fault"),
+        value=0.0, name="HWSTATSUM", dtype=ChannelType.DOUBLE
     )
     limit_switch_a = pvproperty(
         value=0,
         name="STAT_LIMA",
         dtype=ChannelType.ENUM,
-        enum_strings=("not at limit", "at limit"),
+        enum_strings=("Not at limit", "At limit"),
     )
     limit_switch_b = pvproperty(
         value=0,
         name="STAT_LIMB",
         dtype=ChannelType.ENUM,
-        enum_strings=("not at limit", "at limit"),
+        enum_strings=("Not at limit", "At limit"),
     )
     hz_per_microstep = pvproperty(
         value=1 / ESTIMATED_MICROSTEPS_PER_HZ,
@@ -158,6 +184,8 @@ class StepperPVGroup(PVGroup):
         self.cavity_group: CavityPVGroup = cavity_group
         self.piezo_group: PiezoPVGroup = piezo_group
         self._move_task: asyncio.Task | None = None
+        # Set by any put to ABORT_REQ, cleared when move() has stopped.
+        self._abort_requested = False
         # Held from the moving check until the task exists. MOVE_POS and
         # MOVE_NEG are separate PVs, and the MOTOR_MOVING write in between
         # yields, so without it opposing moves could both start.
@@ -177,12 +205,17 @@ class StepperPVGroup(PVGroup):
     @reset_tot.putter
     async def reset_tot(self, instance, value):
         await self.step_tot.write(0)
-        return value
+        return 0
 
     @reset_signed.putter
     async def reset_signed(self, instance, value):
         await self.step_signed.write(0)
-        return value
+        return 0
+
+    @abort.putter
+    async def abort(self, instance, value):
+        self._abort_requested = True
+        return 0
 
     def _hz_per_microstep_now(self) -> float:
         """Hz of detune per microstep, taken from the SCALE PV.
@@ -211,7 +244,7 @@ class StepperPVGroup(PVGroup):
 
         while (
             self.step_des.value - steps >= self.speed.value
-            and self.abort.value != 1
+            and not self._abort_requested
         ):
             await self.step_tot.write(self.step_tot.value + self.speed.value)
             await self.step_signed.write(self.step_signed.value + step_change)
@@ -227,9 +260,9 @@ class StepperPVGroup(PVGroup):
             await self.cavity_group.detune_chirp.write(new_detune)
             await sleep(1)
 
-        if self.abort.value == 1:
-            await self.motor_moving.write("Not Moving")
-            await self.abort.write(0)
+        if self._abort_requested:
+            await self.motor_moving.write("Not moving")
+            self._abort_requested = False
             return
 
         remainder = self.step_des.value - steps
@@ -258,7 +291,7 @@ class StepperPVGroup(PVGroup):
         await self.cavity_group.detune_rfs.write(new_detune)
         await self.cavity_group.detune_chirp.write(new_detune)
 
-        await self.motor_moving.write("Not Moving")
+        await self.motor_moving.write("Not moving")
         await self.motor_done.write("Done")
 
     async def _start_move(self, move_sign_des: int):
@@ -284,12 +317,12 @@ class StepperPVGroup(PVGroup):
     @move_neg.putter
     async def move_neg(self, instance, value):
         await self._start_move(-1)
-        return value
+        return 0
 
     @move_pos.putter
     async def move_pos(self, instance, value):
         await self._start_move(1)
-        return value
+        return 0
 
 
 class PiezoPVGroup(PVGroup):
@@ -316,7 +349,7 @@ class PiezoPVGroup(PVGroup):
         name="ENABLESTAT",
         dtype=ChannelType.ENUM,
         value=0,
-        enum_strings=("Disabled", "Enabled"),
+        enum_strings=("Not enabled", "Enabled"),
     )
     feedback_mode = pvproperty(
         value=1,
@@ -328,14 +361,19 @@ class PiezoPVGroup(PVGroup):
         name="MODESTAT",
         value=1,
         dtype=ChannelType.ENUM,
-        enum_strings=("Manual", "Feedback"),
+        enum_strings=("Manual", "Feedback", "Chirp", "Unknown"),
     )
     dc_setpoint = pvproperty(name="DAC_SP", value=0.0, dtype=ChannelType.FLOAT)
     bias_voltage = pvproperty(name="BIAS", value=0.0, dtype=ChannelType.FLOAT)
 
     # Pre-RF Test PVs. Production has no "Not Tested" state, so a fresh or
     # reset channel reads Fail (2) until a test passes it.
-    prerf_test_start = pvproperty(name="TESTSTRT", value=0)
+    prerf_test_start = pvproperty(
+        name="TESTSTRT",
+        value=0,
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
+    )
     prerf_cha_status = pvproperty(
         name="CHA_TESTSTAT",
         dtype=ChannelType.ENUM,
@@ -371,12 +409,18 @@ class PiezoPVGroup(PVGroup):
     )
 
     # With-RF Test PVs
-    withrf_run_check = pvproperty(name="RFTESTSTRT", value=0)
+    withrf_run_check = pvproperty(
+        name="RFTESTSTRT",
+        value=0,
+        dtype=ChannelType.ENUM,
+        enum_strings=("", ""),
+    )
+    # Production's index 0 is Crash, so a fresh sim idles at Complete.
     withrf_check_status: PvpropertyEnum = pvproperty(
         name="RFTESTSTS",
         dtype=ChannelType.ENUM,
-        value=0,
-        enum_strings=("Idle", "Complete", "Running"),
+        value=1,
+        enum_strings=("Crash", "Complete", "Running"),
     )
     withrf_status = pvproperty(
         name="RFTESTSTAT",
@@ -398,16 +442,10 @@ class PiezoPVGroup(PVGroup):
 
     # Status PVs
     hardware_sum = pvproperty(
-        value=0,
-        name="HWSTATSUM",
-        dtype=ChannelType.ENUM,
-        enum_strings=("OK", "Minor Fault", "Fault"),
+        value=0.0, name="HWSTATSUM", dtype=ChannelType.DOUBLE
     )
     feedback_sum = pvproperty(
-        value=0,
-        name="FBSTATSUM",
-        dtype=ChannelType.ENUM,
-        enum_strings=("OK", "Minor Fault", "Fault"),
+        value=0.0, name="FBSTATSUM", dtype=ChannelType.DOUBLE
     )
 
     integrator_sp: PvpropertyFloat = pvproperty(
@@ -415,11 +453,11 @@ class PiezoPVGroup(PVGroup):
     )
     integrator_lim_status = SeverityProp(name="INTEG_AT_LIM", value=0)
 
-    voltage: PvpropertyInteger = pvproperty(
-        name="V", value=17, dtype=ChannelType.INT
+    voltage: PvpropertyDouble = pvproperty(
+        name="V", value=17.0, dtype=ChannelType.DOUBLE
     )
-    scale: PvpropertyInteger = pvproperty(
-        name="SCALE", value=20, dtype=ChannelType.INT
+    scale: PvpropertyDouble = pvproperty(
+        name="SCALE", value=20.0, dtype=ChannelType.DOUBLE
     )
 
     def __init__(self, prefix, cavity_group):
@@ -450,16 +488,13 @@ class PiezoPVGroup(PVGroup):
 
     @prerf_test_start.putter
     async def prerf_test_start(self, instance, value):
-        """Simulate pre-RF test execution."""
-        if value == 0:
-            return value
-
+        """Simulate pre-RF test execution. TESTSTRT reads back 0."""
         print("Starting Pre-RF test simulation...")
 
         # Set test status to Running (index 2)
         await self.prerf_test_status.write(2)  # Running
 
-        # Reset previous test results to "Not Tested" (index 2)
+        # Reset previous test results to Fail (index 2)
         await self.prerf_cha_status.write(2)  # Fail until the test passes
         await self.prerf_chb_status.write(2)
         await self.capacitance_a.write(0.0)
@@ -551,7 +586,7 @@ class PiezoPVGroup(PVGroup):
         else:
             print("Pre-RF test complete: FAIL")
 
-        return value
+        return 0
 
     @feedback_mode.putter
     async def feedback_mode(self, instance, value):
@@ -572,10 +607,7 @@ class PiezoPVGroup(PVGroup):
 
     @withrf_run_check.putter
     async def withrf_run_check(self, instance, value):
-        """Simulate with-RF test execution."""
-        if value == 0:
-            return value
-
+        """Simulate with-RF test execution. RFTESTSTRT reads back 0."""
         print("Starting With-RF test simulation...")
         await self.withrf_check_status.write(2)  # Running
         await self.withrf_status.write(0)  # Reset status
@@ -589,4 +621,4 @@ class PiezoPVGroup(PVGroup):
 
         await self.withrf_check_status.write(1)  # Complete
         print("With-RF test complete: PASS")
-        return value
+        return 0
