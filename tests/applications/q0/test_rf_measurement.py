@@ -815,6 +815,7 @@ class TestFitWindow:
     ):
         measurement = setup_complete_measurement()
         calibration_run = q0_utils.HeaterRun(10.0)
+        calibration_run.ll_data = {0.0: 95.0, 1.0: 94.0}
         calibration_run.fit_window = (0.0, 1.0)
         measurement.cryomodule.calibration.heater_runs = [calibration_run]
         with pytest.raises(q0_utils.DataError):
