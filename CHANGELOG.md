@@ -2,6 +2,51 @@
 
 <!-- version list -->
 
+## v9.45.4 (2026-10-15)
+
+### Bug Fixes
+
+- **archiver**: Chunk string PVs from their ncount totals
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Count every window before falling back to one request
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Fetch long windows in chunks planned from sample counts
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Fetch long windows in chunks sized by bytes
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+### Documentation
+
+- **archiver**: Give the archiver client its own page
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Record that waveforms are not archived
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Say why the PV is wrapped in count_3600(...)
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+### Performance Improvements
+
+- **archiver**: Build each chunk's frame as it arrives
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Plan chunks from the archiver's own sample counts
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+
 ## v9.45.3 (2026-10-15)
 
 ### Bug Fixes
