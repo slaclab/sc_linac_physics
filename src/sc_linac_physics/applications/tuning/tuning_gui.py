@@ -1,7 +1,6 @@
 from typing import List
 
 from PyQt5.QtCore import QObject
-from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QComboBox, QCheckBox
 from PyQt5.QtWidgets import (
     QGroupBox,
@@ -23,9 +22,8 @@ from sc_linac_physics.applications.tuning.tune_cavity import TuneCavity
 from sc_linac_physics.applications.tuning.tune_rack import TuneRack
 from sc_linac_physics.applications.tuning.tune_stepper import TuneStepper
 from sc_linac_physics.applications.tuning.tune_utils import TUNE_LOG_DIR
-from sc_linac_physics.displays.plot.embeddable_plots import (
-    EmbeddableArchiverPlot,
-)
+from sc_linac_physics.displays.plot.archiver_plot import ArchiverPlot
+from sc_linac_physics.displays.plot.curve_set import Curve, CurveSet
 from sc_linac_physics.utils.logger import custom_logger
 from sc_linac_physics.utils.qt import CollapsibleGroupBox, make_rainbow
 from sc_linac_physics.utils.sc_linac.linac import Machine
@@ -214,6 +212,35 @@ class CavitySection(QObject):
         dialog.exec_()
 
 
+def rack_detune_curve_set(rack: Rack) -> CurveSet:
+    """Each cavity's `detune_best_pv` (solid) and `df_cold_pv` (dashed).
+
+    Both curves for a cavity share one color, on one "Detune (Hz)" axis.
+    """
+    colors = make_rainbow(len(rack.cavities))
+    curves = []
+    for (r, g, b, _), cavity in zip(colors, rack.cavities.values()):
+        color = (int(r), int(g), int(b))
+        curves.append(
+            Curve(
+                pv=cavity.detune_best_pv,
+                label=f"Cav {cavity.number} Detune",
+                axis="Detune (Hz)",
+                color=color,
+            )
+        )
+        curves.append(
+            Curve(
+                pv=cavity.df_cold_pv,
+                label=f"Cav {cavity.number} Cold",
+                axis="Detune (Hz)",
+                color=color,
+                dashed=True,
+            )
+        )
+    return CurveSet(title=f"{rack} Detunes", curves=curves)
+
+
 class RackScreen(QObject):
 
     def __init__(self, rack: Rack, parent=None):
@@ -224,12 +251,9 @@ class RackScreen(QObject):
         self._parent = parent
 
         # Use the embeddable plot component
-        self.detune_plot = EmbeddableArchiverPlot(
-            title=f"{rack} Detunes", time_span=DEFAULT_TIME_SPAN_SECONDS
+        self.detune_plot = ArchiverPlot(
+            rack_detune_curve_set(rack), time_span=DEFAULT_TIME_SPAN_SECONDS
         )
-
-        # Add detune PVs
-        self._populate_detune_plot()
 
         # Main container
         self.groupbox = QGroupBox(f"{rack}")
@@ -260,33 +284,6 @@ class RackScreen(QObject):
         splitter.setHandleWidth(4)
 
         main_layout.addWidget(splitter)
-
-    def _populate_detune_plot(self):
-        """Populate the detune plot with cavity data."""
-        num_cavities = len(self.rack.cavities)
-        colors = make_rainbow(num_cavities)  # One color per cavity
-
-        for idx, cavity in enumerate(self.rack.cavities.values()):
-            # Convert numpy array to QColor
-            r, g, b, a = colors[idx]
-            cavity_color = QColor(int(r), int(g), int(b), int(a))
-
-            # Detune - solid line
-            self.detune_plot.add_pv(
-                pv_name=cavity.detune_best_pv,
-                label=f"Cav {cavity.number} Detune",
-                axis_name="Detune (Hz)",
-                color=cavity_color,
-            )
-
-            # Cold landing - dashed line, SAME color
-            self.detune_plot.add_pv(
-                pv_name=cavity.df_cold_pv,
-                label=f"Cav {cavity.number} Cold",
-                axis_name="Detune (Hz)",
-                color=cavity_color,
-                line_style=QtCore.Qt.DashLine,
-            )
 
     def on_rack_cold_button_clicked(self):
         """Handle rack cold landing button click - set RF state then trigger start."""
