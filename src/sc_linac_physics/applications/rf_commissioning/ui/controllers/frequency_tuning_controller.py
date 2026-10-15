@@ -595,6 +595,9 @@ class FrequencyTuningController(QObject):
         if self._cavity is not None:
             try:
                 self._cavity.stepper_tuner.abort_flag = False
+                # Cavity.check_abort() reads this one: the SSA calibration in
+                # stage 1 and the chirp setup stop on it.
+                self._cavity.abort_flag = False
             except Exception:
                 pass
         speed_spinbox = getattr(self.view, "speed_spinbox", None)
@@ -1180,6 +1183,9 @@ class FrequencyTuningController(QObject):
         if self._cavity is not None:
             try:
                 self._cavity.stepper_tuner.abort_flag = True
+                # On its next check_abort() the cavity turns RF off and
+                # raises CavityAbortError.
+                self._cavity.abort_flag = True
             except Exception:
                 pass
 
