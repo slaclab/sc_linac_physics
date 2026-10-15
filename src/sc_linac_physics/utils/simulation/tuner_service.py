@@ -32,6 +32,11 @@ def _to_float(value):
         return None
 
 
+# PZT:CHA_TESTSTAT / CHB_TESTSTAT states on production (lcls-srv01,
+# 2026-10-14).
+_CHANNEL_TEST_STATES = ("Pass", "Warning", "Fail")
+
+
 def _enum_to_int(value, enum_strings):
     """Best-effort conversion for caproto enum values to integer index."""
     if isinstance(value, int):
@@ -328,24 +333,21 @@ class PiezoPVGroup(PVGroup):
     dc_setpoint = pvproperty(name="DAC_SP", value=0.0, dtype=ChannelType.FLOAT)
     bias_voltage = pvproperty(name="BIAS", value=0.0, dtype=ChannelType.FLOAT)
 
-    # Pre-RF Test PVs
+    # Pre-RF Test PVs. Production has no "Not Tested" state, so a fresh or
+    # reset channel reads Fail (2) until a test passes it.
     prerf_test_start = pvproperty(name="TESTSTRT", value=0)
     prerf_cha_status = pvproperty(
         name="CHA_TESTSTAT",
         dtype=ChannelType.ENUM,
         value=2,
-        enum_strings=(
-            "Pass",
-            "Fail",
-            "Not Tested",
-        ),
+        enum_strings=_CHANNEL_TEST_STATES,
     )
 
     prerf_chb_status = pvproperty(
         name="CHB_TESTSTAT",
         dtype=ChannelType.ENUM,
         value=2,
-        enum_strings=("Pass", "Fail", "Not Tested"),
+        enum_strings=_CHANNEL_TEST_STATES,
     )
     capacitance_a: PvpropertyFloat = pvproperty(
         name="CHA_C", value=0.0, dtype=ChannelType.FLOAT
@@ -450,8 +452,8 @@ class PiezoPVGroup(PVGroup):
         await self.prerf_test_status.write(2)  # Running
 
         # Reset previous test results to "Not Tested" (index 2)
-        await self.prerf_cha_status.write(2)  # Not Tested
-        await self.prerf_chb_status.write(2)  # Not Tested
+        await self.prerf_cha_status.write(2)  # Fail until the test passes
+        await self.prerf_chb_status.write(2)
         await self.capacitance_a.write(0.0)
         await self.capacitance_b.write(0.0)
 
@@ -470,38 +472,38 @@ class PiezoPVGroup(PVGroup):
             await self.capacitance_b.write(24.8)
 
         elif fail_mode == 1:  # Channel A fails
-            await self.prerf_cha_status.write(1)  # Fail
+            await self.prerf_cha_status.write(2)  # Fail
             await self.prerf_chb_status.write(0)  # Pass
             await self.capacitance_a.write(10.5)
             await self.capacitance_b.write(24.8)
 
         elif fail_mode == 2:  # Channel B fails
             await self.prerf_cha_status.write(0)
-            await self.prerf_chb_status.write(1)
+            await self.prerf_chb_status.write(2)
             await self.capacitance_a.write(25.3)
             await self.capacitance_b.write(5.2)
 
         elif fail_mode == 3:  # Both channels fail
-            await self.prerf_cha_status.write(1)
-            await self.prerf_chb_status.write(1)
+            await self.prerf_cha_status.write(2)
+            await self.prerf_chb_status.write(2)
             await self.capacitance_a.write(0.1)
             await self.capacitance_b.write(0.2)
 
         elif fail_mode == 4:  # High capacitance
-            await self.prerf_cha_status.write(1)
+            await self.prerf_cha_status.write(2)
             await self.prerf_chb_status.write(0)
             await self.capacitance_a.write(45.7)
             await self.capacitance_b.write(24.8)
 
         elif fail_mode == 5:  # Timeout
-            await self.prerf_cha_status.write(1)
-            await self.prerf_chb_status.write(1)
+            await self.prerf_cha_status.write(2)
+            await self.prerf_chb_status.write(2)
             await self.capacitance_a.write(0.0)
             await self.capacitance_b.write(0.0)
 
         else:  # Unknown
-            await self.prerf_cha_status.write(1)
-            await self.prerf_chb_status.write(1)
+            await self.prerf_cha_status.write(2)
+            await self.prerf_chb_status.write(2)
 
         # Set test status to Complete
         await self.prerf_test_status.write(1)  # Complete
