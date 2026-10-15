@@ -847,6 +847,71 @@ class TestBinnedValues:
             archiver._to_utc_iso(self.T0 + step),
         ]
 
+    def _value_windows(self, session, prefix):
+        """(from, to) of each value request sent, in order."""
+        return [
+            (c.kwargs["params"]["from"], c.kwargs["params"]["to"])
+            for c in session.request.call_args_list
+            if c.kwargs["params"]["pv"].startswith(prefix)
+        ]
+
+    def test_requests_are_capped_by_bins_too(self, session, monkeypatch):
+        monkeypatch.setattr(archiver, "BINNED_CHUNK_BINS", 3)
+        session.request.side_effect = self._reply([], [])
+
+        archiver.get_binned_values(
+            ["A:PV"], self.T0, self.T0 + timedelta(hours=7), timedelta(hours=1)
+        )
+
+        windows = self._value_windows(session, "mean_")
+        assert len(windows) == 3  # 3 + 3 + 1 bins
+        assert windows[0][1] == "2024-01-01T03:00:00.000000Z"
+
+    def test_bin_holding_two_planned_chunks_is_refused(self):
+        t0 = self.T0
+        planned = [t0, t0 + timedelta(minutes=10), t0 + timedelta(minutes=20)]
+        planned.append(t0 + timedelta(hours=1))
+
+        with pytest.raises(ValueError, match="A:PV.*smaller bin_size"):
+            archiver._binned_bounds(
+                "A:PV", planned, t0, t0 + timedelta(hours=1), self.STEP
+            )
+
+    def test_count_statistic_sends_one_request_per_chunk(self, session):
+        values = self._bins(self.STEP, 4, 5, start=self.T0)
+        session.request.side_effect = self._reply(values, values)
+
+        frame = archiver.get_binned_values(
+            ["A:PV"],
+            self.T0,
+            self.T0 + timedelta(hours=2),
+            timedelta(hours=1),
+            "count",
+        )["A:PV"]
+
+        # the planner's count_3600, then one count_3600 for the one chunk
+        sent = [
+            c.kwargs["params"]["pv"] for c in session.request.call_args_list
+        ]
+        assert sent.count("count_3600(A:PV)") == 2
+        assert list(frame["value"]) == [4, 5]
+
+    def test_bin_on_a_chunk_edge_is_counted_once(self, session, monkeypatch):
+        monkeypatch.setattr(archiver, "BINNED_CHUNK_BINS", 1)
+        # Both requests send back both bins, as when a sample sits exactly on
+        # the edge between them
+        values = self._bins(self.STEP, 1.0, 2.0, start=self.T0)
+        counts = self._bins(self.STEP, 10, 20, start=self.T0)
+        session.request.side_effect = self._reply(values, counts)
+
+        frame = archiver.get_binned_values(
+            ["A:PV"], self.T0, self.T0 + timedelta(hours=2), timedelta(hours=1)
+        )["A:PV"]
+
+        assert len(self._value_windows(session, "mean_")) == 2
+        assert list(frame["value"]) == [1.0, 2.0]
+        assert frame["timestamp"].is_unique
+
     def test_long_window_is_planned_with_the_binned_limit(self, session):
         session.request.return_value = _response(payload=[{"data": []}])
         with patch.object(

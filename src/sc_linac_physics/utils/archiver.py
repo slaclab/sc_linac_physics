@@ -93,6 +93,9 @@ CHUNK_SAMPLES = 250_000
 # bin. So a binned request is limited by raw samples read, not by what comes
 # back: 20 M is about 10 s.
 BINNED_CHUNK_SAMPLES = 20_000_000
+# Each bin still comes back as one JSON datum, so a request is also capped at
+# this many bins, the same budget CHUNK_SAMPLES gives raw samples.
+BINNED_CHUNK_BINS = CHUNK_SAMPLES
 
 # Statistics get_binned_values asks for, each checked on site against the raw
 # samples of one hour (2026-10-12): mean, min and max matched exactly, std is
@@ -423,27 +426,70 @@ def _fetch_binned(
     statistic: str,
     timeout: float,
 ) -> Optional[pd.DataFrame]:
-    bounds = _plan_chunks(pv, start, end, timeout, BINNED_CHUNK_SAMPLES)
-    if bounds is None:
+    planned = _plan_chunks(pv, start, end, timeout, BINNED_CHUNK_SAMPLES)
+    if planned is None:
         return None
-    # Chunk edges on bin edges, so no bin is split between two requests.
-    inner = {_floor_to(b, step) for b in bounds[1:-1]}
-    bounds = [start] + sorted(b for b in inner if start < b < end) + [end]
+    bounds = _binned_bounds(pv, planned, start, end, step)
     rows = []
-    for lo, hi in zip(bounds, bounds[1:]):
+    last = len(bounds) - 2
+    for i, (lo, hi) in enumerate(zip(bounds, bounds[1:])):
         values = _get_json(f"{statistic}_{step}({pv})", lo, hi, timeout)
-        counts = _get_json(f"count_{step}({pv})", lo, hi, timeout)
-        if values is None or counts is None:
+        if values is None:
             return None
-        rows.extend(_binned_rows(values, counts, lo, step))
+        if statistic == "count":
+            counts = values  # the same request; don't send it twice
+        else:
+            counts = _get_json(f"count_{step}({pv})", lo, hi, timeout)
+            if counts is None:
+                return None
+        # A sample exactly on hi comes back in both windows around it; its
+        # bin belongs to the next chunk
+        upper = hi if i < last else None
+        rows.extend(_binned_rows(values, counts, lo, upper, step))
     return pd.DataFrame(rows, columns=["timestamp", "value", "count"])
 
 
-def _binned_rows(values: list, counts: list, lo: datetime, step: int):
-    """(bin start, value, count) for the bins that hold samples from lo on.
+def _binned_bounds(
+    pv: str, planned: List[datetime], start: datetime, end: datetime, step: int
+) -> List[datetime]:
+    """Chunk edges for binned requests, all on bin edges.
+
+    No bin is split between two requests, each request reads at most about
+    BINNED_CHUNK_SAMPLES raw samples (the planned edges) and returns at most
+    BINNED_CHUNK_BINS bins. Raises ValueError if putting the planned edges on
+    bin edges would merge two planned chunks: that bin alone holds more
+    samples than one request should read.
+    """
+    inner = [_floor_to(b, step) for b in planned[1:-1]]
+    kept = {b for b in inner if start < b < end}
+    if len(kept) < len(inner):
+        raise ValueError(
+            f"{pv}: one {step} s bin holds more than {BINNED_CHUNK_SAMPLES} "
+            "samples; use a smaller bin_size"
+        )
+    span = BINNED_CHUNK_BINS * step
+    first = _floor_to(start, step).timestamp()
+    by_bins = {
+        _utc(first + k * span)
+        for k in range(1, int((end.timestamp() - first) // span) + 1)
+    }
+    kept |= {b for b in by_bins if start < b < end}
+    return [start] + sorted(kept) + [end]
+
+
+def _binned_rows(
+    values: list,
+    counts: list,
+    lo: datetime,
+    hi: Optional[datetime],
+    step: int,
+):
+    """(bin start, value, count) for the bins from lo up to hi.
 
     Each window's first bin can be the one before lo, holding only the
-    sample before the window; a bin ending at or before lo is dropped.
+    sample before the window; a bin ending at or before lo is dropped. A
+    bin starting at or after hi is dropped too, unless hi is None (the last
+    chunk): it belongs to the next request.
     """
     count_of = {
         (d["secs"] // step) * step: d["val"]
@@ -452,6 +498,8 @@ def _binned_rows(values: list, counts: list, lo: datetime, step: int):
     for datum in values[0]["data"] if values else []:
         bin_start = (datum["secs"] // step) * step
         n = count_of.get(bin_start, 0)
+        if hi is not None and bin_start >= hi.timestamp():
+            continue
         if n > 0 and bin_start + step > lo.timestamp():
             yield _timestamp(bin_start, 0), datum["val"], int(n)
 
