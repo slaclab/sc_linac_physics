@@ -119,6 +119,8 @@ class PhaseBase(ABC):
         self._max_retries_per_step: int = 3
         self._retry_count: int = 0
         self._sleep_fn = sleep_fn or time.sleep
+        # Only an injected sleep_fn replaces PhaseRun's abortable retry wait.
+        self._injected_sleep_fn = sleep_fn
         self._default_retry_delay_seconds = 5.0
 
     @property
@@ -175,19 +177,25 @@ class PhaseBase(ABC):
         pass
 
     def run(self) -> bool:
-        """Execute the complete phase.
+        """Execute the complete phase through PhaseRun.
 
-        This is the main entry point for phase execution. It:
         1. Validates phase ordering (previous phase complete)
         2. Validates phase-specific prerequisites
-        3. Marks phase as started
-        4. Executes each step with retry logic
-        5. Handles errors and creates checkpoints
-        6. Finalizes phase on success OR failure
+        3. Runs every step through PhaseRun (step_runner.py), which marks
+           the phase started, retries RETRY results, fails on an exception,
+           and checks abort before every attempt
+        4. Finalizes and marks the phase complete
 
         Returns:
             True if phase completed successfully, False otherwise
         """
+        # step_runner imports this module, so it is imported here.
+        from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (  # noqa: E501
+            PhaseRun,
+            SegmentOutcome,
+            StepListener,
+        )
+
         # First check phase ordering
         can_start, ordering_message = self.context.record.can_start_phase(
             self.phase_type
@@ -210,39 +218,23 @@ class PhaseBase(ABC):
             )
             return False
 
-        # Mark phase as started
-        self._mark_phase_started()
+        context = self.context
 
-        try:
-            # Execute each step
-            steps = self.get_phase_steps()
-            for i, step_name in enumerate(steps):
-                self._current_step_index = i
-                self._retry_count = 0
+        class _ProgressCallback(StepListener):
+            def on_progress(self, step: str, percent: int) -> None:
+                if context.progress_callback:
+                    context.progress_callback(step, percent)
 
-                # Check for abort request
-                if self.context.is_abort_requested():
-                    self._handle_abort(step_name)
-                    return False
-
-                # Execute step with retry logic
-                success = self._execute_step_with_retry(step_name)
-                if not success:
-                    return False
-
-            # All steps completed successfully
-            try:
-                self.finalize_phase()
-            except Exception as e:
-                self._handle_exception(e)
-                return False
-
-            self._mark_phase_completed()
-            return True
-
-        except Exception as e:
-            self._handle_exception(e)
+        run = PhaseRun(
+            self,
+            max_attempts=self._max_retries_per_step,
+            listener=_ProgressCallback(),
+            sleep_fn=self._injected_sleep_fn,
+        )
+        segment = run.run_steps(self.get_phase_steps())
+        if segment.outcome is not SegmentOutcome.COMPLETED:
             return False
+        return run.complete().outcome is SegmentOutcome.COMPLETED
 
     def _execute_step_with_retry(self, step_name: str) -> bool:
         """Execute a step with retry logic.
