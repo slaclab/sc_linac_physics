@@ -178,10 +178,11 @@ class Q0Cryomodule(Cryomodule):
         return self._calib_idx_file
 
     def _attempt_each(self, steps) -> None:
-        """Run every (description, step), even after one raises.
+        """Run each step in steps, a list of (description, callable) pairs.
 
-        Then raise the first failure. Used for cleanup: the old caput calls
-        failed silently, so the steps after a failed write still ran.
+        A step that raises doesn't stop the later ones. Once all have run,
+        the first failure is raised. Cleanup uses this because the old caput
+        calls failed silently, so the steps after a failed write still ran.
         """
         first_error = None
         for description, step in steps:
