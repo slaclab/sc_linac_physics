@@ -19,7 +19,6 @@ The phase leaves the cavity as the test left it: RF on in SEL at the test
 ADES, piezo enabled in manual.
 """
 
-import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -142,7 +141,12 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     def _verify_initial_state(self) -> PhaseStepResult:
-        """Read-only: HWMODE, SSA calibration status, stepper motion."""
+        """Read-only: HWMODE, SSA calibration, stepper motion, RFTESTSTS.
+
+        Refuses a with-RF test that is already running here, before
+        setup_rf turns RF off under it. start_test checks again just before
+        it writes RFTESTSTRT.
+        """
         if self.context.dry_run:
             return self._dry_run_result("cavity state check")
         try:
@@ -155,6 +159,14 @@ class PiezoWithRFPhase(PhaseBase):
             if self.cavity.stepper_tuner.motor_moving:
                 return self._failed(
                     "Stepper motor is moving — wait for it to stop"
+                )
+            if (
+                self._test_run_status()
+                == linac_utils.PIEZO_SCRIPT_RUNNING_VALUE
+            ):
+                return self._failed(
+                    "A with-RF test is already running (RFTESTSTS = "
+                    "Running) — wait for it to finish"
                 )
         except Exception as exc:
             return self._retry(f"Could not read cavity state: {exc}")
@@ -582,16 +594,20 @@ class PiezoWithRFPhase(PhaseBase):
     def _poll_until(self, done: Callable[[int], bool], timeout: float) -> bool:
         """Poll RFTESTSTS until done(status), for at most timeout seconds.
 
-        Counts polls rather than reading a clock, so it runs the same under
-        a patched sleep in tests.
+        The limit is elapsed time on time.monotonic(), checked after every
+        read, and each sleep is capped at what remains. A slow PV.get() (it
+        retries) therefore can't stretch the limit by more than one read. A
+        read already in flight still runs to its own PV timeout.
         """
-        polls = max(1, math.ceil(timeout / self.limits.poll_interval))
-        for _ in range(polls):
+        deadline = time.monotonic() + timeout
+        while True:
             self.cavity.check_abort()
             if done(self._test_run_status()):
                 return True
-            time.sleep(self.limits.poll_interval)
-        return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(self.limits.poll_interval, remaining))
 
     def _note_setup_rf_failure(self, exc: Exception) -> None:
         """After a failed setup_rf(), note the loaded Q and scale factor.
