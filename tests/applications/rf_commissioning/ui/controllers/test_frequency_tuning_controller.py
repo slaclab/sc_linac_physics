@@ -1003,6 +1003,7 @@ def test_reset_abort_and_speed() -> None:
 
     assert controller.context.abort_requested is False
     assert cavity.stepper_tuner.abort_flag is False
+    assert cavity.abort_flag is False
     assert controller.phase.limits.move_speed == 2.0
 
 
@@ -1628,6 +1629,7 @@ def test_on_abort_requests_abort() -> None:
     assert controller.context.abort_requested is True
     assert view.abort_button.enabled is False
     assert cavity.stepper_tuner.abort_flag is True
+    assert cavity.abort_flag is True
 
 
 def test_on_abort_without_context_is_noop() -> None:
