@@ -120,6 +120,9 @@ MIN_SPLIT = timedelta(minutes=1)
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 COLUMNS = ["timestamp", "value", "severity", "status", "valid"]
+# Set, not inferred: pandas 2 infers ns from datetimes and pandas 3 infers
+# us, and frames from the CSV and JSON paths must match to pair or concat.
+TIMESTAMP_DTYPE = f"datetime64[us, {LOCAL_TZ.key}]"
 
 Value = Union[float, int, str]
 
@@ -695,10 +698,12 @@ def _to_sample(datum: dict) -> ArchiverSample:
 
 def _to_frame(data: List[dict]) -> pd.DataFrame:
     samples = [_to_sample(datum) for datum in data]
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         [
             (s.timestamp, s.value, s.severity, s.status, s.valid)
             for s in samples
         ],
         columns=COLUMNS,
     )
+    frame["timestamp"] = frame["timestamp"].astype(TIMESTAMP_DTYPE)
+    return frame

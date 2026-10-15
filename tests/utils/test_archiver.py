@@ -817,6 +817,57 @@ class TestCsv:
         with pytest.raises(ArchiverError, match="A:PV.*getData.csv"):
             get_values_over_time_range(["A:PV"], START, self.LONG_END)
 
+    def test_both_paths_set_the_same_timestamp_dtype(self):
+        """Set, not inferred: pandas 2 would infer ns for the JSON path."""
+        as_json = archiver._to_frame([_datum(1696263180, 1.5)])
+        as_csv = archiver._csv_to_frame(
+            pd.DataFrame(
+                {
+                    "secs": [1696263180],
+                    "value": [1.5],
+                    "severity": [0],
+                    "status": [0],
+                    "nanos": [0],
+                }
+            )
+        )
+        assert as_json.dtypes["timestamp"] == archiver.TIMESTAMP_DTYPE
+        assert as_csv.dtypes["timestamp"] == archiver.TIMESTAMP_DTYPE
+        assert archiver._to_frame([]).dtypes["timestamp"] == (
+            archiver.TIMESTAMP_DTYPE
+        )
+
+    def test_csv_series_pairs_with_json_series(self):
+        """A numeric PV (CSV) paired with a string PV (JSON)."""
+        numeric = archiver._csv_to_frame(
+            pd.DataFrame(
+                {
+                    "secs": [1696263180, 1696263190],
+                    "value": [1.0, 2.0],
+                    "severity": [0, 0],
+                    "status": [0, 0],
+                    "nanos": [0, 0],
+                }
+            )
+        )
+        text = archiver._to_frame([_datum(1696263185, "BSO")])
+        x = pd.Series(
+            numeric["value"].to_numpy(),
+            index=pd.DatetimeIndex(numeric["timestamp"]),
+            name="AMP",
+        )
+        y = pd.Series(
+            text["value"].to_numpy(),
+            index=pd.DatetimeIndex(text["timestamp"]),
+            name="STAT",
+        )
+
+        paired = archiver.pair_by_time(x, y)
+
+        # the 10 s amplitude sample pairs with the status from 5 s
+        assert list(paired["AMP"]) == [2.0]
+        assert list(paired["STAT"]) == ["BSO"]
+
     def test_string_pv_chunks_stay_json(self, session):
         session.request.side_effect = [
             _response(payload=[{"data": []}]),
