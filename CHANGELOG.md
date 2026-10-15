@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v9.47.2 (2026-10-15)
+
+### Bug Fixes
+
+- **archiver**: Every failure is an ArchiverError; retry only gateway errors
+  ([#393](https://github.com/slaclab/sc_linac_physics/pull/393),
+  [`53aa2c4`](https://github.com/slaclab/sc_linac_physics/commit/53aa2c43a9b805a510e653190f252e363fa652e4))
+
+### Chores
+
+- **ci**: Bump actions/upload-artifact
+  ([#410](https://github.com/slaclab/sc_linac_physics/pull/410),
+  [`8d2a354`](https://github.com/slaclab/sc_linac_physics/commit/8d2a354cf26b65322f1320e0fc3a343f838c0afe))
+
+
+## v9.47.1 (2026-10-15)
+
+### Bug Fixes
+
+- **sim**: Serve production types and enum states for SSA, rack, cryo and system PVs
+  ([#399](https://github.com/slaclab/sc_linac_physics/pull/399),
+  [`b8bb662`](https://github.com/slaclab/sc_linac_physics/commit/b8bb66242917db815cb4636cc7e3099096ea3319))
+
+
 ## v9.47.0 (2026-10-15)
 
 ### Bug Fixes

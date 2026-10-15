@@ -47,7 +47,9 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   fit in memory. A disk store is planned.
 - Errors: `PVNotArchivedError` (names every unknown PV), `ArchiverTimeoutError`,
   `ArchiverConnectionError`, all subclasses of `ArchiverError`. Timeouts,
-  connection errors and 5xx responses are retried 3 times first.
+  connection errors and HTTP 502/503/504 are retried first (`MAX_RETRIES`
+  attempts in all). Other HTTP errors, and a 200 whose body isn't the
+  expected JSON, raise `ArchiverError` at once.
 - `get_values_at_time` leaves out a PV the archiver has no value for.
 - Cold queries are slow: value-at-time took 26-63 s on site. A proxy answers
   502 at 60 s, which is retried, so one cold lookup can block for about 4
