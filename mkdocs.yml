@@ -71,4 +71,4 @@ nav:
       - SRF Home: displays/srf_home.md
   - Explainers:
       - How auto-tune works: explainers/auto_tune.md
-      - How Q0 comes out of the LL fits: explainers/q0_fits.md
+      - How the Q0 app works: explainers/q0.md
