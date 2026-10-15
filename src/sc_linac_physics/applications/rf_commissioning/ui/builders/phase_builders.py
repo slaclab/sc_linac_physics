@@ -589,34 +589,37 @@ class CavityCharUI(PhaseUIBase):
         grid.addWidget(QLabel("New"), 0, 1, alignment=Qt.AlignCenter)
         grid.addWidget(QLabel("Current"), 0, 2, alignment=Qt.AlignCenter)
 
-        def pv_label(name: str, exponential: bool = False) -> PyDMLabel:
+        def pv_label(name: str, numeric=None) -> PyDMLabel:
+            """numeric: None (text/enum), "e" (exponential) or "f"."""
             label = self._register(name, PyDMLabel(parent=self.parent))
             label.setStyleSheet(PV_LABEL_STYLE)
             label.setAlignment(Qt.AlignCenter)
-            if exponential:
-                label.displayFormat = DisplayFormat.Exponential
+            if numeric is not None:
+                # One figure after the decimal point, asked for in review.
+                if numeric == "e":
+                    label.displayFormat = DisplayFormat.Exponential
                 label.precisionFromPV = False
-                label.precision = 3
+                label.precision = 1
             return label
 
         rows = (
             # caption, New widget, Current widget (None: nothing to show)
-            ("Status:", ("pydm_char_status", False), None),
-            ("Last run:", ("pydm_char_timestamp", False), None),
+            ("Status:", ("pydm_char_status", None), None),
+            ("Last run:", ("pydm_char_timestamp", None), None),
             (
                 "Loaded Q:",
-                ("pydm_loaded_q_new", True),
-                ("pydm_loaded_q_current", True),
+                ("pydm_loaded_q_new", "e"),
+                ("pydm_loaded_q_current", "e"),
             ),
             (
                 "Scale factor:",
-                ("pydm_scale_new", False),
-                ("pydm_scale_current", False),
+                ("pydm_scale_new", "f"),
+                ("pydm_scale_current", "f"),
             ),
             # The hardware model has no PV for the operational probe Q.
-            ("Probe Q:", ("pydm_probe_q_new", True), None),
-            ("Drive level:", ("pydm_drive_level", False), None),
-            ("RF state:", ("pydm_rf_state", False), None),
+            ("Probe Q:", ("pydm_probe_q_new", "e"), None),
+            ("Drive level:", ("pydm_drive_level", "f"), None),
+            ("RF state:", ("pydm_rf_state", None), None),
         )
         for row, (caption, new, current) in enumerate(rows, start=1):
             grid.addWidget(QLabel(caption), row, 0)
@@ -642,7 +645,7 @@ class CavityCharUI(PhaseUIBase):
         for row, (caption, name) in enumerate(
             (
                 ("Loaded Q:", "loaded_q_label"),
-                ("Q window:", "q_window_label"),
+                ("Loaded Q window:", "q_window_label"),
                 ("Scale factor:", "scale_factor_label"),
                 ("Probe Q:", "probe_q_label"),
                 ("Tolerance:", "tolerance_label"),

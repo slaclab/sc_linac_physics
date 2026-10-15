@@ -76,3 +76,48 @@ def test_side_by_side_boxes_share_their_edges(qtbot):
         boxes["Cavity Characterization"].bottom()
         == boxes["Stored Data"].bottom()
     )
+
+
+def test_values_show_one_figure_after_the_decimal_point(qapp_global):
+    """Requested in review of #395 for every value on the page."""
+    ui = CavityCharUI(QWidget(), callbacks={})
+    ui.build()
+    for name in (
+        "pydm_loaded_q_new",
+        "pydm_loaded_q_current",
+        "pydm_scale_new",
+        "pydm_scale_current",
+        "pydm_probe_q_new",
+    ):
+        label = ui.widgets[name]
+        assert label.precisionFromPV is False, name
+        assert label.precision == 1, name
+
+
+def test_the_window_row_is_labelled_loaded_q_window(qapp_global):
+    from PyQt5.QtWidgets import QLabel
+
+    host = QWidget()
+    host.setLayout(CavityCharUI(host, callbacks={}).build())
+    captions = [w.text() for w in host.findChildren(QLabel)]
+    assert "Loaded Q window:" in captions
+    assert "Q window:" not in captions
+
+
+def test_stored_data_formats_use_one_decimal():
+    from sc_linac_physics.applications.rf_commissioning.models.data_models import (  # noqa: E501
+        CavityCharacterization,
+    )
+    from sc_linac_physics.applications.rf_commissioning.models.serialization import (  # noqa: E501
+        get_phase_display_specs,
+    )
+
+    specs = {
+        s.widget_name: s.format_spec
+        for s in get_phase_display_specs(CavityCharacterization)
+    }
+    assert specs == {
+        "cavity_loaded_q": ".1e",
+        "cavity_probe_q": ".1e",
+        "cavity_scale_factor": ".1f",
+    }

@@ -247,8 +247,8 @@ def display(qtbot, tmp_path):
 def test_push_button_enables_after_a_read(display):
     display.on_results_ready(_in_window())
     assert display.push_results_button.isEnabled()
-    assert display.loaded_q_label.text() == "4.100e+07"
-    assert display.probe_q_label.text() == "8.500e+11"
+    assert display.loaded_q_label.text() == "4.1e+07"
+    assert display.probe_q_label.text() == "8.5e+11"
 
 
 def test_an_out_of_window_read_says_so(display):
@@ -258,17 +258,17 @@ def test_an_out_of_window_read_says_so(display):
     assert display.push_results_button.isEnabled()
 
 
-def test_confirm_text_names_the_pvs_and_values(display):
+def test_confirm_text_lists_the_values_without_pv_names(display):
+    """Labels and values only: the operator reads this before saying Yes."""
     text = display._confirm_push_text(_in_window())
     for expected in (
-        "PUSH_QLOADED.PROC",
-        "PUSH_CAV_SCALE.PROC",
-        "PUSH_QPROBECALC.PROC",
-        "4.100e+07",
-        "31.5",
-        "8.500e+11",
+        "Loaded Q: 4.1e+07",
+        "Scale factor: 31.5",
+        "Probe Q: 8.5e+11",
     ):
         assert expected in text
+    assert "PUSH_" not in text
+    assert "processed with" not in text
 
 
 def test_confirm_text_flags_an_out_of_window_value(display):
@@ -315,7 +315,7 @@ def test_a_loaded_record_shows_values_but_cannot_push(display):
         loaded_q=4.1e7, scale_factor=31.5, loaded_q_in_tolerance=True
     )
     display.refresh_from_record(record)
-    assert display.loaded_q_label.text() == "4.100e+07"
+    assert display.loaded_q_label.text() == "4.1e+07"
     assert not display.push_results_button.isEnabled()
 
 

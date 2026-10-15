@@ -142,12 +142,12 @@ class CavityCharDisplay(BasePlaceholderDisplay):
         def fmt(value, spec):
             return "-" if value is None else format(value, spec)
 
-        self.loaded_q_label.setText(fmt(data.get("loaded_q"), ".3e"))
+        self.loaded_q_label.setText(fmt(data.get("loaded_q"), ".1e"))
         self.scale_factor_label.setText(fmt(data.get("scale_factor"), ".1f"))
-        self.probe_q_label.setText(fmt(data.get("probe_q"), ".3e"))
+        self.probe_q_label.setText(fmt(data.get("probe_q"), ".1e"))
         window = self.cavity_loaded_q_window
         self.q_window_label.setText(
-            "-" if window is None else f"{window[0]:.2e} – {window[1]:.2e}"
+            "-" if window is None else f"{window[0]:.1e} – {window[1]:.1e}"
         )
         self.tolerance_label.setText(self._tolerance_text(data))
 
@@ -173,15 +173,19 @@ class CavityCharDisplay(BasePlaceholderDisplay):
         return str(phase.cavity)
 
     def _confirm_push_text(self, data: dict) -> str:
-        """Spell out the three writes CavityCharPhase._push_results makes."""
+        """The values Yes pushes, by label.
+
+        PV names are left out on review (#395): the operator reads this
+        before saying Yes. The writes are CavityCharPhase._push_results':
+        PUSH_QLOADED.PROC, PUSH_CAV_SCALE.PROC and PUSH_QPROBECALC.PROC.
+        """
         text = (
             f"Push these values to {self._cavity_label()}?\n\n"
-            f"  loaded Q {data['loaded_q']:.3e}  ->  PUSH_QLOADED.PROC\n"
-            f"  scale factor {data['scale_factor']:.1f}  ->  "
-            "PUSH_CAV_SCALE.PROC\n"
-            f"  probe Q {data['probe_q']:.3e}  ->  PUSH_QPROBECALC.PROC\n\n"
-            "Each is processed with 1. This replaces the cavity's "
-            "operational values."
+            f"  Loaded Q: {data['loaded_q']:.1e}\n"
+            f"  Scale factor: {data['scale_factor']:.1f}\n"
+            f"  Probe Q: {data['probe_q']:.1e}\n\n"
+            "They replace the loaded Q, scale factor and probe Q the cavity "
+            "uses now."
         )
         tolerance = self._tolerance_text(data)
         if tolerance.startswith("Outside"):
