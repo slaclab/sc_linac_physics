@@ -360,10 +360,10 @@ class PiezoWithRFPhase(PhaseBase):
         RFTESTSTS must read Complete (1); Crash (0) fails. RFTESTSTAT Pass (0)
         and Warning (1) store CHA_AMPGAIN, CHB_AMPGAIN and DFGAIN_NEW with
         the status; a Warning is recorded as complete but not passed. Fail (2)
-        fails and stores nothing.
+        clears earlier results and stores nothing.
 
-        CHECK: does the with-RF script write DFGAIN_NEW before the push? The
-        old worker read it only after processing PUSH_DFGAIN.
+        CHECK: does the with-RF script write DFGAIN_NEW before PUSH_DFGAIN is
+        processed? Review-before-push depends on it.
         """
         if self.context.dry_run:
             return self._dry_run_result("result read")
@@ -429,9 +429,13 @@ class PiezoWithRFPhase(PhaseBase):
         read_results stored. Just before pushing it re-reads DFGAIN_NEW and
         RFTESTSTS, and refuses if the gain changed or a new test is running.
 
-        On success it writes PUSH_DFGAIN.PROC = 1, then SAVE_DFGAIN.PROC = 1.
-        Both are ao records whose DESC reads "Push calc-ed to live PV". A
-        Warning still lets the operator push; passed stays False.
+        It writes PUSH_DFGAIN.PROC = 1, then SAVE_DFGAIN.PROC = 1. Both are ao
+        records whose DESC reads "Push calc-ed to live PV". A PUSH error
+        returns RETRY with nothing recorded as pushed. Once PUSH is processed
+        the gain is live, so detune_gain_pushed is stored before SAVE is
+        written. A SAVE error fails without retry, because a retry would
+        re-run the gate and could refuse after the gain is live. A Warning
+        still lets the operator push; passed stays False.
 
         CHECK: where do PUSH_DFGAIN and SAVE_DFGAIN write (.DOL, .OMSL, .OUT)?
         If SAVE only keeps a copy for a human, as the cavity char SAVE PVs
@@ -448,9 +452,37 @@ class PiezoWithRFPhase(PhaseBase):
                 f"{self._detune_gain:.6f} and confirm before pushing"
             )
 
+        refusal = self._check_before_push()
+        if refusal is not None:
+            return refusal
+
         piezo = self.cavity.piezo
         try:
-            now_gain = float(piezo.detunegain_new_pv_obj.get())
+            piezo.withrf_push_dfgain_pv_obj.put(1)
+        except Exception as exc:
+            return self._retry(f"Could not push the detune gain: {exc}")
+        # PUSH_DFGAIN processed: the gain is live. Record that before SAVE, so
+        # a failed SAVE still leaves detune_gain_pushed True.
+        self._store_phase_fields(detune_gain_pushed=True)
+        try:
+            piezo.withrf_save_dfgain_pv_obj.put(1)
+        except Exception as exc:
+            # Not a RETRY: a retry re-runs the gate, which could refuse now
+            # that the gain is already live.
+            return self._failed(
+                f"PUSH_DFGAIN processed but SAVE_DFGAIN failed: {exc} — the "
+                "gain is live; check SAVE_DFGAIN by hand"
+            )
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=f"Detune gain {self._detune_gain:.6f} pushed",
+            data=self._result_data(),
+        )
+
+    def _check_before_push(self) -> PhaseStepResult | None:
+        """Re-read DFGAIN_NEW and RFTESTSTS. A refusal result, or None to go on."""
+        try:
+            now_gain = float(self.cavity.piezo.detunegain_new_pv_obj.get())
             now_status = self._test_run_status()
         except Exception as exc:
             return self._retry(f"Could not re-read before pushing: {exc}")
@@ -463,18 +495,7 @@ class PiezoWithRFPhase(PhaseBase):
                 f"DFGAIN_NEW changed from {self._detune_gain:.6f} to "
                 f"{now_gain:.6f} since review — nothing pushed. Rerun the test."
             )
-
-        try:
-            piezo.withrf_push_dfgain_pv_obj.put(1)
-            piezo.withrf_save_dfgain_pv_obj.put(1)
-        except Exception as exc:
-            return self._retry(f"Could not push the detune gain: {exc}")
-        self._store_phase_fields(detune_gain_pushed=True)
-        return PhaseStepResult(
-            result=PhaseResult.SUCCESS,
-            message=f"Detune gain {self._detune_gain:.6f} pushed",
-            data=self._result_data(),
-        )
+        return None
 
     def _record_results(self) -> PhaseStepResult:
         """No PV access; finalize_phase() writes the record."""
@@ -496,13 +517,22 @@ class PiezoWithRFPhase(PhaseBase):
         }
 
     def _clear_measured_fields(self) -> None:
-        """Blank this phase's results, in memory and on the record."""
+        """Blank this phase's results, in memory and on the record.
+
+        If an earlier run pushed a detune gain, the gain is still live on the
+        machine. A note keeps that on the record after the fields are blank.
+        """
         self._gain_a = self._gain_b = self._detune_gain = None
         self._rf_test_status = None
         record = getattr(self.context, "record", None)
         if record is None or record.piezo_with_rf is None:
             return
         data = record.piezo_with_rf
+        if data.detune_gain_pushed and data.detune_gain is not None:
+            self._append_note(
+                f"Earlier run pushed detune gain {data.detune_gain:.6f} "
+                f"({data.rf_test_status}); its results were cleared by a rerun"
+            )
         data.amplifier_gain_a = data.amplifier_gain_b = None
         data.detune_gain = None
         data.rf_test_status = None

@@ -460,3 +460,52 @@ def test_dry_run_reads_results_and_pushes_nothing(finished, record, step):
     assert phase.execute_step(step).result == PhaseResult.SUCCESS
     finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
     finished.piezo.withrf_save_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_save_failure_after_push_fails_without_retry(finished, record):
+    """PUSH_DFGAIN processed means the gain is live; a retry must not run."""
+    piezo = finished.piezo
+    piezo.withrf_save_dfgain_pv_obj.put.side_effect = RuntimeError("CA")
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    result = phase.execute_step("push_detune_gain")
+    assert result.result == PhaseResult.FAILED
+    assert "SAVE_DFGAIN" in result.message
+    assert piezo.withrf_push_dfgain_pv_obj.put.call_count == 1
+    assert record.piezo_with_rf.detune_gain_pushed is True
+
+
+def test_push_failure_retries_and_saves_nothing(finished, record):
+    piezo = finished.piezo
+    piezo.withrf_push_dfgain_pv_obj.put.side_effect = RuntimeError("CA")
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.RETRY
+    piezo.withrf_save_dfgain_pv_obj.put.assert_not_called()
+    assert record.piezo_with_rf.detune_gain_pushed is False
+
+
+def test_warning_then_confirmed_push_is_pushed_not_passed(finished, record):
+    finished.piezo.withrf_status_pv_obj.get.return_value = WARNING
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.SUCCESS
+    data = record.piezo_with_rf
+    assert data.rf_test_status == "Warning"
+    assert data.detune_gain_pushed is True
+    assert data.passed is False
+
+
+def test_rerun_that_fails_after_a_push_keeps_a_note(finished, record):
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.SUCCESS
+    finished.piezo.withrf_status_pv_obj.get.return_value = FAIL
+    rerun = make_phase(finished, record)
+    assert rerun.execute_step("read_results").result == PhaseResult.FAILED
+    data = record.piezo_with_rf
+    assert data.amplifier_gain_a is None
+    assert data.detune_gain is None
+    assert data.rf_test_status is None
+    assert data.detune_gain_pushed is False
+    assert "Earlier run pushed detune gain 0.850000 (Pass)" in data.notes
