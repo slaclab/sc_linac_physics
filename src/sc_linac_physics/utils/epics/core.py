@@ -84,19 +84,17 @@ class PV(EPICS_PV):
             access_callback=access_callback,
         )
 
+        # Registered whether or not the PV is connected yet, as pyepics
+        # does: monitor callbacks start firing once it connects.
+        if self._user_callback is not None:
+            self.add_callback(self._user_callback)
+
         # Skip connection wait for batch operations
         if _skip_connection_wait:
-            self._add_user_callback_if_connected()
             return
 
         # Wait for initial connection
         self._wait_for_connection_with_retry(connection_timeout)
-        self._add_user_callback_if_connected()
-
-    def _add_user_callback_if_connected(self):
-        """Add user callback if PV is connected"""
-        if self._user_callback is not None and self.connected:
-            self.add_callback(self._user_callback)
 
     def _wait_for_connection_with_retry(self, timeout: float):
         """Wait for initial connection with retry logic"""
@@ -178,7 +176,8 @@ class PV(EPICS_PV):
             if self.connected:
                 return
 
-            timeout = timeout or self.config.connection_timeout
+            if timeout is None:
+                timeout = self.config.connection_timeout
 
             get_logger().warning(
                 f"PV {self.pvname} disconnected, attempting to reconnect"
@@ -240,7 +239,8 @@ class PV(EPICS_PV):
             PVConnectionError: If PV is not connected
             PVGetError: If get operation fails after retries
         """
-        timeout = timeout or self.config.get_timeout
+        if timeout is None:
+            timeout = self.config.get_timeout
         use_monitor = (
             use_monitor if use_monitor is not None else self.auto_monitor
         )
@@ -368,7 +368,7 @@ class PV(EPICS_PV):
 
     def _retry_backoff(self, attempt: int, timeout: float):
         """Handle retry delay and reconnection attempt"""
-        # Exponential backoff
+        # Linear backoff: retry_delay, 2 x retry_delay, ...
         sleep(self.config.retry_delay * attempt)
 
         # Try to reconnect if disconnected
@@ -444,6 +444,39 @@ class PV(EPICS_PV):
 
         return True
 
+    @property
+    def severity(self) -> int:
+        """
+        Alarm severity. Never None, and never read from a disconnected PV.
+
+        pyepics' severity returns its cached value. pyepics doesn't clear
+        that cache on disconnect, so it can be stale. It can also be None if
+        the time fields never arrived. This waits for the connection first,
+        and raises PVConnectionError if the PV doesn't connect.
+
+        The cache is then refreshed with get_timevars() in two cases where
+        it can't be trusted:
+          - the PV was disconnected at the start of this call: a monitored
+            PV's cache predates the reconnect until its first new update;
+          - the PV is not monitored (auto_monitor=False, e.g. the cavity
+            fault PVs): its cache is from its last get().
+        If that refresh fails, or pyepics still has no severity, this
+        returns EPICS_INVALID_VAL, so unknown reads as invalid, not fine.
+
+        Raises:
+            PVConnectionError: If the PV is not connected
+        """
+        was_connected = self.connected
+        self._ensure_connected()
+        if not was_connected or not self.auto_monitor:
+            refreshed = self.get_timevars(
+                timeout=self.config.get_timeout, warn=False
+            )
+            if refreshed is None:
+                return EPICS_INVALID_VAL
+        severity = super().severity
+        return EPICS_INVALID_VAL if severity is None else severity
+
     def check_alarm(self, raise_on_alarm: bool = False) -> int:
         """
         Check PV alarm status.
@@ -491,7 +524,7 @@ class PV(EPICS_PV):
         auto_monitor: bool = False,
         require_connection: bool = False,
         config: Optional[PVConfig] = None,
-    ) -> List["PV"]:
+    ) -> List[Optional["PV"]]:
         """
         Create multiple PVs with optimized batch connection.
 
@@ -507,7 +540,9 @@ class PV(EPICS_PV):
             config: Custom PVConfig to use for all PVs
 
         Returns:
-            List of PV objects in the same order as pv_names
+            List of PV objects in the same order as pv_names. An entry is
+            None only if constructing that PV raised and
+            require_connection is False.
 
         Raises:
             PVConnectionError: If require_connection=True and any PV fails
@@ -601,6 +636,12 @@ class PV(EPICS_PV):
         failed_pvs: List[str],
     ) -> List[Optional["PV"]]:
         """Wrap raw EPICS PVs in our PV class."""
+        if require_connection and failed_pvs:
+            raise PVConnectionError(
+                f"{len(failed_pvs)} of {len(pv_names)} PVs failed to connect "
+                f"in batch: {failed_pvs[:5]}"
+            )
+
         wrapped_pvs = []
         for pv_name in pv_names:
             try:

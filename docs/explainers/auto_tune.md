@@ -22,7 +22,7 @@ Two actuators, with a clear division of labor:
 
     The code gives a
     closed-loop mode, an integrator setpoint, and a centering pass that runs
-    under SELA
+    under SELA (an RF mode, defined in section 3)
     <span class="cite">`INTEG_SP, piezo.py::Piezo.feedback_setpoint_pv; cavity.py::Cavity.move_to_resonance “if use_sela:”`</span>. None of that fixes a bandwidth, and no figure appears anywhere in `src/`.
 
     CHECK: what is the cutoff in Hz, and does the loop reject microphonics or
@@ -90,7 +90,7 @@ while |delta_hz| > tolerance:
     check_abort()
     if stepper_temp > max_stepper_temp:  raise StepperTempError
     iteration_callback()                        # abort flag + live plot
-    est_steps = int(0.9 * delta_hz * microsteps_per_hz)
+    est_steps = int(0.75 * delta_hz * microsteps_per_hz)
     stepper_tuner.move(est_steps,
                        max_steps = |est_steps| * 1.1,
                        speed     = MAX_STEPPER_SPEED)
@@ -101,6 +101,15 @@ while |delta_hz| > tolerance:
 
 <span class="cite">`cavity.py::Cavity._auto_tune`</span>
 
+**The step budget.** Before the first move, the loop works out how many
+microsteps the whole tune should take, from the starting detune
+(`expected_steps`). It multiplies that by a slack factor from
+`stepper_tol_factor` to get the budget. Each move adds to `steps_moved`. If that
+total ever exceeds the budget, the loop decides something is wrong, for example
+a bad `SCALE` or a slipping tuner, and raises `DetuneError` rather than keep
+driving the motor. The page calls this the runaway guard.
+<span class="cite">`cavity.py::Cavity._auto_tune “expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))”, cavity.py::Cavity._auto_tune “if steps_moved > expected_steps * stepper_tol_factor:”`</span>
+
 ### Drive it
 
 [Drive the auto-tune loop](widgets/auto_tune_sim.html)
@@ -108,21 +117,23 @@ while |delta_hz| > tolerance:
 ### Two things the trace will not tell you
 
 **Truncation means a perfect cavity lands a hair outside tolerance.**
-`est_steps` is an `int(...)`, and 0.9 leaves a tenth of the detune behind — so
-a perfectly calibrated cavity starting at exactly ten times tolerance is aimed
+`est_steps` is an `int(...)`. `int()` drops everything after the decimal point
+instead of rounding; that is truncation. And 0.75 leaves a quarter of the
+detune behind — so
+a perfectly calibrated cavity starting at exactly four times tolerance is aimed
 precisely at the tolerance boundary, and the truncated step always drops it
 just outside. Set the starting detune to
-<span data-fig="fig-example-detune">500</span> Hz with tolerance 50 and
+<span data-fig="fig-example-detune">200</span> Hz with tolerance 50 and
 calibration error 1.0: the exact aim is
-<span data-fig="fig-exact-aim">81,818.18</span> microsteps, which would leave
+<span data-fig="fig-exact-aim">27,272.73</span> microsteps, which would leave
 the detune sitting exactly on the tolerance and end the loop. `int()` hands the
-motor <span data-fig="fig-truncated-aim">81,818</span> instead, and the
-<span data-fig="fig-dropped-microsteps">0.18</span> of a microstep it drops
-leaves <span data-fig="fig-residual">50.0010</span> Hz — still `> 50`, so a
+motor <span data-fig="fig-truncated-aim">27,272</span> instead, and the
+<span data-fig="fig-dropped-microsteps">0.73</span> of a microstep it drops
+leaves <span data-fig="fig-residual">50.0040</span> Hz — still `> 50`, so a
 second move runs. At the nominal `HZ_PER_STEP / MICROSTEPS_PER_STEP` scale of
 1.4/256 (linac_utils.py::MICROSTEPS_PER_STEP, linac_utils.py::HZ_PER_STEP) the
-same arithmetic leaves <span data-fig="fig-residual-nominal">50.0039</span> Hz.
-A well-calibrated cavity at ten times tolerance therefore costs two moves,
+same arithmetic leaves <span data-fig="fig-residual-nominal">50.0031</span> Hz.
+A well-calibrated cavity at four times tolerance therefore costs two moves,
 never one.
 
 **Converging is not the same as being allowed to finish, and the headroom
@@ -137,25 +148,25 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  <- shrinks as detune
 
 The travel a given miscalibration demands does not care how far out of tune you
 started. The budget does. At the page defaults,
-<span data-fig="fig-example-detune-b">500</span> Hz is
-<span data-fig="fig-example-expected">90,909</span> expected steps and buys a
-<span data-fig="fig-example-tol-factor">2.753</span>× budget, while the
+<span data-fig="fig-example-detune-b">200</span> Hz is
+<span data-fig="fig-example-expected">36,363</span> expected steps and buys a
+<span data-fig="fig-example-tol-factor">4.268</span>× budget, while the
 <span data-fig="fig-opened-detune">5000</span> Hz the page opens on is
 <span data-fig="fig-opened-expected">909,090</span> steps and buys only
 <span data-fig="fig-opened-tol-factor">1.376</span>×. (At the nominal 1.4/256
 scale those same two figures are
-<span data-fig="fig-example-tol-factor-nominal">2.738</span>× and
+<span data-fig="fig-example-tol-factor-nominal">4.262</span>× and
 <span data-fig="fig-opened-tol-factor-nominal">1.369</span>×.) So the further
 out of tune a cavity starts, the less calibration error the loop tolerates.
-From that opening detune, undershoot 0.9 survives a true/believed scale ratio
-up to about <span data-fig="fig-window-undershoot">1.49</span>× and undershoot
+From that opening detune, undershoot 0.75 survives a true/believed scale ratio
+up to about <span data-fig="fig-window-undershoot">1.94</span>× and undershoot
 1.0 only to about <span data-fig="fig-window-unity">1.27</span>×. That is what
-the 0.9 is really buying: budget headroom, not just mathematical stability.
+the 0.75 is really buying: budget headroom, not just mathematical stability.
 From the same detune a gain of 1.8 converges in principle — `|1 - 1.8| < 1` —
 and still trips the runaway guard at every undershoot the slider offers.
 
 Check it above: at the opening detune, calibration error 1.35 converges at
-undershoot 0.9 and runs away at 1.0 — it sits inside the first window and
+undershoot 0.75 and runs away at 1.0 — it sits inside the first window and
 outside the second. Same hardware, same miscalibration; the only difference is
 that one factor.
 
@@ -174,7 +185,12 @@ that one factor.
 
 `_auto_tune` does not read the machine itself — it calls a `delta_hz_func`
 handed to it, and is indifferent to where the number came from. There are two
-sources.
+sources, one per RF mode. *Chirp* (`RF_MODE_CHIRP`) sweeps the RF frequency
+within one waveform to measure the detune over a wide range. *SELA*
+(`RF_MODE_SELA`) is the Self-Excited Loop Amplitude mode. Both definitions are
+from the [Linac Hardware Model](../utils/linac_model.md#rf-modes)
+<span class="cite">`linac_utils.py::RF_MODE_CHIRP, linac_utils.py::RF_MODE_SELA`</span>.
+Only auto setup tunes in SELA.
 
 |  | Chirp mode | SELA mode |
 |---|---|---|
@@ -328,11 +344,12 @@ simulator, so you can watch the loop react.
 | Failure | Raises | Cause and what to do | Simulator fault |
 |---|---|---|---|
 | Step budget exceeded | `DetuneError` | `SCALE` is miscalibrated, or the tuner is slipping mechanically. The loop asked for more steps than `stepper_tol_factor` allows for the detune it started with. If the reported detune never changed across the whole run, the message says so — that distinguishes a tuner that is mechanically stuck while still reporting motion from honest over-travel. | `slip` |
-| Step estimate rounds to zero | `DetuneError` | `SCALE` is implausibly large, so `int(0.9 × delta_hz × microsteps_per_hz)` truncates to 0 while the detune is still outside tolerance. A zero step commands no motion, so nothing would ever change. The loop raises immediately and names `SCALE` and the offending `hz_per_microstep` <span class="cite">`cavity.py::Cavity._auto_tune “if est_steps == 0:”`</span>. The injection rewrites `SCALE` mid-tune, which is the real route in: the loop re-reads it every iteration, so a bad value written by `_apply_hz_per_step` takes effect on the next move. | `bad_scale` |
+| Step estimate rounds to zero | `DetuneError` | `SCALE` is implausibly large, so `int(0.75 × delta_hz × microsteps_per_hz)` truncates to 0 while the detune is still outside tolerance. A zero step commands no motion, so nothing would ever change. The loop raises immediately and names `SCALE` and the offending `hz_per_microstep` <span class="cite">`cavity.py::Cavity._auto_tune “if est_steps == 0:”`</span>. The injection rewrites `SCALE` mid-tune, which is the real route in: the loop re-reads it every iteration, so a bad value written by `_apply_hz_per_step` takes effect on the next move. | `bad_scale` |
 | Detune invalid at entry | `DetuneError` | Cavity off, or the chirp range is wrong before the loop even starts. Checked once, before the first move <span class="cite">`cavity.py::Cavity._auto_tune “DetuneError(f"{self} detune invalid")”`</span>. |  |
 | Detune invalid mid-loop, chirp | — recovers | `check_detune()` widens the chirp range 1.1× and carries on. See section 3 on the cap. | `detune_invalid_chirp` |
 | Detune invalid mid-loop, SELA | `DetuneError` | No range to widen, so it fails hard <span class="cite">`cavity.py::Cavity.check_detune “Cannot tune in SELA with invalid detune”`</span>. Auto setup only. | `detune_invalid_sela` |
 | Stepper over temperature | `StepperTempError` | **There is no cool-down and no retry.** The loop raises and stops; a human has to let the motor cool and re-run tuning <span class="cite">`cavity.py::Cavity._auto_tune “Optional stepper motor temperature guard”`</span>. | `hot_motor` |
 | Limit switch hit | `StepperError` | Checked after every completed move — the motor stopped for a bad reason rather than because it arrived <span class="cite">`stepper.py::StepperTuner.issue_move_command “if self.on_limit_switch:”`</span>. | `limit_switch` |
 | Operator abort, stepper | `StepperAbortError` | Setting `stepper_tuner.abort_flag` stops a move *already in progress*: the polling loop in `issue_move_command` checks it every 5 s while the motor runs, writes 1 to `ABORT_REQ`, and raises. Worst case about 10 s from the request — a 5 s settle sleep before polling starts, plus the 5 s interval <span class="cite">`stepper.py::StepperTuner.check_abort, stepper.py::StepperTuner.issue_move_command “while self.motor_moving:”`</span>. |  |
-| Operator abort, cavity | `CavityAbortError` | Setting `cavity.abort_flag` is the path that also turns the RF *off* — `check_abort()` calls `turn_off()` before it raises <span class="cite">`cavity.py::Cavity.check_abort`</span>. A caller that stops the stepper without setting this leaves the cavity powered. | `abort` |
+| Any failure during a move | the original error | `move()` writes `ABORT_REQ` if `MOTOR_MOVING` still reads 1 (or can't be read), then restores `NSTEPS.DRVH` and `VELO` if it changed them, then re-raises <span class="cite">`stepper.py::StepperTuner._clean_up_failed_move`</span>. |  |
+| Operator abort, cavity | `CavityAbortError` | Setting `cavity.abort_flag` is the path that also turns the RF *off* — `check_abort()` calls `turn_off()` before it raises <span class="cite">`cavity.py::Cavity.check_abort`</span>. A caller that stops the stepper without setting this leaves the cavity powered. During a move, `StepperTuner.check_abort` writes `ABORT_REQ` before calling it, so the motor stops before the RF-off wait <span class="cite">`stepper.py::StepperTuner.check_abort “if self.cavity.abort_flag:”`</span>. | `abort` |
