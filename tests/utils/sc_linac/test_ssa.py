@@ -300,6 +300,85 @@ def test_run_calibration_bad_slope(ssa):
         ssa.run_calibration()
 
 
+def _start_running_calibration(ssa, statuses):
+    """Mock everything before the CALSTS poll; CALSTS reads `statuses`."""
+    ssa.reset = MagicMock()
+    ssa.turn_on = MagicMock()
+    ssa.cavity.reset_interlocks = MagicMock()
+    ssa.start_calibration = MagicMock()
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+    ssa._calibration_status_pv_obj = make_mock_pv()
+    ssa._calibration_status_pv_obj.get.side_effect = statuses
+
+
+def test_run_calibration_abort_while_running(ssa):
+    _start_running_calibration(ssa, lambda **_: SSA_CALIBRATION_RUNNING_VALUE)
+    ssa.cavity.turn_off = MagicMock()
+    ssa.cavity.abort_flag = True
+
+    with pytest.raises(CavityAbortError):
+        ssa.run_calibration()
+
+    ssa.start_calibration.assert_called_once()
+    ssa.cavity.turn_off.assert_called_once()
+
+
+def test_run_calibration_timeout(ssa, monkeypatch):
+    _start_running_calibration(ssa, lambda **_: SSA_CALIBRATION_RUNNING_VALUE)
+    ssa.cavity.check_abort = MagicMock()
+    # Deadline set at t=0; polls see t=60, then t=120.
+    clock = iter([0.0, 60.0, 120.0])
+    monkeypatch.setattr(
+        "sc_linac_physics.utils.sc_linac.ssa.time.monotonic",
+        lambda: next(clock),
+    )
+
+    with pytest.raises(SSACalibrationError, match="after 120 s"):
+        ssa.run_calibration(timeout=120.0)
+
+    assert ssa.cavity.check_abort.call_count == 2
+
+
+def test_run_calibration_checks_abort_each_poll(ssa):
+    # CALSTS reads "running" until check_abort has been called twice,
+    # i.e. the scan finishes after two polls.
+    ssa.cavity.check_abort = MagicMock()
+    _start_running_calibration(
+        ssa,
+        lambda **_: (
+            SSA_CALIBRATION_RUNNING_VALUE
+            if ssa.cavity.check_abort.call_count < 2
+            else 1
+        ),
+    )
+    ssa._cal_result_status_pv_obj = make_mock_pv(
+        get_val=SSA_RESULT_GOOD_STATUS_VALUE
+    )
+    ssa._max_fwd_pwr_pv_obj = make_mock_pv(
+        get_val=ssa.fwd_power_lower_limit * 2
+    )
+    ssa._measured_slope_pv_obj = make_mock_pv(
+        get_val=uniform(SSA_SLOPE_LOWER_LIMIT, SSA_SLOPE_UPPER_LIMIT)
+    )
+    ssa.cavity.push_ssa_slope = MagicMock()
+
+    ssa.run_calibration()
+
+    assert ssa.cavity.check_abort.call_count == 2
+    ssa.cavity.push_ssa_slope.assert_called()
+
+
+def test_calibration_timeout_matches_commissioning_limit():
+    from sc_linac_physics.applications.rf_commissioning.phases.ssa_char import (
+        SSACalLimits,
+    )
+    from sc_linac_physics.utils.sc_linac.linac_utils import (
+        SSA_CALIBRATION_TIMEOUT,
+    )
+
+    assert SSA_CALIBRATION_TIMEOUT == SSACalLimits().cal_timeout
+
+
 def test_measured_slope(ssa):
     slope = uniform(SSA_SLOPE_LOWER_LIMIT, SSA_SLOPE_UPPER_LIMIT)
     ssa._measured_slope_pv_obj = make_mock_pv(get_val=slope)

@@ -108,6 +108,9 @@ SSA_RESULT_GOOD_STATUS_VALUE = 0
 SSA_FWD_PWR_LOWER_LIMIT = 3000
 SSA_CALIBRATION_RUNNING_VALUE = 2
 SSA_CALIBRATION_CRASHED_VALUE = 0
+# Seconds SSA.run_calibration waits for CALSTS to leave "running".
+# Same value as SSACalLimits.cal_timeout in rf_commissioning/phases/ssa_char.py.
+SSA_CALIBRATION_TIMEOUT = 120.0
 
 HL_SSA_MAP = {1: 1, 2: 2, 3: 3, 4: 4, 5: 1, 6: 2, 7: 3, 8: 4}
 HL_SSA_SHARED_PVS = [

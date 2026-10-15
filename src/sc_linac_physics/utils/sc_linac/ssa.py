@@ -439,13 +439,21 @@ class SSA(linac_utils.SCLinacObject):
             == linac_utils.SSA_RESULT_GOOD_STATUS_VALUE
         )
 
-    def run_calibration(self, save_slope: bool = False):
+    def run_calibration(
+        self,
+        save_slope: bool = False,
+        timeout: float = linac_utils.SSA_CALIBRATION_TIMEOUT,
+    ):
         """
         Runs the SSA through its range and finds the slope that describes
         the relationship between SSA drive signal and output power
         @param save_slope: Whether to update the saved slope PV with the newly
                            calculated value or not
+        @param timeout: Seconds to wait for CALSTS to stop reading "running"
+                        before raising SSACalibrationError
         @return: None
+        @raise CavityAbortError: abort requested while CALSTS is running
+        @raise SSACalibrationError: CALSTS still running after timeout
         """
 
         self.reset()
@@ -466,7 +474,33 @@ class SSA(linac_utils.SCLinacObject):
         self.start_calibration()
         time.sleep(2)
 
+        # Wall-clock deadline, so a slow CALSTS read (up to 10 s each)
+        # counts against the timeout.
+        deadline = time.monotonic() + timeout
         while self.calibration_running:
+            # check_abort turns the cavity off and raises CavityAbortError.
+            # Nothing here writes CALSTRT to stop the scan.
+            # CHECK: does the SSA scan stop by itself once RF is off,
+            # or does it run to the end after an abort?
+            self.cavity.check_abort()
+            if time.monotonic() >= deadline:
+                self.cavity.logger.error(
+                    "SSA calibration timed out",
+                    extra={
+                        "extra_data": {
+                            "calibration_status": self.calibration_status,
+                            "timeout_s": timeout,
+                            "ssa": str(self),
+                        }
+                    },
+                )
+                # calibrate() catches this and retries (reset, turn_on,
+                # CALSTRT again) with drive max 0.01 lower, up to 3 times.
+                # CHECK: is a new CALSTRT safe while CALSTS still reads
+                # running, or should a timeout skip the retry?
+                raise linac_utils.SSACalibrationError(
+                    f"{self} calibration still running after {timeout:.0f} s"
+                )
             self.cavity.logger.debug(
                 "Waiting for SSA calibration to complete",
                 extra={
