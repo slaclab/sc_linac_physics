@@ -12,6 +12,9 @@ on abort, calls turn_off() and raises CavityAbortError. So the controller that
 runs this phase must call cavity.request_abort() alongside
 context.request_abort(), and clear cavity.abort_flag before starting.
 
+An abort that PhaseBase sees between steps does not touch the cavity: RF stays
+as the last step left it.
+
 The phase leaves the cavity as the test left it: RF on in SEL at the test
 ADES, piezo enabled in manual.
 """
@@ -188,6 +191,8 @@ class PiezoWithRFPhase(PhaseBase):
         CHECK: setup_rf() leaves the cavity in SELA with the piezo in
         feedback. Is it safe to switch to SEL here, then the piezo to manual
         in setup_piezo, with RF on at the test amplitude?
+        CHECK: does the with-RF script keep running if an abort turns RF off
+        mid-test, and is there a PV to stop it?
         """
         if self.context.dry_run:
             return self._dry_run_result("RF setup")
@@ -199,8 +204,10 @@ class PiezoWithRFPhase(PhaseBase):
             loaded_q = float(self.cavity.measured_loaded_q)
             scale_factor = float(self.cavity.measured_scale_factor)
         except CavityAbortError as exc:
+            self._note_setup_rf_failure(exc)
             return self._failed(f"Aborted during RF setup — RF is off: {exc}")
         except Exception as exc:
+            self._note_setup_rf_failure(exc)
             return self._failed(f"RF setup failed: {exc}")
 
         note = (
@@ -233,7 +240,11 @@ class PiezoWithRFPhase(PhaseBase):
         try:
             piezo.enable()
             piezo.set_to_manual()
-        except (CavityAbortError, RuntimeError) as exc:
+        except CavityAbortError as exc:
+            return self._failed(
+                f"Aborted during piezo setup — RF is off: {exc}"
+            )
+        except RuntimeError as exc:
             return self._failed(f"Could not enable the piezo: {exc}")
         except Exception as exc:
             return self._retry(f"Could not set up the piezo: {exc}")
@@ -269,7 +280,12 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     def _start_test(self) -> PhaseStepResult:
-        """Write RFTESTSTRT = 1, unless RFTESTSTS already reads Running."""
+        """Write RFTESTSTRT = 1 with wait=False (a trigger, like PROBECALSTRT
+        in Cavity), unless RFTESTSTS already reads Running.
+
+        PV.put waits for completion by default, and a put that completes only
+        when the script finishes would block this step until the run is over.
+        """
         if self.context.dry_run:
             return self._dry_run_result("test start")
         piezo = self.cavity.piezo
@@ -280,7 +296,7 @@ class PiezoWithRFPhase(PhaseBase):
                     "A with-RF test is already running (RFTESTSTS = Running)"
                 )
             self._test_seen_running = False
-            piezo.withrf_run_check_pv_obj.put(1)
+            piezo.withrf_run_check_pv_obj.put(1, wait=False)
         except Exception as exc:
             return self._retry(f"Could not start the with-RF test: {exc}")
         return PhaseStepResult(
@@ -358,6 +374,22 @@ class PiezoWithRFPhase(PhaseBase):
                 return True
             time.sleep(self.limits.poll_interval)
         return False
+
+    def _note_setup_rf_failure(self, exc: Exception) -> None:
+        """After a failed setup_rf(), note the loaded Q and scale factor.
+
+        characterize() may have pushed them before the failure. If the
+        read-back fails too, add no note.
+        """
+        try:
+            loaded_q = float(self.cavity.measured_loaded_q)
+            scale_factor = float(self.cavity.measured_scale_factor)
+        except Exception:
+            return
+        self._append_note(
+            f"setup_rf() failed: {exc}; loaded Q {loaded_q:.3e}, scale "
+            f"factor {scale_factor:.1f} read back (may have been pushed)"
+        )
 
     def _append_note(self, note: str) -> None:
         """Append a line to record.piezo_with_rf.notes; keeps what is there."""
