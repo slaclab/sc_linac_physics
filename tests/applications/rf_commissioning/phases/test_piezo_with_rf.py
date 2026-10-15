@@ -16,6 +16,7 @@ from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo i
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
+    PhaseStatus,
     PiezoWithRFTest,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
@@ -445,16 +446,18 @@ def test_confirming_another_value_does_not_push(finished, record):
 def test_push_processes_push_then_save(finished, record):
     order = []
     piezo = finished.piezo
-    piezo.withrf_push_dfgain_pv_obj.put.side_effect = lambda v: order.append(
-        ("PUSH_DFGAIN.PROC", v)
+    piezo.withrf_push_dfgain_pv_obj.put.side_effect = (
+        lambda v, **kw: order.append(("PUSH_DFGAIN.PROC", v))
     )
-    piezo.withrf_save_dfgain_pv_obj.put.side_effect = lambda v: order.append(
-        ("SAVE_DFGAIN.PROC", v)
+    piezo.withrf_save_dfgain_pv_obj.put.side_effect = (
+        lambda v, **kw: order.append(("SAVE_DFGAIN.PROC", v))
     )
     phase = make_phase(finished, record, confirmed_detune_gain=0.85)
     phase.execute_step("read_results")
     assert phase.execute_step("push_detune_gain").result == PhaseResult.SUCCESS
     assert order == [("PUSH_DFGAIN.PROC", 1), ("SAVE_DFGAIN.PROC", 1)]
+    piezo.withrf_push_dfgain_pv_obj.put.assert_called_once_with(1, wait=False)
+    piezo.withrf_save_dfgain_pv_obj.put.assert_called_once_with(1, wait=False)
     assert record.piezo_with_rf.detune_gain_pushed is True
 
 
@@ -483,14 +486,44 @@ def test_warning_still_lets_the_operator_push(finished, record):
     assert phase.execute_step("push_detune_gain").result == PhaseResult.SUCCESS
 
 
-def test_full_run_without_confirmation_never_pushes(phase, finished):
+def test_full_run_without_confirmation_never_pushes(phase, finished, record):
+    # run() refuses to start unless the previous phase is complete.
+    record.set_phase_status(
+        CommissioningPhase.CAVITY_CHAR, PhaseStatus.COMPLETE
+    )
     finished.piezo.withrf_check_status_pv_obj.get.side_effect = [
         COMPLETE,
         RUNNING,
         COMPLETE,
     ] + [COMPLETE] * 10
-    phase.run()
+    assert phase.run() is False
     finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+    assert not (
+        phase.context.record.piezo_with_rf
+        and phase.context.record.piezo_with_rf.detune_gain_pushed
+    )
+
+
+def test_full_run_with_confirmation_pushes_once(finished, record):
+    finished.piezo.withrf_check_status_pv_obj.get.side_effect = [
+        COMPLETE,
+        RUNNING,
+        COMPLETE,
+    ] + [COMPLETE] * 10
+    record.set_phase_status(
+        CommissioningPhase.CAVITY_CHAR, PhaseStatus.COMPLETE
+    )
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    assert phase.run() is True
+    piezo = finished.piezo
+    piezo.withrf_push_dfgain_pv_obj.put.assert_called_once_with(1, wait=False)
+    piezo.withrf_save_dfgain_pv_obj.put.assert_called_once_with(1, wait=False)
+    data = record.piezo_with_rf
+    assert (data.amplifier_gain_a, data.amplifier_gain_b) == (1.05, 0.98)
+    assert data.detune_gain == 0.85
+    assert data.rf_test_status == "Pass"
+    assert data.detune_gain_pushed is True
+    assert data.passed
 
 
 def test_record_results_is_a_no_op_step(phase, finished):

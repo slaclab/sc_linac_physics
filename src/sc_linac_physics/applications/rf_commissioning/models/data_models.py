@@ -424,7 +424,8 @@ class PiezoWithRFTest:
         label="With-RF Test",
         widget_name="piezo_rf_test_status",
     )
-    # True once push_detune_gain processed PUSH_DFGAIN and SAVE_DFGAIN.
+    # True once push_detune_gain processed PUSH_DFGAIN (set before SAVE_DFGAIN
+    # is written).
     detune_gain_pushed: bool = phase_display_field(
         default=False,
         label="Detune Gain Pushed",

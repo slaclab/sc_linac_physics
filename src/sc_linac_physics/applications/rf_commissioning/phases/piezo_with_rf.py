@@ -445,9 +445,11 @@ class PiezoWithRFPhase(PhaseBase):
         read_results stored. Just before pushing it re-reads DFGAIN_NEW and
         RFTESTSTS, and refuses if the gain changed or a new test is running.
 
-        It writes PUSH_DFGAIN.PROC = 1, then SAVE_DFGAIN.PROC = 1. Both are ao
-        records whose DESC reads "Push calc-ed to live PV". A PUSH error
-        returns RETRY with nothing recorded as pushed. Once PUSH is processed
+        It writes PUSH_DFGAIN.PROC = 1, then SAVE_DFGAIN.PROC = 1, each with
+        wait=False (triggers, like PROBECALSTRT in Cavity). Both are ao
+        records whose DESC reads 'Push calc-ed to live PV' (as
+        ACCL:L1B:0210:PZT served them on 2026-10-14). A PUSH error returns
+        RETRY with nothing recorded as pushed. Once PUSH is processed
         the gain is live, so detune_gain_pushed is stored before SAVE is
         written. A SAVE error fails without retry, because a retry would
         re-run the gate and could refuse after the gain is live. A Warning
@@ -474,14 +476,18 @@ class PiezoWithRFPhase(PhaseBase):
 
         piezo = self.cavity.piezo
         try:
-            piezo.withrf_push_dfgain_pv_obj.put(1)
+            piezo.withrf_push_dfgain_pv_obj.put(1, wait=False)
         except Exception as exc:
-            return self._retry(f"Could not push the detune gain: {exc}")
+            return self._retry(
+                f"Could not confirm the detune gain push: {exc} — "
+                "PUSH_DFGAIN may have been processed; check DFGAIN before "
+                "retrying"
+            )
         # PUSH_DFGAIN processed: the gain is live. Record that before SAVE, so
         # a failed SAVE still leaves detune_gain_pushed True.
         self._store_phase_fields(detune_gain_pushed=True)
         try:
-            piezo.withrf_save_dfgain_pv_obj.put(1)
+            piezo.withrf_save_dfgain_pv_obj.put(1, wait=False)
         except Exception as exc:
             # Not a RETRY: a retry re-runs the gate, which could refuse now
             # that the gain is already live.
