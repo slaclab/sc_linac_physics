@@ -203,18 +203,12 @@ def _add_mock_methods(cls):
 
             raise q0_utils.Q0AbortError(f"Abort requested for {self}")
 
-    def getRefValveParams(self, *args, **kwargs):
-        from sc_linac_physics.applications.q0 import q0_utils
-
-        return q0_utils.ValveParams(75.0, 150.0, 148.5)
-
     cls.wait_for_ll_drop = wait_for_ll_drop
     cls.setup_cryo_for_measurement = setup_cryo_for_measurement
     cls.restore_cryo = restore_cryo
     cls.waitForLL = waitForLL
     cls.fill = fill
     cls.check_abort = check_abort
-    cls.getRefValveParams = getRefValveParams
 
 
 def _create_mock_q0_cryomodule_class():
@@ -273,6 +267,7 @@ def _add_real_methods_to_mock_class(mock_class):
     methods_to_copy = [
         "launchHeaterRun",
         "take_new_calibration",
+        "_require_valve_params",
         "takeNewQ0Measurement",
         "fill_heater_readback_buffer",
         "fill_pressure_buffer",
@@ -2725,3 +2720,49 @@ class TestCleanupAttemptsEveryStep:
 
         assert cavity.abort_flag is True
         assert fast_q0_cryo.abort_flag is False
+
+
+class TestMissingValveParams:
+    """Without valveParams, runs stop with ValueError before any PV write.
+
+    getRefValveParams (the archiver search that filled valveParams) was
+    retired, so a script that skips setting valveParams used to hit
+    AttributeError partway into setup.
+    """
+
+    def test_take_new_calibration_raises(self, fast_q0_cryo):
+        fast_q0_cryo.valveParams = None
+
+        with (
+            patch("tests.applications.q0.pyepics_shim.caput") as caput,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.Calibration"
+            ) as calibration,
+            pytest.raises(ValueError, match="valveParams is not set"),
+        ):
+            fast_q0_cryo.take_new_calibration()
+
+        caput.assert_not_called()
+        calibration.assert_not_called()
+
+    def test_setup_for_q0_raises(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+
+        fast_q0_cryo.valveParams = None
+        fast_q0_cryo.fill = Mock()
+
+        with (
+            patch("tests.applications.q0.pyepics_shim.caput") as caput,
+            pytest.raises(ValueError, match="valveParams is not set"),
+        ):
+            Q0Cryomodule.setup_for_q0(
+                fast_q0_cryo,
+                desiredAmplitudes={1: 16.0},
+                desired_ll=93,
+                jt_search_end=None,
+                jt_search_start=None,
+            )
+
+        caput.assert_not_called()
+        fast_q0_cryo.fill.assert_not_called()
+        assert fast_q0_cryo.q0_measurement is None
