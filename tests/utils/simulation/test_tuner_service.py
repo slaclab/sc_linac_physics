@@ -86,10 +86,10 @@ class TestPiezoPVGroup:
                 assert hasattr(prop, "value")
                 assert hasattr(prop, "pvname")
 
-    def test_prerf_channel_statuses_default_to_not_tested(self, piezo_group):
-        """Pre-RF channel statuses should start in Not Tested state."""
-        assert piezo_group.prerf_cha_status.value == 2
-        assert piezo_group.prerf_chb_status.value == 2
+    def test_prerf_channel_statuses_default_to_pass(self, piezo_group):
+        """Production has no Not Tested state: [Pass, Warning, Fail]."""
+        assert piezo_group.prerf_cha_status.value == 0
+        assert piezo_group.prerf_chb_status.value == 0
 
     @staticmethod
     def _enum_int(prop):
