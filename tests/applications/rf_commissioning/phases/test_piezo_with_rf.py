@@ -541,12 +541,19 @@ def test_full_run_without_confirmation_never_pushes(phase, finished, record):
     record.set_phase_status(
         CommissioningPhase.CAVITY_CHAR, PhaseStatus.COMPLETE
     )
+    # verify_initial_state, start_test, then wait sees Running and Complete.
     finished.piezo.withrf_check_status_pv_obj.get.side_effect = [
+        COMPLETE,
         COMPLETE,
         RUNNING,
         COMPLETE,
     ] + [COMPLETE] * 10
     assert phase.run() is False
+    # The run got as far as the test and its results; only the push refused.
+    finished.piezo.withrf_run_check_pv_obj.put.assert_called_once_with(
+        1, wait=False
+    )
+    assert phase.context.record.piezo_with_rf.detune_gain == 0.85
     finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
     assert not (
         phase.context.record.piezo_with_rf
@@ -555,7 +562,9 @@ def test_full_run_without_confirmation_never_pushes(phase, finished, record):
 
 
 def test_full_run_with_confirmation_pushes_once(finished, record):
+    # verify_initial_state, start_test, then wait sees Running and Complete.
     finished.piezo.withrf_check_status_pv_obj.get.side_effect = [
+        COMPLETE,
         COMPLETE,
         RUNNING,
         COMPLETE,
