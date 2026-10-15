@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime, timedelta
 from functools import partial
 from typing import Dict, Optional
@@ -48,8 +49,10 @@ def format_q0(measurement) -> str:
     warning when the two differ by more than q0_utils.FIT_SENSITIVE_SIGMAS
     sigma (Q0Measurement.fit_sensitive)."""
     fit = "siegel" if q0_utils.USE_SIEGELSLOPES else "linregress"
+    sigma = measurement.q0_sigma
+    sigma_text = "n/a" if math.isnan(sigma) else f"{sigma:.1e}"
     text = (
-        f"Q0 {measurement.q0:.2e} ± {measurement.q0_sigma:.1e} ({fit})"
+        f"Q0 {measurement.q0:.2e} ± {sigma_text} ({fit})"
         f" · linregress {measurement.q0_linregress:.2e}"
     )
     if measurement.fit_sensitive:

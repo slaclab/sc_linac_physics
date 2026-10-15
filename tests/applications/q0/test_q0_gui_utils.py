@@ -638,3 +638,10 @@ class TestFormatQ0:
         m = Mock(q0=1.2e10, q0_sigma=3e8, q0_linregress=1.31e10)
         m.fit_sensitive = True
         assert format_q0(m).endswith("linregress 1.31e+10 ⚠ fit-sensitive")
+
+    def test_no_sigma_for_two_sample_fit(self):
+        m = Mock(q0=1.2e10, q0_sigma=float("nan"), q0_linregress=1.31e10)
+        m.fit_sensitive = False
+        assert format_q0(m) == (
+            "Q0 1.20e+10 ± n/a (siegel) · linregress 1.31e+10"
+        )

@@ -869,6 +869,11 @@ class TestFitSensitivity:
             gap > q0_utils.FIT_SENSITIVE_SIGMAS * measurement.q0_sigma
         )
 
+    def test_no_flag_without_sigma(self, measurement):
+        measurement.rf_run.fit_window = (0.0, 1.0)
+        assert np.isnan(measurement.q0_sigma)
+        assert not measurement.fit_sensitive
+
     def test_flag_follows_threshold(self, measurement):
         gap = abs(measurement.q0 - measurement.q0_linregress)
         with patch.object(q0_utils, "FIT_SENSITIVE_SIGMAS", 0.0):

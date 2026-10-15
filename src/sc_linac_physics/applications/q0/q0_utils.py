@@ -224,11 +224,13 @@ class DataRun:
         data), which makes its stderr far too small. This uses the AR(1)
         correction stderr * sqrt((1 + rho) / (1 - rho)), with rho the lag-1
         correlation of the residuals in time order, floored at 0.
+        nan when the fit has fewer than 3 samples.
         """
         fit = self._linregress_fit()
         times = np.array(sorted(self.fit_ll_data))
         if len(times) < 3:
-            return fit.stderr
+            # A line through two points has no spread to estimate.
+            return np.nan
         levels = np.array([self.fit_ll_data[t] for t in times])
         resid = levels - (fit.intercept + fit.slope * times)
         if np.std(resid[:-1]) == 0 or np.std(resid[1:]) == 0:

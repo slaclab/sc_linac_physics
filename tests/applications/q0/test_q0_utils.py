@@ -249,9 +249,11 @@ class TestDataRunLinregress(unittest.TestCase):
         )
         self.assertNotAlmostEqual(self.data_run.dll_dt_stderr, full)
 
-    def test_two_sample_window_has_no_correlation_term(self):
+    def test_two_sample_window_has_no_stderr(self):
+        # A line through two points has no spread to estimate; scipy versions
+        # disagree (0 or nan), so the code returns nan itself.
         self.data_run.fit_window = (0.0, 1.0)
-        self.assertEqual(self.data_run.dll_dt_stderr, 0.0)
+        self.assertTrue(np.isnan(self.data_run.dll_dt_stderr))
 
 
 class TestHeaterRun(unittest.TestCase):

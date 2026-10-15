@@ -308,6 +308,6 @@ class Q0Measurement:
     @property
     def fit_sensitive(self) -> bool:
         """True when q0 and q0_linregress differ by more than
-        FIT_SENSITIVE_SIGMAS * q0_sigma."""
+        FIT_SENSITIVE_SIGMAS * q0_sigma. False when q0_sigma is nan."""
         gap = abs(self.q0 - self.q0_linregress)
         return gap > q0_utils.FIT_SENSITIVE_SIGMAS * self.q0_sigma
