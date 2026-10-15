@@ -13,7 +13,7 @@ class DecaradPVGroup(PVGroup):
         value=0,
         name="HVSTATUS",
         dtype=ChannelType.ENUM,
-        enum_strings=("On", "Off"),
+        enum_strings=("ON", "OFF"),
     )
 
     # TODO figure out an appropriate number and set to 0 when turned off

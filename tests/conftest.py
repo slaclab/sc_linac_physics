@@ -309,7 +309,7 @@ class FakeEPICS_PV:
         self._connected = True
         self._get_value = 42.0
         self._put_return = 1
-        self.severity = 0
+        self._severity = 0
         self.auto_monitor = auto_monitor
 
         self.callbacks = {}
@@ -325,6 +325,22 @@ class FakeEPICS_PV:
     @property
     def connected(self):
         return self._connected
+
+    @property
+    def severity(self):
+        """A property, as in pyepics; tests set _severity."""
+        return self._severity
+
+    def get_timevars(self, timeout=None, warn=True):
+        """As pyepics: fetch severity/status/timestamp, update the cache.
+
+        Tests set _ioc_severity to the value the IOC would return now;
+        it defaults to the cached _severity. Returns None if not connected.
+        """
+        if not self._connected:
+            return None
+        self._severity = getattr(self, "_ioc_severity", self._severity)
+        return {"severity": self._severity, "status": 0, "timestamp": None}
 
     def wait_for_connection(self, timeout=None):
         return self._connected
