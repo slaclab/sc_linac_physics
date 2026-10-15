@@ -53,6 +53,7 @@ def mock_cryomodule():
     mock_calibration = Mock()
     mock_calibration.time_stamp = "2023-10-01 10:00:00"
     mock_calibration.get_heat.return_value = 50.0
+    mock_calibration.heater_runs = []
     mock_cm.calibration = mock_calibration
 
     # Mock cavities
@@ -804,6 +805,18 @@ class TestFitWindow:
     ):
         measurement = setup_complete_measurement()
         measurement.set_fit_window(measurement.rf_run, (0.0, 1800.0))
+        with pytest.raises(q0_utils.DataError):
+            measurement.save_results()
+        mock_update.assert_not_called()
+
+    @patch("sc_linac_physics.applications.q0.q0_utils.update_json_data")
+    def test_save_results_refuses_calibration_window(
+        self, mock_update, setup_complete_measurement
+    ):
+        measurement = setup_complete_measurement()
+        calibration_run = q0_utils.HeaterRun(10.0)
+        calibration_run.fit_window = (0.0, 1.0)
+        measurement.cryomodule.calibration.heater_runs = [calibration_run]
         with pytest.raises(q0_utils.DataError):
             measurement.save_results()
         mock_update.assert_not_called()

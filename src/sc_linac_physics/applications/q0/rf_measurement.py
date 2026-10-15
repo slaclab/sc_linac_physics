@@ -201,7 +201,12 @@ class Q0Measurement:
         )
 
     def save_results(self):
-        q0_utils.require_no_fit_windows([self.heater_run, self.rf_run])
+        # The results also come from the calibration curve, so its runs
+        # must be unwindowed too.
+        q0_utils.require_no_fit_windows(
+            [self.heater_run, self.rf_run]
+            + self.cryomodule.calibration.heater_runs
+        )
         newData = {
             q0_utils.JSON_START_KEY: self.start_time,
             q0_utils.JSON_CAV_AMPS_KEY: self.rf_run.amplitudes,
