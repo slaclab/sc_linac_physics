@@ -477,18 +477,23 @@ class SSA(linac_utils.SCLinacObject):
         # Wall-clock deadline, so a slow CALSTS read (up to 10 s each)
         # counts against the timeout.
         deadline = time.monotonic() + timeout
-        while self.calibration_running:
+        while True:
+            # One CALSTS read per poll; the abort check runs after every
+            # read, including the one that reports the scan finished.
+            status = self.calibration_status
             # check_abort turns the cavity off and raises CavityAbortError.
             # Nothing here writes CALSTRT to stop the scan.
             # CHECK: does the SSA scan stop by itself once RF is off,
             # or does it run to the end after an abort?
             self.cavity.check_abort()
+            if status != linac_utils.SSA_CALIBRATION_RUNNING_VALUE:
+                break
             if time.monotonic() >= deadline:
                 self.cavity.logger.error(
                     "SSA calibration timed out",
                     extra={
                         "extra_data": {
-                            "calibration_status": self.calibration_status,
+                            "calibration_status": status,
                             "timeout_s": timeout,
                             "ssa": str(self),
                         }
@@ -505,7 +510,7 @@ class SSA(linac_utils.SCLinacObject):
                 "Waiting for SSA calibration to complete",
                 extra={
                     "extra_data": {
-                        "calibration_status": self.calibration_status,
+                        "calibration_status": status,
                         "ssa": str(self),
                     }
                 },

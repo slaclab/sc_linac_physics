@@ -341,7 +341,7 @@ def test_run_calibration_timeout(ssa, monkeypatch):
 
 def test_run_calibration_checks_abort_each_poll(ssa):
     # CALSTS reads "running" until check_abort has been called twice,
-    # i.e. the scan finishes after two polls.
+    # i.e. the scan finishes on the third poll, which is also checked.
     ssa.cavity.check_abort = MagicMock()
     _start_running_calibration(
         ssa,
@@ -364,8 +364,44 @@ def test_run_calibration_checks_abort_each_poll(ssa):
 
     ssa.run_calibration()
 
-    assert ssa.cavity.check_abort.call_count == 2
+    assert ssa.cavity.check_abort.call_count == 3
     ssa.cavity.push_ssa_slope.assert_called()
+
+
+def test_run_calibration_abort_on_completion_poll(ssa):
+    # The poll that reports the scan finished still honors a pending abort.
+    _start_running_calibration(ssa, lambda **_: 1)
+    ssa.cavity.turn_off = MagicMock()
+    ssa.cavity.push_ssa_slope = MagicMock()
+    ssa.cavity.abort_flag = True
+
+    with pytest.raises(CavityAbortError):
+        ssa.run_calibration()
+
+    ssa.cavity.push_ssa_slope.assert_not_called()
+
+
+def test_run_calibration_timeout_does_not_reread_calsts(ssa, monkeypatch):
+    # A failing CALSTS read after the deadline must not replace the
+    # SSACalibrationError that calibrate() retries on.
+    reads = iter([SSA_CALIBRATION_RUNNING_VALUE])
+
+    def status(**_):
+        try:
+            return next(reads)
+        except StopIteration:
+            raise RuntimeError("CALSTS read after timeout")
+
+    _start_running_calibration(ssa, status)
+    ssa.cavity.check_abort = MagicMock()
+    clock = iter([0.0, 120.0])
+    monkeypatch.setattr(
+        "sc_linac_physics.utils.sc_linac.ssa.time.monotonic",
+        lambda: next(clock),
+    )
+
+    with pytest.raises(SSACalibrationError):
+        ssa.run_calibration(timeout=120.0)
 
 
 def test_calibration_timeout_matches_commissioning_limit():
