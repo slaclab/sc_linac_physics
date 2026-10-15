@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from scipy.stats import linregress
 
 # Import the modules to test
 from sc_linac_physics.applications.q0.q0_utils import (
@@ -193,6 +194,64 @@ class TestDataRunFitWindow(unittest.TestCase):
         with self.assertRaises(DataError):
             self.data_run.fit_window = (4.0, 4.0)
         self.assertIsNone(self.data_run.fit_window)
+
+
+def _corrected_stderr(ll_data):
+    """By hand: linregress stderr times sqrt((1 + rho) / (1 - rho)), rho the
+    lag-1 correlation of the residuals in time order, floored at 0."""
+    t = np.array(sorted(ll_data))
+    y = np.array([ll_data[k] for k in t])
+    fit = linregress(t, y)
+    resid = y - (fit.intercept + fit.slope * t)
+    rho = max(np.corrcoef(resid[:-1], resid[1:])[0, 1], 0.0)
+    return fit.stderr * np.sqrt((1 + rho) / (1 - rho))
+
+
+class TestDataRunLinregress(unittest.TestCase):
+    """dll_dt_linregress and dll_dt_stderr fit the same samples as dll_dt."""
+
+    def setUp(self):
+        self.data_run = DataRun()
+        rng = np.random.default_rng(0)
+        times = np.arange(200.0)
+        # Residuals with lag-1 correlation 0.9, like a slowly wandering LL
+        noise = np.zeros(200)
+        for i in range(1, 200):
+            noise[i] = 0.9 * noise[i - 1] + rng.normal(0, 0.01)
+        self.data_run.ll_data = dict(zip(times, 93.0 - 0.01 * times + noise))
+
+    def test_slope_matches_scipy_linregress(self):
+        expected = linregress(
+            list(self.data_run.ll_data), list(self.data_run.ll_data.values())
+        )
+        self.assertAlmostEqual(self.data_run.dll_dt_linregress, expected.slope)
+
+    def test_stderr_corrected_for_correlated_residuals(self):
+        raw = linregress(
+            list(self.data_run.ll_data), list(self.data_run.ll_data.values())
+        ).stderr
+        self.assertAlmostEqual(
+            self.data_run.dll_dt_stderr,
+            _corrected_stderr(self.data_run.ll_data),
+        )
+        self.assertGreater(self.data_run.dll_dt_stderr, 2 * raw)
+
+    def test_respects_fit_window(self):
+        full = self.data_run.dll_dt_stderr
+        self.data_run.fit_window = (0.0, 99.0)
+        window = self.data_run.fit_ll_data
+        self.assertAlmostEqual(
+            self.data_run.dll_dt_linregress,
+            linregress(list(window), list(window.values())).slope,
+        )
+        self.assertAlmostEqual(
+            self.data_run.dll_dt_stderr, _corrected_stderr(window)
+        )
+        self.assertNotAlmostEqual(self.data_run.dll_dt_stderr, full)
+
+    def test_two_sample_window_has_no_correlation_term(self):
+        self.data_run.fit_window = (0.0, 1.0)
+        self.assertEqual(self.data_run.dll_dt_stderr, 0.0)
 
 
 class TestHeaterRun(unittest.TestCase):

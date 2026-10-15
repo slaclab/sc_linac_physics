@@ -16,7 +16,10 @@ from sc_linac_physics.applications.q0 import q0_gui_utils
 from sc_linac_physics.applications.q0.q0_cavity import Q0Cavity
 from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
 from sc_linac_physics.applications.q0.q0_fit_regions import FitRegions
-from sc_linac_physics.applications.q0.q0_gui_utils import CalibrationWorker
+from sc_linac_physics.applications.q0.q0_gui_utils import (
+    CalibrationWorker,
+    format_q0,
+)
 from sc_linac_physics.applications.q0.q0_measurement_widget import (
     Q0MeasurementWidget,
 )
@@ -375,7 +378,7 @@ class Q0GUI(Display):
         )
         self.q0_fit_plot.setTitle(
             "Heat On Calibration Curve (with adjustments),"
-            f" Q0 {measurement.q0:.2e}"
+            f" {format_q0(measurement)}"
         )
 
     def _draw_calibration_fit(self):

@@ -14,6 +14,10 @@ from scipy.stats import linregress, siegelslopes
 
 USE_SIEGELSLOPES = True
 
+# Q0Measurement.fit_sensitive is True when the linregress Q0 differs from the
+# official Q0 by more than this many q0_sigma.
+FIT_SENSITIVE_SIGMAS = 1
+
 DATETIME_FORMATTER = "%m/%d/%y %H:%M:%S"
 
 # The relationship between the LHE content of a cryomodule and the readback from
@@ -110,6 +114,7 @@ class DataRun:
         self._average_heat = None
         self.reference_heat = reference_heat
         self._fit_window: Optional[Tuple[float, float]] = None
+        self._linregress = None
 
     @property
     def fit_window(self) -> Optional[Tuple[float, float]]:
@@ -134,6 +139,7 @@ class DataRun:
                 )
         self._fit_window = window
         self._dll_dt = None
+        self._linregress = None
 
     @property
     def fit_ll_data(self) -> Dict[float, float]:
@@ -194,6 +200,43 @@ class DataRun:
     @dll_dt.setter
     def dll_dt(self, value: float):
         self._dll_dt = value
+
+    def _linregress_fit(self):
+        if self._linregress is None:
+            self._linregress = linregress(
+                list(self.fit_ll_data.keys()),
+                list(self.fit_ll_data.values()),
+            )
+        return self._linregress
+
+    @property
+    def dll_dt_linregress(self) -> float:
+        """Least-squares dLL/dt over fit_ll_data, shown beside dll_dt."""
+        return self._linregress_fit().slope
+
+    @property
+    def dll_dt_stderr(self) -> float:
+        """Standard error of dll_dt_linregress, in LL units per second,
+        widened for correlated residuals.
+
+        linregress assumes independent samples. Neighbouring LL residuals
+        are strongly correlated (median lag-1 rho ~0.97 in the packaged
+        data), which makes its stderr far too small. This uses the AR(1)
+        correction stderr * sqrt((1 + rho) / (1 - rho)), with rho the lag-1
+        correlation of the residuals in time order, floored at 0.
+        """
+        fit = self._linregress_fit()
+        times = np.array(sorted(self.fit_ll_data))
+        if len(times) < 3:
+            return fit.stderr
+        levels = np.array([self.fit_ll_data[t] for t in times])
+        resid = levels - (fit.intercept + fit.slope * times)
+        if np.std(resid[:-1]) == 0 or np.std(resid[1:]) == 0:
+            return fit.stderr
+        rho = max(np.corrcoef(resid[:-1], resid[1:])[0, 1], 0.0)
+        if rho >= 1:
+            return np.inf
+        return fit.stderr * np.sqrt((1 + rho) / (1 - rho))
 
 
 class HeaterRun(DataRun):

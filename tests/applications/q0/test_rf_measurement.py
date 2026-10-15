@@ -1,5 +1,7 @@
 import json
+import shutil
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
 
 import numpy as np
@@ -821,3 +823,83 @@ class TestFitWindow:
         with pytest.raises(q0_utils.DataError):
             measurement.save_results()
         mock_update.assert_not_called()
+
+
+class TestFitSensitivity:
+    """q0_linregress, q0_sigma and fit_sensitive sit beside the official q0."""
+
+    @pytest.fixture
+    def measurement(self, mock_cryomodule, sample_amplitudes):
+        rng = np.random.default_rng(2)
+        times = np.arange(200.0)
+        m = Q0Measurement(mock_cryomodule)
+        m.amplitudes = sample_amplitudes
+        m.heater_run_heatload = 48.0
+        m.heater_run.average_heat = 48.0
+        m.heater_run.ll_data = dict(
+            zip(times, 93.0 - 0.004 * times + rng.normal(0, 0.05, 200))
+        )
+        m.rf_run.avg_pressure = 30.0
+        m.rf_run.ll_data = dict(
+            zip(times, 93.0 - 0.005 * times + rng.normal(0, 0.05, 200))
+        )
+        cal = mock_cryomodule.calibration
+        cal.dLLdt_dheat = -1e-4
+        cal.adjustment = 0.0
+        cal.get_heat.side_effect = lambda dll: dll / -1e-4
+        cal.linregress_line.return_value = (-1.1e-4, 0.0)
+        return m
+
+    def test_q0_sigma_by_hand(self, measurement):
+        ht, rf = measurement.heater_run, measurement.rf_run
+        sigma_heat = np.hypot(ht.dll_dt_stderr, rf.dll_dt_stderr) / 1e-4
+        expected = measurement.q0 * sigma_heat / measurement.heat_load
+        assert measurement.q0_sigma == pytest.approx(expected)
+
+    def test_q0_linregress_by_hand(self, measurement):
+        ht, rf = measurement.heater_run, measurement.rf_run
+        heat = 48.0 + (rf.dll_dt_linregress - ht.dll_dt_linregress) / -1.1e-4
+        # Uncorrected Q0 is proportional to 1 / heat load
+        expected = measurement.q0 * measurement.heat_load / heat
+        assert measurement.q0_linregress == pytest.approx(expected)
+
+    def test_fit_sensitive_when_gap_exceeds_sigma(self, measurement):
+        gap = abs(measurement.q0 - measurement.q0_linregress)
+        assert measurement.fit_sensitive == (
+            gap > q0_utils.FIT_SENSITIVE_SIGMAS * measurement.q0_sigma
+        )
+
+    def test_flag_follows_threshold(self, measurement):
+        gap = abs(measurement.q0 - measurement.q0_linregress)
+        with patch.object(q0_utils, "FIT_SENSITIVE_SIGMAS", 0.0):
+            assert measurement.fit_sensitive == (gap > 0)
+        with patch.object(q0_utils, "FIT_SENSITIVE_SIGMAS", 1e9):
+            assert not measurement.fit_sensitive
+
+
+def test_packaged_q0_unchanged(tmp_path):
+    """The official q0 for a packaged CM07 run matches the value recorded
+    before the fit-sensitivity change (same cavity length and R/Q mocks)."""
+    from sc_linac_physics.applications.q0.calibration import Calibration
+
+    data = Path(q0_utils.__file__).parent
+    for src, name in (
+        (data / "data" / "q0_measurements" / "cm07.json", "q0.json"),
+        (data / "data" / "calibrations" / "cm07.json", "cal.json"),
+        (data / "calibrations" / "cm07.json", "cal_idx.json"),
+    ):
+        shutil.copy(src, tmp_path / name)
+    cm = Mock()
+    cm.q0_data_file = str(tmp_path / "q0.json")
+    cm.calib_data_file = str(tmp_path / "cal.json")
+    cm.calib_idx_file = str(tmp_path / "cal_idx.json")
+    cm.cavities = {1: Mock(length=1.038, r_over_q=1012.0)}
+    cm.q0_measurement = None
+    cm.calibration = Calibration("07/25/22 14:44:46", cm)
+    cm.calibration.load_data()
+
+    measurement = Q0Measurement(cm)
+    measurement.load_data("07/25/22 19:14:24")
+
+    assert measurement.q0 == pytest.approx(17614343201.731678, rel=1e-12)
+    assert measurement.q0_linregress != pytest.approx(measurement.q0)

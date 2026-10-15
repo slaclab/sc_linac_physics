@@ -1198,6 +1198,9 @@ class TestQ0GUIFitRegions:
             heat_load=60.0,
             heater_run_heatload=40.0,
             q0=2.5e10,
+            q0_sigma=1e8,
+            q0_linregress=2.6e10,
+            fit_sensitive=True,
         )
         mock_cryomodule.calibration = calibration
         mock_cryomodule.q0_measurement = measurement
@@ -1240,7 +1243,9 @@ class TestQ0GUIFitRegions:
             "Heat vs dll/dt, slope -1.00e-02"
         )
         gui.q0_fit_plot.setTitle.assert_called_with(
-            "Heat On Calibration Curve (with adjustments), Q0 2.50e+10"
+            "Heat On Calibration Curve (with adjustments),"
+            " Q0 2.50e+10 ± 1.0e+08 (siegel) · linregress 2.60e+10"
+            " ⚠ fit-sensitive"
         )
 
     def test_calibration_window_change_refits_both_plots(self, gui):

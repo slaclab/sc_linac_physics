@@ -43,6 +43,20 @@ PV_ERRORS = (PVConnectionError, PVGetError, PVPutError)
 NO_CRYO_ACCESS = "Required cryo permissions not granted - call cryo ops"
 
 
+def format_q0(measurement) -> str:
+    """The official Q0 with its sigma, the linregress Q0 beside it, and a
+    warning when the two differ by more than q0_utils.FIT_SENSITIVE_SIGMAS
+    sigma (Q0Measurement.fit_sensitive)."""
+    fit = "siegel" if q0_utils.USE_SIEGELSLOPES else "linregress"
+    text = (
+        f"Q0 {measurement.q0:.2e} ± {measurement.q0_sigma:.1e} ({fit})"
+        f" · linregress {measurement.q0_linregress:.2e}"
+    )
+    if measurement.fit_sensitive:
+        text += " ⚠ fit-sensitive"
+    return text
+
+
 class CryoParamSetupWorker(Worker):
     def __init__(
         self,
@@ -124,7 +138,7 @@ class Q0Worker(RFWorker):
                 ll_drop=self.ll_drop,
             )
             self.finished.emit(
-                f"Recorded Q0: {self.cryomodule.q0_measurement.q0:.2e}"
+                f"Recorded {format_q0(self.cryomodule.q0_measurement)}"
             )
         except (
             TypeError,
@@ -308,8 +322,8 @@ class Q0Options(QObject):
         self.cryomodule.load_q0_measurement(time_stamp=timestamp)
         self.q0_loaded_signal.emit(
             f"Loaded q0 measurement for"
-            f" CM{self.cryomodule.name} from {timestamp}"
-            f" with q0 {self.cryomodule.q0_measurement.q0:.2e}"
+            f" CM{self.cryomodule.name} from {timestamp}:"
+            f" {format_q0(self.cryomodule.q0_measurement)}"
         )
 
 
