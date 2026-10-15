@@ -26,7 +26,7 @@ class MAGNETPVGroup(PVGroup):
             "ADC Error",
             "Not Stdz'd",
             "Out-of-Tol",
-            "Bad Ripple",
+            "BAD Ripple",
             "BAD BACT",
             "No Control",
         ),
