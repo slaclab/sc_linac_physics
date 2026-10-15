@@ -22,6 +22,9 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
     PhaseResult,
 )
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    piezo_with_rf as piezo_with_rf_module,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.piezo_with_rf import (
     PiezoWithRFLimits,
     PiezoWithRFPhase,
@@ -40,6 +43,26 @@ RUNNING = 2
 @pytest.fixture(autouse=True)
 def no_sleep(monkeypatch):
     monkeypatch.setattr(time, "sleep", lambda _: None)
+
+
+class FakeClock:
+    """Stands in for the phase module's ``time``: sleep advances monotonic."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch):
+    fake = FakeClock()
+    monkeypatch.setattr(piezo_with_rf_module, "time", fake)
+    return fake
 
 
 @pytest.fixture
@@ -117,6 +140,15 @@ def test_verify_initial_state_passes(phase):
     assert (
         phase.execute_step("verify_initial_state").result == PhaseResult.SUCCESS
     )
+
+
+def test_verify_initial_state_refuses_a_running_test(phase, mock_cavity):
+    """Refused before setup_rf, which would turn RF off under the test."""
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.return_value = RUNNING
+    result = phase.execute_step("verify_initial_state")
+    assert result.result == PhaseResult.FAILED
+    assert "already running" in result.message
+    mock_cavity.setup_rf.assert_not_called()
 
 
 def test_setup_rf_runs_setup_rf_then_sel(phase, mock_cavity):
@@ -299,14 +331,32 @@ def test_wait_accepts_crash_as_finished(phase, mock_cavity):
     )
 
 
-def test_status_never_seen_running_fails(mock_cavity, record):
+def test_status_never_seen_running_fails(mock_cavity, record, clock):
     mock_cavity.piezo.withrf_check_status_pv_obj.get.return_value = COMPLETE
     phase = make_phase(mock_cavity, record)
     phase.limits.start_timeout_seconds = 3
     result = phase.execute_step("wait_for_completion")
     assert result.result == PhaseResult.FAILED
     assert "RFTESTSTS" in result.message
-    assert mock_cavity.piezo.withrf_check_status_pv_obj.get.call_count == 3
+    # Reads at t = 0, 1, 2 and 3 s; gives up at the deadline.
+    assert mock_cavity.piezo.withrf_check_status_pv_obj.get.call_count == 4
+    assert clock.now == 3
+
+
+def test_slow_reads_do_not_stretch_the_timeout(mock_cavity, record, clock):
+    """Each RFTESTSTS read takes 2 s; the 3 s limit is elapsed time."""
+
+    def slow_read():
+        clock.now += 2
+        return COMPLETE
+
+    mock_cavity.piezo.withrf_check_status_pv_obj.get.side_effect = slow_read
+    phase = make_phase(mock_cavity, record)
+    phase.limits.start_timeout_seconds = 3
+    result = phase.execute_step("wait_for_completion")
+    assert result.result == PhaseResult.FAILED
+    # At most one read past the deadline.
+    assert clock.now <= 3 + 2
 
 
 def test_wait_times_out_while_running(mock_cavity, record):
