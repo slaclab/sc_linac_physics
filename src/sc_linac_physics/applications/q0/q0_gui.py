@@ -2,7 +2,12 @@ from functools import partial
 from typing import Dict, Optional
 
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
-from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QMessageBox
+from PyQt5.QtWidgets import (
+    QHBoxLayout,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
 from lcls_tools.common.frontend.display.util import showDisplay
 from pydm import Display
 from pyqtgraph import PlotWidget, plot
@@ -10,6 +15,7 @@ from pyqtgraph import PlotWidget, plot
 from sc_linac_physics.applications.q0 import q0_gui_utils
 from sc_linac_physics.applications.q0.q0_cavity import Q0Cavity
 from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+from sc_linac_physics.applications.q0.q0_fit_regions import FitRegions
 from sc_linac_physics.applications.q0.q0_gui_utils import CalibrationWorker
 from sc_linac_physics.applications.q0.q0_measurement_widget import (
     Q0MeasurementWidget,
@@ -95,6 +101,9 @@ class Q0GUI(Display):
 
         self.calibration_window: Optional[Display] = None
         self.q0_window: Optional[Display] = None
+
+        self.calibration_regions: Optional[FitRegions] = None
+        self.q0_regions: Optional[FitRegions] = None
 
         self.cav_amp_controls: Dict[int, q0_gui_utils.CavAmpControl] = {}
 
@@ -221,22 +230,23 @@ class Q0GUI(Display):
             if not self.q0_window:
                 self.q0_window = Display()
                 self.q0_window.setWindowTitle("Q0 Plots")
-                layout: QHBoxLayout = QHBoxLayout()
                 self.q0_data_plot: PlotWidget = plot()
                 self.q0_data_plot.setTitle("Q0 Data")
                 self.q0_fit_plot: PlotWidget = plot()
-                self.q0_fit_plot.setTitle(
-                    "Heat On Calibration Curve (with adjustments)"
+                region_button = QPushButton()
+                self.q0_regions = FitRegions(
+                    self.q0_data_plot,
+                    region_button,
+                    self._on_q0_fit_window_changed,
                 )
-                layout.addWidget(self.q0_data_plot)
-                layout.addWidget(self.q0_fit_plot)
-                self.q0_window.setLayout(layout)
+                self.q0_window.setLayout(
+                    self._plot_window_layout(
+                        region_button, self.q0_data_plot, self.q0_fit_plot
+                    )
+                )
 
             while self.q0_data_plot_items:
                 self.q0_data_plot.removeItem(self.q0_data_plot_items.pop())
-
-            while self.q0_fit_plot_items:
-                self.q0_fit_plot.removeItem(self.q0_fit_plot_items.pop())
 
             measurement = self.selected_cm.q0_measurement
             self.q0_data_plot_items.append(
@@ -252,25 +262,12 @@ class Q0GUI(Display):
                 )
             )
 
-            dll_dts = [measurement.rf_run.dll_dt, measurement.heater_run.dll_dt]
-            self.q0_fit_plot_items.append(
-                self.q0_fit_plot.plot(
-                    [measurement.heat_load, measurement.heater_run_heatload],
-                    dll_dts,
-                    pen=None,
-                    symbol="o",
+            if self.q0_regions is not None:
+                self.q0_regions.set_runs(
+                    [measurement.rf_run, measurement.heater_run]
                 )
-            )
 
-            self.q0_fit_plot_items.append(
-                self.q0_fit_plot.plot(
-                    [
-                        self.selected_cm.calibration.get_heat(dll_dt)
-                        for dll_dt in dll_dts
-                    ],
-                    dll_dts,
-                )
-            )
+            self._draw_q0_fit()
 
             showDisplay(self.q0_window)
         except Exception as e:
@@ -294,56 +291,142 @@ class Q0GUI(Display):
             if not self.calibration_window:
                 self.calibration_window = Display()
                 self.calibration_window.setWindowTitle("Calibration Plots")
-                layout: QHBoxLayout = QHBoxLayout()
                 self.calibration_data_plot: PlotWidget = plot()
                 self.calibration_data_plot.setTitle("Calibration Data")
                 self.calibration_fit_plot: PlotWidget = plot()
-                self.calibration_fit_plot.setTitle("Heat vs dll/dt")
-                layout.addWidget(self.calibration_data_plot)
-                layout.addWidget(self.calibration_fit_plot)
-                self.calibration_window.setLayout(layout)
+                region_button = QPushButton()
+                self.calibration_regions = FitRegions(
+                    self.calibration_data_plot,
+                    region_button,
+                    self._on_calibration_fit_window_changed,
+                )
+                self.calibration_window.setLayout(
+                    self._plot_window_layout(
+                        region_button,
+                        self.calibration_data_plot,
+                        self.calibration_fit_plot,
+                    )
+                )
 
             while self.calibration_data_plot_items:
                 self.calibration_data_plot.removeItem(
                     self.calibration_data_plot_items.pop()
                 )
 
-            while self.calibration_fit_plot_items:
-                self.calibration_fit_plot.removeItem(
-                    self.calibration_fit_plot_items.pop()
-                )
-
-            dll_dts = []
-
-            for heater_run in self.selected_cm.calibration.heater_runs:
+            heater_runs = self.selected_cm.calibration.heater_runs
+            for heater_run in heater_runs:
                 self.calibration_data_plot_items.append(
                     self.calibration_data_plot.plot(
                         list(heater_run.ll_data.keys()),
                         list(heater_run.ll_data.values()),
                     )
                 )
-                dll_dts.append(heater_run.dll_dt)
-                self.calibration_fit_plot_items.append(
-                    self.calibration_fit_plot.plot(
-                        [heater_run.average_heat],
-                        [heater_run.dll_dt],
-                        pen=None,
-                        symbol="o",
-                    )
-                )
 
-            heat_loads = [
-                self.selected_cm.calibration.get_heat(dll_dt)
-                for dll_dt in dll_dts
-            ]
-            self.calibration_fit_plot_items.append(
-                self.calibration_fit_plot.plot(heat_loads, dll_dts)
-            )
+            if self.calibration_regions is not None:
+                self.calibration_regions.set_runs(heater_runs)
+
+            self._draw_calibration_fit()
 
             showDisplay(self.calibration_window)
         except Exception as e:
             make_non_blocking_error_popup(
                 "Plot Error", f"Failed to show calibration data: {str(e)}"
+            )
+
+    @staticmethod
+    def _plot_window_layout(
+        region_button: QPushButton,
+        data_plot: PlotWidget,
+        fit_plot: PlotWidget,
+    ) -> QVBoxLayout:
+        """The region button above the data and fit plots, side by side."""
+        plot_layout = QHBoxLayout()
+        plot_layout.addWidget(data_plot)
+        plot_layout.addWidget(fit_plot)
+        layout = QVBoxLayout()
+        layout.addWidget(region_button)
+        layout.addLayout(plot_layout)
+        return layout
+
+    def _draw_q0_fit(self):
+        """Redraw the Q0 fit plot from the current dLL/dt fits."""
+        while self.q0_fit_plot_items:
+            self.q0_fit_plot.removeItem(self.q0_fit_plot_items.pop())
+
+        measurement = self.selected_cm.q0_measurement
+        dll_dts = [measurement.rf_run.dll_dt, measurement.heater_run.dll_dt]
+        self.q0_fit_plot_items.append(
+            self.q0_fit_plot.plot(
+                [measurement.heat_load, measurement.heater_run_heatload],
+                dll_dts,
+                pen=None,
+                symbol="o",
+            )
+        )
+
+        self.q0_fit_plot_items.append(
+            self.q0_fit_plot.plot(
+                [
+                    self.selected_cm.calibration.get_heat(dll_dt)
+                    for dll_dt in dll_dts
+                ],
+                dll_dts,
+            )
+        )
+        self.q0_fit_plot.setTitle(
+            "Heat On Calibration Curve (with adjustments),"
+            f" Q0 {measurement.q0:.2e}"
+        )
+
+    def _draw_calibration_fit(self):
+        """Redraw the calibration fit plot from the current dLL/dt fits."""
+        while self.calibration_fit_plot_items:
+            self.calibration_fit_plot.removeItem(
+                self.calibration_fit_plot_items.pop()
+            )
+
+        calibration = self.selected_cm.calibration
+        dll_dts = []
+        for heater_run in calibration.heater_runs:
+            dll_dts.append(heater_run.dll_dt)
+            self.calibration_fit_plot_items.append(
+                self.calibration_fit_plot.plot(
+                    [heater_run.average_heat],
+                    [heater_run.dll_dt],
+                    pen=None,
+                    symbol="o",
+                )
+            )
+
+        heat_loads = [calibration.get_heat(dll_dt) for dll_dt in dll_dts]
+        self.calibration_fit_plot_items.append(
+            self.calibration_fit_plot.plot(heat_loads, dll_dts)
+        )
+        self.calibration_fit_plot.setTitle(
+            f"Heat vs dll/dt, slope {calibration.dLLdt_dheat:.2e}"
+        )
+
+    def _on_calibration_fit_window_changed(self, run, window):
+        """A calibration region moved or was hidden: refit and redraw."""
+        try:
+            self.selected_cm.calibration.set_fit_window(run, window)
+            self._draw_calibration_fit()
+            # The Q0 result is read off this calibration curve
+            if self.q0_window and self.selected_cm.q0_measurement:
+                self._draw_q0_fit()
+        except Exception as e:
+            make_non_blocking_error_popup(
+                "Fit Error", f"Failed to refit calibration: {str(e)}"
+            )
+
+    def _on_q0_fit_window_changed(self, run, window):
+        """A Q0 region moved or was hidden: refit and redraw."""
+        try:
+            self.selected_cm.q0_measurement.set_fit_window(run, window)
+            self._draw_q0_fit()
+        except Exception as e:
+            make_non_blocking_error_popup(
+                "Fit Error", f"Failed to refit Q0 measurement: {str(e)}"
             )
 
     @pyqtSlot(str)
