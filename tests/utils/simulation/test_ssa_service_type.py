@@ -19,7 +19,14 @@ async def test_ssa_type_matches_cavity_kind(is_hl, is_he, expected_kw):
         "TEST:SSA:", cavityGroup=Mock(is_hl=is_hl), is_high_energy=is_he
     )
     await SSAPVGroup.ssa_type.pvspec.startup(ssa, ssa.ssa_type, None)
-    assert SSA_TYPE_RATED_POWER_KW[ssa.ssa_type.value] == expected_kw
+    # An untouched enum holds its int; a written one holds its label.
+    value = ssa.ssa_type.value
+    index = (
+        value
+        if isinstance(value, int)
+        else ssa.ssa_type.enum_strings.index(value)
+    )
+    assert SSA_TYPE_RATED_POWER_KW[index] == expected_kw
 
 
 def test_service_marks_l4b_ssas_high_energy():

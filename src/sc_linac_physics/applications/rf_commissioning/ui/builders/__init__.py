@@ -3,6 +3,7 @@
 from .activity_feed import ActivityFeedWidget
 from .base import PhaseUIBase
 from .phase_builders import (
+    CavityCharUI,
     FrequencyTuningUI,
     GenericPhaseUI,
     PiezoPreRFUI,
@@ -23,6 +24,7 @@ from .styles import (
 __all__ = [
     "ActivityFeedWidget",
     "PhaseUIBase",
+    "CavityCharUI",
     "FrequencyTuningUI",
     "PiezoPreRFUI",
     "SSACharUI",
