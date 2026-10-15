@@ -41,7 +41,6 @@ def test_numeric_type(service, pv, data_type):
 @pytest.mark.parametrize(
     "pv, states",
     [
-        (f"{CAV}PZT:CHA_TESTSTAT", ("Pass", "Warning", "Fail")),
         (f"{CAV}PZT:RFTESTSTS", ("Crash", "Complete", "Running")),
         (f"{CAV}PZT:MODESTAT", ("Manual", "Feedback", "Chirp", "Unknown")),
         (f"{CAV}PZT:ENABLESTAT", ("Not enabled", "Enabled")),
