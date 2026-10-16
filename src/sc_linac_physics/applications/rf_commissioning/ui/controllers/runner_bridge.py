@@ -3,8 +3,9 @@
 A controller owns one RunnerBridge, connects its signals to the view, and
 calls start_segment() from a button. The steps run on a daemon
 threading.Thread (not a QThread). Each StepListener call is re-emitted as a
-signal, so slots on the GUI thread receive it queued and in emit order: a
-step_finished slot always runs before that segment's segment_finished slot.
+signal. Qt runs the connected handlers on the GUI thread, in the order the
+signals were sent. So a step_finished handler always runs before that
+segment's segment_finished handler.
 """
 
 import logging
@@ -100,8 +101,9 @@ class RunnerBridge(QObject, StepListener):
                     self._log_outcome(result)
                 except Exception:
                     logger.exception("Logging the segment outcome failed")
-                # Released before the emit, so a segment_finished slot may
-                # start the next segment straight away.
+                # Free the run before signalling that the segment finished,
+                # so a segment_finished handler can start the next segment
+                # straight away.
                 run.release()
                 self._busy = False
                 self.segment_finished.emit(result)

@@ -119,7 +119,8 @@ class PhaseBase(ABC):
         self._max_retries_per_step: int = 3
         self._retry_count: int = 0
         self._sleep_fn = sleep_fn or time.sleep
-        # Only an injected sleep_fn replaces PhaseRun's abortable retry wait.
+        # PhaseRun waits between retries in a way an abort can interrupt.
+        # Only a sleep_fn passed in here (tests pass one) replaces that wait.
         self._injected_sleep_fn = sleep_fn
         self._default_retry_delay_seconds = 5.0
 

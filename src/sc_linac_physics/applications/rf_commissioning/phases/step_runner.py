@@ -254,7 +254,10 @@ class PhaseRun:
         self.phase._mark_phase_started()
 
     def complete(self) -> SegmentResult:
-        """finalize_phase(), then COMPLETE with a phase_complete checkpoint."""
+        """Run finalize_phase(), then mark the phase COMPLETE.
+
+        Marking it complete also saves a "phase_complete" checkpoint.
+        """
         try:
             self.phase.finalize_phase()
         except Exception as exc:
@@ -388,7 +391,10 @@ class PhaseRun:
                 return self._abort_before(step)
 
     def _execute(self, step: str) -> tuple[PhaseStepResult, bool]:
-        """One attempt and its checkpoint. True alongside if the step raised."""
+        """Run one attempt of step and save its checkpoint.
+
+        Returns the step's result, and True if the step raised an error.
+        """
         try:
             result = self.phase.execute_step(step)
             if not isinstance(result, PhaseStepResult):
@@ -466,7 +472,9 @@ class PhaseRun:
                 if reason == announced:
                     self._cond.wait(self._POLL_SECONDS)
                     continue
-            # Outside the lock, so a listener can call back into the run.
+            # Tell listeners after releasing the lock. A listener may then
+            # call back into this run, such as to resume it, without
+            # waiting on a lock this thread holds.
             announced = reason
             self._notify("on_holding", step, reason)
 
