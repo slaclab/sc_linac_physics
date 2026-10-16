@@ -118,8 +118,50 @@ class TestFileHandlers:
         with pytest.warns(DeprecationWarning, match="retry_interval"):
             custom_logger("t.dep", "ops", log_dir=tmp_path, retry_interval=5)
 
-    def test_unknown_argument_still_raises(self, tmp_path):
+    def test_old_positional_retry_arguments_still_work(
+        self, tmp_path, creators
+    ):
+        from sc_linac_physics.utils.logger import custom_logger
+
+        with pytest.warns(DeprecationWarning, match="enable_retry"):
+            logger = custom_logger(
+                "t.pos", "ops", tmp_path, logging.INFO, 1000, 2, False, 30, 1
+            )
+
+        assert logger.level == logging.INFO
+
+    def test_no_warning_when_retry_arguments_are_not_passed(
+        self, tmp_path, creators
+    ):
+        import warnings
+
+        from sc_linac_physics.utils.logger import custom_logger
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            custom_logger("t.quiet", "ops", log_dir=tmp_path)
+
+    def test_cached_logger_still_warns(self, tmp_path, creators):
+        from sc_linac_physics.utils.logger import custom_logger
+
+        first = custom_logger("t.cache", "ops", log_dir=tmp_path)
+        with pytest.warns(DeprecationWarning):
+            again = custom_logger(
+                "t.cache", "ops", log_dir=tmp_path, max_retries=3
+            )
+
+        assert again is first
+
+    def test_unknown_argument_raises_before_any_setup(self, tmp_path, creators):
+        import logging as stdlib_logging
+
         from sc_linac_physics.utils.logger import custom_logger
 
         with pytest.raises(TypeError, match="bogus"):
             custom_logger("t.bad", "ops", log_dir=tmp_path, bogus=1)
+
+        # The failed call left nothing behind, so a correct call gets files.
+        assert stdlib_logging.getLogger(f"t.bad#{tmp_path}/ops").handlers == []
+        logger = custom_logger("t.bad", "ops", log_dir=tmp_path)
+        for make in creators:
+            assert make.return_value in logger.handlers
