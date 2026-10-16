@@ -51,6 +51,33 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   502 at 60 s, which is retried, so one cold lookup can block for about 4
   minutes before it fails. Keep these calls off the Qt main thread.
 
+## Binned values (`get_binned_values`)
+
+For plotting or skimming a long span of a numeric PV, ask the archiver for
+one statistic per bin instead of every sample:
+
+```python
+from datetime import datetime, timedelta
+from sc_linac_physics.utils.archiver import get_binned_values
+
+frames = get_binned_values(
+    ["ACCL:L2B:0410:AACTMEAN"], datetime(2025, 10, 1), datetime(2026, 10, 1),
+    timedelta(hours=1), "max",
+)
+# {pv: DataFrame with columns timestamp (bin start), value, count}
+```
+
+- Statistics: `mean`, `min`, `max`, `std` (sample, n-1), `count`. Each was
+  checked against raw samples on site: <span class="cite">archiver.py::STATISTICS</span>.
+- Bins are aligned to UTC multiples of `bin_size`, so the first bin can start
+  before `start`. `count` says how many samples each bin holds.
+- Bins with no samples are left out. The archiver fills them with the
+  previous bin's value, which would draw a gap as a flat line.
+- The archiver still reads every sample to bin them, so long spans are
+  chunked by raw samples read (`BINNED_CHUNK_SAMPLES`, 20 M, about 10 s per
+  request). A year of a 1 Hz PV in hourly bins took 35 s and 12 chunks.
+- Numeric PVs only.
+
 ## Plotting two signals
 
 `get_series` returns each PV's valid samples as a pandas Series indexed by
