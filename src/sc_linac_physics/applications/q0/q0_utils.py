@@ -1,9 +1,11 @@
 import json
 import os
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from os import devnull
 from os.path import isfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -11,6 +13,8 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from scipy.stats import linregress, siegelslopes
+
+from sc_linac_physics.utils.platform_paths import get_json_dir
 
 USE_SIEGELSLOPES = True
 
@@ -222,6 +226,46 @@ def calc_q0(
     print(f"Corrected Q0: {corrected_q0}")
 
     return corrected_q0 if use_correction else uncorrected_q0
+
+
+# The calibration and Q0 history shipped with the package. Read-only once
+# installed: new runs are written under data_dir() instead.
+PACKAGED_DATA_DIR = Path(__file__).parent
+
+
+def data_dir() -> Path:
+    """Where the app reads and writes its JSON files.
+
+    /home/physics/srf/json/q0 on Linux, ~/.sc_linac_physics/json/q0 on macOS.
+    Same layout as PACKAGED_DATA_DIR: calibrations/, q0_measurements/,
+    data/calibrations/, data/q0_measurements/.
+    """
+    return get_json_dir() / "q0"
+
+
+def data_file(relative_path: str) -> str:
+    """Path under data_dir() for relative_path, created on first use."""
+    target = data_dir() / relative_path
+    if not target.is_file():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        seed_data_file(PACKAGED_DATA_DIR / relative_path, target)
+    return str(target)
+
+
+def seed_data_file(packaged: Path, target: Path) -> None:
+    """Create target, the first time this file is used outside the package.
+
+    packaged is the same file in the installed package. It may not exist
+    (a CM with no shipped history). target's folder already exists.
+    """
+    # Copy rather than merge: after the first use, target is the only copy
+    # the app reads or writes. History committed to the package later does
+    # not reach an existing target.
+    if packaged.is_file():
+        shutil.copyfile(packaged, target)
+    else:
+        with open(target, "w") as f:
+            json.dump({}, f)
 
 
 def make_json_file(filepath):
