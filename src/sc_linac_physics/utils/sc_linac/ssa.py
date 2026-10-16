@@ -493,6 +493,10 @@ class SSA(linac_utils.SCLinacObject):
                 },
             ),
         )
+        # wait_until checks abort only on polls that read "running". The
+        # read that sees the scan finish skips it, so check once more here
+        # before the slope is accepted and pushed.
+        self.cavity.check_abort()
         time.sleep(2)
 
         if self.calibration_crashed:

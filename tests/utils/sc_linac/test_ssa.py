@@ -300,6 +300,30 @@ def test_run_calibration_bad_slope(ssa):
         ssa.run_calibration()
 
 
+def _start_running_calibration(ssa, statuses):
+    """Mock everything before the CALSTS poll; CALSTS reads `statuses`."""
+    ssa.reset = MagicMock()
+    ssa.turn_on = MagicMock()
+    ssa.cavity.reset_interlocks = MagicMock()
+    ssa.start_calibration = MagicMock()
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+    ssa._calibration_status_pv_obj = make_mock_pv()
+    ssa._calibration_status_pv_obj.get.side_effect = statuses
+
+
+def test_run_calibration_abort_on_completion_poll(ssa):
+    # The poll that reports the scan finished still honors a pending abort.
+    _start_running_calibration(ssa, lambda **_: 1)
+    ssa.cavity.turn_off = MagicMock()
+    ssa.cavity.push_ssa_slope = MagicMock()
+    ssa.cavity.abort_flag = True
+
+    with pytest.raises(CavityAbortError):
+        ssa.run_calibration()
+
+    ssa.cavity.push_ssa_slope.assert_not_called()
+
+
 def test_measured_slope(ssa):
     slope = uniform(SSA_SLOPE_LOWER_LIMIT, SSA_SLOPE_UPPER_LIMIT)
     ssa._measured_slope_pv_obj = make_mock_pv(get_val=slope)
