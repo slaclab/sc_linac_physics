@@ -125,10 +125,8 @@ class BatchPiezoPreRFController(QObject):
         self._abort_event = Event()
         self._worker_thread: Thread | None = None
 
-        # The trigger threads start once and never exit. When a thread that
-        # used EPICS exits, EPICS runs its per-thread cleanup
-        # (`free_threadInfo`); keeping the threads alive avoids that.
-        # CHECK: what went wrong in free_threadInfo, a crash or a hang?
+        # Persistent trigger pool — threads are created once and never exit so
+        # EPICS's TLS cleanup (`free_threadInfo`) is never triggered.
         self._trigger_queue: Queue = Queue()
         self._pool_ready = False
 
