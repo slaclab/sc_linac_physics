@@ -49,7 +49,8 @@ import requests
 
 from sc_linac_physics.utils.epics.config import EPICS_INVALID_VAL
 
-ARCHIVER_URL = "http://lcls-archapp.slac.stanford.edu/retrieval/data"
+ARCHIVER_BASE_URL = "http://lcls-archapp.slac.stanford.edu"
+ARCHIVER_URL = f"{ARCHIVER_BASE_URL}/retrieval/data"
 
 # Measured on site (2026-10-06), 28 PVs x 2 h, uncached windows, median of 3:
 # 1 worker 6.9 s, 2: 3.6 s, 4: 1.9 s, 8: 1.1 s, 16: 1.3 s. Same value as
@@ -67,6 +68,11 @@ AT_TIME_TIMEOUT = 75.0
 # about 60 s. So one lookup can block for about 4 minutes before it fails.
 MAX_RETRIES = 4
 RETRY_DELAY = 0.5
+
+# Only gateway errors are retried: the proxy's 502 at 60 s above, and 503/504
+# from it or the archiver. Other 5xx, like a 500, fail the same way each time,
+# so retrying them only turned one failure into about 5 minutes of waiting.
+RETRY_STATUS = frozenset({502, 503, 504})
 
 # A proxy cuts every request off at 60 s, and a long window holds more samples
 # than one request can return in that time, so ranges are fetched in chunks.
@@ -152,7 +158,9 @@ def get_values_over_time_range(
     America/Los_Angeles.
 
     Raises PVNotArchivedError, naming every unknown PV, once all requests have
-    finished. Timeouts and connection errors are retried, then raised.
+    finished. Timeouts, connection errors and HTTP 502/503/504 are retried,
+    then raised. Any other error, including a 200 whose body isn't the
+    expected JSON, raises ArchiverError naming the PV.
     """
     pvs = list(pvs)
     # Chunk in UTC: adding a timedelta to a Pacific time is wall-clock
@@ -166,6 +174,9 @@ def get_values_over_time_range(
         except ArchiverError as e:
             # Every range request has the same URL; name the PV that failed.
             raise type(e)(f"{pv}: {e}") from e
+        except (KeyError, IndexError, TypeError) as e:
+            # A 200 whose JSON isn't the shape planning and fetching read.
+            raise ArchiverError(f"{pv}: unexpected response: {e!r}") from e
 
     frames = dict(zip(pvs, _map_in_daemon_threads(fetch, pvs, max_workers)))
 
@@ -321,7 +332,7 @@ def _get_json(
         timeout,
         params={"pv": pv, "from": _to_utc_iso(start), "to": _to_utc_iso(end)},
     )
-    return None if response is None else response.json()
+    return None if response is None else _json(response, "getData.json")
 
 
 def _bin_start(secs: float) -> int:
@@ -383,18 +394,25 @@ def get_values_at_time(
     get_values_over_time_range.
 
     A PV the archiver has no value for is left out of the result. Naive
-    datetimes are read as America/Los_Angeles.
+    datetimes are read as America/Los_Angeles. No PVs means no request.
     """
+    pvs = list(pvs)
+    if not pvs:
+        return {}
     response = _request(
         "POST",
         f"{ARCHIVER_URL}/getDataAtTime",
         timeout,
         params={"at": _to_utc_iso(at), "includeProxies": "true"},
-        json=list(pvs),  # the Save/Restore API takes a JSON list of names
+        json=pvs,  # the Save/Restore API takes a JSON list of names
     )
     if response is None:  # 404: none of the PVs are known
         return {}
-    return {pv: _to_sample(datum) for pv, datum in response.json().items()}
+    payload = _json(response, "getDataAtTime")
+    try:
+        return {pv: _to_sample(datum) for pv, datum in payload.items()}
+    except (AttributeError, KeyError, TypeError) as e:
+        raise ArchiverError(f"getDataAtTime: unexpected response: {e!r}") from e
 
 
 def _map_in_daemon_threads(
@@ -477,18 +495,26 @@ def _request(
         else:
             if response.status_code == 404:
                 return None
-            if response.status_code < 500:
-                if not response.ok:
-                    raise ArchiverError(
-                        f"HTTP {response.status_code} from {url}"
-                    )
+            if response.ok:
                 return response
-            last_error = ArchiverError(
-                f"HTTP {response.status_code} from {url}"
-            )
+            error = ArchiverError(f"HTTP {response.status_code} from {url}")
+            if response.status_code not in RETRY_STATUS:
+                raise error
+            last_error = error
         if attempt < MAX_RETRIES:
             sleep(RETRY_DELAY * attempt)
     raise last_error
+
+
+def _json(response: requests.Response, what: str):
+    """response.json(), raising ArchiverError if the body isn't JSON.
+
+    A proxy can answer 200 with an HTML page (a login or error page).
+    """
+    try:
+        return response.json()
+    except ValueError as e:  # requests' JSONDecodeError is a ValueError
+        raise ArchiverError(f"{what}: response is not JSON: {e}") from e
 
 
 def _aware(moment: datetime) -> datetime:

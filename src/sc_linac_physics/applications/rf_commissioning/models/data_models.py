@@ -343,19 +343,19 @@ class CavityCharacterization:
         default=None,
         label="Loaded Q",
         widget_name="cavity_loaded_q",
-        format_spec=".3e",
+        format_spec=".1e",
     )
     probe_q: float | None = phase_display_field(
         default=None,
         label="Probe Q",
         widget_name="cavity_probe_q",
-        format_spec=".3e",
+        format_spec=".1e",
     )
     scale_factor: float | None = phase_display_field(
         default=None,
         label="Scale Factor",
         widget_name="cavity_scale_factor",
-        format_spec=".6f",
+        format_spec=".1f",
     )
     # Whether the measured loaded Q fell inside the window for this cavity's
     # class, which differs between standard, harmonic-linearizer and HE
