@@ -47,8 +47,8 @@ class PiezoPreRFController(QObject):
         self.view = view
         self.session = session
 
-        # The steps run on the bridge's daemon thread. Its signals reach the
-        # slots below on the GUI thread.
+        # The steps run on the bridge's daemon thread. Qt runs the handlers
+        # connected below on the GUI thread, where widgets can be updated.
         self.bridge = RunnerBridge(self)
         if hasattr(self.view, "log_message"):
             self.bridge.log.connect(self.view.log_message)
