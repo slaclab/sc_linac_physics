@@ -188,8 +188,9 @@ class StepperPVGroup(PVGroup):
         # during the MOTOR_MOVING write. Without this lock, moves in opposite
         # directions could both start.
         self._move_start_lock = asyncio.Lock()
-        # Nominal microsteps per Hz, taken from linac_utils so the simulator
-        # and the real code always use the same numbers.
+        # Nominal microsteps per Hz from linac_utils. Only a fallback:
+        # _hz_per_microstep_now uses it when SCALE is missing or zero.
+        # Otherwise the simulated cavity responds by its SCALE value.
         if not self.cavity_group.is_hl:
             self.steps_per_hertz = ESTIMATED_MICROSTEPS_PER_HZ
         else:
