@@ -405,3 +405,66 @@ class TestIntegration:
         assert len(calibration2.heater_runs) == 1
         assert calibration2.heater_runs[0].heat_load_des == 50.0
         assert calibration2.heater_runs[0].average_heat == 49.8
+
+
+class TestFitWindow:
+    """set_fit_window narrows one run's fit and clears cached results."""
+
+    @pytest.fixture
+    def windowed_calibration(self, calibration):
+        runs = []
+        # dLL/dt = -0.01 * heat, except the 30 W run ends in a longer, steeper
+        # stretch (siegelslopes ignores a few outliers, so it must be long)
+        for heat in (10.0, 20.0, 30.0):
+            run = q0_utils.HeaterRun(heat)
+            run.average_heat = heat
+            run.ll_data = {float(t): 95.0 - 0.01 * heat * t for t in range(6)}
+            runs.append(run)
+        for t in range(6, 13):
+            runs[2].ll_data[float(t)] = 93.5 - 2.0 * (t - 5)
+        calibration.heater_runs = runs
+        return calibration
+
+    def test_window_changes_slope(self, windowed_calibration):
+        before = windowed_calibration.dLLdt_dheat
+        run = windowed_calibration.heater_runs[2]
+        windowed_calibration.set_fit_window(run, (0.0, 5.0))
+        assert windowed_calibration.dLLdt_dheat == pytest.approx(-0.01)
+        assert before != pytest.approx(-0.01)
+
+    def test_window_resets_loaded_q0_measurement(self, windowed_calibration):
+        run = windowed_calibration.heater_runs[2]
+        windowed_calibration.set_fit_window(run, (0.0, 5.0))
+        q0_measurement = windowed_calibration.cryomodule.q0_measurement
+        q0_measurement.reset_calculated_properties.assert_called_once()
+
+    def test_window_on_foreign_run_raises(self, windowed_calibration):
+        with pytest.raises(ValueError):
+            windowed_calibration.set_fit_window(
+                q0_utils.HeaterRun(10.0), (0.0, 5.0)
+            )
+
+    def test_get_heat_uses_fresh_adjustment(self, windowed_calibration):
+        _ = windowed_calibration.dLLdt_dheat
+        run = windowed_calibration.heater_runs[2]
+        windowed_calibration.set_fit_window(run, (0.0, 5.0))
+        # Perfect line through the origin: heat = dll_dt / -0.01
+        assert windowed_calibration.get_heat(-0.2) == pytest.approx(20.0)
+
+    @patch("sc_linac_physics.applications.q0.q0_utils.update_json_data")
+    def test_save_data_refuses_window(self, mock_update, windowed_calibration):
+        run = windowed_calibration.heater_runs[2]
+        windowed_calibration.set_fit_window(run, (0.0, 5.0))
+        with pytest.raises(q0_utils.DataError):
+            windowed_calibration.save_data()
+        mock_update.assert_not_called()
+
+    @patch("sc_linac_physics.applications.q0.q0_utils.update_json_data")
+    def test_save_results_refuses_window(
+        self, mock_update, windowed_calibration
+    ):
+        run = windowed_calibration.heater_runs[2]
+        windowed_calibration.set_fit_window(run, (0.0, 5.0))
+        with pytest.raises(q0_utils.DataError):
+            windowed_calibration.save_results()
+        mock_update.assert_not_called()
