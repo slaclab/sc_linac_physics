@@ -94,9 +94,10 @@ class SSAPVGroup(PVGroup):
     saved_slope: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE_SAVE", dtype=ChannelType.FLOAT
     )
-    # Enum index read by SSA.rated_power_kw, per
-    # linac_utils.SSA_TYPE_RATED_POWER_KW: 0 the 7 kW HE SSA, 2 a standard
-    # LCLS-II SSA, 3 the 3.9 GHz HL SSA. The sim picks by cryomodule: HL,
+    # The SSA type as an enum index. SSA.rated_power_kw looks it up in
+    # linac_utils.SSA_TYPE_RATED_POWER_KW, where 0 is the 7 kW HE SSA, 2 is a
+    # standard LCLS-II SSA and 3 is the 3.9 GHz HL SSA. The sim picks by
+    # cryomodule: HL,
     # then high energy (L4B, Cryomodule.is_high_energy), then standard. The
     # real machine has 191 index-0 SSAs to L4B's 184, plus 4 index-1 HE
     # prototypes, so this is close but not exact.
@@ -164,8 +165,10 @@ class SSAPVGroup(PVGroup):
         self.cavityGroup: CavityPVGroup = cavityGroup
         self.is_high_energy = is_high_energy
         self._calibration_task: asyncio.Task | None = None
-        # Held from the running check until the task exists. The status write
-        # in between yields, so without it two starts could both pass.
+        # Lets only one calibration start at a time. Starting one checks that
+        # none is running, writes the status, then creates the task. Other PV
+        # writes can run during the status write, so without this lock two
+        # starts could both see "not running".
         self._calibration_start_lock = asyncio.Lock()
 
     CALIBRATION_DURATION_S = 5

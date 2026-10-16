@@ -722,8 +722,9 @@ class CavityPVGroup(PVGroup):
         self._characterization_task = asyncio.get_running_loop().create_task(
             self._finish_characterization()
         )
-        # Returning 0 is what resets PROBECALSTRT. Writing 0 from inside this
-        # putter was overwritten by the 1 being put once the putter returned.
+        # caproto stores what this function returns as PROBECALSTRT's new
+        # value, so returning 0 resets it. Writing 0 from inside the function
+        # didn't work: caproto then stored the client's 1 over it.
         return 0
 
     async def _finish_characterization(self):
