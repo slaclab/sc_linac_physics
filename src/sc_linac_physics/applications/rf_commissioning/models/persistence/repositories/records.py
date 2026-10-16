@@ -70,52 +70,31 @@ class RecordRepository(BaseRepository):
             phase_set_clauses = ", ".join(
                 f"{col} = ?" for col in phase_col_names
             )
-            params = (
-                str(record.linac),
-                linac_number,
-                record.cryomodule,
-                record.cavity_number,
-                record.start_time.isoformat(),
-                record.end_time.isoformat() if record.end_time else None,
-                *phase_values,
-                now,
-                record_id,
+            missing = f"Record {record_id} not found"
+            updated = self.update_versioned_row(
+                cursor=cursor,
+                table_name="commissioning_records",
+                row_id=record_id,
+                set_clause=(
+                    "linac = ?, linac_number = ?, cryomodule = ?, "
+                    "cavity_number = ?, start_time = ?, end_time = ?, "
+                    f"{phase_set_clauses}, updated_at = ?"
+                ),
+                params=(
+                    str(record.linac),
+                    linac_number,
+                    record.cryomodule,
+                    record.cavity_number,
+                    record.start_time.isoformat(),
+                    record.end_time.isoformat() if record.end_time else None,
+                    *phase_values,
+                    now,
+                ),
+                expected_version=expected_version,
+                missing_message=missing,
             )
-
-            if expected_version is not None:
-                cursor.execute(
-                    f"""
-                    UPDATE commissioning_records SET
-                        linac = ?, linac_number = ?, cryomodule = ?, cavity_number = ?, start_time = ?, end_time = ?,
-                        {phase_set_clauses},
-                        updated_at = ?,
-                        version = version + 1
-                    WHERE id = ? AND version = ?
-                    """,
-                    (*params, expected_version),
-                )
-                if cursor.rowcount == 0:
-                    self.raise_conflict_error(
-                        cursor=cursor,
-                        table_name="commissioning_records",
-                        row_id=record_id,
-                        expected_version=expected_version,
-                        missing_message=f"Record {record_id} not found",
-                    )
-            else:
-                cursor.execute(
-                    f"""
-                    UPDATE commissioning_records SET
-                        linac = ?, linac_number = ?, cryomodule = ?, cavity_number = ?, start_time = ?, end_time = ?,
-                        {phase_set_clauses},
-                        updated_at = ?,
-                        version = version + 1
-                    WHERE id = ?
-                    """,
-                    params,
-                )
-                if cursor.rowcount == 0:
-                    raise ValueError(f"Record {record_id} not found")
+            if not updated:
+                raise ValueError(missing)
             return record_id
 
     def get_record(self, record_id: int) -> CommissioningRecord | None:
