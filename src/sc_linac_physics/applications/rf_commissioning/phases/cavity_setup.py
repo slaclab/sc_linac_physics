@@ -20,8 +20,9 @@ Abort: the Cavity and SSA calls below check `cavity.abort_flag` through
 `cavity.check_abort()`, which turns RF off and raises CavityAbortError. The
 controller running the phase has to set that flag on abort; the commissioning
 abort (context.request_abort) is only seen here before a call starts.
-`SSA.run_calibration()` does not check abort while it waits on CALSTS, so an
-abort during the calibration scan takes effect when the scan ends.
+`SSA.run_calibration()` also checks it on each CALSTS poll and raises
+SSACalibrationTimeoutError (an SSACalibrationError) after
+SSA_CALIBRATION_TIMEOUT_S; calibrate_ssa reports either as FAILED.
 """
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
