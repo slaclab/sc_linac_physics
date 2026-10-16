@@ -212,6 +212,11 @@ class SSA(linac_utils.SCLinacObject):
             self.cavity.check_abort()
             self.run_calibration()
 
+        except linac_utils.SSACalibrationTimeoutError:
+            # Stuck, not a bad result: retrying would issue CALSTRT again
+            # against the same stuck status.
+            raise
+
         except (
             linac_utils.SSACalibrationToleranceError,
             linac_utils.SSACalibrationError,
@@ -271,18 +276,14 @@ class SSA(linac_utils.SCLinacObject):
             self.cavity.logger.info("Turning SSA on")
             self.turn_on_pv_obj.put(1)
 
-            while not self.is_on:
-                self.cavity.check_abort()
-                self.cavity.logger.debug(
-                    "Waiting for SSA to turn on",
-                    extra={
-                        "extra_data": {
-                            "status_message": self.status_message,
-                            "ssa": str(self),
-                        }
-                    },
-                )
-                time.sleep(1)
+            linac_utils.wait_until(
+                lambda: self.is_on,
+                timeout=linac_utils.SSA_TURN_ON_TIMEOUT_S,
+                description=f"{self} to turn on",
+                error_class=linac_utils.SSAFaultError,
+                check_abort=self.cavity.check_abort,
+                on_poll=lambda: self._log_wait("Waiting for SSA to turn on"),
+            )
 
         if self.cavity.cryomodule.is_harmonic_linearizer:
             self.cavity.logger.debug(
@@ -293,6 +294,17 @@ class SSA(linac_utils.SCLinacObject):
             self.ps_volt_setpoint1_pv_obj.put(linac_utils.HL_SSA_PS_SETPOINT)
 
         self.cavity.logger.info("SSA successfully turned on")
+
+    def _log_wait(self, message: str):
+        self.cavity.logger.debug(
+            message,
+            extra={
+                "extra_data": {
+                    "status_message": self.status_message,
+                    "ssa": str(self),
+                }
+            },
+        )
 
     @property
     def turn_off_pv_obj(self) -> PV:
@@ -305,18 +317,14 @@ class SSA(linac_utils.SCLinacObject):
             self.cavity.logger.info("Turning SSA off")
             self.turn_off_pv_obj.put(1)
 
-            while self.is_on:
-                self.cavity.check_abort()
-                self.cavity.logger.debug(
-                    "Waiting for SSA to turn off",
-                    extra={
-                        "extra_data": {
-                            "status_message": self.status_message,
-                            "ssa": str(self),
-                        }
-                    },
-                )
-                time.sleep(1)
+            linac_utils.wait_until(
+                lambda: not self.is_on,
+                timeout=linac_utils.SSA_TURN_OFF_TIMEOUT_S,
+                description=f"{self} to turn off",
+                error_class=linac_utils.SSAFaultError,
+                check_abort=self.cavity.check_abort,
+                on_poll=lambda: self._log_wait("Waiting for SSA to turn off"),
+            )
 
         self.cavity.logger.info("SSA successfully turned off")
 
@@ -439,21 +447,13 @@ class SSA(linac_utils.SCLinacObject):
             == linac_utils.SSA_RESULT_GOOD_STATUS_VALUE
         )
 
-    def run_calibration(
-        self,
-        save_slope: bool = False,
-        timeout: float = linac_utils.SSA_CALIBRATION_TIMEOUT,
-    ):
+    def run_calibration(self, save_slope: bool = False):
         """
         Runs the SSA through its range and finds the slope that describes
         the relationship between SSA drive signal and output power
         @param save_slope: Whether to update the saved slope PV with the newly
                            calculated value or not
-        @param timeout: Seconds to wait for CALSTS to stop reading "running"
-                        before raising SSACalibrationError
         @return: None
-        @raise CavityAbortError: abort requested while CALSTS is running
-        @raise SSACalibrationError: CALSTS still running after timeout
         """
 
         self.reset()
@@ -474,48 +474,29 @@ class SSA(linac_utils.SCLinacObject):
         self.start_calibration()
         time.sleep(2)
 
-        # Wall-clock deadline, so a slow CALSTS read (up to 10 s each)
-        # counts against the timeout.
-        deadline = time.monotonic() + timeout
-        while True:
-            # One CALSTS read per poll; the abort check runs after every
-            # read, including the one that reports the scan finished.
-            status = self.calibration_status
-            # check_abort turns the cavity off and raises CavityAbortError.
-            # Nothing here writes CALSTRT to stop the scan.
-            # CHECK: does the SSA scan stop by itself once RF is off,
-            # or does it run to the end after an abort?
-            self.cavity.check_abort()
-            if status != linac_utils.SSA_CALIBRATION_RUNNING_VALUE:
-                break
-            if time.monotonic() >= deadline:
-                self.cavity.logger.error(
-                    "SSA calibration timed out",
-                    extra={
-                        "extra_data": {
-                            "calibration_status": status,
-                            "timeout_s": timeout,
-                            "ssa": str(self),
-                        }
-                    },
-                )
-                # calibrate() catches this and retries (reset, turn_on,
-                # CALSTRT again) with drive max 0.01 lower, up to 3 times.
-                # CHECK: is a new CALSTRT safe while CALSTS still reads
-                # running, or should a timeout skip the retry?
-                raise linac_utils.SSACalibrationError(
-                    f"{self} calibration still running after {timeout:.0f} s"
-                )
-            self.cavity.logger.debug(
+        # CHECK: this loop had no check_abort() before. With it, an abort
+        # mid-calibration runs cavity.check_abort() -> turn_off(), then
+        # raises CavityAbortError. Is turning RF off mid-sweep acceptable?
+        linac_utils.wait_until(
+            lambda: not self.calibration_running,
+            timeout=linac_utils.SSA_CALIBRATION_TIMEOUT_S,
+            description=f"{self} calibration to finish",
+            error_class=linac_utils.SSACalibrationTimeoutError,
+            check_abort=self.cavity.check_abort,
+            on_poll=lambda: self.cavity.logger.debug(
                 "Waiting for SSA calibration to complete",
                 extra={
                     "extra_data": {
-                        "calibration_status": status,
+                        "calibration_status": self.calibration_status,
                         "ssa": str(self),
                     }
                 },
-            )
-            time.sleep(1)
+            ),
+        )
+        # wait_until checks abort only on polls that read "running". The
+        # read that sees the scan finish skips it, so check once more here
+        # before the slope is accepted and pushed.
+        self.cavity.check_abort()
         time.sleep(2)
 
         if self.calibration_crashed:

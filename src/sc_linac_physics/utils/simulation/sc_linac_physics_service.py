@@ -8,7 +8,7 @@ import sys
 import time
 import warnings
 
-from caproto import ChannelEnum, ChannelFloat, ChannelInteger
+from caproto import ChannelDouble, ChannelEnum, ChannelFloat
 from caproto.server import ioc_arg_parser, run
 
 from sc_linac_physics.utils.sc_linac.decarad import Decarad
@@ -172,7 +172,8 @@ class SCLinacPhysicsService(Service):
         """Set up system-level PVs for heartbeats and alarms."""
         # Heartbeat channels
         for channel in HEARTBEAT_CHANNELS:
-            self[f"PHYS:SYS0:1:{channel}"] = ChannelInteger(value=0)
+            # Doubles on lcls-srv01 (2026-10-14).
+            self[f"PHYS:SYS0:1:{channel}"] = ChannelDouble(value=0.0)
 
         # Alarm channels
         for channel in ALARM_CHANNELS:
@@ -339,8 +340,10 @@ class SCLinacPhysicsService(Service):
         if cm_group:
             cm_group.heater = heater_group
 
-        self[f"CRYO:CM{cm_name}:0:CAS_ACCESS"] = ChannelEnum(
-            enum_strings=("Close", "Open"), value=1
+        # q0_cryomodule.py names this through cryo_name, so H1/H2 are
+        # CRYO:HL01/HL02. lcls-srv01 has no CRYO:CMH1/CMH2 (2026-10-14).
+        self[f"CRYO:{_cryo_name(cm_name)}:0:CAS_ACCESS"] = ChannelEnum(
+            enum_strings=("Disable", "Enable"), value=1
         )
         self[f"{cm_prefix}00:ADES_MAX"] = ChannelFloat(value=168.0)
 
