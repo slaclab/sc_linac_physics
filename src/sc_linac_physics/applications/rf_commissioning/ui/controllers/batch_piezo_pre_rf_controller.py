@@ -45,10 +45,11 @@ class _TriggerPool:
     """Worker threads, shared by every controller in the process, that run
     trigger jobs.
 
-    The threads are daemons that loop on a Queue and never exit. Because they
-    never exit, EPICS never runs its TLS cleanup (free_threadInfo /
-    cantProceed), and the pthread_attr_destroy errors that occur when
-    short-lived threads leave the CA layer are avoided.
+    The threads are daemons that wait on a Queue for jobs and never exit.
+    When a thread that used Channel Access exits, EPICS frees the data it
+    kept for that thread (free_threadInfo / cantProceed). Short-lived threads
+    hit pthread_attr_destroy errors there. Threads that never exit avoid
+    those errors.
 
     One pool per process, not one per controller: each window used to start
     its own 32 threads, and each thread held its controller alive forever.
@@ -100,10 +101,10 @@ class _TriggerPool:
                 # worker alive if one gets through.
                 logger.exception("Trigger job raised")
             finally:
-                # Otherwise this frame holds the last job, and the controller
-                # it belongs to, until the next job arrives. Dropped before
-                # done.set() so the caller never sees a finished job that a
-                # worker still holds.
+                # Let go of the job now. Otherwise this worker keeps the last
+                # job, and the controller it belongs to, alive until the next
+                # job arrives. Do it before done.set(), so the caller never
+                # sees a finished job that a worker still holds.
                 del job
                 done.set()
                 del done
