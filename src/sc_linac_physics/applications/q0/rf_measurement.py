@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Optional, Dict, TYPE_CHECKING
+from typing import Optional, Dict, Tuple, TYPE_CHECKING
 
 import numpy as np
 
@@ -29,12 +29,28 @@ class Q0Measurement:
     def amplitudes(self):
         return self._amplitudes
 
-    def _reset_calculated_properties(self):
+    def reset_calculated_properties(self):
         """Reset all calculated properties when base data changes"""
         self._raw_heat = None
         self._adjustment = None
         self._heat_load = None
         self._q0 = None
+
+    def set_fit_window(
+        self,
+        run: q0_utils.DataRun,
+        window: Optional[Tuple[float, float]],
+    ) -> None:
+        """Fit run's dLL/dt to the samples in window only (None for all).
+
+        run is heater_run or rf_run. Clears the cached heat loads and Q0.
+        """
+        if run is not self.heater_run and run is not self.rf_run:
+            raise ValueError(
+                f"{run} is not this measurement's heater or RF run"
+            )
+        run.fit_window = window
+        self.reset_calculated_properties()
 
     @amplitudes.setter
     def amplitudes(self, amplitudes: Dict[int, float]):
@@ -57,7 +73,7 @@ class Q0Measurement:
                 raise ValueError(f"Amplitude cannot be negative: {amp}")
         self._amplitudes = amplitudes
         self.rf_run = RFRun(amplitudes)
-        self._reset_calculated_properties()  # Reset when data changes
+        self.reset_calculated_properties()  # Reset when data changes
 
     @property
     def heater_run_heatload(self):
@@ -155,6 +171,7 @@ class Q0Measurement:
         self.heater_run.ll_data = ll_data
 
     def save_data(self):
+        q0_utils.require_no_fit_windows([self.heater_run, self.rf_run])
         q0_utils.make_json_file(self.cryomodule.q0_data_file)
         heater_data = {
             q0_utils.JSON_START_KEY: self.heater_run.start_time,
@@ -184,6 +201,12 @@ class Q0Measurement:
         )
 
     def save_results(self):
+        # The results also come from the calibration curve, so its runs
+        # must be unwindowed too.
+        q0_utils.require_no_fit_windows(
+            [self.heater_run, self.rf_run]
+            + self.cryomodule.calibration.heater_runs
+        )
         newData = {
             q0_utils.JSON_START_KEY: self.start_time,
             q0_utils.JSON_CAV_AMPS_KEY: self.rf_run.amplitudes,
@@ -223,22 +246,68 @@ class Q0Measurement:
             self._heat_load = self.raw_heat + self.adjustment
         return self._heat_load
 
+    def _q0_from_heat(self, heat_load: float) -> float:
+        sum_square_amp = 0
+
+        for amp in self.rf_run.amplitudes.values():
+            sum_square_amp += amp**2
+
+        effective_amplitude = np.sqrt(sum_square_amp)
+
+        cavity: "Q0Cavity" = self.cryomodule.cavities[1]
+        return q0_utils.calc_q0(
+            amplitude=effective_amplitude,
+            rf_heat_load=heat_load,
+            avg_pressure=self.rf_run.avg_pressure,
+            cav_length=cavity.length,
+            r_over_q=cavity.r_over_q,
+        )
+
     @property
     def q0(self):
         if not self._q0:
-            sum_square_amp = 0
-
-            for amp in self.rf_run.amplitudes.values():
-                sum_square_amp += amp**2
-
-            effective_amplitude = np.sqrt(sum_square_amp)
-
-            cavity: "Q0Cavity" = self.cryomodule.cavities[1]
-            self._q0 = q0_utils.calc_q0(
-                amplitude=effective_amplitude,
-                rf_heat_load=self.heat_load,
-                avg_pressure=self.rf_run.avg_pressure,
-                cav_length=cavity.length,
-                r_over_q=cavity.r_over_q,
-            )
+            self._q0 = self._q0_from_heat(self.heat_load)
         return self._q0
+
+    @property
+    def q0_linregress(self) -> float:
+        """Q0 with every dLL/dt (calibration runs, heater run, RF run) fit
+        by linregress instead of dll_dt. Shown beside q0, never saved.
+
+        Same arithmetic as heat_load: raw_heat + adjustment reduces to
+        heater average_heat + (rf dLL/dt - heater dLL/dt) / slope, because
+        the calibration intercept cancels.
+        """
+        slope, _ = self.cryomodule.calibration.linregress_line()
+        heat_load = (
+            self.heater_run.average_heat
+            + (
+                self.rf_run.dll_dt_linregress
+                - self.heater_run.dll_dt_linregress
+            )
+            / slope
+        )
+        return self._q0_from_heat(heat_load)
+
+    @property
+    def q0_sigma(self) -> float:
+        """One-sigma spread on q0 from the RF and heater run fits only.
+
+        sigma_heat = sqrt(rf stderr^2 + heater stderr^2) / |dLLdt_dheat|,
+        using each run's correlation-widened linregress stderr
+        (DataRun.dll_dt_stderr) as the noise scale for both fits.
+        calc_q0 is called uncorrected (use_correction=False), where Q0 is
+        proportional to 1 / heat load, so sigma_q0 = q0 * sigma_heat / heat.
+        Leaves out calibration-line uncertainty and heater readback error.
+        """
+        sigma_heat = np.hypot(
+            self.rf_run.dll_dt_stderr, self.heater_run.dll_dt_stderr
+        ) / abs(self.cryomodule.calibration.dLLdt_dheat)
+        return abs(self.q0) * sigma_heat / abs(self.heat_load)
+
+    @property
+    def fit_sensitive(self) -> bool:
+        """True when q0 and q0_linregress differ by more than
+        FIT_SENSITIVE_SIGMAS * q0_sigma. False when q0_sigma is nan."""
+        gap = abs(self.q0 - self.q0_linregress)
+        return gap > q0_utils.FIT_SENSITIVE_SIGMAS * self.q0_sigma

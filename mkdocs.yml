@@ -71,3 +71,4 @@ nav:
       - SRF Home: displays/srf_home.md
   - Explainers:
       - How auto-tune works: explainers/auto_tune.md
+      - How the Q0 app works: explainers/q0.md
