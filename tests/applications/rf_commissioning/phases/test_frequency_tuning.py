@@ -11,6 +11,7 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     FrequencyTuningData,
     PhaseCheckpoint,
+    SSACharacterization,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.frequency_tuning import (
     FrequencyTuningLimits,
@@ -25,6 +26,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityFaultError,
     DetuneError,
     FSCANError,
+    SSACalibrationError,
     StepperError,
     SAFE_PULSED_DRIVE_LEVEL,
     StepperTempError,
@@ -74,6 +76,11 @@ def mock_cavity(mock_stepper):
     cavity.drive_level = SAFE_PULSED_DRIVE_LEVEL
     # Cavities launch at cold landing (COLD == 1).
     cavity.tune_config_pv_obj.get.return_value = TUNE_CONFIG_COLD_VALUE
+    # What cavity_setup.calibrate_ssa reads in stage 1.
+    cavity.rack.cavities = {}
+    cavity.ssa.drive_max = 0.8
+    cavity.ssa.measured_slope = 1.0
+    cavity.ssa.max_fwd_pwr = 4000.0
     return cavity
 
 
@@ -545,14 +552,76 @@ def test_verify_initial_state_success(phase, mock_cavity):
     assert result.result == PhaseResult.SUCCESS
     assert result.data["initial_temp_c"] == 30.0
     assert "initial_detune_hz" in result.data
-    # The cavity was prepared for tuning (production sequence).
-    mock_cavity.turn_off.assert_called_once()
+    # The cavity was prepared for tuning (production sequence). RF goes off
+    # twice: once to calibrate the SSA, once to prepare for chirp.
+    assert mock_cavity.turn_off.call_count == 2
+    mock_cavity.ssa.calibrate.assert_called_once()
     mock_cavity.ssa.turn_on.assert_called_once()
     mock_cavity.reset_interlocks.assert_called_once()
     mock_cavity.setup_tuning.assert_called_once()
     # COLD start → no warning
     assert result.data["tune_config_warning"] is None
     assert "WARNING" not in result.message
+
+
+def test_verify_initial_state_calibrates_before_setting_up_chirp(
+    phase, mock_cavity
+):
+    _setup_phase(phase)
+    order = Mock()
+    order.attach_mock(mock_cavity.ssa.calibrate, "calibrate")
+    order.attach_mock(mock_cavity.setup_tuning, "setup_tuning")
+
+    result = phase._verify_initial_state()
+
+    assert result.result == PhaseResult.SUCCESS, result.message
+    assert [c[0] for c in order.mock_calls] == ["calibrate", "setup_tuning"]
+
+
+def test_verify_initial_state_uses_the_ssa_char_drive_max(
+    phase, mock_cavity, record
+):
+    _setup_phase(phase)
+    record.ssa_char = SSACharacterization(max_drive=0.6)
+
+    phase._verify_initial_state()
+
+    mock_cavity.ssa.calibrate.assert_called_once_with(0.6, attempt=2)
+    assert record.ssa_char.slope_new == 1.0
+
+
+def test_failed_ssa_calibration_stops_before_tuning_setup(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.ssa.calibrate.side_effect = SSACalibrationError("crashed")
+
+    result = phase._verify_initial_state()
+
+    assert result.result == PhaseResult.FAILED
+    assert "crashed" in result.message
+    mock_cavity.setup_tuning.assert_not_called()
+
+
+def test_retrying_stage_1_does_not_recalibrate(phase, mock_cavity):
+    _setup_phase(phase)
+    phase.cavity.stepper_temp_pv_obj.get.side_effect = [
+        RuntimeError("PV timeout"),
+        25.0,
+    ]
+
+    assert phase._verify_initial_state().result == PhaseResult.RETRY
+    assert phase._verify_initial_state().result == PhaseResult.SUCCESS
+
+    mock_cavity.ssa.calibrate.assert_called_once()
+
+
+def test_stage_2_re_prepare_does_not_recalibrate(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.is_on = False  # drifted out of tuning state after stage 1
+
+    phase._ensure_tuning_setup()
+
+    mock_cavity.setup_tuning.assert_called_once()
+    mock_cavity.ssa.calibrate.assert_not_called()
 
 
 def test_verify_initial_state_warns_when_not_cold(phase, mock_cavity):
