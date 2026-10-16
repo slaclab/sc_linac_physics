@@ -129,7 +129,9 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     def _verify_initial_state(self) -> PhaseStepResult:
-        """Read-only: HWMODE, SSA calibration, stepper motion, RFTESTSTS.
+        """Check HWMODE, SSA calibration, stepper motion and RFTESTSTS.
+
+        Only reads; writes nothing.
 
         Refuses a with-RF test that is already running here, before
         setup_rf turns RF off under it. start_test checks again just before
