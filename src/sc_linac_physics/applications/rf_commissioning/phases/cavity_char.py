@@ -109,8 +109,9 @@ class CavityCharPhase(PhaseBase):
         # PROBECALTS read just before this phase wrote PROBECALSTRT. None until
         # then, and after a session resumed past start_characterization.
         self._prestart_timestamp: datetime | None = None
-        # PROBECALTS as of read_results: identifies the run the operator
-        # reviewed, so push_results can refuse if another run started since.
+        # PROBECALTS when read_results ran, which identifies the run the
+        # operator reviewed. push_results refuses if PROBECALTS has changed,
+        # since that means another run started.
         self._reviewed_run_timestamp: datetime | None = None
 
     @property
@@ -338,8 +339,9 @@ class CavityCharPhase(PhaseBase):
         #
         # A new run invalidates the last one's numbers. Clear them now so a
         # read that fails later cannot leave this run's record carrying the
-        # previous run's probe Q (or loaded Q) — _store_phase_fields skips
-        # None and finalize_phase keeps what is on the record. A session
+        # previous run's probe Q (or loaded Q). Saving never overwrites a
+        # stored value with None (_store_phase_fields, finalize_phase), so a
+        # stale value would otherwise stay. A session
         # resumed past this step does not come back through here, so its
         # values survive.
         self._clear_measured_fields()
@@ -459,7 +461,8 @@ class CavityCharPhase(PhaseBase):
             )
             self._loaded_q = float(self.cavity.measured_loaded_q)
             self._scale_factor = float(self.cavity.measured_scale_factor)
-            # The same checks finish_characterization() makes before pushing.
+            # Whether loaded Q and scale factor are in tolerance: the same two
+            # checks finish_characterization() makes before pushing.
             self._loaded_q_in_tolerance = bool(
                 self.cavity.measured_loaded_q_in_tolerance
             )

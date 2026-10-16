@@ -170,7 +170,7 @@ class _SyncMixin:
             self._update_banner = None
 
     def _handle_note_conflict(self, conflict) -> None:
-        """Handle note update conflicts from optimistic locking."""
+        """Ask for a reload when a note edit lost to another user's save."""
         QMessageBox.warning(
             self,
             "Record Updated",
