@@ -18,8 +18,9 @@ BASE_LOG_DIR = get_log_base_dir()
 # More readable format option
 READABLE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
 
-# Accepted by custom_logger() for old callers, and ignored.
-_IGNORED_RETRY_KWARGS = {"enable_retry", "retry_interval", "max_retries"}
+# Default for custom_logger()'s old retry arguments, so it can tell an
+# argument that was passed from one that wasn't.
+_UNSET: Any = object()
 
 # Track created loggers to avoid duplicates (using weak references to avoid memory leaks)
 _created_loggers: dict[str, weakref.ref] = {}
@@ -266,7 +267,9 @@ def custom_logger(
     level: int = logging.DEBUG,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
-    **deprecated: Any,
+    enable_retry: Any = _UNSET,
+    retry_interval: Any = _UNSET,
+    max_retries: Any = _UNSET,
 ) -> logging.Logger:
     """
     Create a logger with colored console output and dual file logging.
@@ -286,14 +289,34 @@ def custom_logger(
         level: Logging level (default: DEBUG)
         max_bytes: Maximum file size before rotation (default: 10MB)
         backup_count: Number of backup files to keep (default: 5)
-        **deprecated: enable_retry, retry_interval and max_retries are
-            accepted and ignored; file logging is no longer retried.
+        enable_retry, retry_interval, max_retries: Deprecated and ignored,
+            since file logging is no longer retried. Still accepted, by
+            position or keyword, so old calls work. Passing any of them
+            warns.
 
     Returns:
         Logger instance
     """
     if not log_filename:
         raise ValueError("log_filename cannot be empty")
+
+    # Before the cache check, so a call that returns a cached logger warns too.
+    passed = [
+        arg
+        for arg, value in (
+            ("enable_retry", enable_retry),
+            ("retry_interval", retry_interval),
+            ("max_retries", max_retries),
+        )
+        if value is not _UNSET
+    ]
+    if passed:
+        warnings.warn(
+            f"custom_logger(): {passed} are ignored; "
+            "file logging is no longer retried",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     # Normalize log_dir to Path for consistent handling
     log_dir = Path(log_dir)
@@ -323,17 +346,6 @@ def custom_logger(
     # Always add console handler first
     console_handler = _create_console_handler(level)
     logger.addHandler(console_handler)
-
-    unknown = set(deprecated) - _IGNORED_RETRY_KWARGS
-    if unknown:
-        raise TypeError(f"custom_logger() got unexpected arguments: {unknown}")
-    if deprecated:
-        warnings.warn(
-            f"custom_logger(): {sorted(deprecated)} are ignored; "
-            "file logging is no longer retried",
-            DeprecationWarning,
-            stacklevel=2,
-        )
 
     _add_file_handlers(
         logger, log_dir, log_filename, level, max_bytes, backup_count
