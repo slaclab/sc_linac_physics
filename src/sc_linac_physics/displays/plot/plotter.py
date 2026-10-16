@@ -112,8 +112,8 @@ class PlotterDisplay(Display):
 
         self.plot = ArchiverPlot()
         self.plot.set_time_span(TIME_SPANS[DEFAULT_TIME_SPAN])
-        # Cryo view: fixed ranges by cryomodule attribute, kept across
-        # linac switches so an operator's changes stay put.
+        # The cryo view's y-axis range for each cryomodule signal. They are
+        # kept when the operator switches linac, so ranges they set stay put.
         self.cryo_ranges: Dict[str, Optional[YRange]] = dict(
             DEFAULT_AXIS_RANGES
         )
