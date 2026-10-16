@@ -3,7 +3,6 @@
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QComboBox,
     QDoubleSpinBox,
     QFrame,
     QGridLayout,
@@ -152,73 +151,6 @@ class PiezoPreRFUI(PhaseUIBase):
 
         group.setLayout(layout)
         return group
-
-    def _build_setup_row(self) -> QHBoxLayout:
-        """Build compact single-row setup for operator and cavity selection."""
-        row = QHBoxLayout()
-        row.setSpacing(15)
-
-        operator_label = QLabel("👤 Operator:")
-        operator_label.setStyleSheet(
-            "QLabel { color: #ffd700; font-weight: bold; font-size: 10pt; }"
-        )
-
-        operator_combo = self._register("operator_combo", QComboBox())
-        operator_combo.setMinimumWidth(180)
-        operator_combo.setMaximumWidth(220)
-        operator_combo.setStyleSheet(
-            "QComboBox { background-color: #ffffff; color: #000000; "
-            "font-size: 10pt; font-weight: bold; padding: 4px; "
-            "border: 2px solid #5a9a3a; border-radius: 3px; } "
-            "QComboBox::drop-down { border: none; } "
-            "QComboBox QAbstractItemView { background-color: #ffffff; "
-            "color: #000000; selection-background-color: #5a9a3a; }"
-        )
-
-        cavity_label = QLabel("🎯 Cavity:")
-        cavity_label.setStyleSheet(
-            "QLabel { color: #4a9eff; font-weight: bold; font-size: 10pt; }"
-        )
-
-        cm_label = QLabel("CM:")
-        cm_combo = self._register("cm_spinbox", QComboBox())
-        cm_combo.setFixedWidth(60)
-        cm_combo.setStyleSheet("QComboBox { padding: 3px; font-weight: bold; }")
-        for i in range(1, 21):
-            cm_combo.addItem(str(i))
-        cm_combo.setCurrentIndex(0)
-
-        cav_label = QLabel("Cav:")
-        cav_combo = self._register("cav_spinbox", QComboBox())
-        cav_combo.setFixedWidth(60)
-        cav_combo.setStyleSheet(
-            "QComboBox { padding: 3px; font-weight: bold; }"
-        )
-        for i in range(1, 9):
-            cav_combo.addItem(str(i))
-        cav_combo.setCurrentIndex(0)
-
-        row.addWidget(operator_label)
-        row.addWidget(operator_combo)
-        row.addWidget(cavity_label)
-        row.addWidget(cm_label)
-        row.addWidget(cm_combo)
-        row.addWidget(cav_label)
-        row.addWidget(cav_combo)
-        row.addStretch()
-
-        frame = QFrame()
-        frame.setStyleSheet(
-            "QFrame { background-color: #2a2a2a; border: 1px solid #4a4a4a; "
-            "border-radius: 4px; padding: 6px; }"
-        )
-        frame.setLayout(row)
-
-        wrapper = QHBoxLayout()
-        wrapper.addWidget(frame)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-
-        return wrapper
 
     def _build_combined_results_section(
         self, phase_name: str = "Piezo Pre-RF"

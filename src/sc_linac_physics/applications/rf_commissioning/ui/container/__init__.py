@@ -1,12 +1,6 @@
 """Container-level helpers for the multi-phase commissioning UI."""
 
 from .phase_specs import PhaseTabSpec, build_default_phase_specs
-from .progress import build_progress_phases
-from .progress_panel import (
-    _ProgressMixin,
-    build_compact_progress_bar,
-    update_progress_indicator,
-)
 from .header import _HeaderMixin, build_header_panel
 from .notes import _NotesPanelMixin, build_enhanced_notes_panel, load_notes
 from .note_actions import (
@@ -59,10 +53,8 @@ from .tab_state import (
 __all__ = [
     "PhaseTabSpec",
     "build_default_phase_specs",
-    "build_progress_phases",
     # Mixin classes
     "_HeaderMixin",
-    "_ProgressMixin",
     "_NotesPanelMixin",
     "_NoteActionsMixin",
     "_RecordSelectorMixin",
@@ -71,8 +63,6 @@ __all__ = [
     "_RecordLifecycleMixin",
     "_TabsMixin",
     # Backward-compat function aliases
-    "build_compact_progress_bar",
-    "update_progress_indicator",
     "build_header_panel",
     "build_enhanced_notes_panel",
     "load_notes",

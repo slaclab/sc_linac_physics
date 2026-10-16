@@ -28,7 +28,6 @@ from sc_linac_physics.applications.rf_commissioning.ui.container import (
     _NoteActionsMixin,
     _NotesPanelMixin,
     _PersistenceMixin,
-    _ProgressMixin,
     _RecordLifecycleMixin,
     _RecordSelectorMixin,
     _SyncMixin,
@@ -51,7 +50,6 @@ class _Stub(
     _RecordSelectorMixin,
     _NotesPanelMixin,
     _NoteActionsMixin,
-    _ProgressMixin,
     _HeaderMixin,
     QWidget,
 ):
@@ -128,7 +126,6 @@ def host_stub(qtbot):
     host._phase_displays = []
     host._update_sync_status = Mock()
     host._update_tab_states = Mock()
-    host.update_progress_indicator = Mock()
     host._load_notes = Mock()
     host._update_cm_status_panel = Mock()
     host.save_active_record = Mock()
