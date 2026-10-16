@@ -47,7 +47,10 @@ NO_CRYO_ACCESS = "Required cryo permissions not granted - call cryo ops"
 
 
 class _StatusSignalHandler(logging.Handler):
-    """Emits INFO+ records logged on one thread through a status signal."""
+    """Show one worker thread's log messages in its status label.
+
+    Sends each INFO-or-higher message logged on that thread through signal.
+    """
 
     def __init__(self, signal, thread_id: int):
         super().__init__(level=logging.INFO)
