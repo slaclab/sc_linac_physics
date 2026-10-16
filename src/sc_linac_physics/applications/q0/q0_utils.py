@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from os import devnull
@@ -261,11 +262,26 @@ def seed_data_file(packaged: Path, target: Path) -> None:
     # Copy rather than merge: after the first use, target is the only copy
     # the app reads or writes. History committed to the package later does
     # not reach an existing target.
-    if packaged.is_file():
-        shutil.copyfile(packaged, target)
-    else:
-        with open(target, "w") as f:
-            json.dump({}, f)
+    #
+    # Write a temp file next to target, then hard-link it into place.
+    # os.link fails if target exists, so a second sc-q0 seeding the same
+    # file at the same time can't replace runs the first already saved,
+    # and a failed copy never leaves a partial target behind.
+    fd, tmp_name = tempfile.mkstemp(dir=target.parent, suffix=".seed")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w") as f:
+            if packaged.is_file():
+                with open(packaged) as src:
+                    shutil.copyfileobj(src, f)
+            else:
+                json.dump({}, f)
+        try:
+            os.link(tmp, target)
+        except FileExistsError:
+            pass  # another instance seeded it first; keep theirs
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def make_json_file(filepath):
