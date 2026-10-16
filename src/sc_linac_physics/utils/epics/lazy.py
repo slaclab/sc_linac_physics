@@ -53,8 +53,8 @@ class LazyPV:
         if obj is None:
             return self
         pv = getattr(obj, self._cache_attr)
-        # `not pv`, not `pv is None`: same test the hand-written properties
-        # used, so behavior is unchanged.
+        # This checks `not pv` rather than `pv is None` because the
+        # hand-written properties it replaces did. Callers see no change.
         if not pv:
             pv = PV(getattr(obj, self._name_attr), **self._pv_kwargs)
             setattr(obj, self._cache_attr, pv)
