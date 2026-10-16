@@ -94,9 +94,9 @@ class SSAPVGroup(PVGroup):
     saved_slope: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE_SAVE", dtype=ChannelType.FLOAT
     )
-    # Read by SSA.rated_power_kw, in kW. The sim picks by cryomodule: HL
-    # 1 kW, then high energy (L4B, Cryomodule.is_high_energy) 7 kW, then
-    # standard 3.8 kW. The real machine also has 7 kW SSAs outside L4B and
+    # The SSA's rated power in kW, which SSA.rated_power_kw reads. The sim
+    # sets it by cryomodule: 1 kW on HL, 7 kW on high-energy cryomodules
+    # (L4B, Cryomodule.is_high_energy) and 3.8 kW everywhere else. The real machine also has 7 kW SSAs outside L4B and
     # 4 HE prototypes at 4.6 kW, so this is close but not exact.
     pwr_rating: PvpropertyFloat = pvproperty(
         value=3.8, name="PwrRating", dtype=ChannelType.FLOAT, units="kW"
