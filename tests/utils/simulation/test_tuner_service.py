@@ -220,6 +220,39 @@ class TestPiezoPVGroup:
         assert piezo_group.capacitance_a.value == pytest.approx(25.3)
         assert piezo_group.capacitance_b.value == pytest.approx(24.8)
 
+    def test_withrf_enums_match_the_ioc(self, piezo_group):
+        """Enum strings as ACCL:L1B:0210:PZT served them on 2026-10-14."""
+        assert list(piezo_group.withrf_status.enum_strings) == [
+            "Pass",
+            "Warning",
+            "Fail",
+        ]
+        assert list(piezo_group.withrf_check_status.enum_strings) == [
+            "Crash",
+            "Complete",
+            "Running",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_withrf_test_passes_and_writes_a_detune_gain(
+        self, piezo_group, mock_pvproperty_instance
+    ):
+        with patch(
+            "sc_linac_physics.utils.simulation.tuner_service.sleep",
+            new_callable=AsyncMock,
+        ):
+            await piezo_group.withrf_run_check.putter(
+                mock_pvproperty_instance, 1
+            )
+
+        assert piezo_group.withrf_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.withrf_check_status.value in (
+            1,
+            "Complete",
+            b"Complete",
+        )
+        assert piezo_group.detunegain_new.value == pytest.approx(0.85)
+
     def test_piezo_properties_values(self, piezo_group):
         """Test piezo property values and types."""
         if hasattr(piezo_group, "voltage"):

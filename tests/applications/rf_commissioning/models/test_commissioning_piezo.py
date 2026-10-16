@@ -85,7 +85,7 @@ def test_with_rf_pv_names_use_expected_suffixes(
 ) -> None:
     assert piezo.withrf_run_check_pv.endswith("RFTESTSTRT")
     assert piezo.withrf_check_status_pv.endswith("RFTESTSTS")
-    assert piezo.withrf_status_pv.endswith("RFSTESTSTAT")
+    assert piezo.withrf_status_pv.endswith("RFTESTSTAT")
     assert piezo.amplifiergain_a_pv.endswith("CHA_AMPGAIN")
     assert piezo.amplifiergain_b_pv.endswith("CHB_AMPGAIN")
     assert piezo.withrf_push_dfgain_pv.endswith("PUSH_DFGAIN.PROC")
