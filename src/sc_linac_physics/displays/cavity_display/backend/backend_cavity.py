@@ -25,10 +25,8 @@ from sc_linac_physics.displays.cavity_display.utils.utils import (
     display_hash,
     cavity_fault_logger,
 )
-from sc_linac_physics.utils.archiver import (
-    LOCAL_TZ,
-    get_values_over_time_range,
-)
+from sc_linac_physics.utils.archiver import LOCAL_TZ
+from sc_linac_physics.utils.archiver_store import ArchiverStore
 from sc_linac_physics.utils.epics import PV, PVBatch
 from sc_linac_physics.utils.sc_linac.cavity import Cavity
 
@@ -364,16 +362,22 @@ class BackendCavity(Cavity):
     ) -> Tuple[DefaultDict[str, FaultCounter], List[FaultEvent]]:
         """Fetch this cavity's fault history from the archiver.
 
+        Reads through the shared ArchiverStore: months that ended over a
+        day ago come from disk after the first read, and only newer data is
+        asked of the archiver. The two PVs are read one after the other.
+
         Returns (counts by TLC, chronological FaultEvents); both are
         empty if the archiver query fails. Callers fetching many
         cavities should batch the query themselves and use
         process_fault_history().
         """
+        store = ArchiverStore()
         try:
-            data: Dict[str, pd.DataFrame] = get_values_over_time_range(
-                [self.pv_addr("CUDSTATUS"), self.pv_addr("CUDSEVR")],
-                start_time,
-                end_time,
+            statuses = store.read(
+                self.pv_addr("CUDSTATUS"), start_time, end_time
+            )
+            severities = store.read(
+                self.pv_addr("CUDSEVR"), start_time, end_time
             )
         except Exception as e:
             cavity_fault_logger.error(
@@ -382,8 +386,7 @@ class BackendCavity(Cavity):
             return defaultdict(FaultCounter), []
 
         return self.process_fault_history(
-            statuses=data[self.pv_addr("CUDSTATUS")],
-            severities=data[self.pv_addr("CUDSEVR")],
+            statuses=statuses, severities=severities
         )
 
     def process_fault_history(
@@ -393,8 +396,8 @@ class BackendCavity(Cavity):
     ) -> Tuple[DefaultDict[str, FaultCounter], List[FaultEvent]]:
         """Aggregate archived status/severity samples into counts and events.
 
-        statuses and severities are frames from
-        utils.archiver.get_values_over_time_range. Every sample is used,
+        statuses and severities are frames as returned by
+        utils.archiver.get_values_over_time_range or ArchiverStore.read. Every sample is used,
         including ones the archiver marks invalid, as before.
 
         Note the archiver includes one sample from before the requested

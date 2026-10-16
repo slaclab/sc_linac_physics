@@ -38,6 +38,8 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   planned from totals (`ncount`), halving any window that is too big.
 - Live, 2026-10-12: 60 days of a 1 Hz PV took 21 requests, the largest 25 MB.
   A year of two fault PVs took 16, mostly counts.
+- `iter_range_chunks(pv, start, end)` yields the same samples one chunk at a
+  time, for processing or storing a long window without holding all of it.
 - Memory: parsing peaks at about 6.5x a chunk's JSON, about 190 MB per PV,
   for up to `MAX_WORKERS` PVs at once. The 60-day result was 156 MB. Raw
   pulls of a year or more don't fit in memory. A disk store is planned.
@@ -50,6 +52,54 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
 - Cold queries are slow: value-at-time took 26-63 s on site. A proxy answers
   502 at 60 s, which is retried, so one cold lookup can block for about 4
   minutes before it fails. Keep these calls off the Qt main thread.
+
+## Logging
+
+`archiver.get_logger()` writes to the console and to `logfiles/archiver/`.
+INFO is one line per PV fetched, per month written to the cache, per cache
+read, and per value-at-time lookup. Retries and failed cache writes are
+WARNING. Every HTTP request and cache hit is DEBUG; to see them:
+
+```python
+import logging
+from sc_linac_physics.utils import archiver
+
+archiver.get_logger().setLevel(logging.DEBUG)
+```
+
+## On-disk cache (`utils/archiver_store.py`)
+
+For analysis over months or years, read through `ArchiverStore`. Each month
+the archiver has finished with is fetched once and kept as a Parquet file;
+later reads come from disk.
+
+```python
+from datetime import datetime
+from sc_linac_physics.utils.archiver_store import ArchiverStore
+
+store = ArchiverStore()  # or ArchiverStore("/path/to/my/cache")
+store.fill(["ACCL:L2B:0410:AACTMEAN"], datetime(2025, 1, 1), datetime(2026, 1, 1))
+
+for month in store.iter_months("ACCL:L2B:0410:AACTMEAN", datetime(2025, 1, 1), datetime(2026, 1, 1)):
+    ...  # one DataFrame per month, columns as above
+
+frame = store.read("ACCL:L2B:0410:AACTMEAN", datetime(2025, 3, 1), datetime(2025, 3, 8))
+```
+
+- Files: `<root>/<pv>/<YYYY-MM>.parquet`, UTC months. The default root is
+  `/home/physics/srf/archiver_cache` on Linux and
+  `~/.sc_linac_physics/archiver_cache` on macOS. Any tool that reads Parquet
+  can open them: pandas, polars, DuckDB, MATLAB's `parquetread`.
+- A month is written once it ended more than `SETTLE` (1 day) ago. Newer
+  data is fetched from the archiver on every read.
+- `fill` downloads without returning anything, up to 8 PVs at once. `read`
+  and `iter_months` fill whatever months they need first.
+- Reads return what `get_values_over_time_range` would, and may also start
+  with the last sample before `start`.
+- Size and speed, measured 2026-10-12 on a 1 Hz PV: 32 MB per month on disk.
+  Five weeks read from the cache in 0.1 s, against 35 s from the archiver.
+- `iter_months` holds one month in memory at a time: about 100 MB at 1 Hz,
+  about 860 MB at 10 Hz.
 
 ## Plotting two signals
 
