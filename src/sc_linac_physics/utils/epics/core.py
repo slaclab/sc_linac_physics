@@ -143,12 +143,12 @@ class PV(EPICS_PV):
         Thread-safe with reentrant lock.
 
         Args:
-            timeout: Connection timeout. For the first connection it's used
-                only if caller_deadline is set. get() and put() pass their
-                own I/O timeout here, and the first connection waits
-                connection_timeout instead, longer or shorter.
-            caller_deadline: timeout came from ensure_connected(), so it
-                applies to the first connection too.
+            timeout: How long to wait for a reconnect. get() and put()
+                pass their own read or write timeout here. The first
+                connection ignores it and waits connection_timeout, unless
+                caller_deadline is set.
+            caller_deadline: True when timeout came from ensure_connected().
+                Then the first connection waits timeout too.
 
         Raises:
             PVConnectionError: If connection fails
