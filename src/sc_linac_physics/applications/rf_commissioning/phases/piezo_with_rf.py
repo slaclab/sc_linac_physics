@@ -514,7 +514,10 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     def _check_before_push(self) -> PhaseStepResult | None:
-        """Re-read DFGAIN_NEW and RFTESTSTS. A refusal result, or None to go on."""
+        """Re-read DFGAIN_NEW and RFTESTSTS just before pushing.
+
+        Returns a result that stops the push, or None if it can go ahead.
+        """
         try:
             now_gain = float(self.cavity.piezo.detunegain_new_pv_obj.get())
             now_status = self._test_run_status()
