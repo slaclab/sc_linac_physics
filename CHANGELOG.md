@@ -2,6 +2,353 @@
 
 <!-- version list -->
 
+## v9.47.4 (2026-10-16)
+
+### Bug Fixes
+
+- **sc-linac**: Abort the motor on a move timeout; don't retry a stuck SSA calibration
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+- **sc-linac**: Time out the seven polling loops that could wait forever
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+- **utils**: Small bugs in cavity, logger and the EPICS wrapper
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+### Documentation
+
+- **claude-md**: Import AGENTS.md instead of repeating the architecture
+  ([#428](https://github.com/slaclab/sc_linac_physics/pull/428),
+  [`c15bb4b`](https://github.com/slaclab/sc_linac_physics/commit/c15bb4b55f7d1bc50c013721f9de1ddecb9240c3))
+
+
+## v9.47.3 (2026-10-15)
+
+### Bug Fixes
+
+- **epics**: Never re-send a put that already went out
+  ([#349](https://github.com/slaclab/sc_linac_physics/pull/349),
+  [`3f9eff9`](https://github.com/slaclab/sc_linac_physics/commit/3f9eff979ee438daea24f862e4898c1179cf35ab))
+
+
+## v9.47.2 (2026-10-15)
+
+### Bug Fixes
+
+- **archiver**: Every failure is an ArchiverError; retry only gateway errors
+  ([#393](https://github.com/slaclab/sc_linac_physics/pull/393),
+  [`53aa2c4`](https://github.com/slaclab/sc_linac_physics/commit/53aa2c43a9b805a510e653190f252e363fa652e4))
+
+### Chores
+
+- **ci**: Bump actions/upload-artifact
+  ([#410](https://github.com/slaclab/sc_linac_physics/pull/410),
+  [`8d2a354`](https://github.com/slaclab/sc_linac_physics/commit/8d2a354cf26b65322f1320e0fc3a343f838c0afe))
+
+
+## v9.47.1 (2026-10-15)
+
+### Bug Fixes
+
+- **sim**: Serve production types and enum states for SSA, rack, cryo and system PVs
+  ([#399](https://github.com/slaclab/sc_linac_physics/pull/399),
+  [`b8bb662`](https://github.com/slaclab/sc_linac_physics/commit/b8bb66242917db815cb4636cc7e3099096ea3319))
+
+
+## v9.47.0 (2026-10-15)
+
+### Bug Fixes
+
+- **q0**: A failed cryo write no longer skips the rest of cleanup
+  ([#396](https://github.com/slaclab/sc_linac_physics/pull/396),
+  [`fd1832e`](https://github.com/slaclab/sc_linac_physics/commit/fd1832e476da721a5159efb12b149a8580a235de))
+
+- **q0**: Read and write cryo PVs through PV, so failures are errors not None
+  ([#396](https://github.com/slaclab/sc_linac_physics/pull/396),
+  [`fd1832e`](https://github.com/slaclab/sc_linac_physics/commit/fd1832e476da721a5159efb12b149a8580a235de))
+
+- **rf-commissioning**: Abort cavity char the way the phase now expects
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Address #395 review on cavity char targeting and saves
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Don't push a measurement after the record changes
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Drop the probe Q row from cavity char stored data
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Gate the cavity char push and vet the wait
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Honour dry_run in the three steps that ignored it
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Line up the cavity char panel's two columns
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Lock the toolbar and persist the cavity char run
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Make cavity char actually run and leave a trace
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Plainer cavity char confirm and one-decimal values
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Require PROBECALTS to advance past the pre-start value
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Reset the cavity char panel when the cavity changes
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Show this run's cavity char values in Stored Data
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Start Test must not push the measurement
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Stop pretending probe Q can be read back
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **sc-linac**: Check should_abort once more after the characterization settles
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+### Documentation
+
+- **q0**: Full sentences in the _attempt_each docstring
+  ([#396](https://github.com/slaclab/sc_linac_physics/pull/396),
+  [`fd1832e`](https://github.com/slaclab/sc_linac_physics/commit/fd1832e476da721a5159efb12b149a8580a235de))
+
+- **rf-commissioning**: Correct the spec's threading claim
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Design for the cavity characterization phase UI
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Drop the cavity char UI plan and spec from the repo
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Implementation plan for the cavity char UI
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Record that PROBECALTS is stamped at run start
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Record that push, not save, is what the hardware uses
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Resync the cavity char UI spec with the new CLAUDE.md
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+### Features
+
+- **rf-commissioning**: Add the cavity characterization controller
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Add the cavity characterization UI builder
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Cavity characterization phase, steps 1-4
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Cavity characterization phase, steps 5-7
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Cavity characterization UI
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Implement the cavity characterization phase backend
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Live PV readouts on the cavity char panel
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Read and push probe Q; revalidate results before push
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Record cavity char tolerance; out of range is not passed
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Replace the cavity char placeholder display
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Review and push cavity char results
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **sc-linac**: Let callers abort Cavity.wait_for_characterization
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+### Refactoring
+
+- **rf-commissioning**: Abort the characterization wait through abort_flag
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+- **rf-commissioning**: Run cavity char through auto setup's code
+  ([#395](https://github.com/slaclab/sc_linac_physics/pull/395),
+  [`a8045e8`](https://github.com/slaclab/sc_linac_physics/commit/a8045e8cc3927c31a635d06c322686a8fc0ac0e7))
+
+
+## v9.46.0 (2026-10-15)
+
+### Bug Fixes
+
+- **cavity-display**: Catch our PVInvalidError in EnumLabel
+  ([#365](https://github.com/slaclab/sc_linac_physics/pull/365),
+  [`46e8c65`](https://github.com/slaclab/sc_linac_physics/commit/46e8c653a22dca6c84b1a31c371fcb826ec86087))
+
+- **epics**: PV.severity is never None and never stale
+  ([#365](https://github.com/slaclab/sc_linac_physics/pull/365),
+  [`46e8c65`](https://github.com/slaclab/sc_linac_physics/commit/46e8c653a22dca6c84b1a31c371fcb826ec86087))
+
+- **epics**: Refresh severity after a reconnect and on unmonitored PVs
+  ([#365](https://github.com/slaclab/sc_linac_physics/pull/365),
+  [`46e8c65`](https://github.com/slaclab/sc_linac_physics/commit/46e8c653a22dca6c84b1a31c371fcb826ec86087))
+
+- **plot**: Draw archived and live samples as steps
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+- **plot**: Hold each sample until the next, not the reverse
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+### Features
+
+- **plot**: Default PYDM_ARCHIVER_URL to utils.archiver's archiver
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+### Refactoring
+
+- **plot**: Draw plots from a CurveSet; drop EmbeddableArchiverPlot
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+### Testing
+
+- **plot**: Check the linked ViewBox re-enables auto-range
+  ([#366](https://github.com/slaclab/sc_linac_physics/pull/366),
+  [`b4f7b17`](https://github.com/slaclab/sc_linac_physics/commit/b4f7b1723b35e85d82b59774ba6ded0c24315a34))
+
+
+## v9.45.5 (2026-10-15)
+
+### Bug Fixes
+
+- **sc-linac**: Magnet CTRL command values match the real enum
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+### Documentation
+
+- **sc-linac**: Magnet CTRL enum checked on every linac; drop the CHECK
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+- **sc-linac**: XCOR and YCOR CTRL enums match the QUAD's
+  ([#391](https://github.com/slaclab/sc_linac_physics/pull/391),
+  [`f99b406`](https://github.com/slaclab/sc_linac_physics/commit/f99b40649b1767f9323073f95d65ea03cbfbe5a8))
+
+
+## v9.45.4 (2026-10-15)
+
+### Bug Fixes
+
+- **archiver**: Chunk string PVs from their ncount totals
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Count every window before falling back to one request
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Fetch long windows in chunks planned from sample counts
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Fetch long windows in chunks sized by bytes
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+### Documentation
+
+- **archiver**: Give the archiver client its own page
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Record that waveforms are not archived
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Say why the PV is wrapped in count_3600(...)
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+### Performance Improvements
+
+- **archiver**: Build each chunk's frame as it arrives
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+- **archiver**: Plan chunks from the archiver's own sample counts
+  ([#374](https://github.com/slaclab/sc_linac_physics/pull/374),
+  [`2d342a3`](https://github.com/slaclab/sc_linac_physics/commit/2d342a35472c2f10f50d542c26b930624e338661))
+
+
+## v9.45.3 (2026-10-15)
+
+### Bug Fixes
+
+- **sim**: Leave CHA/CHB_TESTSTAT to #397
+  ([#398](https://github.com/slaclab/sc_linac_physics/pull/398),
+  [`5f263de`](https://github.com/slaclab/sc_linac_physics/commit/5f263de1d80ede21593b0c7cd7ea5e6a9c0bd4ed))
+
+- **sim**: Serve production types and enum states for cavity and tuner PVs
+  ([#398](https://github.com/slaclab/sc_linac_physics/pull/398),
+  [`5f263de`](https://github.com/slaclab/sc_linac_physics/commit/5f263de1d80ede21593b0c7cd7ea5e6a9c0bd4ed))
+
+
 ## v9.45.2 (2026-10-14)
 
 ### Bug Fixes

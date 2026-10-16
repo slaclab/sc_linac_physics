@@ -29,8 +29,9 @@ open access (CC BY 3.0).
     better source for anything expected to hold on a production cavity.
 """
 
+import time
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional, Type
 
 from numpy import polyfit
 
@@ -209,11 +210,19 @@ DEFAULT_STEPPER_SPEED = 20000
 MAX_STEPPER_SPEED = 60000
 STEPPER_ON_LIMIT_SWITCH_VALUE = 1
 
-# these values are based on the list of enum states found by probing {magnet_type}:L{x}B:{cm}85:CTRL
-MAGNET_RESET_VALUE = 10
-MAGNET_ON_VALUE = 11
-MAGNET_OFF_VALUE = 12
-MAGNET_DEGAUSS_VALUE = 13
+# Indices into the magnet CTRL enum (DBF_ENUM, 15 states): 0 Ready, 1 TRIM,
+# 2 PERTURB, 3 BCON_TO_BDES, 4 BACT_TO_BDES, 5 SAVE_BDES, 6 LOAD_BDES,
+# 7 UNDO_BDES, 8 DAC_ZERO, 9 CALB, 10 STDZ, 11 RESET, 12 TURN_ON,
+# 13 TURN_OFF, 14 DEGAUSS. Checked with caget -d DBR_CTRL_ENUM on
+# lcls-srv01 (2026-10-13) for QUAD, XCOR and YCOR on L0B:01 and on the
+# first and last cryomodule of L1B through L4B. All match, except that on
+# the L4B QUADs state 9 reads CALIB. Magnet never sends 9.
+# RESET through DEGAUSS were one lower before, which pointed each at the
+# state below it (turn_off sent TURN_ON).
+MAGNET_RESET_VALUE = 11
+MAGNET_ON_VALUE = 12
+MAGNET_OFF_VALUE = 13
+MAGNET_DEGAUSS_VALUE = 14
 MAGNET_TRIM_VALUE = 1
 
 PIEZO_ENABLE_VALUE = 1
@@ -267,6 +276,25 @@ HW_MODE_MAIN_DONE_VALUE = 3
 HW_MODE_READY_VALUE = 4
 
 INTERLOCK_RESET_ATTEMPTS = 5
+
+# Upper bounds on polling loops that used to wait forever. Each is far
+# longer than the step should take; hitting one means something is stuck.
+# The step raises its usual error class (see wait_until) with a timeout
+# message. Values proposed 2026-10-08, not yet reviewed.
+# CHECK: how long does PULSE_STATUS take to reach 2 after PULSE_DIFF_SUM=1?
+PULSE_GO_TIMEOUT_S = 60
+# CHECK: how long from RFCTRL=1 to RFSTATE on, and from RFCTRL=0 to off?
+CAVITY_TURN_ON_TIMEOUT_S = 60
+CAVITY_TURN_OFF_TIMEOUT_S = 60
+# CHECK: how long can an SSA take to report on after the turn-on PV is put?
+SSA_TURN_ON_TIMEOUT_S = 120
+SSA_TURN_OFF_TIMEOUT_S = 60
+# CHECK: how long does a full SSA calibration sweep normally run?
+SSA_CALIBRATION_TIMEOUT_S = 600
+# A stepper move gets FACTOR x (steps / VELO) plus MARGIN seconds. MARGIN
+# alone applies if VELO reads <= 0.
+STEPPER_MOVE_TIMEOUT_FACTOR = 2.0
+STEPPER_MOVE_TIMEOUT_MARGIN_S = 60
 
 # this value is based on historical data, when the decarads were on, but not seeing any FE from a cavity
 DECARAD_BACKGROUND_READING_AVG = 0.8
@@ -389,6 +417,44 @@ def stepper_tol_factor(num_steps) -> float:
     return 1.01
 
 
+def wait_until(
+    condition: Callable[[], bool],
+    timeout: float,
+    description: str,
+    error_class: Type[Exception],
+    poll_interval: float = 1.0,
+    check_abort: Optional[Callable[[], None]] = None,
+    on_poll: Optional[Callable[[], None]] = None,
+) -> None:
+    """Poll until condition() is true, or raise error_class after timeout.
+
+    Each poll, in order: condition(), check_abort(), on_poll(), the timeout
+    check, then sleep(poll_interval). This is the order the hand-written
+    loops it replaces already used, so abort handling is unchanged.
+
+    @param condition: returns True when the wait is over.
+    @param timeout: seconds before giving up.
+    @param description: what is being waited for, used in the error.
+    @param error_class: raised on timeout. Callers pass the error type their
+        callers already catch (e.g. SSAFaultError), so a timeout is handled
+        like the step's other failures.
+    @param check_abort: called each poll; raises to abort the wait.
+    @param on_poll: called each poll, e.g. to log progress.
+    @raise error_class: condition still false after timeout seconds.
+    """
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if check_abort is not None:
+            check_abort()
+        if on_poll is not None:
+            on_poll()
+        if time.monotonic() >= deadline:
+            raise error_class(
+                f"Timed out after {timeout:.0f} s waiting for {description}"
+            )
+        time.sleep(poll_interval)
+
+
 class PulseError(Exception):
     """Exception thrown during pulsed cavity operation."""
 
@@ -397,6 +463,12 @@ class PulseError(Exception):
 
 class StepperError(Exception):
     """Exception thrown when the stepper tuner motor fails or times out."""
+
+    pass
+
+
+class StepperMoveTimeoutError(StepperError):
+    """MOTOR_MOVING stayed 1 past the move timeout (StepperTuner._move_timeout)."""
 
     pass
 
@@ -416,6 +488,17 @@ class FSCANError(Exception):
 class SSACalibrationError(Exception):
     """
     Exception thrown during cavity SSA calibration
+    """
+
+    pass
+
+
+class SSACalibrationTimeoutError(SSACalibrationError):
+    """CALSTS stayed Running past SSA_CALIBRATION_TIMEOUT_S.
+
+    SSA.calibrate() retries other SSACalibrationErrors with a lower drive
+    max. It re-raises this one instead, so a stuck calibration isn't
+    restarted.
     """
 
     pass

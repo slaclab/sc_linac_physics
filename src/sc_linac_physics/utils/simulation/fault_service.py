@@ -3,7 +3,6 @@ from caproto.server import (
     PVGroup,
     PvpropertyEnum,
     pvproperty,
-    PvpropertyInteger,
     PvpropertyDouble,
 )
 
@@ -22,7 +21,7 @@ class CavFaultPVGroup(PVGroup):
         value=0,
         name="RESLINK_LTCH",
         dtype=ChannelType.ENUM,
-        enum_strings=("OK", "Fault"),
+        enum_strings=("Ok", "Fault"),
     )
     pll_latch: PvpropertyEnum = pvproperty(
         value=0,
@@ -40,7 +39,7 @@ class CavFaultPVGroup(PVGroup):
         value=0,
         name="IOCWDOG_LTCH",
         dtype=ChannelType.ENUM,
-        enum_strings=("OK", "Fault"),
+        enum_strings=("Ok", "Fault"),
     )
     coupler_temp1_latch: PvpropertyEnum = pvproperty(
         value=0,
@@ -52,7 +51,7 @@ class CavFaultPVGroup(PVGroup):
         value=0,
         name="CPLRTEMP2_LTCH",
         dtype=ChannelType.ENUM,
-        enum_strings=("Ok", "Faulted"),
+        enum_strings=("Ok", "Fault"),
     )
     stepper_temp_latch: PvpropertyEnum = pvproperty(
         value=0,
@@ -101,11 +100,8 @@ class CavFaultPVGroup(PVGroup):
             "Clipped beam mode",
         ),
     )
-    cavity_characterization: PvpropertyEnum = pvproperty(
-        value=0,
-        name="CAV:CALSTATSUM",
-        dtype=ChannelType.ENUM,
-        enum_strings=("", "", "Fault"),
+    cavity_characterization: PvpropertyDouble = pvproperty(
+        value=0.0, name="CAV:CALSTATSUM", dtype=ChannelType.DOUBLE
     )
     offline: PvpropertyEnum = pvproperty(
         name="HWMODE",
@@ -119,8 +115,8 @@ class CavFaultPVGroup(PVGroup):
             "Ready",
         ),
     )
-    check_phase: PvpropertyInteger = pvproperty(
-        name="CKPSUM", value=0, dtype=ChannelType.INT
+    check_phase: PvpropertyDouble = pvproperty(
+        name="CKPSUM", value=0.0, dtype=ChannelType.DOUBLE
     )
     quench_interlock: PvpropertyEnum = pvproperty(
         name="QUENCH_BYP_RBV",
@@ -175,14 +171,14 @@ class BSOICPVGroup(PVGroup):
         value=1,
         dtype=ChannelType.ENUM,
         name="SumyA",
-        enum_strings=("FAULT", "OK"),
+        enum_strings=("FAULT", "Ok"),
         record="mbbi",
     )
     sum_b = pvproperty(
         value=1,
         dtype=ChannelType.ENUM,
         name="SumyB",
-        enum_strings=("FAULT", "OK"),
+        enum_strings=("FAULT", "Ok"),
         record="mbbi",
     )
 
