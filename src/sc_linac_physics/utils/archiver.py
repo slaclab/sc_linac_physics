@@ -390,7 +390,11 @@ def get_series(
 def series_from_frames(
     frames: Dict[str, pd.DataFrame],
 ) -> Dict[str, pd.Series]:
-    """get_series' Series, from frames such as ArchiverStore.read_windows'."""
+    """Turn DataFrames into the Series that get_series returns.
+
+    Takes frames such as ArchiverStore.read_windows returns, and keeps each
+    PV's valid samples as a Series indexed by timestamp.
+    """
     return {
         pv: pd.Series(
             frame.loc[frame["valid"], "value"].to_numpy(),

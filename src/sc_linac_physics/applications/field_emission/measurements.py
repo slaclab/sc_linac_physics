@@ -58,7 +58,8 @@ def find_dataframes(cm, date, cav, read):
     dfs = {}
     for c in cav_list:
         values, columns = data[c, readout]
-        # Integer column labels: plot_amp_vs_rad numbers channels by them
+        # Keep pandas' default column names, 0, 1, 2 and so on.
+        # plot_amp_vs_rad labels each radiation channel with its column name.
         dfs[c] = pd.DataFrame(values)
     amp_label = columns[0]
     amp_label_parts = amp_label.split(":")
