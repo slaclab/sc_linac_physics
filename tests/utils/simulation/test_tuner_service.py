@@ -99,6 +99,15 @@ class TestPiezoPVGroup:
         return int(value)
 
     @pytest.mark.asyncio
+    async def test_bias_enable_drives_readback(self, piezo_group):
+        """BIAS_ENABLE_SET switches BIAS_RBV between 25 V and 0 V."""
+        await piezo_group.bias_enable.write(1)
+        assert piezo_group.bias_voltage.value == 25.0
+
+        await piezo_group.bias_enable.write("Disable")
+        assert piezo_group.bias_voltage.value == 0.0
+
+    @pytest.mark.asyncio
     async def test_disable_drops_commanded_mode_with_status(self, piezo_group):
         """Disabling must move MODECTRL to Manual, not only MODESTAT.
 
