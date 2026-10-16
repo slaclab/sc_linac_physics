@@ -94,32 +94,20 @@ class SSAPVGroup(PVGroup):
     saved_slope: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE_SAVE", dtype=ChannelType.FLOAT
     )
-    # Enum index read by SSA.rated_power_kw, per
-    # linac_utils.SSA_TYPE_RATED_POWER_KW: 0 the 7 kW HE SSA, 2 a standard
-    # LCLS-II SSA, 3 the 3.9 GHz HL SSA. The sim picks by cryomodule: HL,
-    # then high energy (L4B, Cryomodule.is_high_energy), then standard. The
-    # real machine has 191 index-0 SSAs to L4B's 184, plus 4 index-1 HE
-    # prototypes, so this is close but not exact.
-    ssa_type: PvpropertyEnum = pvproperty(
-        value=2,
-        name="Type",
-        dtype=ChannelType.ENUM,
-        enum_strings=(
-            "RK CA1300 7kW",
-            "RK CA1300 4.6kW",
-            "RK CA1300",
-            "RK CA3900",
-            "RK CA186",
-            "RK CA199",
-        ),
+    # Read by SSA.rated_power_kw, in kW. The sim picks by cryomodule: HL
+    # 1 kW, then high energy (L4B, Cryomodule.is_high_energy) 7 kW, then
+    # standard 3.8 kW. The real machine also has 7 kW SSAs outside L4B and
+    # 4 HE prototypes at 4.6 kW, so this is close but not exact.
+    pwr_rating: PvpropertyFloat = pvproperty(
+        value=3.8, name="PwrRating", dtype=ChannelType.FLOAT, units="kW"
     )
 
-    @ssa_type.startup
-    async def ssa_type(self, instance, async_lib):
+    @pwr_rating.startup
+    async def pwr_rating(self, instance, async_lib):
         if self.cavityGroup.is_hl:
-            await instance.write(3)
+            await instance.write(1.0)
         elif self.is_high_energy:
-            await instance.write(0)
+            await instance.write(7.0)
 
     drive_max: PvpropertyFloat = pvproperty(
         name="DRV_MAX_REQ", value=0.8, dtype=ChannelType.FLOAT
