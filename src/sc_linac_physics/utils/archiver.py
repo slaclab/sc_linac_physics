@@ -407,8 +407,11 @@ def _csv_chunk(
     try:
         return _parse_csv_chunk(response.content, last)
     except (ValueError, TypeError) as e:
-        # A 200 that isn't this CSV, like a proxy's HTML page: the same
-        # contract as _json. pandas' ParserError is a ValueError.
+        # The server said the request succeeded but sent something other
+        # than the expected CSV, such as a proxy's login or error page.
+        # Raise ArchiverError, as _json does for a bad JSON reply, so callers
+        # handle one kind of failure. pandas reports an unreadable file as a
+        # ValueError, so this except catches it.
         raise ArchiverError(
             f"getData.csv: response is not the expected CSV: {e}"
         ) from e
@@ -638,11 +641,11 @@ def _request(
 def _json(response: requests.Response, what: str):
     """response.json(), raising ArchiverError if the body isn't JSON.
 
-    A proxy can answer 200 with an HTML page (a login or error page).
+    A proxy can report success but send a login or error page instead.
     """
     try:
         return response.json()
-    except ValueError as e:  # requests' JSONDecodeError is a ValueError
+    except ValueError as e:  # requests reports bad JSON as a ValueError
         raise ArchiverError(f"{what}: response is not JSON: {e}") from e
 
 
