@@ -54,7 +54,8 @@ def align_pvs_to_common_time(series):
     aligned = pd.concat(deduped, axis=1, sort=True)
     aligned = aligned.ffill()
     aligned = aligned.dropna(how="any")
-    # update_h5py.convert_to_h5 drops this column by name.
+    # Keep this name: update_h5py.convert_to_h5 looks for a "timestamps"
+    # column and drops it before saving the values.
     aligned.index.name = "timestamps"
     return aligned
 
