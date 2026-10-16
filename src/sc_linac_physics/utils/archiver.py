@@ -120,8 +120,9 @@ MIN_SPLIT = timedelta(minutes=1)
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 COLUMNS = ["timestamp", "value", "severity", "status", "valid"]
-# Set, not inferred: pandas 2 infers ns from datetimes and pandas 3 infers
-# us, and frames from the CSV and JSON paths must match to pair or concat.
+# The timestamp type is set here, not left to pandas: pandas 2 picks
+# nanoseconds and pandas 3 picks microseconds. Frames from the CSV and JSON
+# readers need the same type to be lined up by time or joined end to end.
 TIMESTAMP_DTYPE = f"datetime64[us, {LOCAL_TZ.key}]"
 
 Value = Union[float, int, str]
@@ -369,9 +370,12 @@ def _get_json(
 def _json_chunk(
     pv: str, start: datetime, end: datetime, timeout: float, last
 ) -> Optional[tuple]:
-    """(frame, last key) for samples after last; (None, None) if none.
+    """Fetch one chunk of a PV's samples as JSON.
 
-    None if the archiver doesn't know the PV.
+    Returns (frame, last key): the samples newer than `last`, and the
+    (secs, nanos) of the newest one, so the next chunk can start after it.
+    Returns (None, None) if there are no new samples, and None if the
+    archiver doesn't know the PV.
     """
     payload = _get_json(pv, start, end, timeout)
     if payload is None:
@@ -387,7 +391,11 @@ def _json_chunk(
 def _csv_chunk(
     pv: str, start: datetime, end: datetime, timeout: float, last
 ) -> Optional[tuple]:
-    """Like _json_chunk, from getData.csv: for numeric PVs only.
+    """Fetch one chunk of a numeric PV's samples from getData.csv.
+
+    Returns the same three kinds of result as _json_chunk: (frame, last
+    key), (None, None) if there are no new samples, or None if the archiver
+    doesn't know the PV.
 
     Measured on site (2026-10-12), 551k samples: CSV is half the bytes of
     JSON, parses 8x faster and peaks at a quarter of the memory, with an
@@ -418,8 +426,10 @@ def _csv_chunk(
 
 
 def _parse_csv_chunk(content: bytes, last) -> tuple:
-    # Columns secs, val, severity, status, nanos, with no header (checked
-    # on site). round_trip: the default parser can be a bit off.
+    # The CSV has no header row and five columns: secs, val, severity,
+    # status and nanos (checked on site). float_precision="round_trip" reads
+    # each value exactly as written; pandas' default can be off in the last
+    # digit.
     raw = pd.read_csv(
         io.BytesIO(content),
         header=None,
@@ -444,10 +454,10 @@ def _parse_csv_chunk(content: bytes, last) -> tuple:
 
 
 def _csv_to_frame(raw: pd.DataFrame) -> pd.DataFrame:
-    """The frame _to_frame builds, from parsed CSV columns.
+    """Build, from parsed CSV columns, the frame _to_frame builds from JSON.
 
-    Timestamps round to the nearest microsecond, as _timestamp's
-    timedelta does, so both paths give the same frame.
+    Timestamps are rounded to the nearest microsecond, as _timestamp does
+    for JSON samples, so both readers give the same frame.
     """
     raw = raw.reset_index(drop=True)
     frame = pd.DataFrame(
