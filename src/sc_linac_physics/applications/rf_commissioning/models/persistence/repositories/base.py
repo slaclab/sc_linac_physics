@@ -79,10 +79,13 @@ class BaseRepository:
     ) -> bool:
         """Run ``UPDATE table_name SET set_clause`` on one row, bumping version.
 
-        With ``expected_version``, only a row at that version is updated. A
-        miss raises ``RecordConflictError``, or ``ValueError`` if the row is
-        gone. Without it, the row is updated whatever its version, and a miss
-        returns False so the caller decides what a missing row means.
+        Every update adds 1 to the row's version. With ``expected_version``,
+        the row is updated only if its version still matches, which means no
+        one else saved it since it was read. If nothing is updated, this
+        raises ``RecordConflictError``, or ``ValueError`` if the row is gone.
+        Without ``expected_version``, the row is updated whatever its version.
+        If the row is missing, this returns False and the caller decides what
+        that means.
         """
         sql = (
             f"UPDATE {table_name} SET {set_clause}, version = version + 1 "
