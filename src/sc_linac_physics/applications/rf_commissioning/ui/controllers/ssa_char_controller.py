@@ -75,6 +75,11 @@ class SSACharController(QObject):
         cryomodule, cavity_number = resolve_cavity_selection(
             self.view, cryomodule, cavity_number
         )
+        # Drop the last cavity before resolving the new one. If resolving
+        # fails, Push Slope would otherwise write to the old cavity while the
+        # header names another. A run is unaffected: it resolves its own
+        # cavity at start, and Abort goes through the phase context.
+        self._cavity = None
         if cryomodule is None or cavity_number is None:
             self.view.log_message("No cavity selected")
             return
