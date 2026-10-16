@@ -162,7 +162,8 @@ class PlotterDisplay(Display):
         self.setWindowTitle("SC Linac Plotter")
         self.machine = Machine()
         self.pv_groups = get_pvs_all_groupings(self.machine)
-        # Not part of Machine: two units moved between cryomodules.
+        # The two decarad units aren't in Machine, because they are moved
+        # between cryomodules rather than fixed to one.
         self.decarads = [Decarad(1), Decarad(2)]
 
         self.plot = ArchiverPlot()
