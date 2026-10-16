@@ -197,6 +197,8 @@ class MultiPhaseCommissioningDisplay(
 
     def _on_cavity_selection_changed(self) -> None:
         """Update CM status on CM change; load cavity record only when cavity is selected."""
+        if getattr(self, "_reverting_header", False):
+            return
         cryomodule = self.cryomodule_combo.currentText()
         cavity = self.cavity_combo.currentText()
 
@@ -220,10 +222,32 @@ class MultiPhaseCommissioningDisplay(
             self._reset_sync_status_prompt()
             return
 
+        if self._refuse_if_phase_running():
+            self._restore_header_to_active_record()
+            return
+
         created = self.start_new_record(cryomodule, cavity)
         self._update_sync_status(
             True, "New record started" if created else "Record loaded"
         )
+
+    def _restore_header_to_active_record(self) -> None:
+        """Put the header back on the cavity whose phase is running.
+
+        The record didn't change, so the header must not show another
+        cavity. The flag stops the combo changes from re-entering
+        _on_cavity_selection_changed and warning again.
+        """
+        record = self.session.get_active_record()
+        if record is None:
+            return
+        self._reverting_header = True
+        try:
+            self._sync_cavity_selection_from_record(record)
+        finally:
+            self._reverting_header = False
+        self._refresh_magnet_badge(record.cryomodule)
+        self._refresh_cavity_completion_label(record.cryomodule)
 
     def _refresh_magnet_badge(
         self, cryomodule: str, linac: str | None = None
