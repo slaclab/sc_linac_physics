@@ -78,14 +78,14 @@ def plot_amp_vs_rad(aligned_data):
     plt.close(fig)
 
 
-def generate_amp_vs_rad_csvs(cm, start, end, decarad):
-    """fetch one run and write a CSV per cavity and readout
+def fetch_run(cm, start, end, decarad):
+    """fetch one run, aligned per cavity and readout
 
-    Every cavity shares the decarad PVs, so each distinct PV is fetched once:
-    8 amplitudes + 10 heads x 2 readouts, 28 PVs, in parallel by get_series.
+    Returns {(cavity number, readout): DataFrame}, columns amplitude PV then
+    the 10 decarad head PVs. Every cavity shares the decarad PVs, so each
+    distinct PV is fetched once: 8 amplitudes + 10 heads x 2 readouts, 28
+    PVs, in parallel by get_series.
     """
-    print(f"Processing CM{cm} {start} -> {end}")
-    csv_date = start.strftime(CSV_DATE_FORMAT)
     amp_pvs = amplitude_pvs(cm)
     rad_pvs = {
         readout: rad_readout_pvs(decarad, readout) for readout in RAD_READ_TYPES
@@ -93,12 +93,22 @@ def generate_amp_vs_rad_csvs(cm, start, end, decarad):
     all_pvs = amp_pvs + [pv for pvs in rad_pvs.values() for pv in pvs]
     fetched = get_series(all_pvs, start, end)
 
+    frames = {}
     for readout in RAD_READ_TYPES:
         for cav_num, amp_pv in enumerate(amp_pvs, start=1):
             series = {pv: fetched[pv] for pv in [amp_pv] + rad_pvs[readout]}
-            aligned_time_data = align_pvs_to_common_time(series)
-            csv_path = (
-                CSV_OUTPUT_DIR
-                / f"cm{cm}_{csv_date}_cavity{cav_num}_{readout}.csv"
-            )
-            aligned_time_data.to_csv(csv_path)
+            frames[cav_num, readout] = align_pvs_to_common_time(series)
+    return frames
+
+
+def generate_amp_vs_rad_csvs(cm, start, end, decarad):
+    """fetch one run and write a CSV per cavity and readout"""
+    print(f"Processing CM{cm} {start} -> {end}")
+    csv_date = start.strftime(CSV_DATE_FORMAT)
+    for (cav_num, readout), aligned in fetch_run(
+        cm, start, end, decarad
+    ).items():
+        csv_path = (
+            CSV_OUTPUT_DIR / f"cm{cm}_{csv_date}_cavity{cav_num}_{readout}.csv"
+        )
+        aligned.to_csv(csv_path)

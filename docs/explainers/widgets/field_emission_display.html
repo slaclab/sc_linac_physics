@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field emission display mockup — SC Linac</title>
+<link rel="stylesheet" href="widgets.css">
+<style>
+  /* ---- UI mockup ---- */
+  .win { border: 1px solid var(--edge); border-radius: 8px; overflow: hidden; background: #e9eaec; color: #1d1f23; font-size: .78rem; }
+  .win-title { background: #cfd2d7; padding: .3rem .7rem; font-size: .8rem; display: flex; gap: .5rem; align-items: center; }
+  .win-title i { width: .65rem; height: .65rem; border-radius: 50%; background: #9aa0a8; display: inline-block; }
+  .win-body { display: grid; grid-template-columns: 3fr 7fr; gap: .6rem; padding: .6rem; }
+  @media (max-width: 36rem) { .win-body { grid-template-columns: 1fr; } }
+  .qleft { display: flex; flex-direction: column; gap: .45rem; transition: opacity .15s; }
+  .qleft.disabled { opacity: .45; pointer-events: none; }
+  .qbox { border: 1px solid #b4b8bf; border-radius: 4px; padding: .55rem .5rem .4rem; position: relative; margin-top: .35rem; }
+  .qbox > .t { position: absolute; top: -.6rem; left: .45rem; background: #e9eaec; padding: 0 .25rem; font-size: .74rem; }
+  .qrow { display: flex; align-items: center; gap: .4rem; margin: .15rem 0; }
+  .qcombo { flex: 1; background: #fff; border: 1px solid #a9adb4; border-radius: 3px; padding: .1rem .35rem; }
+  .qcombo::after { content: " ▾"; float: right; color: #666; }
+  .qchk { display: grid; gap: .1rem .4rem; font-size: .72rem; }
+  .qchk span { white-space: nowrap; }
+  .qchk span::before { content: "☐ "; }
+  .qchk span.on::before { content: "☑ "; }
+  .qbtn { background: #f6f6f7; border: 1px solid #a9adb4; border-radius: 3px; text-align: center; padding: .15rem; }
+  .qbtn.primary { font-weight: 700; }
+  .qlist { background: #fff; border: 1px solid #a9adb4; height: 4.4rem; overflow: hidden; font-family: var(--mono); font-size: .7rem; }
+  .qlist div { padding: 0 .3rem; white-space: pre; }
+  .qlist div:nth-child(even) { background: #f1f2f4; }
+  .qlist div.sel { background: #3d7bd9; color: #fff; }
+  .qmeta { display: grid; grid-template-columns: auto 1fr; gap: 0 .5rem; }
+  .qmeta a { color: #2257b8; }
+  .qurl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .qradio span::before { content: "○ "; }
+  .qradio span.on::before { content: "◉ "; }
+  .qright { background: #fff; border: 1px solid #b4b8bf; display: flex; flex-direction: column; }
+  .qtool { border-bottom: 1px solid #d5d8dc; padding: .2rem .4rem; letter-spacing: .3rem; color: #555; }
+  .qright svg { width: 100%; height: auto; display: block; }
+  .mock-ctl { display: flex; gap: 1rem; align-items: center; margin: 0 0 .6rem; font-size: .88rem; }
+  .mock-ctl label { cursor: pointer; }
+  .qbtn.loading { color: #777; }
+</style>
+</head>
+<body>
+<main>
+  <p class="standalone-only note"><a href="https://slaclab.github.io/sc_linac_physics/explainers/field_emission/">Part of: How the field emission display works</a></p>
+    <div class="mock-ctl">
+      <span class="note" style="margin:0">Mockup, illustrative data:</span>
+      <label><input type="radio" name="mstate" value="ready" checked> ready</label>
+      <label><input type="radio" name="mstate" value="fill"> caching on open</label>
+      <label><input type="radio" name="mstate" value="loading"> loading a run</label>
+    </div>
+    <div class="win" aria-label="Mockup of the field emission display">
+      <div class="win-title"><i></i><i></i><i></i><span id="mock-title">LCLS-II Field Emission</span></div>
+      <div class="win-body">
+        <div class="qleft" id="mock-left">
+          <div class="qbox"><span class="t">Measurement Filter</span>
+            <div class="qrow">Cryomodule <span class="qcombo">01</span></div>
+            <div class="qbox"><span class="t">Cavity Selection</span>
+              <div class="qchk" style="grid-template-columns:repeat(4,1fr)">
+                <span class="on">Cavity 1</span><span class="on">Cavity 2</span><span>Cavity 3</span><span>Cavity 4</span>
+                <span>Cavity 5</span><span>Cavity 6</span><span>Cavity 7</span><span>Cavity 8</span>
+              </div></div>
+            <div class="qbtn">Select All Cavities</div>
+          </div>
+          <div class="qbox"><span class="t">Available Measurements</span>
+            <div class="qlist">
+              <div class="sel">CM01    2023-10-02 09:13:00</div>
+              <div>CM01    2023-10-15 11:22:00</div>
+            </div>
+            <div class="qbox"><span class="t">Measurement Information</span>
+              <div class="qmeta">
+                <span>Date:</span><span>Monday, October 02, 2023</span>
+                <span>Start Time:</span><span>9:13</span>
+                <span>End Time:</span><span>10:00</span>
+                <span>Decarad:</span><span>1</span>
+                <span>eLog:</span><a class="qurl">https://mccelog.slac.stanford.edu/elog/wbin/elog_item.php?elog_id=1228238</a>
+                <span>Notes:</span><span></span>
+              </div>
+            </div>
+          </div>
+          <div class="qbox"><span class="t">Decarad Configuration</span>
+            <div class="qrow">Readout Type: <span class="qcombo">Average</span></div>
+            <div class="qbox"><span class="t">Channel Selection</span>
+              <div class="qchk" style="grid-template-columns:repeat(5,1fr)">
+                <span class="on">Ch 1</span><span class="on">Ch 2</span><span class="on">Ch 3</span><span>Ch 4</span><span>Ch 5</span>
+                <span>Ch 6</span><span>Ch 7</span><span>Ch 8</span><span>Ch 9</span><span>Ch 10</span>
+              </div></div>
+            <div class="qbtn">Select All Channels</div>
+          </div>
+          <div class="qrow qradio" style="gap:1rem"><span>Amplitude vs Radiation</span><span class="on">Fit Line</span></div>
+          <div class="qbtn primary" id="mock-plot-btn">PLOT</div>
+        </div>
+        <div class="qright">
+          <div class="qtool">⌂ ← → ✥ ⌕ ⚙ 💾 <span class="qbtn" style="display:inline-block;padding:0 .4rem;margin-left:.6rem">Add New Data</span></div>
+          <svg id="mock-plot" viewBox="0 0 440 470" role="img" aria-label="Two stacked plots of radiation against amplitude"></svg>
+        </div>
+      </div>
+    </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+
+/* ---- UI mockup ---- */
+(function mockup() {
+  const svg = $("mock-plot");
+  if (!svg) return;
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text !== undefined) e.textContent = text;
+    svg.append(e);
+    return e;
+  };
+  // Illustrative only: a seeded curve of the fitted form plus noise.
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const colors = ["#1f77b4", "#ff7f0e", "#2ca02c"];  // matplotlib C0-C2
+  const fit = (e, c1, c2) => c1 * e ** 2.5 * Math.exp(-c2 / e);
+  const params = [[[0.05, 60], [0.03, 55], [0.02, 70]], [[0.04, 75], [0.02, 65], [0.015, 80]]];
+  const X0 = 46, W = 380, H = 170, EMIN = 4, EMAX = 18;
+  const txt = { "font-size": 11, fill: "#222" };
+  el("text", { x: 220, y: 16, "text-anchor": "middle", "font-size": 13, fill: "#222" }, "ACCL:L0B:01x0");
+  el("text", { x: 236, y: 466, "text-anchor": "middle", ...txt }, "Amplitude (MV)");
+  el("text", { x: 12, y: 235, "text-anchor": "middle", transform: "rotate(-90 12 235)", ...txt }, "Radiation (mR/hr)");
+  // figure-level channel legend, upper right (fig.legend in _configure_plot_canvas)
+  colors.forEach((c, ch) => {
+    el("circle", { cx: 392, cy: 10 + ch * 11, r: 3, fill: c });
+    el("text", { x: 399, y: 13 + ch * 11, "font-size": 9, fill: "#222" }, `Ch ${ch + 1}`);
+  });
+  params.forEach((chans, k) => {
+    const YMAX = 1.3 * Math.max(...chans.map(([c1, c2]) => fit(EMAX, c1, c2)));
+    const top = 40 + k * 215, sx = (e) => X0 + ((e - EMIN) / (EMAX - EMIN)) * W,
+      sy = (r) => top + H - Math.min(r / YMAX, 1) * H;
+    el("text", { x: X0 + W / 2, y: top - 6, "text-anchor": "middle", ...txt }, `Cavity ${k + 1}`);
+    el("rect", { x: X0, y: top, width: W, height: H, fill: "none", stroke: "#888" });
+    for (let g = 1; g < 4; g++) {
+      const y = top + (g * H) / 4, x = X0 + (g * W) / 4;
+      el("line", { x1: X0, x2: X0 + W, y1: y, y2: y, stroke: "#e4e4e4" });
+      el("line", { y1: top, y2: top + H, x1: x, x2: x, stroke: "#e4e4e4" });
+    }
+    chans.forEach(([c1, c2], ch) => {
+      for (let i = 0; i < 70; i++) {
+        const e = EMIN + rand() * (EMAX - EMIN), r = fit(e, c1, c2) * (0.8 + rand() * 0.4);
+        el("circle", { cx: sx(e).toFixed(1), cy: sy(r).toFixed(1), r: 1.6, fill: colors[ch] });
+      }
+      let d = "";
+      for (let i = 0; i <= 40; i++) {
+        const e = EMIN + (i / 40) * (EMAX - EMIN);
+        d += `${i ? "L" : "M"}${sx(e).toFixed(1)},${sy(fit(e, c1, c2)).toFixed(1)}`;
+      }
+      el("path", { d, fill: "none", stroke: colors[ch], "stroke-width": 1.5 });
+      el("rect", { x: X0 + 6, y: top + 6 + ch * 13, width: 8, height: 8, fill: colors[ch] });
+      el("text", { x: X0 + 18, y: top + 13 + ch * 13, "font-size": 9, fill: "#222" }, `C1: ${c1}    C2: ${c2}.0`);
+    });
+    el("text", { x: X0, y: top + H + 13, "font-size": 9, fill: "#555" }, "4");
+    el("text", { x: X0 + W, y: top + H + 13, "font-size": 9, fill: "#555", "text-anchor": "end" }, "18 MV");
+  });
+
+  const TITLE = "LCLS-II Field Emission";
+  for (const r of document.querySelectorAll('input[name="mstate"]')) {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      const btn = $("mock-plot-btn");
+      $("mock-title").textContent = r.value === "fill"
+        ? `${TITLE} — caching runs from the archiver 3/80`
+        : TITLE;
+      btn.textContent = r.value === "loading" ? "LOADING..." : "PLOT";
+      btn.classList.toggle("loading", r.value === "loading");
+    });
+  }
+})();
+</script>
+</body>
+</html>
