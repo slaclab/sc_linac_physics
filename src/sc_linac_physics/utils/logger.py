@@ -17,7 +17,9 @@ from sc_linac_physics.utils.platform_paths import get_log_base_dir
 
 try:
     import fcntl
-except ImportError:  # Windows: no flock, so rotate unlocked as before
+except ImportError:
+    # Windows has no fcntl, so there is no file lock. Log files rotate
+    # without one, as they did before.
     fcntl = None
 
 BASE_LOG_DIR = get_log_base_dir()
@@ -103,8 +105,9 @@ def _add_file_handlers(
 LOG_LOCK_TIMEOUT_S = 1.0
 
 # One thread lock per log file path, shared by every handler in this process
-# that writes it. Over NFS, Linux implements flock as a POSIX lock, and POSIX
-# locks don't block other handlers in the same process, so threads queue here.
+# that writes it. The file lock (flock) keeps other processes out, but not
+# other threads in this one: over NFS, Linux turns flock into a POSIX lock,
+# which only blocks other processes. So threads in this process wait here.
 _path_locks: dict[str, threading.Lock] = {}
 _path_locks_guard = threading.Lock()
 
