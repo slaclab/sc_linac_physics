@@ -125,9 +125,8 @@ class SSA(linac_utils.SCLinacObject):
     def rated_power_kw(self) -> float:
         """Rated power in kW, read from SSA:PwrRating.
 
-        CHECK: on HL the PV is shared by a cavity pair. Is its 1 kW each
-        cavity's rating or the pair's total? Sebastian Aderhold said per
-        cavity on #317, before this PV existed.
+        On HL the PV is shared by a cavity pair, but its 1 kW is each
+        cavity's rating, not the pair's total (confirmed on #438).
         """
         if not self._pwr_rating_pv_obj:
             self._pwr_rating_pv_obj = PV(self.pwr_rating_pv)
