@@ -276,9 +276,9 @@ class SSACharController(QObject):
         if not self.context or not self.phase:
             return
 
-        # No AbortHook, as before this used PhaseRun: Abort sets only
-        # context.abort_requested, which SSACharPhase reads in
-        # wait_for_completion. Abort does not call cavity.request_abort().
+        # No AbortHook, the same as before this controller used PhaseRun.
+        # Abort only sets context.abort_requested, which SSACharPhase reads in
+        # wait_for_completion. It doesn't call cavity.request_abort().
         self.run = PhaseRun(self.phase)
         self.run.set_step_mode(self._step_mode)
         if not self.bridge.start_segment(
