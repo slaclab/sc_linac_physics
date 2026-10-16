@@ -47,6 +47,10 @@ from sc_linac_physics.utils.sc_linac.linac import Machine
 # its own button, and the phase is finalized after it, not here.
 MEASURE_STEPS = (
     "verify_initial_state",
+    # SSA calibration (PUSH_SSA_SLOPE.PROC with no review) and the stepper
+    # moves to resonance run here, before the measurement. See cavity_setup.
+    "calibrate_ssa",
+    "tune_to_resonance",
     "set_drive_level",
     "start_characterization",
     "wait_for_completion",

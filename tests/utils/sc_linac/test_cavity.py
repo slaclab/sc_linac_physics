@@ -497,6 +497,22 @@ def test_move_to_resonance_chirp(cavity):
     )
 
 
+def test_move_to_resonance_passes_the_stepper_temp_limit(cavity):
+    """Every _auto_tune pass gets the limit; the default stays None."""
+    cavity._tune_config_pv_obj = make_mock_pv()
+    cavity.piezo._hz_per_v_pv_obj = make_mock_pv(get_val=10)
+    cavity.setup_tuning = MagicMock()
+    cavity._auto_tune = MagicMock()
+
+    cavity.move_to_resonance(use_sela=True, max_stepper_temp=70.0)
+    for call in cavity._auto_tune.call_args_list:
+        assert call.kwargs["max_stepper_temp"] == 70.0
+
+    cavity._auto_tune.reset_mock()
+    cavity.move_to_resonance()
+    assert cavity._auto_tune.call_args.kwargs["max_stepper_temp"] is None
+
+
 def test_move_to_resonance_sela(cavity):
     cavity._tune_config_pv_obj = make_mock_pv()
     gain = randint(0, 40)

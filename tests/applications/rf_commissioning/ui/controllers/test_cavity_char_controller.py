@@ -204,6 +204,8 @@ def test_a_failed_step_stops_the_run(controller, monkeypatch):
 
     assert ran == [
         "verify_initial_state",
+        "calibrate_ssa",
+        "tune_to_resonance",
         "set_drive_level",
         "start_characterization",
     ]
