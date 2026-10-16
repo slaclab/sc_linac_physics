@@ -10,10 +10,12 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pytest
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 # Import the modules to test
+from sc_linac_physics.applications.q0 import q0_utils
 from sc_linac_physics.applications.q0.q0_utils import (
     DataRun,
     HeaterRun,
@@ -1049,3 +1051,69 @@ if __name__ == "__main__":
         print("All tests passed!")
     else:
         print("Some tests failed.")
+
+
+class TestDataFile:
+    """data_file puts Q0 files under data_dir, seeded from the package."""
+
+    def test_copies_packaged_file_on_first_use(self, q0_data_dir):
+        relative = "calibrations/cm01.json"
+        packaged = q0_utils.PACKAGED_DATA_DIR / relative
+
+        path = q0_utils.data_file(relative)
+
+        assert path == str(q0_data_dir / relative)
+        with open(path) as f, open(packaged) as g:
+            assert json.load(f) == json.load(g)
+
+    def test_empty_file_when_nothing_packaged(self, q0_data_dir):
+        path = q0_utils.data_file("calibrations/cm99.json")
+
+        with open(path) as f:
+            assert json.load(f) == {}
+
+    def test_existing_file_is_not_reseeded(self, q0_data_dir):
+        relative = "calibrations/cm01.json"
+        target = q0_data_dir / relative
+        target.parent.mkdir(parents=True)
+        target.write_text('{"mine": 1}')
+
+        q0_utils.data_file(relative)
+
+        assert json.loads(target.read_text()) == {"mine": 1}
+
+    def test_concurrent_seed_keeps_the_first_file(self, q0_data_dir):
+        relative = "calibrations/cm01.json"
+        target = q0_data_dir / relative
+        target.parent.mkdir(parents=True)
+        # Another instance publishes target after our existence check.
+        target.write_text('{"theirs": 1}')
+
+        q0_utils.seed_data_file(q0_utils.PACKAGED_DATA_DIR / relative, target)
+
+        assert json.loads(target.read_text()) == {"theirs": 1}
+        assert list(target.parent.iterdir()) == [target]
+
+    def test_failed_copy_leaves_no_target(self, q0_data_dir):
+        relative = "calibrations/cm01.json"
+        with patch.object(
+            q0_utils.shutil, "copyfileobj", side_effect=OSError("disk full")
+        ):
+            with pytest.raises(OSError):
+                q0_utils.data_file(relative)
+
+        assert list((q0_data_dir / "calibrations").iterdir()) == []
+
+    def test_never_writes_inside_the_package(self, q0_data_dir):
+        assert not str(q0_data_dir).startswith(str(q0_utils.PACKAGED_DATA_DIR))
+        path = q0_utils.data_file("q0_measurements/cm99.json")
+        assert not path.startswith(str(q0_utils.PACKAGED_DATA_DIR))
+        assert not (
+            q0_utils.PACKAGED_DATA_DIR / "q0_measurements/cm99.json"
+        ).exists()
+
+
+def test_data_dir_is_under_json_dir(monkeypatch, tmp_path):
+    monkeypatch.undo()  # drop the conftest redirect
+    monkeypatch.setattr(q0_utils, "get_json_dir", lambda: tmp_path / "json")
+    assert q0_utils.data_dir() == tmp_path / "json" / "q0"
