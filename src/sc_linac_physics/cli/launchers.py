@@ -190,6 +190,17 @@ def launch_field_emission(standalone=True):
 
 @display
 def launch_plotter(standalone=True):
+    """Plot PVs from the linac hierarchy against time."""
+    from sc_linac_physics.displays.plot.plotter import PlotterDisplay
+
+    return launch_python_display(
+        PlotterDisplay, *sys.argv[1:], standalone=standalone
+    )
+
+
+@display
+def launch_plotter_old(standalone=True):
+    """The previous plotter, kept while the new one settles in."""
     from sc_linac_physics.displays.plot.plot import PVGroupArchiverDisplay
 
     return launch_python_display(
@@ -211,6 +222,19 @@ def launch_fault_heatmap(standalone=True):
 
 @display
 def launch_cryo_signals(standalone=True):
+    """Cryomodule JT valve, levels and AACT for every CM in a linac."""
+    from sc_linac_physics.displays.plot.cryo_signals_display import (
+        CryoSignalsDisplay,
+    )
+
+    return launch_python_display(
+        CryoSignalsDisplay, *sys.argv[1:], standalone=standalone
+    )
+
+
+@display
+def launch_cryo_signals_old(standalone=True):
+    """The previous cryo signals display, kept while the new one settles in."""
     from sc_linac_physics.displays.plot.cryo_signals import (
         LinacGroupedCryomodulePlotDisplay,
     )
