@@ -1,13 +1,13 @@
 """Turn uncaught exceptions into a logged traceback and an error popup.
 
-Without a hook, PyQt5 calls qFatal() on an exception that escapes a Python
-override of a Qt virtual, such as QThread.run(). That aborts the whole app,
-mid-sequence. With sys.excepthook replaced, PyQt5 calls the hook and keeps
-running.
+Without a hook, an error in Python code that Qt calls, such as
+QThread.run(), is never caught. PyQt5 then calls qFatal(), Qt's "stop the
+program" function, and the whole app aborts mid-sequence. With
+sys.excepthook replaced, PyQt5 calls the hook instead and keeps running.
 
 Not pydm.exception.install(): its dispatcher is a QThread that lives for
-the whole app, and this repo is moving off QThread (see Threading in
-CLAUDE.md). It also leaves threading.excepthook alone, so exceptions in
+the whole app, and this repo is moving off QThread (see the threading
+notes in AGENTS.md). It also leaves threading.excepthook alone, so exceptions in
 plain Python threads would only reach stderr.
 """
 
