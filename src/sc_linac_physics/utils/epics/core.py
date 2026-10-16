@@ -126,21 +126,29 @@ class PV(EPICS_PV):
         without.
 
         Args:
-            timeout: Longest wait. Default: connection_timeout for the
-                first connection, config.connection_timeout afterwards.
+            timeout: Longest wait, used as given. Default: connection_timeout
+                for the first connection, config.connection_timeout
+                afterwards.
 
         Raises:
             PVConnectionError: If the PV doesn't connect within timeout
         """
-        self._ensure_connected(timeout=timeout)
+        self._ensure_connected(timeout=timeout, caller_deadline=True)
 
-    def _ensure_connected(self, timeout: Optional[float] = None):
+    def _ensure_connected(
+        self, timeout: Optional[float] = None, caller_deadline: bool = False
+    ):
         """
         Ensure PV is connected, raise exception if not.
         Thread-safe with reentrant lock.
 
         Args:
-            timeout: Connection timeout
+            timeout: Connection timeout. For the first connection it's used
+                only if caller_deadline is set. get() and put() pass their
+                own I/O timeout here, and the first connection waits
+                connection_timeout instead, longer or shorter.
+            caller_deadline: timeout came from ensure_connected(), so it
+                applies to the first connection too.
 
         Raises:
             PVConnectionError: If connection fails
@@ -159,10 +167,8 @@ class PV(EPICS_PV):
 
             first = not self._has_connected
             if first:
-                timeout = max(
-                    timeout if timeout is not None else 0.0,
-                    self._first_connect_timeout,
-                )
+                if not caller_deadline or timeout is None:
+                    timeout = self._first_connect_timeout
                 # Not logged: every PV's first use comes through here, and
                 # the shared pv_operations log would get one line per PV.
                 verb = "connect"

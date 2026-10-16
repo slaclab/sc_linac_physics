@@ -376,6 +376,52 @@ class TestPVConnectionManagement:
 
         assert waits == [7.0]
 
+    @staticmethod
+    def _record_waits(monkeypatch):
+        waits = []
+
+        def fake_wait(self, timeout=None):
+            waits.append(timeout)
+            self._connected = True
+            return True
+
+        monkeypatch.setattr(FakeEPICS_PV, "wait_for_connection", fake_wait)
+        return waits
+
+    @pytest.mark.parametrize("operation", ["get", "put"])
+    def test_short_connection_timeout_is_a_limit(self, monkeypatch, operation):
+        """connection_timeout=0.1 must not become get's 2 s or put's 5 s."""
+        pv = PV("TEST:PV", connection_timeout=0.1)
+        pv._connected = False
+        waits = self._record_waits(monkeypatch)
+
+        if operation == "get":
+            pv.get()
+        else:
+            pv.put(1)
+
+        assert waits == [0.1]
+
+    def test_explicit_first_connect_timeout_is_used_as_given(self, monkeypatch):
+        pv = PV("TEST:PV")  # default connection_timeout, 5 s
+        pv._connected = False
+        waits = self._record_waits(monkeypatch)
+
+        pv.ensure_connected(timeout=0.25)
+
+        assert waits == [0.25]
+
+    def test_ensure_connected_default_waits_connection_timeout(
+        self, monkeypatch
+    ):
+        pv = PV("TEST:PV", connection_timeout=7.0)
+        pv._connected = False
+        waits = self._record_waits(monkeypatch)
+
+        pv.ensure_connected()
+
+        assert waits == [7.0]
+
     def test_reconnect_uses_callers_timeout(self, monkeypatch):
         pv = PV("TEST:PV", connection_timeout=7.0)
         pv.get()  # first connection
