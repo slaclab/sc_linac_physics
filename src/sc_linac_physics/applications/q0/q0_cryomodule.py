@@ -47,7 +47,8 @@ class Q0Cryomodule(Cryomodule):
 
         self.valveParams: Optional[q0_utils.ValveParams] = None
 
-        # Paths relative to q0_utils.data_dir(), resolved by data_file.
+        # Paths relative to q0_utils.data_dir(), the app's JSON folder.
+        # q0_utils.data_file turns each into a full path.
         self._calib_idx_file = f"calibrations/cm{self.name}.json"
         self._calib_data_file = f"data/calibrations/cm{self.name}.json"
         self._q0_idx_file = f"q0_measurements/cm{self.name}.json"
