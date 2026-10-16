@@ -94,10 +94,9 @@ class SSAPVGroup(PVGroup):
     saved_slope: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE_SAVE", dtype=ChannelType.FLOAT
     )
-    # The SSA type as an enum index. SSA.rated_power_kw looks it up in
-    # linac_utils.SSA_TYPE_RATED_POWER_KW, where 0 is the 7 kW HE SSA, 2 is a
-    # standard LCLS-II SSA and 3 is the 3.9 GHz HL SSA. The sim picks by
-    # cryomodule: HL,
+    # Enum index read by SSA.rated_power_kw, per
+    # linac_utils.SSA_TYPE_RATED_POWER_KW: 0 the 7 kW HE SSA, 2 a standard
+    # LCLS-II SSA, 3 the 3.9 GHz HL SSA. The sim picks by cryomodule: HL,
     # then high energy (L4B, Cryomodule.is_high_energy), then standard. The
     # real machine has 191 index-0 SSAs to L4B's 184, plus 4 index-1 HE
     # prototypes, so this is close but not exact.
