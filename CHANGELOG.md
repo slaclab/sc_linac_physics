@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v9.47.4 (2026-10-16)
+
+### Bug Fixes
+
+- **sc-linac**: Abort the motor on a move timeout; don't retry a stuck SSA calibration
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+- **sc-linac**: Time out the seven polling loops that could wait forever
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+- **utils**: Small bugs in cavity, logger and the EPICS wrapper
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+### Documentation
+
+- **claude-md**: Import AGENTS.md instead of repeating the architecture
+  ([#428](https://github.com/slaclab/sc_linac_physics/pull/428),
+  [`c15bb4b`](https://github.com/slaclab/sc_linac_physics/commit/c15bb4b55f7d1bc50c013721f9de1ddecb9240c3))
+
+
 ## v9.47.3 (2026-10-15)
 
 ### Bug Fixes
