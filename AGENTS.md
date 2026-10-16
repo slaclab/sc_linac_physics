@@ -1,10 +1,12 @@
 # AGENTS.md
 
 ## Big-picture architecture
-- Core domain model is hierarchical and EPICS-first: `Machine -> Linac -> Cryomodule -> Rack -> Cavity` in `src/sc_linac_physics/utils/sc_linac/`.
-- `Machine()` eagerly builds the full accelerator object graph at import time (`utils/sc_linac/linac.py`, global `MACHINE`), so avoid heavy side effects in constructors.
+- Controls, displays, and analysis tools for the SLAC SC Linac, built on PyDM/PyQt5 with EPICS (caproto/pyepics). Code lives in `src/sc_linac_physics/{applications,displays,cli,utils}`.
+- Core domain model is hierarchical and EPICS-first: `Machine -> Linac -> Cryomodule -> Rack -> Cavity` (+ `SSA`, `StepperTuner`, `Piezo` per cavity) in `src/sc_linac_physics/utils/sc_linac/`.
+- `Machine()` eagerly builds the full accelerator object graph at import time (`utils/sc_linac/linac.py`, global `MACHINE`), so avoid heavy side effects in constructors. Each application builds its own module-level `Machine` subclass singleton (e.g. `SETUP_MACHINE`).
+- Each major application splits into `backend/` (logic and EPICS, no Qt), `frontend/` (PyQt5 widgets) and `launcher/` (CLI entry points). Displays inherit `pydm.Display`.
 - PV naming and topology are centralized in `utils/sc_linac/linac_utils.py` (`LINAC_TUPLES`, `LINAC_CM_MAP`, `build_cavity_pv*`); reuse these instead of hand-building PV strings.
-- Auto-setup launchers mirror physical hierarchy (global/linac/cm/cavity) and propagate request flags downward via AUTO PVs (`applications/auto_setup/backend/setup_utils.py`).
+- Auto-setup launchers mirror physical hierarchy (`sc-setup-all`/`-linac`/`-cm`/`-cav` → `SetupMachine`/`SetupLinac`/`SetupCryomodule`/`SetupCavity`) and propagate request flags downward via AUTO PVs (`applications/auto_setup/backend/setup_utils.py`).
 - GUI launching is centralized in `cli/launchers.py`; `sc-linac` discovers `launch_*` functions dynamically and classifies them via decorators (`@display`, `@application`).
 - Simulation (`utils/simulation/sc_linac_physics_service.py`) reproduces the same hierarchy with caproto PVGroups and launcher groups (`setup/off/cold/park`) for offline development.
 
@@ -13,12 +15,14 @@
   - `pip install -e ".[dev,test]"`
 - Main quality gate is pytest with coverage settings from `pyproject.toml` (`--cov=sc_linac_physics`, html in `htmlcov/`):
   - `pytest`
-- GUI/headless tests assume Qt offscreen and disabled PyDM telemetry/plugins; see `tests/conftest.py` (`QT_QPA_PLATFORM=offscreen`, `PYDM_DATA_PLUGINS_DISABLED=1`).
+- GUI/headless tests assume Qt offscreen and disabled PyDM telemetry/plugins; see `tests/conftest.py` (`QT_QPA_PLATFORM=offscreen`, `PYDM_DATA_PLUGINS_DISABLED=1`). conftest also redirects `/home/physics` to a temp dir. PVs are mocked with `unittest.mock`; no hardware is needed.
 - CLI health checks are mostly `--help` smoke tests (`tests/test_integration.py`, `tests/test_setup_commands.py`).
 - When adding/changing console commands, update `[project.scripts]` in `pyproject.toml` and verify entry points in `tests/test_cli_entrypoints.py`.
 
 ## Project conventions (non-generic)
-- Prefer `sc_linac_physics.utils.epics.PV` over raw `epics.PV`; this wrapper enforces retry/reconnect/exception semantics (`utils/epics/core.py`).
+- Prefer `sc_linac_physics.utils.epics.PV` over raw `epics.PV`; this wrapper enforces retry/reconnect/exception semantics and never returns `None` (`utils/epics/core.py`). Create PV objects lazily, on first property access, so nothing connects at import time.
+- Read archived data through `utils/archiver.py`, not `lcls_tools.common.data.archiver` (deprecated). Its timestamps are timezone-aware Pacific, and it reads naive inputs as Pacific.
+- Background work runs on a daemon `threading.Thread` that reports back through a `pyqtSignal`, which Qt delivers on the main thread. Never run blocking EPICS or archiver calls on the main Qt thread. Don't add new `QThread` subclasses: ones that outlived their owner crashed test workers (#307, #308). Existing `QThread` users are older code still to move (`grep -rn QThread src/`). Avoid `ThreadPoolExecutor` for calls that can hang: its workers are joined at exit, so a stuck archiver call keeps the app open.
 - For one-shot large PV reads, prefer `PVBatch.get_values` (used by tuning poller) instead of creating hundreds of PV objects (`utils/epics/batch.py`, `applications/tuning/state/tune_status_poll.py`).
 - Logging convention is structured: `custom_logger(..., extra={"extra_data": {...}})` for both text and JSONL outputs (`utils/logger.py`).
 - Platform-aware filesystem paths are deliberate (`utils/platform_paths.py`): Linux defaults to `/home/physics/srf/...`, macOS to `~/...`.
@@ -29,7 +33,7 @@
 - UI stack is PyDM + Qt + PyQtGraph; launchers instantiate `PyDMApplication` and open Python displays by class file path (`cli/launchers.py`).
 - Watcher orchestration is operationally coupled to `tmux_launcher` and `xterm` (`cli/watcher_commands.py`), including hardcoded SSH env vars.
 - Tuning state polling persists operational snapshots to SQLite + JSON (`applications/tuning/state/tune_status_poll.py`), with change history tables.
-- RF commissioning is a separate SQLite-backed workflow subsystem with optimistic locking/versioning and normalized phase instances (`applications/rf_commissioning/session_manager.py`).
+- RF commissioning is a separate SQLite-backed workflow subsystem with optimistic locking/versioning and normalized phase instances (`applications/rf_commissioning/session_manager.py`). Phases run in `CommissioningPhase` order (`models/data_models.py`); `CommissioningSession` is the facade and `PhaseBase` the base for each phase.
 
 ## High-signal file map for new agents
 - Entrypoints: `pyproject.toml`, `src/sc_linac_physics/cli/cli.py`, `src/sc_linac_physics/cli/launchers.py`

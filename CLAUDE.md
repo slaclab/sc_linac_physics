@@ -3,14 +3,11 @@
 ## Commands
 
 ```bash
-# Run all tests
+# Run all tests (coverage is on by default; CI enforces 80%)
 pytest
 
 # Run a single test file
 pytest tests/test_cli.py -v
-
-# Run with coverage report (80% minimum enforced in CI)
-pytest --cov=sc_linac_physics --cov-report=term-missing
 
 # Lint
 flake8 . --count --max-complexity=10 --max-line-length=120 --show-source --statistics
@@ -24,17 +21,12 @@ pip install -e ".[dev,test]"
 ```
 
 Set `PYDM_DEFAULT_PROTOCOL=fake` to run UI code without live EPICS hardware.
+Run these in the env you installed into. `No module named pytest` means the
+wrong env, not a missing dependency.
 
 ## Documentation
 
-Full documentation lives in [`docs/`](docs/index.md):
-- [`docs/utils/linac_model.md`](docs/utils/linac_model.md) — hardware model, PV naming, all constants
-- [`docs/utils/shared_utilities.md`](docs/utils/shared_utilities.md) — EPICS `PV`/`PVBatch`, logger, Qt helpers
-- [`docs/utils/archiver.md`](docs/utils/archiver.md) — reading archived PV data
-- [`docs/applications/auto_setup.md`](docs/applications/auto_setup.md) — automated cavity turn-on
-- [`docs/applications/rf_commissioning.md`](docs/applications/rf_commissioning.md) — phase-gated acceptance workflow
-- [`docs/applications/q0.md`](docs/applications/q0.md), [`microphonics.md`](docs/applications/microphonics.md), [`quench_processing.md`](docs/applications/quench_processing.md), [`tuning.md`](docs/applications/tuning.md)
-- [`docs/displays/cavity_display.md`](docs/displays/cavity_display.md), [`srf_home.md`](docs/displays/srf_home.md)
+Full documentation lives in [`docs/`](docs/index.md).
 
 **Explainer vs. docs page.** An app's "how it works and why" lives in one
 place: an explainer in `docs/explainers/`, for the app or for a piece several
@@ -50,58 +42,9 @@ widget in `docs/explainers/widgets/`, linked on a line of its own, which the
 site shows inline. Why: prose diffs a reviewer can read, and the site's search
 and sidebar.
 
-See also `AGENTS.md` at the repo root for architectural conventions enforced across the codebase.
+## Architecture and testing
 
-## Architecture
-
-Controls, displays, and analysis tools for the SLAC SC Linac, built on PyDM/PyQt5 with EPICS (caproto/pyepics). Code lives in `src/sc_linac_physics/{applications,displays,cli,utils}`.
-
-### Linac Hardware Model (`utils/sc_linac/`)
-
-The full hierarchy is `Machine → Linac → Cryomodule → Rack → Cavity` (+ `SSA`, `StepperTuner`, `Piezo` per cavity). `linac_utils.py` defines cryomodule groupings (L0B–L4B), all EPICS PV naming conventions, and hardware constants. All applications build a module-level `Machine` subclass singleton (e.g., `SETUP_MACHINE`) at import time.
-
-### EPICS Integration (`utils/epics/`)
-
-Use `PV` (never raw `pyepics.PV`) — it adds retry/backoff, typed exceptions, and never returns `None`. For bulk reads across many cavities, use `PVBatch.get_values()`. PV objects are always lazily instantiated on first property access to avoid connecting to hardware at import time.
-
-Read archived data through `utils/archiver.py`, not `lcls_tools.common.data.archiver` (deprecated). Its timestamps are timezone-aware Pacific, and it reads naive inputs as Pacific.
-
-Platform-aware paths (log dirs, database dirs) live in `utils/platform_paths.py`.
-
-### Displays (`displays/`)
-
-All displays inherit from `pydm.Display`. They are launched either from `.ui` files or as Python classes. The `@display` decorator in `cli/launchers.py` registers them for the unified CLI and handles standalone vs. embedded modes.
-
-### Applications (`applications/`)
-
-Each major application follows a three-layer pattern:
-- `backend/` — business logic and EPICS communication, no Qt dependency
-- `frontend/` — PyQt5 widgets
-- `launcher/` — CLI entry point(s)
-
-### Hierarchical Setup (`applications/auto_setup/`)
-
-`SetupMachine` → `SetupLinac` → `SetupCryomodule` → `SetupCavity` mirrors the physical hierarchy. CLI commands at each level (`sc-setup-all`, `sc-setup-linac`, `sc-setup-cm`, `sc-setup-cav`) map to corresponding backend classes. Request flags (SSA cal, auto-tune, characterization, RF ramp) are EPICS PVs set by GUI/CLI before triggering start.
-
-### RF Commissioning (`applications/rf_commissioning/`)
-
-Nine-phase gated acceptance workflow (PIEZO_PRE_RF → SSA_CHAR → … → ONE_HOUR_RUN → COMPLETE). `CommissioningSession` is the application facade; `PhaseBase` is the abstract base for all phases; `WorkflowService` orchestrates normalized phase instances; `CommissioningDatabase` (SQLite) stores records with optimistic locking. See the three `.md` files inside `applications/rf_commissioning/` for detailed architecture docs.
-
-### Threading
-
-Long-running operations run on a daemon `threading.Thread` and report back through a `pyqtSignal`, which Qt delivers on the main thread. Don't add new `QThread` subclasses: ones that outlived their owner have crashed test workers (#307, #308). Avoid `ThreadPoolExecutor` for calls that can hang: its workers are joined at exit, so a stuck archiver call keeps the app open. `Worker(QThread)` in `utils/qt.py` and the heatmap's `FaultDataFetcher` are older code still to move. Never run blocking EPICS or archiver calls on the main Qt thread.
-
-### Logging
-
-`utils/logger.py` provides `custom_logger()` with rotating file handlers. Use `utils/platform_paths.py` to get the correct base log directory (`/home/physics/srf/logfiles` on Linux, `~/` on macOS).
-
-## Testing Notes
-
-- Headless Qt tests require `QT_QPA_PLATFORM=offscreen` (set automatically by `conftest.py` — no need to set it manually).
-- `conftest.py` redirects `/home/physics` to a temp directory so tests never write to real paths.
-- EPICS PVs are mocked via `unittest.mock`; no hardware connection is required.
-- `pytest-asyncio` is configured with `asyncio_mode = auto`.
-- The 80% coverage threshold is enforced by CI — check coverage before opening a PR.
+@AGENTS.md
 
 ## Scope and shipping
 
@@ -212,9 +155,9 @@ naming and docstrings on phase logic over compact code.
 
 ### How to write it
 
-This governs PR descriptions, docs, and comments. The audience is any of the
-readers above, plus managers, all reading between other things. Aim at what you would type in
-Slack, not at a technical report.
+This governs PR descriptions, docs, comments, and chat replies. The audience
+is any of the readers above, plus managers, all reading between other things.
+Aim at what you would type in Slack, not at a technical report.
 
 The failure mode runs backwards: the smallest PRs get the longest descriptions
 (#292: 66 lines of CI config, 580 words).
@@ -238,6 +181,9 @@ constants the reader can grep. No gloss needed. Jargon is the opposite: words
 that exist only in prose. Orthogonal, idempotent, invariant, semantics,
 pre-flight — none of them name anything in `src/`.
 The test is grep over identifiers, not taste.
+
+**People.** Refer to people by name or handle. Don't infer pronouns from a
+name, username, or role; use they/them unless you know.
 
 ## Conventions
 
