@@ -224,7 +224,9 @@ class ArchiverStore:
     def _cached(
         self, path: Path, pv: str, start: datetime, end: datetime
     ) -> pd.DataFrame:
-        """start..end from path, fetching and writing it first if needed.
+        """Return the samples from start to end, read from the file at path.
+
+        If the file doesn't exist yet, fetch the samples and write it first.
 
         Written only once end is SETTLE ago. If the cache can't be written
         (no permission, disk full), it is fetched without it: the cache
