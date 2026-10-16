@@ -1,10 +1,6 @@
 """Controller for Piezo Pre-RF display logic."""
 
-from datetime import datetime
-from threading import Thread
-
-
-from PyQt5.QtCore import QEventLoop, QObject, QTimer, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal
 
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
@@ -14,9 +10,16 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
+    PhaseResult,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
     PiezoPreRFPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
+    HOLD_STEP_MODE,
+    PhaseRun,
+    SegmentOutcome,
+    SegmentResult,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
@@ -28,6 +31,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.runner_bridge import (
+    RunnerBridge,
+)
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 
@@ -35,27 +41,36 @@ class PiezoPreRFController(QObject):
     """Owns phase execution and PV wiring for the display."""
 
     phase_completed = pyqtSignal(object)  # Emits the updated record
-    phase_run_finished = pyqtSignal(bool, str)
 
     def __init__(self, view, session: CommissioningSession) -> None:
         super().__init__()  # Initialize QObject
         self.view = view
         self.session = session
 
+        # The steps run on the bridge's daemon thread. Its signals reach the
+        # slots below on the GUI thread.
+        self.bridge = RunnerBridge(self)
+        if hasattr(self.view, "log_message"):
+            self.bridge.log.connect(self.view.log_message)
+        if hasattr(self.view, "step_progress_signal"):
+            self.bridge.progress.connect(
+                lambda step, pct: self.view.step_progress_signal.emit(step, pct)
+            )
+        self.bridge.step_started.connect(
+            lambda *_: self._set_next_button_enabled(False)
+        )
+        self.bridge.step_finished.connect(self._on_step_finished)
+        self.bridge.holding.connect(self._on_holding)
+        self.bridge.segment_finished.connect(self._on_segment_finished)
+
         self.context: PhaseContext | None = None
         self.phase: PiezoPreRFPhase | None = None
         self.machine: Machine | None = None
+        self.run: PhaseRun | None = None
 
-        # Pause and step mode state
-        self._paused = False
+        # Step mode is chosen before Run and copied onto each new PhaseRun.
         self._step_mode = False
-        self._step_executing = False
-        self._current_step_index = 0
-        self._total_steps = 0
-        self._steps: list[str] = []
         self._active_phase_instance_id: int | None = None
-
-        self.phase_run_finished.connect(self._on_phase_run_finished)
 
     def setup_pv_connections(self) -> None:
         """Connect to PVs based on active record's cavity.
@@ -394,308 +409,40 @@ class PiezoPreRFController(QObject):
             parent = parent.parent()
 
     def execute_phase_steps(self) -> None:
-        """Execute phase steps using the controller-managed step loop."""
+        """Run every step of the phase, then finalize it, on the bridge."""
         if not self.context or not self.phase:
             self.view.show_error("No phase context available to run")
             return
 
-        self.context.progress_callback = (
-            lambda step, prog: self.view.step_progress_signal.emit(step, prog)
-        )
+        # No AbortHook: Abort sets context.abort_requested, which
+        # PiezoPreRFPhase._wait_for_completion reads. That is how Abort
+        # worked before this ran through PhaseRun.
+        self.run = PhaseRun(self.phase)
+        self.run.set_step_mode(self._step_mode)
+        if not self.bridge.start_segment(
+            self.run, self.phase.get_phase_steps(), then_complete=True
+        ):
+            self.view.show_error("A Pre-RF test is already running.")
 
-        # Get the steps and store for step mode
-        self._steps = self.phase.get_phase_steps()
-        self._total_steps = len(self._steps)
-        self._current_step_index = 0
+    def _on_step_finished(self, step: str, result) -> None:
+        if step == "setup_piezo" and result.result is PhaseResult.SUCCESS:
+            self._sync_piezo_readbacks()
 
-        def run_phase():
-            try:
-                if self._step_mode:
-                    # In step mode, show first step and wait for click
-                    self.view.log_message(
-                        f"Step mode: Ready for step 1/{self._total_steps}: {self._steps[0]}"
-                    )
-                    self._set_next_button_enabled(True)
-                else:
-                    self._run_phase_in_background()
-            except Exception as exc:
-                import traceback
+    def _on_holding(self, step: str, reason: str) -> None:
+        if reason == HOLD_STEP_MODE:
+            self.view.log_message(f"Step mode: press Next to run {step}")
+            self._set_next_button_enabled(True)
 
-                self.view.log_message(
-                    f"Exception: {exc}\n{traceback.format_exc()}"
-                )
-                self.on_phase_failed(str(exc))
-
-        QTimer.singleShot(100, run_phase)
-
-    def _run_phase_in_background(self) -> None:
-        """Run blocking phase execution in a worker thread."""
-
-        def worker() -> None:
-            try:
-                steps = self.phase.get_phase_steps()
-                for step_name in steps:
-                    if not self._check_pause_and_abort():
-                        return
-
-                    # Execute the step
-                    success = self.phase._execute_step_with_retry(step_name)
-                    if not success:
-                        self.phase_run_finished.emit(
-                            False, f"Step failed: {step_name}"
-                        )
-                        return
-
-                self._finalize_background_phase()
-
-            except Exception as exc:
-                self.phase_run_finished.emit(False, str(exc))
-
-        Thread(target=worker, daemon=True).start()
-
-    def _check_pause_and_abort(self) -> bool:
-        """Check for pause/abort requests. Returns False if aborted."""
-        import time
-
-        # Wait while paused
-        while self._paused:
-            time.sleep(0.1)
-            if self.context and self.context.is_abort_requested():
-                self.phase_run_finished.emit(False, "Aborted")
-                return False
-
-        # Check for abort
-        if self.context and self.context.is_abort_requested():
-            self.phase_run_finished.emit(False, "Aborted")
-            return False
-
-        return True
-
-    def _finalize_background_phase(self) -> None:
-        """Finalize phase after all steps complete in background worker."""
-        try:
-            self.phase.finalize_phase()
-            self.phase._mark_phase_completed()
-            self.phase_run_finished.emit(True, "")
-        except Exception as e:
-            self.phase._handle_exception(e)
-            self.phase_run_finished.emit(False, str(e))
-
-    def _on_phase_run_finished(self, success: bool, error_msg: str) -> None:
-        """Handle worker-thread phase completion on UI thread."""
+    def _on_segment_finished(self, result: SegmentResult) -> None:
         self._sync_piezo_readbacks()
-
-        if success:
+        if result.outcome is SegmentOutcome.COMPLETED:
             self.on_phase_completed()
-            return
-
-        self.on_phase_failed(error_msg or "Phase execution failed")
-
-    def _execute_single_step(self, step_name: str) -> bool:
-        """Execute a single step with retry logic and checkpoint creation.
-
-        Args:
-            step_name: Name of the step to execute
-
-        Returns:
-            True if step succeeded, False otherwise
-        """
-        if not self._wait_for_unpause():
-            return False
-
-        if self.context and self.context.is_abort_requested():
-            self.view.log_message(f"Abort during step: {step_name}")
-            return False
-
-        self._notify_step_progress(step_name)
-
-        # Execute with retry logic
-        return self._execute_step_with_retries(step_name, max_retries=3)
-
-    def _wait_for_unpause(self) -> bool:
-        """Wait for pause to clear and stop early if abort is requested."""
-        import time
-
-        while self._paused:
-            if self.context and self.context.is_abort_requested():
-                return False
-
-            QTimer.singleShot(100, lambda: None)
-            time.sleep(0.1)
-
-        return not (
-            self.context is not None and self.context.is_abort_requested()
-        )
-
-    def _notify_step_progress(self, step_name: str) -> None:
-        """Notify progress callback of current step."""
-        if self.context and self.context.progress_callback:
-            idx = (
-                self._steps.index(step_name) if step_name in self._steps else 0
-            )
-            progress = int((idx / len(self._steps)) * 100)
-            self.context.progress_callback(step_name, progress)
-
-    def _execute_step_with_retries(
-        self, step_name: str, max_retries: int
-    ) -> bool:
-        """Execute a step with retry logic."""
-        from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
-            PhaseResult,
-        )
-
-        retry_count = 0
-        while retry_count < max_retries:
-            try:
-                result = self.phase.execute_step(step_name)
-                self._create_step_checkpoint(step_name, result)
-
-                # Handle result
-                if result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP):
-                    return self._handle_step_success(step_name, result)
-
-                if result.result == PhaseResult.RETRY:
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        retry_delay = max(
-                            0.0, float(result.retry_delay_seconds)
-                        )
-                        self.view.log_message(
-                            f"Retrying {retry_count}/{max_retries} in {retry_delay:.1f}s: {result.message}"
-                        )
-                        if not self._wait_for_retry_delay(retry_delay):
-                            self.view.log_message(
-                                f"Abort during retry backoff: {step_name}"
-                            )
-                            return False
-                        continue
-                    self.view.log_message(f"Failed after {max_retries} retries")
-                    return False
-
-                # PhaseResult.FAILED
-                self.view.log_message(f"✗ {step_name} failed: {result.message}")
-                return False
-
-            except Exception as e:
-                retry_count += 1
-                if retry_count < max_retries:
-                    self.view.log_message(
-                        f"Exception on retry {retry_count}: {str(e)}"
-                    )
-                    continue
-                self.view.log_message(
-                    f"Exception after {max_retries} retries: {str(e)}"
-                )
-                return False
-
-        return False
-
-    def _wait_for_retry_delay(self, delay_seconds: float) -> bool:
-        """Wait for retry delay while keeping UI responsive.
-
-        Returns False if abort is requested during the delay.
-        """
-        if delay_seconds <= 0:
-            return not (
-                self.context is not None and self.context.is_abort_requested()
-            )
-
-        if self.context and self.context.is_abort_requested():
-            return False
-
-        event_loop = QEventLoop()
-        aborted = False
-
-        def check_abort() -> None:
-            nonlocal aborted
-            if self.context and self.context.is_abort_requested():
-                aborted = True
-                event_loop.quit()
-
-        abort_timer = QTimer()
-        abort_timer.setInterval(100)
-        abort_timer.timeout.connect(check_abort)
-        abort_timer.start()
-
-        QTimer.singleShot(int(delay_seconds * 1000), event_loop.quit)
-        event_loop.exec_()
-
-        abort_timer.stop()
-        abort_timer.deleteLater()
-        return not aborted
-
-    def _create_step_checkpoint(self, step_name: str, result) -> None:
-        """Create checkpoint for step execution."""
-        from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
-            PhaseResult,
-        )
-        from sc_linac_physics.applications.rf_commissioning.models.data_models import (
-            PhaseCheckpoint,
-        )
-
-        checkpoint_measurements = dict(result.data or {})
-        if self.context.phase_instance_id is not None:
-            checkpoint_measurements.setdefault(
-                "phase_instance_id", self.context.phase_instance_id
-            )
-
-        checkpoint = PhaseCheckpoint(
-            phase=self.phase.phase_type,
-            timestamp=datetime.now(),
-            operator=self.context.operator,
-            step_name=step_name,
-            success=result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP),
-            notes=result.message,
-            measurements=checkpoint_measurements,
-        )
-        self.context.record.phase_history.append(checkpoint)
-
-    def _handle_step_success(self, step_name: str, result) -> bool:
-        """Handle successful step execution."""
-        from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
-            PhaseResult,
-        )
-
-        if result.result == PhaseResult.SUCCESS:
-            self.view.log_message(f"✓ {step_name} completed")
-            if step_name == "setup_piezo":
-                self._sync_piezo_readbacks()
-        else:  # SKIP
-            self.view.log_message(f"⊘ {step_name} skipped")
-        return True
-
-    def _finalize_phase_execution(self) -> None:
-        """Finalize phase after all steps complete in step mode."""
-        try:
-            self.phase.finalize_phase()
-
-            # Log what data was populated
-            if self.context and self.context.record.piezo_pre_rf:
-                self.view.log_message(
-                    f"Phase data populated: Cap A={self.context.record.piezo_pre_rf.capacitance_a}, "
-                    f"Cap B={self.context.record.piezo_pre_rf.capacitance_b}, "
-                    f"Passed={self.context.record.piezo_pre_rf.passed}"
-                )
-            else:
-                self.view.log_message(
-                    "Warning: piezo_pre_rf data was not populated after finalize_phase()"
-                )
-
-            self.on_phase_completed()
-        except Exception as e:
-            import traceback
-
-            self.view.log_message(f"Error finalizing phase: {str(e)}")
-            self.view.log_message(f"Traceback: {traceback.format_exc()}")
-            self.on_phase_failed(str(e))
+        else:
+            self.on_phase_failed(result.message or "Phase execution failed")
 
     def on_phase_completed(self) -> None:
         """Handle phase completion."""
-        # Reset pause and step mode state
-        self._paused = False
-        self._step_mode = False
-        self._step_executing = False
-        self._current_step_index = 0
+        self._reset_run_controls()
 
         self.view.log_message("Phase completed successfully")
         self.view.local_phase_status.setText("COMPLETED")
@@ -774,11 +521,7 @@ class PiezoPreRFController(QObject):
 
     def on_phase_failed(self, error_msg: str) -> None:
         """Handle phase failure."""
-        # Reset pause and step mode state
-        self._paused = False
-        self._step_mode = False
-        self._step_executing = False
-        self._current_step_index = 0
+        self._reset_run_controls()
 
         self.view.log_message(f"Phase failed: {error_msg}")
         self.view.local_phase_status.setText("FAILED")
@@ -866,8 +609,9 @@ class PiezoPreRFController(QObject):
 
     def on_abort(self) -> None:
         """Handle abort button click."""
-        if self.context:
-            self.context.request_abort()
+        # request_abort also ends a retry delay or a pause at once.
+        if self.run:
+            self.run.request_abort()
             self.view.log_message("Abort requested...")
             self.view.abort_button.setEnabled(False)
 
@@ -885,15 +629,15 @@ class PiezoPreRFController(QObject):
 
     def on_pause_test(self) -> None:
         """Handle pause button click."""
-        if self._paused:
-            # Resume
-            self._paused = False
+        if not self.run:
+            return
+        if self.run.paused:
+            self.run.resume()
             self.view.log_message("Test resumed...")
             self.view.pause_button.setText("⏸ Pause")
             self._update_toolbar_state("running")
         else:
-            # Pause
-            self._paused = True
+            self.run.pause()
             self.view.log_message("Test paused...")
             self.view.pause_button.setText("▶ Resume")
             self._update_toolbar_state("paused")
@@ -901,72 +645,27 @@ class PiezoPreRFController(QObject):
     def on_toggle_step_mode(self) -> None:
         """Handle step mode toggle."""
         self._step_mode = not self._step_mode
+        if self.run:
+            self.run.set_step_mode(self._step_mode)
         if self._step_mode:
             self.view.log_message(
-                "✓ Step mode enabled - Start Test, then use 'Next' to execute steps"
+                "✓ Step mode enabled - Start Test, then use 'Next' to "
+                "execute steps"
             )
-            # Next button will be enabled when test starts
         else:
             self.view.log_message("Step mode disabled")
             self._set_next_button_enabled(False)
-            self._step_executing = False
 
     def on_next_step(self) -> None:
-        """Handle next step button click."""
-        if not self._step_mode or self._step_executing:
-            return
+        """Let the next step run in step mode."""
+        if self.run and self._step_mode:
+            self._set_next_button_enabled(False)
+            self.run.next_step()
 
-        if self._current_step_index >= len(self._steps):
-            self.view.log_message("All steps completed!")
-            return
-
-        step_name = self._steps[self._current_step_index]
-        self._step_executing = True
+    def _reset_run_controls(self) -> None:
         self._set_next_button_enabled(False)
-        self._execute_step_when_resumed(step_name)
-
-    def _execute_step_when_resumed(self, step_name: str) -> None:
-        """Run a step once pause clears; keep polling abort while paused."""
-        if self.context and self.context.is_abort_requested():
-            self._step_executing = False
-            self.on_phase_failed("Aborted")
-            return
-
-        if self._paused:
-            QTimer.singleShot(
-                100, lambda: self._execute_step_when_resumed(step_name)
-            )
-            return
-
-        QTimer.singleShot(100, lambda: self._execute_step(step_name))
-
-    def _execute_step(self, step_name: str) -> None:
-        """Execute one step and advance state machine."""
-        try:
-            success = self._execute_single_step(step_name)
-            self._current_step_index += 1
-
-            if success and self._current_step_index < len(self._steps):
-                # More steps to execute
-                next_step = self._steps[self._current_step_index]
-                self.view.log_message(
-                    f"Ready for step {self._current_step_index + 1}/{len(self._steps)}: {next_step}"
-                )
-                self._set_next_button_enabled(True)
-            elif success:
-                # All steps done
-                self.view.log_message("All steps completed. Finalizing...")
-                self._finalize_phase_execution()
-            else:
-                # Step failed
-                self.on_phase_failed("Step execution failed")
-        except Exception as exc:
-            import traceback
-
-            self.view.log_message(f"Error: {exc}\n{traceback.format_exc()}")
-            self.on_phase_failed(str(exc))
-        finally:
-            self._step_executing = False
+        if hasattr(self.view, "pause_button"):
+            self.view.pause_button.setText("⏸ Pause")
 
     def _notify_parent_record_created(self, record, record_id: int) -> None:
         """Notify parent container that a record was created."""
