@@ -20,9 +20,10 @@ Abort: the Cavity and SSA calls below check `cavity.abort_flag` through
 `cavity.check_abort()`, which turns RF off and raises CavityAbortError. The
 controller running the phase has to set that flag on abort; the commissioning
 abort (context.request_abort) is only seen here before a call starts.
-`SSA.run_calibration()` also checks it on each CALSTS poll and raises
-SSACalibrationTimeoutError (an SSACalibrationError) after
-SSA_CALIBRATION_TIMEOUT_S; calibrate_ssa reports either as FAILED.
+`SSA.run_calibration()` also checks it each time it reads CALSTS. It
+raises SSACalibrationTimeoutError if the calibration takes longer than
+SSA_CALIBRATION_TIMEOUT_S. calibrate_ssa reports that, or any other
+calibration error, as FAILED.
 """
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -92,9 +93,9 @@ def check_rack_free(cavity, context: PhaseContext) -> PhaseStepResult | None:
 
 
 def turn_off_and_zero_dac(cavity) -> None:
-    """RF off, then DAC_AMPLITUDE 0 on both of the rack's RF stations.
+    """Turn RF off, then zero DAC_AMPLITUDE on both of the rack's RF stations.
 
-    What `SetupCavity.request_ssa_cal()` does before calibrating; its
+    `SetupCavity.request_ssa_cal()` does the same before calibrating. Its
     docstring says the calibration procedure requires the DAC amplitudes at 0.
     turn_off() writes RFCTRL 0 and waits for RFSTATE to read off. Callers run
     check_rack_free() first.

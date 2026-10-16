@@ -99,8 +99,9 @@ class CavityCharLimits:
     status_settle_delay: float = 2.0
     characterization_timeout_seconds: float = 300.0
 
-    # Kelvin. Passed to Cavity.move_to_resonance() in tune_to_resonance; the
-    # same default FrequencyTuningLimits.temp_limit_k uses.
+    # Highest stepper temperature in kelvin, passed to
+    # Cavity.move_to_resonance() in tune_to_resonance. Frequency tuning uses
+    # the same default (FrequencyTuningLimits.temp_limit_k).
     stepper_temp_limit_k: float = linac_utils.STEPPER_TEMP_LIMIT
 
 
