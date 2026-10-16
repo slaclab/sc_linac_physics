@@ -839,8 +839,10 @@ class CommissioningRecord:
 #      should be surfaced in the UI (see
 #      ``applications/rf_commissioning/models/serialization.py``).
 #
-# Everything else (DB schema migration, INSERT/UPDATE SQL, UI tabs, and
-# the progress indicator) is derived from this registry automatically.
+# Everything else is derived from this registry: the phase's JSON column
+# (added to existing database files by ``initialize_database_schema``), the
+# INSERT/UPDATE SQL, and the UI tab. Renaming or removing a phase is not
+# handled: the old column stays in existing files.
 
 PHASE_REGISTRY: dict[CommissioningPhase, PhaseRegistration] = (
     create_phase_registry()
