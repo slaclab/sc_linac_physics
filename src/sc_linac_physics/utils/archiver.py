@@ -35,13 +35,23 @@ Endpoints: https://epicsarchiver.readthedocs.io/en/stable/user/userguide.html
 old; where it is silent, this follows what the LCLS archiver did when tested.
 """
 
+import io
 import math
 import queue
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from time import sleep
-from typing import Callable, Dict, Iterable, List, Optional, TypeVar, Union
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    TypeVar,
+    Union,
+)
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -80,13 +90,20 @@ RETRY_STATUS = frozenset({502, 503, 504})
 # requests of 8-94 MB ran at 20-25 MB/s plus about 0.2 s each; 234 MB and
 # 468 MB ran at about 12 MB/s. JSON is about 99 bytes per scalar sample.
 #
-# Memory sets the chunk size, not time: parsing a chunk peaks at 6.5x its JSON
-# size (one dict per sample), and MAX_WORKERS PVs fetch at once. At 250k
+# Memory sets the JSON chunk size, not time: parsing a chunk peaks at 6.5x its
+# JSON size (one dict per sample), and MAX_WORKERS PVs fetch at once. At 250k
 # samples (about 25 MB) that is about 190 MB per PV, 1.5 GB for 8, with about
 # 2 s per request. Chunks count samples, which assumes scalar PVs: waveforms
 # are not archived (Lisa Zacarias, 2026-10-12). A waveform sample would be
-# many times bigger.
+# many times bigger. JSON is used for string PVs and windows up to COUNT_BIN.
 CHUNK_SAMPLES = 250_000
+
+# Numeric PVs are read as CSV (_csv_chunk), which parses at a quarter of
+# JSON's memory, so their chunks can be bigger. Measured on site
+# (2026-10-12): 60 days of one 1 Hz PV took 20 s in 250k chunks and 14.5 s
+# in 1 M (6 requests); 8 PVs x 30 days in parallel peaked at 1.68 GB and
+# 1.86 GB, most of it the 18.9 M rows returned.
+CSV_CHUNK_SAMPLES = 1_000_000
 
 # Chunks are planned from the archiver's own sample counts, not guessed:
 # count_3600(pv) returns the samples in each UTC hour, timestamped at the
@@ -103,6 +120,10 @@ MIN_SPLIT = timedelta(minutes=1)
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 COLUMNS = ["timestamp", "value", "severity", "status", "valid"]
+# The timestamp type is set here, not left to pandas: pandas 2 picks
+# nanoseconds and pandas 3 picks microseconds. Frames from the CSV and JSON
+# readers need the same type to be lined up by time or joined end to end.
+TIMESTAMP_DTYPE = f"datetime64[us, {LOCAL_TZ.key}]"
 
 Value = Union[float, int, str]
 
@@ -202,22 +223,20 @@ def _fetch_range(
     until the end peaked at 3.7 GB for a 156 MB result (60 days, 4.7 M
     samples, measured 2026-10-12).
     """
-    bounds = _plan_chunks(pv, start, end, timeout)
-    if bounds is None:
+    plan = _plan_chunks(pv, start, end, timeout)
+    if plan is None:
         return None
+    get_chunk = _csv_chunk if plan.numeric else _json_chunk
     frames: List[pd.DataFrame] = []
     last: Optional[tuple] = None
-    for chunk_start, chunk_end in zip(bounds, bounds[1:]):
-        payload = _get_json(pv, chunk_start, chunk_end, timeout)
-        if payload is None:
+    for chunk_start, chunk_end in zip(plan.bounds, plan.bounds[1:]):
+        chunk = get_chunk(pv, chunk_start, chunk_end, timeout, last)
+        if chunk is None:
             return None
-        chunk = payload[0]["data"] if payload else []
-        if last is not None:
-            chunk = [datum for datum in chunk if _key(datum) > last]
-        if chunk:
-            last = _key(chunk[-1])
-            frames.append(_to_frame(chunk))
-        del payload, chunk
+        frame, chunk_last = chunk
+        if chunk_last is not None:
+            last = chunk_last
+            frames.append(frame)
     # An empty frame's columns are object dtype; mixing one in would turn
     # the timestamps into objects too.
     if not frames:
@@ -225,31 +244,40 @@ def _fetch_range(
     return pd.concat(frames, ignore_index=True)
 
 
+class _Plan(NamedTuple):
+    bounds: List[datetime]
+    # The archiver gave hourly counts, which it does only for numeric PVs
+    # (count_3600 of a string PV is empty). Numeric chunks are read as CSV.
+    numeric: bool
+
+
 def _plan_chunks(
     pv: str, start: datetime, end: datetime, timeout: float
-) -> Optional[List[datetime]]:
+) -> Optional[_Plan]:
     """Return chunk boundaries from start to end; None if not archived.
 
     Planned COUNT_WINDOW at a time, from hourly counts where the archiver
-    gives them and from totals where it does not (_split_by_total).
+    gives them and from totals where it does not (_split_by_total). A
+    window up to COUNT_BIN is not planned, and read as JSON.
     """
     if end - start <= COUNT_BIN:
-        return [start, end]
-    bounds = [start]
+        return _Plan([start, end], numeric=False)
+    bounds, numeric = [start], False
     window_start = start
     while window_start < end:
         window_end = min(window_start + COUNT_WINDOW, end)
         planned = _plan_window(pv, window_start, window_end, timeout)
         if planned is None:
             return None
-        bounds.extend(planned[1:])
+        bounds.extend(planned.bounds[1:])
+        numeric = numeric or planned.numeric
         window_start = window_end
-    return bounds
+    return _Plan(bounds, numeric)
 
 
 def _plan_window(
     pv: str, start: datetime, end: datetime, timeout: float
-) -> Optional[List[datetime]]:
+) -> Optional[_Plan]:
     # The archiver applies an operator to a PV when the operator wraps the
     # PV's name in the "pv" parameter: "count_3600(ACCL:...)" returns how
     # many samples fall in each 3600 s bin instead of the samples. That is
@@ -262,9 +290,10 @@ def _plan_window(
         return None
     bins = payload[0]["data"] if payload else []
     if not bins:
-        return _split_by_total(pv, start, end, timeout)
+        bounds = _split_by_total(pv, start, end, timeout)
+        return None if bounds is None else _Plan(bounds, numeric=False)
     counts = {_bin_start(datum["secs"]): datum["val"] for datum in bins}
-    return _group_bins(start, end, counts)
+    return _Plan(_group_bins(start, end, counts), numeric=True)
 
 
 def _split_by_total(
@@ -297,12 +326,15 @@ def _split_by_total(
 
 
 def _group_bins(
-    start: datetime, end: datetime, counts: Dict[int, float]
+    start: datetime,
+    end: datetime,
+    counts: Dict[int, float],
+    limit: int = CSV_CHUNK_SAMPLES,
 ) -> List[datetime]:
-    """Cut start..end into chunks of at most CHUNK_SAMPLES.
+    """Cut start..end into chunks of at most limit samples.
 
     counts maps each COUNT_BIN's start (UTC epoch seconds) to its samples;
-    a missing bin has none. A bin with more than CHUNK_SAMPLES is split into
+    a missing bin has none. A bin with more than limit is split into
     equal parts, assuming its samples are spread evenly.
     """
     step = int(COUNT_BIN.total_seconds())
@@ -312,10 +344,10 @@ def _group_bins(
         lo = max(_utc(t), start)
         hi = min(_utc(t + step), end)
         n = counts.get(t, 0.0)
-        if in_chunk and in_chunk + n > CHUNK_SAMPLES:
+        if in_chunk and in_chunk + n > limit:
             bounds.append(lo)
             in_chunk = 0.0
-        parts = max(1, math.ceil(n / CHUNK_SAMPLES))
+        parts = max(1, math.ceil(n / limit))
         bounds.extend(lo + (hi - lo) * k / parts for k in range(1, parts))
         in_chunk += n / parts
         t += step
@@ -333,6 +365,116 @@ def _get_json(
         params={"pv": pv, "from": _to_utc_iso(start), "to": _to_utc_iso(end)},
     )
     return None if response is None else _json(response, "getData.json")
+
+
+def _json_chunk(
+    pv: str, start: datetime, end: datetime, timeout: float, last
+) -> Optional[tuple]:
+    """Fetch one chunk of a PV's samples as JSON.
+
+    Returns (frame, last key): the samples newer than `last`, and the
+    (secs, nanos) of the newest one, so the next chunk can start after it.
+    Returns (None, None) if there are no new samples, and None if the
+    archiver doesn't know the PV.
+    """
+    payload = _get_json(pv, start, end, timeout)
+    if payload is None:
+        return None
+    data = payload[0]["data"] if payload else []
+    if last is not None:
+        data = [datum for datum in data if _key(datum) > last]
+    if not data:
+        return None, None
+    return _to_frame(data), _key(data[-1])
+
+
+def _csv_chunk(
+    pv: str, start: datetime, end: datetime, timeout: float, last
+) -> Optional[tuple]:
+    """Fetch one chunk of a numeric PV's samples from getData.csv.
+
+    Returns the same three kinds of result as _json_chunk: (frame, last
+    key), (None, None) if there are no new samples, or None if the archiver
+    doesn't know the PV.
+
+    Measured on site (2026-10-12), 551k samples: CSV is half the bytes of
+    JSON, parses 8x faster and peaks at a quarter of the memory, with an
+    identical frame. CSV doesn't say a value's type and doesn't quote
+    strings, so a string PV is read as JSON instead.
+    """
+    response = _request(
+        "GET",
+        f"{ARCHIVER_URL}/getData.csv",
+        timeout,
+        params={"pv": pv, "from": _to_utc_iso(start), "to": _to_utc_iso(end)},
+    )
+    if response is None:
+        return None
+    if not response.content.strip():
+        return None, None
+    try:
+        return _parse_csv_chunk(response.content, last)
+    except (ValueError, TypeError) as e:
+        # The server said the request succeeded but sent something other
+        # than the expected CSV, such as a proxy's login or error page.
+        # Raise ArchiverError, as _json does for a bad JSON reply, so callers
+        # handle one kind of failure. pandas reports an unreadable file as a
+        # ValueError, so this except catches it.
+        raise ArchiverError(
+            f"getData.csv: response is not the expected CSV: {e}"
+        ) from e
+
+
+def _parse_csv_chunk(content: bytes, last) -> tuple:
+    # The CSV has no header row and five columns: secs, val, severity,
+    # status and nanos (checked on site). float_precision="round_trip" reads
+    # each value exactly as written; pandas' default can be off in the last
+    # digit.
+    raw = pd.read_csv(
+        io.BytesIO(content),
+        header=None,
+        names=["secs", "value", "severity", "status", "nanos"],
+        float_precision="round_trip",
+    )
+    # Check before any arithmetic: on a text column, raw["secs"] * 10**9
+    # repeats the string a billion times. A proxy's HTML page parses that way.
+    columns = ["secs", "value", "severity", "status", "nanos"]
+    if not all(pd.api.types.is_numeric_dtype(raw[c]) for c in columns):
+        raise ValueError(f"non-numeric columns: {dict(raw.dtypes.astype(str))}")
+    if last is not None:
+        secs, nanos = last
+        raw = raw[
+            (raw["secs"] > secs)
+            | ((raw["secs"] == secs) & (raw["nanos"] > nanos))
+        ]
+    if raw.empty:
+        return None, None
+    tail = raw.iloc[-1]
+    return _csv_to_frame(raw), (int(tail["secs"]), int(tail["nanos"]))
+
+
+def _csv_to_frame(raw: pd.DataFrame) -> pd.DataFrame:
+    """Build, from parsed CSV columns, the frame _to_frame builds from JSON.
+
+    Timestamps are rounded to the nearest microsecond, as _timestamp does
+    for JSON samples, so both readers give the same frame.
+    """
+    raw = raw.reset_index(drop=True)
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                raw["secs"] * 1_000_000_000 + raw["nanos"], utc=True
+            )
+            .dt.round("us")
+            .astype("datetime64[us, UTC]")
+            .dt.tz_convert(LOCAL_TZ),
+            "value": raw["value"],
+            "severity": raw["severity"],
+            "status": raw["status"],
+        }
+    )
+    frame["valid"] = frame["severity"] != EPICS_INVALID_VAL
+    return frame[COLUMNS]
 
 
 def _bin_start(secs: float) -> int:
@@ -509,11 +651,11 @@ def _request(
 def _json(response: requests.Response, what: str):
     """response.json(), raising ArchiverError if the body isn't JSON.
 
-    A proxy can answer 200 with an HTML page (a login or error page).
+    A proxy can report success but send a login or error page instead.
     """
     try:
         return response.json()
-    except ValueError as e:  # requests' JSONDecodeError is a ValueError
+    except ValueError as e:  # requests reports bad JSON as a ValueError
         raise ArchiverError(f"{what}: response is not JSON: {e}") from e
 
 
@@ -569,10 +711,12 @@ def _to_sample(datum: dict) -> ArchiverSample:
 
 def _to_frame(data: List[dict]) -> pd.DataFrame:
     samples = [_to_sample(datum) for datum in data]
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         [
             (s.timestamp, s.value, s.severity, s.status, s.valid)
             for s in samples
         ],
         columns=COLUMNS,
     )
+    frame["timestamp"] = frame["timestamp"].astype(TIMESTAMP_DTYPE)
+    return frame
