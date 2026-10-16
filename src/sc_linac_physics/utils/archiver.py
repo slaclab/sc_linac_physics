@@ -114,10 +114,11 @@ MIN_SPLIT = timedelta(minutes=1)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
-# INFO: one line per PV fetched, per month cached, per value-at-time lookup.
-# WARNING: retries, cache writes that failed. DEBUG: every request and cache
-# hit. Created on first use, like utils/epics/logger.py, so importing this
-# module opens no log files.
+# The archiver client's logger. At INFO it writes one line per PV fetched,
+# per month cached and per value-at-time lookup. WARNING adds retries and
+# failed cache writes; DEBUG adds every request and cache hit. It is created
+# on first use, as utils/epics/logger.py does, so importing this module opens
+# no log files.
 _logger: Optional[logging.Logger] = None
 
 
