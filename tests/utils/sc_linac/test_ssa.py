@@ -333,7 +333,7 @@ def test_wait_while_resetting(ssa):
 
 
 class TestRatedPower:
-    """SSA.rated_power_kw reads SSA:Type and maps the enum index to kW."""
+    """SSA.rated_power_kw reads SSA:PwrRating, in kW."""
 
     @staticmethod
     def _ssa(cm_name, number):
@@ -343,23 +343,23 @@ class TestRatedPower:
 
         return MACHINE.cryomodules[cm_name].cavities[number].ssa
 
-    def test_type_pv_name(self):
-        assert self._ssa("35", 2).type_pv == "ACCL:L3B:3520:SSA:Type"
+    def test_pwr_rating_pv_name(self):
+        assert self._ssa("35", 2).pwr_rating_pv == "ACCL:L3B:3520:SSA:PwrRating"
 
     @pytest.mark.parametrize("number,shared", [(1, 1), (5, 1), (8, 4)])
-    def test_hl_type_pv_is_shared(self, number, shared):
-        # SSA:Type only exists on HL cavities 1-4 (checked 2026-10-05)
+    def test_hl_pwr_rating_pv_is_shared(self, number, shared):
+        # SSA:PwrRating only exists on HL cavities 1-4 (checked 2026-10-16)
         assert (
-            self._ssa("H1", number).type_pv == f"ACCL:L1B:H1{shared}0:SSA:Type"
+            self._ssa("H1", number).pwr_rating_pv
+            == f"ACCL:L1B:H1{shared}0:SSA:PwrRating"
         )
 
-    @pytest.mark.parametrize(
-        "ssa_type,expected",
-        [(0, 7.0), (1, 4.6), (2, 3.8), (3, 1.0), (4, None), (5, None)],
-    )
-    def test_rated_power_from_type(self, ssa, ssa_type, expected):
-        ssa._type_pv_obj = make_mock_pv(get_val=ssa_type)
-        assert ssa.rated_power_kw == expected
+    @pytest.mark.parametrize("raw", [3.8, 1, 7.0])
+    def test_rated_power_is_pv_value(self, ssa, raw):
+        # HL reads back 1 (an int), so the value is cast to float.
+        ssa._pwr_rating_pv_obj = make_mock_pv(get_val=raw)
+        assert ssa.rated_power_kw == float(raw)
+        assert isinstance(ssa.rated_power_kw, float)
 
 
 @pytest.fixture
