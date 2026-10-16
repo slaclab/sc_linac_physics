@@ -620,3 +620,71 @@ class TestPVErrorsReachTheErrorSignal:
 
         worker.error.emit.assert_called_once_with("JT AUTO")
         worker.finished.emit.assert_not_called()
+
+
+class TestLogsReachTheStatusSignal:
+    """INFO logs from a running measurement reach the worker's status
+    signal, so cal_status_label / rf_status_label update during a run."""
+
+    @pytest.fixture(autouse=True)
+    def enable_logging(self):
+        # conftest.suppress_logging disables all logging for every test.
+        import logging
+
+        logging.disable(logging.NOTSET)
+        yield
+        logging.disable(logging.CRITICAL)
+
+    @pytest.mark.parametrize(
+        "worker_cls, method",
+        [
+            ("Q0Worker", "takeNewQ0Measurement"),
+            ("Q0SetupWorker", "setup_for_q0"),
+            ("CalibrationWorker", "take_new_calibration"),
+        ],
+    )
+    def test_info_log_is_emitted_as_status(
+        self, worker_cls, method, mock_cryomodule
+    ):
+        from sc_linac_physics.applications.q0 import q0_gui_utils, q0_utils
+
+        mock_cryomodule.cryo_access_granted = True
+        getattr(mock_cryomodule, method).side_effect = (
+            lambda **kwargs: q0_utils.logger.info(
+                "Averaged level is 91.8; waiting 10s"
+            )
+        )
+        cls = getattr(q0_gui_utils, worker_cls)
+        if worker_cls == "CalibrationWorker":
+            worker = cls(mock_cryomodule, None, None, 90, 5, 4, 40, 112)
+        else:
+            worker = cls(mock_cryomodule, None, None, 90, 4, {1: 16.0})
+        worker.status = Mock()
+        worker.error = Mock()
+        worker.finished = Mock()
+        handlers_before = list(q0_utils.logger.handlers)
+
+        worker.run()
+
+        worker.status.emit.assert_any_call(
+            "Averaged level is 91.8; waiting 10s"
+        )
+        worker.error.emit.assert_not_called()
+        # The forwarding handler is removed once the run ends.
+        assert q0_utils.logger.handlers == handlers_before
+
+    def test_logs_from_other_threads_are_not_forwarded(self):
+        import threading
+
+        from sc_linac_physics.applications.q0 import q0_gui_utils, q0_utils
+
+        worker = Mock()
+        with q0_gui_utils.forward_logs_to_status(worker):
+            other = threading.Thread(
+                target=q0_utils.logger.info, args=("other worker",)
+            )
+            other.start()
+            other.join()
+            q0_utils.logger.info("this worker")
+
+        worker.status.emit.assert_called_once_with("this worker")

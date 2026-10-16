@@ -905,7 +905,9 @@ class TestQ0CryomoduleMeasurementFast:
                 "sc_linac_physics.applications.q0.q0_utils.HeaterRun",
                 return_value=mock_heater_run,
             ),
-            patch("builtins.print") as mock_print,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.logger"
+            ) as mock_logger,
         ):
             mock_datetime_module.now.side_effect = [
                 measurement_start,  # Overall measurement start
@@ -937,7 +939,7 @@ class TestQ0CryomoduleMeasurementFast:
             mock_q0_measurement.save_results.assert_called_once()
 
             # Verify console output was produced
-            assert mock_print.call_count > 0  # At least some output was printed
+            assert mock_logger.info.call_count > 0
 
     def test_take_new_q0_measurement_with_abort(
         self, fast_q0_cryo, valve_params
@@ -1909,12 +1911,14 @@ class TestQ0CryomoduleWaitForLLDrop:
 
         with (
             patch("sc_linac_physics.applications.q0.q0_cryomodule.sleep"),
-            patch("builtins.print") as mock_print,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.logger"
+            ) as mock_logger,
         ):
             Q0Cryomodule.wait_for_ll_drop(fast_q0_cryo, target_ll_diff)
 
             # Should have printed level information
-            assert mock_print.call_count > 0
+            assert mock_logger.info.call_count > 0
 
 
 class TestQ0CryomoduleWaitForLL:
@@ -2267,12 +2271,14 @@ class TestQ0CryomoduleShutOff:
 
         with (
             patch("tests.applications.q0.pyepics_shim.caput"),
-            patch("builtins.print") as mock_print,
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.logger"
+            ) as mock_logger,
         ):
             Q0Cryomodule.shut_off(fast_q0_cryo)
 
             # Should have printed information about shutting off
-            assert mock_print.call_count > 0
+            assert mock_logger.info.call_count > 0
 
     def test_shut_off_no_cavities(self, fast_q0_cryo):
         """Test shut_off with no cavities"""
