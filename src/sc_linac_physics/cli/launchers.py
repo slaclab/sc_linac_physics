@@ -5,6 +5,8 @@ import sys
 from pydm import PyDMApplication
 from pydm.main_window import PyDMMainWindow
 
+from sc_linac_physics.utils import exception_hook
+
 
 def display(func):
     """Decorator to mark a launcher as a display."""
@@ -44,6 +46,8 @@ def launch_python_display(display_class, *args, standalone=True):
     if standalone:
         # Standalone mode: use PyDM's open method
         app = PyDMApplication(command_line_args=list(args))
+        # Child windows share this app, so they are covered too.
+        exception_hook.install()
         app.main_window.open(display_file, macros=None)
         app.main_window.show()
         sys.exit(app.exec())
