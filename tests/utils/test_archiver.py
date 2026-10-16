@@ -710,6 +710,92 @@ class TestChunkedRange:
         assert "A:PV" in str(excinfo.value)
 
 
+class TestIterRangeChunks:
+    @pytest.fixture(autouse=True)
+    def three_chunks(self):
+        bounds = [START + i * HOUR for i in range(4)]
+        with patch.object(archiver, "_plan_chunks", return_value=bounds):
+            yield
+
+    def test_yields_one_frame_per_nonempty_chunk_lazily(self, session):
+        session.request.side_effect = [
+            _response(payload=[{"data": [_datum(100, 1.0)]}]),
+            _response(payload=[{"data": []}]),
+            _response(payload=[{"data": [_datum(300, 3.0)]}]),
+        ]
+
+        chunks = archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR)
+        first = next(chunks)
+
+        assert session.request.call_count == 1
+        assert list(first["value"]) == [1.0]
+        assert [list(c["value"]) for c in chunks] == [[3.0]]
+
+    def test_not_archived_raises_naming_the_pv(self, session):
+        session.request.return_value = _response(status=404)
+
+        with pytest.raises(PVNotArchivedError) as excinfo:
+            list(archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR))
+
+        assert excinfo.value.pvs == ["A:PV"]
+
+    def test_other_errors_name_the_pv(self, session):
+        session.request.return_value = _response(status=400)
+
+        with pytest.raises(ArchiverError, match="A:PV"):
+            list(archiver.iter_range_chunks("A:PV", START, START + 3 * HOUR))
+
+
+class TestLogging:
+    @pytest.fixture
+    def log(self):
+        with patch.object(archiver, "get_logger") as get_logger:
+            yield get_logger.return_value
+
+    def test_one_info_line_per_pv_with_its_sample_count(self, session, log):
+        session.request.return_value = _response(
+            payload=[{"data": [_datum(1696263180, 1.5)]}]
+        )
+
+        get_values_over_time_range(["A:PV"], START, END)
+
+        line = log.info.call_args.args[0] % log.info.call_args.args[1:]
+        assert line.startswith("A:PV 2023-10-02 09:13..2023-10-02 10:00")
+        assert "1 samples in 1 chunk(s)" in line
+
+    def test_each_request_is_a_debug_line(self, session, log):
+        session.request.return_value = _response(
+            payload=[{"data": []}], nbytes=2_000_000
+        )
+
+        get_values_over_time_range(["A:PV"], START, END)
+
+        line = log.debug.call_args.args[0] % log.debug.call_args.args[1:]
+        assert line.startswith("GET A:PV") and "2.0 MB" in line
+
+    def test_retries_are_warnings(self, session, log):
+        session.request.side_effect = [
+            requests.exceptions.Timeout("slow"),
+            _response(payload=[{"data": []}]),
+        ]
+
+        get_values_over_time_range(["A:PV"], START, END)
+
+        assert "attempt 1 of 4" in (
+            log.warning.call_args.args[0] % log.warning.call_args.args[1:]
+        )
+
+    def test_value_at_time_is_one_info_line(self, session, log):
+        session.request.return_value = _response(
+            payload={"A:PV": {"secs": 1, "val": 1.0, "nanos": 0}}
+        )
+
+        get_values_at_time(["A:PV", "B:PV"], START)
+
+        line = log.info.call_args.args[0] % log.info.call_args.args[1:]
+        assert "1 of 2 PVs" in line
+
+
 class TestGroupBins:
     LIMIT = archiver.CHUNK_SAMPLES
 
