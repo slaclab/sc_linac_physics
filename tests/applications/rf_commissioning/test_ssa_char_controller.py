@@ -1009,3 +1009,28 @@ def test_get_cavity_from_parent_no_parent_returns_none() -> None:
     controller.view.parent = lambda: None
 
     assert controller._get_cavity_from_parent() == (None, None)
+
+
+def test_failed_selection_drops_the_previous_cavity(monkeypatch) -> None:
+    # H1/H2 fail int(); Push Slope must not fall back to the old cavity.
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._cavity = Mock(name="old cavity")
+    monkeypatch.setattr(
+        controller_module, "resolve_cavity_selection", lambda *_: ("H1", "1")
+    )
+
+    controller.update_pv_addresses()
+
+    assert controller._cavity is None
+
+
+def test_lookup_error_drops_the_previous_cavity() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._cavity = Mock(name="old cavity")
+    controller._get_machine_cavity = Mock(side_effect=KeyError("no such CM"))
+
+    controller.update_pv_addresses("02", "1")
+
+    assert controller._cavity is None
