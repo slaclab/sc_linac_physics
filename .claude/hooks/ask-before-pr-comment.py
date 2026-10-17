@@ -19,7 +19,10 @@ $( or a backtick, or inside a quoted string such as bash -c "..."):
 Not matched: replying to, or resolving the thread of, an inline review
 comment whose author GitHub marks as a bot (Copilot, github-actions). The
 hook looks the author up with a read-only gh api call. If the lookup
-fails, it asks.
+fails, it asks. This only applies when the whole command is one bare
+`gh api` call with repos/OWNER/REPO spelled out and no $ or {a,b}
+expansion. Glob characters (* ? [) are left alone: a glob can only turn
+a field's text into file names, not add flags.
 
 The command is split the way the shell splits it (backslash-newline
 joined, quotes removed), and -R/--repo is skipped wherever it sits, so
@@ -42,11 +45,13 @@ REPO_FLAGS = {"-R", "--repo"}
 LONG_WRITE_FLAGS = ("--field", "--raw-field", "--input")
 SHELL_OPERATORS = set(";&|()<>")
 DIRECT_API = re.compile(r"api\.github\.com", re.IGNORECASE)
-# gh api repos/OWNER/REPO/pulls/N/comments/ID/replies (OWNER/REPO may be
-# gh's {owner}/{repo} placeholders, which the lookup passes through)
+# gh api repos/OWNER/REPO/pulls/N/comments/ID/replies, with OWNER/REPO
+# spelled out (not gh's {owner}/{repo}, which depend on the directory)
 REPLY_ENDPOINT = re.compile(
-    r"/?repos/([^/\s]+/[^/\s]+)/pulls/\d+/comments/(\d+)/replies"
+    r"/?repos/([\w.-]+/[\w.-]+)/pulls/\d+/comments/(\d+)/replies"
 )
+# Shell expansion the parser can't see through: $VAR, $(...), {a,b}
+SHELL_EXPANSION = re.compile(r"\$|\{[^{}]*,[^{}]*\}")
 # The whole graphql query: one resolveReviewThread on a literal thread id,
 # selecting plain fields only (no commas, aliases or other mutations)
 RESOLVE_MUTATION = re.compile(
@@ -229,12 +234,30 @@ def resolves_bot_thread(args: list[str]) -> bool:
     return author == "Bot"
 
 
+def is_bot_exception(command: str, commands: list[list[str]]) -> bool:
+    """True if the whole command is one bare bot reply or bot resolve.
+
+    Bare means `gh api ...` alone: no ;, && or |, no VAR=, env or cd in
+    front, and no shell expansion, so the hook sees the same arguments
+    and directory that gh will.
+    """
+    if len(commands) != 1 or commands[0][:1] != ["gh"]:
+        return False
+    if SHELL_EXPANSION.search(command):
+        return False
+    args = commands[0][1:]
+    return reply_to_bot(args) or resolves_bot_thread(args)
+
+
 def posts_to_github(command: str, depth: int = 0) -> bool:
     if DIRECT_API.search(command):
         return True
     if depth > MAX_NESTING:
         return True
-    for words in split_commands(command):
+    commands = split_commands(command)
+    if depth == 0 and is_bot_exception(command, commands):
+        return False
+    for words in commands:
         # A quoted word that is itself a command (bash -c "...", eval "...")
         if any(
             " " in word and "gh" in word and posts_to_github(word, depth + 1)
@@ -246,8 +269,6 @@ def posts_to_github(command: str, depth: int = 0) -> bool:
             if len(pos) >= 2 and pos[1] in POSTING.get(pos[0], ()):
                 return True
             if pos[:1] == ["api"] and api_writes(args):
-                if reply_to_bot(args) or resolves_bot_thread(args):
-                    continue
                 return True
     return False
 
