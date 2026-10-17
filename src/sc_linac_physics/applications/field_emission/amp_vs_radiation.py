@@ -54,8 +54,9 @@ def align_pvs_to_common_time(series):
     aligned = pd.concat(deduped, axis=1, sort=True)
     aligned = aligned.ffill()
     aligned = aligned.dropna(how="any")
-    # Keep this name: update_h5py.convert_to_h5 looks for a "timestamps"
-    # column and drops it before saving the values.
+    # The index becomes the CSV's first column, named "timestamps".
+    # update_h5py.convert_to_h5 removes the column by that name before
+    # saving the values, so it fails if the name changes.
     aligned.index.name = "timestamps"
     return aligned
 
