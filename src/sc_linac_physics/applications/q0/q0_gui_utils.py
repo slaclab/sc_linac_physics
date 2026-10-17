@@ -36,8 +36,9 @@ DEFAULT_POST_RF_HEAT = 24
 DEFAULT_JT_START_DELTA = timedelta(hours=24)
 DEFAULT_LL_BUFFER_SIZE = 10
 
-# Q0Cryomodule reads and writes through PV, which raises these instead of
-# returning None. Each worker reports them through its error signal.
+# The errors a PV read or write can raise when the PV is disconnected or
+# the read or write fails. Q0Cryomodule's PV calls raise these instead of
+# returning None, and each worker reports them through its error signal.
 PV_ERRORS = (PVConnectionError, PVGetError, PVPutError)
 
 NO_CRYO_ACCESS = "Required cryo permissions not granted - call cryo ops"

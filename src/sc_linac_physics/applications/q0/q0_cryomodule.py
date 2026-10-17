@@ -39,8 +39,9 @@ class Q0Cryomodule(Cryomodule):
 
         self.cryo_access_pv: str = f"CRYO:{self.cryo_name}:0:CAS_ACCESS"
 
-        # PV objects by name, created on first use (see _pv), and the
-        # callback index of each monitor (see _monitor).
+        # PV objects by name. _pv creates each the first time it's used.
+        # _monitor stores each monitor's callback index here, which is
+        # needed to remove the callback later.
         self._pvs: Dict[str, PV] = {}
         self._monitor_indices: Dict[str, int] = {}
 
@@ -78,7 +79,8 @@ class Q0Cryomodule(Cryomodule):
     def check_abort(self):
         if self.abort_flag:
             self.abort_flag = False
-            # Flag the cavities first, so a failed cryo restore can't skip it.
+            # Flag the cavities before restoring cryo. If restore_cryo raises,
+            # the cavities still see the abort.
             for cavity in self.cavities.values():
                 cavity.abort_flag = True
             self.restore_cryo()

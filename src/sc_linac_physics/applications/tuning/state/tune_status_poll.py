@@ -126,7 +126,8 @@ def caget_values(
     caget_command: str,
 ) -> dict[str, object | None]:
     """Bulk-read PVs in batches using the shared EPICS batch utility."""
-    # Deprecated compatibility args retained for CLI/API stability.
+    # command_timeout_sec and caget_command are ignored. They stay so
+    # existing callers and command lines keep working.
     _ = command_timeout_sec, caget_command
     result: dict[str, object | None] = {}
     logger.info("Reading %s PVs in batches of %s", len(pvs), batch_size)
