@@ -47,8 +47,15 @@ DIRECT_API = re.compile(r"api\.github\.com", re.IGNORECASE)
 REPLY_ENDPOINT = re.compile(
     r"/?repos/([^/\s]+/[^/\s]+)/pulls/\d+/comments/(\d+)/replies"
 )
-THREAD_ID = re.compile(r"threadId\s*:\s*\\?\"([A-Za-z0-9_-]+)\\?\"")
+# The whole graphql query: one resolveReviewThread on a literal thread id,
+# selecting plain fields only (no commas, aliases or other mutations)
+RESOLVE_MUTATION = re.compile(
+    r"\s*mutation\s*\{\s*resolveReviewThread\s*\(\s*input\s*:\s*\{\s*"
+    r'threadId\s*:\s*"([A-Za-z0-9_-]+)"\s*\}\s*\)\s*\{[\w\s{}]*\}\s*\}\s*'
+)
 MAX_NESTING = 3
+MAX_LOOKUPS = 1
+lookups_used = 0
 
 ASK = {
     "hookSpecificOutput": {
@@ -136,35 +143,77 @@ def api_writes(args: list[str]) -> bool:
 
 
 def gh_output(*args: str) -> str:
-    """Run a read-only gh command; any failure raises, so the hook asks."""
+    """Run a read-only gh command; any failure raises, so the hook asks.
+
+    At most MAX_LOOKUPS run per command, each capped at 10 s, so the hook
+    always answers inside its 30 s timeout in settings.json. A second
+    lookup raises, and the command asks.
+    """
+    global lookups_used
+    if lookups_used >= MAX_LOOKUPS:
+        raise RuntimeError("one author lookup per command")
+    lookups_used += 1
     result = subprocess.run(
         ["gh", *args], capture_output=True, text=True, timeout=10, check=True
     )
     return result.stdout.strip()
 
 
-def reply_to_bot(pos: list[str]) -> bool:
-    """True for a reply to an inline review comment written by a bot."""
-    for arg in pos:
-        match = REPLY_ENDPOINT.fullmatch(arg)
-        if match:
-            repo, comment_id = match.groups()
-            user_type = gh_output(
-                "api",
-                f"repos/{repo}/pulls/comments/{comment_id}",
-                "--jq",
-                ".user.type",
-            )
-            return user_type == "Bot"
-    return False
+def plain_api_call(args: list[str]) -> tuple[str, dict[str, str]] | None:
+    """(endpoint, string fields) for a plain `gh api` call, else None.
+
+    Plain means: `api`, one endpoint, then only -f/--raw-field KEY=VALUE
+    (never -F, --input or an @file value), -X/--method POST, and the
+    output flags --jq/-q VALUE and --silent. The bot exception only
+    applies to calls in this form, so what the hook checks is what gh
+    sends.
+    """
+    if args[:1] != ["api"] or len(args) < 2 or args[1].startswith("-"):
+        return None
+    endpoint, fields, i = args[1], {}, 2
+    while i < len(args):
+        flag = args[i]
+        value = args[i + 1] if i + 1 < len(args) else None
+        if flag == "--silent":
+            i += 1
+            continue
+        if value is None:
+            return None
+        if flag in ("-f", "--raw-field") and "=" in value:
+            key, field_value = value.split("=", 1)
+            fields[key] = field_value
+        elif flag in ("-X", "--method") and value.upper() == "POST":
+            pass
+        elif flag not in ("--jq", "-q"):
+            return None
+        i += 2
+    return endpoint, fields
+
+
+def reply_to_bot(args: list[str]) -> bool:
+    """True for a plain reply to an inline review comment by a bot."""
+    call = plain_api_call(args)
+    if call is None or set(call[1]) != {"body"}:
+        return False
+    match = REPLY_ENDPOINT.fullmatch(call[0])
+    if not match:
+        return False
+    repo, comment_id = match.groups()
+    user_type = gh_output(
+        "api",
+        f"repos/{repo}/pulls/comments/{comment_id}",
+        "--jq",
+        ".user.type",
+    )
+    return user_type == "Bot"
 
 
 def resolves_bot_thread(args: list[str]) -> bool:
-    """True for a graphql call whose only mutation resolves a bot's thread."""
-    query = " ".join(args)
-    if re.findall(r"(\w+)\s*\(\s*input\s*:", query) != ["resolveReviewThread"]:
+    """True for a plain graphql call that only resolves a bot's thread."""
+    call = plain_api_call(args)
+    if call is None or call[0] != "graphql" or set(call[1]) != {"query"}:
         return False
-    match = THREAD_ID.search(query)
+    match = RESOLVE_MUTATION.fullmatch(call[1]["query"])
     if not match:
         return False
     author = gh_output(
@@ -197,7 +246,7 @@ def posts_to_github(command: str, depth: int = 0) -> bool:
             if len(pos) >= 2 and pos[1] in POSTING.get(pos[0], ()):
                 return True
             if pos[:1] == ["api"] and api_writes(args):
-                if reply_to_bot(pos) or resolves_bot_thread(args):
+                if reply_to_bot(args) or resolves_bot_thread(args):
                     continue
                 return True
     return False
