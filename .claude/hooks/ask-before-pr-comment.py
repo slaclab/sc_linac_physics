@@ -9,7 +9,7 @@ affected.
 
 Matched:
 - gh pr comment, gh pr review, gh issue comment
-- gh pr/issue close or reopen with --comment/-c
+- gh pr/issue close or reopen (either can carry a --comment)
 - any gh api call that writes: -X/--method other than GET, a field flag
   (-f/-F/--field/--raw-field/--input, value attached or not), or a
   graphql mutation
@@ -26,8 +26,8 @@ import sys
 
 POSTING_SUBCOMMANDS = re.compile(
     r"\bgh\s+(pr\s+(comment|review)|issue\s+comment)\b"
-    # close and reopen post their --comment/-c text as a comment
-    r"|\bgh\s+(pr|issue)\s+(close|reopen)\b.*\s(-c|--comment)\b"
+    # close and reopen can post a comment (--comment/-c); ask for all of them
+    r"|\bgh\s+(pr|issue)\s+(close|reopen)\b"
 )
 GH_API = re.compile(r"\bgh\s+api\b")
 WRITE_METHOD = re.compile(
