@@ -357,11 +357,12 @@ class GUICavity:
     def trigger_setup(self):
         if self.locked:
             return
-        # Checkbox states are read here, on the main thread, and saved as
-        # True/False. _run below runs on a background thread, so the window
-        # doesn't freeze while it writes the request PVs and starts setup.
-        # Qt only allows widgets like these checkboxes to be used from the
-        # main thread, so _run uses the saved values instead of the boxes.
+        # Checkbox states are read here, on the main thread, into ssa_cal,
+        # auto_tune, cav_char and rf_ramp. _run, defined below, runs on a
+        # background thread so the window doesn't freeze while it writes the
+        # request PVs and starts setup. Qt only allows widgets like these
+        # checkboxes to be used from the main thread, so _run writes those
+        # four variables and never reads the checkboxes itself.
         ssa_cal = self.settings.ssa_cal_checkbox.isChecked()
         auto_tune = self.settings.auto_tune_checkbox.isChecked()
         cav_char = self.settings.cav_char_checkbox.isChecked()
