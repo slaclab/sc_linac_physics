@@ -264,6 +264,8 @@ ignore = [
     "mkdocs.yml",
     ".git*",
     ".pre-commit-config.yaml",
+    ".claude",
+    ".claude/**/*",
     # Test data (in git but not in distribution)
     "src/sc_linac_physics/applications/microphonics/test_data",
     "src/sc_linac_physics/applications/microphonics/test_data/*",
