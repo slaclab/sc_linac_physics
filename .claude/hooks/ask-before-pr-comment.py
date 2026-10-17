@@ -246,7 +246,7 @@ def is_bot_exception(command: str, commands: list[list[str]]) -> bool:
     """
     if len(commands) != 1 or commands[0][:1] != ["gh"]:
         return False
-    if "$" in command:
+    if "$" in command or "`" in command:
         return False
     if not PLAIN_UNQUOTED.fullmatch(QUOTED.sub("", command)):
         return False
