@@ -49,9 +49,9 @@ _executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 4)
 class _ChannelWatcher(PyDMLabel):
     """Zero-size PyDMLabel that delivers channel updates to a callback.
 
-    A plain PyDMChannel with a value_slot callback never received value
-    changes. A PyDM widget does, so this zero-size label receives them and
-    passes each one to the callback.
+    A plain PyDMChannel with a value_slot callback never receives value
+    changes. A PyDM widget does, so this zero-size PyDM label receives the
+    live value changes and passes each one to the callback.
     """
 
     def __init__(self, init_channel: str, callback):
