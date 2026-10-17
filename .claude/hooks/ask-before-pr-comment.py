@@ -20,9 +20,9 @@ Not matched: replying to, or resolving the thread of, an inline review
 comment whose author GitHub marks as a bot (Copilot, github-actions). The
 hook looks the author up with a read-only gh api call. If the lookup
 fails, it asks. This only applies when the whole command is one bare
-`gh api` call with repos/OWNER/REPO spelled out and no $ or {a,b}
-expansion. Glob characters (* ? [) are left alone: a glob can only turn
-a field's text into file names, not add flags.
+`gh api` call with repos/OWNER/REPO spelled out, no $ anywhere, and
+only plain characters outside quotes, so no glob, brace, ~ or # can
+change the arguments gh receives.
 
 The command is split the way the shell splits it (backslash-newline
 joined, quotes removed), and -R/--repo is skipped wherever it sits, so
@@ -50,8 +50,11 @@ DIRECT_API = re.compile(r"api\.github\.com", re.IGNORECASE)
 REPLY_ENDPOINT = re.compile(
     r"/?repos/([\w.-]+/[\w.-]+)/pulls/\d+/comments/(\d+)/replies"
 )
-# Shell expansion the parser can't see through: $VAR, $(...), {a,b}
-SHELL_EXPANSION = re.compile(r"\$|\{[^{}]*,[^{}]*\}")
+# Quoted spans: '...' (literal) and "..." (with \" escapes). $ still
+# expands inside "...", so the bot exception rejects $ anywhere.
+QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
+# What the bot exception allows outside quotes: nothing bash expands
+PLAIN_UNQUOTED = re.compile(r"[A-Za-z0-9/._=:,@+ -]*")
 # The whole graphql query: one resolveReviewThread on a literal thread id,
 # selecting plain fields only (no commas, aliases or other mutations)
 RESOLVE_MUTATION = re.compile(
@@ -238,12 +241,14 @@ def is_bot_exception(command: str, commands: list[list[str]]) -> bool:
     """True if the whole command is one bare bot reply or bot resolve.
 
     Bare means `gh api ...` alone: no ;, && or |, no VAR=, env or cd in
-    front, and no shell expansion, so the hook sees the same arguments
-    and directory that gh will.
+    front, no $, and only plain characters outside quotes, so the hook
+    sees the same arguments and directory that gh will.
     """
     if len(commands) != 1 or commands[0][:1] != ["gh"]:
         return False
-    if SHELL_EXPANSION.search(command):
+    if "$" in command:
+        return False
+    if not PLAIN_UNQUOTED.fullmatch(QUOTED.sub("", command)):
         return False
     args = commands[0][1:]
     return reply_to_bot(args) or resolves_bot_thread(args)
