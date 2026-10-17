@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ask-before-pr-comment.py\"",
-            "timeout": 10
+            "timeout": 30
           }
         ]
       }
