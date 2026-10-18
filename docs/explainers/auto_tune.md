@@ -41,12 +41,12 @@ tuning code uses them. It does not.
 The 1.4 is not arbitrary — the prototype tuner measured a slow-tuner
 sensitivity of 1.4 Hz/step over a ~450 kHz range <span class="cite">Pischalnikov et al.,
 IPAC2015, [WEPTY035](https://proceedings.jacow.org/IPAC2015/papers/wepty035.pdf)</span>.
-`linac_utils.py` in the `sc_linac_physics` repo calls both constants "
-very rough values obtained empirically," which is the right
+`linac_utils.py` in the `sc_linac_physics` repo calls both constants
+<span class="cite">`linac_utils.py “very rough values obtained empirically”`</span> which is the right
 warning: they are one prototype's numbers, not this cavity's.
 
 The two constants `HZ_PER_STEP = 1.4` and `HL_HZ_PER_STEP = 18.3` are *estimates*.
-Nothing in `utils/sc_linac/` or`applications/` reads either one.
+Nothing in `utils/sc_linac/` or `applications/` reads either one.
 Their only consumers are the two derived constants declared immediately below them
 <span class="cite">`linac_utils.py::ESTIMATED_MICROSTEPS_PER_HZ, linac_utils.py::ESTIMATED_MICROSTEPS_PER_HZ_HL`</span>,
 and the only thing that imports *those* is the simulation IOC
