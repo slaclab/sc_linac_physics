@@ -121,7 +121,7 @@ driving the motor. Note that `DetuneError` may also be referred to as the runawa
 <span class="cite">
 `cavity.py::Cavity._auto_tune “expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))”, cavity.py::Cavity._auto_tune “if steps_moved > expected_steps * stepper_tol_factor:”`</span>
 
-### Drive it
+### Drive It
 
 [Drive the auto-tune loop](widgets/auto_tune_sim.html)
 
@@ -365,8 +365,8 @@ The seven steps in the sequence are as follows:
 
 ## 6. How it fails
 
-The final (optional) dropdown menu in the section 2 “Drive It” simulator lists different faults.
-Selecting one will allow you to watch how the loop reacts.
+The last column of the table below names the fault to pick from the *Inject a fault* dropdown in
+the section 2 "Drive it" simulator, so you can watch how the loop reacts.
 
 | Failure                        | Raises                                       | Cause and what to do                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Simulator fault        |
 |--------------------------------|----------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------|
