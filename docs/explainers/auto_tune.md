@@ -10,13 +10,15 @@ simulated copy of it, and lists how it fails.
 Detune is the difference between the cavity's frequency and the frequency we
 want. Tuning is the act of driving it to zero.
 
-Two actuators, with a clear division of labor:
+The two actuators used in tuning are the stepper tuner
+(which makes coarse adjustments) and the piezo tuner (which makes fine adjustments).
+These two actuators have a clear division of labor:
 
-|  | Stepper tuner | Piezo |
-|---|---|---|
-| Speed | Slow — a mechanical move. Roughly 50 s at full range: 1,000,000 usteps at 20,000 usteps/s <span class="cite">`linac_utils.py::DEFAULT_STEPPER_MAX_STEPS, linac_utils.py::DEFAULT_STEPPER_SPEED; STEP:VELO EGU is usteps/`</span> | Fast — a voltage change, not a mechanical move <span class="cite">`piezo.py::Piezo.voltage_pv`</span> |
-| Range | Enormous; tens of millions of microsteps to cold landing <span class="cite">`linac_utils.py::stepper_tol_factor “50,000,000 steps for cold landing”`</span> | Narrow, centered at 25 V <span class="cite">`linac_utils.py::PIEZO_CENTER_VOLTAGE`</span> |
-| Role | Gets the cavity to resonance and holds the coarse position <span class="cite">`cavity.py::Cavity.move_to_resonance`</span> | Closed-loop frequency feedback, driven off an integrator setpoint <span class="cite">`MODECTRL/MODESTAT, piezo.py::Piezo.feedback_control_pv, piezo.py::Piezo.feedback_stat_pv; INTEG_SP, piezo.py::Piezo.feedback_setpoint_pv`</span> |
+|       | Stepper tuner                                                                                                                                                                                                                            | Piezo tuner                                                                                                                                                                                                                            |
+|-------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Speed | Slow — a mechanical move. Roughly 50 s at full range: 1,000,000 microsteps at 20,000 microsteps/s <span class="cite">`linac_utils.py::DEFAULT_STEPPER_MAX_STEPS, linac_utils.py::DEFAULT_STEPPER_SPEED; STEP:VELO EGU is usteps/`</span> | Fast — a voltage change, not a mechanical move <span class="cite">`piezo.py::Piezo.voltage_pv`</span>                                                                                                                                  |
+| Range | Enormous; tens of millions of microsteps to cold landing <span class="cite">`linac_utils.py::stepper_tol_factor “50,000,000 steps for cold landing”`</span>                                                                              | Narrow, centered at 25 V <span class="cite">`linac_utils.py::PIEZO_CENTER_VOLTAGE`</span>                                                                                                                                              |
+| Role  | Gets the cavity to resonance and holds the coarse position <span class="cite">`cavity.py::Cavity.move_to_resonance`</span>                                                                                                               | Closed-loop frequency feedback, driven off an integrator setpoint <span class="cite">`MODECTRL/MODESTAT, piezo.py::Piezo.feedback_control_pv, piezo.py::Piezo.feedback_stat_pv; INTEG_SP, piezo.py::Piezo.feedback_setpoint_pv`</span> |
 
 !!! warning "Open question: the piezo loop's timescale is not in this repo"
 
@@ -33,19 +35,23 @@ Two actuators, with a clear division of labor:
 
 This is the detail most likely to mislead someone reading the source.
 `linac_utils.py` contains `HZ_PER_STEP = 1.4` and `HL_HZ_PER_STEP = 18.3`
-<span class="cite">`linac_utils.py::HZ_PER_STEP, linac_utils.py::HL_HZ_PER_STEP`</span>, and it is natural to assume the tuning code uses them. It does not.
+<span class="cite">`linac_utils.py::HZ_PER_STEP, linac_utils.py::HL_HZ_PER_STEP`</span>, and it is natural to assume the
+tuning code uses them. It does not.
 
 The 1.4 is not arbitrary — the prototype tuner measured a slow-tuner
-sensitivity of 1.4 Hz/step over a ~450 kHz range
-<span class="cite">Pischalnikov et al., IPAC2015, [WEPTY035](https://proceedings.jacow.org/IPAC2015/papers/wepty035.pdf)</span>. The repo calls both constants "very rough values obtained empirically"
-<span class="cite">`linac_utils.py “These are very rough values obtained empirically”`</span>, which is the right warning: they are one prototype's numbers, not this
-cavity's.
+sensitivity of 1.4 Hz/step over a ~450 kHz range <span class="cite">Pischalnikov et al.,
+IPAC2015, [WEPTY035](https://proceedings.jacow.org/IPAC2015/papers/wepty035.pdf)</span>.
+`linac_utils.py` in the `sc_linac_physics` repo calls both constants "
+very rough values obtained empirically," which is the right
+warning: they are one prototype's numbers, not this cavity's.
 
-Those two are *estimates*. Nothing in `utils/sc_linac/` or `applications/`
-reads either one. Their only consumers are the two derived constants declared
-immediately below them
-<span class="cite">`linac_utils.py::ESTIMATED_MICROSTEPS_PER_HZ, linac_utils.py::ESTIMATED_MICROSTEPS_PER_HZ_HL`</span>, and the only thing that imports *those* is the simulation IOC
-<span class="cite">`utils/simulation/tuner_service.py::StepperPVGroup.hz_per_microstep`</span>. It seeds each simulated cavity's `SCALE` PV at startup, picking the 1.3 GHz
+The two constants `HZ_PER_STEP = 1.4` and `HL_HZ_PER_STEP = 18.3` are *estimates*.
+Nothing in `utils/sc_linac/` or`applications/` reads either one.
+Their only consumers are the two derived constants declared immediately below them
+<span class="cite">`linac_utils.py::ESTIMATED_MICROSTEPS_PER_HZ, linac_utils.py::ESTIMATED_MICROSTEPS_PER_HZ_HL`</span>,
+and the only thing that imports *those* is the simulation IOC
+<span class="cite">`utils/simulation/tuner_service.py::StepperPVGroup.hz_per_microstep`</span>. It seeds each simulated
+cavity's `SCALE` PV at startup, picking the 1.3 GHz
 or 3.9 GHz estimate according to the cryomodule and then jittering it uniformly
 by ±20 %.
 
@@ -66,18 +72,23 @@ Two consequences worth carrying into the rest of this page:
 - `hz_per_microstep` returns `abs()` of the PV
   <span class="cite">`stepper.py::StepperTuner.hz_per_microstep`</span>. RF
   commissioning measures a *signed* Hz/microstep
-  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase._probe_stepper_direction “signed_hz_per_microstep = -delta / probe”`</span>
+  <span class="cite">
+  `phases/frequency_tuning.py::FrequencyTuningPhase._probe_stepper_direction “signed_hz_per_microstep = -delta / probe”`</span>
   and writes it to `SCALE_CALC.B`
-  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase._apply_hz_per_step`</span>, but the loop only ever sees the magnitude. Direction of travel comes from
+  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase._apply_hz_per_step`</span>, but the loop only
+  ever sees the magnitude. Direction of travel comes from
   the sign of the detune, plus the harmonic-linearizer inversion applied inside
   `issue_move_command()`
-  <span class="cite">`stepper.py::StepperTuner.issue_move_command “num_steps *= -1”`</span>. So the probe's sign is information for the operator and the commissioning
+  <span class="cite">`stepper.py::StepperTuner.issue_move_command “num_steps *= -1”`</span>. So the probe's sign is
+  information for the operator and the commissioning
   record — not an input to the loop.
 
 ## 2. The loop
 
-Read the detune, convert Hz to microsteps, move most of the way, read again,
-repeat until you are inside tolerance. That is the entire algorithm. Everything
+Auto tune reads a cavity's detune (in units of Hz), converts the Hz to microsteps,
+moves the tuner most of the way to desired frequency, reads detune again,
+then repeats the process until cavity detune is inside tolerance.
+That is the entire algorithm. Everything
 else in `_auto_tune` is a guard against it going wrong.
 
 ```text
@@ -101,14 +112,14 @@ while |delta_hz| > tolerance:
 
 <span class="cite">`cavity.py::Cavity._auto_tune`</span>
 
-**The step budget.** Before the first move, the loop works out how many
-microsteps the whole tune should take, from the starting detune
-(`expected_steps`). It multiplies that by a slack factor from
+**The step budget.** Before the first move, the loop uses the starting detune (`expected_steps`) to calculate how many
+microsteps the whole tune should take. It multiplies that by a slack factor from
 `stepper_tol_factor` to get the budget. Each move adds to `steps_moved`. If that
 total ever exceeds the budget, the loop decides something is wrong, for example
 a bad `SCALE` or a slipping tuner, and raises `DetuneError` rather than keep
-driving the motor. The page calls this the runaway guard.
-<span class="cite">`cavity.py::Cavity._auto_tune “expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))”, cavity.py::Cavity._auto_tune “if steps_moved > expected_steps * stepper_tol_factor:”`</span>
+driving the motor. Note that `DetuneError` may also be referred to as the runaway guard throughout this page.
+<span class="cite">
+`cavity.py::Cavity._auto_tune “expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))”, cavity.py::Cavity._auto_tune “if steps_moved > expected_steps * stepper_tol_factor:”`</span>
 
 ### Drive it
 
@@ -131,7 +142,8 @@ motor <span data-fig="fig-truncated-aim">27,272</span> instead, and the
 <span data-fig="fig-dropped-microsteps">0.73</span> of a microstep it drops
 leaves <span data-fig="fig-residual">50.0040</span> Hz — still `> 50`, so a
 second move runs. At the nominal `HZ_PER_STEP / MICROSTEPS_PER_STEP` scale of
-1.4/256 (linac_utils.py::MICROSTEPS_PER_STEP, linac_utils.py::HZ_PER_STEP) the
+1.4/256 <span class="cite">`linac_utils.py::MICROSTEPS_PER_STEP`</span>,
+<span class="cite">`linac_utils.py::HZ_PER_STEP`</span> the
 same arithmetic leaves <span data-fig="fig-residual-nominal">50.0031</span> Hz.
 A well-calibrated cavity at four times tolerance therefore costs two moves,
 never one.
@@ -147,7 +159,7 @@ budget / expectedSteps = stepper_tol_factor(expectedSteps)  <- shrinks as detune
 ```
 
 The travel a given miscalibration demands does not care how far out of tune you
-started. The budget does. At the page defaults,
+started. The budget does. At the page defaults in the "Drive It" simulation in section 2,
 <span data-fig="fig-example-detune-b">200</span> Hz is
 <span data-fig="fig-example-expected">36,363</span> expected steps and buys a
 <span data-fig="fig-example-tol-factor">4.268</span>× budget, while the
@@ -162,7 +174,7 @@ From that opening detune, undershoot 0.75 survives a true/believed scale ratio
 up to about <span data-fig="fig-window-undershoot">1.94</span>× and undershoot
 1.0 only to about <span data-fig="fig-window-unity">1.27</span>×. That is what
 the 0.75 is really buying: budget headroom, not just mathematical stability.
-From the same detune a gain of 1.8 converges in principle — `|1 - 1.8| < 1` —
+From the same detune, a gain of 1.8 converges in principle — `|1 - 1.8| < 1` —
 and still trips the runaway guard at every undershoot the slider offers.
 
 Check it above: at the opening detune, calibration error 1.35 converges at
@@ -192,13 +204,13 @@ from the [Linac Hardware Model](../utils/linac_model.md#rf-modes)
 <span class="cite">`linac_utils.py::RF_MODE_CHIRP, linac_utils.py::RF_MODE_SELA`</span>.
 Only auto setup tunes in SELA.
 
-|  | Chirp mode | SELA mode |
-|---|---|---|
-| Detune PV | `CHIRP:DF` | `DFBEST` |
-| Piezo feedback | Disabled, DC setpoint 0 V | Enabled |
-| Drive level | `SAFE_PULSED_DRIVE_LEVEL` = 10 | Unchanged |
-| Settling | RF on, 5 s wait, then find a valid chirp range | RF on |
-| Used by | Tuning GUI, RF commissioning | **Auto setup only** |
+|                | Chirp mode                                     | SELA mode               |
+|----------------|------------------------------------------------|-------------------------|
+| Detune PV      | `CHIRP:DF`                                     | `DFBEST`                |
+| Piezo feedback | Disabled, DC setpoint 0 V                      | Enabled                 |
+| Drive level    | `SAFE_PULSED_DRIVE_LEVEL` = 10                 | Unchanged               |
+| Settling       | RF on, 5 s wait, then find a valid chirp range | RF on                   |
+| Used by        | Tuning GUI, RF commissioning                   | **Auto setup GUI only** |
 
 <span class="cite">`cavity.py::Cavity.setup_tuning`</span>
 
@@ -233,11 +245,13 @@ Worth knowing, because it means the chirp range at the end of a tune is not
 necessarily the one `setup_tuning` established. `_auto_tune` calls
 `check_detune()` after *every* stepper move. If the detune has gone invalid and
 the cavity is in chirp mode, that widens the sweep by 1.1× and retries
-<span class="cite">`cavity.py::Cavity._auto_tune “self.check_detune()”, cavity.py::Cavity.check_detune`</span>. In SELA there is no range to widen, so it fails hard instead.
+<span class="cite">`cavity.py::Cavity._auto_tune “self.check_detune()”, cavity.py::Cavity.check_detune`</span>. In SELA
+there is no range to widen, so it fails hard instead.
 
 Both entry points are safe. `find_chirp_range` normalizes its argument with
 `abs(int(...))` before doing anything else
-<span class="cite">`cavity.py::Cavity.find_chirp_range “chirp_range = abs(int(chirp_range))”`</span>, so the negative value that `check_detune()` passes in — `chirp_freq_start` is
+<span class="cite">`cavity.py::Cavity.find_chirp_range “chirp_range = abs(int(chirp_range))”`</span>, so the negative
+value that `check_detune()` passes in — `chirp_freq_start` is
 negative by construction
 <span class="cite">`cavity.py::Cavity.set_chirp_range`</span> — is folded to a
 magnitude first. The recursion therefore widens and caps on the same number,
@@ -249,16 +263,17 @@ by then <span class="cite">`cavity.py::Cavity.find_chirp_range`</span>.
 
 Every cavity carries a `TUNE_CONFIG` PV asserting what its frequency currently
 means
-<span class="cite">`linac_utils.py::TUNE_CONFIG_RESONANCE_VALUE, linac_utils.py::TUNE_CONFIG_COLD_VALUE, linac_utils.py::TUNE_CONFIG_PARKED_VALUE, linac_utils.py::TUNE_CONFIG_OTHER_VALUE`</span>.
+<span class="cite">
+`linac_utils.py::TUNE_CONFIG_RESONANCE_VALUE, linac_utils.py::TUNE_CONFIG_COLD_VALUE, linac_utils.py::TUNE_CONFIG_PARKED_VALUE, linac_utils.py::TUNE_CONFIG_OTHER_VALUE`</span>.
 
 ![Tune config states: _auto_tune entry sets OTHER, move_to_resonance exit sets RESONANCE; COLD and PARKED are set by other tooling](img/tune_states.svg)
 
-| State | What it asserts | Written by |
-|---|---|---|
-| `RESONANCE` (0) | On resonance, ready for beam | `move_to_resonance()` on success <span class="cite">`cavity.py::Cavity.move_to_resonance “put(linac_utils.TUNE_CONFIG_RESONANCE_VALUE)”`</span> |
-| `COLD` (1) | At the cold landing frequency | Cold-landing tooling |
-| `PARKED` (2) | Stepper parked at a defined reference | Parking tooling |
-| `OTHER` (3) | Mid-transition or unknown — do not trust the frequency | `_auto_tune()` on entry <span class="cite">`cavity.py::Cavity._auto_tune “put(linac_utils.TUNE_CONFIG_OTHER_VALUE)”`</span> |
+| State           | What it asserts                                        | Written by                                                                                                                                      |
+|-----------------|--------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| `RESONANCE` (0) | On resonance, ready for beam                           | `move_to_resonance()` on success <span class="cite">`cavity.py::Cavity.move_to_resonance “put(linac_utils.TUNE_CONFIG_RESONANCE_VALUE)”`</span> |
+| `COLD` (1)      | At the cold landing frequency                          | Cold-landing tooling                                                                                                                            |
+| `PARKED` (2)    | Stepper parked at a defined reference                  | Parking tooling                                                                                                                                 |
+| `OTHER` (3)     | Mid-transition or unknown — do not trust the frequency | `_auto_tune()` on entry <span class="cite">`cavity.py::Cavity._auto_tune “put(linac_utils.TUNE_CONFIG_OTHER_VALUE)”`</span>                     |
 
 !!! note "A cavity that dies mid-tune is left in OTHER, and that is correct"
 
@@ -269,49 +284,59 @@ means
 
 ### Two cold-landing numbers, easily conflated
 
-|  |  |
-|---|---|
-| `DF_COLD` | The reference *detune*, in Hz, at cold landing <span class="cite">`cavity.py::Cavity.df_cold_pv`</span> |
+|               |                                                                                                                                                                                                                                                                 |
+|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `DF_COLD`     | The reference *detune*, in Hz, at cold landing <span class="cite">`cavity.py::Cavity.df_cold_pv`</span>                                                                                                                                                         |
 | `NSTEPS_COLD` | The signed *step count* for the return trip, resonance back to cold landing — a distance, not a position <span class="cite">`stepper.py::StepperTuner.steps_cold_landing_pv, phases/frequency_tuning.py::FrequencyTuningPhase._write_cold_landing_steps`</span> |
 
 ## 5. The commissioning stages
 
 RF commissioning wraps the same loop in a gated, operator-supervised sequence
-<span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase.get_phase_steps`</span>. Seven steps:
+<span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase.get_phase_steps`</span>.
+The seven steps in the sequence are as follows:
 
-| # | Step | What it does to the machine |
-|---|---|---|
-| 1 | `verify_initial_state` | Confirms the stepper is idle, then prepares the cavity: SSA on, interlocks reset, `setup_tuning()` into chirp mode |
-| 2 | `record_cold_landing` | Records the cold-landing detune; the operator pushes it to `DF_COLD` from the UI |
-| 3 | `probe_stepper_direction` | Moves ±50,000 microsteps and measures the detune response |
-| 4 | `apply_hz_per_step` | Writes the confirmed Hz/full-step to `SCALE_CALC.B` |
-| 5 | `tune_to_resonance` | Delegates to `_auto_tune` with a temperature guard, then writes `NSTEPS_COLD` |
-| 6 | `measure_pi_modes` | Single-cavity FSCAN for the 8π/9 and 7π/9 parasitic modes |
-| 7 | `record_results` | Writes the phase record to the commissioning database |
+| # | Step                      | What it does to the machine                                                                                        |
+|---|---------------------------|--------------------------------------------------------------------------------------------------------------------|
+| 1 | `verify_initial_state`    | Confirms the stepper is idle, then prepares the cavity: SSA on, interlocks reset, `setup_tuning()` into chirp mode |
+| 2 | `record_cold_landing`     | Records the cold-landing detune; the operator pushes it to `DF_COLD` from the UI                                   |
+| 3 | `probe_stepper_direction` | Moves ±50,000 microsteps and measures the detune response                                                          |
+| 4 | `apply_hz_per_step`       | Writes the confirmed Hz/full-step to `SCALE_CALC.B`                                                                |
+| 5 | `tune_to_resonance`       | Delegates to `_auto_tune` with a temperature guard, then writes `NSTEPS_COLD`                                      |
+| 6 | `measure_pi_modes`        | Single-cavity FSCAN for the 8π/9 and 7π/9 parasitic modes                                                          |
+| 7 | `record_results`          | Writes the phase record to the commissioning database                                                              |
 
 ### What this path does that `move_to_resonance` does not
 
 - **Measures Hz/microstep instead of inheriting it.** A 50,000-microstep probe
   move must produce at least 100 Hz of detune change
-  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningLimits.min_probe_delta_hz, enforced phases/frequency_tuning.py::FrequencyTuningPhase._probe_stepper_direction “abs(delta) < self.limits.min_probe_delta_hz”`</span>. Below that it fails and points at the physical cause: the stepper is not
+  <span class="cite">
+  `phases/frequency_tuning.py::FrequencyTuningLimits.min_probe_delta_hz, enforced phases/frequency_tuning.py::FrequencyTuningPhase._probe_stepper_direction “abs(delta) < self.limits.min_probe_delta_hz”`</span>.
+  Below that it fails and points at the physical cause: the stepper is not
   mechanically connected to the tuner.
 - **Applies an explicit sign convention.**
   `SCALE = -Δ(CHIRP:DF) / Δ(microstep)`: a positive number of microsteps
   *decreases* `CHIRP:DF`
-  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase._probe_stepper_direction “A positive number of microsteps decreases CHIRP:DF”`</span>.
+  <span class="cite">
+  `phases/frequency_tuning.py::FrequencyTuningPhase._probe_stepper_direction “A positive number of microsteps decreases CHIRP:DF”`</span>.
 - **Waits for the operator before writing.** And it writes `SCALE_CALC.B`, not
   `SCALE` — `SCALE` is a read-only calc output the IOC recomputes from it
   (`SCALE = SCALE_CALC.B / 256`), so writing `SCALE` directly is silently
   reverted
-  <span class="cite">`stepper.py::StepperTuner.set_hz_per_microstep, phases/frequency_tuning.py::FrequencyTuningPhase._apply_hz_per_step “STEP:SCALE is a derived, read-only calc-record output”`</span>.
+  <span class="cite">
+  `stepper.py::StepperTuner.set_hz_per_microstep, phases/frequency_tuning.py::FrequencyTuningPhase._apply_hz_per_step “STEP:SCALE is a derived, read-only calc-record output”`</span>.
 - **Refuses to tune until `DF_COLD` is pushed** and matches the recorded
   cold-landing frequency within 1 Hz
-  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase._check_df_cold_recorded, tolerance at phases/frequency_tuning.py::FrequencyTuningPhase._DF_COLD_MATCH_TOLERANCE_HZ`</span>. The reason it compares against the record rather than checking validity:
+  <span class="cite">
+  `phases/frequency_tuning.py::FrequencyTuningPhase._check_df_cold_recorded, tolerance at phases/frequency_tuning.py::FrequencyTuningPhase._DF_COLD_MATCH_TOLERANCE_HZ`</span>.
+  The reason it compares against the record cold landing frequency rather than checking validity:
   `DF_COLD` defaults to a perfectly valid 0, so there is no INVALID severity to
   key off.
 - **Guards the stepper temperature** at `STEPPER_TEMP_LIMIT` = 70 *kelvin*
-  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningLimits.temp_limit_k`</span>, raisable for a re-run by an explicit operator acknowledgement
-  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase._tune_to_resonance “parameters.get("over_temp_ack_k")”`</span>. The raised ceiling is passed straight into `_auto_tune`'s
+  <span class="cite">`phases/frequency_tuning.py::FrequencyTuningLimits.temp_limit_k`</span>, raisable for a re-run by
+  an explicit operator acknowledgement
+  <span class="cite">
+  `phases/frequency_tuning.py::FrequencyTuningPhase._tune_to_resonance “parameters.get("over_temp_ack_k")”`</span>. The
+  raised ceiling is passed straight into `_auto_tune`'s
   `max_stepper_temp`, which still fails hard on a breach — the acknowledgement
   moves the line, it does not add a retry.
 
@@ -319,7 +344,9 @@ RF commissioning wraps the same loop in a gated, operator-supervised sequence
   message. The stepper sits in the cryomodule insulating vacuum: production
   testing interlocks the motor below 70 K and reports it starting near 30 K and
   rising under 4 K through a long motion
-  <span class="cite">Holzbauer et al., IPAC2018, [WEPML004](https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf)</span>. The simulation agrees, serving `STEPTEMP` at 35.0 with its alarm at 70
+  <span class="cite">Holzbauer et al.,
+  IPAC2018, [WEPML004](https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf)</span>. The simulation agrees,
+  serving `STEPTEMP` at 35.0 with its alarm at 70
   <span class="cite">`cavity_service.py::CavityPVGroup.step_temp`</span>. The
   number is right and the label is wrong.
 
@@ -338,19 +365,19 @@ RF commissioning wraps the same loop in a gated, operator-supervised sequence
 
 ## 6. How it fails
 
-The last column names the fault to pick from *Inject a fault* in the section 2
-simulator, so you can watch the loop react.
+The final (optional) dropdown menu in the section 2 “Drive It” simulator lists different faults.
+Selecting one will allow you to watch how the loop reacts.
 
-| Failure | Raises | Cause and what to do | Simulator fault |
-|---|---|---|---|
-| Step budget exceeded | `DetuneError` | `SCALE` is miscalibrated, or the tuner is slipping mechanically. The loop asked for more steps than `stepper_tol_factor` allows for the detune it started with. If the reported detune never changed across the whole run, the message says so — that distinguishes a tuner that is mechanically stuck while still reporting motion from honest over-travel. | `slip` |
-| Step estimate rounds to zero | `DetuneError` | `SCALE` is implausibly large, so `int(0.75 × delta_hz × microsteps_per_hz)` truncates to 0 while the detune is still outside tolerance. A zero step commands no motion, so nothing would ever change. The loop raises immediately and names `SCALE` and the offending `hz_per_microstep` <span class="cite">`cavity.py::Cavity._auto_tune “if est_steps == 0:”`</span>. The injection rewrites `SCALE` mid-tune, which is the real route in: the loop re-reads it every iteration, so a bad value written by `_apply_hz_per_step` takes effect on the next move. | `bad_scale` |
-| Detune invalid at entry | `DetuneError` | Cavity off, or the chirp range is wrong before the loop even starts. Checked once, before the first move <span class="cite">`cavity.py::Cavity._auto_tune “DetuneError(f"{self} detune invalid")”`</span>. |  |
-| Detune invalid mid-loop, chirp | — recovers | `check_detune()` widens the chirp range 1.1× and carries on. See section 3 on the cap. | `detune_invalid_chirp` |
-| Detune invalid mid-loop, SELA | `DetuneError` | No range to widen, so it fails hard <span class="cite">`cavity.py::Cavity.check_detune “Cannot tune in SELA with invalid detune”`</span>. Auto setup only. | `detune_invalid_sela` |
-| Stepper over temperature | `StepperTempError` | **There is no cool-down and no retry.** The loop raises and stops; a human has to let the motor cool and re-run tuning <span class="cite">`cavity.py::Cavity._auto_tune “Optional stepper motor temperature guard”`</span>. | `hot_motor` |
-| Limit switch hit | `StepperError` | Checked after every completed move — the motor stopped for a bad reason rather than because it arrived <span class="cite">`stepper.py::StepperTuner.issue_move_command “if self.on_limit_switch:”`</span>. | `limit_switch` |
-| Operator abort, stepper | `StepperAbortError` | Setting `stepper_tuner.abort_flag` stops a move *already in progress*: the polling loop in `issue_move_command` checks it every 5 s while the motor runs, writes 1 to `ABORT_REQ`, and raises. Worst case about 10 s from the request — a 5 s settle sleep before polling starts, plus the 5 s interval <span class="cite">`stepper.py::StepperTuner.check_abort, stepper.py::StepperTuner._wait_until_stopped “poll_interval=5”`</span>. |  |
-| Move never finishes | `StepperMoveTimeoutError` (a `StepperError`) | The motor-moving poll gives up after `STEPPER_MOVE_TIMEOUT_FACTOR` × steps / `VELO` + `STEPPER_MOVE_TIMEOUT_MARGIN_S` seconds <span class="cite">`stepper.py::StepperTuner._move_timeout`</span>. It writes `ABORT_REQ` first, since the motor may still be moving <span class="cite">`stepper.py::StepperTuner._wait_until_stopped “write ABORT_REQ before reporting”`</span>. |  |
-| Any failure during a move | the original error | `move()` writes `ABORT_REQ` if `MOTOR_MOVING` still reads 1 (or can't be read), then restores `NSTEPS.DRVH` and `VELO` if it changed them, then re-raises <span class="cite">`stepper.py::StepperTuner._clean_up_failed_move`</span>. |  |
-| Operator abort, cavity | `CavityAbortError` | Setting `cavity.abort_flag` is the path that also turns the RF *off* — `check_abort()` calls `turn_off()` before it raises <span class="cite">`cavity.py::Cavity.check_abort`</span>. A caller that stops the stepper without setting this leaves the cavity powered. During a move, `StepperTuner.check_abort` writes `ABORT_REQ` before calling it, so the motor stops before the RF-off wait <span class="cite">`stepper.py::StepperTuner.check_abort “if self.cavity.abort_flag:”`</span>. | `abort` |
+| Failure                        | Raises                                       | Cause and what to do                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Simulator fault        |
+|--------------------------------|----------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------|
+| Step budget exceeded           | `DetuneError`                                | `SCALE` is miscalibrated, or the tuner is slipping mechanically. The loop asked for more steps than `stepper_tol_factor` allows for the detune it started with. If the reported detune never changed across the whole run, the message says so — that distinguishes a tuner that is mechanically stuck while still reporting motion from honest over-travel.                                                                                                                                                                                                     | `slip`                 |
+| Step estimate rounds to zero   | `DetuneError`                                | `SCALE` is implausibly large, so `int(0.75 × delta_hz × microsteps_per_hz)` truncates to 0 while the detune is still outside tolerance. A zero step commands no motion, so nothing would ever change. The loop raises immediately and names `SCALE` and the offending `hz_per_microstep` <span class="cite">`cavity.py::Cavity._auto_tune “if est_steps == 0:”`</span>. The injection rewrites `SCALE` mid-tune, which is the real route in: the loop re-reads it every iteration, so a bad value written by `_apply_hz_per_step` takes effect on the next move. | `bad_scale`            |
+| Detune invalid at entry        | `DetuneError`                                | Cavity off, or the chirp range is wrong before the loop even starts. Checked once, before the first move <span class="cite">`cavity.py::Cavity._auto_tune “DetuneError(f"{self} detune invalid")”`</span>.                                                                                                                                                                                                                                                                                                                                                       |                        |
+| Detune invalid mid-loop, chirp | — recovers                                   | `check_detune()` widens the chirp range 1.1× and carries on. See section 3 on the cap.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `detune_invalid_chirp` |
+| Detune invalid mid-loop, SELA  | `DetuneError`                                | No range to widen, so it fails hard <span class="cite">`cavity.py::Cavity.check_detune “Cannot tune in SELA with invalid detune”`</span>. Auto setup only.                                                                                                                                                                                                                                                                                                                                                                                                       | `detune_invalid_sela`  |
+| Stepper over temperature       | `StepperTempError`                           | **There is no cool-down and no retry.** The loop raises and stops; a human has to let the motor cool and re-run tuning <span class="cite">`cavity.py::Cavity._auto_tune “Optional stepper motor temperature guard”`</span>.                                                                                                                                                                                                                                                                                                                                      | `hot_motor`            |
+| Limit switch hit               | `StepperError`                               | Checked after every completed move — the motor stopped for a bad reason rather than because it arrived <span class="cite">`stepper.py::StepperTuner.issue_move_command “if self.on_limit_switch:”`</span>.                                                                                                                                                                                                                                                                                                                                                       | `limit_switch`         |
+| Operator abort, stepper        | `StepperAbortError`                          | Setting `stepper_tuner.abort_flag` stops a move *already in progress*: the polling loop in `issue_move_command` checks it every 5 s while the motor runs, writes 1 to `ABORT_REQ`, and raises. Worst case about 10 s from the request — a 5 s settle sleep before polling starts, plus the 5 s interval <span class="cite">`stepper.py::StepperTuner.check_abort, stepper.py::StepperTuner._wait_until_stopped “poll_interval=5”`</span>.                                                                                                                        |                        |
+| Move never finishes            | `StepperMoveTimeoutError` (a `StepperError`) | The motor-moving poll gives up after `STEPPER_MOVE_TIMEOUT_FACTOR` × steps / `VELO` + `STEPPER_MOVE_TIMEOUT_MARGIN_S` seconds <span class="cite">`stepper.py::StepperTuner._move_timeout`</span>. It writes `ABORT_REQ` first, since the motor may still be moving <span class="cite">`stepper.py::StepperTuner._wait_until_stopped “write ABORT_REQ before reporting”`</span>.                                                                                                                                                                                  |                        |
+| Any failure during a move      | the original error                           | `move()` writes `ABORT_REQ` if `MOTOR_MOVING` still reads 1 (or can't be read), then restores `NSTEPS.DRVH` and `VELO` if it changed them, then re-raises <span class="cite">`stepper.py::StepperTuner._clean_up_failed_move`</span>.                                                                                                                                                                                                                                                                                                                            |                        |
+| Operator abort, cavity         | `CavityAbortError`                           | Setting `cavity.abort_flag` is the path that also turns the RF *off* — `check_abort()` calls `turn_off()` before it raises <span class="cite">`cavity.py::Cavity.check_abort`</span>. A caller that stops the stepper without setting this leaves the cavity powered. During a move, `StepperTuner.check_abort` writes `ABORT_REQ` before calling it, so the motor stops before the RF-off wait <span class="cite">`stepper.py::StepperTuner.check_abort “if self.cavity.abort_flag:”`</span>.                                                                   | `abort`                |
