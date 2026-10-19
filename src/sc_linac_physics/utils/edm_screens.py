@@ -116,9 +116,9 @@ SCREENS: Dict[str, EdmScreen] = {
             name="freqscan",
             description="Frequency scan for a rack",
             level=ScreenLevel.RACK,
-            # CHECK: tuning_gui.py hardcodes
-            # /usr/local/lcls/tools/edm/display/llrf/... for this screen.
-            # Is $EDM always /usr/local/lcls/tools/edm/display?
+            # tuning_gui.py hardcodes /usr/local/lcls/tools/edm/display/llrf/
+            # for this screen. The $EDM path opened the same screen on
+            # lcls-srv01 (checked 2026-10-19).
             path="$EDM/llrf/rf_srf_freq_scan_rack{rack}.edl",
         ),
         EdmScreen(
@@ -222,8 +222,8 @@ def edm_command(path: str, macros: str) -> List[str]:
     screen ends the process. The buttons instead share one ``edm -server``
     process; a standalone command has no server to share.
     """
-    # CHECK: edmbutton passes "$EDM/..." to edm unexpanded. Does edm expand
-    # $EDM itself? Expanding here works either way.
+    # edmbutton passes "$EDM/..." to edm unexpanded. Expanding it here means
+    # the command does not depend on whether edm expands it itself.
     command = ["edm", "-x", "-eolc"]
     if macros:
         command += ["-m", macros]
