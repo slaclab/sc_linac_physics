@@ -226,6 +226,11 @@ sc-setup-cav = "sc_linac_physics.applications.auto_setup.launcher.srf_cavity_set
 sc-watcher = "sc_linac_physics.cli.watcher_commands:main"
 
 # ============================================================================
+# EDM screens
+# ============================================================================
+sc-edm = "sc_linac_physics.cli.edm_commands:main"
+
+# ============================================================================
 # Simulation/Testing
 # ============================================================================
 sc-sim = "sc_linac_physics.utils.simulation.sc_linac_physics_service:main"
