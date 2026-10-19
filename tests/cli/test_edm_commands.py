@@ -27,6 +27,12 @@ def test_print_does_not_start_edm(capsys, monkeypatch):
     assert "/edm/display/llrf/rf_srf_cavity_main.edl" in out
 
 
+def test_tab_and_char_names(capsys):
+    argv = ["cavity", "02", "3", "--tab", "characterization"]
+    assert main(argv + ["--char", "frequency-tune", "--print"]) == 0
+    assert "SELTAB=1,SELCHAR=2" in capsys.readouterr().out
+
+
 def test_opens_screen(monkeypatch):
     monkeypatch.setenv("EDM", "/edm/display")
     with patch("sc_linac_physics.cli.edm_commands.open_screen") as opener:
@@ -60,6 +66,7 @@ def test_missing_edm_binary_is_an_error(monkeypatch, capsys):
         ["cavity", "02", "9"],
         ["cavity", "CM02", "1"],
         ["cavity", "02", "1", "--tab", "nope"],
+        ["cavity", "02", "1", "--char", "nope"],
         ["freqscan", "02", "C"],
     ],
 )

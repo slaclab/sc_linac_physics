@@ -4,7 +4,8 @@ Opens an SRF EDM screen from the terminal, without going through SRF Home.
 
 ```bash
 sc-edm --help
-sc-edm cavity 02 3 --tab 4
+sc-edm cavity 02 3 --tab interlocks
+sc-edm cavity 02 3 --tab characterization --char frequency-tune
 sc-edm ssa H1 2
 sc-edm freqscan 02 A
 sc-edm cryo 02
@@ -16,7 +17,7 @@ Cryomodules are written `02` or `H1`, not `CM02`. Cavities are `1`-`8` and racks
 
 | Screen | Needs | File |
 |--------|-------|------|
-| `cavity` | CM, cavity, optional `--tab` | `llrf/rf_srf_cavity_main.edl` |
+| `cavity` | CM, cavity, optional `--tab` and `--char` | `llrf/rf_srf_cavity_main.edl` |
 | `ssa` | CM, cavity | `llrf/rf_srf_ssa_cm.edl` or `_hl.edl` |
 | `intlk` | CM, cavity | `llrf/rf_srf_intlk_cryo.edl` |
 | `prl` | CM, cavity | `llrf/rf_srf_prl_cm.edl` |
@@ -38,7 +39,13 @@ Rack screens use the first cavity in the rack, the same as the tuning GUI's rack
 ## Adding a screen
 
 Add an `EdmScreen` to `SCREENS` in `utils/edm_screens.py`. The subcommand, its arguments and the
-help text come from that entry. To name cavity-screen tabs, add them to `CAVITY_TABS`.
+help text come from that entry.
+
+## Cavity screen tabs
+
+`--tab` sets `SELTAB`, the tab on the cavity main screen. `--char` sets `SELCHAR`, the sub-tab inside
+Characterization (default 3, Cavity). Both take a number or a name. The names are in `CAVITY_TABS` and
+`CHARACTERIZATION_TABS`, and `sc-edm cavity --help` lists them.
 
 ## Files
 

@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from sc_linac_physics.utils.edm_screens import (
+    CHARACTERIZATION_TABS,
     SCREENS,
     ScreenLevel,
     edm_command,
@@ -22,6 +23,13 @@ def test_cavity_screen_uses_cavity_macros_and_tab():
     cavity = MACHINE.cryomodules["02"].cavities[3]
     assert path == "$EDM/llrf/rf_srf_cavity_main.edl"
     assert macros == f"{cavity.edm_macro_string},SELTAB=4,SELCHAR=3"
+
+
+def test_cavity_screen_sets_characterization_sub_tab():
+    _, macros = screen_path_and_macros(
+        SCREENS["cavity"], cryomodule="02", cavity=3, tab=1, char=2
+    )
+    assert macros.endswith(",SELTAB=1,SELCHAR=2")
 
 
 def test_cavity_screen_defaults_to_tab_0():
@@ -83,12 +91,14 @@ def test_every_screen_resolves_for_a_cm_and_an_hl():
 
 def test_resolve_tab():
     assert resolve_tab("5") == 5
-    with patch.dict(
-        "sc_linac_physics.utils.edm_screens.CAVITY_TABS", {"tune": 4}
-    ):
-        assert resolve_tab("Tune") == 4
+    assert resolve_tab("RF-Controller") == 5
+    assert resolve_tab("hwmode") == 10
+    assert resolve_tab("frequency-tune", CHARACTERIZATION_TABS) == 2
     with pytest.raises(ValueError):
         resolve_tab("not-a-tab")
+    with pytest.raises(ValueError):
+        # Sub-tab names are not tab names.
+        resolve_tab("frequency-tune")
 
 
 def test_edm_command_expands_edm_variable(monkeypatch):

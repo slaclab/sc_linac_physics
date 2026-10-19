@@ -12,6 +12,8 @@ import sys
 from typing import List, Optional
 
 from sc_linac_physics.utils.edm_screens import (
+    CAVITY_TABS,
+    CHARACTERIZATION_TABS,
     SCREENS,
     ScreenLevel,
     edm_command,
@@ -51,7 +53,14 @@ def build_parser() -> argparse.ArgumentParser:
             )
         if screen.has_tabs:
             sub.add_argument(
-                "--tab", help="SELTAB number to open on (default 0)"
+                "--tab",
+                help="Tab to open on, by name or SELTAB number (default 0): "
+                + ", ".join(CAVITY_TABS),
+            )
+            sub.add_argument(
+                "--char",
+                help="Characterization sub-tab, by name or SELCHAR number "
+                "(default 3): " + ", ".join(CHARACTERIZATION_TABS),
             )
         sub.add_argument(
             "--print",
@@ -67,12 +76,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     screen = SCREENS[args.screen]
 
-    tab = None
-    if getattr(args, "tab", None) is not None:
-        try:
-            tab = resolve_tab(args.tab)
-        except ValueError as e:
-            parser.error(str(e))
+    tab = char = None
+    try:
+        if getattr(args, "tab", None) is not None:
+            tab = resolve_tab(args.tab, CAVITY_TABS)
+        if getattr(args, "char", None) is not None:
+            char = resolve_tab(args.char, CHARACTERIZATION_TABS)
+    except ValueError as e:
+        parser.error(str(e))
 
     path, macros = screen_path_and_macros(
         screen,
@@ -80,6 +91,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         rack=getattr(args, "rack", None),
         cavity=getattr(args, "cavity", None),
         tab=tab,
+        char=char,
     )
     command = edm_command(path, macros)
 

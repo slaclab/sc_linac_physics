@@ -55,10 +55,28 @@ class EdmScreen:
 # buttons pass. Other tabs ignore it.
 CAVITY_MAIN_SELCHAR = 3
 
-# Names for the rf_srf_cavity_main.edl tabs, so `--tab` can take a name
-# instead of a SELTAB number. Numbers always work.
+# Names for the rf_srf_cavity_main.edl tabs (SELTAB) and Characterization
+# sub-tabs (SELCHAR), so `--tab` and `--char` can take a name. Numbers always
+# work. Both count left to right from 0, as the tabs appear on the screen.
 CAVITY_TABS: Dict[str, int] = {
-    # TODO(Lisa): fill in tab names -> SELTAB numbers.
+    "overview": 0,
+    "characterization": 1,
+    "detune": 2,
+    "tuners": 3,
+    "interlocks": 4,
+    "rf-controller": 5,
+    "diag": 6,
+    "pulsed": 7,
+    "hardware": 8,
+    "calib": 9,
+    "hwmode": 10,
+}
+CHARACTERIZATION_TABS: Dict[str, int] = {
+    "piezo-pre-rf": 0,
+    "ssa": 1,
+    "frequency-tune": 2,
+    "cavity": 3,
+    "piezo-with-rf": 4,
 }
 
 SCREENS: Dict[str, EdmScreen] = {
@@ -145,17 +163,20 @@ SCREENS: Dict[str, EdmScreen] = {
 }
 
 
-def resolve_tab(tab: str) -> int:
-    """Turn a ``--tab`` value (a SELTAB number or a CAVITY_TABS name) into
-    a SELTAB number. Raises ValueError for anything else."""
+def resolve_tab(tab: str, names: Optional[Dict[str, int]] = None) -> int:
+    """Turn a ``--tab`` or ``--char`` value (a number, or a name in
+    ``names``) into a number. ``names`` defaults to CAVITY_TABS.
+    Raises ValueError for anything else."""
+    if names is None:
+        names = CAVITY_TABS
     if tab.isdigit():
         return int(tab)
     try:
-        return CAVITY_TABS[tab.lower()]
+        return names[tab.lower()]
     except KeyError:
-        known = ", ".join(sorted(CAVITY_TABS)) or "none yet"
+        known = ", ".join(names) or "none yet"
         raise ValueError(
-            f"Unknown tab {tab!r}. Use a SELTAB number or one of: {known}"
+            f"Unknown tab {tab!r}. Use a number or one of: {known}"
         ) from None
 
 
@@ -165,13 +186,16 @@ def screen_path_and_macros(
     rack: Optional[str] = None,
     cavity: Optional[int] = None,
     tab: Optional[int] = None,
+    char: Optional[int] = None,
 ) -> tuple[str, str]:
     """Return the ``.edl`` path (``$EDM`` not yet expanded) and the macro
     string for one screen.
 
     ``cryomodule`` is a name like "02" or "H1", ``rack`` is "A" or "B",
     ``cavity`` is 1-8. Which of them are needed depends on
-    ``screen.level``. Raises ValueError if one is missing.
+    ``screen.level``. Raises ValueError if one is missing. ``tab`` and
+    ``char`` are the SELTAB and SELCHAR numbers, used only by screens with
+    tabs (default 0 and CAVITY_MAIN_SELCHAR).
     """
     if screen.level is ScreenLevel.GLOBAL:
         return screen.path, screen.extra_macros
@@ -209,7 +233,8 @@ def screen_path_and_macros(
     extra = screen.extra_macros
     if screen.has_tabs:
         seltab = 0 if tab is None else tab
-        extra = f"SELTAB={seltab},SELCHAR={CAVITY_MAIN_SELCHAR}"
+        selchar = CAVITY_MAIN_SELCHAR if char is None else char
+        extra = f"SELTAB={seltab},SELCHAR={selchar}"
     if extra:
         macros = f"{macros},{extra}"
     return path, macros
