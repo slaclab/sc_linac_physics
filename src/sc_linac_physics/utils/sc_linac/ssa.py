@@ -88,9 +88,10 @@ class SSA(linac_utils.SCLinacObject):
         self.max_fwd_pwr_pv: str = self.pv_addr("CALPWR")
         self._max_fwd_pwr_pv_obj: Optional[PV] = None
 
-        # Shared between HL cavity pairs (see HL_SSA_SHARED_PVS)
-        self.type_pv: str = self.pv_addr("Type")
-        self._type_pv_obj: Optional[PV] = None
+        # SSA:PwrRating, in kW. On HL it only exists on cavities 1-4, so
+        # cavities 5-8 read their pair's (see HL_SSA_SHARED_PVS).
+        self.pwr_rating_pv: str = self.pv_addr("PwrRating")
+        self._pwr_rating_pv_obj: Optional[PV] = None
 
     def __str__(self):
         return f"{self.cavity} SSA"
@@ -121,14 +122,15 @@ class SSA(linac_utils.SCLinacObject):
         return self._status_pv_obj.get()
 
     @property
-    def rated_power_kw(self) -> Optional[float]:
-        """Rated power in kW, from the SSA:Type enum index. Reads one PV.
+    def rated_power_kw(self) -> float:
+        """Rated power in kW, read from SSA:PwrRating.
 
-        None if the index is not in linac_utils.SSA_TYPE_RATED_POWER_KW.
+        On HL the PV is shared by a cavity pair, but its 1 kW is each
+        cavity's rating, not the pair's total (confirmed on #438).
         """
-        if not self._type_pv_obj:
-            self._type_pv_obj = PV(self.type_pv)
-        return linac_utils.ssa_rated_power_kw(int(self._type_pv_obj.get()))
+        if not self._pwr_rating_pv_obj:
+            self._pwr_rating_pv_obj = PV(self.pwr_rating_pv)
+        return float(self._pwr_rating_pv_obj.get())
 
     @property
     def is_on(self) -> bool:

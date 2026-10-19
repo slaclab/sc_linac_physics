@@ -1,6 +1,7 @@
 # tests/utils/epics/test_core.py
 # Get reference to the FakeEPICS_PV that was injected
 import sys
+from unittest.mock import patch
 
 import pytest
 
@@ -194,55 +195,87 @@ class TestPVPut:
         connected_pv.put(100.0, timeout=10.0)
         # Should not raise
 
-    def test_put_retry_on_failure(self):
-        """Test put retries on failure"""
+    def _patch_put(self, monkeypatch, returns):
+        """Make FakeEPICS_PV.put return/raise items of `returns` in order.
+
+        Returns the list of values that reached the fake (one per send).
+        """
+        sent = []
+        seq = iter(returns)
+
+        def fake_put(self, value, *args, **kwargs):
+            sent.append(value)
+            item = next(seq)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        monkeypatch.setattr(FakeEPICS_PV, "put", fake_put)
+        return sent
+
+    def test_put_retries_while_not_sent(self, monkeypatch):
+        """None means pyepics sent nothing (disconnected): retry."""
         pv = PV("TEST:PV")
+        sent = self._patch_put(monkeypatch, [None, None, 1])
 
-        call_count = [0]
-        original_put = FakeEPICS_PV.put
+        pv.put(100.0)
 
-        def put_with_retries(self, *args, **kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 2:
-                return 0  # Failure
-            return 1  # Success
+        assert len(sent) == 3
 
-        FakeEPICS_PV.put = put_with_retries
-        try:
+    def test_put_gives_up_after_max_retries_not_sent(self, monkeypatch):
+        pv = PV("TEST:PV")
+        sent = self._patch_put(monkeypatch, [None, None, None])
+
+        with pytest.raises(PVPutError, match="not sent after 3 attempts"):
             pv.put(100.0)
-            assert call_count[0] == 3
-        finally:
-            FakeEPICS_PV.put = original_put
+        assert len(sent) == 3
 
-    def test_put_fails_after_max_retries(self):
-        """Test put raises error after max retries"""
+    def test_put_not_resent_when_completion_times_out(self, monkeypatch):
+        """-1 means the put went out but wait=True timed out: no re-send."""
         pv = PV("TEST:PV")
+        sent = self._patch_put(monkeypatch, [-1, 1, 1])
 
-        original_put = FakeEPICS_PV.put
-        FakeEPICS_PV.put = lambda self, *args, **kwargs: 0
+        with pytest.raises(PVPutError, match="not re-sent"):
+            pv.put(1)
+        assert sent == [1]
 
-        try:
-            with pytest.raises(PVPutError) as exc_info:
-                pv.put(100.0)
-            assert "after 3 attempts" in str(exc_info.value)
-        finally:
-            FakeEPICS_PV.put = original_put
-
-    def test_put_exception_after_max_retries(self):
-        """Test put raises PVPutError after max retries with exception"""
+    def test_put_not_resent_on_exception(self, monkeypatch):
         pv = PV("TEST:PV")
-
-        original_put = FakeEPICS_PV.put
-        FakeEPICS_PV.put = lambda self, *args, **kwargs: (_ for _ in ()).throw(
-            RuntimeError("Persistent error")
+        sent = self._patch_put(
+            monkeypatch, [RuntimeError("Persistent error"), 1, 1]
         )
 
-        try:
-            with pytest.raises(PVPutError) as exc_info:
-                pv.put(100.0)
-            assert "Persistent error" in str(exc_info.value)
-        finally:
-            FakeEPICS_PV.put = original_put
+        with pytest.raises(PVPutError, match="Persistent error") as exc_info:
+            pv.put(100.0)
+        assert len(sent) == 1
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+    def test_put_reconnect_wait_capped_at_connection_timeout(self, monkeypatch):
+        """A disconnected PV waits connection_timeout, not put_timeout."""
+        pv = PV("TEST:PV")
+        waits = []
+        monkeypatch.setattr(
+            pv, "_ensure_connected", lambda timeout=None: waits.append(timeout)
+        )
+
+        pv.put(100.0)
+
+        assert waits == [pv.config.connection_timeout]
+        assert pv.config.put_timeout > pv.config.connection_timeout
+
+    def test_put_timeout_zero_is_not_replaced_by_default(self, monkeypatch):
+        pv = PV("TEST:PV")
+        seen = {}
+
+        def fake_put(self, value, wait=True, timeout=None, **kwargs):
+            seen["timeout"] = timeout
+            return 1
+
+        monkeypatch.setattr(FakeEPICS_PV, "put", fake_put)
+
+        pv.put(1, timeout=0)
+
+        assert seen["timeout"] == 0
 
     def test_put_without_wait(self, connected_pv):
         """Test put without waiting"""
@@ -365,21 +398,21 @@ class TestPVAlarmChecking:
     def test_check_alarm_minor(self):
         """Test check_alarm detects MINOR alarm"""
         pv = PV("TEST:PV")
-        pv.severity = EPICS_MINOR_VAL
+        pv._severity = EPICS_MINOR_VAL
         severity = pv.check_alarm()
         assert severity == EPICS_MINOR_VAL
 
     def test_check_alarm_major(self):
         """Test check_alarm detects MAJOR alarm"""
         pv = PV("TEST:PV")
-        pv.severity = EPICS_MAJOR_VAL
+        pv._severity = EPICS_MAJOR_VAL
         severity = pv.check_alarm()
         assert severity == EPICS_MAJOR_VAL
 
     def test_check_alarm_raise_on_major(self):
         """Test check_alarm raises on MAJOR when requested"""
         pv = PV("TEST:PV")
-        pv.severity = EPICS_MAJOR_VAL
+        pv._severity = EPICS_MAJOR_VAL
         with pytest.raises(PVInvalidError) as exc_info:
             pv.check_alarm(raise_on_alarm=True)
         assert "MAJOR" in str(exc_info.value)
@@ -647,6 +680,64 @@ class TestSmallFixes:
         with pytest.raises(PVPutError):
             mock.put(1)
         assert mock.put(1) == 1
+
+
+class TestSeverity:
+    def test_connected_returns_pyepics_value(self):
+        pv = PV("TEST:PV")
+        pv._severity = EPICS_MINOR_VAL
+        assert pv.severity == EPICS_MINOR_VAL
+
+    def test_unknown_severity_reads_as_invalid(self):
+        from sc_linac_physics.utils.epics import EPICS_INVALID_VAL
+
+        pv = PV("TEST:PV")
+        pv._severity = None
+        assert pv.severity == EPICS_INVALID_VAL
+
+    def test_reconnect_refreshes_stale_cached_severity(self):
+        """Disconnected at the call, then reconnects: don't use the old value."""
+        pv = PV("TEST:PV")
+        pv.get()
+        pv._severity = EPICS_NO_ALARM_VAL  # cached before the disconnect
+        pv._ioc_severity = EPICS_MAJOR_VAL  # what the IOC says now
+        pv._connected = False
+
+        def reconnect(self, timeout=None):
+            self._connected = True
+            return True
+
+        with patch.object(FakeEPICS_PV, "wait_for_connection", reconnect):
+            assert pv.severity == EPICS_MAJOR_VAL
+
+    def test_unmonitored_pv_refreshes_every_read(self):
+        pv = PV("TEST:PV", auto_monitor=False)
+        pv._severity = EPICS_NO_ALARM_VAL
+        pv._ioc_severity = EPICS_MINOR_VAL
+        assert pv.severity == EPICS_MINOR_VAL
+
+    def test_monitored_connected_pv_uses_cache(self):
+        pv = PV("TEST:PV")
+        pv._severity = EPICS_MINOR_VAL
+        pv._ioc_severity = EPICS_MAJOR_VAL
+        assert pv.severity == EPICS_MINOR_VAL
+
+    def test_failed_refresh_reads_as_invalid(self):
+        from sc_linac_physics.utils.epics import EPICS_INVALID_VAL
+
+        pv = PV("TEST:PV", auto_monitor=False)
+        pv._severity = EPICS_NO_ALARM_VAL
+        with patch.object(FakeEPICS_PV, "get_timevars", return_value=None):
+            assert pv.severity == EPICS_INVALID_VAL
+
+    def test_disconnected_raises_instead_of_stale_value(self):
+        """pyepics keeps the last severity after a disconnect."""
+        pv = PV("TEST:PV")
+        pv._severity = EPICS_NO_ALARM_VAL
+        pv.get()  # connected once
+        pv._connected = False
+        with pytest.raises(PVConnectionError):
+            _ = pv.severity
 
 
 class TestMakeMockPvSpec:

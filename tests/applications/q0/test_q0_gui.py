@@ -643,6 +643,23 @@ class TestQ0GUIWorkerManagement:
         gui._clear_ramp_worker(1)
         assert gui.q0_ramp_workers[1] is None
 
+    def test_failed_shut_off_shows_popup(self, qtbot):
+        """shut_off after a measurement error must not raise out of the slot."""
+        from sc_linac_physics.applications.q0.q0_gui import Q0GUI
+
+        gui = Q0GUI()
+        qtbot.addWidget(gui)
+        cm = Mock()
+        cm.shut_off.side_effect = RuntimeError("JT AUTO")
+
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+        ) as popup:
+            gui._shut_off_after_error(cm)
+
+        cm.shut_off.assert_called_once_with()
+        assert "JT AUTO" in popup.call_args.args[1]
+
     def test_clear_q0_meas_worker(self, qtbot):
         """Test clearing Q0 measurement worker."""
         from sc_linac_physics.applications.q0.q0_gui import Q0GUI

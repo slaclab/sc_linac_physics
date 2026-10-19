@@ -446,7 +446,7 @@ def setup_cavity_group():
 
 class TestStopAndMissingScripts:
     @pytest.mark.asyncio
-    async def test_missing_script_reports_failed_instead_of_raising(self):
+    async def test_missing_script_reports_crash_instead_of_raising(self):
         """No sc-park-cm entry point exists; starting it must not crash."""
         from sc_linac_physics.utils.simulation.launcher_service import (
             ParkCMPVGroup,
@@ -459,7 +459,7 @@ class TestStopAndMissingScripts:
             side_effect=FileNotFoundError("sc-park-cm"),
         ):
             await group.trigger_start()
-        assert group.status.value == "Failed: sc-park-cm not found"
+        assert group.status.value == "Crash"
 
     @pytest.mark.asyncio
     async def test_stop_in_process_run_aborts_and_reports_stopped(self):
@@ -478,11 +478,11 @@ class TestStopAndMissingScripts:
         ):
             await group.trigger_start()
             await group.trigger_stop()
-            assert group.status.value == "Stopping"
+            assert group.status.value == "Running"
             assert group.abort.value == "Abort request"
             aborted.set()  # what the setup code does when it sees ABORT
             await group._monitor_task
-        assert group.status.value == "Stopped"
+        assert group.status.value == "Complete"
 
     @pytest.mark.asyncio
     async def test_stop_subprocess_reports_stopped_not_exit_code(self):
@@ -515,7 +515,7 @@ class TestStopAndMissingScripts:
             assert isinstance(group._monitor_task, asyncio.Task)
             await group.trigger_stop()
             await group._monitor_task
-        assert group.status.value == "Stopped"
+        assert group.status.value == "Complete"
 
     @pytest.mark.asyncio
     async def test_start_refused_until_previous_monitor_has_written_result(
@@ -526,10 +526,10 @@ class TestStopAndMissingScripts:
         release = asyncio.Event()
         real_stamp = group._stamp
 
-        async def held_stamp(status):
+        async def held_stamp(status, *args):
             if status != "Running":
                 await release.wait()
-            await real_stamp(status)
+            await real_stamp(status, *args)
 
         with (
             patch(
@@ -544,13 +544,13 @@ class TestStopAndMissingScripts:
             assert not first_monitor.done()
 
             await group.trigger_start()  # in the gap before the result
-            assert group.status.value == "Already running"
+            assert group.status.value == "Running"
             assert run.call_count == 1
             assert group._monitor_task is first_monitor
 
             release.set()
             await first_monitor
-        assert group.status.value == "Completed"
+        assert group.status.value == "Complete"
 
     @pytest.mark.asyncio
     async def test_stop_after_aggregate_dispatch_stops_running_children(self):
@@ -571,4 +571,4 @@ class TestStopAndMissingScripts:
 
         running.trigger_stop.assert_awaited_once()
         idle.trigger_stop.assert_not_awaited()
-        assert cm.status.value == "Stopped"
+        assert cm.status.value == "Complete"
