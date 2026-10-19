@@ -118,7 +118,7 @@ It multiplies that by a slack factor from
 `stepper_tol_factor` to get the budget. Each move adds to `steps_moved`. If that
 total ever exceeds the budget, the loop decides something is wrong, for example
 a bad `SCALE` or a slipping tuner, and raises `DetuneError` rather than keep
-driving the motor. Note that `DetuneError` may also be referred to as the runaway guard throughout this page.
+driving the motor. This step-budget check is called the runaway guard throughout this page.
 <span class="cite">
 `cavity.py::Cavity._auto_tune “expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))”, cavity.py::Cavity._auto_tune “if steps_moved > expected_steps * stepper_tol_factor:”`</span>
 
