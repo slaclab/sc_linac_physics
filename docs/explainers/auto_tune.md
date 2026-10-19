@@ -205,13 +205,13 @@ from the [Linac Hardware Model](../utils/linac_model.md#rf-modes)
 <span class="cite">`linac_utils.py::RF_MODE_CHIRP, linac_utils.py::RF_MODE_SELA`</span>.
 Only auto setup tunes in SELA.
 
-|                | Chirp mode                                     | SELA mode               |
-|----------------|------------------------------------------------|-------------------------|
-| Detune PV      | `CHIRP:DF`                                     | `DFBEST`                |
-| Piezo feedback | Disabled, DC setpoint 0 V                      | Enabled                 |
-| Drive level    | `SAFE_PULSED_DRIVE_LEVEL` = 10                 | Unchanged               |
-| Settling       | RF on, 5 s wait, then find a valid chirp range | RF on                   |
-| Used by        | Tuning GUI, RF commissioning                   | **Auto setup GUI only** |
+|                | Chirp mode                                     | SELA mode           |
+|----------------|------------------------------------------------|---------------------|
+| Detune PV      | `CHIRP:DF`                                     | `DFBEST`            |
+| Piezo feedback | Disabled, DC setpoint 0 V                      | Enabled             |
+| Drive level    | `SAFE_PULSED_DRIVE_LEVEL` = 10                 | Unchanged           |
+| Settling       | RF on, 5 s wait, then find a valid chirp range | RF on               |
+| Used by        | Tuning GUI, RF commissioning                   | **Auto setup only** |
 
 <span class="cite">`cavity.py::Cavity.setup_tuning`</span>
 
