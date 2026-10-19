@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v9.49.2 (2026-10-19)
+
+### Bug Fixes
+
+- **rf-commissioning**: Read RFTESTSTAT, the with-RF result PV the IOC serves
+  ([#407](https://github.com/slaclab/sc_linac_physics/pull/407),
+  [`7d7f095`](https://github.com/slaclab/sc_linac_physics/commit/7d7f09521c135a6e61d5efe931c109d5cdb76dc6))
+
+- **ssa**: Check abort and time out while waiting on CALSTS
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+- **ssa**: Check abort on the completion poll and log the read CALSTS value
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+- **ssa**: Honor an abort that lands as SSA calibration finishes
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+
 ## v9.49.1 (2026-10-19)
 
 ### Bug Fixes
