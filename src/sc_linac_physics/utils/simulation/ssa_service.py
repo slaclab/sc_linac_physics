@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from asyncio import sleep
 from random import uniform, random
 
@@ -9,6 +10,7 @@ from caproto.server import (
     PvpropertyEnum,
     PvpropertyFloat,
     PvpropertyInteger,
+    PvpropertyString,
     pvproperty,
 )
 
@@ -84,6 +86,11 @@ class SSAPVGroup(PVGroup):
         dtype=ChannelType.ENUM,
         name="CALSTAT",
         enum_strings=("Good", "Warning", "Error"),
+    )
+    cal_time: PvpropertyString = pvproperty(
+        name="CALTS",
+        dtype=ChannelType.STRING,
+        value=datetime.now().strftime("%Y-%m-%d-%H:%M:%S"),
     )
     slope_old: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE", dtype=ChannelType.FLOAT
@@ -190,6 +197,11 @@ class SSAPVGroup(PVGroup):
                 )
                 return 0
             self.log.info(f"{self.prefix} SSA calibration started")
+            # Stamped at the start, as cavity_service stamps PROBECALTS.
+            # CHECK: does the real IOC stamp CALTS at start or at finish?
+            await self.cal_time.write(
+                datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+            )
             await self.cal_status.write("Running")
             self._calibration_task = asyncio.get_running_loop().create_task(
                 self._finish_calibration()

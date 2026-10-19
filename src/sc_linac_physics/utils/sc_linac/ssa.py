@@ -70,6 +70,9 @@ class SSA(linac_utils.SCLinacObject):
         self.cal_result_status_pv: str = self.pv_addr("CALSTAT")
         self._cal_result_status_pv_obj: Optional[PV] = None
 
+        self.calibration_timestamp_pv: str = self.pv_addr("CALTS")
+        self._calibration_timestamp_pv_obj: Optional[PV] = None
+
         self.current_slope_pv: str = self.pv_addr("SLOPE")
         self._current_slope_pv_obj: Optional[PV] = None
         self.measured_slope_pv: str = self.pv_addr("SLOPE_NEW")
@@ -445,6 +448,25 @@ class SSA(linac_utils.SCLinacObject):
         return (
             self.cal_result_status_pv_obj.get()
             == linac_utils.SSA_RESULT_GOOD_STATUS_VALUE
+        )
+
+    @property
+    def calibration_timestamp(self) -> datetime:
+        """CALTS, the time of the last SSA calibration.
+
+        A read-only string such as "2025-12-03-08:17:16", the same format as
+        the cavity's PROBECALTS (checked on ACCL:L1B:0210:SSA:CALTS,
+        2026-10-19). It is not in the archiver.
+
+        CHECK: does the IOC stamp CALTS when a calibration starts or when it
+        finishes, and does it update on a run whose CALSTAT is not Good?
+        """
+        if not self._calibration_timestamp_pv_obj:
+            self._calibration_timestamp_pv_obj = PV(
+                self.calibration_timestamp_pv
+            )
+        return datetime.strptime(
+            self._calibration_timestamp_pv_obj.get(), "%Y-%m-%d-%H:%M:%S"
         )
 
     def run_calibration(self, save_slope: bool = False):
