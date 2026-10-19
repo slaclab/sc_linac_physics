@@ -26,6 +26,9 @@ SSA_CALIBRATION_TIMEOUT_S. calibrate_ssa reports that, or any other
 calibration error, as FAILED.
 """
 
+from dataclasses import dataclass
+from datetime import datetime
+
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     SSACharacterization,
 )
@@ -39,6 +42,78 @@ from sc_linac_physics.utils.sc_linac import linac_utils
 # The retry count auto setup passes to SSA.calibrate(): with attempt=2 a failed
 # calibration is retried once, at drive max - 0.01, before it raises.
 SSA_CAL_START_ATTEMPT = 2
+
+# A phase keeps an SSA calibration or characterization younger than this
+# instead of running it again. One hour is from Sebastian Aderhold's review of
+# #408.
+RECENT_RESULT_SECONDS = 3600.0
+
+
+@dataclass(frozen=True)
+class LastSetupResult:
+    """When a setup step last ran on the cavity, and whether it came out good.
+
+    Read from the IOC, so it counts runs made outside this tool (auto setup,
+    the LLRF screens) as well as the commissioning phases.
+    """
+
+    name: str
+    timestamp: datetime
+    good: bool
+
+    def age_hours(self, now: datetime | None = None) -> float:
+        now = now or datetime.now()
+        return (now - self.timestamp).total_seconds() / 3600
+
+    def is_recent(
+        self,
+        max_age_seconds: float = RECENT_RESULT_SECONDS,
+        now: datetime | None = None,
+    ) -> bool:
+        """Good, and younger than max_age_seconds."""
+        return self.good and self.age_hours(now) * 3600 < max_age_seconds
+
+    def describe(self, now: datetime | None = None) -> str:
+        """E.g. "SSA calibration from 2026-10-19 08:17, 3.2 h old".
+
+        Past 48 h the age is given in days.
+        """
+        hours = self.age_hours(now)
+        age = f"{hours / 24:.0f} days" if hours >= 48 else f"{hours:.1f} h"
+        text = f"{self.name} from {self.timestamp:%Y-%m-%d %H:%M}, {age} old"
+        if not self.good:
+            text += ", result not good"
+        return text
+
+
+def last_ssa_calibration(cavity) -> LastSetupResult:
+    """CALTS for the time, CALSTAT Good for the result. Reads only.
+
+    CHECK: does the IOC update CALTS on a calibration whose CALSTAT is not
+    Good? If it does, a recent CALTS alone does not mean a usable slope, which
+    is why good also reads CALSTAT.
+    """
+    ssa = cavity.ssa
+    return LastSetupResult(
+        name="SSA calibration",
+        timestamp=ssa.calibration_timestamp,
+        good=ssa.calibration_result_good,
+    )
+
+
+def last_characterization(cavity) -> LastSetupResult:
+    """PROBECALTS for the time, PROBECALSTS Complete for the result.
+
+    Reads only. Complete does not mean in tolerance: finish_characterization()
+    refuses to push an out-of-tolerance loaded Q or scale factor, so a
+    Complete result may never have been pushed.
+    """
+    return LastSetupResult(
+        name="Characterization",
+        timestamp=cavity.characterization_timestamp,
+        good=cavity.characterization_status
+        == linac_utils.CALIBRATION_COMPLETE_VALUE,
+    )
 
 
 def _aborted(context: PhaseContext, what: str) -> PhaseStepResult | None:

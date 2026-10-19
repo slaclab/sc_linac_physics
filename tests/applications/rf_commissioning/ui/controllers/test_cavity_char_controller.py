@@ -1,10 +1,14 @@
 """Tests for the Cavity Characterization controller."""
 
 import pathlib
+from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
 
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseResult,
 )
@@ -27,6 +31,42 @@ class RunInline:
 
     def start(self):
         self._target()
+
+
+CONTROLLER_MODULE = (
+    "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+    "cavity_char_controller"
+)
+
+
+def _last_ssa_cal(hours_old=0.5, good=True):
+    return cavity_setup.LastSetupResult(
+        name="SSA calibration",
+        timestamp=datetime.now() - timedelta(hours=hours_old),
+        good=good,
+    )
+
+
+@pytest.fixture
+def ssa_cal_read_inline(monkeypatch):
+    """Start Test reads CALTS on a thread; run that read inline.
+
+    Returns a holder whose "last" the test may replace before starting.
+    The default is a good calibration under an hour old, which is kept
+    without asking.
+    """
+    holder = {"last": _last_ssa_cal()}
+
+    def read(cavity):
+        if isinstance(holder["last"], Exception):
+            raise holder["last"]
+        return holder["last"]
+
+    monkeypatch.setattr(f"{CONTROLLER_MODULE}.threading.Thread", RunInline)
+    monkeypatch.setattr(
+        f"{CONTROLLER_MODULE}.cavity_setup.last_ssa_calibration", read
+    )
+    return holder
 
 
 @pytest.fixture
@@ -106,7 +146,9 @@ def test_abort_with_no_run_in_progress_does_not_touch_a_context(
     controller.on_abort()
 
 
-def test_a_stale_abort_flag_is_cleared_before_a_run(view, monkeypatch):
+def test_a_stale_abort_flag_is_cleared_before_a_run(
+    view, monkeypatch, ssa_cal_read_inline
+):
     """An Abort pressed after the last wait leaves abort_flag set.
 
     Left alone, the next run's wait would read it, turn RF off and abort.
@@ -338,7 +380,9 @@ def test_run_stops_with_no_cavity_selected(view, monkeypatch):
     assert called == []
 
 
-def test_run_reaches_execution_when_every_guard_passes(view, monkeypatch):
+def test_run_reaches_execution_when_every_guard_passes(
+    view, monkeypatch, ssa_cal_read_inline
+):
     view.get_current_operator.return_value = "lisa"
     c = CavityCharController(view, _session_ready())
     c._cavity = Mock()
@@ -667,7 +711,99 @@ def _ready_controller(view, monkeypatch):
     return c
 
 
-def test_running_disables_run_and_enables_abort(view, monkeypatch):
+def test_a_recent_good_calibration_is_kept_without_asking(
+    view, monkeypatch, ssa_cal_read_inline
+):
+    c = _ready_controller(view, monkeypatch)
+    c.on_run_characterization()
+    view.ask_rerun_ssa_calibration.assert_not_called()
+    assert c._ssa_cal_decision == (ssa_cal_read_inline["last"], None)
+
+
+@pytest.mark.parametrize(
+    "choice, kept, skipped_by",
+    [("rerun", False, None), ("skip", True, "lisa")],
+)
+def test_an_old_calibration_asks_rerun_or_skip(
+    view, monkeypatch, ssa_cal_read_inline, choice, kept, skipped_by
+):
+    ssa_cal_read_inline["last"] = _last_ssa_cal(hours_old=5)
+    view.ask_rerun_ssa_calibration.return_value = choice
+    c = _ready_controller(view, monkeypatch)
+    started = []
+    monkeypatch.setattr(c, "_execute_phase_async", lambda: started.append(1))
+
+    c.on_run_characterization()
+
+    view.ask_rerun_ssa_calibration.assert_called_once()
+    expected = ssa_cal_read_inline["last"] if kept else None
+    assert c._ssa_cal_decision == (expected, skipped_by)
+    assert started == [1]
+
+
+def test_a_recent_bad_calibration_asks_too(
+    view, monkeypatch, ssa_cal_read_inline
+):
+    ssa_cal_read_inline["last"] = _last_ssa_cal(hours_old=0.5, good=False)
+    view.ask_rerun_ssa_calibration.return_value = "rerun"
+    c = _ready_controller(view, monkeypatch)
+    c.on_run_characterization()
+    view.ask_rerun_ssa_calibration.assert_called_once()
+
+
+def test_cancel_starts_nothing_and_unlocks_the_toolbar(
+    view, monkeypatch, ssa_cal_read_inline
+):
+    ssa_cal_read_inline["last"] = _last_ssa_cal(hours_old=5)
+    view.ask_rerun_ssa_calibration.return_value = "cancel"
+    c = _ready_controller(view, monkeypatch)
+    started = []
+    monkeypatch.setattr(c, "_execute_phase_async", lambda: started.append(1))
+
+    c.on_run_characterization()
+
+    assert started == []
+    assert c._running is False
+    view.run_button.setEnabled.assert_called_with(True)
+
+
+def test_an_unreadable_calts_calibrates_without_asking(
+    view, monkeypatch, ssa_cal_read_inline
+):
+    ssa_cal_read_inline["last"] = RuntimeError("CALTS disconnected")
+    c = _ready_controller(view, monkeypatch)
+    c.on_run_characterization()
+    view.ask_rerun_ssa_calibration.assert_not_called()
+    assert c._ssa_cal_decision == (None, None)
+
+
+def test_a_failed_prepare_unlocks_the_toolbar(
+    view, monkeypatch, ssa_cal_read_inline
+):
+    c = _ready_controller(view, monkeypatch)
+    monkeypatch.setattr(c, "_prepare_phase_context", lambda *a: False)
+    c.on_run_characterization()
+    assert c._running is False
+
+
+def test_the_decision_reaches_the_phase_context(view, ssa_cal_read_inline):
+    ssa_cal_read_inline["last"] = _last_ssa_cal(hours_old=5)
+    view.ask_rerun_ssa_calibration.return_value = "skip"
+    view.get_current_operator.return_value = "lisa"
+    c = CavityCharController(view, _session_ready())
+    c._cavity = Mock()
+    c._execute_phase_async = lambda: None
+
+    c.on_run_characterization()
+
+    params = c.context.parameters
+    assert params["kept_ssa_calibration"] is ssa_cal_read_inline["last"]
+    assert params["ssa_calibration_skipped_by"] == "lisa"
+
+
+def test_running_disables_run_and_enables_abort(
+    view, monkeypatch, ssa_cal_read_inline
+):
     """Otherwise Start Test can be clicked again mid-run.
 
     Each click starts another daemon thread driving the same cavity, so two
@@ -679,7 +815,9 @@ def test_running_disables_run_and_enables_abort(view, monkeypatch):
     view.abort_button.setEnabled.assert_called_with(True)
 
 
-def test_a_second_click_while_running_is_ignored(view, monkeypatch):
+def test_a_second_click_while_running_is_ignored(
+    view, monkeypatch, ssa_cal_read_inline
+):
     c = _ready_controller(view, monkeypatch)
     started = []
     monkeypatch.setattr(c, "_execute_phase_async", lambda: started.append(1))

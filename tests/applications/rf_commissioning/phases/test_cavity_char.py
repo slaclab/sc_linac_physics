@@ -19,6 +19,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     PhaseStatus,
     SSACharacterization,
 )
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.cavity_char import (
     CavityCharLimits,
     CavityCharPhase,
@@ -490,6 +493,70 @@ def test_calibration_without_ssa_char_uses_the_saved_drive_max(
     phase.execute_step("calibrate_ssa")
 
     mock_cavity.ssa.calibrate.assert_called_once_with(0.8, attempt=2)
+
+
+def _kept(hours_old, good=True):
+    return cavity_setup.LastSetupResult(
+        name="SSA calibration",
+        timestamp=datetime.now() - timedelta(hours=hours_old),
+        good=good,
+    )
+
+
+def test_a_recent_calibration_is_kept_with_a_note(phase, mock_cavity, record):
+    phase.context.parameters["kept_ssa_calibration"] = _kept(0.5)
+
+    result = phase.execute_step("calibrate_ssa")
+
+    assert result.result == PhaseResult.SUCCESS
+    mock_cavity.ssa.calibrate.assert_not_called()
+    mock_cavity.turn_off.assert_not_called()
+    assert record.cavity_char.notes.startswith("Kept the SSA calibration")
+    assert result.data["skipped_by"] is None
+
+
+def test_a_skipped_old_calibration_records_who_skipped_it(
+    phase, mock_cavity, record
+):
+    record.ssa_char = SSACharacterization(max_drive=0.65)
+    phase.context.parameters["kept_ssa_calibration"] = _kept(5)
+    phase.context.parameters["ssa_calibration_skipped_by"] = "lisa"
+
+    result = phase.execute_step("calibrate_ssa")
+
+    mock_cavity.ssa.calibrate.assert_not_called()
+    assert record.cavity_char.notes == (
+        "SSA calibration skipped by lisa: " + _kept(5).describe()
+    )
+    assert result.data["skipped_by"] == "lisa"
+    # The SSA char result is left as it was, not replaced.
+    assert record.ssa_char.max_drive == 0.65
+
+
+def test_a_skip_appends_to_existing_notes(phase, record):
+    record.cavity_char = CavityCharacterization(notes="operator note")
+    phase.context.parameters["kept_ssa_calibration"] = _kept(0.5)
+    phase.execute_step("calibrate_ssa")
+    assert record.cavity_char.notes.startswith("operator note\nKept")
+
+
+def test_a_dry_run_with_a_kept_calibration_leaves_the_record(
+    mock_cavity, record
+):
+    context = PhaseContext(
+        record=record,
+        operator="op",
+        dry_run=True,
+        parameters={
+            "cavity": mock_cavity,
+            "kept_ssa_calibration": _kept(0.5),
+        },
+    )
+    p = CavityCharPhase(context)
+    p.validate_prerequisites()
+    result = p.execute_step("calibrate_ssa")
+    assert result.data == {"dry_run": True}
+    assert record.cavity_char is None
 
 
 def test_tuning_passes_the_stepper_temp_limit(mock_cavity, record):

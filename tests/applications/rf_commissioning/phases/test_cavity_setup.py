@@ -1,5 +1,6 @@
 """Tests for the setup steps phases share with auto setup."""
 
+from datetime import datetime, timedelta
 from unittest.mock import Mock, call
 
 import pytest
@@ -245,3 +246,52 @@ def test_dry_run_touches_nothing(cavity, record):
     cavity.move_to_resonance.assert_not_called()
     assert not isinstance(cavity.rack.rfs1.dac_amp, int)
     assert record.ssa_char is None
+
+
+# ---------------------------------------------------------------------------
+# Last setup results
+# ---------------------------------------------------------------------------
+
+NOW = datetime(2026, 10, 19, 12, 0, 0)
+
+
+def _result(hours_old, good=True):
+    return cavity_setup.LastSetupResult(
+        name="SSA calibration",
+        timestamp=NOW - timedelta(hours=hours_old),
+        good=good,
+    )
+
+
+@pytest.mark.parametrize(
+    "hours_old, good, recent",
+    [(0.5, True, True), (1.5, True, False), (0.5, False, False)],
+)
+def test_is_recent_needs_good_and_under_an_hour(hours_old, good, recent):
+    assert _result(hours_old, good).is_recent(now=NOW) is recent
+
+
+def test_describe_gives_hours_then_days():
+    assert _result(3.2).describe(now=NOW) == (
+        "SSA calibration from 2026-10-19 08:48, 3.2 h old"
+    )
+    assert _result(72).describe(now=NOW).endswith("3 days old")
+    assert (
+        _result(0.5, good=False).describe(now=NOW).endswith(", result not good")
+    )
+
+
+def test_last_ssa_calibration_reads_calts_and_calstat():
+    cavity = Mock()
+    cavity.ssa.calibration_timestamp = NOW
+    cavity.ssa.calibration_result_good = False
+    last = cavity_setup.last_ssa_calibration(cavity)
+    assert (last.timestamp, last.good) == (NOW, False)
+
+
+@pytest.mark.parametrize("status, good", [(1, True), (0, False), (2, False)])
+def test_last_characterization_is_good_only_when_complete(status, good):
+    cavity = Mock()
+    cavity.characterization_timestamp = NOW
+    cavity.characterization_status = status
+    assert cavity_setup.last_characterization(cavity).good is good

@@ -36,7 +36,10 @@ Sequence:
                                calibrating
   2. calibrate_ssa           – cavity_setup.calibrate_ssa: RF off, rack DAC
                                amplitudes 0, SSA.calibrate(), slope pushed;
-                               replaces record.ssa_char
+                               replaces record.ssa_char. Skipped, with a note
+                               on the record, when the controller passes
+                               kept_ssa_calibration (see
+                               _keep_ssa_calibration)
   3. tune_to_resonance       – cavity_setup.tune_to_resonance:
                                Cavity.move_to_resonance() with the stepper
                                temperature guard; leaves RF on in chirp mode
@@ -235,7 +238,37 @@ class CavityCharPhase(PhaseBase):
         """
         previous = getattr(self.context.record, "ssa_char", None)
         drive_max = previous.max_drive if previous else None
+        kept = self.context.parameters.get("kept_ssa_calibration")
+        if kept is not None and not self.context.dry_run:
+            return self._keep_ssa_calibration(kept)
         return cavity_setup.calibrate_ssa(self.cavity, self.context, drive_max)
+
+    def _keep_ssa_calibration(
+        self, kept: cavity_setup.LastSetupResult
+    ) -> PhaseStepResult:
+        """Skip the calibration and keep the slope already on the SSA.
+
+        The controller sets parameters["kept_ssa_calibration"] in two cases.
+        A good one under an hour old is kept without asking. An older or bad
+        one is kept only if the operator chose Skip, and then
+        parameters["ssa_calibration_skipped_by"] holds their name. Either way
+        a line goes onto record.cavity_char.notes. record.ssa_char is left
+        alone. Writes no PVs.
+        """
+        skipped_by = self.context.parameters.get("ssa_calibration_skipped_by")
+        if skipped_by:
+            note = f"SSA calibration skipped by {skipped_by}: {kept.describe()}"
+        else:
+            note = f"Kept the {kept.describe()}"
+        self._append_note(note)
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=note,
+            data={
+                "ssa_calibration_kept": kept.timestamp.isoformat(),
+                "skipped_by": skipped_by,
+            },
+        )
 
     def _tune_to_resonance(self) -> PhaseStepResult:
         return cavity_setup.tune_to_resonance(
@@ -675,6 +708,15 @@ class CavityCharPhase(PhaseBase):
         for name, value in fields.items():
             if value is not None:
                 setattr(data, name, value)
+        record.cavity_char = data
+
+    def _append_note(self, note: str) -> None:
+        """Append a line to record.cavity_char.notes; keeps what is there."""
+        record = getattr(self.context, "record", None)
+        if record is None:
+            return
+        data = record.cavity_char or CavityCharacterization()
+        data.notes = f"{data.notes}\n{note}" if data.notes else note
         record.cavity_char = data
 
     def finalize_phase(self) -> None:
