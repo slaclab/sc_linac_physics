@@ -1,6 +1,8 @@
 """``sc-edm``: open an EDM screen from the command line.
 
-Usage examples are in ``docs/displays/edm_screens.md``. Each screen is a subcommand, built from ``utils/edm_screens.SCREENS``, so
+Usage examples are in ``docs/displays/edm_screens.md``.
+
+Each screen is a subcommand, built from ``utils/edm_screens.SCREENS``, so
 ``sc-edm --help`` lists every screen.
 """
 
