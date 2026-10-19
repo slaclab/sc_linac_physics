@@ -365,7 +365,7 @@ The seven steps in the sequence are as follows:
 
 ## 6. How it fails
 
-The last column of the table below names the fault to pick from the *Inject a fault* dropdown in
+The "Simulator fault" column of the table below names the fault to pick from the *Inject a fault* dropdown in
 the section 2 "Drive it" simulator, so you can watch how the loop reacts.
 
 | Failure                        | Raises                                       | Cause and what to do                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Simulator fault        |
