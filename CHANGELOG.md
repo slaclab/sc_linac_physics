@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.49.0 (2026-10-19)
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+- **sc-linac**: HL PwrRating is 1 kW per cavity, not per pair
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+### Features
+
+- **sc-linac**: Read SSA rated power from SSA:PwrRating
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+
 ## v9.48.0 (2026-10-17)
 
 ### Bug Fixes
