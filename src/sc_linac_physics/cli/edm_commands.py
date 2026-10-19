@@ -1,14 +1,6 @@
 """``sc-edm``: open an EDM screen from the command line.
 
-Examples::
-
-    sc-edm cavity 02 3 --tab 4
-    sc-edm ssa H1 2
-    sc-edm freqscan 02 A
-    sc-edm cryo 02
-    sc-edm cavity 02 3 --print
-
-Each screen is a subcommand, built from ``utils/edm_screens.SCREENS``, so
+Usage examples are in ``docs/displays/edm_screens.md``. Each screen is a subcommand, built from ``utils/edm_screens.SCREENS``, so
 ``sc-edm --help`` lists every screen.
 """
 
