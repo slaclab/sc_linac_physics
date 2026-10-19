@@ -112,8 +112,9 @@ while |delta_hz| > tolerance:
 
 <span class="cite">`cavity.py::Cavity._auto_tune`</span>
 
-**The step budget.** Before the first move, the loop uses the starting detune (`expected_steps`) to calculate how many
-microsteps the whole tune should take. It multiplies that by a slack factor from
+**The step budget.** Before the first move, the loop converts the starting detune
+(`delta_hz`) into an expected microstep count (`expected_steps`).
+It multiplies that by a slack factor from
 `stepper_tol_factor` to get the budget. Each move adds to `steps_moved`. If that
 total ever exceeds the budget, the loop decides something is wrong, for example
 a bad `SCALE` or a slipping tuner, and raises `DetuneError` rather than keep
