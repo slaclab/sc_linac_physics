@@ -853,7 +853,7 @@ def test_check_abort(cavity):
         assert False
 
 
-def test_setup_rf(cavity):
+def _mock_setup_rf_steps(cavity):
     cavity.turn_off = MagicMock()
     cavity.ssa.calibrate = MagicMock()
     cavity._ades_max_pv_obj = make_mock_pv(get_val=21)
@@ -869,8 +869,21 @@ def test_setup_rf(cavity):
     cavity.set_sela_mode = MagicMock()
     cavity.walk_amp = MagicMock()
 
+
+def test_setup_rf(cavity):
+    _mock_setup_rf_steps(cavity)
     cavity.setup_rf(5)
     cavity.ssa.calibrate.assert_called()
+    cavity.characterize.assert_called_once()
+
+
+def test_setup_rf_can_skip_calibration_and_characterization(cavity):
+    _mock_setup_rf_steps(cavity)
+    cavity.setup_rf(5, calibrate_ssa=False, characterize=False)
+    cavity.ssa.calibrate.assert_not_called()
+    cavity.characterize.assert_not_called()
+    cavity.move_to_resonance.assert_called_once()
+    cavity.calculate_probe_q.assert_called_once()
 
 
 def test_reset_data_decimation(cavity):

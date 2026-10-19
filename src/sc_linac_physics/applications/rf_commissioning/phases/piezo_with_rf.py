@@ -22,6 +22,7 @@ ADES, piezo enabled in manual.
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
@@ -56,6 +57,10 @@ class PiezoWithRFLimits:
     # guess; the old worker waited with no timeout.
     test_timeout_seconds: float = 300.0
     poll_interval: float = 1.0
+    # setup_rf skips the SSA calibration or the characterization when its
+    # last good result is younger than this. One hour is from Sebastian
+    # Aderhold's review of #408.
+    recent_result_seconds: float = 3600.0
 
 
 class PiezoWithRFPhase(PhaseBase):
@@ -179,11 +184,11 @@ class PiezoWithRFPhase(PhaseBase):
         In order, it:
           - caps the amplitude at ADES_MAX
           - turn_off()
-          - ssa.calibrate(ssa.drive_max)
-          - move_to_resonance()
-          - characterize(): finish_characterization() pushes loaded Q and
-            scale factor, and raises if either is out of tolerance; it also
-            sets the piezo feedback setpoint to 0
+          - ssa.calibrate(ssa.drive_max), unless skipped (below)
+          - move_to_resonance(), always
+          - characterize(), unless skipped: finish_characterization() pushes
+            loaded Q and scale factor, and raises if either is out of
+            tolerance; it also sets the piezo feedback setpoint to 0
           - calculate_probe_q()
           - reset_data_decimation(): both decimations to 255
           - ADES = min(5, amplitude), SEL, piezo.enable_feedback(), SELA
@@ -192,16 +197,29 @@ class PiezoWithRFPhase(PhaseBase):
         set_sel_mode(), because the old worker ran the test in SEL, and
         waits rf_settle_seconds.
 
-        So this re-runs SSA calibration and characterization without the
-        review gates those phases have. Re-calibrating and re-tuning in a
-        phase's setup is accepted (Lisa Zacarias, 2026-10-14). What it leaves
-        on the machine can differ from record.ssa_char and record.cavity_char,
-        so this step appends the loaded Q and scale factor it read back to
+        The SSA calibration is skipped when CALTS is under
+        recent_result_seconds (1 h) old and CALSTAT is Good. The
+        characterization is skipped when PROBECALTS is under 1 h old and
+        PROBECALSTS is Complete. A skipped step leaves the slope, loaded Q
+        and scale factor already on the machine. This follows Sebastian
+        Aderhold's review of #408. A stale result is re-run here. The review
+        suggested asking the operator first, but nothing runs this phase
+        yet, so there is nothing to ask through; the controller should add it.
+        A step that runs here has none of the review gates the SSA and
+        cavity characterization phases have. So this step appends what it
+        did, with the loaded Q and scale factor it read back, to
         record.piezo_with_rf.notes.
 
-        Any error fails the step without a retry: a retry would repeat an SSA
-        calibration and a characterization.
+        A failed read of the timestamps or statuses retries: nothing has
+        been written yet. Any error after that fails the step without a
+        retry: a retry could repeat an SSA calibration and a
+        characterization.
 
+        CHECK: does CALTS update on a failed SSA calibration? If it does,
+        CALSTAT is all that tells a good recent run from a bad one.
+        CHECK: a Complete characterization can still be out of tolerance;
+        finish_characterization() then pushes nothing. Should "good" here
+        also require loaded Q and scale factor in tolerance?
         CHECK: setup_rf() leaves the cavity in SELA with the piezo in
         feedback. Is it safe to switch to SEL here, then the piezo to manual
         in setup_piezo, with RF on at the test amplitude?
@@ -212,7 +230,17 @@ class PiezoWithRFPhase(PhaseBase):
             return self._dry_run_result("RF setup")
         amplitude = self._test_amplitude()
         try:
-            self.cavity.setup_rf(amplitude)
+            calibrate_ssa = not self._ssa_calibration_recent()
+            characterize = not self._characterization_recent()
+        except Exception as exc:
+            # Only reads so far, so a retry repeats nothing on the machine.
+            return self._retry(f"Could not read the last calibration: {exc}")
+        try:
+            self.cavity.setup_rf(
+                amplitude,
+                calibrate_ssa=calibrate_ssa,
+                characterize=characterize,
+            )
             self.cavity.set_sel_mode()
             time.sleep(self.limits.rf_settle_seconds)
             loaded_q = float(self.cavity.measured_loaded_q)
@@ -224,10 +252,19 @@ class PiezoWithRFPhase(PhaseBase):
             self._note_setup_rf_failure(exc)
             return self._failed(f"RF setup failed: {exc}")
 
+        ssa_note = (
+            "re-ran SSA calibration"
+            if calibrate_ssa
+            else "kept the SSA calibration from the last hour"
+        )
+        char_note = (
+            "re-ran characterization (pushed, not reviewed)"
+            if characterize
+            else "kept the characterization from the last hour"
+        )
         note = (
-            "setup_rf() re-ran SSA calibration and characterization: loaded "
-            f"Q {loaded_q:.3e}, scale factor {scale_factor:.1f} (pushed, not "
-            "reviewed)"
+            f"setup_rf() {ssa_note} and {char_note}: loaded Q "
+            f"{loaded_q:.3e}, scale factor {scale_factor:.1f}"
         )
         self._append_note(note)
         return PhaseStepResult(
@@ -235,9 +272,31 @@ class PiezoWithRFPhase(PhaseBase):
             message=f"RF on in SEL, set up to {amplitude:.2f} MV. {note}",
             data={
                 "requested_amplitude": amplitude,
+                "calibrated_ssa": calibrate_ssa,
+                "characterized": characterize,
                 "loaded_q": loaded_q,
                 "scale_factor": scale_factor,
             },
+        )
+
+    def _is_recent(self, timestamp: datetime) -> bool:
+        age = (datetime.now() - timestamp).total_seconds()
+        return age < self.limits.recent_result_seconds
+
+    def _ssa_calibration_recent(self) -> bool:
+        """CALTS under recent_result_seconds old and CALSTAT Good."""
+        ssa = self.cavity.ssa
+        return (
+            self._is_recent(ssa.calibration_timestamp)
+            and ssa.calibration_result_good
+        )
+
+    def _characterization_recent(self) -> bool:
+        """PROBECALTS under recent_result_seconds old, PROBECALSTS Complete."""
+        return (
+            self._is_recent(self.cavity.characterization_timestamp)
+            and self.cavity.characterization_status
+            == linac_utils.CALIBRATION_COMPLETE_VALUE
         )
 
     def _setup_piezo(self) -> PhaseStepResult:

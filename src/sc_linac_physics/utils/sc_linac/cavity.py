@@ -1139,7 +1139,15 @@ class Cavity(linac_utils.SCLinacObject):
             )
             raise linac_utils.CavityAbortError(f"Abort requested for {self}")
 
-    def setup_rf(self, des_amp):
+    def setup_rf(self, des_amp, calibrate_ssa=True, characterize=True):
+        """Turn the cavity on and walk it up to des_amp (MV) in SELA.
+
+        Auto setup calls this with the defaults, so every turn-on calibrates
+        the SSA and characterizes the cavity. Passing calibrate_ssa=False or
+        characterize=False skips that step and keeps what is on the machine.
+        The RF commissioning piezo with RF phase does this when the last good
+        result is recent. move_to_resonance() always runs.
+        """
         if des_amp > self.ades_max:
             self.set_status_message(
                 "Requested amplitude too high - using AMAX instead",
@@ -1162,10 +1170,12 @@ class Cavity(linac_utils.SCLinacObject):
         )
 
         self.turn_off()
-        self.ssa.calibrate(self.ssa.drive_max)
+        if calibrate_ssa:
+            self.ssa.calibrate(self.ssa.drive_max)
         self.move_to_resonance()
 
-        self.characterize()
+        if characterize:
+            self.characterize()
         self.calculate_probe_q()
 
         self.check_abort()

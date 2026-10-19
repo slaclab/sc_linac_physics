@@ -6,6 +6,7 @@ refuses to go on.
 """
 
 import time
+from datetime import datetime, timedelta
 from unittest.mock import Mock, PropertyMock
 
 import pytest
@@ -78,6 +79,11 @@ def mock_cavity():
     cavity.detune = 12.0
     cavity.detune_invalid = False
     cavity.piezo.withrf_check_status_pv_obj.get.return_value = COMPLETE
+    # Good results, but too old to skip: setup_rf re-runs both by default.
+    cavity.ssa.calibration_timestamp = datetime.now() - timedelta(hours=2)
+    cavity.ssa.calibration_result_good = True
+    cavity.characterization_timestamp = datetime.now() - timedelta(hours=2)
+    cavity.characterization_status = COMPLETE
     return cavity
 
 
@@ -153,7 +159,7 @@ def test_verify_initial_state_refuses_a_running_test(phase, mock_cavity):
 
 def test_setup_rf_runs_setup_rf_then_sel(phase, mock_cavity):
     order = []
-    mock_cavity.setup_rf.side_effect = lambda amp: order.append(
+    mock_cavity.setup_rf.side_effect = lambda amp, **_: order.append(
         ("setup_rf", amp)
     )
     mock_cavity.set_sel_mode.side_effect = lambda: order.append("sel")
@@ -162,6 +168,61 @@ def test_setup_rf_runs_setup_rf_then_sel(phase, mock_cavity):
 
     assert result.result == PhaseResult.SUCCESS
     assert order == [("setup_rf", pytest.approx(6.5 * 1.038)), "sel"]
+
+
+def test_setup_rf_reruns_old_results(phase, mock_cavity, record):
+    phase.execute_step("setup_rf")
+    mock_cavity.setup_rf.assert_called_once_with(
+        pytest.approx(6.5 * 1.038), calibrate_ssa=True, characterize=True
+    )
+    assert "re-ran SSA calibration" in record.piezo_with_rf.notes
+    assert "re-ran characterization" in record.piezo_with_rf.notes
+
+
+def test_setup_rf_keeps_good_results_from_the_last_hour(
+    phase, mock_cavity, record
+):
+    recent = datetime.now() - timedelta(minutes=30)
+    mock_cavity.ssa.calibration_timestamp = recent
+    mock_cavity.characterization_timestamp = recent
+    result = phase.execute_step("setup_rf")
+    assert result.result == PhaseResult.SUCCESS
+    mock_cavity.setup_rf.assert_called_once_with(
+        pytest.approx(6.5 * 1.038), calibrate_ssa=False, characterize=False
+    )
+    assert "kept the SSA calibration" in record.piezo_with_rf.notes
+    assert "kept the characterization" in record.piezo_with_rf.notes
+
+
+@pytest.mark.parametrize(
+    "attr, value, kwarg",
+    [
+        ("ssa.calibration_result_good", False, "calibrate_ssa"),
+        ("characterization_status", CRASH, "characterize"),
+    ],
+)
+def test_setup_rf_reruns_a_recent_bad_result(
+    phase, mock_cavity, attr, value, kwarg
+):
+    recent = datetime.now() - timedelta(minutes=30)
+    mock_cavity.ssa.calibration_timestamp = recent
+    mock_cavity.characterization_timestamp = recent
+    target = mock_cavity
+    *path, last = attr.split(".")
+    for name in path:
+        target = getattr(target, name)
+    setattr(target, last, value)
+    phase.execute_step("setup_rf")
+    assert mock_cavity.setup_rf.call_args.kwargs[kwarg] is True
+
+
+def test_setup_rf_retries_when_a_timestamp_read_fails(phase, mock_cavity):
+    type(mock_cavity.ssa).calibration_timestamp = PropertyMock(
+        side_effect=RuntimeError("CALTS disconnected")
+    )
+    result = phase.execute_step("setup_rf")
+    assert result.result == PhaseResult.RETRY
+    mock_cavity.setup_rf.assert_not_called()
 
 
 def test_setup_rf_notes_the_values_it_left(phase, mock_cavity, record):
