@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v9.49.1 (2026-10-19)
+
+### Bug Fixes
+
+- **rf-commissioning**: Piezo pre-RF no longer reads message PVs production lacks
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **rf-commissioning**: Piezo pre-RF reads the production TESTMSG1/2 PV names
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **rf-commissioning**: Read pre-RF messages from PZT:TESTMSG1/2
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **sim**: Piezo pre-RF channel states match production (Pass/Warning/Fail)
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+
 ## v9.49.0 (2026-10-19)
 
 ### Documentation
