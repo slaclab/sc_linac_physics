@@ -50,8 +50,9 @@ class EdmScreen:
     has_tabs: bool = False
 
 
-# CHECK: SELCHAR=3 is what most fault buttons pass to rf_srf_cavity_main.edl.
-# What does SELCHAR select, and is 3 the right default for every tab?
+# SELCHAR picks the sub-tab inside the Characterization tab of
+# rf_srf_cavity_main.edl. 3 is the Cavity sub-tab, the value most fault
+# buttons pass. Other tabs ignore it.
 CAVITY_MAIN_SELCHAR = 3
 
 # Names for the rf_srf_cavity_main.edl tabs, so `--tab` can take a name
