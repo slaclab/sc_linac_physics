@@ -16,8 +16,11 @@ from sc_linac_physics.applications.microphonics.utils.constants import (
     BASE_HARDWARE_SAMPLE_RATE,
 )
 from sc_linac_physics.applications.microphonics.utils.file_parser import (
-    FileParserError,
     load_and_process_file,
+)
+from sc_linac_physics.utils.background import (
+    BackgroundTask,
+    run_in_daemon_thread,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,6 +36,9 @@ class DataAcquisitionManager(QObject):
 
     COMPLETION_MARKERS = ACQ_COMPLETION_MARKERS
     PROGRESS_REGEX = ACQ_PROGRESS_REGEX
+
+    # How the output-file parse runs. Tests swap in run_inline.
+    parse_runner = staticmethod(run_in_daemon_thread)
 
     def __init__(self):
         super().__init__()
@@ -428,72 +434,83 @@ class DataAcquisitionManager(QObject):
     def _process_output_file_wrapper(
         self, chassis_id: str, output_path: Path, process_info: dict
     ):
-        """
-        Wrapper to check file, call the central file parser, handle errors,
-        and emit signals.
+        """Check the output file, then parse it off the main thread.
+
+        A file holds BUFFER_LENGTH samples per buffer per channel as text,
+        so parsing a long run can take a while. The result comes back
+        through _on_file_parsed.
         """
         try:
-
-            try:
-                file_stats = output_path.stat()
-                file_size = file_stats.st_size
-            except FileNotFoundError:
-                logger.error(f"File {output_path} not found after wait!")
-                self.acquisitionError.emit(
-                    chassis_id,
-                    f"Output file {output_path.name} missing after wait.",
-                )
-                return
-            if file_size == 0:
-                logger.warning(
-                    f"File {output_path} exists but is empty. Aborting processing."
-                )
-                self.acquisitionError.emit(
-                    chassis_id, f"Output file {output_path.name} was empty."
-                )
-                return
-            parsed_data_dict = load_and_process_file(output_path)
-
-            if parsed_data_dict and parsed_data_dict.get("cavities"):
-
-                parsed_data_dict["source"] = chassis_id
-                parsed_data_dict["decimation"] = process_info.get(
-                    "decimation", 1
-                )
-
-                self.dataReceived.emit(chassis_id, parsed_data_dict)
-                self.acquisitionComplete.emit(chassis_id)
-
-            else:
-                logger.error(
-                    f"load_and_process_file did not return valid data for {chassis_id} from {output_path.name}."
-                )
-                self.acquisitionError.emit(
-                    chassis_id,
-                    f"Failed to parse valid data from {output_path.name}",
-                )
-
-        except (FileParserError, FileNotFoundError, ValueError) as e:
-            logger.error(f"File processing failed for {chassis_id}: {e}")
+            file_size = output_path.stat().st_size
+        except FileNotFoundError:
+            logger.error(f"File {output_path} not found after wait!")
             self.acquisitionError.emit(
-                chassis_id, f"Data processing error: {e}"
+                chassis_id,
+                f"Output file {output_path.name} missing after wait.",
             )
-        except Exception as e:
-            logger.critical(
-                f"Unexpected error processing file for {chassis_id}: {e}",
-                exc_info=True,
+            self._forget_process(chassis_id)
+            return
+        if file_size == 0:
+            logger.warning(
+                f"File {output_path} exists but is empty. Aborting processing."
+            )
+            self.acquisitionError.emit(
+                chassis_id, f"Output file {output_path.name} was empty."
+            )
+            self._forget_process(chassis_id)
+            return
+
+        task = BackgroundTask(
+            _parse_output_file,
+            output_path,
+            name=f"microphonics-parse-{chassis_id}",
+            runner=self.parse_runner,
+            parent=self,
+        )
+        task.succeeded.connect(
+            lambda data: self._on_file_parsed(
+                chassis_id, output_path, process_info, data
+            )
+        )
+        task.failed.connect(
+            lambda message: self.acquisitionError.emit(
+                chassis_id, f"Data processing error: {message}"
+            )
+        )
+        task.done.connect(lambda: self._forget_process(chassis_id))
+        task.done.connect(task.deleteLater)
+        task.start()
+
+    def _on_file_parsed(
+        self,
+        chassis_id: str,
+        output_path: Path,
+        process_info: dict,
+        parsed_data_dict: dict,
+    ):
+        if parsed_data_dict and parsed_data_dict.get("cavities"):
+            parsed_data_dict["source"] = chassis_id
+            parsed_data_dict["decimation"] = process_info.get("decimation", 1)
+            self.dataReceived.emit(chassis_id, parsed_data_dict)
+            self.acquisitionComplete.emit(chassis_id)
+        else:
+            logger.error(
+                f"load_and_process_file did not return valid data for {chassis_id} from {output_path.name}."
             )
             self.acquisitionError.emit(
                 chassis_id,
-                f"Unexpected error processing file {output_path.name}: {str(e)}",
+                f"Failed to parse valid data from {output_path.name}",
             )
-        finally:
-            if chassis_id in self.active_processes:
-                del self.active_processes[chassis_id]
+
+    def _forget_process(self, chassis_id: str):
+        self.active_processes.pop(chassis_id, None)
 
     def stop_acquisition(self, chassis_id: str):
         """Stop a running acquisition process."""
-        process_info = self.active_processes.get(chassis_id)
+        # Forget the chassis before terminating. waitForFinished emits
+        # finished before it returns, and handle_finished would report the
+        # terminate as a crash if the chassis were still listed.
+        process_info = self.active_processes.pop(chassis_id, None)
         if process_info:
             timer = process_info.get("progress_timer")
             if timer and timer.isActive():
@@ -505,10 +522,12 @@ class DataAcquisitionManager(QObject):
                     process.kill()
                     process.waitForFinished(1000)
 
-        if chassis_id in self.active_processes:
-            del self.active_processes[chassis_id]
-
     def stop_all(self):
         """Stop all acquisitions"""
         for chassis_id in list(self.active_processes.keys()):
             self.stop_acquisition(chassis_id)
+
+
+def _parse_output_file(_task: BackgroundTask, output_path: Path) -> dict:
+    """BackgroundTask target: parse one acquisition output file."""
+    return load_and_process_file(output_path)
