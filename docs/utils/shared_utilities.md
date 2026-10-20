@@ -118,7 +118,9 @@ Notable behaviors:
 
 `BackgroundTask` runs one blocking call off the Qt main thread, on a daemon
 `threading.Thread`. The call gets the task as its first argument, so it can
-emit `status` and `progress` and check `cancel_requested`. Signals reach
+call `report_status()` and `report_progress()` and check `cancel_requested`.
+Use those methods rather than `task.status.emit()`. If the owner deletes the
+task mid-run, they do nothing, while `.emit()` would raise inside the call. Signals reach
 main-thread slots in this order: `status`/`progress` as the call emits them,
 then `succeeded(result)` or `failed("ExcType: message")`, then `done()`.
 
