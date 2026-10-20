@@ -10,22 +10,17 @@ import time
 from typing import Dict, List, Optional, Sequence
 
 from sc_linac_physics.utils.epics import PV, PVConnectionError, PVGetError
-from sc_linac_physics.utils.sc_linac.linac_utils import (
-    build_cavity_pv_prefix,
-    get_linac_for_cryomodule,
-)
+from sc_linac_physics.utils.sc_linac.decarad import Decarad
+from sc_linac_physics.utils.sc_linac.linac import Machine
 
 # How long one round of reads waits for missing PVs (a wrong prefix, a
 # field the record type lacks) before calling them "no response".
 CONNECT_TIMEOUT_S = 1.0
 # PV.batch_create waits on each PV in turn, so a missing PV costs its full
 # connection_timeout. It gets this much; _connect then waits once, against
-# one CONNECT_TIMEOUT_S deadline, for any PV still connecting.
-BATCH_WAIT_S = 0.05
-
-# Prefixes a cavity's PVs use in utils/sc_linac: the cavity itself,
-# Piezo, StepperTuner and SSA (each built with cavity.pv_addr).
-CAVITY_SUBPREFIXES = ("", "PZT:", "STEP:", "SSA:")
+# one CONNECT_TIMEOUT_S deadline, for any PV still connecting. A suffix
+# makes ~60 candidates, so this keeps that round under a second.
+BATCH_WAIT_S = 0.005
 
 INPUT_TYPES = {"ai", "bi", "mbbi", "mbbiDirect", "longin", "int64in"}
 INPUT_TYPES |= {"stringin", "lsi", "waveform", "aai", "subArray"}
@@ -35,20 +30,72 @@ CALC_INPUTS = tuple(f"INP{letter}" for letter in "ABCDEFGHIJKL")
 LINK_FIELDS = ("INP", "DOL", "OUT") + CALC_INPUTS + ("FLNK",)
 
 
+def _model_objects(cm: str, cav: int) -> list:
+    """The utils/sc_linac objects whose PVs a suffix can belong to.
+
+    Decarads aren't tied to a cryomodule in the model, so both decarads
+    and all their heads are included for every --cm.
+    """
+    try:
+        cryomodule = Machine().cryomodules[cm]
+    except KeyError:
+        raise ValueError(f"No linac has cryomodule {cm!r}") from None
+    cavity = cryomodule.cavities[cav]
+    magnets = [getattr(cryomodule, m, None) for m in ("quad", "xcor", "ycor")]
+    decarads = [Decarad(1), Decarad(2)]
+    return [
+        cryomodule.linac,
+        cryomodule,
+        cryomodule.rack_a,
+        cryomodule.rack_b,
+        cavity,
+        cavity.piezo,
+        cavity.stepper_tuner,
+        cavity.ssa,
+        *(m for m in magnets if m is not None),
+        *decarads,
+        *(head for d in decarads for head in d.heads.values()),
+    ]
+
+
+def _model_prefixes(cm: str, cav: int) -> set:
+    """Every prefix the model builds for this CM and cavity.
+
+    Taken from attributes named *prefix, *_pv and *_pvs. A full PV name
+    gives each of its prefixes past the third colon, so CLL:CM01:2301:DS:LVL
+    gives CLL:CM01:2301: and CLL:CM01:2301:DS:.
+    """
+    objects = _model_objects(cm, cav)
+    names = []
+    for obj in objects:
+        for key, value in vars(obj).items():
+            if key.lower().endswith(("prefix", "_pv", "_pvs")):
+                names += value if isinstance(value, list) else [value]
+    # CAS_ACCESS's prefix; Q0Cryomodule builds it (q0_cryomodule.py), not
+    # utils/sc_linac. objects[1] is the cryomodule.
+    names.append(f"CRYO:{objects[1].cryo_name}:0:")
+
+    prefixes = set()
+    for name in (n for n in names if isinstance(n, str)):
+        if name.endswith(":"):
+            prefixes.add(name)
+        for i, char in enumerate(name):
+            if char == ":" and name[: i + 1].count(":") >= 3:
+                prefixes.add(name[: i + 1])
+    return prefixes
+
+
 def candidates(name: str, cm: str, cav: int) -> List[str]:
     """Full PV names to try for `name`.
 
     A name with three or more colons (ACCL:L1B:0210:PZT:PUSH_DFGAIN,
-    QUAD:L0B:0185:CTRL) is used as is. Anything shorter is a suffix under
-    the cavity's prefix, with or without PZT:/STEP:/SSA:.
+    QUAD:L0B:0185:CTRL) is used as is. Anything shorter is tried as typed,
+    then under every prefix the model builds for this CM and cavity.
     """
     if name.count(":") >= 3:
         return [name]
-    linac = get_linac_for_cryomodule(cm)
-    if linac is None:
-        raise ValueError(f"No linac has cryomodule {cm!r}")
-    prefix = build_cavity_pv_prefix(linac, cm, cav)
-    return [prefix + sub + name for sub in CAVITY_SUBPREFIXES]
+    prefixes = sorted(_model_prefixes(cm, cav))
+    return [name] + [prefix + name for prefix in prefixes]
 
 
 def _connect(names: Sequence[str]) -> List[PV]:
@@ -248,7 +295,13 @@ def describe(name: str, cm: str = "02", cav: int = 1) -> List[str]:
     names = candidates(name, cm, cav)
     answered = _connect(names)
     if not answered:
-        return [f"No response from {' or '.join(names)}"]
+        if len(names) == 1:
+            return [f"No response from {name}"]
+        return [
+            f"No response from {name}, as typed or under any of the "
+            f"{len(names) - 1} prefixes the model builds for CM{cm} "
+            f"cavity {cav}"
+        ]
     if len(answered) > 1:
         lines = [f"{name} answers under more than one prefix:"]
         return lines + [f"  {pv.pvname}" for pv in answered]

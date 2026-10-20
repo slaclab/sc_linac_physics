@@ -83,17 +83,42 @@ class TestResolve:
             "QUAD:L0B:0185:CTRL"
         ]
 
-    def test_suffix_gets_every_cavity_prefix(self, serve):
-        assert pv_info.candidates("PUSH_DFGAIN", "02", 1) == [
+    def test_suffix_gets_every_cavity_prefix(self):
+        names = pv_info.candidates("PUSH_DFGAIN", "02", 1)
+        assert {
             "ACCL:L1B:0210:PUSH_DFGAIN",
             "ACCL:L1B:0210:PZT:PUSH_DFGAIN",
             "ACCL:L1B:0210:STEP:PUSH_DFGAIN",
             "ACCL:L1B:0210:SSA:PUSH_DFGAIN",
-        ]
+        } <= set(names)
+
+    def test_name_as_typed_is_tried_first(self):
+        assert pv_info.candidates("CTE:CM01", "01", 1)[0] == "CTE:CM01"
 
     def test_linac_comes_from_cryomodule(self):
-        assert pv_info.candidates("ADES", "H1", 8)[0] == "ACCL:L1B:H180:ADES"
-        assert pv_info.candidates("ADES", "35", 3)[0] == "ACCL:L3B:3530:ADES"
+        assert "ACCL:L1B:H180:ADES" in pv_info.candidates("ADES", "H1", 8)
+        assert "ACCL:L3B:3530:ADES" in pv_info.candidates("ADES", "35", 3)
+
+    @pytest.mark.parametrize(
+        "suffix, cm, full",
+        [
+            ("DS:LVL", "01", "CLL:CM01:2301:DS:LVL"),
+            ("PVJT:SP_RQST", "01", "CLIC:CM01:3001:PVJT:SP_RQST"),
+            ("PVJT:SP_RQST", "H1", "CLIC:HL01:3001:PVJT:SP_RQST"),
+            ("EHCV:MANPOS_RQST", "01", "CPIC:CM01:0000:EHCV:MANPOS_RQST"),
+            ("CAS_ACCESS", "01", "CRYO:CM01:0:CAS_ACCESS"),
+            ("AACTMEANSUM", "01", "ACCL:L0B:0100:AACTMEANSUM"),
+            ("COMBO_P", "02", "VGXX:L1B:0214:COMBO_P"),
+            ("CTRL", "02", "QUAD:L1B:0285:CTRL"),
+        ],
+    )
+    def test_suffix_under_model_prefixes(self, suffix, cm, full):
+        assert full in pv_info.candidates(suffix, cm, 1)
+
+    def test_every_decarad_head_is_a_candidate(self):
+        names = pv_info.candidates("GAMMAAVE", "02", 1)
+        assert "RADM:SYS0:100:01:GAMMAAVE" in names
+        assert "RADM:SYS0:200:10:GAMMAAVE" in names
 
     def test_unknown_cryomodule(self):
         with pytest.raises(ValueError, match="99"):
@@ -113,7 +138,9 @@ class TestResolve:
 
     def test_none_answer(self, serve):
         serve({})
-        assert "No response" in describe("NOPE")
+        out = describe("NOPE")
+        assert out.startswith("No response from NOPE, as typed or under any")
+        assert "CM02 cavity 1" in out
 
 
 class TestRecord:
