@@ -114,9 +114,9 @@ while |delta_hz| > tolerance:
 
 **The step budget.** Before the first move, the loop converts the starting detune
 (`delta_hz`) into an expected microstep count (`expected_steps`).
-It multiplies that by a slack factor from
+The loop multiplies `expected_steps` by a slack factor from
 `stepper_tol_factor` to get the budget. Each move adds to `steps_moved`. If that
-total ever exceeds the budget, the loop decides something is wrong, for example
+total `steps_moved` ever exceeds the budget, the loop decides something is wrong, for example
 a bad `SCALE` or a slipping tuner, and raises `DetuneError` rather than keep
 driving the motor. This step-budget check is called the runaway guard throughout this page.
 <span class="cite">
@@ -126,13 +126,13 @@ driving the motor. This step-budget check is called the runaway guard throughout
 
 [Drive the auto-tune loop](widgets/auto_tune_sim.html)
 
-### Two things the trace will not tell you
+### Two things the plot will not tell you
 
 **Truncation means a perfect cavity lands a hair outside tolerance.**
 `est_steps` is an `int(...)`. `int()` drops everything after the decimal point
 instead of rounding; that is truncation. And 0.75 leaves a quarter of the
-detune behind — so
-a perfectly calibrated cavity starting at exactly four times tolerance is aimed
+detune behind — so a perfectly calibrated cavity (aka a cavity with a calibration error of 1.0, meaning its `SCALE` is
+exactly right) starting at exactly four times tolerance is aimed
 precisely at the tolerance boundary, and the truncated step always drops it
 just outside. Set the starting detune to
 <span data-fig="fig-example-detune">200</span> Hz with tolerance 50 and
