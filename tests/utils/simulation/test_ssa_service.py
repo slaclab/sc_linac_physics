@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -26,6 +27,16 @@ class TestCalibration:
         finish.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_start_stamps_calts(self, ssa):
+        await ssa.cal_time.write("2000-01-01-00:00:00")
+        with patch.object(ssa, "_finish_calibration", new_callable=AsyncMock):
+            await ssa.cal_start.putter(None, 1)
+            await ssa._calibration_task
+
+        stamped = datetime.strptime(ssa.cal_time.value, "%Y-%m-%d-%H:%M:%S")
+        assert datetime.now() - stamped < timedelta(minutes=1)
+
+    @pytest.mark.asyncio
     async def test_start_ignored_while_running(self, ssa):
         running = Mock()
         running.done.return_value = False
@@ -38,9 +49,7 @@ class TestCalibration:
         ssa.log.warning.assert_called_once()
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "roll, expected", [(0.9, "Success"), (0.1, "Crash")]
-    )
+    @pytest.mark.parametrize("roll, expected", [(0.9, "Good"), (0.1, "Error")])
     async def test_results_written_before_complete(self, ssa, roll, expected):
         """A client that sees CALSTS Complete must read this run's results."""
         seen_at_complete = {}

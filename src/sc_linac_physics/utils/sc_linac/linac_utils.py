@@ -29,8 +29,9 @@ open access (CC BY 3.0).
     better source for anything expected to hold on a production cavity.
 """
 
+import time
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional, Type
 
 from numpy import polyfit
 
@@ -120,35 +121,10 @@ HL_SSA_SHARED_PVS = [
     "NRP_PRMT",
     "FaultSummary.SEVR",
     "480VACStat",
-    "Type",
+    "PwrRating",
 ]
 
 HL_SSA_PS_SETPOINT = 2500
-
-# SSA:Type is an enum naming the SSA model. Its labels only state the power
-# for states 0 and 1, so the rating comes from this map, keyed on the enum
-# index. Ratings are from Mike Dunning and Andy Benwell (email, 2026-10-05).
-# Read across the whole machine on 2026-10-05, the PV agreed with the per-CM
-# table Sebastian Aderhold gave on #285: 191 x state 0, 4 x state 1,
-# 269 x state 2, 16 x state 3 (HL, 8 read through HL_SSA_MAP).
-# States 4 (CA186, GUNB) and 5 (CA199, MSU) do not drive linac cavities.
-# On HL, HL_SSA_MAP shares PS and on/off between cavity pairs, but the 1 kW
-# is per cavity, not shared by the pair (Sebastian Aderhold on #317).
-SSA_TYPE_RATED_POWER_KW: dict[int, float] = {
-    0: 7.0,  # RK CA1300 7kW, LCLS-II-HE
-    1: 4.6,  # RK CA1300 4.6kW, HE prototypes
-    2: 3.8,  # RK CA1300, standard LCLS-II (label gives no power)
-    3: 1.0,  # RK CA3900, 3.9 GHz HL
-}
-
-
-def ssa_rated_power_kw(ssa_type: int) -> float | None:
-    """Rated power in kW for an SSA:Type enum index, or None if unknown.
-
-    Callers must handle None rather than guess a drive level.
-    """
-    return SSA_TYPE_RATED_POWER_KW.get(ssa_type)
-
 
 LOADED_Q_LOWER_LIMIT = int(2.5e7)
 LOADED_Q_UPPER_LIMIT = int(5.1e7)
@@ -267,6 +243,15 @@ HL_HZ_PER_STEP = 18.3
 ESTIMATED_MICROSTEPS_PER_HZ = MICROSTEPS_PER_STEP / HZ_PER_STEP
 ESTIMATED_MICROSTEPS_PER_HZ_HL = MICROSTEPS_PER_STEP / HL_HZ_PER_STEP
 
+# Cavity._auto_tune aims each stepper move at this fraction of the measured
+# detune (was 0.9). A move passes resonance when
+# AUTO_TUNE_UNDERSHOOT * (true / believed SCALE) > 1, so 0.75 tolerates a tuner
+# that moves up to 1/0.75 = 1.33x what SCALE says without overshooting. 0.9
+# overshoots past 1.11x.
+# CHECK: Ryan reports some tuners move ~30% more than SCALE says. Is there a
+# measurement or tuner report to cite here?
+AUTO_TUNE_UNDERSHOOT = 0.75
+
 TUNE_CONFIG_RESONANCE_VALUE = 0
 TUNE_CONFIG_COLD_VALUE = 1
 TUNE_CONFIG_PARKED_VALUE = 2
@@ -279,6 +264,25 @@ HW_MODE_MAIN_DONE_VALUE = 3
 HW_MODE_READY_VALUE = 4
 
 INTERLOCK_RESET_ATTEMPTS = 5
+
+# Upper bounds on polling loops that used to wait forever. Each is far
+# longer than the step should take; hitting one means something is stuck.
+# The step raises its usual error class (see wait_until) with a timeout
+# message. Values proposed 2026-10-08, not yet reviewed.
+# CHECK: how long does PULSE_STATUS take to reach 2 after PULSE_DIFF_SUM=1?
+PULSE_GO_TIMEOUT_S = 60
+# CHECK: how long from RFCTRL=1 to RFSTATE on, and from RFCTRL=0 to off?
+CAVITY_TURN_ON_TIMEOUT_S = 60
+CAVITY_TURN_OFF_TIMEOUT_S = 60
+# CHECK: how long can an SSA take to report on after the turn-on PV is put?
+SSA_TURN_ON_TIMEOUT_S = 120
+SSA_TURN_OFF_TIMEOUT_S = 60
+# CHECK: how long does a full SSA calibration sweep normally run?
+SSA_CALIBRATION_TIMEOUT_S = 600
+# A stepper move gets FACTOR x (steps / VELO) plus MARGIN seconds. MARGIN
+# alone applies if VELO reads <= 0.
+STEPPER_MOVE_TIMEOUT_FACTOR = 2.0
+STEPPER_MOVE_TIMEOUT_MARGIN_S = 60
 
 # this value is based on historical data, when the decarads were on, but not seeing any FE from a cavity
 DECARAD_BACKGROUND_READING_AVG = 0.8
@@ -401,6 +405,44 @@ def stepper_tol_factor(num_steps) -> float:
     return 1.01
 
 
+def wait_until(
+    condition: Callable[[], bool],
+    timeout: float,
+    description: str,
+    error_class: Type[Exception],
+    poll_interval: float = 1.0,
+    check_abort: Optional[Callable[[], None]] = None,
+    on_poll: Optional[Callable[[], None]] = None,
+) -> None:
+    """Poll until condition() is true, or raise error_class after timeout.
+
+    Each poll, in order: condition(), check_abort(), on_poll(), the timeout
+    check, then sleep(poll_interval). This is the order the hand-written
+    loops it replaces already used, so abort handling is unchanged.
+
+    @param condition: returns True when the wait is over.
+    @param timeout: seconds before giving up.
+    @param description: what is being waited for, used in the error.
+    @param error_class: raised on timeout. Callers pass the error type their
+        callers already catch (e.g. SSAFaultError), so a timeout is handled
+        like the step's other failures.
+    @param check_abort: called each poll; raises to abort the wait.
+    @param on_poll: called each poll, e.g. to log progress.
+    @raise error_class: condition still false after timeout seconds.
+    """
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if check_abort is not None:
+            check_abort()
+        if on_poll is not None:
+            on_poll()
+        if time.monotonic() >= deadline:
+            raise error_class(
+                f"Timed out after {timeout:.0f} s waiting for {description}"
+            )
+        time.sleep(poll_interval)
+
+
 class PulseError(Exception):
     """Exception thrown during pulsed cavity operation."""
 
@@ -409,6 +451,12 @@ class PulseError(Exception):
 
 class StepperError(Exception):
     """Exception thrown when the stepper tuner motor fails or times out."""
+
+    pass
+
+
+class StepperMoveTimeoutError(StepperError):
+    """MOTOR_MOVING stayed 1 past the move timeout (StepperTuner._move_timeout)."""
 
     pass
 
@@ -428,6 +476,17 @@ class FSCANError(Exception):
 class SSACalibrationError(Exception):
     """
     Exception thrown during cavity SSA calibration
+    """
+
+    pass
+
+
+class SSACalibrationTimeoutError(SSACalibrationError):
+    """CALSTS stayed Running past SSA_CALIBRATION_TIMEOUT_S.
+
+    SSA.calibrate() retries other SSACalibrationErrors with a lower drive
+    max. It re-raises this one instead, so a stuck calibration isn't
+    restarted.
     """
 
     pass

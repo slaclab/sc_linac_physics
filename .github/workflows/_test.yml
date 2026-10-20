@@ -34,6 +34,9 @@ jobs:
     if: ${{ inputs.python-versions != '[]' }}
     runs-on: ubuntu-latest
     continue-on-error: ${{ inputs.continue-on-error }}
+    # Backstop for a hang pytest-timeout can't interrupt (see pyproject.toml).
+    # Jobs take 2.5-4.6 min; without this a hang sits until the 6-hour limit.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +113,7 @@ jobs:
 
           xvfb-run -a pytest "${ARGS[@]}"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.tests.outputs.measured-coverage == 'true'
         with:
           name: coverage-${{ matrix.python-version }}
