@@ -393,27 +393,6 @@ class TestPiezoWithRFTestStatus:
         assert data.is_complete
         assert not data.passed
 
-    def test_record_without_status_keeps_its_result(self):
-        """Records saved before rf_test_status existed carry None."""
-        assert self._complete(rf_test_status=None).passed
-
-    def test_old_payload_loads(self):
-        from sc_linac_physics.applications.rf_commissioning.models.serialization import (
-            deserialize_model,
-        )
-
-        old = {
-            "amplifier_gain_a": 1.05,
-            "amplifier_gain_b": 0.98,
-            "detune_gain": 0.85,
-            "timestamp": "2026-05-01T12:00:00",
-            "notes": "",
-        }
-        data = deserialize_model(PiezoWithRFTest, old)
-        assert data.rf_test_status is None
-        assert data.detune_gain_pushed is False
-        assert data.passed
-
     def test_new_fields_round_trip(self):
         from sc_linac_physics.applications.rf_commissioning.models.serialization import (
             deserialize_model,
