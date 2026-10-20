@@ -34,6 +34,9 @@ jobs:
     if: ${{ inputs.python-versions != '[]' }}
     runs-on: ubuntu-latest
     continue-on-error: ${{ inputs.continue-on-error }}
+    # Backstop for a hang pytest-timeout can't interrupt (see pyproject.toml).
+    # Jobs take 2.5-4.6 min; without this a hang sits until the 6-hour limit.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
