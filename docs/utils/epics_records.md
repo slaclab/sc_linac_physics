@@ -55,8 +55,13 @@ comes from and where it goes.
 
 Each link carries flags after the PV name:
 
-- `PP` (process passive) makes the other record process too, so a written
-  value takes effect. `NPP` reads or writes without processing it.
+- `PP` (process passive) makes the other record process too, but only if
+  that record's `SCAN` is `Passive`; a periodic or event-driven record is
+  left to its own schedule. On an input link the source processes before
+  the value is read. On an output link the destination processes after the
+  write, so the value takes effect. This holds for links between records on
+  the same IOC; a link to another IOC goes over Channel Access, with its own
+  rules. `NPP` reads or writes without processing the other record.
 - `CP` (on an input) makes this record process whenever the source changes.
 - `MS` passes the source's alarm severity on; `NMS` doesn't.
 
@@ -75,9 +80,12 @@ caget ACCL:L1B:0210:PZT:PUSH_DFGAIN.DOL ACCL:L1B:0210:PZT:PUSH_DFGAIN.OMSL ACCL:
 | `PUSH_DFGAIN` (`ao`) | `closed_loop` | `DFGAIN_NEW NPP` | `DFGAIN PP` | copies `DFGAIN_NEW` as it stands into `DFGAIN`, the gain in use |
 | `SAVE_DFGAIN` (`ao`) | `closed_loop` | `DFGAIN NPP` | `DFGAIN_SAVE PP` | copies whatever `DFGAIN` holds into `DFGAIN_SAVE` |
 
-Two things follow. The push sends exactly the `DFGAIN_NEW` the operator
-reviewed; it doesn't compute a new gain. And SAVE has to run after PUSH has
-finished, or it saves the old gain.
+Two things follow. The push sends whatever `DFGAIN_NEW` holds at the moment
+PUSH processes; it doesn't compute a new gain. The links don't promise that
+this is the value the operator reviewed: if `DFGAIN_NEW` changes in between,
+PUSH copies the new one. Code that pushes a reviewed value has to re-read
+`DFGAIN_NEW` just before pushing and refuse if it changed. And SAVE has to
+run after PUSH has finished, or it saves the old gain.
 
 ## Links point one way
 
@@ -102,6 +110,12 @@ are listed in the IOC's autosave request files, which the IOC's owner knows.
 
 That is right for a record like `PUSH_DFGAIN`, whose processing is one copy.
 It is wrong for a record that starts a long script, such as `RFTESTSTRT` or
-`PROBECALSTRT`. There the put may not be confirmed until the script ends, so
-the caller blocks for the whole run. Those starts use `wait=False`
-<span class="cite">`cavity.py::Cavity.start_characterization “put(1, wait=False)”`</span>.
+`PROBECALSTRT`. There the put may not be confirmed until the script ends.
+The caller waits up to `put_timeout`, 30 s by default
+<span class="cite">`epics/config.py::PVConfig “put_timeout: float = 30.0”`</span>,
+and then `PV.put` raises `PVPutError`. The script may still be running when
+that happens: the start reached the IOC, so don't send it again. Those
+starts use `wait=False`
+<span class="cite">`cavity.py::Cavity.start_characterization “put(1, wait=False)”`</span>,
+and the code then polls the script's status PV
+<span class="cite">`cavity.py::Cavity.wait_for_characterization`</span>.
