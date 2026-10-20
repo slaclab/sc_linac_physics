@@ -238,7 +238,7 @@ stepper ends up holding the offset instead of the piezo.
 ### Tolerances
 
 50 Hz, or 500 Hz for harmonic linearizers, typed directly into the
-`move_to_resonance` call, not derived from anything
+`move_to_resonance` call and not derived from anything
 <span class="cite">`cavity.py::Cavity.move_to_resonance “500 if self.cryomodule.is_harmonic_linearizer else 50”`</span>.
 
 ### Yes, the chirp range gets re-adjusted mid-tune
