@@ -2,6 +2,51 @@
 
 <!-- version list -->
 
+## v9.50.0 (2026-10-20)
+
+### Bug Fixes
+
+- **rf-commissioning**: Refuse a running with-RF test before setup; time the wait by the clock
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Resume the with-RF wait after a read error; flag IOC assumptions
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Say setup_rf raises on out-of-tolerance results
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Start the with-RF test without waiting on the put; note what a failed
+  setup_rf left ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+### Features
+
+- **rf-commissioning**: Piezo with RF phase, detune check, start and wait for the test
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Piezo with RF phase, RF and piezo setup
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Piezo with RF phase, steps 1-6
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Skip SSA cal and characterization younger than an hour
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+
 ## v9.49.3 (2026-10-20)
 
 ### Refactoring
