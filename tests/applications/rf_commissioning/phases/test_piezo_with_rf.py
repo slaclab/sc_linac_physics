@@ -567,8 +567,9 @@ def test_push_processes_push_then_save(finished, record):
     phase.execute_step("read_results")
     assert phase.execute_step("push_detune_gain").result == PhaseResult.SUCCESS
     assert order == [("PUSH_DFGAIN.PROC", 1), ("SAVE_DFGAIN.PROC", 1)]
-    piezo.withrf_push_dfgain_pv_obj.put.assert_called_once_with(1, wait=False)
-    piezo.withrf_save_dfgain_pv_obj.put.assert_called_once_with(1, wait=False)
+    # wait=True (the default): the IOC confirms each record processed.
+    piezo.withrf_push_dfgain_pv_obj.put.assert_called_once_with(1)
+    piezo.withrf_save_dfgain_pv_obj.put.assert_called_once_with(1)
     assert record.piezo_with_rf.detune_gain_pushed is True
 
 
@@ -636,8 +637,9 @@ def test_full_run_with_confirmation_pushes_once(finished, record):
     phase = make_phase(finished, record, confirmed_detune_gain=0.85)
     assert phase.run() is True
     piezo = finished.piezo
-    piezo.withrf_push_dfgain_pv_obj.put.assert_called_once_with(1, wait=False)
-    piezo.withrf_save_dfgain_pv_obj.put.assert_called_once_with(1, wait=False)
+    # wait=True (the default): the IOC confirms each record processed.
+    piezo.withrf_push_dfgain_pv_obj.put.assert_called_once_with(1)
+    piezo.withrf_save_dfgain_pv_obj.put.assert_called_once_with(1)
     data = record.piezo_with_rf
     assert (data.amplifier_gain_a, data.amplifier_gain_b) == (1.05, 0.98)
     assert data.detune_gain == 0.85
@@ -673,14 +675,49 @@ def test_save_failure_after_push_fails_without_retry(finished, record):
     assert record.piezo_with_rf.detune_gain_pushed is True
 
 
-def test_push_failure_retries_and_saves_nothing(finished, record):
+def test_unconfirmed_push_fails_and_notes_unknown(finished, record):
+    """No RETRY: the put may have reached the IOC; a retry would re-push."""
     piezo = finished.piezo
     piezo.withrf_push_dfgain_pv_obj.put.side_effect = RuntimeError("CA")
     phase = make_phase(finished, record, confirmed_detune_gain=0.85)
     phase.execute_step("read_results")
-    assert phase.execute_step("push_detune_gain").result == PhaseResult.RETRY
+    result = phase.execute_step("push_detune_gain")
+    assert result.result == PhaseResult.FAILED
+    assert "unknown" in result.message
+    piezo.withrf_push_dfgain_pv_obj.put.assert_called_once()
     piezo.withrf_save_dfgain_pv_obj.put.assert_not_called()
     assert record.piezo_with_rf.detune_gain_pushed is False
+    assert "unknown" in record.piezo_with_rf.notes
+
+
+def test_push_refuses_if_a_test_crashed_since_review(finished, record):
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    finished.piezo.withrf_check_status_pv_obj.get.return_value = CRASH
+    result = phase.execute_step("push_detune_gain")
+    assert result.result == PhaseResult.FAILED
+    assert "Crash" in result.message
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_pre_push_reads_bypass_the_monitor_cache(finished, record):
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    piezo = finished.piezo
+    piezo.detunegain_new_pv_obj.get.reset_mock()
+    piezo.withrf_check_status_pv_obj.get.reset_mock()
+    phase.execute_step("push_detune_gain")
+    piezo.detunegain_new_pv_obj.get.assert_called_once_with(use_monitor=False)
+    piezo.withrf_check_status_pv_obj.get.assert_called_once_with(
+        use_monitor=False
+    )
+
+
+def test_rerun_stamps_this_runs_time(phase, finished, record):
+    old = datetime(2026, 1, 1)
+    record.piezo_with_rf = PiezoWithRFTest(timestamp=old)
+    phase.execute_step("read_results")
+    assert record.piezo_with_rf.timestamp > old
 
 
 def test_warning_then_confirmed_push_is_pushed_not_passed(finished, record):

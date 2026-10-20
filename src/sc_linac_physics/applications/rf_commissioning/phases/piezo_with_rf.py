@@ -493,6 +493,9 @@ class PiezoWithRFPhase(PhaseBase):
             amplifier_gain_b=self._gain_b,
             detune_gain=self._detune_gain,
             rf_test_status=label,
+            # A rerun reuses the record's PiezoWithRFTest; stamp this read so
+            # the gains carry this run's time, not the first run's.
+            timestamp=datetime.now(),
         )
 
         verdict = (
@@ -516,17 +519,24 @@ class PiezoWithRFPhase(PhaseBase):
         is in this step: it refuses unless
         context.parameters["confirmed_detune_gain"] equals the DFGAIN_NEW that
         read_results stored. Just before pushing it re-reads DFGAIN_NEW and
-        RFTESTSTS, and refuses if the gain changed or a new test is running.
+        RFTESTSTS from the IOC, and refuses unless the gain is unchanged and
+        RFTESTSTS still reads Complete.
 
         It writes PUSH_DFGAIN.PROC = 1, then SAVE_DFGAIN.PROC = 1, each with
-        wait=False (triggers, like PROBECALSTRT in Cavity). Both are ao
-        records whose DESC reads 'Push calc-ed to live PV' (as
-        ACCL:L1B:0210:PZT served them on 2026-10-14). A PUSH error returns
-        RETRY with nothing recorded as pushed. Once PUSH is processed
-        the gain is live, so detune_gain_pushed is stored before SAVE is
-        written. A SAVE error fails without retry, because a retry would
-        re-run the gate and could refuse after the gain is live. A Warning
-        still lets the operator push; passed stays False.
+        wait=True: PV.put returns once the IOC confirms the record processed,
+        and raises PVPutError if it isn't confirmed within put_timeout. It
+        never resends. Both are ao records whose DESC reads 'Push calc-ed to
+        live PV' (as ACCL:L1B:0210:PZT served them on 2026-10-14).
+        detune_gain_pushed is stored only after PUSH is confirmed, and before
+        SAVE is written. A PUSH error fails without retry and notes that the
+        push outcome is unknown: the put may have reached the IOC, and a
+        retry would trigger it again. A SAVE error fails without retry too,
+        because a retry would re-run the gate after the gain is live. A
+        Warning still lets the operator push; passed stays False.
+
+        CHECK: does processing PUSH_DFGAIN and SAVE_DFGAIN complete promptly?
+        If either starts something slow, the confirmed put times out and the
+        step reports the push as unknown.
 
         CHECK: where do PUSH_DFGAIN and SAVE_DFGAIN write (.DOL, .OMSL, .OUT)?
         If SAVE only keeps a copy for a human, as the cavity char SAVE PVs
@@ -549,18 +559,23 @@ class PiezoWithRFPhase(PhaseBase):
 
         piezo = self.cavity.piezo
         try:
-            piezo.withrf_push_dfgain_pv_obj.put(1, wait=False)
+            piezo.withrf_push_dfgain_pv_obj.put(1)
         except Exception as exc:
-            return self._retry(
-                f"Could not confirm the detune gain push: {exc} — "
-                "PUSH_DFGAIN may have been processed; check DFGAIN before "
-                "retrying"
+            # Not a RETRY: the put may have reached the IOC, and a retry would
+            # trigger PUSH_DFGAIN again before anyone has checked.
+            note = (
+                f"PUSH_DFGAIN put of detune gain {self._detune_gain:.6f} not "
+                f"confirmed ({exc}); whether it reached the machine is unknown"
             )
-        # PUSH_DFGAIN processed: the gain is live. Record that before SAVE, so
-        # a failed SAVE still leaves detune_gain_pushed True.
+            self._append_note(note)
+            return self._failed(
+                f"{note} — check the live detune gain before pushing again"
+            )
+        # PUSH_DFGAIN confirmed processed: the gain is live. Record that before
+        # SAVE, so a failed SAVE still leaves detune_gain_pushed True.
         self._store_phase_fields(detune_gain_pushed=True)
         try:
-            piezo.withrf_save_dfgain_pv_obj.put(1, wait=False)
+            piezo.withrf_save_dfgain_pv_obj.put(1)
         except Exception as exc:
             # Not a RETRY: a retry re-runs the gate, which could refuse now
             # that the gain is already live.
@@ -577,16 +592,28 @@ class PiezoWithRFPhase(PhaseBase):
     def _check_before_push(self) -> PhaseStepResult | None:
         """Re-read DFGAIN_NEW and RFTESTSTS just before pushing.
 
+        Both reads pass use_monitor=False, so they ask the IOC now rather than
+        return the last monitor update. RFTESTSTS must still read Complete:
+        Running or Crash means another test has run since review.
+
         Returns a result that stops the push, or None if it can go ahead.
         """
+        piezo = self.cavity.piezo
         try:
-            now_gain = float(self.cavity.piezo.detunegain_new_pv_obj.get())
-            now_status = self._test_run_status()
+            now_gain = float(piezo.detunegain_new_pv_obj.get(use_monitor=False))
+            now_status = int(
+                piezo.withrf_check_status_pv_obj.get(use_monitor=False)
+            )
         except Exception as exc:
             return self._retry(f"Could not re-read before pushing: {exc}")
-        if now_status == linac_utils.PIEZO_SCRIPT_RUNNING_VALUE:
+        if now_status != linac_utils.PIEZO_SCRIPT_COMPLETE_VALUE:
+            name = {
+                linac_utils.PIEZO_SCRIPT_CRASH_VALUE: "Crash",
+                linac_utils.PIEZO_SCRIPT_RUNNING_VALUE: "Running",
+            }.get(now_status, str(now_status))
             return self._failed(
-                "A new with-RF test is running — nothing pushed"
+                f"RFTESTSTS reads {name}, not Complete — another with-RF test "
+                "has run since review; nothing pushed. Rerun the test."
             )
         if now_gain != self._detune_gain:
             return self._failed(
