@@ -41,7 +41,16 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from time import sleep
-from typing import Callable, Dict, Iterable, List, Optional, TypeVar, Union
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+)
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -163,20 +172,15 @@ def get_values_over_time_range(
     expected JSON, raises ArchiverError naming the PV.
     """
     pvs = list(pvs)
-    # Chunk in UTC: adding a timedelta to a Pacific time is wall-clock
-    # arithmetic, which skips or repeats an hour across a DST change.
-    start = _aware(start).astimezone(timezone.utc)
-    end = _aware(end).astimezone(timezone.utc)
 
     def fetch(pv: str) -> Optional[pd.DataFrame]:
         try:
-            return _fetch_range(pv, start, end, timeout)
-        except ArchiverError as e:
-            # Every range request has the same URL; name the PV that failed.
-            raise type(e)(f"{pv}: {e}") from e
-        except (KeyError, IndexError, TypeError) as e:
-            # A 200 whose JSON isn't the shape planning and fetching read.
-            raise ArchiverError(f"{pv}: unexpected response: {e!r}") from e
+            frames = list(iter_range_chunks(pv, start, end, timeout))
+        except PVNotArchivedError:
+            return None
+        # An empty frame's columns are object dtype; mixing one in would turn
+        # the timestamps into objects too, so chunks are never empty.
+        return pd.concat(frames, ignore_index=True) if frames else _to_frame([])
 
     frames = dict(zip(pvs, _map_in_daemon_threads(fetch, pvs, max_workers)))
 
@@ -186,10 +190,18 @@ def get_values_over_time_range(
     return frames
 
 
-def _fetch_range(
-    pv: str, start: datetime, end: datetime, timeout: float
-) -> Optional[pd.DataFrame]:
-    """Fetch one PV between start and end in chunks; None if not archived.
+def iter_range_chunks(
+    pv: str, start: datetime, end: datetime, timeout: float = RANGE_TIMEOUT
+) -> Iterator[pd.DataFrame]:
+    """Yield one PV's samples between start and end, a chunk at a time.
+
+    Chunks come in time order, none empty, with no sample twice. Joined with
+    pd.concat they equal get_values_over_time_range's frame for the PV. Use
+    this to process or store a long window without holding all of it.
+    Naive datetimes are read as America/Los_Angeles.
+
+    Raises PVNotArchivedError if the archiver does not know the PV, before
+    the first chunk or partway through. Other errors name the PV.
 
     A window can start with the last sample before "from", and a sample
     exactly on a boundary came back in both windows around it (checked on
@@ -202,27 +214,40 @@ def _fetch_range(
     until the end peaked at 3.7 GB for a 156 MB result (60 days, 4.7 M
     samples, measured 2026-10-12).
     """
+    # Chunk in UTC: adding a timedelta to a Pacific time is wall-clock
+    # arithmetic, which skips or repeats an hour across a DST change.
+    start = _aware(start).astimezone(timezone.utc)
+    end = _aware(end).astimezone(timezone.utc)
+    try:
+        yield from _iter_chunks(pv, start, end, timeout)
+    except PVNotArchivedError:
+        raise
+    except ArchiverError as e:
+        # Every range request has the same URL; name the PV that failed.
+        raise type(e)(f"{pv}: {e}") from e
+    except (KeyError, IndexError, TypeError) as e:
+        # A 200 whose JSON isn't the shape planning and fetching read.
+        raise ArchiverError(f"{pv}: unexpected response: {e!r}") from e
+
+
+def _iter_chunks(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Iterator[pd.DataFrame]:
     bounds = _plan_chunks(pv, start, end, timeout)
     if bounds is None:
-        return None
-    frames: List[pd.DataFrame] = []
+        raise PVNotArchivedError([pv])
     last: Optional[tuple] = None
     for chunk_start, chunk_end in zip(bounds, bounds[1:]):
         payload = _get_json(pv, chunk_start, chunk_end, timeout)
         if payload is None:
-            return None
+            raise PVNotArchivedError([pv])
         chunk = payload[0]["data"] if payload else []
         if last is not None:
             chunk = [datum for datum in chunk if _key(datum) > last]
         if chunk:
             last = _key(chunk[-1])
-            frames.append(_to_frame(chunk))
+            yield _to_frame(chunk)
         del payload, chunk
-    # An empty frame's columns are object dtype; mixing one in would turn
-    # the timestamps into objects too.
-    if not frames:
-        return _to_frame([])
-    return pd.concat(frames, ignore_index=True)
 
 
 def _plan_chunks(
@@ -357,7 +382,15 @@ def get_series(
     directly. Samples with INVALID severity are dropped. Keyword arguments go
     to get_values_over_time_range.
     """
-    frames = get_values_over_time_range(pvs, start, end, **kwargs)
+    return series_from_frames(
+        get_values_over_time_range(pvs, start, end, **kwargs)
+    )
+
+
+def series_from_frames(
+    frames: Dict[str, pd.DataFrame],
+) -> Dict[str, pd.Series]:
+    """get_series' Series, from frames such as ArchiverStore.read_windows'."""
     return {
         pv: pd.Series(
             frame.loc[frame["valid"], "value"].to_numpy(),

@@ -1,10 +1,7 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from sc_linac_physics.applications.field_emission.constants import (
     CAV_RANGE,
-    CSV_DATE_FORMAT,
-    CSV_OUTPUT_DIR,
     RAD_READ_TYPES,
     RAD_CHAN_RANGE,
 )
@@ -54,51 +51,37 @@ def align_pvs_to_common_time(series):
     aligned = pd.concat(deduped, axis=1, sort=True)
     aligned = aligned.ffill()
     aligned = aligned.dropna(how="any")
-    # update_h5py.convert_to_h5 drops this column by name.
-    aligned.index.name = "timestamps"
     return aligned
 
 
-def plot_amp_vs_rad(aligned_data):
-    """plot amplitude on x-axis, radiation on y-axis"""
-    x_axis = aligned_data.iloc[
-        :, 0
-    ]  # all rows, first column (amp data lives here)
-    rad_cols = aligned_data.columns[
-        1:
-    ]  # all columns after first (radmon channels live here)
-    fig, ax = plt.subplots()
-    for col in rad_cols:
-        ax.scatter(x_axis, aligned_data[col], label=col, marker=".")
-    ax.set_title(aligned_data.columns[0])
-    ax.set_xlabel("Amplitude (MV)")
-    ax.set_ylabel("Radiation")
-    ax.legend()
-    # plt.show()  # uncomment if you'd like to visualize
-    plt.close(fig)
+def run_pvs(cm, decarad):
+    """Every PV fetch_run reads: 8 amplitudes, then 10 heads x 2 readouts."""
+    rad_pvs = [
+        pv
+        for readout in RAD_READ_TYPES
+        for pv in rad_readout_pvs(decarad, readout)
+    ]
+    return amplitude_pvs(cm) + rad_pvs
 
 
-def generate_amp_vs_rad_csvs(cm, start, end, decarad):
-    """fetch one run and write a CSV per cavity and readout
+def fetch_run(cm, start, end, decarad, fetch=None):
+    """fetch one run, aligned per cavity and readout
 
-    Every cavity shares the decarad PVs, so each distinct PV is fetched once:
-    8 amplitudes + 10 heads x 2 readouts, 28 PVs, in parallel by get_series.
+    Returns {(cavity number, readout): DataFrame}, columns amplitude PV then
+    the 10 decarad head PVs. Every cavity shares the decarad PVs, so each
+    distinct PV is fetched once: 8 amplitudes + 10 heads x 2 readouts, 28
+    PVs, in parallel. fetch(pvs, start, end) returns {pv: Series} like
+    get_series; run_cache passes one that reads through ArchiverStore.
     """
-    print(f"Processing CM{cm} {start} -> {end}")
-    csv_date = start.strftime(CSV_DATE_FORMAT)
     amp_pvs = amplitude_pvs(cm)
     rad_pvs = {
         readout: rad_readout_pvs(decarad, readout) for readout in RAD_READ_TYPES
     }
-    all_pvs = amp_pvs + [pv for pvs in rad_pvs.values() for pv in pvs]
-    fetched = get_series(all_pvs, start, end)
+    fetched = (fetch or get_series)(run_pvs(cm, decarad), start, end)
 
+    frames = {}
     for readout in RAD_READ_TYPES:
         for cav_num, amp_pv in enumerate(amp_pvs, start=1):
             series = {pv: fetched[pv] for pv in [amp_pv] + rad_pvs[readout]}
-            aligned_time_data = align_pvs_to_common_time(series)
-            csv_path = (
-                CSV_OUTPUT_DIR
-                / f"cm{cm}_{csv_date}_cavity{cav_num}_{readout}.csv"
-            )
-            aligned_time_data.to_csv(csv_path)
+            frames[cav_num, readout] = align_pvs_to_common_time(series)
+    return frames
