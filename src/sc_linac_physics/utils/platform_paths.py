@@ -66,6 +66,18 @@ def get_log_base_dir(
     )
 
 
+def get_field_emission_dir(
+    *,
+    system_name: str | None = None,
+    home_dir: Path | None = None,
+) -> Path:
+    """Return the field emission data cache directory for the current platform."""
+    return (
+        get_srf_base_dir(system_name=system_name, home_dir=home_dir)
+        / "field_emission"
+    )
+
+
 def get_ssa_cal_base_dir(
     *,
     system_name: str | None = None,
