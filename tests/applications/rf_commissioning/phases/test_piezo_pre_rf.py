@@ -388,7 +388,7 @@ class TestPiezoPreRFPhase:
 
         assert result.result == PhaseResult.FAILED
         assert "Channel A failed" in result.message
-        assert "Low capacitance" in result.message
+        assert "Channel A failed (Warning): Low capacitance" in result.message
 
     def test_validate_results_channel_b_fails(self, phase, mock_piezo_pvs):
         """Test validate_results with Channel B failure."""
@@ -409,7 +409,7 @@ class TestPiezoPreRFPhase:
 
         assert result.result == PhaseResult.FAILED
         assert "Channel B failed" in result.message
-        assert "Connection error" in result.message
+        assert "Channel B failed (Fail): Connection error" in result.message
 
     def test_validate_results_both_channels_fail(self, phase, mock_piezo_pvs):
         """Test validate_results with both channels failing."""
@@ -491,6 +491,7 @@ class TestPiezoPreRFPhase:
             abs(piezo_result.capacitance_a - 25.3e-9) < 1e-12
         )  # Check nF to F conversion
         assert abs(piezo_result.capacitance_b - 24.8e-9) < 1e-12
+        assert piezo_result.notes == "Ch A: Pass (OK), Ch B: Pass (OK)"
 
     def test_custom_limits(self, context):
         """Test phase with custom test limits."""

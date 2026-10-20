@@ -2,6 +2,76 @@
 
 <!-- version list -->
 
+## v9.49.3 (2026-10-20)
+
+### Refactoring
+
+- **tuning**: Name the auto-tune undershoot factor
+  ([#442](https://github.com/slaclab/sc_linac_physics/pull/442),
+  [`b593b61`](https://github.com/slaclab/sc_linac_physics/commit/b593b61ca74154f7a323c8ecb80b90ff61c43829))
+
+
+## v9.49.2 (2026-10-19)
+
+### Bug Fixes
+
+- **rf-commissioning**: Read RFTESTSTAT, the with-RF result PV the IOC serves
+  ([#407](https://github.com/slaclab/sc_linac_physics/pull/407),
+  [`7d7f095`](https://github.com/slaclab/sc_linac_physics/commit/7d7f09521c135a6e61d5efe931c109d5cdb76dc6))
+
+- **ssa**: Check abort and time out while waiting on CALSTS
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+- **ssa**: Check abort on the completion poll and log the read CALSTS value
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+- **ssa**: Honor an abort that lands as SSA calibration finishes
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+
+## v9.49.1 (2026-10-19)
+
+### Bug Fixes
+
+- **rf-commissioning**: Piezo pre-RF no longer reads message PVs production lacks
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **rf-commissioning**: Piezo pre-RF reads the production TESTMSG1/2 PV names
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **rf-commissioning**: Read pre-RF messages from PZT:TESTMSG1/2
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **sim**: Piezo pre-RF channel states match production (Pass/Warning/Fail)
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+
+## v9.49.0 (2026-10-19)
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+- **sc-linac**: HL PwrRating is 1 kW per cavity, not per pair
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+### Features
+
+- **sc-linac**: Read SSA rated power from SSA:PwrRating
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+
 ## v9.48.0 (2026-10-17)
 
 ### Bug Fixes

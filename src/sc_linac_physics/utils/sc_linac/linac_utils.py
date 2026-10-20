@@ -208,6 +208,10 @@ PIEZO_SCRIPT_RUNNING_VALUE = 2
 PIEZO_SCRIPT_COMPLETE_VALUE = 1
 PIEZO_SCRIPT_CRASH_VALUE = 0
 PIEZO_PRE_RF_CHECKOUT_PASS_VALUE = 0
+# PZT:RFTESTSTAT enum, as ACCL:L1B:0210:PZT served it on 2026-10-14.
+PIEZO_WITH_RF_PASS_VALUE = 0
+PIEZO_WITH_RF_WARNING_VALUE = 1
+PIEZO_WITH_RF_FAIL_VALUE = 2
 PIEZO_WITH_RF_GRAD = 6.5
 PIEZO_CENTER_VOLTAGE = 25
 # 20 Hz/V is the production acceptance figure: +20 V on all four piezo-stacks
@@ -238,6 +242,15 @@ HL_HZ_PER_STEP = 18.3
 # applications/ consumes them.
 ESTIMATED_MICROSTEPS_PER_HZ = MICROSTEPS_PER_STEP / HZ_PER_STEP
 ESTIMATED_MICROSTEPS_PER_HZ_HL = MICROSTEPS_PER_STEP / HL_HZ_PER_STEP
+
+# Cavity._auto_tune aims each stepper move at this fraction of the measured
+# detune (was 0.9). A move passes resonance when
+# AUTO_TUNE_UNDERSHOOT * (true / believed SCALE) > 1, so 0.75 tolerates a tuner
+# that moves up to 1/0.75 = 1.33x what SCALE says without overshooting. 0.9
+# overshoots past 1.11x.
+# CHECK: Ryan reports some tuners move ~30% more than SCALE says. Is there a
+# measurement or tuner report to cite here?
+AUTO_TUNE_UNDERSHOOT = 0.75
 
 TUNE_CONFIG_RESONANCE_VALUE = 0
 TUNE_CONFIG_COLD_VALUE = 1
