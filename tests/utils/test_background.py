@@ -38,8 +38,8 @@ def _deliver(task: BackgroundTask):
 
 def test_success_emits_status_then_result_then_done(qapp):
     def target(task, cavity, amp):
-        task.status.emit(f"ramping {cavity}")
-        task.progress.emit(50)
+        task.report_status(f"ramping {cavity}")
+        task.report_progress(50)
         return amp * 2
 
     task = BackgroundTask(target, "CM01 cav 1", 8.0, runner=run_inline)
@@ -100,7 +100,7 @@ def test_default_runner_uses_a_daemon_thread_and_delivers_on_main(qapp):
 
     def target(task):
         worker_threads.append(threading.current_thread())
-        task.status.emit("working")
+        task.report_status("working")
         return "ok"
 
     task = BackgroundTask(target, name="test-task")
@@ -161,9 +161,13 @@ def test_deleted_task_does_not_raise_from_the_thread(qapp):
 
     release = threading.Event()
     errors = []
+    finished = []
 
     def target(task):
         release.wait(5)
+        task.report_status("still ramping")
+        task.report_progress(90)
+        finished.append(True)  # the rest of the target still ran
         return "late"
 
     task = BackgroundTask(target)
@@ -184,3 +188,4 @@ def test_deleted_task_does_not_raise_from_the_thread(qapp):
         release.set()
         task._thread.join(timeout=5)
     assert not errors
+    assert finished == [True]
