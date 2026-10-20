@@ -24,6 +24,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 |------|----------------|
 | [Linac Hardware Model](utils/linac_model.md) | `Machine → Linac → Cryomodule → Rack → Cavity` class hierarchy, PV naming, cryomodule groupings, all constants |
 | [Shared Utilities](utils/shared_utilities.md) | EPICS `PV` wrapper, `PVBatch`, `platform_paths`, `custom_logger`, Qt helpers |
+| [Reading an IOC Record](utils/epics_records.md) | What a PV does from a terminal: record types, processing, link fields and flags, and when to put with `wait=False` |
 | [Archiver Client](utils/archiver.md) | Reading archived PV data: ranges, value-at-time, plotting two signals |
 
 ### Applications
