@@ -164,10 +164,10 @@ The travel a given miscalibration demands does not care how far out of tune you
 started. The budget does. At the page defaults in the "Drive It" simulation in section 2,
 <span data-fig="fig-example-detune-b">200</span> Hz is
 <span data-fig="fig-example-expected">36,363</span> expected steps and buys a
-<span data-fig="fig-example-tol-factor">4.268</span>× budget, while the
-<span data-fig="fig-opened-detune">5000</span> Hz the page opens on is
+budget of <span data-fig="fig-example-tol-factor">4.268</span> times the expected steps,
+while the <span data-fig="fig-opened-detune">5000</span> Hz the page opens on is
 <span data-fig="fig-opened-expected">909,090</span> steps and buys only
-<span data-fig="fig-opened-tol-factor">1.376</span>×. (At the nominal 1.4/256
+<span data-fig="fig-opened-tol-factor">1.376</span> times. (At the nominal 1.4/256
 scale those same two figures are
 <span data-fig="fig-example-tol-factor-nominal">4.262</span>× and
 <span data-fig="fig-opened-tol-factor-nominal">1.369</span>×.) So the further
@@ -182,7 +182,7 @@ and still trips the runaway guard at every undershoot the slider offers.
 Check it above: at the opening detune, calibration error 1.35 converges at
 undershoot 0.75 and runs away at 1.0 — it sits inside the first window and
 outside the second. Same hardware, same miscalibration; the only difference is
-that one factor.
+the undershoot factor.
 
 !!! note "What this simulator is not"
 
@@ -237,7 +237,7 @@ stepper ends up holding the offset instead of the piezo.
 
 ### Tolerances
 
-50 Hz, or 500 Hz for harmonic linearizers — a literal in the
+50 Hz, or 500 Hz for harmonic linearizers, typed directly into the
 `move_to_resonance` call, not derived from anything
 <span class="cite">`cavity.py::Cavity.move_to_resonance “500 if self.cryomodule.is_harmonic_linearizer else 50”`</span>.
 
@@ -263,10 +263,10 @@ by then <span class="cite">`cavity.py::Cavity.find_chirp_range`</span>.
 
 ## 4. Tune states
 
-Every cavity carries a `TUNE_CONFIG` PV asserting what its frequency currently
-means
-<span class="cite">
-`linac_utils.py::TUNE_CONFIG_RESONANCE_VALUE, linac_utils.py::TUNE_CONFIG_COLD_VALUE, linac_utils.py::TUNE_CONFIG_PARKED_VALUE, linac_utils.py::TUNE_CONFIG_OTHER_VALUE`</span>.
+Every cavity carries a `TUNE_CONFIG` PV holding one of four values
+which say what its frequency currently means:
+<span class="cite">`linac_utils.py::TUNE_CONFIG_RESONANCE_VALUE, linac_utils.py::TUNE_CONFIG_COLD_VALUE,
+linac_utils.py::TUNE_CONFIG_PARKED_VALUE, linac_utils.py::TUNE_CONFIG_OTHER_VALUE`</span>.
 
 ![Tune config states: _auto_tune entry sets OTHER, move_to_resonance exit sets RESONANCE; COLD and PARKED are set by other tooling](img/tune_states.svg)
 
@@ -293,21 +293,21 @@ means
 
 ## 5. The commissioning stages
 
-RF commissioning wraps the same loop in a gated, operator-supervised sequence
+RF commissioning wraps the same `_auto_tune` loop from section 2 in a gated, operator-supervised sequence
 <span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase.get_phase_steps`</span>.
 The seven steps in the sequence are as follows:
 
-| # | Step                      | What it does to the machine                                                                                        |
-|---|---------------------------|--------------------------------------------------------------------------------------------------------------------|
-| 1 | `verify_initial_state`    | Confirms the stepper is idle, then prepares the cavity: SSA on, interlocks reset, `setup_tuning()` into chirp mode |
-| 2 | `record_cold_landing`     | Records the cold-landing detune; the operator pushes it to `DF_COLD` from the UI                                   |
-| 3 | `probe_stepper_direction` | Moves ±50,000 microsteps and measures the detune response                                                          |
-| 4 | `apply_hz_per_step`       | Writes the confirmed Hz/full-step to `SCALE_CALC.B`                                                                |
-| 5 | `tune_to_resonance`       | Delegates to `_auto_tune` with a temperature guard, then writes `NSTEPS_COLD`                                      |
-| 6 | `measure_pi_modes`        | Single-cavity FSCAN for the 8π/9 and 7π/9 parasitic modes                                                          |
-| 7 | `record_results`          | Writes the phase record to the commissioning database                                                              |
+| # | Step                      | What it does to the machine                                                                                                   |
+|---|---------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| 1 | `verify_initial_state`    | Confirms the stepper is idle, then prepares the cavity: SSA on, interlocks reset, `setup_tuning()` into chirp mode            |
+| 2 | `record_cold_landing`     | Records the cold-landing detune; the operator pushes it to `DF_COLD` from the cold landing dialog in the RF commissioning GUI |
+| 3 | `probe_stepper_direction` | Moves ±50,000 microsteps and measures the detune response                                                                     |
+| 4 | `apply_hz_per_step`       | Writes the confirmed Hz/full-step to `SCALE_CALC.B`                                                                           |
+| 5 | `tune_to_resonance`       | Delegates to `_auto_tune` with a temperature guard, then writes `NSTEPS_COLD`                                                 |
+| 6 | `measure_pi_modes`        | Single-cavity frequency scan (FSCAN) that records the 8π/9 and 7π/9 modes, the two resonances nearest the operating π mode    |
+| 7 | `record_results`          | Writes the phase record to the commissioning database                                                                         |
 
-### What this path does that `move_to_resonance` does not
+### What the commissioning phase does that `move_to_resonance` does not
 
 - **Measures Hz/microstep instead of inheriting it.** A 50,000-microstep probe
   move must produce at least 100 Hz of detune change
@@ -342,15 +342,15 @@ The seven steps in the sequence are as follows:
   `max_stepper_temp`, which still fails hard on a breach — the acknowledgement
   moves the line, it does not add a retry.
 
-  Kelvin, despite the `_c` on those names and the `°C` in `StepperTempError`'s
-  message. The stepper sits in the cryomodule insulating vacuum: production
-  testing interlocks the motor below 70 K and reports it starting near 30 K and
-  rising under 4 K through a long motion
-  <span class="cite">Holzbauer et al.,
-  IPAC2018, [WEPML004](https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf)</span>. The simulation agrees,
-  serving `STEPTEMP` at 35.0 with its alarm at 70
-  <span class="cite">`cavity_service.py::CavityPVGroup.step_temp`</span>. The
-  number is right and the label is wrong.
+The limit is in Kelvin, despite the `_c` on those names and the `°C` in `StepperTempError`'s
+message. The stepper sits in the cryomodule insulating vacuum: production
+testing interlocks the motor below 70 K and reports it starting near 30 K and
+rising under 4 K through a long motion
+<span class="cite">Holzbauer et al.,
+IPAC2018, [WEPML004](https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf)</span>. The simulation agrees,
+serving `STEPTEMP` at 35.0 with its alarm at 70
+<span class="cite">`cavity_service.py::CavityPVGroup.step_temp`</span>. The
+number is right and the label is wrong.
 
 !!! note "Not covered here: the operator controls"
 
