@@ -451,8 +451,11 @@ class PiezoWithRFPhase(PhaseBase):
         the status; a Warning is recorded as complete but not passed. Fail (2)
         clears earlier results and stores nothing.
 
-        CHECK: does the with-RF script write DFGAIN_NEW before PUSH_DFGAIN is
-        processed? Review-before-push depends on it.
+        Review-before-push works because PUSH_DFGAIN does not compute the
+        gain: its DOL reads DFGAIN_NEW (an ai record) with NPP, and it copies
+        that value to DFGAIN (as ACCL:L1B:0210:PZT served them on
+        2026-10-20). So DFGAIN_NEW already holds the value that will be
+        pushed when this step reads it.
         """
         if self.context.dry_run:
             return self._dry_run_result("result read")
@@ -538,9 +541,13 @@ class PiezoWithRFPhase(PhaseBase):
         If either starts something slow, the confirmed put times out and the
         step reports the push as unknown.
 
-        CHECK: where do PUSH_DFGAIN and SAVE_DFGAIN write (.DOL, .OMSL, .OUT)?
-        If SAVE only keeps a copy for a human, as the cavity char SAVE PVs
-        do (see CavityCharPhase._push_results), drop the SAVE write.
+        PUSH_DFGAIN is closed_loop: DOL reads DFGAIN_NEW (NPP) and OUT writes
+        DFGAIN (PP), the live detune gain (as ACCL:L1B:0210:PZT served them
+        on 2026-10-20).
+
+        CHECK: where does SAVE_DFGAIN write (.DOL, .OMSL, .OUT)? If it only
+        keeps a copy for a human, as the cavity char SAVE PVs do (see
+        CavityCharPhase._push_results), drop the SAVE write.
         """
         if self.context.dry_run:
             return self._dry_run_result("detune gain push")
@@ -568,9 +575,7 @@ class PiezoWithRFPhase(PhaseBase):
                 f"confirmed ({exc}); whether it reached the machine is unknown"
             )
             self._append_note(note)
-            return self._failed(
-                f"{note} — check the live detune gain before pushing again"
-            )
+            return self._failed(f"{note} — check DFGAIN before pushing again")
         # PUSH_DFGAIN confirmed processed: the gain is live. Record that before
         # SAVE, so a failed SAVE still leaves detune_gain_pushed True.
         self._store_phase_fields(detune_gain_pushed=True)
