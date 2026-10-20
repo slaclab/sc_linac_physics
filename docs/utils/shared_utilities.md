@@ -114,11 +114,31 @@ Notable behaviors:
 - `RetryFileHandlerFilter` retries log file creation every 60 s if the directory is missing (handles NFS mounts)
 - Pass `enable_retry=False` in tests to skip retries
 
+## Background work (`utils/background.py`)
+
+`BackgroundTask` runs one blocking call off the Qt main thread, on a daemon
+`threading.Thread`. The call gets the task as its first argument, so it can
+emit `status` and `progress` and check `cancel_requested`. Signals reach
+main-thread slots in this order: `status`/`progress` as the call emits them,
+then `succeeded(result)` or `failed("ExcType: message")`, then `done()`.
+
+```python
+task = BackgroundTask(fetch, cavity, name="fault-fetch")
+task.succeeded.connect(self.show_counts)
+task.failed.connect(self.show_error)
+task.start()
+```
+
+The thread attaches the pyepics initial CA context before the call and
+detaches after. Cancelling only sets a flag; nothing stops the thread from
+outside. In tests, pass `runner=run_inline` to run the call before `start()`
+returns, with no thread.
+
 ## Qt utilities (`utils/qt.py`)
 
 ### `Worker(QThread)`
 
-All long-running operations (EPICS sequences, data acquisition) run in a `Worker` to avoid blocking the Qt event loop. Signals:
+Older code. New code uses `BackgroundTask` above. Signals:
 
 ```python
 class Worker(QThread):
