@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.49.3 (2026-10-20)
+
+### Refactoring
+
+- **tuning**: Name the auto-tune undershoot factor
+  ([#442](https://github.com/slaclab/sc_linac_physics/pull/442),
+  [`b593b61`](https://github.com/slaclab/sc_linac_physics/commit/b593b61ca74154f7a323c8ecb80b90ff61c43829))
+
+
 ## v9.49.2 (2026-10-19)
 
 ### Bug Fixes
