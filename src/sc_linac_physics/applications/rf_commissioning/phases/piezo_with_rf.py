@@ -530,7 +530,7 @@ class PiezoWithRFPhase(PhaseBase):
 
         CHECK: where do PUSH_DFGAIN and SAVE_DFGAIN write (.DOL, .OMSL, .OUT)?
         If SAVE only keeps a copy for a human, as the cavity char SAVE PVs
-        do (#285), drop the SAVE write.
+        do (see CavityCharPhase._push_results), drop the SAVE write.
         """
         if self.context.dry_run:
             return self._dry_run_result("detune gain push")
