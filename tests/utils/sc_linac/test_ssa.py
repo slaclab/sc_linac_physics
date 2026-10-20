@@ -300,6 +300,30 @@ def test_run_calibration_bad_slope(ssa):
         ssa.run_calibration()
 
 
+def _start_running_calibration(ssa, statuses):
+    """Mock everything before the CALSTS poll; CALSTS reads `statuses`."""
+    ssa.reset = MagicMock()
+    ssa.turn_on = MagicMock()
+    ssa.cavity.reset_interlocks = MagicMock()
+    ssa.start_calibration = MagicMock()
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+    ssa._calibration_status_pv_obj = make_mock_pv()
+    ssa._calibration_status_pv_obj.get.side_effect = statuses
+
+
+def test_run_calibration_abort_on_completion_poll(ssa):
+    # The poll that reports the scan finished still honors a pending abort.
+    _start_running_calibration(ssa, lambda **_: 1)
+    ssa.cavity.turn_off = MagicMock()
+    ssa.cavity.push_ssa_slope = MagicMock()
+    ssa.cavity.abort_flag = True
+
+    with pytest.raises(CavityAbortError):
+        ssa.run_calibration()
+
+    ssa.cavity.push_ssa_slope.assert_not_called()
+
+
 def test_measured_slope(ssa):
     slope = uniform(SSA_SLOPE_LOWER_LIMIT, SSA_SLOPE_UPPER_LIMIT)
     ssa._measured_slope_pv_obj = make_mock_pv(get_val=slope)
@@ -333,7 +357,7 @@ def test_wait_while_resetting(ssa):
 
 
 class TestRatedPower:
-    """SSA.rated_power_kw reads SSA:Type and maps the enum index to kW."""
+    """SSA.rated_power_kw reads SSA:PwrRating, in kW."""
 
     @staticmethod
     def _ssa(cm_name, number):
@@ -343,20 +367,116 @@ class TestRatedPower:
 
         return MACHINE.cryomodules[cm_name].cavities[number].ssa
 
-    def test_type_pv_name(self):
-        assert self._ssa("35", 2).type_pv == "ACCL:L3B:3520:SSA:Type"
+    def test_pwr_rating_pv_name(self):
+        assert self._ssa("35", 2).pwr_rating_pv == "ACCL:L3B:3520:SSA:PwrRating"
 
     @pytest.mark.parametrize("number,shared", [(1, 1), (5, 1), (8, 4)])
-    def test_hl_type_pv_is_shared(self, number, shared):
-        # SSA:Type only exists on HL cavities 1-4 (checked 2026-10-05)
+    def test_hl_pwr_rating_pv_is_shared(self, number, shared):
+        # SSA:PwrRating only exists on HL cavities 1-4 (checked 2026-10-16)
         assert (
-            self._ssa("H1", number).type_pv == f"ACCL:L1B:H1{shared}0:SSA:Type"
+            self._ssa("H1", number).pwr_rating_pv
+            == f"ACCL:L1B:H1{shared}0:SSA:PwrRating"
         )
 
-    @pytest.mark.parametrize(
-        "ssa_type,expected",
-        [(0, 7.0), (1, 4.6), (2, 3.8), (3, 1.0), (4, None), (5, None)],
+    @pytest.mark.parametrize("raw", [3.8, 1, 7.0])
+    def test_rated_power_is_pv_value(self, ssa, raw):
+        # HL reads back 1 (an int), so the value is cast to float.
+        ssa._pwr_rating_pv_obj = make_mock_pv(get_val=raw)
+        assert ssa.rated_power_kw == float(raw)
+        assert isinstance(ssa.rated_power_kw, float)
+
+
+@pytest.fixture
+def no_wait(monkeypatch):
+    from sc_linac_physics.utils.sc_linac import linac_utils
+
+    for name in (
+        "SSA_TURN_ON_TIMEOUT_S",
+        "SSA_TURN_OFF_TIMEOUT_S",
+        "SSA_CALIBRATION_TIMEOUT_S",
+    ):
+        monkeypatch.setattr(linac_utils, name, 0)
+
+
+def test_turn_on_times_out_as_ssa_fault(ssa, no_wait):
+    from sc_linac_physics.utils.sc_linac.linac_utils import SSAFaultError
+
+    ssa.reset = MagicMock()
+    ssa.cavity.check_abort = MagicMock()
+    ssa._status_pv_obj = make_mock_pv(get_val="SSA Off")
+    ssa._turn_on_pv_obj = make_mock_pv()
+    with pytest.raises(SSAFaultError, match="to turn on"):
+        ssa.turn_on()
+
+
+def test_turn_off_times_out_as_ssa_fault(ssa, no_wait):
+    from sc_linac_physics.utils.sc_linac.linac_utils import SSAFaultError
+
+    ssa.cavity.check_abort = MagicMock()
+    ssa._status_pv_obj = make_mock_pv(get_val=SSA_STATUS_ON_VALUE)
+    ssa._turn_off_pv_obj = make_mock_pv()
+    with pytest.raises(SSAFaultError, match="to turn off"):
+        ssa.turn_off()
+
+
+def _start_stuck_calibration(ssa):
+    from sc_linac_physics.utils.sc_linac.linac_utils import (
+        SSA_CALIBRATION_RUNNING_VALUE,
     )
-    def test_rated_power_from_type(self, ssa, ssa_type, expected):
-        ssa._type_pv_obj = make_mock_pv(get_val=ssa_type)
-        assert ssa.rated_power_kw == expected
+
+    ssa.reset = MagicMock()
+    ssa.turn_on = MagicMock()
+    ssa.cavity.reset_interlocks = MagicMock()
+    ssa.start_calibration = MagicMock()
+    ssa._saved_drive_max_pv_obj = make_mock_pv(get_val=0.8)
+    ssa._calibration_status_pv_obj = make_mock_pv(
+        get_val=SSA_CALIBRATION_RUNNING_VALUE
+    )
+
+
+def test_run_calibration_times_out(ssa, no_wait):
+    _start_stuck_calibration(ssa)
+    ssa.cavity.check_abort = MagicMock()
+    from sc_linac_physics.utils.sc_linac.linac_utils import (
+        SSACalibrationTimeoutError,
+    )
+
+    with pytest.raises(
+        SSACalibrationTimeoutError, match="calibration to finish"
+    ):
+        ssa.run_calibration()
+
+
+def test_run_calibration_wait_checks_abort(ssa):
+    from sc_linac_physics.utils.sc_linac.linac_utils import CavityAbortError
+
+    _start_stuck_calibration(ssa)
+    ssa.cavity.check_abort = MagicMock(side_effect=CavityAbortError("abort"))
+    with pytest.raises(CavityAbortError):
+        ssa.run_calibration()
+
+
+def test_calibrate_does_not_retry_a_timed_out_calibration(ssa):
+    """A stuck CALSTS must not be met with another CALSTRT."""
+    from sc_linac_physics.utils.sc_linac.linac_utils import (
+        SSACalibrationTimeoutError,
+    )
+
+    ssa.cavity.check_abort = MagicMock()
+    ssa._drive_max_setpoint_pv_obj = make_mock_pv()
+    ssa.run_calibration = MagicMock(
+        side_effect=SSACalibrationTimeoutError("stuck")
+    )
+    with pytest.raises(SSACalibrationTimeoutError):
+        ssa.calibrate(0.8)
+    ssa.run_calibration.assert_called_once()
+
+
+def test_calibrate_still_retries_a_bad_result(ssa):
+    ssa.cavity.check_abort = MagicMock()
+    ssa._drive_max_setpoint_pv_obj = make_mock_pv()
+    ssa.run_calibration = MagicMock(
+        side_effect=[SSACalibrationError("bad"), None]
+    )
+    ssa.calibrate(0.8)
+    assert ssa.run_calibration.call_count == 2
