@@ -12,7 +12,7 @@ want. Tuning is the act of driving it to zero.
 
 The two actuators used in tuning are the stepper tuner
 (which makes coarse adjustments) and the piezo tuner (which makes fine adjustments).
-These two actuators have a clear division of labor:
+These two actuators split the work:
 
 |       | Stepper tuner                                                                                                                                                                                                                            | Piezo tuner                                                                                                                                                                                                                            |
 |-------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
