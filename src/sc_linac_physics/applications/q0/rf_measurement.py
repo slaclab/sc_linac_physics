@@ -291,14 +291,21 @@ class Q0Measurement:
 
     @property
     def q0_sigma(self) -> float:
-        """One-sigma spread on q0 from the RF and heater run fits only.
+        """How much q0 would vary from noise in the RF and heater run fits
+        alone (one standard deviation, the "±" shown beside Q0).
 
-        sigma_heat = sqrt(rf stderr^2 + heater stderr^2) / |dLLdt_dheat|,
-        using each run's correlation-widened linregress stderr
-        (DataRun.dll_dt_stderr) as the noise scale for both fits.
-        calc_q0 is called uncorrected (use_correction=False), where Q0 is
-        proportional to 1 / heat load, so sigma_q0 = q0 * sigma_heat / heat.
-        Leaves out calibration-line uncertainty and heater readback error.
+        The heat load is heater average_heat plus (rf dLL/dt - heater
+        dLL/dt) / dLLdt_dheat, so its spread in watts is
+        sqrt(rf_err^2 + heater_err^2) / |dLLdt_dheat|. Each err is that
+        run's DataRun.dll_dt_stderr. Independent errors add this way
+        because they partly cancel.
+
+        calc_q0 is called uncorrected (use_correction=False). Q0 is then
+        proportional to 1 / heat load, so a 1% spread in heat is a 1% spread
+        in Q0: sigma_q0 = q0 * sigma_heat / heat_load.
+
+        This leaves out the calibration line's own uncertainty and any
+        error in the heater readback, so the real uncertainty is larger.
         """
         sigma_heat = np.hypot(
             self.rf_run.dll_dt_stderr, self.heater_run.dll_dt_stderr
