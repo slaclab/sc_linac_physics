@@ -90,7 +90,7 @@ while |delta_hz| > tolerance:
     check_abort()
     if stepper_temp > max_stepper_temp:  raise StepperTempError
     iteration_callback()                        # abort flag + live plot
-    est_steps = int(0.75 * delta_hz * microsteps_per_hz)
+    est_steps = int(AUTO_TUNE_UNDERSHOOT * delta_hz * microsteps_per_hz)
     stepper_tuner.move(est_steps,
                        max_steps = |est_steps| * 1.1,
                        speed     = MAX_STEPPER_SPEED)
@@ -118,7 +118,8 @@ driving the motor. The page calls this the runaway guard.
 
 **Truncation means a perfect cavity lands a hair outside tolerance.**
 `est_steps` is an `int(...)`. `int()` drops everything after the decimal point
-instead of rounding; that is truncation. And 0.75 leaves a quarter of the
+instead of rounding; that is truncation. And `AUTO_TUNE_UNDERSHOOT` (0.75)
+<span class="cite">`linac_utils.py::AUTO_TUNE_UNDERSHOOT`</span> leaves a quarter of the
 detune behind — so
 a perfectly calibrated cavity starting at exactly four times tolerance is aimed
 precisely at the tolerance boundary, and the truncated step always drops it
