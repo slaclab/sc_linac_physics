@@ -541,13 +541,26 @@ class PiezoWithRFPhase(PhaseBase):
         If either starts something slow, the confirmed put times out and the
         step reports the push as unknown.
 
-        PUSH_DFGAIN is closed_loop: DOL reads DFGAIN_NEW (NPP) and OUT writes
-        DFGAIN (PP), the live detune gain (as ACCL:L1B:0210:PZT served them
-        on 2026-10-20).
+        What the two records do, from their link fields (caget on
+        ACCL:L1B:0210:PZT, 2026-10-20). Writing 1 to a record's .PROC makes
+        it process, meaning run once. Both are ao records with
+        OMSL = closed_loop: when one processes, it fetches a value from the
+        record named in its DOL field and writes it to the record named in
+        its OUT field. NPP on DOL means it reads the source as it stands,
+        without making the source recompute. PP on OUT means the destination
+        processes too, so the new value takes effect.
 
-        SAVE_DFGAIN is closed_loop too: DOL reads DFGAIN (NPP) and OUT writes
-        DFGAIN_SAVE (PP) (same IOC, same day). It copies the live gain, so it
-        must run after PUSH is confirmed, which is why PUSH waits.
+        - PUSH_DFGAIN: DOL = DFGAIN_NEW (NPP), OUT = DFGAIN (PP). It copies
+          DFGAIN_NEW, the value read_results stored and the operator
+          reviewed, into DFGAIN, the gain in use. It does not compute a gain.
+        - SAVE_DFGAIN: DOL = DFGAIN (NPP), OUT = DFGAIN_SAVE (PP). It copies
+          whatever DFGAIN holds at that moment into DFGAIN_SAVE. So it must
+          run after PUSH is confirmed, or it would save the old gain. That is
+          why PUSH waits.
+
+        Links point one way. A record names its own source and destination,
+        never the records that read from it. So these fields can't show
+        whether anything reads DFGAIN_SAVE.
 
         CHECK: does anything read DFGAIN_SAVE, e.g. to restore DFGAIN after an
         IOC reboot? If not, it only keeps a copy for a human, as the cavity
