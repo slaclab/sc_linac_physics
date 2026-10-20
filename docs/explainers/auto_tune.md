@@ -130,8 +130,9 @@ driving the motor. This step-budget check is called the runaway guard throughout
 
 **Truncation means a perfect cavity lands a hair outside tolerance.**
 `est_steps` is an `int(...)`. `int()` drops everything after the decimal point
-instead of rounding; that is truncation. And 0.75 leaves a quarter of the
-detune behind — so a perfectly calibrated cavity (aka a cavity with a calibration error of 1.0, meaning its `SCALE` is
+instead of rounding; that is truncation. And the 0.75 in `est_steps = int(0.75 * ...)`
+(the loop in section 2) leaves a quarter of the detune behind — so a perfectly
+calibrated cavity (aka a cavity with a calibration error of 1.0, meaning its `SCALE` is
 exactly right) starting at exactly four times tolerance is aimed
 precisely at the tolerance boundary, and the truncated step always drops it
 just outside. Set the starting detune to
