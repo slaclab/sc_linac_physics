@@ -3,7 +3,7 @@
 This replaces Worker(QThread) in utils/qt.py. Usage::
 
     def ramp(task, cavity, amp):
-        task.status.emit(f"Ramping {cavity} to {amp} MV")
+        task.report_status(f"Ramping {cavity} to {amp} MV")
         cavity.setup_rf(amp)
         return amp
 
@@ -83,7 +83,10 @@ class BackgroundTask(QObject):
 
     Signals, all delivered on the main thread:
 
-    - status(str), progress(int): emitted by the target when it chooses.
+    - status(str), progress(int): sent by the target through
+      report_status() and report_progress(). Use those, not .emit():
+      if the owner deletes the task mid-run, they do nothing, where
+      .emit() would raise inside the target and skip the rest of it.
     - succeeded(object): the target's return value.
     - failed(str): "ExcType: message" for any exception the target raised.
       The traceback goes to the log.
@@ -128,6 +131,12 @@ class BackgroundTask(QObject):
         self._started = True
         self._running = True
         self._runner(self)
+
+    def report_status(self, message: str) -> None:
+        self._emit("status", message)
+
+    def report_progress(self, percent: int) -> None:
+        self._emit("progress", percent)
 
     def request_cancel(self) -> None:
         self._cancel.set()
