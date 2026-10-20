@@ -545,9 +545,14 @@ class PiezoWithRFPhase(PhaseBase):
         DFGAIN (PP), the live detune gain (as ACCL:L1B:0210:PZT served them
         on 2026-10-20).
 
-        CHECK: where does SAVE_DFGAIN write (.DOL, .OMSL, .OUT)? If it only
-        keeps a copy for a human, as the cavity char SAVE PVs do (see
-        CavityCharPhase._push_results), drop the SAVE write.
+        SAVE_DFGAIN is closed_loop too: DOL reads DFGAIN (NPP) and OUT writes
+        DFGAIN_SAVE (PP) (same IOC, same day). It copies the live gain, so it
+        must run after PUSH is confirmed, which is why PUSH waits.
+
+        CHECK: does anything read DFGAIN_SAVE, e.g. to restore DFGAIN after an
+        IOC reboot? If not, it only keeps a copy for a human, as the cavity
+        char SAVE PVs do (see CavityCharPhase._push_results); drop the SAVE
+        write.
         """
         if self.context.dry_run:
             return self._dry_run_result("detune gain push")
