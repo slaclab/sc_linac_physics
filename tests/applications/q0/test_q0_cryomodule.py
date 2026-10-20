@@ -2658,6 +2658,38 @@ class TestPVHelpers:
         )
 
 
+class TestDsLevelSetpoint:
+    """The DS level target goes to JT SP_RQST, not the DS:LVL readback."""
+
+    @staticmethod
+    def _set_level(cryo, value):
+        # fast_q0_cryo stubs ds_liquid_level; call the real setter.
+        from sc_linac_physics.applications.q0.q0_cryomodule import (
+            Q0Cryomodule,
+        )
+
+        Q0Cryomodule.ds_liquid_level.fset(cryo, value)
+
+    def test_setter_writes_jt_setpoint(self, fast_q0_cryo):
+        from tests.applications.q0 import pyepics_shim
+
+        self._set_level(fast_q0_cryo, 85.0)
+
+        pyepics_shim.caput.assert_called_once_with(
+            fast_q0_cryo.ds_liq_lev_setpoint_pv, 85.0, wait=True
+        )
+        assert fast_q0_cryo.ds_liq_lev_setpoint_pv.endswith(":SP_RQST")
+
+    def test_setter_does_not_write_readback(self, fast_q0_cryo):
+        from tests.applications.q0 import pyepics_shim
+
+        self._set_level(fast_q0_cryo, 85.0)
+
+        written = [c.args[0] for c in pyepics_shim.caput.call_args_list]
+        assert fast_q0_cryo.ds_level_pv not in written
+        fast_q0_cryo.ds_level_pv_obj.put.assert_not_called()
+
+
 class TestCleanupAttemptsEveryStep:
     """A failed cryo write must not skip later cleanup or abort flags."""
 

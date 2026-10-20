@@ -28,6 +28,9 @@ class Q0Cryomodule(Cryomodule):
         self.jt_mode_str_pv: str = self.make_jt_pv("MODE_STRING")
         self.jt_manual_select_pv: str = self.make_jt_pv("MANUAL")
         self.jt_auto_select_pv: str = self.make_jt_pv("AUTO")
+        # Per Sebastian Aderhold (Slack, 2026-10-20): in AUTO, SP_RQST is the
+        # DS liquid level the JT controller opens/closes the valve to reach.
+        # In MANUAL, MANPOS_RQST sets the valve position directly.
         self.ds_liq_lev_setpoint_pv: str = self.make_jt_pv("SP_RQST")
         self.jt_man_pos_setpoint_pv: str = self.make_jt_pv("MANPOS_RQST")
 
@@ -238,7 +241,12 @@ class Q0Cryomodule(Cryomodule):
 
     @ds_liquid_level.setter
     def ds_liquid_level(self, value):
-        self.ds_level_pv_obj.put(value)
+        """Write the DS level target to JT SP_RQST (waited put).
+
+        The getter reads the DS:LVL readback. The setter used to write
+        DS:LVL too, so the JT setpoint was never changed.
+        """
+        self._pv(self.ds_liq_lev_setpoint_pv).put(value)
 
     def fill(
         self, desired_level=q0_utils.MAX_DS_LL, turn_cavities_off: bool = True
@@ -537,7 +545,7 @@ class Q0Cryomodule(Cryomodule):
         self._clear_monitor(self.ds_level_pv)
 
     def restore_cryo(self):
-        """JT AUTO, ds_liquid_level = 92, heater SEQUENCER, in that order.
+        """JT AUTO, JT SP_RQST = 92, heater SEQUENCER, in that order.
 
         Each step is attempted even if an earlier one fails.
         """
