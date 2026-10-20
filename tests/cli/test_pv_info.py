@@ -191,7 +191,10 @@ class TestLinks:
         assert "NPP: reads it as it stands" in out
         assert "NMS: does not pass on its alarm severity" in out
         assert "OUT   " + P + "DFGAIN" in out
-        assert "PP: writes it and makes it process" in out
+        assert (
+            "PP: writes it, then makes it process if it is passive "
+            "(not over a CA link)" in out
+        )
         assert "FLNK" not in out
         assert "Processing it copies DFGAIN_NEW as it stands into DFGAIN." in (
             out
@@ -281,6 +284,61 @@ class TestLinks:
         )
         out = describe(name)
         assert f"INP   {link}  ({label}, not a PV)" in out
+
+
+def test_pp_dol_summary_is_qualified(serve):
+    served = dict(PUSH_DFGAIN, **{P + "PUSH_DFGAIN.DOL": P + "DFGAIN_NEW PP"})
+    serve(served)
+    out = describe(P + "PUSH_DFGAIN")
+    assert "makes it process first if it is passive, then reads it" in out
+    assert (
+        "copies DFGAIN_NEW after processing it if it is passive into DFGAIN"
+        in out
+    )
+
+
+def test_field_qualified_name_uses_its_record(serve):
+    served = dict(PUSH_DFGAIN, **{P + "PUSH_DFGAIN.PROC": "0"})
+    serve(served)
+    out = describe(P + "PUSH_DFGAIN.PROC")
+    assert out.startswith(P + "PUSH_DFGAIN.PROC\n")
+    assert 'ao record: "Push new DF gain"' in out
+    assert 'dbgrep "*PUSH_DFGAIN*"' in out
+    assert "copies DFGAIN_NEW as it stands into DFGAIN." in out
+
+
+def test_field_qualified_target_reads_its_record(serve):
+    name = P + "AMP"
+    serve(
+        {
+            name: "3",
+            name + ".RTYP": "ai",
+            name + ".DESC": "",
+            name + ".INP": P + "RAW.VAL NPP",
+            name + ".FLNK": "",
+            P + "RAW.VAL": "7",
+            P + "RAW.RTYP": "ai",
+            P + "RAW.DESC": "Raw amp",
+        }
+    )
+    assert '→ ai "Raw amp" = 7' in describe(name)
+
+
+def test_each_target_read_once(serve):
+    name = P + "SUM"
+    created = serve(
+        {
+            name: "5",
+            name + ".RTYP": "calc",
+            name + ".DESC": "",
+            name + ".CALC": "A+B",
+            name + ".INPA": P + "A NPP",
+            name + ".INPB": P + "A NPP",
+        }
+    )
+    describe(name)
+    asked = [pv.pvname for pv in created]
+    assert asked.count(P + "A") == 1
 
 
 def test_sim_style_zero_flnk_is_unset(serve):

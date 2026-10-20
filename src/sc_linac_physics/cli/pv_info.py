@@ -111,12 +111,17 @@ def _connect(names: Sequence[str]) -> List[PV]:
 def _read(names: Sequence[str]) -> Dict[str, Optional[str]]:
     """{name: value as a string}, or None for a PV that didn't answer."""
     values = dict.fromkeys(names)
-    for pv in _connect(names):
+    for pv in _connect(list(values)):
         try:
             values[pv.pvname] = pv.get(as_string=True)
         except (PVConnectionError, PVGetError):
             pass
     return values
+
+
+def _record_of(name: str) -> str:
+    """The record a PV name belongs to: PUSH_DFGAIN.PROC -> PUSH_DFGAIN."""
+    return name.split(".", 1)[0]
 
 
 def _fields_for(rtyp: str) -> List[str]:
@@ -144,13 +149,18 @@ def _link_kind(link: str) -> Optional[str]:
 
 # Flag meanings: EPICS Application Developer's Guide, "Database Links".
 # The PP/NPP/CP/MS/NMS wording follows docs/utils/epics_records.md.
+# PP only processes a passive target, and a CA link doesn't apply it.
+# CHECK: over a CA link (another IOC, or the CA flag), does the target
+# process anyway when the field written is VAL?
 def _flag_words(flag: str, field: str, short: str) -> str:
     writes = field == "OUT"
     words = {
         "PP": (
-            "writes it and makes it process"
+            "writes it, then makes it process if it is passive "
+            "(not over a CA link)"
             if writes
-            else "makes it process, then reads it"
+            else "makes it process first if it is passive, then reads it "
+            "(not over a CA link)"
         ),
         "NPP": (
             "writes it without making it process"
@@ -191,8 +201,9 @@ def _link_lines(field, link, record, targets) -> List[str]:
     if value is None:
         lines.append("          → no response")
     else:
-        rtyp = targets.get(target + ".RTYP") or "no record fields"
-        desc = targets.get(target + ".DESC") or ""
+        owner = _record_of(target)
+        rtyp = targets.get(owner + ".RTYP") or "no record fields"
+        desc = targets.get(owner + ".DESC") or ""
         lines.append(f'          → {rtyp} "{desc}" = {value}')
     return lines
 
@@ -218,32 +229,39 @@ def _summary(rtyp, fields, record) -> Optional[str]:
     dest = _short(out[0], record)
     dol = pv_target("DOL")
     if fields.get("OMSL") == "closed_loop" and dol:
-        how = "after making it process" if "PP" in dol else "as it stands"
+        how = (
+            "after processing it if it is passive"
+            if "PP" in dol
+            else "as it stands"
+        )
         source = _short(dol[0], record)
         return f"Processing it copies {source} {how} into {dest}."
     return f"Processing it writes its own value into {dest}."
 
 
 def _record_lines(pv: PV) -> List[str]:
+    # A field-qualified name (PUSH_DFGAIN.PROC) gives the value and cainfo
+    # facts; the record's type, DESC and links come from PUSH_DFGAIN.
     name = pv.pvname
+    owner = _record_of(name)
     dbf = "DBF_" + str(pv.type).split("_")[-1].upper()
-    head = _read([name, name + ".RTYP", name + ".DESC"])
+    head = _read([name, owner + ".RTYP", owner + ".DESC"])
     lines = [
         name,
         f"  connected · {pv.host} · {pv.access} · {dbf}",
     ]
-    rtyp = head[name + ".RTYP"]
+    rtyp = head[owner + ".RTYP"]
     if rtyp is None:
         lines.append("  no record fields served (.RTYP doesn't answer)")
     else:
-        lines.append(f'  {rtyp} record: "{head[name + ".DESC"] or ""}"')
+        lines.append(f'  {rtyp} record: "{head[owner + ".DESC"] or ""}"')
     lines.append(f"  value: {head[name]}")
     if dbf == "DBF_ENUM":
         pv.get_ctrlvars(timeout=CONNECT_TIMEOUT_S, warn=False)
         lines.append("  states:")
         for i, state in enumerate(pv.enum_strs or ()):
             lines.append(f"    [{i}] {state}")
-    record = name.rsplit(":", 1)[-1]
+    record = owner.rsplit(":", 1)[-1]
     lines += [
         "",
         "  Channel Access can't show which records read this one. On the",
@@ -251,7 +269,7 @@ def _record_lines(pv: PV) -> List[str]:
         "  dbpr <record> 1 prints each one's links.",
     ]
     if rtyp is not None:
-        lines += _links_section(name, rtyp)
+        lines += _links_section(owner, rtyp)
     return lines
 
 
@@ -266,7 +284,8 @@ def _links_section(name: str, rtyp: str) -> List[str]:
         del links["FLNK"]
     target_names = [v.split()[0] for v in links.values() if not _link_kind(v)]
     targets = _read(
-        [t + suffix for t in target_names for suffix in ("", ".RTYP", ".DESC")]
+        list(target_names)
+        + [_record_of(t) + f for t in target_names for f in (".RTYP", ".DESC")]
     )
 
     lines = ["", "Links"]
