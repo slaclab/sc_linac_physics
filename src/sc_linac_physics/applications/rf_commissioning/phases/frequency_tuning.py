@@ -73,8 +73,8 @@ class FrequencyTuningLimits:
     # Computed, not measured: probe_steps microsteps at HZ_PER_STEP /
     # MICROSTEPS_PER_STEP = 1.4 / 256 Hz per microstep works out to
     # 50_000 * 1.4 / 256 = 273 Hz. HZ_PER_STEP is documented as measured;
-    # MICROSTEPS_PER_STEP is a fixed count, not a measurement.
-    # CHECK: is every stepper driver on the machine set to 256 microsteps?
+    # MICROSTEPS_PER_STEP is a fixed count, not a measurement: every stepper
+    # on the machine runs 256 microsteps per step (Lisa Zacarias, 2026-10-21).
     # Require a solid fraction of that so a degraded/uncoupled stepper is
     # caught, not just a totally dead one.
     #
