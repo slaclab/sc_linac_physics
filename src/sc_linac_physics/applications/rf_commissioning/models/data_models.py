@@ -416,6 +416,20 @@ class PiezoWithRFTest:
         widget_name="piezo_rf_detune_gain",
         format_spec=".6f",
     )
+    # RFTESTSTAT as read_results found it: "Pass" or "Warning". A Fail fails
+    # the phase before anything is stored. None until read_results runs.
+    rf_test_status: str | None = phase_display_field(
+        default=None,
+        label="With-RF Test",
+        widget_name="piezo_rf_test_status",
+    )
+    # True once push_detune_gain processed PUSH_DFGAIN (set before SAVE_DFGAIN
+    # is written).
+    detune_gain_pushed: bool = phase_display_field(
+        default=False,
+        label="Detune Gain Pushed",
+        widget_name="piezo_rf_detune_gain_pushed",
+    )
     timestamp: datetime = field(default_factory=datetime.now)
     notes: str = ""
 
@@ -430,7 +444,8 @@ class PiezoWithRFTest:
 
     @property
     def passed(self) -> bool:
-        return self.is_complete
+        """Complete, and RFTESTSTAT did not end in Warning."""
+        return self.is_complete and self.rf_test_status != "Warning"
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
