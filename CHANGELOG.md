@@ -2,6 +2,78 @@
 
 <!-- version list -->
 
+## v9.54.0 (2026-10-21)
+
+### Bug Fixes
+
+- **cli**: Sc-pv-info reads record fields from the owning record
+  ([#449](https://github.com/slaclab/sc_linac_physics/pull/449),
+  [`7b96919`](https://github.com/slaclab/sc_linac_physics/commit/7b9691944ff619ed1c6262b15d6de11c75bbfb6c))
+
+### Features
+
+- **cli**: Add sc-pv-info, a read-only description of an EPICS record
+  ([#449](https://github.com/slaclab/sc_linac_physics/pull/449),
+  [`7b96919`](https://github.com/slaclab/sc_linac_physics/commit/7b9691944ff619ed1c6262b15d6de11c75bbfb6c))
+
+- **cli**: Let sc-pv-info find cryo, decarad, vacuum and magnet suffixes
+  ([#449](https://github.com/slaclab/sc_linac_physics/pull/449),
+  [`7b96919`](https://github.com/slaclab/sc_linac_physics/commit/7b9691944ff619ed1c6262b15d6de11c75bbfb6c))
+
+
+## v9.53.0 (2026-10-21)
+
+### Bug Fixes
+
+- **q0**: A failed cryo write no longer skips the rest of cleanup
+  ([#406](https://github.com/slaclab/sc_linac_physics/pull/406),
+  [`60ae1a4`](https://github.com/slaclab/sc_linac_physics/commit/60ae1a4539db3607039d668e4532194da3c083aa))
+
+- **q0**: Read and write cryo PVs through PV, so failures are errors not None
+  ([#406](https://github.com/slaclab/sc_linac_physics/pull/406),
+  [`60ae1a4`](https://github.com/slaclab/sc_linac_physics/commit/60ae1a4539db3607039d668e4532194da3c083aa))
+
+- **q0**: Restore the saved DS level target in shut_off too
+  ([#406](https://github.com/slaclab/sc_linac_physics/pull/406),
+  [`60ae1a4`](https://github.com/slaclab/sc_linac_physics/commit/60ae1a4539db3607039d668e4532194da3c083aa))
+
+- **q0**: Restore the starting DS level target, leave SSAs on at shut_off
+  ([#406](https://github.com/slaclab/sc_linac_physics/pull/406),
+  [`60ae1a4`](https://github.com/slaclab/sc_linac_physics/commit/60ae1a4539db3607039d668e4532194da3c083aa))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#400](https://github.com/slaclab/sc_linac_physics/pull/400),
+  [`7695773`](https://github.com/slaclab/sc_linac_physics/commit/7695773eeab12025685950f3d09d925e132eb27f))
+
+- **q0**: Full sentences in the _attempt_each docstring
+  ([#406](https://github.com/slaclab/sc_linac_physics/pull/406),
+  [`60ae1a4`](https://github.com/slaclab/sc_linac_physics/commit/60ae1a4539db3607039d668e4532194da3c083aa))
+
+- **rf-commissioning**: Say cavity char keeps a recent SSA calibration
+  ([#400](https://github.com/slaclab/sc_linac_physics/pull/400),
+  [`7695773`](https://github.com/slaclab/sc_linac_physics/commit/7695773eeab12025685950f3d09d925e132eb27f))
+
+### Features
+
+- **rf-commissioning**: Ask before recalibrating an old SSA in cavity char
+  ([#400](https://github.com/slaclab/sc_linac_physics/pull/400),
+  [`7695773`](https://github.com/slaclab/sc_linac_physics/commit/7695773eeab12025685950f3d09d925e132eb27f))
+
+- **rf-commissioning**: Cavity char calibrates the SSA and tunes before measuring
+  ([#400](https://github.com/slaclab/sc_linac_physics/pull/400),
+  [`7695773`](https://github.com/slaclab/sc_linac_physics/commit/7695773eeab12025685950f3d09d925e132eb27f))
+
+- **rf-commissioning**: Cavity char panel runs the new setup steps
+  ([#400](https://github.com/slaclab/sc_linac_physics/pull/400),
+  [`7695773`](https://github.com/slaclab/sc_linac_physics/commit/7695773eeab12025685950f3d09d925e132eb27f))
+
+- **sc-linac**: Read the SSA calibration time from SSA:CALTS
+  ([#400](https://github.com/slaclab/sc_linac_physics/pull/400),
+  [`7695773`](https://github.com/slaclab/sc_linac_physics/commit/7695773eeab12025685950f3d09d925e132eb27f))
+
+
 ## v9.52.0 (2026-10-21)
 
 ### Bug Fixes

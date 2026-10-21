@@ -221,7 +221,7 @@ def test_progress_is_reported_for_each_step(view):
     c.phase.execute_step.return_value = _result(PhaseResult.SUCCESS)
     c._execute_single_step("read_results")
     c.context.progress_callback.assert_called_once_with(
-        "read_results", int(4 / 7 * 100)
+        "read_results", int(6 / 9 * 100)
     )
 
 
