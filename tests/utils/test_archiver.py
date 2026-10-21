@@ -978,3 +978,49 @@ class TestCsv:
         with patch.object(archiver, "_plan_chunks", return_value=plan):
             with pytest.raises(PVNotArchivedError):
                 get_values_over_time_range(["A:PV"], START, bounds[-1])
+
+
+class TestTimestampDtype:
+    """CSV and JSON frames share TIMESTAMP_DTYPE, whatever pandas picks."""
+
+    ROWS = [(1696263180, 1.0, 0, 0, 500), (1696263181, 2.0, 0, 0, 0)]
+
+    def _csv_frame(self):
+        raw = pd.DataFrame(
+            self.ROWS, columns=["secs", "value", "severity", "status", "nanos"]
+        )
+        return archiver._csv_to_frame(raw)
+
+    def _json_frame(self, rows):
+        return archiver._to_frame(
+            [{"secs": s, "val": v, "nanos": n} for s, v, _, _, n in rows]
+        )
+
+    def test_both_readers_give_timestamp_dtype(self):
+        assert str(self._csv_frame()["timestamp"].dtype) == (
+            archiver.TIMESTAMP_DTYPE
+        )
+        assert str(self._json_frame(self.ROWS)["timestamp"].dtype) == (
+            archiver.TIMESTAMP_DTYPE
+        )
+        assert str(archiver._to_frame([])["timestamp"].dtype) == (
+            archiver.TIMESTAMP_DTYPE
+        )
+
+    def test_csv_and_json_series_pair_by_time(self):
+        def series(frame, name):
+            return pd.Series(
+                frame["value"].to_numpy(),
+                index=pd.DatetimeIndex(frame["timestamp"]),
+                name=name,
+            )
+
+        numeric = series(self._csv_frame(), "NUM")  # read as CSV
+        status = series(  # a string PV, read as JSON
+            self._json_frame([(1696263179, "1", 0, 0, 0)]), "STR"
+        )
+
+        paired = archiver.pair_by_time(numeric, status)
+
+        assert list(paired["NUM"]) == [1.0, 2.0]
+        assert list(paired["STR"]) == ["1", "1"]

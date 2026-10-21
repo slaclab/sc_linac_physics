@@ -487,8 +487,8 @@ def _csv_to_frame(raw: pd.DataFrame) -> pd.DataFrame:
                 raw["secs"] * 1_000_000_000 + raw["nanos"], utc=True
             )
             .dt.round("us")
-            .astype("datetime64[us, UTC]")
-            .dt.tz_convert(LOCAL_TZ),
+            .dt.tz_convert(LOCAL_TZ)
+            .astype(TIMESTAMP_DTYPE),
             "value": raw["value"],
             "severity": raw["severity"],
             "status": raw["status"],
