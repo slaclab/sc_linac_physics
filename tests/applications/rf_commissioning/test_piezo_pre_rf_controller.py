@@ -1,5 +1,6 @@
 """Targeted tests for Piezo Pre-RF controller helpers."""
 
+import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -13,6 +14,7 @@ from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo i
     CommissioningPiezo,
 )
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
     CommissioningRecord,
     PiezoPreRFCheck,
 )
@@ -20,6 +22,12 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
     PhaseResult,
     PhaseStepResult,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
+    HOLD_STEP_MODE,
+    PhaseRun,
+    SegmentOutcome,
+    SegmentResult,
 )
 
 
@@ -228,118 +236,6 @@ def test_get_selected_cavity_info_returns_parsed_values() -> None:
     result = controller._get_selected_cavity_info()
 
     assert result == ("L1B_CM02_CAV1", 2, 1)
-
-
-def test_execute_step_with_retries_success_calls_success_handler() -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.execute_step.return_value = PhaseStepResult(
-        result=PhaseResult.SUCCESS,
-        message="ok",
-    )
-    controller._create_step_checkpoint = Mock()
-    controller._handle_step_success = Mock(return_value=True)
-
-    result = controller._execute_step_with_retries("setup_piezo", max_retries=3)
-
-    assert result is True
-    controller._create_step_checkpoint.assert_called_once()
-    controller._handle_step_success.assert_called_once()
-
-
-def test_execute_step_with_retries_retry_exhausted_returns_false() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.phase.execute_step.return_value = PhaseStepResult(
-        result=PhaseResult.RETRY,
-        message="try again",
-    )
-    controller._create_step_checkpoint = Mock()
-
-    result = controller._execute_step_with_retries("validate", max_retries=2)
-
-    assert result is False
-    assert any("Failed after 2 retries" in msg for msg in view.logs)
-
-
-def test_execute_step_with_retries_failed_result_returns_false() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.phase.execute_step.return_value = PhaseStepResult(
-        result=PhaseResult.FAILED,
-        message="bad",
-    )
-    controller._create_step_checkpoint = Mock()
-
-    result = controller._execute_step_with_retries("validate", max_retries=2)
-
-    assert result is False
-    assert any("validate failed" in msg for msg in view.logs)
-
-
-def test_execute_step_with_retries_exception_exhausted_returns_false() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.phase.execute_step.side_effect = RuntimeError("rpc down")
-
-    result = controller._execute_step_with_retries("validate", max_retries=2)
-
-    assert result is False
-    assert any("Exception after 2 retries" in msg for msg in view.logs)
-
-
-def test_on_phase_run_finished_routes_to_completed_handler() -> None:
-    controller = _make_controller()
-    controller._sync_piezo_readbacks = Mock()
-    controller.on_phase_completed = Mock()
-    controller.on_phase_failed = Mock()
-
-    controller._on_phase_run_finished(True, "")
-
-    controller._sync_piezo_readbacks.assert_called_once()
-    controller.on_phase_completed.assert_called_once()
-    controller.on_phase_failed.assert_not_called()
-
-
-def test_on_phase_run_finished_uses_default_error_message() -> None:
-    controller = _make_controller()
-    controller._sync_piezo_readbacks = Mock()
-    controller.on_phase_completed = Mock()
-    controller.on_phase_failed = Mock()
-
-    controller._on_phase_run_finished(False, "")
-
-    controller.on_phase_failed.assert_called_once_with("Phase execution failed")
-
-
-def test_on_abort_requests_abort_and_disables_button() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-
-    controller.on_abort()
-
-    assert controller.context.abort_requested is True
-    assert view.abort_button.enabled is False
-    assert "Abort requested..." in view.logs
-
-
-def test_on_pause_test_toggles_pause_state_and_button_text() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-
-    controller.on_pause_test()
-    assert controller._paused is True
-    assert view.pause_button.text == "\u25b6 Resume"
-
-    controller.on_pause_test()
-    assert controller._paused is False
-    assert view.pause_button.text == "\u23f8 Pause"
 
 
 def test_set_next_button_enabled_no_next_step_button_is_safe() -> None:
@@ -758,281 +654,6 @@ def test_on_run_automated_test_stops_when_prepare_context_fails() -> None:
     controller.execute_phase_steps.assert_not_called()
 
 
-def test_execute_phase_steps_paths(monkeypatch) -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-
-    controller.context = None
-    controller.phase = None
-    controller.execute_phase_steps()
-    assert "No phase context available" in view.errors[-1]
-
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller.phase = Mock()
-    controller.phase.get_phase_steps.return_value = ["a"]
-    controller._step_mode = True
-    controller._set_next_button_enabled = Mock()
-    monkeypatch.setattr(
-        controller_module.QTimer, "singleShot", lambda _ms, fn: fn()
-    )
-
-    controller.execute_phase_steps()
-    controller._set_next_button_enabled.assert_called_once_with(True)
-
-    controller._step_mode = False
-    controller._run_phase_in_background = Mock(
-        side_effect=RuntimeError("run boom")
-    )
-    controller.on_phase_failed = Mock()
-    controller.execute_phase_steps()
-    controller.on_phase_failed.assert_called_once_with("run boom")
-
-
-def test_run_phase_in_background_worker_paths(monkeypatch) -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.get_phase_steps.return_value = ["step"]
-    controller._check_pause_and_abort = Mock(return_value=False)
-
-    class _ThreadStub:
-        def __init__(self, target, daemon):
-            self.target = target
-
-        def start(self):
-            self.target()
-
-    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
-    controller._run_phase_in_background()
-
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.get_phase_steps.return_value = ["step"]
-    controller.phase._execute_step_with_retry.return_value = False
-    controller._check_pause_and_abort = Mock(return_value=True)
-    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-    controller._run_phase_in_background()
-    assert emitted[-1] == (False, "Step failed: step")
-
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.get_phase_steps.side_effect = RuntimeError("worker fail")
-    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-    controller._run_phase_in_background()
-    assert emitted[-1] == (False, "worker fail")
-
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.get_phase_steps.return_value = ["step"]
-    controller.phase._execute_step_with_retry.return_value = True
-    controller._check_pause_and_abort = Mock(return_value=True)
-    controller._finalize_background_phase = Mock()
-    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
-    controller._run_phase_in_background()
-    controller._finalize_background_phase.assert_called_once()
-
-
-def test_check_pause_and_abort_paths(monkeypatch) -> None:
-    controller = _make_controller()
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller._paused = True
-
-    def _sleep(_):
-        controller.context.request_abort()
-
-    monkeypatch.setitem(
-        __import__("sys").modules, "time", SimpleNamespace(sleep=_sleep)
-    )
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-    assert controller._check_pause_and_abort() is False
-    assert emitted[-1] == (False, "Aborted")
-
-    controller = _make_controller()
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller.context.request_abort()
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-    assert controller._check_pause_and_abort() is False
-    assert emitted[-1] == (False, "Aborted")
-
-    controller = _make_controller()
-    assert controller._check_pause_and_abort() is True
-
-
-def test_finalize_background_phase_paths() -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-    controller._finalize_background_phase()
-    assert emitted[-1] == (True, "")
-
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.finalize_phase.side_effect = RuntimeError("finalize fail")
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-    controller._finalize_background_phase()
-    assert emitted[-1] == (False, "finalize fail")
-
-
-def test_execute_single_step_and_wait_notify_helpers(monkeypatch) -> None:
-    controller = _make_controller()
-    controller._wait_for_unpause = Mock(return_value=False)
-    assert controller._execute_single_step("step") is False
-
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller._wait_for_unpause = Mock(return_value=True)
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller.context.request_abort()
-    assert controller._execute_single_step("step") is False
-    assert any("Abort during step" in msg for msg in view.logs)
-
-    controller = _make_controller()
-    controller._wait_for_unpause = Mock(return_value=True)
-    controller._notify_step_progress = Mock()
-    controller._execute_step_with_retries = Mock(return_value=True)
-    assert controller._execute_single_step("step") is True
-
-    controller = _make_controller()
-    assert controller._wait_for_unpause() is True
-    controller._paused = True
-    calls = {"n": 0}
-    monkeypatch.setattr(
-        controller_module.QTimer, "singleShot", lambda _ms, fn: fn()
-    )
-
-    def _sleep(_):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            controller._paused = False
-
-    monkeypatch.setitem(
-        __import__("sys").modules, "time", SimpleNamespace(sleep=_sleep)
-    )
-    assert controller._wait_for_unpause() is True
-
-    events = []
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller.context.progress_callback = lambda step, prog: events.append(
-        (step, prog)
-    )
-    controller._steps = ["a", "b"]
-    controller._notify_step_progress("b")
-    controller._notify_step_progress("x")
-    assert events[0] == ("b", 50)
-    assert events[1] == ("x", 0)
-
-
-def test_execute_step_with_retries_skip_and_retry_then_success() -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.execute_step.return_value = PhaseStepResult(
-        result=PhaseResult.SKIP,
-        message="skip",
-    )
-    controller._create_step_checkpoint = Mock()
-    controller._handle_step_success = Mock(return_value=True)
-    assert controller._execute_step_with_retries("step", 2) is True
-
-    controller = _make_controller(view=_ViewStub())
-    controller.phase = Mock()
-    controller.phase.execute_step.side_effect = [
-        PhaseStepResult(result=PhaseResult.RETRY, message="retry"),
-        PhaseStepResult(result=PhaseResult.SUCCESS, message="ok"),
-    ]
-    controller._create_step_checkpoint = Mock()
-    controller._handle_step_success = Mock(return_value=True)
-    assert controller._execute_step_with_retries("step", 3) is True
-
-
-def test_execute_step_with_retries_zero_retries_returns_false() -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    assert controller._execute_step_with_retries("step", 0) is False
-
-
-def test_create_checkpoint_and_handle_step_success_paths() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    record = _record_with_result()
-    record.phase_history = []
-    controller.context = PhaseContext(record=record, operator="op")
-    controller.phase = Mock()
-    controller.phase.phase_type = "PHASE"
-
-    result = PhaseStepResult(
-        result=PhaseResult.SUCCESS, message="done", data={"a": 1}
-    )
-    controller._create_step_checkpoint("step", result)
-    assert len(record.phase_history) == 1
-
-    controller._sync_piezo_readbacks = Mock()
-    assert controller._handle_step_success("setup_piezo", result) is True
-    controller._sync_piezo_readbacks.assert_called_once()
-
-    skip = PhaseStepResult(result=PhaseResult.SKIP, message="skip")
-    assert controller._handle_step_success("validate", skip) is True
-
-
-def test_finalize_phase_execution_paths() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller.on_phase_completed = Mock()
-    controller._finalize_phase_execution()
-    controller.on_phase_completed.assert_called_once()
-
-    controller = _make_controller(view=_ViewStub())
-    controller.phase = Mock()
-    rec = _record_with_result()
-    rec.piezo_pre_rf = None
-    controller.context = PhaseContext(record=rec, operator="op")
-    controller.on_phase_completed = Mock()
-    controller._finalize_phase_execution()
-    assert any("not populated" in msg for msg in controller.view.logs)
-
-    controller = _make_controller(view=_ViewStub())
-    controller.phase = Mock()
-    controller.phase.finalize_phase.side_effect = RuntimeError("boom")
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller.on_phase_failed = Mock()
-    controller._finalize_phase_execution()
-    controller.on_phase_failed.assert_called_once_with("boom")
-
-
 def test_on_phase_completed_paths() -> None:
     view = _ViewStub()
     session = Mock()
@@ -1168,66 +789,6 @@ def test_set_next_button_enabled_and_update_toolbar_positive_paths() -> None:
     view.ui.update_toolbar_state.assert_called_once_with("running")
 
 
-def test_toggle_step_mode_and_next_step_paths(monkeypatch) -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller._set_next_button_enabled = Mock()
-
-    controller.on_toggle_step_mode()
-    assert controller._step_mode is True
-
-    controller.on_toggle_step_mode()
-    assert controller._step_mode is False
-    controller._set_next_button_enabled.assert_called_with(False)
-
-    controller._step_mode = False
-    controller._step_executing = False
-    controller.on_next_step()
-
-    controller._step_mode = True
-    controller._step_executing = True
-    controller.on_next_step()
-
-    controller._step_executing = False
-    controller._steps = ["a"]
-    controller._current_step_index = 1
-    controller.on_next_step()
-    assert any("All steps completed" in msg for msg in view.logs)
-
-    monkeypatch.setattr(
-        controller_module.QTimer, "singleShot", lambda _ms, fn: fn()
-    )
-    controller._current_step_index = 0
-    controller._steps = ["a", "b"]
-    controller._execute_single_step = Mock(return_value=True)
-    controller._set_next_button_enabled = Mock()
-    controller.on_next_step()
-    assert controller._current_step_index == 1
-
-    controller._steps = ["a"]
-    controller._current_step_index = 0
-    controller._execute_single_step = Mock(return_value=True)
-    controller._finalize_phase_execution = Mock()
-    controller.on_next_step()
-    controller._finalize_phase_execution.assert_called_once()
-
-    controller._steps = ["a"]
-    controller._current_step_index = 0
-    controller._execute_single_step = Mock(return_value=False)
-    controller.on_phase_failed = Mock()
-    controller.on_next_step()
-    controller.on_phase_failed.assert_called_once_with("Step execution failed")
-
-    controller._steps = ["a"]
-    controller._current_step_index = 0
-    controller._execute_single_step = Mock(
-        side_effect=RuntimeError("step kaboom")
-    )
-    controller.on_phase_failed = Mock()
-    controller.on_next_step()
-    controller.on_phase_failed.assert_called_once_with("step kaboom")
-
-
 def test_notify_parent_record_created_logs_message() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
@@ -1248,3 +809,216 @@ def test_get_cavity_from_parent_returns_none_when_no_matching_parent() -> None:
     controller.view.parent = lambda: _NoCombos()
 
     assert controller._get_cavity_from_parent() == (None, None)
+
+
+# ------------------------------------------------------------------
+# Controls delegate to the PhaseRun
+# ------------------------------------------------------------------
+
+
+def _run_with_record() -> PhaseRun:
+    phase = Mock()
+    phase.context = PhaseContext(record=_record_with_result(), operator="op")
+    phase.phase_type = CommissioningPhase.PIEZO_PRE_RF
+    return PhaseRun(phase)
+
+
+def test_on_abort_aborts_the_run_and_disables_button() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller.run = _run_with_record()
+
+    controller.on_abort()
+
+    assert controller.run.context.abort_requested is True
+    assert view.abort_button.enabled is False
+
+
+def test_on_abort_without_run_is_noop() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller.on_abort()
+    assert view.abort_button.enabled is True
+
+
+def test_on_pause_test_toggles_run_and_button_text() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller.run = _run_with_record()
+
+    controller.on_pause_test()
+    assert controller.run.paused is True
+    assert view.pause_button.text == "▶ Resume"
+
+    controller.on_pause_test()
+    assert controller.run.paused is False
+    assert view.pause_button.text == "⏸ Pause"
+
+
+def test_toggle_step_mode_sets_it_on_the_run() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller.run = _run_with_record()
+
+    controller.on_toggle_step_mode()
+    assert controller.run.step_mode is True
+    controller.on_toggle_step_mode()
+    assert controller.run.step_mode is False
+    assert view.next_step_btn.enabled is False
+
+
+def test_next_step_ignored_outside_step_mode() -> None:
+    controller = _make_controller()
+    controller.run = Mock()
+    controller.on_next_step()
+    controller.run.next_step.assert_not_called()
+
+
+def test_holding_in_step_mode_enables_next() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    view.next_step_btn.enabled = False
+
+    controller._on_holding("setup_piezo", "paused")
+    assert view.next_step_btn.enabled is False
+    controller._on_holding("setup_piezo", HOLD_STEP_MODE)
+    assert view.next_step_btn.enabled is True
+
+
+def test_setup_piezo_success_syncs_readbacks() -> None:
+    controller = _make_controller()
+    controller._sync_piezo_readbacks = Mock()
+    ok = PhaseStepResult(result=PhaseResult.SUCCESS, message="ok")
+
+    controller._on_step_finished("run_prerf_test", ok)
+    controller._sync_piezo_readbacks.assert_not_called()
+    controller._on_step_finished("setup_piezo", ok)
+    controller._sync_piezo_readbacks.assert_called_once()
+
+
+def test_segment_finished_routes_by_outcome() -> None:
+    controller = _make_controller()
+    controller._sync_piezo_readbacks = Mock()
+    controller.on_phase_completed = Mock()
+    controller.on_phase_failed = Mock()
+
+    controller._on_segment_finished(SegmentResult(SegmentOutcome.COMPLETED))
+    controller.on_phase_completed.assert_called_once()
+
+    controller._on_segment_finished(SegmentResult(SegmentOutcome.FAILED))
+    controller.on_phase_failed.assert_called_once_with("Phase execution failed")
+    assert controller._sync_piezo_readbacks.call_count == 2
+
+
+# ------------------------------------------------------------------
+# Running through the RunnerBridge
+# ------------------------------------------------------------------
+
+
+def _controller_with_phase(steps, execute_step):
+    view = _ViewStub()
+    view.next_step_btn.enabled = False
+    controller = _make_controller(view=view)
+    controller.on_phase_completed = Mock()
+    controller.on_phase_failed = Mock()
+    controller.phase = Mock()
+    controller.phase.phase_type = CommissioningPhase.PIEZO_PRE_RF
+    controller.phase.get_phase_steps.return_value = steps
+    controller.phase.execute_step.side_effect = execute_step
+    controller.context = PhaseContext(
+        record=_record_with_result(), operator="op"
+    )
+    controller.phase.context = controller.context
+    return controller
+
+
+def _ok(step):
+    return PhaseStepResult(result=PhaseResult.SUCCESS, message="ok")
+
+
+def test_run_completes_and_finalizes(qtbot) -> None:
+    controller = _controller_with_phase(["setup_piezo", "run_prerf_test"], _ok)
+
+    controller.execute_phase_steps()
+
+    qtbot.waitUntil(lambda: controller.on_phase_completed.called, timeout=2000)
+    controller.phase.finalize_phase.assert_called_once()
+    controller.phase._mark_phase_started.assert_called_once()
+    controller.on_phase_failed.assert_not_called()
+    assert "✓ setup_piezo: ok" in controller.view.logs
+
+
+def test_exception_in_step_fails_without_retry(qtbot) -> None:
+    def _raise(step):
+        raise RuntimeError("PV disconnected")
+
+    controller = _controller_with_phase(["setup_piezo"], _raise)
+    controller.execute_phase_steps()
+
+    qtbot.waitUntil(lambda: controller.on_phase_failed.called, timeout=2000)
+    assert controller.phase.execute_step.call_count == 1
+    assert "PV disconnected" in controller.on_phase_failed.call_args.args[0]
+
+
+def test_retry_count_starts_fresh_for_each_step(qtbot) -> None:
+    attempts = {"a": 0, "b": 0}
+
+    def _retry_twice(step):
+        attempts[step] += 1
+        if attempts[step] < 3:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message="not yet",
+                retry_delay_seconds=0,
+            )
+        return PhaseStepResult(result=PhaseResult.SUCCESS, message="ok")
+
+    controller = _controller_with_phase(["a", "b"], _retry_twice)
+    controller.execute_phase_steps()
+
+    qtbot.waitUntil(lambda: controller.on_phase_completed.called, timeout=2000)
+    assert attempts == {"a": 3, "b": 3}
+
+
+def test_step_mode_runs_each_step_off_the_gui_thread(qtbot) -> None:
+    """Before PhaseRun, Next ran the step on the GUI thread and froze it."""
+    gui_thread = threading.current_thread()
+    ran_on = []
+
+    def _record_thread(step):
+        ran_on.append(threading.current_thread())
+        return _ok(step)
+
+    controller = _controller_with_phase(["setup_piezo"], _record_thread)
+    controller.on_toggle_step_mode()
+    controller.execute_phase_steps()
+
+    qtbot.waitUntil(lambda: controller.view.next_step_btn.enabled, timeout=2000)
+    controller.phase.execute_step.assert_not_called()
+    controller.on_next_step()
+
+    qtbot.waitUntil(lambda: controller.on_phase_completed.called, timeout=2000)
+    assert ran_on and ran_on[0] is not gui_thread
+
+
+def test_abort_during_a_hold_ends_the_run_at_once(qtbot) -> None:
+    controller = _controller_with_phase(["setup_piezo"], _ok)
+    controller.on_toggle_step_mode()
+    controller.execute_phase_steps()
+    qtbot.waitUntil(lambda: controller.view.next_step_btn.enabled, timeout=2000)
+
+    controller.on_pause_test()
+    controller.on_abort()
+
+    qtbot.waitUntil(lambda: controller.on_phase_failed.called, timeout=2000)
+    controller.phase.execute_step.assert_not_called()
+    controller.on_phase_completed.assert_not_called()
+
+
+def test_second_run_while_running_shows_error() -> None:
+    controller = _controller_with_phase(["setup_piezo"], _ok)
+    controller.bridge.start_segment = Mock(return_value=False)
+
+    controller.execute_phase_steps()
+
+    assert controller.view.errors == ["A Pre-RF test is already running."]
