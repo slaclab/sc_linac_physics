@@ -153,6 +153,12 @@ class PiezoWithRFPhase(PhaseBase):
         Refuses a with-RF test that is already running here, before
         setup_rf turns RF off under it. start_test checks again just before
         it writes RFTESTSTRT.
+
+        Its data says whether the SSA calibration and the characterization
+        are recent enough for setup_rf to keep (see _setup_rf), with CALTS
+        and PROBECALTS. The controller asks the operator Rerun or Skip for
+        each one that is not, and puts the answers in
+        context.parameters before setup_rf runs.
         """
         if self.context.dry_run:
             return self._dry_run_result("cavity state check")
@@ -175,11 +181,26 @@ class PiezoWithRFPhase(PhaseBase):
                     "A with-RF test is already running (RFTESTSTS = "
                     "Running) — wait for it to finish"
                 )
+            ssa = self.cavity.ssa
+            data = {
+                "ssa_calibration_time": ssa.calibration_timestamp,
+                "ssa_calibration_good": bool(ssa.calibration_result_good),
+                "ssa_calibration_recent": self._ssa_calibration_recent(),
+                "characterization_time": (
+                    self.cavity.characterization_timestamp
+                ),
+                "characterization_complete": (
+                    self.cavity.characterization_status
+                    == linac_utils.CALIBRATION_COMPLETE_VALUE
+                ),
+                "characterization_recent": self._characterization_recent(),
+            }
         except Exception as exc:
             return self._retry(f"Could not read cavity state: {exc}")
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
             message="Cavity ready for the with-RF test",
+            data=data,
         )
 
     def _test_amplitude(self) -> float:
@@ -214,9 +235,14 @@ class PiezoWithRFPhase(PhaseBase):
         characterization is skipped when PROBECALTS is under 1 h old and
         PROBECALSTS is Complete. A skipped step leaves the slope, loaded Q
         and scale factor already on the machine. This follows Sebastian
-        Aderhold's review of #408. A stale result is re-run here. The review
-        suggested asking the operator first, but nothing runs this phase
-        yet, so there is nothing to ask through; the controller should add it.
+        Aderhold's review of #408.
+
+        A stale result is re-run unless the operator chose Skip:
+        context.parameters["rerun_ssa_calibration"] or
+        ["rerun_characterization"] set to False. The controller asks before
+        this step (verify_initial_state reports what is stale). A missing
+        answer means re-run. An answer only covers a stale result: True
+        does not re-run a recent one.
         A step that runs here has none of the review gates the SSA and
         cavity characterization phases have. So this step appends what it
         did, with the loaded Q and scale factor it read back, to
@@ -241,9 +267,18 @@ class PiezoWithRFPhase(PhaseBase):
         if self.context.dry_run:
             return self._dry_run_result("RF setup")
         amplitude = self._test_amplitude()
+        params = self.context.parameters
         try:
-            calibrate_ssa = not self._ssa_calibration_recent()
-            characterize = not self._characterization_recent()
+            ssa_stale = not self._ssa_calibration_recent()
+            char_stale = not self._characterization_recent()
+            ssa_time = self.cavity.ssa.calibration_timestamp
+            char_time = self.cavity.characterization_timestamp
+            calibrate_ssa = ssa_stale and bool(
+                params.get("rerun_ssa_calibration", True)
+            )
+            characterize = char_stale and bool(
+                params.get("rerun_characterization", True)
+            )
         except Exception as exc:
             # Only reads so far, so a retry repeats nothing on the machine.
             return self._retry(f"Could not read the last calibration: {exc}")
@@ -267,12 +302,16 @@ class PiezoWithRFPhase(PhaseBase):
         ssa_note = (
             "re-ran SSA calibration"
             if calibrate_ssa
-            else "kept the SSA calibration from the last hour"
+            else self._kept_note(
+                "SSA calibration", ssa_stale, "CALTS", ssa_time
+            )
         )
         char_note = (
             "re-ran characterization (pushed, not reviewed)"
             if characterize
-            else "kept the characterization from the last hour"
+            else self._kept_note(
+                "characterization", char_stale, "PROBECALTS", char_time
+            )
         )
         note = (
             f"setup_rf() {ssa_note} and {char_note}: loaded Q "
@@ -290,6 +329,16 @@ class PiezoWithRFPhase(PhaseBase):
                 "scale_factor": scale_factor,
             },
         )
+
+    @staticmethod
+    def _kept_note(what: str, stale: bool, pv: str, stamp: datetime) -> str:
+        """setup_rf's note for a result it did not re-run."""
+        if stale:
+            return (
+                f"kept a stale {what} ({pv} {stamp:%Y-%m-%d %H:%M}; "
+                "operator chose Skip)"
+            )
+        return f"kept the {what} from the last hour"
 
     def _is_recent(self, timestamp: datetime) -> bool:
         age = (datetime.now() - timestamp).total_seconds()
