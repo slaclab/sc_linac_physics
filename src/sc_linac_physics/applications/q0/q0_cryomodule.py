@@ -9,7 +9,10 @@ from numpy import linspace, sign, floor
 
 from sc_linac_physics.applications.q0 import q0_utils
 from sc_linac_physics.applications.q0.calibration import Calibration
-from sc_linac_physics.applications.q0.q0_utils import round_for_printing
+from sc_linac_physics.applications.q0.q0_utils import (
+    logger,
+    round_for_printing,
+)
 from sc_linac_physics.applications.q0.rf_measurement import Q0Measurement
 from sc_linac_physics.applications.q0.rf_run import RFRun
 from sc_linac_physics.utils.epics import PV
@@ -193,7 +196,7 @@ class Q0Cryomodule(Cryomodule):
             try:
                 step()
             except Exception as e:
-                print(f"{self}: {description} failed: {e}")
+                logger.error(f"{self}: {description} failed: {e}")
                 if first_error is None:
                     first_error = e
         if first_error is not None:
@@ -206,7 +209,7 @@ class Q0Cryomodule(Cryomodule):
     def _restore_ds_level_setpoint(self) -> None:
         """Put the saved starting value back to SP_RQST, if one was saved."""
         if self._starting_ds_level_setpoint is None:
-            print(
+            logger.info(
                 f"{self}: no starting liquid level setpoint saved,"
                 " leaving SP_RQST as is"
             )
@@ -220,7 +223,7 @@ class Q0Cryomodule(Cryomodule):
         value, then each cavity off. Each step is attempted even if an
         earlier one fails.
         """
-        print("Restoring cryo, turning cavities off")
+        logger.info("Restoring cryo, turning cavities off")
         steps = [
             ("heater SEQUENCER", self._select_heater_sequencer),
             ("JT AUTO", self.select_jt_auto),
@@ -243,13 +246,13 @@ class Q0Cryomodule(Cryomodule):
             self._pv(self.heater_mode_pv).get() != q0_utils.HEATER_MANUAL_VALUE
         ):
             self.check_abort()
-            print(f"Setting {self} heaters to manual and waiting 3s")
+            logger.info(f"Setting {self} heaters to manual and waiting 3s")
             self._pv(self.heater_manual_pv).put(1, wait=True)
             sleep(3)
 
         self._pv(self.heater_setpoint_pv).put(value, wait=False)
 
-        print(f"set {self} heater power to {value} W")
+        logger.info(f"set {self} heater power to {value} W")
 
     @property
     def ds_liquid_level(self):
@@ -265,7 +268,7 @@ class Q0Cryomodule(Cryomodule):
         self, desired_level=q0_utils.MAX_DS_LL, turn_cavities_off: bool = True
     ):
         self.ds_liquid_level = desired_level
-        print(f"Setting JT to auto for refill to {desired_level}")
+        logger.info(f"Setting JT to auto for refill to {desired_level}")
         self._pv(self.jt_auto_select_pv).put(1, wait=True)
         self.heater_power = 0
 
@@ -278,7 +281,7 @@ class Q0Cryomodule(Cryomodule):
     def fillAndLock(self, desiredLevel=q0_utils.MAX_DS_LL):
         self.ds_liquid_level = desiredLevel
 
-        print(f"Setting JT to auto for refill to {desiredLevel}")
+        logger.info(f"Setting JT to auto for refill to {desiredLevel}")
         self._pv(self.jt_auto_select_pv).put(1, wait=True)
 
         self.heater_power = self.valveParams.refHeatLoadDes
@@ -367,7 +370,7 @@ class Q0Cryomodule(Cryomodule):
     ) -> None:
         self.heater_power = heater_setpoint
 
-        print(f"Waiting for the LL to drop {target_ll_diff}%")
+        logger.info(f"Waiting for the LL to drop {target_ll_diff}%")
 
         self.current_data_run: q0_utils.HeaterRun = q0_utils.HeaterRun(
             heater_setpoint - self.valveParams.refHeatLoadAct,
@@ -385,7 +388,7 @@ class Q0Cryomodule(Cryomodule):
         self._clear_monitor(self.heater_readback_pv)
 
         self.current_data_run.end_time = datetime.now()
-        print("Heater run done")
+        logger.info("Heater run done")
 
     def wait_for_ll_drop(self, target_ll_diff):
         starting_level = self.averaged_liquid_level
@@ -393,7 +396,7 @@ class Q0Cryomodule(Cryomodule):
         while (starting_level - avg_level) < target_ll_diff:
             self.check_abort()
             avg_level_rounded = round_for_printing(self.averaged_liquid_level)
-            print(f"Averaged level is {avg_level_rounded}; waiting 10s")
+            logger.info(f"Averaged level is {avg_level_rounded}; waiting 10s")
             avg_level = self.averaged_liquid_level
             sleep(10)
 
@@ -420,7 +423,9 @@ class Q0Cryomodule(Cryomodule):
                 > 0.1
             ):
                 self.check_abort()
-                print(f"Waiting for CM{self.name} cavity {cav_num} to be ready")
+                logger.info(
+                    f"Waiting for CM{self.name} cavity {cav_num} to be ready"
+                )
                 sleep(5)
 
         self.current_data_run: RFRun = self.q0_measurement.rf_run
@@ -441,7 +446,7 @@ class Q0Cryomodule(Cryomodule):
         self._clear_monitor(self.ds_pressure_pv)
         self.q0_measurement.rf_run.end_time = datetime.now()
 
-        print(self.q0_measurement.rf_run.dll_dt)
+        logger.info(f"RF run dLL/dt: {self.q0_measurement.rf_run.dll_dt}")
 
         self.setup_cryo_for_measurement(desired_ll)
 
@@ -456,7 +461,9 @@ class Q0Cryomodule(Cryomodule):
             self.valveParams.refHeatLoadAct
         )
 
-        print(self.q0_measurement.heater_run.dll_dt)
+        logger.info(
+            f"Heater run dLL/dt: {self.q0_measurement.heater_run.dll_dt}"
+        )
 
         self.q0_measurement.save_data()
 
@@ -469,13 +476,13 @@ class Q0Cryomodule(Cryomodule):
 
         self._clear_monitor(self.ds_level_pv)
 
-        print("\nStart Time: {START}".format(START=start_time))
-        print("End Time: {END}".format(END=end_time))
+        logger.info(f"Start Time: {start_time}")
+        logger.info(f"End Time: {end_time}")
 
         duration = (end_time - start_time).total_seconds() / 3600
-        print("Duration in hours: {DUR}".format(DUR=duration))
+        logger.info(f"Duration in hours: {duration}")
 
-        print("Caluclated Q0: ", self.q0_measurement.q0)
+        logger.info(f"Calculated Q0: {self.q0_measurement.q0}")
         self.q0_measurement.save_results()
         self.restore_cryo()
 
@@ -484,7 +491,7 @@ class Q0Cryomodule(Cryomodule):
         self._starting_ds_level_setpoint = self._pv(
             self.ds_liq_lev_setpoint_pv
         ).get()
-        print(
+        logger.info(
             f"Starting liquid level setpoint: {self._starting_ds_level_setpoint}"
         )
 
@@ -539,7 +546,9 @@ class Q0Cryomodule(Cryomodule):
             cryomodule=self,
         )
 
-        print(f"setting {self} heater to {self.valveParams.refHeatLoadDes} W")
+        logger.info(
+            f"setting {self} heater to {self.valveParams.refHeatLoadDes} W"
+        )
         self.heater_power = self.valveParams.refHeatLoadDes
 
         self._save_starting_ds_level_setpoint()
@@ -555,11 +564,11 @@ class Q0Cryomodule(Cryomodule):
 
         self.calibration.save_data()
 
-        print("\nStart Time: {START}".format(START=startTime))
-        print("End Time: {END}".format(END=datetime.now()))
+        logger.info(f"Start Time: {startTime}")
+        logger.info(f"End Time: {datetime.now()}")
 
         duration = (datetime.now() - startTime).total_seconds() / 3600
-        print("Duration in hours: {DUR}".format(DUR=duration))
+        logger.info(f"Duration in hours: {duration}")
 
         self.heater_power = self.valveParams.refHeatLoadDes
 
@@ -576,7 +585,7 @@ class Q0Cryomodule(Cryomodule):
         SP_RQST is not written. Each step is attempted even if an earlier
         one fails.
         """
-        print("Restoring initial cryo conditions")
+        logger.info("Restoring initial cryo conditions")
         self._attempt_each(
             [
                 ("JT AUTO", self.select_jt_auto),
@@ -604,7 +613,7 @@ class Q0Cryomodule(Cryomodule):
         delta = value - self.jt_position
         step = sign(delta)
 
-        print("Setting JT to manual and waiting for readback to change")
+        logger.info("Setting JT to manual and waiting for readback to change")
         self._pv(self.jt_manual_select_pv).put(1, wait=True)
 
         # One way for the JT valve to be locked in the correct position is for
@@ -613,7 +622,7 @@ class Q0Cryomodule(Cryomodule):
             self.check_abort()
             sleep(1)
 
-        print(f"Walking {self} JT to {value}%")
+        logger.info(f"Walking {self} JT to {value}%")
         for _ in range(int(floor(abs(delta)))):
             self._pv(self.jt_man_pos_setpoint_pv).put(
                 self.jt_position + step, wait=True
@@ -622,25 +631,25 @@ class Q0Cryomodule(Cryomodule):
 
         self._pv(self.jt_man_pos_setpoint_pv).put(value, wait=False)
 
-        print(f"Waiting for {self} JT Valve position to be in tolerance")
+        logger.info(f"Waiting for {self} JT Valve position to be in tolerance")
         # Wait for the valve position to be within tolerance before continuing
         while abs(self.jt_position - value) > q0_utils.VALVE_POS_TOL:
             self.check_abort()
             sleep(1)
 
-        print(f"{self} JT Valve at {value}")
+        logger.info(f"{self} JT Valve at {value}")
 
     def waitForLL(self, desiredLiquidLevel=q0_utils.MAX_DS_LL):
-        print(
+        logger.info(
             f"Waiting for downstream liquid level to be {desiredLiquidLevel}%"
         )
 
         while (desiredLiquidLevel - self.averaged_liquid_level) > 0.01:
             self.check_abort()
             avgLevel_rounded = round_for_printing(self.averaged_liquid_level)
-            print(
+            logger.info(
                 f"Current averaged level is {avgLevel_rounded}; waiting 10 seconds for more data."
             )
             sleep(10)
 
-        print("downstream liquid level at required value.")
+        logger.info("downstream liquid level at required value.")

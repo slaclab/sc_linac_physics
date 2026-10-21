@@ -1,4 +1,7 @@
 import json
+import logging
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from functools import partial
 from typing import Dict, Optional
@@ -41,6 +44,36 @@ DEFAULT_LL_BUFFER_SIZE = 10
 PV_ERRORS = (PVConnectionError, PVGetError, PVPutError)
 
 NO_CRYO_ACCESS = "Required cryo permissions not granted - call cryo ops"
+
+
+class _StatusSignalHandler(logging.Handler):
+    """Show one worker thread's log messages in its status label.
+
+    Sends each INFO-or-higher message logged on that thread through signal.
+    """
+
+    def __init__(self, signal, thread_id: int):
+        super().__init__(level=logging.INFO)
+        self.signal = signal
+        self.thread_id = thread_id
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Only this worker's thread, so a second worker running at the same
+        # time doesn't write into this worker's status label.
+        if record.thread == self.thread_id:
+            self.signal.emit(record.getMessage())
+
+
+@contextmanager
+def forward_logs_to_status(worker: Worker):
+    """While active, q0_utils.logger records from this thread go to
+    worker.status. Call from inside worker.run()."""
+    handler = _StatusSignalHandler(worker.status, threading.get_ident())
+    q0_utils.logger.addHandler(handler)
+    try:
+        yield
+    finally:
+        q0_utils.logger.removeHandler(handler)
 
 
 class CryoParamSetupWorker(Worker):
@@ -118,11 +151,12 @@ class Q0Worker(RFWorker):
                 self.error.emit(NO_CRYO_ACCESS)
                 return
             self.status.emit("Taking new Q0 Measurement")
-            self.cryomodule.takeNewQ0Measurement(
-                desiredAmplitudes=self.desired_amplitudes,
-                desired_ll=self.desired_ll,
-                ll_drop=self.ll_drop,
-            )
+            with forward_logs_to_status(self):
+                self.cryomodule.takeNewQ0Measurement(
+                    desiredAmplitudes=self.desired_amplitudes,
+                    desired_ll=self.desired_ll,
+                    ll_drop=self.ll_drop,
+                )
             self.finished.emit(
                 f"Recorded Q0: {self.cryomodule.q0_measurement.q0:.2e}"
             )
@@ -148,12 +182,13 @@ class Q0SetupWorker(RFWorker):
             self.status.emit(
                 f"CM{self.cryomodule.name} setting up for RF measurement"
             )
-            self.cryomodule.setup_for_q0(
-                desiredAmplitudes=self.desired_amplitudes,
-                desired_ll=self.desired_ll,
-                jt_search_start=self.jt_search_start,
-                jt_search_end=self.jt_search_end,
-            )
+            with forward_logs_to_status(self):
+                self.cryomodule.setup_for_q0(
+                    desiredAmplitudes=self.desired_amplitudes,
+                    desired_ll=self.desired_ll,
+                    jt_search_start=self.jt_search_start,
+                    jt_search_end=self.jt_search_end,
+                )
             self.finished.emit(
                 f"CM{self.cryomodule.name} ready for cavity ramp up"
             )
@@ -208,15 +243,16 @@ class CalibrationWorker(Worker):
                 self.error.emit(NO_CRYO_ACCESS)
                 return
             self.status.emit("Taking new calibration")
-            self.cryomodule.take_new_calibration(
-                jt_search_start=self.jt_search_start,
-                jt_search_end=self.jt_search_end,
-                desired_ll=self.desired_ll,
-                num_cal_steps=self.num_cal_steps,
-                ll_drop=self.ll_drop,
-                heat_start=self.heat_start,
-                heat_end=self.heat_end,
-            )
+            with forward_logs_to_status(self):
+                self.cryomodule.take_new_calibration(
+                    jt_search_start=self.jt_search_start,
+                    jt_search_end=self.jt_search_end,
+                    desired_ll=self.desired_ll,
+                    num_cal_steps=self.num_cal_steps,
+                    ll_drop=self.ll_drop,
+                    heat_start=self.heat_start,
+                    heat_end=self.heat_end,
+                )
             self.finished.emit("Calibration Loaded")
         except (
             ConnectTimeoutError,
