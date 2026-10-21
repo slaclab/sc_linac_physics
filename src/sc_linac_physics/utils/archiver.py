@@ -253,7 +253,8 @@ def iter_range_chunks(
         # Every range request has the same URL; name the PV that failed.
         raise type(e)(f"{pv}: {e}") from e
     except (KeyError, IndexError, TypeError) as e:
-        # A 200 whose JSON isn't the shape planning and fetching read.
+        # The reply reported success, but its JSON is missing fields that
+        # splitting the window into chunks, or reading them, depends on.
         raise ArchiverError(f"{pv}: unexpected response: {e!r}") from e
 
 
