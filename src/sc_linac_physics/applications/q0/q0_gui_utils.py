@@ -160,8 +160,12 @@ class Q0Worker(RFWorker):
             self.finished.emit(
                 f"Recorded Q0: {self.cryomodule.q0_measurement.q0:.2e}"
             )
+        # calc_q0 raises ValueError for a non-positive RF heat load or
+        # amplitude. Reaching the error signal is what shows the popup and
+        # runs cm.shut_off() (q0_gui.py connects both to it).
         except (
             TypeError,
+            ValueError,
             CavityAbortError,
             q0_utils.Q0AbortError,
             *PV_ERRORS,

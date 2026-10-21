@@ -252,6 +252,7 @@ def _create_mock_q0_cryomodule_class():
             self.cavity_amplitudes = {}
             self.fill_data_run_buffer = False
             self.abort_flag = False
+            self._starting_ds_level_setpoint = None
             self._pvs = {}
             self._monitor_indices = {}
 
@@ -285,6 +286,8 @@ def _add_real_methods_to_mock_class(mock_class):
         "cryo_access_granted",
         "_attempt_each",
         "_select_heater_sequencer",
+        "_save_starting_ds_level_setpoint",
+        "_restore_ds_level_setpoint",
     ]
 
     for method_name in methods_to_copy:
@@ -2687,7 +2690,6 @@ class TestCleanupAttemptsEveryStep:
             Q0Cryomodule.shut_off(fast_q0_cryo)
 
         cavity.turn_off.assert_called_once()
-        cavity.ssa.turn_off.assert_called_once()
 
     def test_shut_off_continues_after_a_cavity_fails(self, fast_q0_cryo):
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
@@ -2699,9 +2701,7 @@ class TestCleanupAttemptsEveryStep:
         with patch("builtins.print"), pytest.raises(RuntimeError, match="1"):
             Q0Cryomodule.shut_off(fast_q0_cryo)
 
-        first.ssa.turn_off.assert_called_once()
         second.turn_off.assert_called_once()
-        second.ssa.turn_off.assert_called_once()
 
     def test_restore_cryo_writes_sequencer_after_failed_jt(self, fast_q0_cryo):
         from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
@@ -2731,3 +2731,142 @@ class TestCleanupAttemptsEveryStep:
 
         assert cavity.abort_flag is True
         assert fast_q0_cryo.abort_flag is False
+
+
+class TestDsLevelSetpoint:
+    """Level writes go to SP_RQST; restore_cryo puts back the saved value."""
+
+    @staticmethod
+    def _real_ds_liquid_level(cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+
+        return patch.object(
+            type(cryo), "ds_liquid_level", Q0Cryomodule.ds_liquid_level
+        )
+
+    def test_setter_writes_sp_rqst(self, fast_q0_cryo):
+        from tests.applications.q0 import pyepics_shim
+
+        with self._real_ds_liquid_level(fast_q0_cryo):
+            fast_q0_cryo.ds_liquid_level = 85.0
+
+        pyepics_shim.caput.assert_called_once_with(
+            fast_q0_cryo.ds_liq_lev_setpoint_pv, 85.0, wait=True
+        )
+        fast_q0_cryo.ds_level_pv_obj.put.assert_not_called()
+
+    def test_restore_cryo_puts_back_saved_setpoint(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from tests.applications.q0 import pyepics_shim
+
+        pyepics_shim.caget.side_effect = lambda pv: 88.0
+        with patch("builtins.print"):
+            fast_q0_cryo._save_starting_ds_level_setpoint()
+        assert fast_q0_cryo._starting_ds_level_setpoint == 88.0
+
+        with self._real_ds_liquid_level(fast_q0_cryo), patch("builtins.print"):
+            Q0Cryomodule.restore_cryo(fast_q0_cryo)
+
+        assert [c.args[0] for c in pyepics_shim.caput.call_args_list] == [
+            fast_q0_cryo.jt_auto_select_pv,
+            fast_q0_cryo.ds_liq_lev_setpoint_pv,
+            fast_q0_cryo.heater_sequencer_pv,
+        ]
+        pyepics_shim.caput.assert_any_call(
+            fast_q0_cryo.ds_liq_lev_setpoint_pv, 88.0, wait=True
+        )
+
+    def test_restore_cryo_skips_level_when_nothing_saved(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from tests.applications.q0 import pyepics_shim
+
+        with self._real_ds_liquid_level(fast_q0_cryo), patch("builtins.print"):
+            Q0Cryomodule.restore_cryo(fast_q0_cryo)
+
+        written = [c.args[0] for c in pyepics_shim.caput.call_args_list]
+        assert written == [
+            fast_q0_cryo.jt_auto_select_pv,
+            fast_q0_cryo.heater_sequencer_pv,
+        ]
+
+    def test_setup_for_q0_saves_setpoint_before_fill(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from tests.applications.q0 import pyepics_shim
+
+        pyepics_shim.caget.side_effect = lambda pv: 88.0
+        fast_q0_cryo.valveParams = Mock()
+        saved_when_filling = []
+        fast_q0_cryo.fill = Mock(
+            side_effect=lambda ll: saved_when_filling.append(
+                fast_q0_cryo._starting_ds_level_setpoint
+            )
+        )
+
+        with (
+            patch(
+                "sc_linac_physics.applications.q0.q0_cryomodule.Q0Measurement"
+            ),
+            patch("builtins.print"),
+        ):
+            Q0Cryomodule.setup_for_q0(fast_q0_cryo, {1: 16.0}, 92.0, None, None)
+
+        assert saved_when_filling == [88.0]
+        fast_q0_cryo.fill.assert_called_once_with(92.0)
+
+    def test_shut_off_leaves_ssas_on(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+
+        cavity = Mock()
+        fast_q0_cryo.cavities = {1: cavity}
+
+        with patch("builtins.print"):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        cavity.turn_off.assert_called_once()
+        cavity.ssa.turn_off.assert_not_called()
+
+    def test_shut_off_restores_saved_setpoint(self, fast_q0_cryo):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from tests.applications.q0 import pyepics_shim
+
+        fast_q0_cryo._starting_ds_level_setpoint = 88.0
+        cavity = Mock()
+        fast_q0_cryo.cavities = {1: cavity}
+
+        with self._real_ds_liquid_level(fast_q0_cryo), patch("builtins.print"):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        assert [c.args[0] for c in pyepics_shim.caput.call_args_list] == [
+            fast_q0_cryo.heater_sequencer_pv,
+            fast_q0_cryo.jt_auto_select_pv,
+            fast_q0_cryo.ds_liq_lev_setpoint_pv,
+        ]
+        pyepics_shim.caput.assert_any_call(
+            fast_q0_cryo.ds_liq_lev_setpoint_pv, 88.0, wait=True
+        )
+        cavity.turn_off.assert_called_once()
+
+    def test_shut_off_turns_cavities_off_after_failed_restore(
+        self, fast_q0_cryo
+    ):
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+        from sc_linac_physics.utils.epics import PVPutError
+        from tests.applications.q0 import pyepics_shim
+
+        def fail_sp_rqst(pv_name, *args, **kwargs):
+            if pv_name.endswith("SP_RQST"):
+                raise PVPutError("SP_RQST")
+
+        fast_q0_cryo._starting_ds_level_setpoint = 88.0
+        cavity = Mock()
+        fast_q0_cryo.cavities = {1: cavity}
+        pyepics_shim.caput.side_effect = fail_sp_rqst
+
+        with (
+            self._real_ds_liquid_level(fast_q0_cryo),
+            patch("builtins.print"),
+            pytest.raises(PVPutError),
+        ):
+            Q0Cryomodule.shut_off(fast_q0_cryo)
+
+        cavity.turn_off.assert_called_once()

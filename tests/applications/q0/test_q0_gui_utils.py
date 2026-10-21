@@ -175,6 +175,52 @@ class TestQ0Worker:
             # Assert
             worker.error.emit.assert_called_with("Cavity aborted")
 
+    def _make_worker(self, mock_cryomodule):
+        worker = Q0Worker(
+            mock_cryomodule,
+            jt_search_start=datetime.now(),
+            jt_search_end=datetime.now() + timedelta(hours=1),
+            desired_ll=95.0,
+            ll_drop=4.0,
+            desired_amplitudes=[16.5] * 8,
+        )
+        worker.status = Mock()
+        worker.error = Mock()
+        worker.finished = Mock()
+        return worker
+
+    def test_value_error_from_measurement_emits_error(self, mock_cryomodule):
+        # calc_q0 raises ValueError on a non-positive RF heat load. It must
+        # reach the error signal, which the GUI wires to a popup and
+        # shut_off; otherwise the thread ends silently.
+        mock_cryomodule.cryo_access_granted = True
+        mock_cryomodule.takeNewQ0Measurement.side_effect = ValueError(
+            "RF heat load must be positive"
+        )
+        worker = self._make_worker(mock_cryomodule)
+
+        worker.run()
+
+        worker.error.emit.assert_called_once_with(
+            "RF heat load must be positive"
+        )
+        worker.finished.emit.assert_not_called()
+
+    def test_value_error_from_q0_in_finished_message_emits_error(
+        self, mock_cryomodule
+    ):
+        # The finished message reads q0_measurement.q0, which calls calc_q0.
+        mock_cryomodule.cryo_access_granted = True
+        type(mock_cryomodule.q0_measurement).q0 = PropertyMock(
+            side_effect=ValueError("Amplitude must be positive")
+        )
+        worker = self._make_worker(mock_cryomodule)
+
+        worker.run()
+
+        worker.error.emit.assert_called_once_with("Amplitude must be positive")
+        worker.finished.emit.assert_not_called()
+
 
 class TestCavityRampWorker:
     """Test CavityRampWorker functionality"""

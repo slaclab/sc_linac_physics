@@ -335,7 +335,8 @@ class PV(EPICS_PV):
                 get_logger().error(error_msg)
                 raise PVPutError(error_msg)
 
-            # status is None: not connected, nothing sent. Safe to retry.
+            # status is None when the PV wasn't connected, so the value never
+            # went out. Retrying can't write it to the machine twice.
             if attempt < self.config.max_retries:
                 get_logger().warning(
                     f"PV {self.pvname} put not sent, PV disconnected "
