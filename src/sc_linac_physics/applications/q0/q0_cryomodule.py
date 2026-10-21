@@ -1,6 +1,4 @@
-import os
 from datetime import datetime
-from os.path import isfile
 from time import sleep
 from typing import Dict, Optional
 
@@ -49,16 +47,12 @@ class Q0Cryomodule(Cryomodule):
 
         self.valveParams: Optional[q0_utils.ValveParams] = None
 
-        base_dir = os.path.dirname(os.path.realpath(__file__))
-
-        self._calib_idx_file = f"{base_dir}/calibrations/cm{self.name}.json"
-        self._calib_data_file = (
-            f"{base_dir}/data/calibrations/cm{self.name}.json"
-        )
-        self._q0_idx_file = f"{base_dir}/q0_measurements/cm{self.name}.json"
-        self._q0_data_file = (
-            f"{base_dir}/data/q0_measurements/cm{self.name}.json"
-        )
+        # Paths relative to q0_utils.data_dir(), the app's JSON folder.
+        # q0_utils.data_file turns each into a full path.
+        self._calib_idx_file = f"calibrations/cm{self.name}.json"
+        self._calib_data_file = f"data/calibrations/cm{self.name}.json"
+        self._q0_idx_file = f"q0_measurements/cm{self.name}.json"
+        self._q0_data_file = f"data/q0_measurements/cm{self.name}.json"
 
         self.ll_buffer: np.array = np.empty(q0_utils.NUM_LL_POINTS_TO_AVG)
         self.ll_buffer[:] = np.nan
@@ -90,15 +84,11 @@ class Q0Cryomodule(Cryomodule):
 
     @property
     def calib_data_file(self):
-        if not isfile(self._calib_data_file):
-            q0_utils.make_json_file(self._calib_data_file)
-        return self._calib_data_file
+        return q0_utils.data_file(self._calib_data_file)
 
     @property
     def q0_data_file(self):
-        if not isfile(self._q0_data_file):
-            q0_utils.make_json_file(self._q0_data_file)
-        return self._q0_data_file
+        return q0_utils.data_file(self._q0_data_file)
 
     @property
     def ll_buffer_size(self):
@@ -169,17 +159,11 @@ class Q0Cryomodule(Cryomodule):
 
     @property
     def q0_idx_file(self) -> str:
-        if not isfile(self._q0_idx_file):
-            q0_utils.make_json_file(self._q0_idx_file)
-
-        return self._q0_idx_file
+        return q0_utils.data_file(self._q0_idx_file)
 
     @property
     def calib_idx_file(self) -> str:
-        if not isfile(self._calib_idx_file):
-            q0_utils.make_json_file(self._calib_idx_file)
-
-        return self._calib_idx_file
+        return q0_utils.data_file(self._calib_idx_file)
 
     def _attempt_each(self, steps) -> None:
         """Run each step in steps, a list of (description, callable) pairs.
