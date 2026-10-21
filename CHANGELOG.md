@@ -2,6 +2,231 @@
 
 <!-- version list -->
 
+## v9.50.0 (2026-10-20)
+
+### Bug Fixes
+
+- **rf-commissioning**: Refuse a running with-RF test before setup; time the wait by the clock
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Resume the with-RF wait after a read error; flag IOC assumptions
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Say setup_rf raises on out-of-tolerance results
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Start the with-RF test without waiting on the put; note what a failed
+  setup_rf left ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+### Features
+
+- **rf-commissioning**: Piezo with RF phase, detune check, start and wait for the test
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Piezo with RF phase, RF and piezo setup
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Piezo with RF phase, steps 1-6
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+- **rf-commissioning**: Skip SSA cal and characterization younger than an hour
+  ([#408](https://github.com/slaclab/sc_linac_physics/pull/408),
+  [`73636a8`](https://github.com/slaclab/sc_linac_physics/commit/73636a840b2c6aa3c37fcfb6162949f97148a348))
+
+
+## v9.49.3 (2026-10-20)
+
+### Refactoring
+
+- **tuning**: Name the auto-tune undershoot factor
+  ([#442](https://github.com/slaclab/sc_linac_physics/pull/442),
+  [`b593b61`](https://github.com/slaclab/sc_linac_physics/commit/b593b61ca74154f7a323c8ecb80b90ff61c43829))
+
+
+## v9.49.2 (2026-10-19)
+
+### Bug Fixes
+
+- **rf-commissioning**: Read RFTESTSTAT, the with-RF result PV the IOC serves
+  ([#407](https://github.com/slaclab/sc_linac_physics/pull/407),
+  [`7d7f095`](https://github.com/slaclab/sc_linac_physics/commit/7d7f09521c135a6e61d5efe931c109d5cdb76dc6))
+
+- **ssa**: Check abort and time out while waiting on CALSTS
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+- **ssa**: Check abort on the completion poll and log the read CALSTS value
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+- **ssa**: Honor an abort that lands as SSA calibration finishes
+  ([#403](https://github.com/slaclab/sc_linac_physics/pull/403),
+  [`3ed67dc`](https://github.com/slaclab/sc_linac_physics/commit/3ed67dc1fb70698a553f57b21e2c04a39e1177b7))
+
+
+## v9.49.1 (2026-10-19)
+
+### Bug Fixes
+
+- **rf-commissioning**: Piezo pre-RF no longer reads message PVs production lacks
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **rf-commissioning**: Piezo pre-RF reads the production TESTMSG1/2 PV names
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **rf-commissioning**: Read pre-RF messages from PZT:TESTMSG1/2
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+- **sim**: Piezo pre-RF channel states match production (Pass/Warning/Fail)
+  ([#397](https://github.com/slaclab/sc_linac_physics/pull/397),
+  [`15e58dd`](https://github.com/slaclab/sc_linac_physics/commit/15e58dd1d5e02b278a64b67224470fc99b9bacd1))
+
+
+## v9.49.0 (2026-10-19)
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+- **sc-linac**: HL PwrRating is 1 kW per cavity, not per pair
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+### Features
+
+- **sc-linac**: Read SSA rated power from SSA:PwrRating
+  ([#438](https://github.com/slaclab/sc_linac_physics/pull/438),
+  [`a1d82bf`](https://github.com/slaclab/sc_linac_physics/commit/a1d82bfd70899cfc6b231a5cb66d49bcc2c0ccde))
+
+
+## v9.48.0 (2026-10-17)
+
+### Bug Fixes
+
+- **claude**: Bot exception needs plain text outside quotes
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+- **claude**: Bot exception only for one bare gh api call
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+- **claude**: Bot exception rejects backticks too
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+- **claude**: Exempt only plain bot replies; one lookup, block on failure
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+- **claude**: Parse the command like the shell before matching
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+### Chores
+
+- **claude**: Also ask before close/reopen with a comment
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+- **claude**: Ask before Claude posts PR comments or reviews
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+- **claude**: Ask on every pr/issue close or reopen
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+### Continuous Integration
+
+- Fail hung tests after 60 s instead of the 6-hour job limit
+  ([#436](https://github.com/slaclab/sc_linac_physics/pull/436),
+  [`5f0c86f`](https://github.com/slaclab/sc_linac_physics/commit/5f0c86f367d7472674912161e50d72389a70f048))
+
+### Documentation
+
+- **claude-md**: Ask for whole sentences in comments, not shorthand
+  ([#430](https://github.com/slaclab/sc_linac_physics/pull/430),
+  [`4d645f7`](https://github.com/slaclab/sc_linac_physics/commit/4d645f75ab7c562344fab4ae1dd9f29f8cb1ca5b))
+
+### Features
+
+- **claude**: Let replies to bot review comments through without asking
+  ([#439](https://github.com/slaclab/sc_linac_physics/pull/439),
+  [`e73c06e`](https://github.com/slaclab/sc_linac_physics/commit/e73c06ec5e8b91e2e7a785167184d5d89f56ea7b))
+
+### Testing
+
+- **microphonics**: Stop progress timers the data acquisition tests leave running
+  ([#435](https://github.com/slaclab/sc_linac_physics/pull/435),
+  [`9cedddd`](https://github.com/slaclab/sc_linac_physics/commit/9ceddddd242351ddf15be6a4977c98abc837f27d))
+
+
+## v9.47.4 (2026-10-16)
+
+### Bug Fixes
+
+- **sc-linac**: Abort the motor on a move timeout; don't retry a stuck SSA calibration
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+- **sc-linac**: Time out the seven polling loops that could wait forever
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+- **utils**: Small bugs in cavity, logger and the EPICS wrapper
+  ([#352](https://github.com/slaclab/sc_linac_physics/pull/352),
+  [`848fd39`](https://github.com/slaclab/sc_linac_physics/commit/848fd39e36a0d9f0956872e260905978dcea9509))
+
+### Documentation
+
+- **claude-md**: Import AGENTS.md instead of repeating the architecture
+  ([#428](https://github.com/slaclab/sc_linac_physics/pull/428),
+  [`c15bb4b`](https://github.com/slaclab/sc_linac_physics/commit/c15bb4b55f7d1bc50c013721f9de1ddecb9240c3))
+
+
+## v9.47.3 (2026-10-15)
+
+### Bug Fixes
+
+- **epics**: Never re-send a put that already went out
+  ([#349](https://github.com/slaclab/sc_linac_physics/pull/349),
+  [`3f9eff9`](https://github.com/slaclab/sc_linac_physics/commit/3f9eff979ee438daea24f862e4898c1179cf35ab))
+
+
+## v9.47.2 (2026-10-15)
+
+### Bug Fixes
+
+- **archiver**: Every failure is an ArchiverError; retry only gateway errors
+  ([#393](https://github.com/slaclab/sc_linac_physics/pull/393),
+  [`53aa2c4`](https://github.com/slaclab/sc_linac_physics/commit/53aa2c43a9b805a510e653190f252e363fa652e4))
+
+### Chores
+
+- **ci**: Bump actions/upload-artifact
+  ([#410](https://github.com/slaclab/sc_linac_physics/pull/410),
+  [`8d2a354`](https://github.com/slaclab/sc_linac_physics/commit/8d2a354cf26b65322f1320e0fc3a343f838c0afe))
+
+
 ## v9.47.1 (2026-10-15)
 
 ### Bug Fixes
