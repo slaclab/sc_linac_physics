@@ -51,6 +51,7 @@ as a link; opened on its own it also works offline.
 | [Cavity Display](displays/cavity_display.md) | Fault monitoring dashboard for all 296 cavities with heatmap and audio alerts |
 | [Fault Heatmap](displays/fault_heatmap.md) | Fault counts per cavity over a time window, as a heatmap |
 | [SRF Home](displays/srf_home.md) | Top-level launcher panel and watcher management |
+| [EDM Screens](displays/edm_screens.md) | `sc-edm`: open an SRF EDM screen from the terminal |
 
 ## Quick orientation
 
