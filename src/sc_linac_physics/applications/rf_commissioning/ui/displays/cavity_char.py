@@ -205,7 +205,7 @@ class CavityCharDisplay(BasePlaceholderDisplay):
         )
 
     def ask_rerun_ssa_calibration(self, last: str) -> str:
-        """Ask whether to recalibrate an SSA whose last calibration is old.
+        """Ask whether to recalibrate an SSA: last calibration old or bad.
 
         Returns "rerun", "skip" or "cancel". Rerun is the default button.
         The controller records the operator's name when they choose Skip.

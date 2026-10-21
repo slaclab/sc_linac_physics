@@ -25,11 +25,14 @@ happens:
   (`_push_results`). `finish_characterization()` refuses.
 
 Before measuring it redoes the setup the measurement depends on, the way auto
-setup does before characterizing (`SetupCavity.setup()`): it calibrates the SSA
-and tunes to resonance even if the SSA and frequency tuning phases already did
-(Lisa Zacarias, 2026-10-14). Both calls live in `cavity_setup`, which documents
-the PVs they write. Two of those writes have no operator review: the SSA slope
-push (PUSH_SSA_SLOPE.PROC) and the stepper moves.
+setup does before characterizing (`SetupCavity.setup()`). It tunes to resonance
+every run, even if the frequency tuning phase already did (Lisa Zacarias,
+2026-10-14). It calibrates the SSA unless the controller passes
+kept_ssa_calibration: the last calibration is under an hour old and Good, or
+the operator chose Skip (see `_keep_ssa_calibration`). Both calls live in
+`cavity_setup`, which documents the PVs they write. Two of those writes have no
+operator review: the SSA slope push (PUSH_SSA_SLOPE.PROC) and the stepper
+moves.
 
 Sequence:
   1. verify_initial_state    – cavity online, stepper idle, SSA not
@@ -231,6 +234,9 @@ class CavityCharPhase(PhaseBase):
 
     def _calibrate_ssa(self) -> PhaseStepResult:
         """Recalibrate the SSA at the drive max the SSA char phase used.
+
+        Skipped when the controller passes kept_ssa_calibration; see
+        _keep_ssa_calibration.
 
         record.ssa_char.max_drive is the value the operator chose there. With
         no SSA char result on the record, calibrate_ssa falls back to

@@ -2,8 +2,11 @@
 Setup steps shared by commissioning phases.
 
 A phase runs the setup its measurement depends on before it measures, even when
-an earlier phase already did it (Lisa Zacarias, 2026-10-14). The calls and
-their order are the ones auto setup makes in `SetupCavity.setup()`
+an earlier phase already did it (Lisa Zacarias, 2026-10-14). The exception is a
+recent SSA calibration: the phase's controller reads it with
+`last_ssa_calibration()` and may keep it instead of calibrating again.
+
+The calls and their order are the ones auto setup makes in `SetupCavity.setup()`
 (auto_setup/backend/setup_cavity.py): RF off, SSA on, interlocks reset, then
 `request_ssa_cal()`, then `request_auto_tune()`.
 
@@ -43,9 +46,10 @@ from sc_linac_physics.utils.sc_linac import linac_utils
 # calibration is retried once, at drive max - 0.01, before it raises.
 SSA_CAL_START_ATTEMPT = 2
 
-# A phase keeps an SSA calibration or characterization younger than this
-# instead of running it again. One hour is from Sebastian Aderhold's review of
-# #408.
+# A Good SSA calibration or characterization younger than this counts as
+# recent (LastSetupResult.is_recent). The cavity char controller keeps a
+# recent SSA calibration instead of running it again. One hour is from
+# Sebastian Aderhold's review of #408.
 RECENT_RESULT_SECONDS = 3600.0
 
 
