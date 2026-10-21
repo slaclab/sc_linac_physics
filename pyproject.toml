@@ -231,6 +231,11 @@ sc-watcher = "sc_linac_physics.cli.watcher_commands:main"
 sc-edm = "sc_linac_physics.cli.edm_commands:main"
 
 # ============================================================================
+# EPICS record inspection (read-only)
+# ============================================================================
+sc-pv-info = "sc_linac_physics.cli.pv_info:main"
+
+# ============================================================================
 # Simulation/Testing
 # ============================================================================
 sc-sim = "sc_linac_physics.utils.simulation.sc_linac_physics_service:main"
