@@ -2,6 +2,93 @@
 
 <!-- version list -->
 
+## v9.52.0 (2026-10-21)
+
+### Bug Fixes
+
+- **archiver**: Chunk string PVs from their ncount totals
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+- **archiver**: Count every window before falling back to one request
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+- **archiver**: Fetch long windows in chunks sized by bytes
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+- **q0**: Report ValueError from calc_q0 through Q0Worker's error signal
+  ([#443](https://github.com/slaclab/sc_linac_physics/pull/443),
+  [`c1d7726`](https://github.com/slaclab/sc_linac_physics/commit/c1d77264ecc035d0e50a8606e9f683294c8be355))
+
+- **q0**: Stop rewriting the data file when loading a Q0 measurement
+  ([#415](https://github.com/slaclab/sc_linac_physics/pull/415),
+  [`ebd2b1e`](https://github.com/slaclab/sc_linac_physics/commit/ebd2b1e938e676a1af353c49c01dabb820aa9471))
+
+### Code Style
+
+- **cli**: Wrap sc-edm module docstring under flake8's line limit
+  ([#441](https://github.com/slaclab/sc_linac_physics/pull/441),
+  [`80e93d9`](https://github.com/slaclab/sc_linac_physics/commit/80e93d9eab71ab7e1164b39261ff7a86ecf33a90))
+
+### Documentation
+
+- **archiver**: Give the archiver client its own page
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+- **archiver**: Record that waveforms are not archived
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+- **archiver**: Say what the bad-reply comment means in plain words
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+- **archiver**: Say why the PV is wrapped in count_3600(...)
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+- **cli**: Point sc-edm module docstring at the docs page for examples
+  ([#441](https://github.com/slaclab/sc_linac_physics/pull/441),
+  [`80e93d9`](https://github.com/slaclab/sc_linac_physics/commit/80e93d9eab71ab7e1164b39261ff7a86ecf33a90))
+
+- **edm**: Record what the production test on lcls-srv01 showed
+  ([#441](https://github.com/slaclab/sc_linac_physics/pull/441),
+  [`80e93d9`](https://github.com/slaclab/sc_linac_physics/commit/80e93d9eab71ab7e1164b39261ff7a86ecf33a90))
+
+- **edm**: Say what SELCHAR selects on the cavity main screen
+  ([#441](https://github.com/slaclab/sc_linac_physics/pull/441),
+  [`80e93d9`](https://github.com/slaclab/sc_linac_physics/commit/80e93d9eab71ab7e1164b39261ff7a86ecf33a90))
+
+### Features
+
+- **cli**: Add sc-edm to open SRF EDM screens from the terminal
+  ([#441](https://github.com/slaclab/sc_linac_physics/pull/441),
+  [`80e93d9`](https://github.com/slaclab/sc_linac_physics/commit/80e93d9eab71ab7e1164b39261ff7a86ecf33a90))
+
+- **edm**: Name the cavity screen tabs and add --char for sub-tabs
+  ([#441](https://github.com/slaclab/sc_linac_physics/pull/441),
+  [`80e93d9`](https://github.com/slaclab/sc_linac_physics/commit/80e93d9eab71ab7e1164b39261ff7a86ecf33a90))
+
+### Performance Improvements
+
+- **archiver**: Build each chunk's frame as it arrives
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+- **archiver**: Plan chunks from the archiver's own sample counts
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+### Refactoring
+
+- **archiver**: Expose the chunk loop as iter_range_chunks
+  ([#376](https://github.com/slaclab/sc_linac_physics/pull/376),
+  [`3a32b5f`](https://github.com/slaclab/sc_linac_physics/commit/3a32b5f722d9a22d148c755ddf8319a5eca00e6c))
+
+
 ## v9.51.0 (2026-10-21)
 
 ### Bug Fixes
