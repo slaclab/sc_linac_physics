@@ -631,6 +631,7 @@ def all_script_names():
         "sc-setup-cm",
         "sc-setup-cav",
         "sc-watcher",
+        "sc-edm",
         "sc-sim",
         "sc-tune-status-poll",
         "sc-tune-status-query",
