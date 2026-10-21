@@ -35,9 +35,11 @@ Endpoints: https://epicsarchiver.readthedocs.io/en/stable/user/userguide.html
 old; where it is silent, this follows what the LCLS archiver did when tested.
 """
 
+import logging
 import math
 import queue
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from time import sleep
@@ -57,6 +59,7 @@ import pandas as pd
 import requests
 
 from sc_linac_physics.utils.epics.config import EPICS_INVALID_VAL
+from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
 
 ARCHIVER_BASE_URL = "http://lcls-archapp.slac.stanford.edu"
 ARCHIVER_URL = f"{ARCHIVER_BASE_URL}/retrieval/data"
@@ -113,6 +116,27 @@ COUNT_WINDOW = timedelta(days=31)
 MIN_SPLIT = timedelta(minutes=1)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
+
+# The archiver client's logger. At INFO it writes one line per PV fetched,
+# per month cached and per value-at-time lookup. WARNING adds retries and
+# failed cache writes; DEBUG adds every request and cache hit. It is created
+# on first use, as utils/epics/logger.py does, so importing this module opens
+# no log files.
+_logger: Optional[logging.Logger] = None
+
+
+def get_logger() -> logging.Logger:
+    """The archiver client's logger: console, and logfiles/archiver/."""
+    global _logger
+    if _logger is None:
+        _logger = custom_logger(
+            "sc_linac_physics.utils.archiver",
+            log_dir=BASE_LOG_DIR / "archiver",
+            log_filename="archiver",
+            level=logging.INFO,
+        )
+    return _logger
+
 
 COLUMNS = ["timestamp", "value", "severity", "status", "valid"]
 
@@ -237,10 +261,12 @@ def iter_range_chunks(
 def _iter_chunks(
     pv: str, start: datetime, end: datetime, timeout: float
 ) -> Iterator[pd.DataFrame]:
+    began = time.monotonic()
     bounds = _plan_chunks(pv, start, end, timeout)
     if bounds is None:
         raise PVNotArchivedError([pv])
     last: Optional[tuple] = None
+    samples = 0
     for chunk_start, chunk_end in zip(bounds, bounds[1:]):
         payload = _get_json(pv, chunk_start, chunk_end, timeout)
         if payload is None:
@@ -250,8 +276,17 @@ def _iter_chunks(
             chunk = [datum for datum in chunk if _key(datum) > last]
         if chunk:
             last = _key(chunk[-1])
+            samples += len(chunk)
             yield _to_frame(chunk)
         del payload, chunk
+    get_logger().info(
+        "%s %s: %d samples in %d chunk(s), %.1f s",
+        pv,
+        _span(start, end),
+        samples,
+        len(bounds) - 1,
+        time.monotonic() - began,
+    )
 
 
 def _plan_chunks(
@@ -355,13 +390,32 @@ def _group_bins(
 def _get_json(
     pv: str, start: datetime, end: datetime, timeout: float
 ) -> Optional[list]:
+    began = time.monotonic()
     response = _request(
         "GET",
         f"{ARCHIVER_URL}/getData.json",
         timeout,
         params={"pv": pv, "from": _to_utc_iso(start), "to": _to_utc_iso(end)},
     )
-    return None if response is None else _json(response, "getData.json")
+    if response is None:
+        get_logger().debug("GET %s %s: not archived", pv, _span(start, end))
+        return None
+    get_logger().debug(
+        "GET %s %s: %.1f MB in %.2f s",
+        pv,
+        _span(start, end),
+        len(response.content) / 1e6,
+        time.monotonic() - began,
+    )
+    return _json(response, "getData.json")
+
+
+def _span(start: datetime, end: datetime) -> str:
+    """start..end in Pacific time, for log lines."""
+    fmt = "%Y-%m-%d %H:%M"
+    return (
+        f"{start.astimezone(LOCAL_TZ):{fmt}}..{end.astimezone(LOCAL_TZ):{fmt}}"
+    )
 
 
 def _bin_start(secs: float) -> int:
@@ -428,6 +482,7 @@ def get_values_at_time(
     pvs = list(pvs)
     if not pvs:
         return {}
+    began = time.monotonic()
     response = _request(
         "POST",
         f"{ARCHIVER_URL}/getDataAtTime",
@@ -436,12 +491,21 @@ def get_values_at_time(
         json=pvs,  # the Save/Restore API takes a JSON list of names
     )
     if response is None:  # 404: none of the PVs are known
+        get_logger().info("value at %s: none of %d PVs known", at, len(pvs))
         return {}
     payload = _json(response, "getDataAtTime")
     try:
-        return {pv: _to_sample(datum) for pv, datum in payload.items()}
+        samples = {pv: _to_sample(d) for pv, d in payload.items()}
     except (AttributeError, KeyError, TypeError) as e:
         raise ArchiverError(f"getDataAtTime: unexpected response: {e!r}") from e
+    get_logger().info(
+        "value at %s: %d of %d PVs, %.1f s",
+        at,
+        len(samples),
+        len(pvs),
+        time.monotonic() - began,
+    )
+    return samples
 
 
 def _map_in_daemon_threads(
@@ -531,6 +595,12 @@ def _request(
                 raise error
             last_error = error
         if attempt < MAX_RETRIES:
+            get_logger().warning(
+                "attempt %d of %d failed (%s); retrying",
+                attempt,
+                MAX_RETRIES,
+                last_error,
+            )
             sleep(RETRY_DELAY * attempt)
     raise last_error
 
