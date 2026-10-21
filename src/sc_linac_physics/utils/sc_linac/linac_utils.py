@@ -121,35 +121,10 @@ HL_SSA_SHARED_PVS = [
     "NRP_PRMT",
     "FaultSummary.SEVR",
     "480VACStat",
-    "Type",
+    "PwrRating",
 ]
 
 HL_SSA_PS_SETPOINT = 2500
-
-# SSA:Type is an enum naming the SSA model. Its labels only state the power
-# for states 0 and 1, so the rating comes from this map, keyed on the enum
-# index. Ratings are from Mike Dunning and Andy Benwell (email, 2026-10-05).
-# Read across the whole machine on 2026-10-05, the PV agreed with the per-CM
-# table Sebastian Aderhold gave on #285: 191 x state 0, 4 x state 1,
-# 269 x state 2, 16 x state 3 (HL, 8 read through HL_SSA_MAP).
-# States 4 (CA186, GUNB) and 5 (CA199, MSU) do not drive linac cavities.
-# On HL, HL_SSA_MAP shares PS and on/off between cavity pairs, but the 1 kW
-# is per cavity, not shared by the pair (Sebastian Aderhold on #317).
-SSA_TYPE_RATED_POWER_KW: dict[int, float] = {
-    0: 7.0,  # RK CA1300 7kW, LCLS-II-HE
-    1: 4.6,  # RK CA1300 4.6kW, HE prototypes
-    2: 3.8,  # RK CA1300, standard LCLS-II (label gives no power)
-    3: 1.0,  # RK CA3900, 3.9 GHz HL
-}
-
-
-def ssa_rated_power_kw(ssa_type: int) -> float | None:
-    """Rated power in kW for an SSA:Type enum index, or None if unknown.
-
-    Callers must handle None rather than guess a drive level.
-    """
-    return SSA_TYPE_RATED_POWER_KW.get(ssa_type)
-
 
 LOADED_Q_LOWER_LIMIT = int(2.5e7)
 LOADED_Q_UPPER_LIMIT = int(5.1e7)
@@ -233,6 +208,10 @@ PIEZO_SCRIPT_RUNNING_VALUE = 2
 PIEZO_SCRIPT_COMPLETE_VALUE = 1
 PIEZO_SCRIPT_CRASH_VALUE = 0
 PIEZO_PRE_RF_CHECKOUT_PASS_VALUE = 0
+# PZT:RFTESTSTAT enum, as ACCL:L1B:0210:PZT served it on 2026-10-14.
+PIEZO_WITH_RF_PASS_VALUE = 0
+PIEZO_WITH_RF_WARNING_VALUE = 1
+PIEZO_WITH_RF_FAIL_VALUE = 2
 PIEZO_WITH_RF_GRAD = 6.5
 PIEZO_CENTER_VOLTAGE = 25
 # 20 Hz/V is the production acceptance figure: +20 V on all four piezo-stacks
@@ -263,6 +242,15 @@ HL_HZ_PER_STEP = 18.3
 # applications/ consumes them.
 ESTIMATED_MICROSTEPS_PER_HZ = MICROSTEPS_PER_STEP / HZ_PER_STEP
 ESTIMATED_MICROSTEPS_PER_HZ_HL = MICROSTEPS_PER_STEP / HL_HZ_PER_STEP
+
+# Cavity._auto_tune aims each stepper move at this fraction of the measured
+# detune (was 0.9). A move passes resonance when
+# AUTO_TUNE_UNDERSHOOT * (true / believed SCALE) > 1, so 0.75 tolerates a tuner
+# that moves up to 1/0.75 = 1.33x what SCALE says without overshooting. 0.9
+# overshoots past 1.11x.
+# CHECK: Ryan reports some tuners move ~30% more than SCALE says. Is there a
+# measurement or tuner report to cite here?
+AUTO_TUNE_UNDERSHOOT = 0.75
 
 TUNE_CONFIG_RESONANCE_VALUE = 0
 TUNE_CONFIG_COLD_VALUE = 1

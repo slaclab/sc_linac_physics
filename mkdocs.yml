@@ -69,5 +69,6 @@ nav:
       - Cavity Display: displays/cavity_display.md
       - Fault Heatmap: displays/fault_heatmap.md
       - SRF Home: displays/srf_home.md
+      - EDM Screens: displays/edm_screens.md
   - Explainers:
       - How auto-tune works: explainers/auto_tune.md

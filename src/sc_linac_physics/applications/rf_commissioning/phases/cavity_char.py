@@ -94,8 +94,8 @@ class CavityCharLimits:
     """Configurable limits for the cavity characterization phase."""
 
     # Ryan's outline calls for 10% drive on 7 kW SSAs and 15% on 3.8 kW ones.
-    # SSA.rated_power_kw reads the rating from SSA:Type, but the outline gives
-    # no drive level for the 4.6 kW and 1 kW SSAs. Until that is decided the
+    # SSA.rated_power_kw reads the rating from SSA:PwrRating, but the outline
+    # gives no drive level for the 4.6 kW and 1 kW SSAs. Until that is decided the
     # phase starts from the existing safe pulsed level for every SSA, and the
     # operator can change it, which the outline asks for regardless.
     default_drive_level: float = linac_utils.SAFE_PULSED_DRIVE_LEVEL

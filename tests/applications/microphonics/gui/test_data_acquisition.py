@@ -13,7 +13,19 @@ class TestDataAcquisition:
     @pytest.fixture
     def acquisition_manager(self):
         """Fixture to create the acquisition manager instance"""
-        return DataAcquisitionManager()
+        manager = DataAcquisitionManager()
+        yield manager
+        # start_acquisition starts a real 2 s progress QTimer. Its slot holds
+        # the manager, and the manager holds the timer, so the pair outlives
+        # the test and the timer keeps firing in whatever test runs next.
+        # That segfaulted an xdist worker during a test_archiver.py test
+        # (release run 38971424831). Stop every timer the test left behind.
+        for info in manager.active_processes.values():
+            timer = info.get("progress_timer")
+            if timer is not None:
+                timer.stop()
+                timer.deleteLater()
+        manager.active_processes.clear()
 
     @pytest.fixture
     def mock_process_info(self, tmp_path):

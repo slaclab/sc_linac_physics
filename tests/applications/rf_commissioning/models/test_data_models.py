@@ -374,3 +374,31 @@ class TestSerializationAndRegistry:
         assert set(PHASE_REGISTRY) == set(CommissioningPhase)
         assert PHASE_REGISTRY[CommissioningPhase.COMPLETE].record_attr is None
         assert PHASE_REGISTRY[CommissioningPhase.COMPLETE].data_model is None
+
+
+class TestPiezoWithRFTestStatus:
+    def _complete(self, **kwargs):
+        return PiezoWithRFTest(
+            amplifier_gain_a=1.05,
+            amplifier_gain_b=0.98,
+            detune_gain=0.85,
+            **kwargs,
+        )
+
+    def test_pass_passes(self):
+        assert self._complete(rf_test_status="Pass").passed
+
+    def test_warning_is_complete_but_not_passed(self):
+        data = self._complete(rf_test_status="Warning")
+        assert data.is_complete
+        assert not data.passed
+
+    def test_new_fields_round_trip(self):
+        from sc_linac_physics.applications.rf_commissioning.models.serialization import (
+            deserialize_model,
+        )
+
+        data = self._complete(rf_test_status="Warning", detune_gain_pushed=True)
+        again = deserialize_model(PiezoWithRFTest, data.to_dict())
+        assert again.rf_test_status == "Warning"
+        assert again.detune_gain_pushed is True

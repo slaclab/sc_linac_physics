@@ -170,6 +170,14 @@ colors and buttons." Say what the reader should do. Short sentences — if one
 needs a comma to survive, split it. Hedge honestly ("my best guess is") rather
 than elaborately.
 
+**Short is not shorthand.** Machine experts read our comments: they read
+Python but don't build web services. Write whole sentences that say what
+happens and why it matters. Don't lean on software terms (an HTTP status
+like "a 200", "contract", which exception subclasses which). Don't write
+"same as `_foo`" without saying what `_foo` does. The test: could a machine
+expert follow it without opening another file? #383's "A 200 that isn't
+this CSV ... the same contract as _json" failed it.
+
 **Cut on sight.** Restating what the diff already shows. Explaining at length
 why a rejected alternative was rejected. Implementation detail nobody will act
 on. Empty template headings — delete the heading rather than writing "None

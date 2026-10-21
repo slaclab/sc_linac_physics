@@ -86,10 +86,14 @@ class TestPiezoPVGroup:
                 assert hasattr(prop, "value")
                 assert hasattr(prop, "pvname")
 
-    def test_prerf_channel_statuses_default_to_not_tested(self, piezo_group):
-        """Pre-RF channel statuses should start in Not Tested state."""
-        assert piezo_group.prerf_cha_status.value == 2
-        assert piezo_group.prerf_chb_status.value == 2
+    def test_prerf_channel_statuses_default_to_fail(self, piezo_group):
+        """Channels start at Fail; production has no Not Tested state."""
+        for status in (
+            piezo_group.prerf_cha_status,
+            piezo_group.prerf_chb_status,
+        ):
+            assert status.value == 2
+            assert tuple(status.enum_strings) == ("Pass", "Warning", "Fail")
 
     @staticmethod
     def _enum_int(prop):
@@ -219,6 +223,39 @@ class TestPiezoPVGroup:
         assert piezo_group.prerf_chb_status.value in (0, "Pass", b"Pass")
         assert piezo_group.capacitance_a.value == pytest.approx(25.3)
         assert piezo_group.capacitance_b.value == pytest.approx(24.8)
+
+    def test_withrf_enums_match_the_ioc(self, piezo_group):
+        """Enum strings as ACCL:L1B:0210:PZT served them on 2026-10-14."""
+        assert list(piezo_group.withrf_status.enum_strings) == [
+            "Pass",
+            "Warning",
+            "Fail",
+        ]
+        assert list(piezo_group.withrf_check_status.enum_strings) == [
+            "Crash",
+            "Complete",
+            "Running",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_withrf_test_passes_and_writes_a_detune_gain(
+        self, piezo_group, mock_pvproperty_instance
+    ):
+        with patch(
+            "sc_linac_physics.utils.simulation.tuner_service.sleep",
+            new_callable=AsyncMock,
+        ):
+            await piezo_group.withrf_run_check.putter(
+                mock_pvproperty_instance, 1
+            )
+
+        assert piezo_group.withrf_status.value in (0, "Pass", b"Pass")
+        assert piezo_group.withrf_check_status.value in (
+            1,
+            "Complete",
+            b"Complete",
+        )
+        assert piezo_group.detunegain_new.value == pytest.approx(0.85)
 
     def test_piezo_properties_values(self, piezo_group):
         """Test piezo property values and types."""
