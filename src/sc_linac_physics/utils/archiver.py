@@ -76,14 +76,17 @@ MAX_WORKERS = 8
 RANGE_TIMEOUT = 75.0
 AT_TIME_TIMEOUT = 75.0
 
-# Cold value-at-time lookups took up to 4 attempts (502, 502, then 200), each
-# about 60 s. So one lookup can block for about 4 minutes before it fails.
+# A value-at-time lookup the archiver had not cached took up to 4 attempts in
+# testing: the proxy cut off the first ones at 60 s (HTTP 502, a gateway
+# error) before one succeeded. So one lookup can block for about 4 minutes
+# before it fails.
 MAX_RETRIES = 4
 RETRY_DELAY = 0.5
 
-# Only gateway errors are retried: the proxy's 502 at 60 s above, and 503/504
-# from it or the archiver. Other 5xx, like a 500, fail the same way each time,
-# so retrying them only turned one failure into about 5 minutes of waiting.
+# Retry only gateway errors, where the proxy or archiver was busy or cut the
+# request off. Those are HTTP 502 (the proxy's 60 s cutoff above), 503 and
+# 504. Other server errors, such as 500, fail the same way every time. Retrying
+# them only turned one failure into about 5 minutes of waiting.
 RETRY_STATUS = frozenset({502, 503, 504})
 
 # A proxy cuts every request off at 60 s, and a long window holds more samples
@@ -114,10 +117,11 @@ MIN_SPLIT = timedelta(minutes=1)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
-# INFO: one line per PV fetched, per month cached, per value-at-time lookup.
-# WARNING: retries, cache writes that failed. DEBUG: every request and cache
-# hit. Created on first use, like utils/epics/logger.py, so importing this
-# module opens no log files.
+# The archiver client's logger. At INFO it writes one line per PV fetched,
+# per month cached and per value-at-time lookup. WARNING adds retries and
+# failed cache writes; DEBUG adds every request and cache hit. It is created
+# on first use, as utils/epics/logger.py does, so importing this module opens
+# no log files.
 _logger: Optional[logging.Logger] = None
 
 
@@ -191,8 +195,8 @@ def get_values_over_time_range(
 
     Raises PVNotArchivedError, naming every unknown PV, once all requests have
     finished. Timeouts, connection errors and HTTP 502/503/504 are retried,
-    then raised. Any other error, including a 200 whose body isn't the
-    expected JSON, raises ArchiverError naming the PV.
+    then raised. Any other error raises ArchiverError naming the PV. That
+    includes a reply that reports success but isn't the expected JSON.
     """
     pvs = list(pvs)
 

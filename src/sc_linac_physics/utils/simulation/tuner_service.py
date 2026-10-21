@@ -33,6 +33,11 @@ def _to_float(value):
         return None
 
 
+# PZT:CHA_TESTSTAT / CHB_TESTSTAT states on production (lcls-srv01,
+# 2026-10-14).
+_CHANNEL_TEST_STATES = ("Pass", "Warning", "Fail")
+
+
 def _enum_to_int(value, enum_strings):
     """Best-effort conversion for caproto enum values to integer index."""
     if isinstance(value, int):
@@ -141,8 +146,9 @@ class StepperPVGroup(PVGroup):
         # https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf). So a
         # simulated cavity lands anywhere a real accepted one could.
         #
-        # Skip the putter (which reverts direct writes) — this is the
-        # internal initial-value seed, not a client write to SCALE.
+        # This is the simulator setting SCALE's starting value, not a client
+        # writing it. verify_value=False skips SCALE's putter, the function
+        # caproto runs on a client write, which would revert this one.
         await instance.write(
             uniform(0.8 * nominal, 1.2 * nominal), verify_value=False
         )
@@ -181,12 +187,15 @@ class StepperPVGroup(PVGroup):
         self._move_task: asyncio.Task | None = None
         # Set by any put to ABORT_REQ, cleared when move() has stopped.
         self._abort_requested = False
-        # Held from the moving check until the task exists. MOVE_POS and
-        # MOVE_NEG are separate PVs, and the MOTOR_MOVING write in between
-        # yields, so without it opposing moves could both start.
+        # Lets only one move start at a time. Starting one checks that the
+        # motor isn't moving, writes MOTOR_MOVING, then creates the task.
+        # MOVE_POS and MOVE_NEG are separate PVs, and a write to one can run
+        # during the MOTOR_MOVING write. Without this lock, moves in opposite
+        # directions could both start.
         self._move_start_lock = asyncio.Lock()
-        # Same values as the former literal 256/1.4 and 256/18.3, via the
-        # shared constants so the nominal slope cannot drift from linac_utils.
+        # Nominal microsteps per Hz from linac_utils. Only a fallback:
+        # _hz_per_microstep_now uses it when SCALE is missing or zero.
+        # Otherwise the simulated cavity responds by its SCALE value.
         if not self.cavity_group.is_hl:
             self.steps_per_hertz = ESTIMATED_MICROSTEPS_PER_HZ
         else:
@@ -361,7 +370,8 @@ class PiezoPVGroup(PVGroup):
     dc_setpoint = pvproperty(name="DAC_SP", value=0.0, dtype=ChannelType.FLOAT)
     bias_voltage = pvproperty(name="BIAS", value=0.0, dtype=ChannelType.FLOAT)
 
-    # Pre-RF Test PVs
+    # Pre-RF Test PVs. Production has no "Not Tested" state, so a fresh or
+    # reset channel reads Fail (2) until a test passes it.
     prerf_test_start = pvproperty(
         name="TESTSTRT",
         value=0,
@@ -372,24 +382,20 @@ class PiezoPVGroup(PVGroup):
         name="CHA_TESTSTAT",
         dtype=ChannelType.ENUM,
         value=2,
-        enum_strings=(
-            "Pass",
-            "Fail",
-            "Not Tested",
-        ),
+        enum_strings=_CHANNEL_TEST_STATES,
     )
 
     prerf_chb_status = pvproperty(
         name="CHB_TESTSTAT",
         dtype=ChannelType.ENUM,
         value=2,
-        enum_strings=("Pass", "Fail", "Not Tested"),
+        enum_strings=_CHANNEL_TEST_STATES,
     )
     prerf_cha_testmsg = pvproperty(
-        name="CHA_TESTMSG1", value="", dtype=ChannelType.STRING
+        name="TESTMSG1", value="", dtype=ChannelType.STRING
     )
     prerf_chb_testmsg = pvproperty(
-        name="CHA_TESTMSG2",
+        name="TESTMSG2",
         value="",
         dtype=ChannelType.STRING,
     )
@@ -421,10 +427,10 @@ class PiezoPVGroup(PVGroup):
         enum_strings=("Crash", "Complete", "Running"),
     )
     withrf_status = pvproperty(
-        name="RFSTESTSTAT",
+        name="RFTESTSTAT",
         dtype=ChannelType.ENUM,
         value=0,
-        enum_strings=("Not Tested", "Pass", "Fail"),
+        enum_strings=("Pass", "Warning", "Fail"),
     )
     amplifiergain_a = pvproperty(
         name="CHA_AMPGAIN", value=0.0, dtype=ChannelType.FLOAT
@@ -474,10 +480,10 @@ class PiezoPVGroup(PVGroup):
         if not is_enabled:  # Disabled
             # Dropping to Manual on disable has to move the *commanded* mode as
             # well as the status. Writing MODESTAT alone leaves MODECTRL saying
-            # "Feedback" with no way to reconcile: Piezo.disable_feedback() is a
-            # guard-first loop on MODESTAT, so once the status reads Manual it
-            # never writes MODECTRL again, and the pair stays split for the rest
-            # of the session. Real IOCs keep status following control; the
+            # "Feedback" with no way to reconcile. Piezo.disable_feedback()
+            # writes MODECTRL only until MODESTAT reads Manual. Once it does,
+            # MODECTRL is never written again, and the pair stays split for the
+            # rest of the session. Real IOCs keep status following control; the
             # simulator has to model that or every commissioning screen that
             # shows both PVs reports a mismatch that hardware would never have.
             await self.feedback_mode_stat.write(0)
@@ -492,9 +498,9 @@ class PiezoPVGroup(PVGroup):
         # Set test status to Running (index 2)
         await self.prerf_test_status.write(2)  # Running
 
-        # Reset previous test results to "Not Tested" (index 2)
-        await self.prerf_cha_status.write(2)  # Not Tested
-        await self.prerf_chb_status.write(2)  # Not Tested
+        # Reset previous test results to Fail (index 2)
+        await self.prerf_cha_status.write(2)  # Fail until the test passes
+        await self.prerf_chb_status.write(2)
         await self.capacitance_a.write(0.0)
         await self.capacitance_b.write(0.0)
         await self.prerf_cha_testmsg.write("Testing...")
@@ -517,7 +523,7 @@ class PiezoPVGroup(PVGroup):
             await self.prerf_chb_testmsg.write("Test passed")
 
         elif fail_mode == 1:  # Channel A fails
-            await self.prerf_cha_status.write(1)  # Fail
+            await self.prerf_cha_status.write(2)  # Fail
             await self.prerf_chb_status.write(0)  # Pass
             await self.capacitance_a.write(10.5)
             await self.capacitance_b.write(24.8)
@@ -526,22 +532,22 @@ class PiezoPVGroup(PVGroup):
 
         elif fail_mode == 2:  # Channel B fails
             await self.prerf_cha_status.write(0)
-            await self.prerf_chb_status.write(1)
+            await self.prerf_chb_status.write(2)
             await self.capacitance_a.write(25.3)
             await self.capacitance_b.write(5.2)
             await self.prerf_cha_testmsg.write("Test passed")
             await self.prerf_chb_testmsg.write("Low capacitance detected")
 
         elif fail_mode == 3:  # Both channels fail
-            await self.prerf_cha_status.write(1)
-            await self.prerf_chb_status.write(1)
+            await self.prerf_cha_status.write(2)
+            await self.prerf_chb_status.write(2)
             await self.capacitance_a.write(0.1)
             await self.capacitance_b.write(0.2)
             await self.prerf_cha_testmsg.write("No connection detected")
             await self.prerf_chb_testmsg.write("No connection detected")
 
         elif fail_mode == 4:  # High capacitance
-            await self.prerf_cha_status.write(1)
+            await self.prerf_cha_status.write(2)
             await self.prerf_chb_status.write(0)
             await self.capacitance_a.write(45.7)
             await self.capacitance_b.write(24.8)
@@ -549,16 +555,16 @@ class PiezoPVGroup(PVGroup):
             await self.prerf_chb_testmsg.write("Test passed")
 
         elif fail_mode == 5:  # Timeout
-            await self.prerf_cha_status.write(1)
-            await self.prerf_chb_status.write(1)
+            await self.prerf_cha_status.write(2)
+            await self.prerf_chb_status.write(2)
             await self.capacitance_a.write(0.0)
             await self.capacitance_b.write(0.0)
             await self.prerf_cha_testmsg.write("Test timeout")
             await self.prerf_chb_testmsg.write("Test timeout")
 
         else:  # Unknown
-            await self.prerf_cha_status.write(1)
-            await self.prerf_chb_status.write(1)
+            await self.prerf_cha_status.write(2)
+            await self.prerf_chb_status.write(2)
             await self.prerf_cha_testmsg.write("Unknown failure mode")
             await self.prerf_chb_testmsg.write("Unknown failure mode")
 
@@ -608,14 +614,15 @@ class PiezoPVGroup(PVGroup):
         """Simulate with-RF test execution. RFTESTSTRT reads back 0."""
         print("Starting With-RF test simulation...")
         await self.withrf_check_status.write(2)  # Running
-        await self.withrf_status.write(0)  # Reset status
 
         await sleep(3)
 
         # Simulate successful with-RF test
-        await self.withrf_status.write(1)  # Pass
+        await self.withrf_status.write(0)  # Pass
         await self.amplifiergain_a.write(1.05)
         await self.amplifiergain_b.write(0.98)
+        # Arbitrary sim value, so the phase has a detune gain to review.
+        await self.detunegain_new.write(0.85)
 
         await self.withrf_check_status.write(1)  # Complete
         print("With-RF test complete: PASS")

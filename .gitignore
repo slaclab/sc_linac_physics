@@ -1,4 +1,8 @@
 .claude/*
+!.claude/settings.json
+!.claude/hooks/
+.claude/hooks/*
+!.claude/hooks/ask-before-pr-comment.py
 .superpowers/
 
 # IDEs
