@@ -195,6 +195,17 @@ def test_setup_rf_keeps_good_results_from_the_last_hour(
     assert "kept the characterization" in record.piezo_with_rf.notes
 
 
+def test_setup_rf_uses_the_recent_result_limit(phase, mock_cavity):
+    phase.limits.recent_result_seconds = 600
+    recent = datetime.now() - timedelta(minutes=30)
+    mock_cavity.ssa.calibration_timestamp = recent
+    mock_cavity.characterization_timestamp = recent
+    phase.execute_step("setup_rf")
+    kwargs = mock_cavity.setup_rf.call_args.kwargs
+    assert kwargs["calibrate_ssa"] is True
+    assert kwargs["characterize"] is True
+
+
 @pytest.mark.parametrize(
     "attr, value, kwarg",
     [

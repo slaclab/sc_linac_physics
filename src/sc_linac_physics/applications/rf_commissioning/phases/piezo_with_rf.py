@@ -31,6 +31,10 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PiezoWithRFTest,
 )
+from sc_linac_physics.applications.rf_commissioning.phases.cavity_setup import (
+    last_characterization,
+    last_ssa_calibration,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
     PhaseContext,
@@ -242,8 +246,13 @@ class PiezoWithRFPhase(PhaseBase):
             return self._dry_run_result("RF setup")
         amplitude = self._test_amplitude()
         try:
-            calibrate_ssa = not self._ssa_calibration_recent()
-            characterize = not self._characterization_recent()
+            max_age = self.limits.recent_result_seconds
+            calibrate_ssa = not last_ssa_calibration(self.cavity).is_recent(
+                max_age
+            )
+            characterize = not last_characterization(self.cavity).is_recent(
+                max_age
+            )
         except Exception as exc:
             # Only reads so far, so a retry repeats nothing on the machine.
             return self._retry(f"Could not read the last calibration: {exc}")
@@ -289,26 +298,6 @@ class PiezoWithRFPhase(PhaseBase):
                 "loaded_q": loaded_q,
                 "scale_factor": scale_factor,
             },
-        )
-
-    def _is_recent(self, timestamp: datetime) -> bool:
-        age = (datetime.now() - timestamp).total_seconds()
-        return age < self.limits.recent_result_seconds
-
-    def _ssa_calibration_recent(self) -> bool:
-        """CALTS under recent_result_seconds old and CALSTAT Good."""
-        ssa = self.cavity.ssa
-        return (
-            self._is_recent(ssa.calibration_timestamp)
-            and ssa.calibration_result_good
-        )
-
-    def _characterization_recent(self) -> bool:
-        """PROBECALTS under recent_result_seconds old, PROBECALSTS Complete."""
-        return (
-            self._is_recent(self.cavity.characterization_timestamp)
-            and self.cavity.characterization_status
-            == linac_utils.CALIBRATION_COMPLETE_VALUE
         )
 
     def _setup_piezo(self) -> PhaseStepResult:
