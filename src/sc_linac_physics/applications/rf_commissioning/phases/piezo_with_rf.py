@@ -31,6 +31,11 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PiezoWithRFTest,
 )
+from sc_linac_physics.applications.rf_commissioning.phases.cavity_setup import (
+    LastSetupResult,
+    last_characterization,
+    last_ssa_calibration,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
     PhaseContext,
@@ -181,19 +186,16 @@ class PiezoWithRFPhase(PhaseBase):
                     "A with-RF test is already running (RFTESTSTS = "
                     "Running) — wait for it to finish"
                 )
-            ssa = self.cavity.ssa
+            ssa_cal = last_ssa_calibration(self.cavity)
+            char = last_characterization(self.cavity)
+            max_age = self.limits.recent_result_seconds
             data = {
-                "ssa_calibration_time": ssa.calibration_timestamp,
-                "ssa_calibration_good": bool(ssa.calibration_result_good),
-                "ssa_calibration_recent": self._ssa_calibration_recent(),
-                "characterization_time": (
-                    self.cavity.characterization_timestamp
-                ),
-                "characterization_complete": (
-                    self.cavity.characterization_status
-                    == linac_utils.CALIBRATION_COMPLETE_VALUE
-                ),
-                "characterization_recent": self._characterization_recent(),
+                "ssa_calibration_time": ssa_cal.timestamp,
+                "ssa_calibration_good": bool(ssa_cal.good),
+                "ssa_calibration_recent": ssa_cal.is_recent(max_age),
+                "characterization_time": char.timestamp,
+                "characterization_complete": char.good,
+                "characterization_recent": char.is_recent(max_age),
             }
         except Exception as exc:
             return self._retry(f"Could not read cavity state: {exc}")
@@ -269,10 +271,11 @@ class PiezoWithRFPhase(PhaseBase):
         amplitude = self._test_amplitude()
         params = self.context.parameters
         try:
-            ssa_stale = not self._ssa_calibration_recent()
-            char_stale = not self._characterization_recent()
-            ssa_time = self.cavity.ssa.calibration_timestamp
-            char_time = self.cavity.characterization_timestamp
+            ssa_cal = last_ssa_calibration(self.cavity)
+            char = last_characterization(self.cavity)
+            max_age = self.limits.recent_result_seconds
+            ssa_stale = not ssa_cal.is_recent(max_age)
+            char_stale = not char.is_recent(max_age)
             calibrate_ssa = ssa_stale and bool(
                 params.get("rerun_ssa_calibration", True)
             )
@@ -302,15 +305,13 @@ class PiezoWithRFPhase(PhaseBase):
         ssa_note = (
             "re-ran SSA calibration"
             if calibrate_ssa
-            else self._kept_note(
-                "SSA calibration", ssa_stale, "CALTS", ssa_time
-            )
+            else self._kept_note("SSA calibration", ssa_stale, "CALTS", ssa_cal)
         )
         char_note = (
             "re-ran characterization (pushed, not reviewed)"
             if characterize
             else self._kept_note(
-                "characterization", char_stale, "PROBECALTS", char_time
+                "characterization", char_stale, "PROBECALTS", char
             )
         )
         note = (
@@ -331,34 +332,16 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     @staticmethod
-    def _kept_note(what: str, stale: bool, pv: str, stamp: datetime) -> str:
+    def _kept_note(
+        what: str, stale: bool, pv: str, last: LastSetupResult
+    ) -> str:
         """setup_rf's note for a result it did not re-run."""
         if stale:
             return (
-                f"kept a stale {what} ({pv} {stamp:%Y-%m-%d %H:%M}; "
+                f"kept a stale {what} ({pv} {last.timestamp:%Y-%m-%d %H:%M}; "
                 "operator chose Skip)"
             )
         return f"kept the {what} from the last hour"
-
-    def _is_recent(self, timestamp: datetime) -> bool:
-        age = (datetime.now() - timestamp).total_seconds()
-        return age < self.limits.recent_result_seconds
-
-    def _ssa_calibration_recent(self) -> bool:
-        """CALTS under recent_result_seconds old and CALSTAT Good."""
-        ssa = self.cavity.ssa
-        return (
-            self._is_recent(ssa.calibration_timestamp)
-            and ssa.calibration_result_good
-        )
-
-    def _characterization_recent(self) -> bool:
-        """PROBECALTS under recent_result_seconds old, PROBECALSTS Complete."""
-        return (
-            self._is_recent(self.cavity.characterization_timestamp)
-            and self.cavity.characterization_status
-            == linac_utils.CALIBRATION_COMPLETE_VALUE
-        )
 
     def _setup_piezo(self) -> PhaseStepResult:
         """Enable the piezo, then put it in manual.
