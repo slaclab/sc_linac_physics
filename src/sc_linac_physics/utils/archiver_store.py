@@ -124,7 +124,7 @@ class ArchiverStore:
             try:
                 for month_start, month_end in _months(start, end):
                     if _settled(month_end):
-                        self._month(pv, month_start, month_end, start, end)
+                        self._cache(pv, month_start, month_end)
             except archiver.PVNotArchivedError:
                 return False
             return True
@@ -148,28 +148,43 @@ class ArchiverStore:
         """One month's samples, from the cache when the month is settled.
 
         A month not yet settled is fetched only where it overlaps start..end,
-        and not written. If the cache can't be written (no permission, disk
-        full), the month is fetched without it: the cache only saves time.
+        and not written. If the cache can't be written or read (no
+        permission, disk full), that overlap is fetched without it: the cache
+        only saves time.
+        """
+        if _settled(month_end) and self._cache(pv, month_start, month_end):
+            path = self.path(pv, month_start)
+            try:
+                return pq.read_table(path).to_pandas()
+            except OSError as e:
+                logger.warning(
+                    "archiver cache: cannot read %s (%s); fetching %s without it",
+                    path,
+                    e,
+                    pv,
+                )
+        lo, hi = max(month_start, start), min(month_end, end)
+        return _join(archiver.iter_range_chunks(pv, lo, hi))
+
+    def _cache(
+        self, pv: str, month_start: datetime, month_end: datetime
+    ) -> bool:
+        """Put a settled month on disk unless it is there already.
+
+        Never reads the month back, so fill() holds about one chunk per PV.
+        Returns False, with a warning, if the cache can't be used.
         """
         path = self.path(pv, month_start)
-        if path.exists():
-            return pq.read_table(path).to_pandas()
-        if not _settled(month_end):
-            lo, hi = max(month_start, start), min(month_end, end)
-            return _join(archiver.iter_range_chunks(pv, lo, hi))
         try:
+            if path.exists():
+                return True
             _write_atomically(
                 path, archiver.iter_range_chunks(pv, month_start, month_end)
             )
         except OSError as e:
-            logger.warning(
-                "archiver cache: cannot write %s (%s); fetching %s without it",
-                path,
-                e,
-                pv,
-            )
-            return _join(archiver.iter_range_chunks(pv, month_start, month_end))
-        return pq.read_table(path).to_pandas()
+            logger.warning("archiver cache: cannot write %s (%s)", path, e)
+            return False
+        return True
 
 
 def _write_atomically(path: Path, chunks: Iterator[pd.DataFrame]) -> None:
@@ -184,9 +199,14 @@ def _write_atomically(path: Path, chunks: Iterator[pd.DataFrame]) -> None:
     writer: Optional[pq.ParquetWriter] = None
     try:
         for chunk in chunks:
-            table = pa.Table.from_pandas(
-                chunk[STORED_COLUMNS], preserve_index=False
-            )
+            chunk = chunk[STORED_COLUMNS]
+            # The first chunk fixes the file's schema. Integer values are
+            # stored as float64 so a later chunk with 0.5 in it still fits,
+            # the way pandas would widen them when joining the chunks.
+            # float64 holds every integer up to 2**53 exactly.
+            if pd.api.types.is_integer_dtype(chunk["value"]):
+                chunk = chunk.astype({"value": "float64"})
+            table = pa.Table.from_pandas(chunk, preserve_index=False)
             if writer is None:
                 writer = pq.ParquetWriter(tmp, table.schema, compression="zstd")
             writer.write_table(table.cast(writer.schema))

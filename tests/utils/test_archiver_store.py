@@ -240,3 +240,46 @@ def test_cached_month_reads_back_identical_frame(store):
         cached = store.read("A:PV", JAN, FEB)
 
     pd.testing.assert_frame_equal(fetched, cached)
+
+
+def test_integer_then_fractional_values_are_cached(store):
+    # Each sample is its own chunk, so the first chunk holds only an int.
+    fake, served = _serve(
+        {"A:PV": [(JAN + timedelta(days=1), 1), (JAN + timedelta(days=2), 0.5)]}
+    )
+    with served:
+        fetched = store.read("A:PV", JAN, FEB)
+        cached = store.read("A:PV", JAN, FEB)
+
+    assert _values(fetched) == [1.0, 0.5]
+    pd.testing.assert_frame_equal(fetched, cached)
+
+
+def test_unreadable_cache_file_is_fetched_without_it(store, caplog):
+    fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
+    with served:
+        store.read("A:PV", JAN, FEB)
+        with (
+            patch.object(
+                archiver_store.pq,
+                "read_table",
+                side_effect=PermissionError("Permission denied"),
+            ),
+            caplog.at_level("WARNING", logger=archiver_store.__name__),
+        ):
+            frame = store.read("A:PV", JAN, FEB)
+
+    assert _values(frame) == [1.0]
+    assert len(fake.calls) == 2
+    assert "cannot read" in caplog.text
+
+
+def test_fill_does_not_read_months_back(store):
+    fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
+    with served, patch.object(archiver_store.pq, "read_table") as read_table:
+        store.fill(["A:PV"], JAN, FEB)
+        store.fill(["A:PV"], JAN, FEB)
+
+    read_table.assert_not_called()
+    assert len(fake.calls) == 1
+    assert store.path("A:PV", JAN).exists()
