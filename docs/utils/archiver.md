@@ -42,6 +42,8 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
   keeps their values strings. Windows up to an hour are one JSON request.
 - Live, 2026-10-12: 60 days of a 1 Hz PV took 6 chunks and 14.5 s (49 s as
   JSON). A year of two fault PVs took 16 requests, mostly counts.
+- `iter_range_chunks(pv, start, end)` yields the same samples one chunk at a
+  time, for processing or storing a long window without holding all of it.
 - Memory: mostly the frames returned, about 33 bytes a sample. 8 PVs x 30
   days (18.9 M samples) peaked at 1.9 GB. Raw pulls of a year or more don't
   fit in memory. A disk store is planned.

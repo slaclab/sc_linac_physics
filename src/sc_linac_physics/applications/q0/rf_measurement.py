@@ -104,8 +104,9 @@ class Q0Measurement:
         try:
             q0_meas_data = all_data[time_stamp]
             self._load_heater_run_data(q0_meas_data)
+            # No save here: save_data writes dLL/dt from today's refit and
+            # would overwrite values stored with the fit in use at the time.
             self._load_rf_run_data(q0_meas_data)
-            self.save_data()
         except KeyError as e:
             raise ValueError(f"Missing required data field: {e}")
 

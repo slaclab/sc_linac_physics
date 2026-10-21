@@ -46,6 +46,7 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    Iterator,
     List,
     NamedTuple,
     Optional,
@@ -74,14 +75,17 @@ MAX_WORKERS = 8
 RANGE_TIMEOUT = 75.0
 AT_TIME_TIMEOUT = 75.0
 
-# Cold value-at-time lookups took up to 4 attempts (502, 502, then 200), each
-# about 60 s. So one lookup can block for about 4 minutes before it fails.
+# A value-at-time lookup the archiver had not cached took up to 4 attempts in
+# testing: the proxy cut off the first ones at 60 s (HTTP 502, a gateway
+# error) before one succeeded. So one lookup can block for about 4 minutes
+# before it fails.
 MAX_RETRIES = 4
 RETRY_DELAY = 0.5
 
-# Only gateway errors are retried: the proxy's 502 at 60 s above, and 503/504
-# from it or the archiver. Other 5xx, like a 500, fail the same way each time,
-# so retrying them only turned one failure into about 5 minutes of waiting.
+# Retry only gateway errors, where the proxy or archiver was busy or cut the
+# request off. Those are HTTP 502 (the proxy's 60 s cutoff above), 503 and
+# 504. Other server errors, such as 500, fail the same way every time. Retrying
+# them only turned one failure into about 5 minutes of waiting.
 RETRY_STATUS = frozenset({502, 503, 504})
 
 # A proxy cuts every request off at 60 s, and a long window holds more samples
@@ -180,24 +184,19 @@ def get_values_over_time_range(
 
     Raises PVNotArchivedError, naming every unknown PV, once all requests have
     finished. Timeouts, connection errors and HTTP 502/503/504 are retried,
-    then raised. Any other error, including a 200 whose body isn't the
-    expected JSON, raises ArchiverError naming the PV.
+    then raised. Any other error raises ArchiverError naming the PV. That
+    includes a reply that reports success but isn't the expected JSON.
     """
     pvs = list(pvs)
-    # Chunk in UTC: adding a timedelta to a Pacific time is wall-clock
-    # arithmetic, which skips or repeats an hour across a DST change.
-    start = _aware(start).astimezone(timezone.utc)
-    end = _aware(end).astimezone(timezone.utc)
 
     def fetch(pv: str) -> Optional[pd.DataFrame]:
         try:
-            return _fetch_range(pv, start, end, timeout)
-        except ArchiverError as e:
-            # Every range request has the same URL; name the PV that failed.
-            raise type(e)(f"{pv}: {e}") from e
-        except (KeyError, IndexError, TypeError) as e:
-            # A 200 whose JSON isn't the shape planning and fetching read.
-            raise ArchiverError(f"{pv}: unexpected response: {e!r}") from e
+            frames = list(iter_range_chunks(pv, start, end, timeout))
+        except PVNotArchivedError:
+            return None
+        # An empty frame's columns are object dtype; mixing one in would turn
+        # the timestamps into objects too, so chunks are never empty.
+        return pd.concat(frames, ignore_index=True) if frames else _to_frame([])
 
     frames = dict(zip(pvs, _map_in_daemon_threads(fetch, pvs, max_workers)))
 
@@ -207,10 +206,18 @@ def get_values_over_time_range(
     return frames
 
 
-def _fetch_range(
-    pv: str, start: datetime, end: datetime, timeout: float
-) -> Optional[pd.DataFrame]:
-    """Fetch one PV between start and end in chunks; None if not archived.
+def iter_range_chunks(
+    pv: str, start: datetime, end: datetime, timeout: float = RANGE_TIMEOUT
+) -> Iterator[pd.DataFrame]:
+    """Yield one PV's samples between start and end, a chunk at a time.
+
+    Chunks come in time order, none empty, with no sample twice. Joined with
+    pd.concat they equal get_values_over_time_range's frame for the PV. Use
+    this to process or store a long window without holding all of it.
+    Naive datetimes are read as America/Los_Angeles.
+
+    Raises PVNotArchivedError if the archiver does not know the PV, before
+    the first chunk or partway through. Other errors name the PV.
 
     A window can start with the last sample before "from", and a sample
     exactly on a boundary came back in both windows around it (checked on
@@ -223,25 +230,39 @@ def _fetch_range(
     until the end peaked at 3.7 GB for a 156 MB result (60 days, 4.7 M
     samples, measured 2026-10-12).
     """
+    # Chunk in UTC: adding a timedelta to a Pacific time is wall-clock
+    # arithmetic, which skips or repeats an hour across a DST change.
+    start = _aware(start).astimezone(timezone.utc)
+    end = _aware(end).astimezone(timezone.utc)
+    try:
+        yield from _iter_chunks(pv, start, end, timeout)
+    except PVNotArchivedError:
+        raise
+    except ArchiverError as e:
+        # Every range request has the same URL; name the PV that failed.
+        raise type(e)(f"{pv}: {e}") from e
+    except (KeyError, IndexError, TypeError, pd.errors.ParserError) as e:
+        # The reply reported success, but its JSON or CSV is missing fields
+        # that splitting the window into chunks, or reading them, depends on.
+        raise ArchiverError(f"{pv}: unexpected response: {e!r}") from e
+
+
+def _iter_chunks(
+    pv: str, start: datetime, end: datetime, timeout: float
+) -> Iterator[pd.DataFrame]:
     plan = _plan_chunks(pv, start, end, timeout)
     if plan is None:
-        return None
+        raise PVNotArchivedError([pv])
     get_chunk = _csv_chunk if plan.numeric else _json_chunk
-    frames: List[pd.DataFrame] = []
     last: Optional[tuple] = None
     for chunk_start, chunk_end in zip(plan.bounds, plan.bounds[1:]):
         chunk = get_chunk(pv, chunk_start, chunk_end, timeout, last)
         if chunk is None:
-            return None
+            raise PVNotArchivedError([pv])
         frame, chunk_last = chunk
         if chunk_last is not None:
             last = chunk_last
-            frames.append(frame)
-    # An empty frame's columns are object dtype; mixing one in would turn
-    # the timestamps into objects too.
-    if not frames:
-        return _to_frame([])
-    return pd.concat(frames, ignore_index=True)
+            yield frame
 
 
 class _Plan(NamedTuple):
