@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ask-before-pr-comment.py\"",
+            "timeout": 30,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}

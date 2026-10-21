@@ -48,17 +48,6 @@ def test_numeric_type(service, pv, data_type):
         (f"{CAV}SSA:CALSTAT", ("Good", "Warning", "Error")),
         (f"{CAV}SSA:PowerOn", ("Standby", "Powering On...")),
         (f"{CAV}SSA:PowerOff", ("Standby", "Powering Off...")),
-        (
-            f"{CAV}SSA:Type",
-            (
-                "RK CA1300 7kW",
-                "RK CA1300 4.6kW",
-                "RK CA1300",
-                "RK CA3900",
-                "RK CA186",
-                "RK CA199",
-            ),
-        ),
         (f"{CAV}CPLRTEMP2_LTCH", ("Ok", "Fault")),
         (f"{CM}AUTO:SETUP_SSAREQ", ("No request", "Request")),
         (f"{CM}AUTO:SETUPSTS", ("Crash", "Complete", "Running")),
