@@ -331,7 +331,8 @@ class SCLinacPhysicsService(Service):
             cm_group.ll_group = ll_group
 
         # heater group
-        # Cryomodule.cryo_name: HL01/HL02 for H1/H2 (CRYO_NAME_MAP), else CMxx.
+        # Heater PVs use the cryo name, as Cryomodule.cryo_name does: HL01 and
+        # HL02 for cryomodules H1 and H2 (CRYO_NAME_MAP), CMxx for the rest.
         heater_prefix = f"CPIC:{_cryo_name(cm_name)}:0000:EHCV:"
         heater_group = HeaterPVGroup(prefix=heater_prefix, cm_group=cm_group)
         self.add_pvs(heater_group)
