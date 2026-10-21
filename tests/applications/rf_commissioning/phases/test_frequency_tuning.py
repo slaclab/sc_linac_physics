@@ -1,8 +1,8 @@
 """Tests for Frequency Tuning Phase."""
 
 import time
-from datetime import datetime
-from unittest.mock import Mock
+from datetime import datetime, timedelta
+from unittest.mock import Mock, PropertyMock
 
 import pytest
 
@@ -12,6 +12,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     FrequencyTuningData,
     PhaseCheckpoint,
     SSACharacterization,
+)
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.frequency_tuning import (
     FrequencyTuningLimits,
@@ -81,6 +84,7 @@ def mock_cavity(mock_stepper):
     cavity.ssa.drive_max = 0.8
     cavity.ssa.measured_slope = 1.0
     cavity.ssa.max_fwd_pwr = 4000.0
+    cavity.ssa.calibration_running = False
     return cavity
 
 
@@ -622,6 +626,68 @@ def test_stage_2_re_prepare_does_not_recalibrate(phase, mock_cavity):
 
     mock_cavity.setup_tuning.assert_called_once()
     mock_cavity.ssa.calibrate.assert_not_called()
+
+
+def test_stage_1_refuses_while_ssa_calibration_running(phase, mock_cavity):
+    _setup_phase(phase)
+    mock_cavity.ssa.calibration_running = True
+
+    result = phase._verify_initial_state()
+
+    assert result.result == PhaseResult.FAILED
+    assert "running" in result.message
+    mock_cavity.turn_off.assert_not_called()
+    mock_cavity.ssa.calibrate.assert_not_called()
+
+
+def test_stage_1_retries_without_writes_when_calsts_unreadable(
+    phase, mock_cavity
+):
+    _setup_phase(phase)
+    type(mock_cavity.ssa).calibration_running = PropertyMock(
+        side_effect=RuntimeError("PV timeout")
+    )
+
+    result = phase._verify_initial_state()
+
+    assert result.result == PhaseResult.RETRY
+    mock_cavity.turn_off.assert_not_called()
+    mock_cavity.ssa.calibrate.assert_not_called()
+
+
+def _last_cal(good=True, hours_old=0.2):
+    return cavity_setup.LastSetupResult(
+        name="SSA calibration",
+        timestamp=datetime.now() - timedelta(hours=hours_old),
+        good=good,
+    )
+
+
+def test_stage_1_keeps_a_calibration_the_controller_passed(
+    phase, mock_cavity, record
+):
+    _setup_phase(phase)
+    phase.context.parameters["kept_ssa_calibration"] = _last_cal()
+
+    result = phase._verify_initial_state()
+
+    assert result.result == PhaseResult.SUCCESS, result.message
+    mock_cavity.ssa.calibrate.assert_not_called()
+    assert record.ssa_char is None
+    assert record.frequency_tuning.notes.startswith("Kept the SSA calibration")
+    mock_cavity.setup_tuning.assert_called_once()
+
+
+def test_stage_1_notes_who_skipped_an_old_calibration(phase, record):
+    _setup_phase(phase)
+    phase.context.parameters["kept_ssa_calibration"] = _last_cal(hours_old=5)
+    phase.context.parameters["ssa_calibration_skipped_by"] = "test_op"
+
+    phase._verify_initial_state()
+
+    assert record.frequency_tuning.notes.startswith(
+        "SSA calibration skipped by test_op"
+    )
 
 
 def test_verify_initial_state_warns_when_not_cold(phase, mock_cavity):

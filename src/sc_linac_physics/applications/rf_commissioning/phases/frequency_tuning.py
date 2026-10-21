@@ -540,9 +540,35 @@ class FrequencyTuningPhase(PhaseBase):
         record.ssa_char on success. The stage 2/3 re-prepare
         (_ensure_tuning_setup) does not recalibrate.
 
+        Refuses, before any write, while CALSTS reads Running. Skips the
+        calibration when the controller passes kept_ssa_calibration: a good
+        one under an hour old, or an older one the operator chose to Skip
+        (then ssa_calibration_skipped_by holds their name). A skip writes no
+        PVs and adds a line to record.frequency_tuning.notes.
+
         Returns None on success, else the failed calibration result.
         """
         if self._ssa_calibrated:
+            return None
+        try:
+            running = self.cavity.ssa.calibration_running
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read SSA calibration status: {exc}",
+                retry_delay_seconds=3.0,
+            )
+        if running:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    "SSA calibration is running — wait for it to finish "
+                    "before tuning"
+                ),
+            )
+        kept = self.context.parameters.get("kept_ssa_calibration")
+        if kept is not None:
+            self._keep_ssa_calibration(kept, status_cb)
             return None
         _emit_status(status_cb, "Calibrating SSA...")
         previous = getattr(self.context.record, "ssa_char", None)
@@ -556,6 +582,21 @@ class FrequencyTuningPhase(PhaseBase):
         self._ssa_calibrated = True
         _emit_status(status_cb, f"✓ {result.message}")
         return None
+
+    def _keep_ssa_calibration(self, kept, status_cb=None) -> None:
+        """Keep the slope already on the SSA and note why on the record."""
+        skipped_by = self.context.parameters.get("ssa_calibration_skipped_by")
+        if skipped_by:
+            note = f"SSA calibration skipped by {skipped_by}: {kept.describe()}"
+        else:
+            note = f"Kept the {kept.describe()}"
+        record = getattr(self.context, "record", None)
+        if record is not None:
+            data = record.frequency_tuning or FrequencyTuningData()
+            data.notes = f"{data.notes}\n{note}" if data.notes else note
+            record.frequency_tuning = data
+        self._ssa_calibrated = True
+        _emit_status(status_cb, f"✓ {note}")
 
     def _prepare_and_read(
         self, status_cb=None
