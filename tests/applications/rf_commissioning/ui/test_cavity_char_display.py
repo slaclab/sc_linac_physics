@@ -127,3 +127,20 @@ def test_stored_data_shows_probe_q(display):
     assert "cavity_probe_q" in names
     assert "cavity_loaded_q" in names
     assert "cavity_scale_factor" in names
+
+
+@pytest.mark.parametrize(
+    "button, expected",
+    [("Rerun calibration", "rerun"), ("Skip", "skip"), ("Cancel", "cancel")],
+)
+def test_the_old_calibration_popup_maps_each_button(display, button, expected):
+    from PyQt5.QtWidgets import QMessageBox
+
+    def click(box):
+        next(b for b in box.buttons() if b.text() == button).click()
+
+    with patch.object(QMessageBox, "exec_", click):
+        answer = display.ask_rerun_ssa_calibration(
+            "SSA calibration from 2026-10-19 08:48, 3.2 h old"
+        )
+    assert answer == expected
