@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.54.0 (2026-10-21)
+
+### Bug Fixes
+
+- **cli**: Sc-pv-info reads record fields from the owning record
+  ([#449](https://github.com/slaclab/sc_linac_physics/pull/449),
+  [`7b96919`](https://github.com/slaclab/sc_linac_physics/commit/7b9691944ff619ed1c6262b15d6de11c75bbfb6c))
+
+### Features
+
+- **cli**: Add sc-pv-info, a read-only description of an EPICS record
+  ([#449](https://github.com/slaclab/sc_linac_physics/pull/449),
+  [`7b96919`](https://github.com/slaclab/sc_linac_physics/commit/7b9691944ff619ed1c6262b15d6de11c75bbfb6c))
+
+- **cli**: Let sc-pv-info find cryo, decarad, vacuum and magnet suffixes
+  ([#449](https://github.com/slaclab/sc_linac_physics/pull/449),
+  [`7b96919`](https://github.com/slaclab/sc_linac_physics/commit/7b9691944ff619ed1c6262b15d6de11c75bbfb6c))
+
+
 ## v9.53.0 (2026-10-21)
 
 ### Bug Fixes
