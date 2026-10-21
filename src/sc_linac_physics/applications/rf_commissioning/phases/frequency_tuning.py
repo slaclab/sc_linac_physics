@@ -586,10 +586,7 @@ class FrequencyTuningPhase(PhaseBase):
     def _keep_ssa_calibration(self, kept, status_cb=None) -> None:
         """Keep the slope already on the SSA and note why on the record."""
         skipped_by = self.context.parameters.get("ssa_calibration_skipped_by")
-        if skipped_by:
-            note = f"SSA calibration skipped by {skipped_by}: {kept.describe()}"
-        else:
-            note = f"Kept the {kept.describe()}"
+        note = cavity_setup.kept_ssa_calibration_note(kept, skipped_by)
         record = getattr(self.context, "record", None)
         if record is not None:
             data = record.frequency_tuning or FrequencyTuningData()

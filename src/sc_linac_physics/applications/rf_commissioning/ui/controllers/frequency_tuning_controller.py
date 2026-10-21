@@ -311,25 +311,18 @@ class FrequencyTuningController(QObject):
     def _decide_ssa_calibration(self, last, error: str, operator: str):
         """Return (kept, skipped_by), or None if the operator cancelled.
 
-        The same rule as cavity char: a good calibration under
-        RECENT_RESULT_SECONDS (1 h) is kept without asking. An older or bad
-        one asks the operator: Rerun calibrates; Skip keeps it and records
-        their name. If CALTS or CALSTAT could not be read, it calibrates.
+        The same rule as cavity char: cavity_setup.decide_ssa_calibration.
         """
         if last is None:
             self.view.log_message(
                 f"Could not read the last SSA calibration ({error}); "
                 "calibrating"
             )
-            return (None, None)
-        if last.is_recent():
-            return (last, None)
-        choice = self.view.ask_rerun_ssa_calibration(last.describe())
-        if choice == "skip":
-            return (last, operator)
-        if choice == "rerun":
-            return (None, None)
-        return None
+        return cavity_setup.decide_ssa_calibration(
+            last,
+            operator,
+            lambda text: self.view.ask_rerun_ssa_calibration(text),
+        )
 
     def run_stage_2(self) -> None:
         """Probe stepper direction to measure Hz/step."""

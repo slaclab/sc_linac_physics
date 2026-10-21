@@ -262,10 +262,7 @@ class CavityCharPhase(PhaseBase):
         alone. Writes no PVs.
         """
         skipped_by = self.context.parameters.get("ssa_calibration_skipped_by")
-        if skipped_by:
-            note = f"SSA calibration skipped by {skipped_by}: {kept.describe()}"
-        else:
-            note = f"Kept the {kept.describe()}"
+        note = cavity_setup.kept_ssa_calibration_note(kept, skipped_by)
         self._append_note(note)
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
