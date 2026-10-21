@@ -244,13 +244,19 @@ def test_reset_and_power_on_turns_rf_off_and_zeroes_dac_first(
     order = Mock()
     order.attach_mock(mock_cavity.turn_off, "turn_off")
     order.attach_mock(mock_cavity.ssa.reset, "reset")
+    dac_at_reset = {}
+
+    def record_dac():
+        dac_at_reset["rfs1"] = mock_cavity.rack.rfs1.dac_amp
+        dac_at_reset["rfs2"] = mock_cavity.rack.rfs2.dac_amp
+
+    mock_cavity.ssa.reset.side_effect = record_dac
 
     result = phase._reset_and_power_on()
 
     assert result.result == PhaseResult.SUCCESS
     assert [c[0] for c in order.mock_calls] == ["turn_off", "reset"]
-    assert mock_cavity.rack.rfs1.dac_amp == 0
-    assert mock_cavity.rack.rfs2.dac_amp == 0
+    assert dac_at_reset == {"rfs1": 0, "rfs2": 0}
 
 
 def test_reset_and_power_on_refuses_when_the_rack_is_in_use(phase, mock_cavity):
