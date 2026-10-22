@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v9.56.0 (2026-10-22)
+
+### Bug Fixes
+
+- **watcher**: Only signal a pid file's process if it is the watcher
+  ([#455](https://github.com/slaclab/sc_linac_physics/pull/455),
+  [`6774cfa`](https://github.com/slaclab/sc_linac_physics/commit/6774cfa4342252751e22a029ea5bb3ce70803b3e))
+
+- **watcher**: Wait for local watchers to stop, per-user state dir
+  ([#455](https://github.com/slaclab/sc_linac_physics/pull/455),
+  [`6774cfa`](https://github.com/slaclab/sc_linac_physics/commit/6774cfa4342252751e22a029ea5bb3ce70803b3e))
+
+### Features
+
+- **watcher**: Run watchers as local processes when tmux_launcher is missing
+  ([#455](https://github.com/slaclab/sc_linac_physics/pull/455),
+  [`6774cfa`](https://github.com/slaclab/sc_linac_physics/commit/6774cfa4342252751e22a029ea5bb3ce70803b3e))
+
+
 ## v9.55.1 (2026-10-22)
 
 ### Bug Fixes
