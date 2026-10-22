@@ -31,7 +31,7 @@ MicrophonicsGUI (PyDM Display)
 
 ### `AsyncDataManager` (`gui/async_data_manager.py`)
 
-Worker thread pool managing data acquisition jobs. Emits:
+Runs one acquisition per chassis. Each chassis gets a `DataAcquisitionManager` on the main thread. It starts `res_data_acq.py` as a `QProcess` and polls progress with a `QTimer`, and neither blocks. Only the output-file parse runs off the main thread, on a `BackgroundTask`. Emits:
 - `acquisitionProgress(int)` — 0–100 during acquisition
 - `acquisitionError(str)` — error message
 - `jobComplete(np.ndarray)` — measured detuning array when done
@@ -57,7 +57,7 @@ Reads previously saved measurements from `.npy` or HDF5 files and replays them t
 
 - **Incremental spectrogram**: The spectrogram appends new frequency bins as time advances rather than recomputing the full matrix each update. This keeps the GUI responsive for long (>60 s) acquisitions.
 - **PV batch fetch**: `format_pv_base()` converts cavity identifiers to standardized PV names; acquisition batches the channel-access requests to minimize round-trip latency.
-- **Worker isolation**: Errors in the acquisition worker are caught and re-emitted as signals — they never crash the GUI event loop.
+- **Error reporting**: acquisition and parse errors come back as `acquisitionError` signals. A parse exception becomes `failed` on its `BackgroundTask`, not a crash.
 
 ## Entry point
 

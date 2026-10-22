@@ -7,6 +7,7 @@ from PyQt5.QtCore import QProcess, QByteArray, QTimer
 from sc_linac_physics.applications.microphonics.gui.data_acquisition import (
     DataAcquisitionManager,
 )
+from sc_linac_physics.utils.background import run_inline
 
 
 class TestDataAcquisition:
@@ -14,6 +15,8 @@ class TestDataAcquisition:
     def acquisition_manager(self):
         """Fixture to create the acquisition manager instance"""
         manager = DataAcquisitionManager()
+        # Parse output files before _process_output_file_wrapper returns.
+        manager.parse_runner = run_inline
         yield manager
         # start_acquisition starts a real 2 s progress QTimer. Its slot holds
         # the manager, and the manager holds the timer, so the pair outlives
@@ -1232,3 +1235,75 @@ class TestDataAcquisition:
             # Stop all
             acquisition_manager.stop_all()
             assert len(acquisition_manager.active_processes) == 0
+
+
+def test_output_file_is_parsed_off_the_main_thread(qapp, tmp_path):
+    """The default parse_runner: parse on a daemon thread, emit on main."""
+    import threading
+
+    from PyQt5.QtCore import QCoreApplication
+
+    from sc_linac_physics.utils.background import BackgroundTask
+
+    manager = DataAcquisitionManager()
+    output_file = tmp_path / "out.dat"
+    output_file.write_text("data")
+    parse_threads, emit_threads = [], []
+
+    def fake_parse(path):
+        parse_threads.append(threading.current_thread())
+        return {"cavities": {1: {}}}
+
+    manager.dataReceived.connect(
+        lambda *_: emit_threads.append(threading.current_thread())
+    )
+    with patch(
+        "sc_linac_physics.applications.microphonics.gui.data_acquisition.load_and_process_file",
+        side_effect=fake_parse,
+    ):
+        manager._process_output_file_wrapper(
+            "chassis_1", output_file, {"decimation": 1}
+        )
+        task = manager.findChild(BackgroundTask)
+        task._thread.join(timeout=5)
+    # Not qtbot.waitSignal: its event loop returns at once in an xdist
+    # worker where an earlier test called app.quit().
+    QCoreApplication.sendPostedEvents()
+
+    assert parse_threads[0] is not threading.main_thread()
+    assert emit_threads == [threading.main_thread()]
+
+
+def test_stopping_does_not_also_report_a_crash(qapp):
+    """terminate() then waitForFinished() emits finished before
+    stop_acquisition returns, now that the QProcess lives on the main
+    thread. That finished must not raise a second "Process crashed" error.
+    """
+    manager = DataAcquisitionManager()
+    process = Mock(spec=QProcess)
+    process.state.return_value = QProcess.Running
+    process.readAllStandardError.return_value = QByteArray(b"")
+    process.readAllStandardOutput.return_value = QByteArray(b"")
+    process.readyReadStandardOutput = MagicMock()
+    process.readyReadStandardError = MagicMock()
+    process.finished = MagicMock()
+    manager.active_processes["chassis_1"] = {
+        "process": process,
+        "output_path": None,
+        "completion_signal_received": False,
+        "progress_timer": None,
+    }
+
+    def finish_now(_msecs):
+        manager.handle_finished("chassis_1", process, 15, QProcess.CrashExit)
+        return True
+
+    process.waitForFinished.side_effect = finish_now
+    errors = []
+    manager.acquisitionError.connect(lambda *args: errors.append(args))
+
+    manager.stop_acquisition("chassis_1")
+
+    process.terminate.assert_called_once()
+    assert errors == []
+    assert "chassis_1" not in manager.active_processes
