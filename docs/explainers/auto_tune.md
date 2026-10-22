@@ -331,9 +331,9 @@ The seven steps in the sequence are as follows:
   cold-landing frequency within 1 Hz
   <span class="cite">
   `phases/frequency_tuning.py::FrequencyTuningPhase._check_df_cold_recorded, tolerance at phases/frequency_tuning.py::FrequencyTuningPhase._DF_COLD_MATCH_TOLERANCE_HZ`</span>.
-  The reason it compares against the recorded cold landing frequency rather than checking validity:
-  `DF_COLD` defaults to a perfectly valid 0, so there is no INVALID severity to
-  key off.
+  The reason the RF commissioning phase compares `DF_COLD` against the cold landing frequency recorded in step
+  2, rather than checking validity is because `DF_COLD` defaults to a perfectly valid 0,
+  so there is no INVALID severity to key off.
 - **Guards the stepper temperature** at `STEPPER_TEMP_LIMIT` = 70 *kelvin*
   <span class="cite">`phases/frequency_tuning.py::FrequencyTuningLimits.temp_limit_k`</span>, raisable for a re-run by
   an explicit operator acknowledgement
