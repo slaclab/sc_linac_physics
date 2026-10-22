@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sc_linac_physics"
-version = "9.52.0"
+version = "9.55.0"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -229,6 +229,11 @@ sc-watcher = "sc_linac_physics.cli.watcher_commands:main"
 # EDM screens
 # ============================================================================
 sc-edm = "sc_linac_physics.cli.edm_commands:main"
+
+# ============================================================================
+# EPICS record inspection (read-only)
+# ============================================================================
+sc-pv-info = "sc_linac_physics.cli.pv_info:main"
 
 # ============================================================================
 # Simulation/Testing

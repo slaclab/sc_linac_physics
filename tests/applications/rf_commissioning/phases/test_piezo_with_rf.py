@@ -149,6 +149,33 @@ def test_verify_initial_state_passes(phase):
     )
 
 
+def test_verify_initial_state_reports_how_old_each_result_is(
+    phase, mock_cavity
+):
+    """The controller asks Rerun or Skip from this data, before setup_rf."""
+    recent = datetime.now() - timedelta(minutes=30)
+    mock_cavity.characterization_timestamp = recent
+    data = phase.execute_step("verify_initial_state").data
+    assert data["ssa_calibration_recent"] is False
+    assert data["ssa_calibration_time"] == (
+        mock_cavity.ssa.calibration_timestamp
+    )
+    assert data["ssa_calibration_good"] is True
+    assert data["characterization_recent"] is True
+    assert data["characterization_time"] == recent
+    assert data["characterization_complete"] is True
+
+
+def test_verify_initial_state_retries_when_a_timestamp_read_fails(
+    phase, mock_cavity
+):
+    type(mock_cavity).characterization_timestamp = PropertyMock(
+        side_effect=RuntimeError("PROBECALTS disconnected")
+    )
+    result = phase.execute_step("verify_initial_state")
+    assert result.result == PhaseResult.RETRY
+
+
 def test_verify_initial_state_refuses_a_running_test(phase, mock_cavity):
     """Refused before setup_rf, which would turn RF off under the test."""
     mock_cavity.piezo.withrf_check_status_pv_obj.get.return_value = RUNNING
@@ -180,6 +207,56 @@ def test_setup_rf_reruns_old_results(phase, mock_cavity, record):
     assert "re-ran characterization" in record.piezo_with_rf.notes
 
 
+@pytest.mark.parametrize(
+    "param, kwarg, kept",
+    [
+        ("rerun_ssa_calibration", "calibrate_ssa", "kept a stale SSA"),
+        ("rerun_characterization", "characterize", "kept a stale char"),
+    ],
+)
+def test_setup_rf_keeps_a_stale_result_the_operator_skipped(
+    mock_cavity, record, param, kwarg, kept
+):
+    phase = make_phase(mock_cavity, record, **{param: False})
+    result = phase.execute_step("setup_rf")
+    assert result.result == PhaseResult.SUCCESS
+    assert mock_cavity.setup_rf.call_args.kwargs[kwarg] is False
+    assert kept in record.piezo_with_rf.notes
+    assert "operator chose Skip" in record.piezo_with_rf.notes
+
+
+def test_setup_rf_reruns_a_stale_result_the_operator_chose_to_rerun(
+    mock_cavity, record
+):
+    phase = make_phase(
+        mock_cavity,
+        record,
+        rerun_ssa_calibration=True,
+        rerun_characterization=True,
+    )
+    phase.execute_step("setup_rf")
+    kwargs = mock_cavity.setup_rf.call_args.kwargs
+    assert kwargs == {"calibrate_ssa": True, "characterize": True}
+
+
+def test_setup_rf_rerun_answer_does_not_rerun_a_recent_result(
+    mock_cavity, record
+):
+    """The answer only covers a stale result; a recent one is still kept."""
+    recent = datetime.now() - timedelta(minutes=30)
+    mock_cavity.ssa.calibration_timestamp = recent
+    mock_cavity.characterization_timestamp = recent
+    phase = make_phase(
+        mock_cavity,
+        record,
+        rerun_ssa_calibration=True,
+        rerun_characterization=True,
+    )
+    phase.execute_step("setup_rf")
+    kwargs = mock_cavity.setup_rf.call_args.kwargs
+    assert kwargs == {"calibrate_ssa": False, "characterize": False}
+
+
 def test_setup_rf_keeps_good_results_from_the_last_hour(
     phase, mock_cavity, record
 ):
@@ -193,6 +270,17 @@ def test_setup_rf_keeps_good_results_from_the_last_hour(
     )
     assert "kept the SSA calibration" in record.piezo_with_rf.notes
     assert "kept the characterization" in record.piezo_with_rf.notes
+
+
+def test_setup_rf_uses_the_recent_result_limit(phase, mock_cavity):
+    phase.limits.recent_result_seconds = 600
+    recent = datetime.now() - timedelta(minutes=30)
+    mock_cavity.ssa.calibration_timestamp = recent
+    mock_cavity.characterization_timestamp = recent
+    phase.execute_step("setup_rf")
+    kwargs = mock_cavity.setup_rf.call_args.kwargs
+    assert kwargs["calibrate_ssa"] is True
+    assert kwargs["characterize"] is True
 
 
 @pytest.mark.parametrize(
