@@ -174,13 +174,17 @@ class TestLocalFallback:
         ].__module__
         assert argv[1:] == ["-m", module]
         assert mock_popen.call_args.kwargs["start_new_session"] is True
+        assert mock_popen.call_args.kwargs["env"]["PYTHONUNBUFFERED"] == "1"
         pid_file = without_tmux_launcher / "SC_CAV_QNCH_RESET.pid"
         assert pid_file.read_text() == "4321"
         assert (without_tmux_launcher / "SC_CAV_QNCH_RESET.out").exists()
 
     @patch("sc_linac_physics.cli.watcher_commands.subprocess.run")
     @patch("sc_linac_physics.cli.watcher_commands.os.killpg")
-    @patch("sc_linac_physics.cli.watcher_commands.os.kill")
+    @patch(
+        "sc_linac_physics.cli.watcher_commands.os.kill",
+        side_effect=[None, ProcessLookupError],
+    )
     @patch("sys.argv", ["watcher_commands", "stop", "SC_CAV_QNCH_RESET"])
     def test_stop_kills_running_watcher(
         self, mock_kill, mock_killpg, mock_run, without_tmux_launcher
@@ -296,3 +300,99 @@ class TestLocalFallback:
         watcher_commands.main()
         mock_killpg.assert_not_called()
         assert not pid_file.exists()
+
+
+def _watcher_ps_output(name="SC_CAV_QNCH_RESET"):
+    module = watcher_commands.WATCHER_CONFIGS[name].__module__
+    return f"python -m {module}\n"
+
+
+class TestLocalStopWaits:
+    """stop waits for the watcher to exit before dropping its pid file"""
+
+    @patch.object(watcher_commands, "STOP_TIMEOUT_S", 0)
+    @patch("sc_linac_physics.cli.watcher_commands.subprocess.run")
+    @patch("sc_linac_physics.cli.watcher_commands.os.killpg")
+    @patch("sc_linac_physics.cli.watcher_commands.os.kill")
+    @patch("sys.argv", ["watcher_commands", "stop", "SC_CAV_QNCH_RESET"])
+    def test_stop_timeout_keeps_pid_file(
+        self, mock_kill, mock_killpg, mock_run, without_tmux_launcher
+    ):
+        mock_run.return_value.stdout = _watcher_ps_output()
+        pid_file = without_tmux_launcher / "SC_CAV_QNCH_RESET.pid"
+        pid_file.write_text("4321")
+        with pytest.raises(SystemExit):
+            watcher_commands.main()
+        mock_killpg.assert_called_once()
+        assert pid_file.read_text() == "4321"
+
+    @patch.object(watcher_commands, "STOP_TIMEOUT_S", 0)
+    @patch("sc_linac_physics.cli.watcher_commands.subprocess.Popen")
+    @patch("sc_linac_physics.cli.watcher_commands.subprocess.run")
+    @patch("sc_linac_physics.cli.watcher_commands.os.killpg")
+    @patch("sc_linac_physics.cli.watcher_commands.os.kill")
+    @patch("sys.argv", ["watcher_commands", "restart", "SC_CAV_QNCH_RESET"])
+    def test_restart_does_not_start_second_copy(
+        self,
+        mock_kill,
+        mock_killpg,
+        mock_run,
+        mock_popen,
+        without_tmux_launcher,
+    ):
+        mock_run.return_value.stdout = _watcher_ps_output()
+        (without_tmux_launcher / "SC_CAV_QNCH_RESET.pid").write_text("4321")
+        with pytest.raises(SystemExit):
+            watcher_commands.main()
+        mock_popen.assert_not_called()
+
+    @patch("sc_linac_physics.cli.watcher_commands.subprocess.run")
+    @patch(
+        "sc_linac_physics.cli.watcher_commands.os.killpg",
+        side_effect=ProcessLookupError,
+    )
+    @patch("sc_linac_physics.cli.watcher_commands.os.kill")
+    @patch("sys.argv", ["watcher_commands", "stop", "SC_CAV_QNCH_RESET"])
+    def test_stop_refuses_pid_that_is_not_a_group_leader(
+        self, mock_kill, mock_killpg, mock_run, without_tmux_launcher
+    ):
+        mock_run.return_value.stdout = _watcher_ps_output()
+        pid_file = without_tmux_launcher / "SC_CAV_QNCH_RESET.pid"
+        pid_file.write_text("4321")
+        with pytest.raises(SystemExit):
+            watcher_commands.main()
+        assert pid_file.exists()
+
+
+class TestLocalShowOnLinux:
+    @patch("sc_linac_physics.cli.watcher_commands.subprocess.Popen")
+    @patch(
+        "sc_linac_physics.cli.watcher_commands.shutil.which",
+        return_value="/usr/bin/xterm",
+    )
+    @patch("sc_linac_physics.cli.watcher_commands.is_macos", return_value=False)
+    @patch("sc_linac_physics.cli.watcher_commands.sys.stdout")
+    @patch("sys.argv", ["watcher_commands", "show", "SC_CAV_QNCH_RESET"])
+    def test_show_opens_xterm_without_a_terminal(
+        self,
+        mock_stdout,
+        mock_is_macos,
+        mock_which,
+        mock_popen,
+        without_tmux_launcher,
+    ):
+        mock_stdout.isatty.return_value = False
+        log = without_tmux_launcher / "SC_CAV_QNCH_RESET.out"
+        log.write_text("hello\n")
+        watcher_commands.main()
+
+        argv = mock_popen.call_args[0][0]
+        assert argv[0] == "xterm"
+        assert argv[-1] == str(log)
+
+
+def test_local_dir_is_per_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(watcher_commands.Path, "home", lambda: tmp_path)
+    assert watcher_commands._local_dir() == (
+        tmp_path / ".sc_linac_physics" / "watchers"
+    )

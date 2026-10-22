@@ -4,6 +4,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from sc_linac_physics.applications.quench_processing import quench_resetter
@@ -11,7 +12,7 @@ from sc_linac_physics.applications.sel_phase_optimizer import (
     sel_phase_optimizer,
 )
 from sc_linac_physics.displays.cavity_display.backend import runner
-from sc_linac_physics.utils.platform_paths import get_srf_base_dir, is_macos
+from sc_linac_physics.utils.platform_paths import is_macos
 
 WATCHER_CONFIGS = {
     "SC_CAV_QNCH_RESET": quench_resetter.main,
@@ -63,8 +64,15 @@ def _has_tmux_launcher() -> bool:
     return shutil.which("tmux_launcher") is not None
 
 
+# How long stop waits for a watcher to exit after SIGTERM. SC_CAV_FAULT
+# finishes its current fault-check cycle before exiting.
+STOP_TIMEOUT_S = 30
+
+
 def _local_dir() -> Path:
-    return get_srf_base_dir() / "watchers"
+    # Per-user, unlike get_srf_base_dir(), which is /home/physics/srf on any
+    # Linux host and may not be writable from a developer account.
+    return Path.home() / ".sc_linac_physics" / "watchers"
 
 
 def _log_path(session_name: str) -> Path:
@@ -75,45 +83,72 @@ def _pid_path(session_name: str) -> Path:
     return _local_dir() / f"{session_name}.pid"
 
 
-def _read_running_pid(session_name: str, main_func) -> int | None:
-    """Return the pid from the watcher's pid file if that process is ours.
+def _is_watcher_process(pid: int, main_func) -> bool:
+    """True if pid is a live process we may signal running the watcher.
 
-    The pid must be a live process we may signal, and its command line must
-    name the watcher module. A pid file left behind after a reboot can point
-    at an unrelated process that reused the pid.
+    Checking the command line means a pid reused after the watcher died or
+    the machine rebooted is not mistaken for the watcher.
     """
+    if pid <= 1:
+        return False
     try:
-        pid = int(_pid_path(session_name).read_text().strip())
-        if pid <= 1:
-            return None
         os.kill(pid, 0)
-    except (FileNotFoundError, ValueError, ProcessLookupError):
-        return None
-    except PermissionError:
-        return None
+    except (ProcessLookupError, PermissionError):
+        return False
     command = subprocess.run(
         ["ps", "-o", "command=", "-p", str(pid)],
         capture_output=True,
         text=True,
     ).stdout
-    if main_func.__module__ not in command:
+    return main_func.__module__ in command
+
+
+def _read_running_pid(session_name: str, main_func) -> int | None:
+    """Return the pid from the watcher's pid file if that process is ours."""
+    try:
+        pid = int(_pid_path(session_name).read_text().strip())
+    except (FileNotFoundError, ValueError):
         return None
-    return pid
+    return pid if _is_watcher_process(pid, main_func) else None
 
 
-def local_stop(session_name: str, main_func) -> None:
+def _wait_for_exit(pid: int, main_func) -> bool:
+    deadline = time.monotonic() + STOP_TIMEOUT_S
+    while time.monotonic() < deadline:
+        if not _is_watcher_process(pid, main_func):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def local_stop(session_name: str, main_func) -> bool:
+    """Stop the watcher and wait for it to exit. Return False if it didn't."""
     pid = _read_running_pid(session_name, main_func)
     if pid is None:
         print(f"{session_name} is not running")
-    else:
+        _pid_path(session_name).unlink(missing_ok=True)
+        return True
+    try:
         # The watcher is its own session leader, so this reaches its children.
         os.killpg(pid, signal.SIGTERM)
-        print(f"Stopped {session_name} (pid {pid})")
+    except ProcessLookupError:
+        # Not a group leader, so not started by local_restart.
+        print(f"pid {pid} is not a watcher started by sc-watcher; not stopping")
+        return False
+    if not _wait_for_exit(pid, main_func):
+        print(
+            f"{session_name} (pid {pid}) still running {STOP_TIMEOUT_S} s after SIGTERM"
+        )
+        return False
+    print(f"Stopped {session_name} (pid {pid})")
     _pid_path(session_name).unlink(missing_ok=True)
+    return True
 
 
 def local_restart(session_name: str, main_func) -> None:
-    local_stop(session_name, main_func)
+    if not local_stop(session_name, main_func):
+        print(f"Not starting a second copy of {session_name}")
+        sys.exit(1)
     _local_dir().mkdir(parents=True, exist_ok=True)
     log_path = _log_path(session_name)
     with open(log_path, "ab") as log:
@@ -123,6 +158,9 @@ def local_restart(session_name: str, main_func) -> None:
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
+            # So print() output reaches the log promptly and isn't lost on
+            # SIGTERM.
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
         )
     _pid_path(session_name).write_text(str(proc.pid))
     print(f"Started {session_name} (pid {proc.pid}), logging to {log_path}")
@@ -133,11 +171,14 @@ def local_show(session_name: str) -> None:
     if not log_path.exists():
         print(f"No log for {session_name} yet: {log_path}")
         return
+    tail = ["tail", "-n", "200", "-f", str(log_path)]
+    # Launched from SRF Home there is no terminal to tail into.
     if sys.stdout.isatty():
-        os.execvp("tail", ["tail", "-n", "200", "-f", str(log_path)])
+        os.execvp("tail", tail)
     elif is_macos():
-        # Launched from SRF Home there is no terminal to tail into.
         subprocess.Popen(["open", "-a", "Console", str(log_path)])
+    elif shutil.which("xterm"):
+        subprocess.Popen(["xterm", "-T", session_name, "-e", *tail])
     else:
         print(f"Log for {session_name}: {log_path}")
 
@@ -161,8 +202,8 @@ def _stop(session_name: str) -> None:
     func = WATCHER_CONFIGS[session_name]
     if _has_tmux_launcher():
         _run_tmux_command(build_stop_command(session_name, func))
-    else:
-        local_stop(session_name, func)
+    elif not local_stop(session_name, func):
+        sys.exit(1)
 
 
 def show_watcher():
