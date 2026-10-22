@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.55.1 (2026-10-22)
+
+### Bug Fixes
+
+- **rf_commissioning**: Piezo with RF re-reads RFTESTSTAT before push, clears old results at run
+  start ([#453](https://github.com/slaclab/sc_linac_physics/pull/453),
+  [`4f94c46`](https://github.com/slaclab/sc_linac_physics/commit/4f94c460f9cdaeb0f2081e42e5ce72b23f6f1955))
+
+
 ## v9.55.0 (2026-10-22)
 
 ### Bug Fixes
