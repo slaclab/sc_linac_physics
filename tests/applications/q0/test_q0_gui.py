@@ -1178,3 +1178,103 @@ class TestQ0GUIShowCalibrationData:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestQ0GUIFitRegions:
+    """The plot windows' fit regions refit through set_fit_window."""
+
+    @pytest.fixture
+    def gui(self, qtbot, mock_cryomodule):
+        from sc_linac_physics.applications.q0.q0_gui import Q0GUI
+
+        heater_run = Mock(ll_data={1.0: 95.0, 2.0: 94.0}, dll_dt=-0.5)
+        heater_run.average_heat = 40.0
+        rf_run = Mock(ll_data={3.0: 95.0, 4.0: 93.0}, dll_dt=-1.0)
+        calibration = Mock(heater_runs=[heater_run], dLLdt_dheat=-0.01)
+        calibration.get_heat.return_value = 50.0
+        measurement = Mock(
+            heater_run=heater_run,
+            rf_run=rf_run,
+            heat_load=60.0,
+            heater_run_heatload=40.0,
+            q0=2.5e10,
+            q0_sigma=1e8,
+            q0_linregress=2.6e10,
+            fit_sensitive=True,
+        )
+        mock_cryomodule.calibration = calibration
+        mock_cryomodule.q0_measurement = measurement
+
+        gui = Q0GUI()
+        qtbot.addWidget(gui)
+        gui.selected_cm = mock_cryomodule
+        with (
+            patch("sc_linac_physics.applications.q0.q0_gui.Display"),
+            patch("sc_linac_physics.applications.q0.q0_gui.showDisplay"),
+            patch("sc_linac_physics.applications.q0.q0_gui.plot") as mock_plot,
+            patch("sc_linac_physics.applications.q0.q0_gui.QPushButton"),
+            patch.object(Q0GUI, "_plot_window_layout"),
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.FitRegions"
+            ) as mock_regions,
+            patch(
+                "sc_linac_physics.applications.q0.q0_gui.make_non_blocking_error_popup"
+            ) as mock_popup,
+        ):
+            mock_plot.side_effect = lambda: Mock()
+            mock_regions.side_effect = lambda *args: Mock()
+            gui.mock_popup = mock_popup
+            gui.show_calibration_data()
+            gui.show_q0_data()
+            yield gui
+
+    def test_windows_get_regions_for_their_runs(self, gui):
+        cm = gui.selected_cm
+        gui.calibration_regions.set_runs.assert_called_with(
+            cm.calibration.heater_runs
+        )
+        gui.q0_regions.set_runs.assert_called_with(
+            [cm.q0_measurement.rf_run, cm.q0_measurement.heater_run]
+        )
+        gui.mock_popup.assert_not_called()
+
+    def test_fit_titles_show_slope_and_q0(self, gui):
+        gui.calibration_fit_plot.setTitle.assert_called_with(
+            "Heat vs dll/dt, slope -1.00e-02"
+        )
+        gui.q0_fit_plot.setTitle.assert_called_with(
+            "Heat On Calibration Curve (with adjustments),"
+            " Q0 2.50e+10 ± 1.0e+08 (siegel) · linregress 2.60e+10"
+            " ⚠ fit-sensitive"
+        )
+
+    def test_calibration_window_change_refits_both_plots(self, gui):
+        cm = gui.selected_cm
+        run = cm.calibration.heater_runs[0]
+        gui.calibration_fit_plot.plot.reset_mock()
+        gui.q0_fit_plot.plot.reset_mock()
+
+        gui._on_calibration_fit_window_changed(run, (1.0, 1.5))
+
+        cm.calibration.set_fit_window.assert_called_once_with(run, (1.0, 1.5))
+        assert gui.calibration_fit_plot.plot.called
+        assert gui.q0_fit_plot.plot.called
+
+    def test_q0_window_change_refits(self, gui):
+        cm = gui.selected_cm
+        run = cm.q0_measurement.rf_run
+        gui.q0_fit_plot.plot.reset_mock()
+
+        gui._on_q0_fit_window_changed(run, None)
+
+        cm.q0_measurement.set_fit_window.assert_called_once_with(run, None)
+        assert gui.q0_fit_plot.plot.called
+
+    def test_refit_error_shows_popup(self, gui):
+        cm = gui.selected_cm
+        cm.calibration.set_fit_window.side_effect = ValueError("bad window")
+
+        gui._on_calibration_fit_window_changed(Mock(), (1.0, 1.5))
+
+        gui.mock_popup.assert_called_once()
+        assert "bad window" in gui.mock_popup.call_args[0][1]
