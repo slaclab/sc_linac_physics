@@ -112,9 +112,8 @@ logger.info("Starting SSA calibration", extra={"extra_data": {"cavity": "CM01:1"
 ```
 
 Notable behaviors:
-- File creation uses a safe umask to set group-writable permissions
-- `RetryFileHandlerFilter` retries log file creation every 60 s if the directory is missing (handles NFS mounts)
-- Pass `enable_retry=False` in tests to skip retries
+- New directories and files are created under umask 002, so they're group-writable (775 and 664). Existing permissions are left alone.
+- If the files can't be opened when the logger is created, it logs one warning and writes to the console only for the rest of the process. It doesn't retry.
 
 ## Qt utilities (`utils/qt.py`)
 
