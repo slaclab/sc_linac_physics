@@ -13,8 +13,9 @@ and say so. For the phase list, session API and database tables, see the
 Commissioning is nine phases run in a fixed order per cavity. Each phase has a
 stored value, a record attribute and a data model, all declared in one registry
 <span class="cite">`models/registry.py::create_phase_registry`</span>. Today
-four phases are real. The rest have a tab with a placeholder display whose Run
-button only logs
+four phases run from the app. A fifth, piezo with RF, has its phase class on
+main but no controller yet. The rest have a tab with a placeholder display
+whose Run button only logs
 <span class="cite">`ui/displays/base_placeholder.py::BasePlaceholderDisplay.on_run_automated_test “This is a placeholder implementation”`</span>.
 
 | # | Phase | Phase class | Controller | Status on main |
@@ -23,7 +24,7 @@ button only logs
 | 2 | `SSA_CHAR` | `SSACharPhase` | `SSACharController` | Implemented |
 | 3 | `FREQUENCY_TUNING` | `FrequencyTuningPhase` | `FrequencyTuningController` (4 stages) | Implemented |
 | 4 | `CAVITY_CHAR` | `CavityCharPhase` | `CavityCharController` | Implemented |
-| 5 | `PIEZO_WITH_RF` | — | — | Placeholder. Backend in open PRs #408 and #409; UI waits for the shared step runner |
+| 5 | `PIEZO_WITH_RF` | `PiezoWithRFPhase` | — | Phase on main. The tab is still a placeholder: controller and tab are in draft PRs #451 and #452, on the shared step runner (#417) |
 | 6 | `HIGH_POWER_RAMP` | — | — | Placeholder |
 | 7 | `MP_PROCESSING` | — | — | Placeholder |
 | 8 | `ONE_HOUR_RUN` | — | — | Placeholder |
@@ -39,13 +40,14 @@ Five layers, top to bottom:
 | Phase | `phases/` | The steps. The automated test's PV writes happen here, through `Cavity`, `SSA`, `Piezo` and `StepperTuner` from `utils/sc_linac/`. Controllers and PyDM widgets also write some PVs directly when the operator acts. Section 5 lists both. |
 | Session and storage | `session_manager.py`, `services/workflow_service.py`, `models/persistence/` | `CommissioningSession` is the facade the UI calls. `WorkflowService` owns phase attempts. Repositories own SQL. |
 
-!!! note "Not the layout CLAUDE.md describes"
+!!! note "Not the layout AGENTS.md describes"
 
-    The repo-wide CLAUDE.md describes a `backend/ frontend/ launcher/` layout
-    and `Worker(QThread)` threading. This app uses neither. There is no
-    `launcher/` directory: the entry point is
+    The repo-wide AGENTS.md describes a `backend/ frontend/ launcher/` layout.
+    This app does not use it. There is no `launcher/` directory: the entry
+    point is
     <span class="cite">`cli/launchers.py::launch_rf_commissioning`</span>.
-    Threads are plain `threading.Thread`
+    Threading does follow the repo rule. Threads are plain daemon
+    `threading.Thread`, no `QThread`
     <span class="cite">`ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._run_phase_in_background “Thread(target=worker, daemon=True).start()”`</span>.
 
 ## 2. Follow one click
@@ -97,9 +99,10 @@ A phase subclasses `PhaseBase` and implements five members: `phase_type`,
     not just `PhaseBase`.
 
     Decided 2026-10-02: one shared step runner will replace these loops. It
-    was meant to land before any placeholder phase was implemented. Cavity
-    char went first anyway, and the piezo with RF backend (#408, #409) is going
-    in ahead of it too. Only the piezo with RF UI waits for the runner.
+    is `PhaseRun` plus a Qt `RunnerBridge`, in #417, not yet merged. Cavity
+    char and the piezo with RF backend landed before it. The moves onto the
+    runner are open PRs: SSA char (#419), piezo pre-RF (#426) and the piezo
+    with RF controller (#451). A new phase should build on the runner.
 
 ## 4. What gets stored
 
@@ -177,6 +180,32 @@ the four stages in detail.
 | 3 | `SCALE_CALC.B` from the measured Hz/microstep, auto-tune, `NSTEPS_COLD`, `TUNE_CONFIG` | <span class="cite">`phases/frequency_tuning.py::FrequencyTuningPhase._write_cold_landing_steps “self.cavity.stepper_tuner.steps_cold_landing_pv_obj.put(”`</span> |
 | 4 | Rack frequency scan: `FSCAN:SEL` = 1 for this cavity and 0 for the rest of the rack, then `FSCAN:FREQ_START` = −3,500,000 Hz, `FSCAN:FREQ_STOP` = 50,000 Hz, `FSCAN:RMS_THRESH` = 10.0, `FSCAN:MODE_OVERLAP` = 1,000, then `FSCAN:START` = 1, then, once the scan is done, `FSCAN:PUSH_8PI9.PROC` = 1 and `FSCAN:PUSH_7PI9.PROC` = 1 for this cavity. The four settings are `FrequencyTuningLimits` defaults. | <span class="cite">`rack.py::Rack.run_fscan “self.fscan_rms_thresh_pv_obj.put(rms_thresh)”, rack.py::Rack.run_fscan “cav.fscan_push_8pi9_pv_obj.put(1)”, cavity.py::Cavity.__init__ “self.pv_addr("FSCAN:PUSH_8PI9.PROC")”, phases/frequency_tuning.py::FrequencyTuningLimits “pi_scan_rms_thresh: float = 10.0”`</span> |
 
+### CAVITY_CHAR
+
+The first two steps are shared setup in `phases/cavity_setup.py`, the same
+calls auto setup makes. Neither has an operator review before it pushes.
+
+| Step | PV | Value | Source |
+|---|---|---|---|
+| `calibrate_ssa` | `RFCTRL`, then `DAC_AMPLITUDE` on both rack RF stations | 0, 0. Skipped when the controller keeps an earlier calibration | <span class="cite">`phases/cavity_setup.py::turn_off_and_zero_dac “cavity.rack.rfs2.dac_amp = 0”, phases/cavity_char.py::CavityCharPhase._calibrate_ssa “return self._keep_ssa_calibration(kept)”`</span> |
+|  | `SSA.calibrate`: `DRV_MAX_REQ`, `FaultReset`, `PowerOn`, `INTLK_RESET_ALL`, `CALSTRT`, then `PUSH_SSA_SLOPE.PROC` if the slope is good | drive max from the SSA char record, else `DRV_MAX_SAVE` | <span class="cite">`phases/cavity_setup.py::calibrate_ssa “ssa.calibrate(drive_max, attempt=SSA_CAL_START_ATTEMPT)”`</span> |
+| `tune_to_resonance` | `Cavity.move_to_resonance`. Leaves RF on in chirp mode | | <span class="cite">`phases/cavity_setup.py::tune_to_resonance “cavity.move_to_resonance(max_stepper_temp=max_stepper_temp)”`</span> |
+| `set_drive_level` | `INTLK_RESET_ALL`, then `SEL_ASET` | 1, then the operator's drive level | <span class="cite">`phases/cavity_char.py::CavityCharPhase._set_drive_level “self.cavity.drive_level = drive”`</span> |
+| `start_characterization` | `PROBECALSTRT` | 1, always a fresh run | <span class="cite">`cavity.py::Cavity.start_characterization “self._characterization_start_pv_obj.put(1, wait=False)”`</span> |
+| `push_results` | `PUSH_QLOADED.PROC`, `PUSH_CAV_SCALE.PROC`, `PUSH_QPROBECALC.PROC` | 1 each, in that order. Only after the operator confirms the loaded Q on screen and a re-read shows nothing changed. Pushed in or out of tolerance | <span class="cite">`phases/cavity_char.py::CavityCharPhase._push_results “self.cavity.push_probe_q()”`</span> |
+
+### PIEZO_WITH_RF
+
+On main, but nothing in the app runs it yet (section 1).
+
+| Step | PV | Value | Source |
+|---|---|---|---|
+| `setup_rf` | `Cavity.setup_rf`, auto setup's turn-on. It re-runs the SSA calibration and the characterization when the last one is over 1 h old or not good, unless the operator chose to keep it. Those pushes have no review | test amplitude | <span class="cite">`phases/piezo_with_rf.py::PiezoWithRFPhase._setup_rf “characterize=characterize,”`</span> |
+|  | `RFMODECTRL` | `RF_MODE_SEL` | <span class="cite">`cavity.py::Cavity.set_sel_mode “self.rf_mode_ctrl_pv_obj.put(linac_utils.RF_MODE_SEL)”`</span> |
+| `setup_piezo` | `Piezo.enable` (as in PIEZO_PRE_RF), then `MODECTRL` | `PIEZO_MANUAL_VALUE` | <span class="cite">`phases/piezo_with_rf.py::PiezoWithRFPhase._setup_piezo “piezo.set_to_manual()”`</span> |
+| `start_test` | `RFTESTSTRT` | 1, refused if `RFTESTSTS` reads Running | <span class="cite">`phases/piezo_with_rf.py::PiezoWithRFPhase._start_test “piezo.withrf_run_check_pv_obj.put(1, wait=False)”`</span> |
+| `push_detune_gain` | `PUSH_DFGAIN.PROC`, then `SAVE_DFGAIN.PROC` | 1 each. Only after the operator confirms `DFGAIN_NEW` and a re-read shows it unchanged. SAVE waits for PUSH to be confirmed | <span class="cite">`phases/piezo_with_rf.py::PiezoWithRFPhase._push_detune_gain “piezo.withrf_save_dfgain_pv_obj.put(1)”`</span> |
+
 ### Writes outside the phase
 
 These happen when the operator clicks or edits something, not as a step of the
@@ -192,17 +221,25 @@ automated test.
 
 ### Checked against the IOC
 
-Three things that look wrong in the code and are not. Confirmed against the IOC
-records on 2026-10-02. Those records are not in this repo.
+Facts the code relies on that only the IOC records show. Those records are not
+in this repo.
 
 - `FSCAN:FREQ_START` and `FREQ_STOP` are in Hz (record EGU), so stage 4 scans
-  −3.5 MHz to +50 kHz.
-- `TESTSTS` is an enum: 0 Crash, 1 Complete, 2 Running. The code's `== 0` crash
-  test matches
+  −3.5 MHz to +50 kHz. Checked 2026-10-02.
+- `TESTSTS` and `RFTESTSTS` are enums: 0 Crash, 1 Complete, 2 Running. The
+  code's `== 0` crash test matches
   <span class="cite">`phases/piezo_pre_rf.py::PiezoPreRFPhase._trigger_prerf_test “is_crash = test_status == 0  # Crash”`</span>.
-- `CommissioningPiezo` reads `CHA_TESTMSG2` for channel B's message. That is
-  the real PV name, not a typo
-  <span class="cite">`models/commissioning_piezo.py::CommissioningPiezo.__init__ “self.pv_addr("CHA_TESTMSG2")”`</span>.
+  Checked 2026-10-02 and 2026-10-14.
+- The pre-RF test messages are `PZT:TESTMSG1` and `TESTMSG2` in production. The
+  `CHA_TESTMSG1/2` names the code used before do not exist. Which message
+  belongs to which channel is still a `CHECK:`
+  <span class="cite">`models/commissioning_piezo.py::CommissioningPiezo.__init__ “self.pv_addr("TESTMSG1")”`</span>.
+  Checked 2026-10-14.
+- The with-RF result PV is `RFTESTSTAT`: 0 Pass, 1 Warning, 2 Fail. Checked
+  2026-10-14.
+
+The code still has open `CHECK:` questions about the hardware, most of them in
+`phases/piezo_with_rf.py`. Find them with `grep -rn "CHECK:"`.
 
 ## 6. Where newcomers trip
 
@@ -273,8 +310,8 @@ makes no network loads.
 
 ### Test it
 
-- Tests: `pytest tests/applications/rf_commissioning -n auto`. About 900
-  tests, about 12 s.
+- Tests: `pytest tests/applications/rf_commissioning -n auto`. About
+  1,200 tests, under 10 s.
 - EPICS is faked for the whole test run by `tests/conftest.py`, which installs
   a fake PV class at configure time.
 - Three patterns worth copying:
