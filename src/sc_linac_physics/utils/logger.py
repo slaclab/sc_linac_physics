@@ -5,19 +5,31 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
+import warnings
 import weakref
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from threading import Lock
 from typing import Any
 
 from sc_linac_physics.utils.platform_paths import get_log_base_dir
+
+try:
+    import fcntl
+except ImportError:
+    # Windows has no fcntl, so there is no file lock. Log files rotate
+    # without one, as they did before.
+    fcntl = None
 
 BASE_LOG_DIR = get_log_base_dir()
 
 # More readable format option
 READABLE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
+
+# Default for custom_logger()'s old retry arguments, so it can tell an
+# argument that was passed from one that wasn't.
+_UNSET: Any = object()
 
 # Track created loggers to avoid duplicates (using weak references to avoid memory leaks)
 _created_loggers: dict[str, weakref.ref] = {}
@@ -45,206 +57,155 @@ class NameOverrideFilter(logging.Filter):
         return True
 
 
-class RetryFileHandlerFilter(logging.Filter):
-    """Filter that retries adding file handlers if they're missing."""
+def _add_file_handlers(
+    logger: logging.Logger,
+    log_dir: Path,
+    log_filename: str,
+    level: int,
+    max_bytes: int,
+    backup_count: int,
+) -> bool:
+    """Add the .log and .jsonl handlers, creating log_dir if needed.
 
-    def __init__(self, logger_manager: "LoggerFileHandlerManager"):
-        super().__init__()
-        self.logger_manager = logger_manager
-        self._last_check = 0.0
-        self._check_interval = 5.0  # Only check every 5 seconds max
-        self._in_retry = False  # Prevent recursive retry attempts
+    umask 002 while creating, so new directories are 775 and new files 664.
+    Existing permissions are left alone.
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        # Prevent recursive calls during retry
-        if self._in_retry:
-            return True
-
-        # Fast path: if we have handlers, skip
-        if self.logger_manager.has_file_handlers:
-            return True
-
-        # Rate limit the retry checks
-        current_time = time.time()
-        if current_time - self._last_check < self._check_interval:
-            return True
-
-        self._last_check = current_time
-
-        # Attempt to ensure file handlers
-        try:
-            self._in_retry = True
-            self.logger_manager.ensure_file_handlers()
-        finally:
-            self._in_retry = False
-
-        return True
-
-
-class LoggerFileHandlerManager:
-    """Manages file handlers with retry capability."""
-
-    def __init__(
-        self,
-        logger: logging.Logger,
-        log_dir: str | Path,
-        log_filename: str,
-        level: int,
-        max_bytes: int,
-        backup_count: int,
-        retry_interval: int = 60,  # seconds between retries
-        max_retries: int = -1,  # -1 means infinite retries
-    ):
-        self.logger = logger
-        self.log_dir = Path(log_dir)
-        self.log_filename = log_filename
-        self.level = level
-        self.max_bytes = max_bytes
-        self.backup_count = backup_count
-        self.retry_interval = retry_interval
-        self.max_retries = max_retries
-
-        self.has_file_handlers = False
-        self.retry_count = 0
-        self.last_retry_time = 0.0
-        self.lock = Lock()
-
-    def has_active_file_handlers(self) -> bool:
-        """Check if logger has active file handlers."""
-        return any(
-            isinstance(h, RotatingFileHandler) for h in self.logger.handlers
-        )
-
-    def ensure_file_handlers(self) -> bool:
-        """
-        Ensure file handlers exist, retry if necessary.
-
-        Returns:
-            True if file handlers exist or were successfully added.
-        """
-        # Always check actual handlers first (cheap operation)
-        if self.has_active_file_handlers():
-            self.has_file_handlers = True  # Sync the flag
-            return True
-
-        with self.lock:
-            # Recheck after acquiring lock
-            if self.has_active_file_handlers():
-                self.has_file_handlers = True
-                return True
-
-            # Check if we should retry
-            current_time = time.time()
-            if current_time - self.last_retry_time < self.retry_interval:
-                return False
-
-            # Check max retries
-            if 0 <= self.max_retries <= self.retry_count:
-                return False
-
-            self.last_retry_time = current_time
-            self.retry_count += 1
-
-            # Attempt to add file handlers
-            success = self._add_file_handlers()
-
-            if success:
-                self.has_file_handlers = True
-                self.logger.info(
-                    f"File logging restored after {self.retry_count} attempt(s): "
-                    f"{self.log_dir}/{self.log_filename}"
-                )
-            else:
-                self.logger.debug(
-                    f"Retry {self.retry_count}: File logging still unavailable"
-                )
-
-            return success
-
-    def _ensure_log_directory(self) -> None:
-        """
-        Create log directory with appropriate permissions.
-
-        Raises:
-            PermissionError: If directory cannot be created or accessed.
-        """
+    Returns:
+        False if log_dir or the files can't be created or opened. The logger
+        then writes to the console only, for the life of the process.
+    """
+    handlers = []
+    try:
         with safe_umask(0o002):
-            self.log_dir.mkdir(parents=True, exist_ok=True)
-
-        if not self.log_dir.exists():
-            raise PermissionError(f"Failed to create directory: {self.log_dir}")
-
-        self._set_directory_permissions()
-
-    def _set_directory_permissions(self) -> None:
-        """
-        Set directory permissions if we own it, otherwise verify write access.
-
-        Raises:
-            PermissionError: If directory is not writable.
-        """
-        try:
-            stat_info = self.log_dir.stat()
-            current_uid = os.getuid()
-
-            if stat_info.st_uid == current_uid:
-                # We own it, set permissions
-                os.chmod(self.log_dir, 0o775)
-            elif not os.access(self.log_dir, os.W_OK):
-                # We don't own it and can't write
-                raise PermissionError(
-                    f"Directory '{self.log_dir}' is not writable "
-                    f"(owned by uid {stat_info.st_uid}, running as uid {current_uid})"
-                )
-        except (PermissionError, OSError):
-            # Final check: can we write?
-            if not os.access(self.log_dir, os.W_OK):
-                raise
-
-    def _add_file_handlers(self) -> bool:
-        """
-        Attempt to add file handlers to logger.
-
-        Returns:
-            True if file handlers were successfully added, False otherwise.
-        """
-        try:
-            self._ensure_log_directory()
-
-            text_handler = _create_text_file_handler(
-                self.log_dir,
-                self.log_filename,
-                self.level,
-                self.max_bytes,
-                self.backup_count,
+            log_dir.mkdir(parents=True, exist_ok=True)
+        for create in (_create_text_file_handler, _create_json_file_handler):
+            handlers.append(
+                create(log_dir, log_filename, level, max_bytes, backup_count)
             )
-            self.logger.addHandler(text_handler)
-
-            json_handler = _create_json_file_handler(
-                self.log_dir,
-                self.log_filename,
-                self.level,
-                self.max_bytes,
-                self.backup_count,
+    except Exception as e:
+        for handler in handlers:
+            handler.close()
+        if isinstance(e, OSError):  # includes PermissionError
+            logger.warning(
+                f"File logging unavailable for '{log_dir}/{log_filename}', "
+                f"console only: {e}"
             )
-            self.logger.addHandler(json_handler)
-
-            return True
-
-        except (PermissionError, OSError) as e:
-            # Log at debug level to avoid spam
-            if self.retry_count == 1:  # Only warn on first failure
-                self.logger.warning(
-                    f"Cannot create log files in '{self.log_dir}': {e}"
-                )
-            return False
-
-        except Exception as e:
-            self.logger.error(
+        else:
+            logger.error(
                 f"Unexpected error setting up file logging: {e}",
                 exc_info=True,
             )
-            return False
+        return False
+    for handler in handlers:
+        logger.addHandler(handler)
+    return True
+
+
+# How long a write waits for another process's lock before writing unlocked.
+LOG_LOCK_TIMEOUT_S = 1.0
+
+# One thread lock per log file path, shared by every handler in this process
+# that writes it. The file lock (flock) keeps other processes out, but not
+# other threads in this one: over NFS, Linux turns flock into a POSIX lock,
+# which only blocks other processes. So threads in this process wait here.
+_path_locks: dict[str, threading.Lock] = {}
+_path_locks_guard = threading.Lock()
+
+
+def _path_lock(path: str) -> threading.Lock:
+    with _path_locks_guard:
+        return _path_locks.setdefault(path, threading.Lock())
+
+
+class SharedRotatingFileHandler(RotatingFileHandler):
+    """RotatingFileHandler for a file that several processes write.
+
+    Every app that uses PV writes epics/pv_operations.log, and each cavity's
+    cavity_N.log is written by whichever apps touch that cavity. A plain
+    RotatingFileHandler checks the size and rotates in each process on its
+    own. Two processes can rotate at once, so one renames over the other's
+    backup. A process that didn't rotate keeps writing to the renamed file.
+
+    Here each record is written like this:
+    1. Take this file's thread lock, then an flock on <file>.lock.
+    2. If the inode at the path isn't the open file's inode, another
+       process rotated it, so reopen. Otherwise seek to the end, so the size
+       check counts other processes' lines.
+    3. RotatingFileHandler.emit: rotate if over max_bytes, then write.
+    4. Close the lock file, which releases the flock.
+
+    If the lock file can't be opened or the lock isn't free within
+    LOG_LOCK_TIMEOUT_S, the record is written without it, as before.
+    """
+
+    def __init__(self, filename, *args, **kwargs):
+        super().__init__(filename, *args, **kwargs)
+        self.lock_path = self.baseFilename + ".lock"
+        self._path_lock = _path_lock(self.baseFilename)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        with self._path_lock:
+            lock_fd = self._lock_file()
+            try:
+                self._follow_rotation()
+                super().emit(record)
+            finally:
+                if lock_fd is not None:
+                    os.close(lock_fd)
+
+    def _lock_file(self) -> int | None:
+        """Open <file>.lock and flock it. None if that isn't possible."""
+        if fcntl is None:
+            return None
+        fd = self._open_lock_file()
+        if fd is None:
+            return None
+        deadline = time.monotonic() + LOG_LOCK_TIMEOUT_S
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return fd
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.01)
+            except OSError:
+                break
+        os.close(fd)
+        return None
+
+    def _open_lock_file(self) -> int | None:
+        try:
+            fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT | os.O_EXCL)
+        except FileExistsError:
+            try:
+                return os.open(self.lock_path, os.O_RDWR)
+            except OSError:
+                return None
+        except OSError:
+            return None
+        # A lock file we just made: 664, so other group members can open it
+        # read-write, which an exclusive lock needs on NFS.
+        try:
+            os.fchmod(fd, 0o664)
+        except OSError:
+            pass  # the lock still works for this user
+        return fd
+
+    def _follow_rotation(self) -> None:
+        """Reopen if another process rotated the file, else seek to its end."""
+        if self.stream is None:
+            return  # RotatingFileHandler.emit opens it
+        try:
+            on_disk = os.stat(self.baseFilename)
+            same = os.path.samestat(on_disk, os.fstat(self.stream.fileno()))
+        except OSError:
+            same = False
+        if same:
+            self.stream.seek(0, os.SEEK_END)
+        else:
+            self.stream.close()
+            self.stream = self._open()
 
 
 class ExtraDataMixin:
@@ -358,24 +319,17 @@ def _create_text_file_handler(
     level: int,
     max_bytes: int,
     backup_count: int,
-) -> RotatingFileHandler:
+) -> SharedRotatingFileHandler:
     """Create and configure rotating text file handler."""
     text_file = log_dir_path / f"{log_filename}.log"
 
-    # Set umask to ensure file is created with proper permissions
     with safe_umask(0o002):
-        text_handler = RotatingFileHandler(
+        text_handler = SharedRotatingFileHandler(
             text_file,
             maxBytes=max_bytes,
             backupCount=backup_count,
             encoding="utf-8",
         )
-        # Explicitly set permissions on the file
-        if text_file.exists():
-            try:
-                os.chmod(text_file, 0o664)
-            except (PermissionError, OSError):
-                pass  # Best effort
 
     text_handler.setLevel(level)
     text_formatter = ExtendedFormatter(
@@ -392,24 +346,17 @@ def _create_json_file_handler(
     level: int,
     max_bytes: int,
     backup_count: int,
-) -> RotatingFileHandler:
+) -> SharedRotatingFileHandler:
     """Create and configure rotating JSON Lines file handler."""
     jsonl_file = log_dir_path / f"{log_filename}.jsonl"
 
-    # Set umask to ensure file is created with proper permissions
     with safe_umask(0o002):
-        json_handler = RotatingFileHandler(
+        json_handler = SharedRotatingFileHandler(
             jsonl_file,
             maxBytes=max_bytes,
             backupCount=backup_count,
             encoding="utf-8",
         )
-        # Explicitly set permissions on the file
-        if jsonl_file.exists():
-            try:
-                os.chmod(jsonl_file, 0o664)
-            except (PermissionError, OSError):
-                pass  # Best effort
 
     json_handler.setLevel(level)
     json_handler.setFormatter(JSONFormatter())
@@ -437,20 +384,20 @@ def custom_logger(
     level: int = logging.DEBUG,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
-    enable_retry: bool = True,
-    retry_interval: int = 60,  # seconds
-    max_retries: int = -1,  # -1 = infinite
+    enable_retry: Any = _UNSET,
+    retry_interval: Any = _UNSET,
+    max_retries: Any = _UNSET,
 ) -> logging.Logger:
     """
-    Create a logger with colored console output and dual file logging with retry.
+    Create a logger with colored console output and dual file logging.
 
     Always writes to console. Attempts to write to files:
     - Console: Colored, human-readable (always)
     - {log_dir}/{log_filename}.log: Plain text, human-readable (with rotation)
     - {log_dir}/{log_filename}.jsonl: JSON Lines format (with rotation)
 
-    If file logging fails due to permissions, falls back to console-only logging
-    and retries on subsequent log entries.
+    If the files can't be opened when the logger is created, it logs one
+    warning and writes to the console only from then on.
 
     Args:
         name: Logger name (typically __name__)
@@ -459,15 +406,34 @@ def custom_logger(
         level: Logging level (default: DEBUG)
         max_bytes: Maximum file size before rotation (default: 10MB)
         backup_count: Number of backup files to keep (default: 5)
-        enable_retry: Enable automatic retry of file handler creation (default: True)
-        retry_interval: Seconds between retry attempts (default: 60)
-        max_retries: Maximum retry attempts, -1 for infinite (default: -1)
+        enable_retry, retry_interval, max_retries: Deprecated and ignored,
+            since file logging is no longer retried. Still accepted, by
+            position or keyword, so old calls work. Passing any of them
+            warns.
 
     Returns:
         Logger instance
     """
     if not log_filename:
         raise ValueError("log_filename cannot be empty")
+
+    # Before the cache check, so a call that returns a cached logger warns too.
+    passed = [
+        arg
+        for arg, value in (
+            ("enable_retry", enable_retry),
+            ("retry_interval", retry_interval),
+            ("max_retries", max_retries),
+        )
+        if value is not _UNSET
+    ]
+    if passed:
+        warnings.warn(
+            f"custom_logger(): {passed} are ignored; "
+            "file logging is no longer retried",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     # Normalize log_dir to Path for consistent handling
     log_dir = Path(log_dir)
@@ -498,29 +464,9 @@ def custom_logger(
     console_handler = _create_console_handler(level)
     logger.addHandler(console_handler)
 
-    # Create file handler manager
-    handler_manager = LoggerFileHandlerManager(
-        logger=logger,
-        log_dir=log_dir,
-        log_filename=log_filename,
-        level=level,
-        max_bytes=max_bytes,
-        backup_count=backup_count,
-        retry_interval=retry_interval,
-        max_retries=max_retries,
+    _add_file_handlers(
+        logger, log_dir, log_filename, level, max_bytes, backup_count
     )
-
-    # Try initial file handler creation
-    initial_success = handler_manager.ensure_file_handlers()
-
-    # Add retry filter if enabled and initial creation failed
-    if enable_retry and not initial_success:
-        retry_filter = RetryFileHandlerFilter(handler_manager)
-        logger.addFilter(retry_filter)
-        logger.warning(
-            f"File logging unavailable for '{log_dir}/{log_filename}'. "
-            f"Will retry every {retry_interval}s on new log entries."
-        )
 
     # Register cleanup
     _register_cleanup(logger)
