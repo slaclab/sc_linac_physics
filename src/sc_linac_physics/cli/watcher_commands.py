@@ -1,12 +1,17 @@
 import argparse
 import os
+import shutil
+import signal
+import subprocess
 import sys
+from pathlib import Path
 
 from sc_linac_physics.applications.quench_processing import quench_resetter
 from sc_linac_physics.applications.sel_phase_optimizer import (
     sel_phase_optimizer,
 )
 from sc_linac_physics.displays.cavity_display.backend import runner
+from sc_linac_physics.utils.platform_paths import get_srf_base_dir, is_macos
 
 WATCHER_CONFIGS = {
     "SC_CAV_QNCH_RESET": quench_resetter.main,
@@ -52,13 +57,106 @@ def _run_tmux_command(command: str):
     os.system(command)
 
 
+# Without tmux_launcher (a laptop, not the production servers), watchers run
+# as local background processes. Each gets a log file and a pid file here.
+def _has_tmux_launcher() -> bool:
+    return shutil.which("tmux_launcher") is not None
+
+
+def _local_dir() -> Path:
+    return get_srf_base_dir() / "watchers"
+
+
+def _log_path(session_name: str) -> Path:
+    return _local_dir() / f"{session_name}.log"
+
+
+def _pid_path(session_name: str) -> Path:
+    return _local_dir() / f"{session_name}.pid"
+
+
+def _read_running_pid(session_name: str) -> int | None:
+    """Return the watcher's pid if its pid file names a live process."""
+    try:
+        pid = int(_pid_path(session_name).read_text().strip())
+        os.kill(pid, 0)
+    except (FileNotFoundError, ValueError, ProcessLookupError):
+        return None
+    except PermissionError:
+        pass
+    return pid
+
+
+def local_stop(session_name: str) -> None:
+    pid = _read_running_pid(session_name)
+    if pid is None:
+        print(f"{session_name} is not running")
+    else:
+        # The watcher is its own session leader, so this reaches its children.
+        os.killpg(pid, signal.SIGTERM)
+        print(f"Stopped {session_name} (pid {pid})")
+    _pid_path(session_name).unlink(missing_ok=True)
+
+
+def local_restart(session_name: str, main_func) -> None:
+    local_stop(session_name)
+    _local_dir().mkdir(parents=True, exist_ok=True)
+    log_path = _log_path(session_name)
+    with open(log_path, "ab") as log:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", main_func.__module__],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    _pid_path(session_name).write_text(str(proc.pid))
+    print(f"Started {session_name} (pid {proc.pid}), logging to {log_path}")
+
+
+def local_show(session_name: str) -> None:
+    log_path = _log_path(session_name)
+    if not log_path.exists():
+        print(f"No log for {session_name} yet: {log_path}")
+        return
+    if sys.stdout.isatty():
+        os.execvp("tail", ["tail", "-n", "200", "-f", str(log_path)])
+    elif is_macos():
+        # Launched from SRF Home there is no terminal to tail into.
+        subprocess.Popen(["open", "-a", "Console", str(log_path)])
+    else:
+        print(f"Log for {session_name}: {log_path}")
+
+
+def _show(session_name: str) -> None:
+    if _has_tmux_launcher():
+        _run_tmux_command(build_show_command(session_name))
+    else:
+        local_show(session_name)
+
+
+def _restart(session_name: str) -> None:
+    func = WATCHER_CONFIGS[session_name]
+    if _has_tmux_launcher():
+        _run_tmux_command(build_restart_command(session_name, func))
+    else:
+        local_restart(session_name, func)
+
+
+def _stop(session_name: str) -> None:
+    func = WATCHER_CONFIGS[session_name]
+    if _has_tmux_launcher():
+        _run_tmux_command(build_stop_command(session_name, func))
+    else:
+        local_stop(session_name)
+
+
 def show_watcher():
     parser = argparse.ArgumentParser(description="Show watcher output")
     parser.add_argument("watcher", choices=WATCHER_CONFIGS.keys())
     args = parser.parse_args()
 
-    command = build_show_command(args.watcher)
-    _run_tmux_command(command)
+    _show(args.watcher)
 
 
 def restart_watcher():
@@ -66,9 +164,7 @@ def restart_watcher():
     parser.add_argument("watcher", choices=WATCHER_CONFIGS.keys())
     args = parser.parse_args()
 
-    func = WATCHER_CONFIGS[args.watcher]
-    command = build_restart_command(args.watcher, func)
-    _run_tmux_command(command)
+    _restart(args.watcher)
 
 
 def stop_watcher():
@@ -76,9 +172,7 @@ def stop_watcher():
     parser.add_argument("watcher", choices=WATCHER_CONFIGS.keys())
     args = parser.parse_args()
 
-    func = WATCHER_CONFIGS[args.watcher]
-    command = build_stop_command(args.watcher, func)
-    _run_tmux_command(command)
+    _stop(args.watcher)
 
 
 def main():
@@ -91,9 +185,9 @@ Available watchers:
   {', '.join(WATCHER_CONFIGS.keys())}
 
 Examples:
-  %(prog)s show quench_resetter
-  %(prog)s restart quench_resetter
-  %(prog)s stop quench_resetter
+  %(prog)s show SC_CAV_QNCH_RESET
+  %(prog)s restart SC_CAV_QNCH_RESET
+  %(prog)s stop SC_CAV_QNCH_RESET
         """,
     )
 
@@ -134,16 +228,11 @@ Examples:
     args = parser.parse_args()
 
     if args.command == "show":
-        command = build_show_command(args.watcher)
-        _run_tmux_command(command)
+        _show(args.watcher)
     elif args.command == "restart":
-        func = WATCHER_CONFIGS[args.watcher]
-        command = build_restart_command(args.watcher, func)
-        _run_tmux_command(command)
+        _restart(args.watcher)
     elif args.command == "stop":
-        func = WATCHER_CONFIGS[args.watcher]
-        command = build_stop_command(args.watcher, func)
-        _run_tmux_command(command)
+        _stop(args.watcher)
     elif args.command == "list":
         print("Available watchers:")
         for watcher_name, func in WATCHER_CONFIGS.items():
