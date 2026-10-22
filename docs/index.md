@@ -24,6 +24,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 |------|----------------|
 | [Linac Hardware Model](utils/linac_model.md) | `Machine → Linac → Cryomodule → Rack → Cavity` class hierarchy, PV naming, cryomodule groupings, all constants |
 | [Shared Utilities](utils/shared_utilities.md) | EPICS `PV` wrapper, `PVBatch`, `platform_paths`, `custom_logger`, Qt helpers |
+| [Reading an IOC Record](utils/epics_records.md) | What a PV does from a terminal: record types, processing, link fields and flags, and when to put with `wait=False` |
 | [Archiver Client](utils/archiver.md) | Reading archived PV data: ranges, value-at-time, plotting two signals |
 
 ### Applications
@@ -51,6 +52,7 @@ as a link; opened on its own it also works offline.
 | [Cavity Display](displays/cavity_display.md) | Fault monitoring dashboard for all 296 cavities with heatmap and audio alerts |
 | [Fault Heatmap](displays/fault_heatmap.md) | Fault counts per cavity over a time window, as a heatmap |
 | [SRF Home](displays/srf_home.md) | Top-level launcher panel and watcher management |
+| [EDM Screens](displays/edm_screens.md) | `sc-edm`: open an SRF EDM screen from the terminal |
 
 ## Quick orientation
 

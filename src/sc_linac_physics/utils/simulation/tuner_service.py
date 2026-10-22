@@ -146,8 +146,9 @@ class StepperPVGroup(PVGroup):
         # https://proceedings.jacow.org/IPAC2018/papers/wepml004.pdf). So a
         # simulated cavity lands anywhere a real accepted one could.
         #
-        # Skip the putter (which reverts direct writes) — this is the
-        # internal initial-value seed, not a client write to SCALE.
+        # This is the simulator setting SCALE's starting value, not a client
+        # writing it. verify_value=False skips SCALE's putter, the function
+        # caproto runs on a client write, which would revert this one.
         await instance.write(
             uniform(0.8 * nominal, 1.2 * nominal), verify_value=False
         )
@@ -186,12 +187,15 @@ class StepperPVGroup(PVGroup):
         self._move_task: asyncio.Task | None = None
         # Set by any put to ABORT_REQ, cleared when move() has stopped.
         self._abort_requested = False
-        # Held from the moving check until the task exists. MOVE_POS and
-        # MOVE_NEG are separate PVs, and the MOTOR_MOVING write in between
-        # yields, so without it opposing moves could both start.
+        # Lets only one move start at a time. Starting one checks that the
+        # motor isn't moving, writes MOTOR_MOVING, then creates the task.
+        # MOVE_POS and MOVE_NEG are separate PVs, and a write to one can run
+        # during the MOTOR_MOVING write. Without this lock, moves in opposite
+        # directions could both start.
         self._move_start_lock = asyncio.Lock()
-        # Same values as the former literal 256/1.4 and 256/18.3, via the
-        # shared constants so the nominal slope cannot drift from linac_utils.
+        # Nominal microsteps per Hz from linac_utils. Only a fallback:
+        # _hz_per_microstep_now uses it when SCALE is missing or zero.
+        # Otherwise the simulated cavity responds by its SCALE value.
         if not self.cavity_group.is_hl:
             self.steps_per_hertz = ESTIMATED_MICROSTEPS_PER_HZ
         else:
@@ -476,10 +480,10 @@ class PiezoPVGroup(PVGroup):
         if not is_enabled:  # Disabled
             # Dropping to Manual on disable has to move the *commanded* mode as
             # well as the status. Writing MODESTAT alone leaves MODECTRL saying
-            # "Feedback" with no way to reconcile: Piezo.disable_feedback() is a
-            # guard-first loop on MODESTAT, so once the status reads Manual it
-            # never writes MODECTRL again, and the pair stays split for the rest
-            # of the session. Real IOCs keep status following control; the
+            # "Feedback" with no way to reconcile. Piezo.disable_feedback()
+            # writes MODECTRL only until MODESTAT reads Manual. Once it does,
+            # MODECTRL is never written again, and the pair stays split for the
+            # rest of the session. Real IOCs keep status following control; the
             # simulator has to model that or every commissioning screen that
             # shows both PVs reports a mismatch that hardware would never have.
             await self.feedback_mode_stat.write(0)

@@ -72,8 +72,11 @@ class FrequencyTuningLimits:
     max_total_steps: int = 10_000_000
     # Computed, not measured: probe_steps microsteps at HZ_PER_STEP /
     # MICROSTEPS_PER_STEP = 1.4 / 256 Hz per microstep works out to
-    # 50_000 * 1.4 / 256 = 273 Hz. Require a solid fraction of that so a
-    # degraded/uncoupled stepper is caught, not just a totally dead one.
+    # 50_000 * 1.4 / 256 = 273 Hz. HZ_PER_STEP is documented as measured;
+    # MICROSTEPS_PER_STEP is a fixed count, not a measurement: every stepper
+    # on the machine runs 256 microsteps per step (Lisa Zacarias, 2026-10-21).
+    # Require a solid fraction of that so a degraded/uncoupled stepper is
+    # caught, not just a totally dead one.
     #
     # 273 Hz is a design figure, not a per-cavity prediction: live tuning
     # reads the stepper SCALE PV rather than HZ_PER_STEP, and [TUNER-2018]
@@ -81,9 +84,6 @@ class FrequencyTuningLimits:
     # CM2-6, cavity 1 on CM4 and CM5 lower again). That is a few percent, so
     # 100 Hz sits well below anything a healthy stepper should produce and
     # catches a badly degraded one rather than a slightly off one.
-    #
-    # Not "very rough constants": linac_utils.HZ_PER_STEP documents
-    # 1.4 Hz/step as measured, and MICROSTEPS_PER_STEP is exact gearing.
     min_probe_delta_hz: float = 100.0
     pi_scan_freq_start: int = -3_500_000
     pi_scan_freq_stop: int = 50_000
@@ -817,8 +817,10 @@ class FrequencyTuningPhase(PhaseBase):
         if df_cold_err is not None:
             return df_cold_err
 
-        # Operator-authorized over-temp ceiling (re-run raises it); default is
-        # the plain temperature limit.  _auto_tune fails hard on a breach.
+        # Highest stepper temperature allowed while tuning. Normally it's the
+        # temperature limit. An operator can acknowledge an over-temperature
+        # and re-run with a higher one (over_temp_ack_k). If the stepper goes
+        # over it, _auto_tune raises StepperTempError and this step fails.
         ack_ceiling = self.context.parameters.get("over_temp_ack_k")
         max_temp = (
             ack_ceiling if ack_ceiling is not None else self.limits.temp_limit_k

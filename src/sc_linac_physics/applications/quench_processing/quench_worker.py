@@ -94,7 +94,8 @@ class QuenchWorker(Worker):
             f"{self.cavity} quench processing aborted: {exception}"
         )
         self._safe_turn_off("abort")
-        # Use finished to drive UI cleanup; message clarifies it was aborted.
+        # Emit finished so the GUI cleans up as it does after a normal run.
+        # The message says the run was aborted.
         self.finished.emit(f"{self.cavity} quench processing aborted")
 
     def _handle_quench_error(self, exception):
