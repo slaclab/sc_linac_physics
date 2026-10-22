@@ -188,9 +188,8 @@ class FrequencyTuningController(QObject):
             # Drive level is read-only here — drive_level_readback is a
             # PyDMLabel, shown next to a static "expect
             # SAFE_PULSED_DRIVE_LEVEL" hint, with no widget that writes it.
-            # Requested by @hmarts9 in review of PR #270; see
-            # FrequencyTuningUI._build_piezo_settings in
-            # ui/builders/phase_builders.py for what prompted it.
+            # Requested in review of PR #270, so operators can see piezo mode
+            # and drive level while moving the stepper by hand.
             ("piezo_enable_stat_readback", piezo.enable_stat_pv),
             ("piezo_enable_ctrl", piezo.enable_pv),
             ("piezo_mode_stat_readback", piezo.feedback_stat_pv),

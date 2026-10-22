@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sc_linac_physics"
-version = "9.47.2"
+version = "9.56.0"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -47,6 +47,7 @@ test = [
     # Parallel test execution in CI. Safe here only with `--dist loadfile`,
     # because of the import-time Machine singletons — see _test.yml.
     "pytest-xdist",
+    "pytest-timeout",
 ]
 dev = [
     "black",
@@ -97,6 +98,19 @@ addopts = "-vv -ra --durations=10 --cov=sc_linac_physics --cov-report=term-missi
 log_cli = true
 log_cli_level = "INFO"
 asyncio_mode = "auto"
+# Hung tests fail instead of running to GitHub's 6-hour job limit. The
+# slowest test takes ~5 s locally (--durations, Oct 2026), so 60 s is
+# ~10x headroom for slower CI runners.
+# timeout_method = "signal", not "thread": under xdist, "thread" kills the
+# worker, the stack dump never reached the log, and the rest of that file
+# never ran (tried on a deliberate hang). "signal" fails just the hung test,
+# names it, and the run continues. Its gap is a hang inside C code (e.g. a
+# Qt event loop) where the Python handler never runs. faulthandler_timeout
+# covers that: it still dumps every thread's stack to the job log, and
+# timeout-minutes in _test.yml then ends the job.
+timeout = 60
+timeout_method = "signal"
+faulthandler_timeout = 50
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -212,6 +226,16 @@ sc-setup-cav = "sc_linac_physics.applications.auto_setup.launcher.srf_cavity_set
 sc-watcher = "sc_linac_physics.cli.watcher_commands:main"
 
 # ============================================================================
+# EDM screens
+# ============================================================================
+sc-edm = "sc_linac_physics.cli.edm_commands:main"
+
+# ============================================================================
+# EPICS record inspection (read-only)
+# ============================================================================
+sc-pv-info = "sc_linac_physics.cli.pv_info:main"
+
+# ============================================================================
 # Simulation/Testing
 # ============================================================================
 sc-sim = "sc_linac_physics.utils.simulation.sc_linac_physics_service:main"
@@ -250,6 +274,8 @@ ignore = [
     "mkdocs.yml",
     ".git*",
     ".pre-commit-config.yaml",
+    ".claude",
+    ".claude/**/*",
     # Test data (in git but not in distribution)
     "src/sc_linac_physics/applications/microphonics/test_data",
     "src/sc_linac_physics/applications/microphonics/test_data/*",
