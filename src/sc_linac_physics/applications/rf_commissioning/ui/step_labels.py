@@ -16,6 +16,7 @@ not the Machine build.
 
 STEP_LABELS: dict[str, str] = {
     "verify_initial_state": "Verifying cavity state",
+    "calibrate_ssa": "Calibrating SSA",
     "record_cold_landing": "Recording cold landing frequency",
     "check_state_for_stage_2": "Checking prerequisites",
     "probe_stepper_direction": "Probing stepper direction",

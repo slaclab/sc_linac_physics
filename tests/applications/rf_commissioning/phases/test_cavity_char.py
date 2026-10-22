@@ -19,6 +19,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     PhaseStatus,
     SSACharacterization,
 )
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.cavity_char import (
     CavityCharLimits,
     CavityCharPhase,
@@ -59,6 +62,14 @@ def mock_cavity():
     cavity.loaded_q_lower_limit = 2.5e7
     cavity.loaded_q_upper_limit = 5.1e7
     cavity.measured_probe_q = 8.5e11
+    # What calibrate_ssa and tune_to_resonance read.
+    cavity.rack.cavities = {}
+    cavity.ssa.drive_max = 0.8
+    cavity.ssa.measured_slope = 1.0
+    cavity.ssa.max_fwd_pwr = 4000.0
+    cavity.is_on = True
+    cavity.detune_invalid = False
+    cavity.detune = 0.0
     return cavity
 
 
@@ -440,6 +451,133 @@ def test_drive_level_outside_the_allowed_range_is_refused(
 
 
 # ---------------------------------------------------------------------------
+# Setup — redone before measuring, as auto setup does
+# ---------------------------------------------------------------------------
+
+
+def test_setup_runs_before_the_drive_is_set(phase):
+    """Calibrate, then tune, then the characterization's own steps."""
+    steps = phase.get_phase_steps()
+    assert (
+        steps.index("verify_initial_state")
+        < steps.index("calibrate_ssa")
+        < steps.index("tune_to_resonance")
+        < steps.index("set_drive_level")
+    )
+
+
+def test_calibration_uses_the_drive_max_from_ssa_char(
+    phase, mock_cavity, record
+):
+    record.ssa_char = SSACharacterization(max_drive=0.65)
+    mock_cavity.rack.cavities = {}
+    mock_cavity.ssa.measured_slope = 1.01
+    mock_cavity.ssa.max_fwd_pwr = 4000.0
+
+    result = phase.execute_step("calibrate_ssa")
+
+    assert result.result == PhaseResult.SUCCESS, result.message
+    mock_cavity.ssa.calibrate.assert_called_once_with(0.65, attempt=2)
+    assert record.ssa_char.slope_new == 1.01
+    assert record.ssa_char.max_drive == 0.65
+
+
+def test_calibration_without_ssa_char_uses_the_saved_drive_max(
+    phase, mock_cavity
+):
+    mock_cavity.rack.cavities = {}
+    mock_cavity.ssa.drive_max = 0.8
+    mock_cavity.ssa.measured_slope = 1.0
+    mock_cavity.ssa.max_fwd_pwr = 4000.0
+
+    phase.execute_step("calibrate_ssa")
+
+    mock_cavity.ssa.calibrate.assert_called_once_with(0.8, attempt=2)
+
+
+def _kept(hours_old, good=True):
+    return cavity_setup.LastSetupResult(
+        name="SSA calibration",
+        timestamp=datetime.now() - timedelta(hours=hours_old),
+        good=good,
+    )
+
+
+def test_a_recent_calibration_is_kept_with_a_note(phase, mock_cavity, record):
+    phase.context.parameters["kept_ssa_calibration"] = _kept(0.5)
+
+    result = phase.execute_step("calibrate_ssa")
+
+    assert result.result == PhaseResult.SUCCESS
+    mock_cavity.ssa.calibrate.assert_not_called()
+    mock_cavity.turn_off.assert_not_called()
+    assert record.cavity_char.notes.startswith("Kept the SSA calibration")
+    assert result.data["skipped_by"] is None
+
+
+def test_a_skipped_old_calibration_records_who_skipped_it(
+    phase, mock_cavity, record
+):
+    record.ssa_char = SSACharacterization(max_drive=0.65)
+    phase.context.parameters["kept_ssa_calibration"] = _kept(5)
+    phase.context.parameters["ssa_calibration_skipped_by"] = "lisa"
+
+    result = phase.execute_step("calibrate_ssa")
+
+    mock_cavity.ssa.calibrate.assert_not_called()
+    assert record.cavity_char.notes == (
+        "SSA calibration skipped by lisa: " + _kept(5).describe()
+    )
+    assert result.data["skipped_by"] == "lisa"
+    # The SSA char result is left as it was, not replaced.
+    assert record.ssa_char.max_drive == 0.65
+
+
+def test_a_skip_appends_to_existing_notes(phase, record):
+    record.cavity_char = CavityCharacterization(notes="operator note")
+    phase.context.parameters["kept_ssa_calibration"] = _kept(0.5)
+    phase.execute_step("calibrate_ssa")
+    assert record.cavity_char.notes.startswith("operator note\nKept")
+
+
+def test_a_dry_run_with_a_kept_calibration_leaves_the_record(
+    mock_cavity, record
+):
+    context = PhaseContext(
+        record=record,
+        operator="op",
+        dry_run=True,
+        parameters={
+            "cavity": mock_cavity,
+            "kept_ssa_calibration": _kept(0.5),
+        },
+    )
+    p = CavityCharPhase(context)
+    p.validate_prerequisites()
+    result = p.execute_step("calibrate_ssa")
+    assert result.data == {"dry_run": True}
+    assert record.cavity_char is None
+
+
+def test_tuning_passes_the_stepper_temp_limit(mock_cavity, record):
+    context = PhaseContext(
+        record=record, operator="op", parameters={"cavity": mock_cavity}
+    )
+    p = CavityCharPhase(
+        context, limits=CavityCharLimits(stepper_temp_limit_k=55)
+    )
+    p.validate_prerequisites()
+    mock_cavity.is_on = True
+    mock_cavity.detune_invalid = False
+    mock_cavity.detune = 12.0
+
+    result = p.execute_step("tune_to_resonance")
+
+    assert result.result == PhaseResult.SUCCESS, result.message
+    mock_cavity.move_to_resonance.assert_called_once_with(max_stepper_temp=55)
+
+
+# ---------------------------------------------------------------------------
 # Gates and waiting
 # ---------------------------------------------------------------------------
 
@@ -458,31 +596,11 @@ def test_moving_stepper_is_refused(phase, mock_cavity):
     assert "moving" in result.message.lower()
 
 
-def test_stale_upstream_results_warn_rather_than_block(phase, record):
-    """The workflow already guarantees those phases ran; recency is advice."""
-    record.ssa_char = SSACharacterization(
-        timestamp=datetime.now() - timedelta(hours=72)
-    )
-
-    result = phase.execute_step("verify_initial_state")
-
-    assert result.result == PhaseResult.SUCCESS
-    assert "SSA calibration" in result.message
-
-
-def test_fresh_upstream_results_do_not_warn(phase, record):
-    record.ssa_char = SSACharacterization(timestamp=datetime.now())
-
-    result = phase.execute_step("verify_initial_state")
-
-    assert "note:" not in result.message
-
-
-def test_ssa_off_is_refused(phase, mock_cavity):
+def test_ssa_off_is_not_refused(phase, mock_cavity):
+    """calibrate_ssa turns the SSA on, so an SSA that is off is not a blocker."""
     mock_cavity.ssa.is_on = False
     result = phase.execute_step("verify_initial_state")
-    assert result.result == PhaseResult.FAILED
-    assert "SSA is not on" in result.message
+    assert result.result == PhaseResult.SUCCESS
 
 
 def test_ssa_calibrating_is_refused(phase, mock_cavity):
@@ -615,6 +733,9 @@ def test_dry_run_touches_no_hardware(mock_cavity, record):
     mock_cavity.push_scale_factor.assert_not_called()
     mock_cavity.reset_interlocks.assert_not_called()
     mock_cavity.calculate_probe_q.assert_not_called()
+    mock_cavity.turn_off.assert_not_called()
+    mock_cavity.ssa.calibrate.assert_not_called()
+    mock_cavity.move_to_resonance.assert_not_called()
 
     # drive_level is an attribute assignment, not a call: _set_drive_level
     # would put a float there. An untouched Mock attribute is still a Mock.

@@ -738,7 +738,18 @@ class Cavity(linac_utils.SCLinacObject):
             else -delta_hz
         )
 
-    def move_to_resonance(self, reset_signed_steps=False, use_sela=False):
+    def move_to_resonance(
+        self,
+        reset_signed_steps=False,
+        use_sela=False,
+        max_stepper_temp: Optional[float] = None,
+    ):
+        """Tune to resonance with the stepper.
+
+        max_stepper_temp is passed to every _auto_tune pass; None (auto setup's
+        default) means no stepper temperature guard.
+        """
+
         def delta_detune():
             return self.detune
 
@@ -758,6 +769,7 @@ class Cavity(linac_utils.SCLinacObject):
             delta_hz_func=delta_detune,
             tolerance=(500 if self.cryomodule.is_harmonic_linearizer else 50),
             reset_signed_steps=reset_signed_steps,
+            max_stepper_temp=max_stepper_temp,
         )
 
         if use_sela:
@@ -766,6 +778,7 @@ class Cavity(linac_utils.SCLinacObject):
                 delta_hz_func=self.delta_piezo,
                 tolerance=5 * self.piezo.hz_per_v,
                 reset_signed_steps=False,
+                max_stepper_temp=max_stepper_temp,
             )
 
         self.tune_config_pv_obj.put(linac_utils.TUNE_CONFIG_RESONANCE_VALUE)
@@ -895,13 +908,10 @@ class Cavity(linac_utils.SCLinacObject):
                 iteration_callback()
 
             microsteps_per_hz = self.microsteps_per_hz
-            # Aim for 75% of the measured detune per move (was 90%). A move
-            # passes resonance when 0.75 * (true / believed SCALE) > 1, so
-            # 0.75 tolerates a tuner that moves up to 1/0.75 = 1.33x what
-            # SCALE says without overshooting. 0.9 overshoots past 1.11x.
-            # CHECK: Ryan reports some tuners move ~30% more than SCALE
-            # says. Is there a measurement or tuner report to cite here?
-            est_steps = int(0.75 * delta_hz * microsteps_per_hz)
+            # Undershoot on purpose; the reasoning is at the constant.
+            est_steps = int(
+                linac_utils.AUTO_TUNE_UNDERSHOOT * delta_hz * microsteps_per_hz
+            )
 
             # A zero step estimate commands no motion, so the detune cannot
             # change and steps_moved cannot grow -- so the runaway guard below
@@ -1153,7 +1163,15 @@ class Cavity(linac_utils.SCLinacObject):
             )
             raise linac_utils.CavityAbortError(f"Abort requested for {self}")
 
-    def setup_rf(self, des_amp):
+    def setup_rf(self, des_amp, calibrate_ssa=True, characterize=True):
+        """Turn the cavity on and walk it up to des_amp (MV) in SELA.
+
+        Auto setup calls this with the defaults, so every turn-on calibrates
+        the SSA and characterizes the cavity. Passing calibrate_ssa=False or
+        characterize=False skips that step and keeps what is on the machine.
+        The RF commissioning piezo with RF phase does this when the last good
+        result is recent. move_to_resonance() always runs.
+        """
         if des_amp > self.ades_max:
             self.set_status_message(
                 "Requested amplitude too high - using AMAX instead",
@@ -1176,10 +1194,12 @@ class Cavity(linac_utils.SCLinacObject):
         )
 
         self.turn_off()
-        self.ssa.calibrate(self.ssa.drive_max)
+        if calibrate_ssa:
+            self.ssa.calibrate(self.ssa.drive_max)
         self.move_to_resonance()
 
-        self.characterize()
+        if characterize:
+            self.characterize()
         self.calculate_probe_q()
 
         self.check_abort()

@@ -70,6 +70,9 @@ class SSA(linac_utils.SCLinacObject):
         self.cal_result_status_pv: str = self.pv_addr("CALSTAT")
         self._cal_result_status_pv_obj: Optional[PV] = None
 
+        self.calibration_timestamp_pv: str = self.pv_addr("CALTS")
+        self._calibration_timestamp_pv_obj: Optional[PV] = None
+
         self.current_slope_pv: str = self.pv_addr("SLOPE")
         self._current_slope_pv_obj: Optional[PV] = None
         self.measured_slope_pv: str = self.pv_addr("SLOPE_NEW")
@@ -88,9 +91,10 @@ class SSA(linac_utils.SCLinacObject):
         self.max_fwd_pwr_pv: str = self.pv_addr("CALPWR")
         self._max_fwd_pwr_pv_obj: Optional[PV] = None
 
-        # Shared between HL cavity pairs (see HL_SSA_SHARED_PVS)
-        self.type_pv: str = self.pv_addr("Type")
-        self._type_pv_obj: Optional[PV] = None
+        # SSA:PwrRating, in kW. On HL it only exists on cavities 1-4, so
+        # cavities 5-8 read their pair's (see HL_SSA_SHARED_PVS).
+        self.pwr_rating_pv: str = self.pv_addr("PwrRating")
+        self._pwr_rating_pv_obj: Optional[PV] = None
 
     def __str__(self):
         return f"{self.cavity} SSA"
@@ -121,14 +125,15 @@ class SSA(linac_utils.SCLinacObject):
         return self._status_pv_obj.get()
 
     @property
-    def rated_power_kw(self) -> Optional[float]:
-        """Rated power in kW, from the SSA:Type enum index. Reads one PV.
+    def rated_power_kw(self) -> float:
+        """Rated power in kW, read from SSA:PwrRating.
 
-        None if the index is not in linac_utils.SSA_TYPE_RATED_POWER_KW.
+        On HL the PV is shared by a cavity pair, but its 1 kW is each
+        cavity's rating, not the pair's total (confirmed on #438).
         """
-        if not self._type_pv_obj:
-            self._type_pv_obj = PV(self.type_pv)
-        return linac_utils.ssa_rated_power_kw(int(self._type_pv_obj.get()))
+        if not self._pwr_rating_pv_obj:
+            self._pwr_rating_pv_obj = PV(self.pwr_rating_pv)
+        return float(self._pwr_rating_pv_obj.get())
 
     @property
     def is_on(self) -> bool:
@@ -447,6 +452,25 @@ class SSA(linac_utils.SCLinacObject):
             == linac_utils.SSA_RESULT_GOOD_STATUS_VALUE
         )
 
+    @property
+    def calibration_timestamp(self) -> datetime:
+        """CALTS, the time of the last SSA calibration.
+
+        A read-only string such as "2025-12-03-08:17:16", the same format as
+        the cavity's PROBECALTS (checked on ACCL:L1B:0210:SSA:CALTS,
+        2026-10-19). It is not in the archiver.
+
+        CHECK: does the IOC stamp CALTS when a calibration starts or when it
+        finishes, and does it update on a run whose CALSTAT is not Good?
+        """
+        if not self._calibration_timestamp_pv_obj:
+            self._calibration_timestamp_pv_obj = PV(
+                self.calibration_timestamp_pv
+            )
+        return datetime.strptime(
+            self._calibration_timestamp_pv_obj.get(), "%Y-%m-%d-%H:%M:%S"
+        )
+
     def run_calibration(self, save_slope: bool = False):
         """
         Runs the SSA through its range and finds the slope that describes
@@ -493,6 +517,10 @@ class SSA(linac_utils.SCLinacObject):
                 },
             ),
         )
+        # wait_until checks abort only on polls that read "running". The
+        # read that sees the scan finish skips it, so check once more here
+        # before the slope is accepted and pushed.
+        self.cavity.check_abort()
         time.sleep(2)
 
         if self.calibration_crashed:
