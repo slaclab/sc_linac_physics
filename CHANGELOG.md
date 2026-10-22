@@ -2,6 +2,159 @@
 
 <!-- version list -->
 
+## v9.55.0 (2026-10-22)
+
+### Bug Fixes
+
+- **rf-commissioning**: Confirm the detune gain push before recording it
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Keep a live detune gain on record when SAVE fails
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Push the detune gain without waiting on the put; keep the record's wording
+  exact ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Read RFTESTSTAT, the with-RF result PV the IOC serves
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Refuse a running with-RF test before setup; time the wait by the clock
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Resume the with-RF wait after a read error; flag IOC assumptions
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Say setup_rf raises on out-of-tolerance results
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Start the with-RF test without waiting on the put; note what a failed
+  setup_rf left ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **auto-setup**: Explain why the setup reads the checkboxes first
+  ([#434](https://github.com/slaclab/sc_linac_physics/pull/434),
+  [`388373d`](https://github.com/slaclab/sc_linac_physics/commit/388373de0c7780a3e328ad5614a21082b5830299))
+
+- **auto-setup**: Name the variables _run uses instead of the checkboxes
+  ([#434](https://github.com/slaclab/sc_linac_physics/pull/434),
+  [`388373d`](https://github.com/slaclab/sc_linac_physics/commit/388373de0c7780a3e328ad5614a21082b5830299))
+
+- **auto-setup**: Reword the channel watcher docstring per review
+  ([#434](https://github.com/slaclab/sc_linac_physics/pull/434),
+  [`388373d`](https://github.com/slaclab/sc_linac_physics/commit/388373de0c7780a3e328ad5614a21082b5830299))
+
+- **displays**: Plain-words fetch, threading and q0 comments
+  ([#434](https://github.com/slaclab/sc_linac_physics/pull/434),
+  [`388373d`](https://github.com/slaclab/sc_linac_physics/commit/388373de0c7780a3e328ad5614a21082b5830299))
+
+- **displays**: Say what the fetch, threading and q0 comments mean in plain words
+  ([#434](https://github.com/slaclab/sc_linac_physics/pull/434),
+  [`388373d`](https://github.com/slaclab/sc_linac_physics/commit/388373de0c7780a3e328ad5614a21082b5830299))
+
+- **epics**: Add a page on reading an IOC record's fields and links
+  ([#448](https://github.com/slaclab/sc_linac_physics/pull/448),
+  [`fc14c8a`](https://github.com/slaclab/sc_linac_physics/commit/fc14c8a4103d7e8ce7505cd08a4206d3847ba100))
+
+- **epics**: PP only processes Passive records; the push copies the current value; the put wait is
+  bounded ([#448](https://github.com/slaclab/sc_linac_physics/pull/448),
+  [`fc14c8a`](https://github.com/slaclab/sc_linac_physics/commit/fc14c8a4103d7e8ce7505cd08a4206d3847ba100))
+
+- **field-emission**: Say why the timestamps column name matters
+  ([#434](https://github.com/slaclab/sc_linac_physics/pull/434),
+  [`388373d`](https://github.com/slaclab/sc_linac_physics/commit/388373de0c7780a3e328ad5614a21082b5830299))
+
+- **rf-commissioning**: Cite PUSH_DFGAIN's links; DFGAIN_NEW is copied, not computed
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Cite SAVE_DFGAIN's links; narrow its CHECK to who reads DFGAIN_SAVE
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Drop the old-records note on PiezoWithRFTest
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Every stepper runs 256 microsteps per step
+  ([#433](https://github.com/slaclab/sc_linac_physics/pull/433),
+  [`00833a2`](https://github.com/slaclab/sc_linac_physics/commit/00833a2b3b7c908434b1aef5cca0370028b183b4))
+
+- **rf-commissioning**: Explain PUSH_DFGAIN and SAVE_DFGAIN links in plain words
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Leave the trigger-pool comment to #437, which replaces it
+  ([#433](https://github.com/slaclab/sc_linac_physics/pull/433),
+  [`00833a2`](https://github.com/slaclab/sc_linac_physics/commit/00833a2b3b7c908434b1aef5cca0370028b183b4))
+
+- **rf-commissioning**: Plain-words threading, push and conflict comments
+  ([#433](https://github.com/slaclab/sc_linac_physics/pull/433),
+  [`00833a2`](https://github.com/slaclab/sc_linac_physics/commit/00833a2b3b7c908434b1aef5cca0370028b183b4))
+
+- **rf-commissioning**: Point the SAVE_DFGAIN CHECK at CavityCharPhase._push_results, not closed
+  #285 ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Say MICROSTEPS_PER_STEP is a set count, not gearing
+  ([#433](https://github.com/slaclab/sc_linac_physics/pull/433),
+  [`00833a2`](https://github.com/slaclab/sc_linac_physics/commit/00833a2b3b7c908434b1aef5cca0370028b183b4))
+
+- **rf-commissioning**: Say what the threading, push and conflict comments mean in plain words
+  ([#433](https://github.com/slaclab/sc_linac_physics/pull/433),
+  [`00833a2`](https://github.com/slaclab/sc_linac_physics/commit/00833a2b3b7c908434b1aef5cca0370028b183b4))
+
+### Features
+
+- **rf-commissioning**: Piezo with RF asks before re-running a stale setup
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Piezo with RF phase, detune check, start and wait for the test
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Piezo with RF phase, read results and push the reviewed detune gain
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Piezo with RF phase, RF and piezo setup
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Record the with-RF test status; Warning is not passed
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+### Refactoring
+
+- **rf-commissioning**: Piezo with RF reads recency through LastSetupResult
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+### Testing
+
+- **rf-commissioning**: Drop the old-record PiezoWithRFTest tests
+  ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+- **rf-commissioning**: Feed the full-run tests the extra RFTESTSTS read; check the run reached the
+  test ([#450](https://github.com/slaclab/sc_linac_physics/pull/450),
+  [`cdfc36c`](https://github.com/slaclab/sc_linac_physics/commit/cdfc36cc037974e95da1027cf7eab3cda2ea69f4))
+
+
 ## v9.54.0 (2026-10-21)
 
 ### Bug Fixes
