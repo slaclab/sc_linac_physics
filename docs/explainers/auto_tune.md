@@ -105,6 +105,7 @@ while |delta_hz| > tolerance:
     stepper_tuner.move(est_steps,
                        max_steps = |est_steps| * 1.1,
                        speed     = MAX_STEPPER_SPEED)
+    steps_moved += |est_steps|
     if steps_moved > expected_steps * tol_factor:  raise DetuneError
     check_detune()                              # may widen the chirp range
     delta_hz = delta_hz_func()                  # read the machine again
