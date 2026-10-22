@@ -49,6 +49,8 @@ class SSACharDisplay(BasePlaceholderDisplay):
             "on_run_automated_test": self.on_run_calibration,
             "on_pause_test": self.on_pause_test,
             "on_abort_test": self.on_abort,
+            "on_toggle_step_mode": self.on_toggle_step_mode,
+            "on_next_step": self.on_next_step,
             "on_push_slope": self.on_push_slope,
             "on_plot": self.on_plot,
         }
@@ -125,6 +127,14 @@ class SSACharDisplay(BasePlaceholderDisplay):
     @pyqtSlot()
     def on_pause_test(self):
         self.controller.on_pause_test()
+
+    @pyqtSlot()
+    def on_toggle_step_mode(self):
+        self.controller.on_toggle_step_mode()
+
+    @pyqtSlot()
+    def on_next_step(self):
+        self.controller.on_next_step()
 
     @pyqtSlot()
     def on_push_slope(self):
