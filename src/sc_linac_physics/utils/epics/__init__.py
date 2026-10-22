@@ -54,6 +54,7 @@ from .config import (
 
 # Core functionality
 from .core import PV
+from .lazy import LazyPV
 from .exceptions import (
     PVConnectionError,
     PVGetError,
@@ -70,6 +71,7 @@ from .utils import create_pv_safe, diagnose_pv_connection
 __all__ = [
     # Core
     "PV",
+    "LazyPV",
     "PVConfig",
     # Constants
     "EPICS_NO_ALARM_VAL",
