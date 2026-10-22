@@ -271,10 +271,6 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         if pw is not None:
             pw.autoRange()
 
-    def clear_probe_fit(self) -> None:
-        if self._probe_fit_curve is not None:
-            self._probe_fit_curve.setData([], [])
-
     @pyqtSlot(float, float)
     def _on_tuning_data_point(self, signed_steps: float, detune: float) -> None:
         """Receive a (signed_steps, detune) point emitted from the phase callback."""
