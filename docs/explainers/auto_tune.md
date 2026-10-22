@@ -212,7 +212,7 @@ Only auto setup tunes in SELA.
 | Detune PV      | `CHIRP:DF`                                     | `DFBEST`            |
 | Piezo feedback | Disabled, DC setpoint 0 V                      | Enabled             |
 | Drive level    | `SAFE_PULSED_DRIVE_LEVEL` = 10                 | Unchanged           |
-| Settling       | RF on, 5 s wait, then find a valid chirp range | RF on               |
+| Settling       | RF on, 5 s wait, then find a valid chirp range | RF on, no wait      |
 | Used by        | Tuning GUI, RF commissioning                   | **Auto setup only** |
 
 <span class="cite">`cavity.py::Cavity.setup_tuning`</span>
