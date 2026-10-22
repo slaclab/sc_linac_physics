@@ -446,3 +446,30 @@ class TestUtilities:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--cov=runner", "--cov-report=term-missing"])
+
+
+class TestWatcherPvCreation:
+    def test_watcher_pv_fails_fast_when_not_connected(self, runner):
+        runner._watcher_pv_obj = None
+        pv = MagicMock()
+        pv.ensure_connected.side_effect = PVConnectionError("down")
+        with patch(
+            "sc_linac_physics.displays.cavity_display.backend.runner.PV",
+            return_value=pv,
+        ):
+            with pytest.raises(PVConnectionError):
+                _ = runner.watcher_pv_obj
+        assert runner._watcher_pv_obj is None
+
+    def test_watcher_pv_connected_before_cached(self, runner):
+        runner._watcher_pv_obj = None
+        pv = MagicMock()
+        with patch(
+            "sc_linac_physics.displays.cavity_display.backend.runner.PV",
+            return_value=pv,
+        ) as pv_cls:
+            assert runner.watcher_pv_obj is pv
+        pv_cls.assert_called_once_with(
+            runner.watcher_pv_name, connection_timeout=10.0
+        )
+        pv.ensure_connected.assert_called_once_with()
