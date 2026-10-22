@@ -151,13 +151,24 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     def _verify_initial_state(self) -> PhaseStepResult:
-        """Check HWMODE, SSA calibration, stepper motion and RFTESTSTS.
+        """Clear the last run's results, then check HWMODE, SSA calibration,
+        stepper motion and RFTESTSTS.
 
-        Only reads; writes nothing.
+        Only reads PVs; writes nothing to the machine.
 
         Refuses a with-RF test that is already running here, before
         setup_rf turns RF off under it. start_test checks again just before
         it writes RFTESTSTRT.
+
+        Clearing here, the first step, rather than only in read_results: a
+        rerun that fails in any step before read_results (setup_rf,
+        wait_for_completion, ...) would otherwise leave the last run's Pass
+        and gains on record.piezo_with_rf, though setup_rf has already turned
+        RF off and the IOC's DFGAIN_NEW may no longer hold that gain. The
+        rerun replaces the old result whether or not it finishes.
+        _clear_measured_fields keeps a note if that old result had been
+        pushed, since the pushed gain is still live in DFGAIN. A dry run
+        clears nothing, as read_results doesn't in a dry run.
 
         Its data says whether the SSA calibration and the characterization
         are recent enough for setup_rf to keep (see _setup_rf), with CALTS
@@ -167,6 +178,7 @@ class PiezoWithRFPhase(PhaseBase):
         """
         if self.context.dry_run:
             return self._dry_run_result("cavity state check")
+        self._clear_measured_fields()
         try:
             if not self.cavity.is_online:
                 return self._failed("Cavity is not online — cannot run test")
@@ -491,6 +503,9 @@ class PiezoWithRFPhase(PhaseBase):
         """
         if self.context.dry_run:
             return self._dry_run_result("result read")
+        # verify_initial_state already cleared the record at the start of
+        # the run. Clear again so a RETRY of this step, or a call outside
+        # run(), never mixes gains from two reads.
         self._clear_measured_fields()
         piezo = self.cavity.piezo
         try:
@@ -553,9 +568,10 @@ class PiezoWithRFPhase(PhaseBase):
         PhaseBase.run() goes straight from read_results to here, so the gate
         is in this step: it refuses unless
         context.parameters["confirmed_detune_gain"] equals the DFGAIN_NEW that
-        read_results stored. Just before pushing it re-reads DFGAIN_NEW and
-        RFTESTSTS from the IOC, and refuses unless the gain is unchanged and
-        RFTESTSTS still reads Complete.
+        read_results stored. Just before pushing it re-reads DFGAIN_NEW,
+        RFTESTSTS and RFTESTSTAT from the IOC, and refuses unless the gain is
+        unchanged, RFTESTSTS still reads Complete and RFTESTSTAT still reads
+        the Pass or Warning that read_results stored.
 
         It writes PUSH_DFGAIN.PROC = 1, then SAVE_DFGAIN.PROC = 1, each with
         wait=True: PV.put returns once the IOC confirms the record processed,
@@ -645,11 +661,19 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     def _check_before_push(self) -> PhaseStepResult | None:
-        """Re-read DFGAIN_NEW and RFTESTSTS just before pushing.
+        """Re-read DFGAIN_NEW, RFTESTSTS and RFTESTSTAT just before pushing.
 
-        Both reads pass use_monitor=False, so they ask the IOC now rather than
-        return the last monitor update. RFTESTSTS must still read Complete:
-        Running or Crash means another test has run since review.
+        All three reads pass use_monitor=False, so they ask the IOC now rather
+        than return the last monitor update. RFTESTSTS must still read
+        Complete: Running or Crash means another test has run since review.
+        RFTESTSTAT must still read the label read_results stored in
+        self._rf_test_status (Pass or Warning). Another run can end Complete
+        with Fail (2) and leave RFTESTSTS at Complete; the RFTESTSTAT check
+        refuses that even if DFGAIN_NEW reads the same as at review.
+
+        CHECK: does a with-RF run that ends in Fail rewrite DFGAIN_NEW, or
+        leave the last run's value? If it leaves it, the DFGAIN_NEW check
+        alone would not catch a Fail run since review.
 
         Returns a result that stops the push, or None if it can go ahead.
         """
@@ -658,6 +682,9 @@ class PiezoWithRFPhase(PhaseBase):
             now_gain = float(piezo.detunegain_new_pv_obj.get(use_monitor=False))
             now_status = int(
                 piezo.withrf_check_status_pv_obj.get(use_monitor=False)
+            )
+            now_test_status = int(
+                piezo.withrf_status_pv_obj.get(use_monitor=False)
             )
         except Exception as exc:
             return self._retry(f"Could not re-read before pushing: {exc}")
@@ -669,6 +696,18 @@ class PiezoWithRFPhase(PhaseBase):
             return self._failed(
                 f"RFTESTSTS reads {name}, not Complete — another with-RF test "
                 "has run since review; nothing pushed. Rerun the test."
+            )
+        now_label = self._TEST_STATUS_LABELS.get(now_test_status)
+        if now_label != self._rf_test_status:
+            name = now_label or (
+                "Fail"
+                if now_test_status == linac_utils.PIEZO_WITH_RF_FAIL_VALUE
+                else str(now_test_status)
+            )
+            return self._failed(
+                f"RFTESTSTAT reads {name}, not the {self._rf_test_status} "
+                "reviewed — another with-RF test has run since review; "
+                "nothing pushed. Rerun the test."
             )
         if now_gain != self._detune_gain:
             return self._failed(

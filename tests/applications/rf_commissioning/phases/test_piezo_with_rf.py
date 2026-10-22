@@ -832,3 +832,90 @@ def test_rerun_that_fails_after_a_push_keeps_a_note(finished, record):
     assert data.rf_test_status is None
     assert data.detune_gain_pushed is False
     assert "Earlier run pushed detune gain 0.850000 (Pass)" in data.notes
+
+
+@pytest.mark.parametrize(
+    "reviewed, now, name",
+    [(PASS, FAIL, "Fail"), (PASS, WARNING, "Warning"), (WARNING, PASS, "Pass")],
+)
+def test_push_refuses_if_rfteststat_changed_since_review(
+    finished, record, reviewed, now, name
+):
+    """RFTESTSTS still Complete and DFGAIN_NEW unchanged, but RFTESTSTAT is
+    not what was reviewed: another run ended since review."""
+    finished.piezo.withrf_status_pv_obj.get.return_value = reviewed
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    finished.piezo.withrf_status_pv_obj.get.return_value = now
+    result = phase.execute_step("push_detune_gain")
+    assert result.result == PhaseResult.FAILED
+    assert f"RFTESTSTAT reads {name}" in result.message
+    finished.piezo.withrf_push_dfgain_pv_obj.put.assert_not_called()
+    finished.piezo.withrf_save_dfgain_pv_obj.put.assert_not_called()
+
+
+def test_pre_push_rfteststat_read_bypasses_the_monitor_cache(finished, record):
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    piezo = finished.piezo
+    piezo.withrf_status_pv_obj.get.reset_mock()
+    phase.execute_step("push_detune_gain")
+    piezo.withrf_status_pv_obj.get.assert_called_once_with(use_monitor=False)
+
+
+def test_rerun_clears_the_last_pass_at_the_start(phase, finished, record):
+    assert phase.execute_step("read_results").result == PhaseResult.SUCCESS
+    rerun = make_phase(finished, record)
+    assert (
+        rerun.execute_step("verify_initial_state").result == PhaseResult.SUCCESS
+    )
+    data = record.piezo_with_rf
+    assert data.amplifier_gain_a is None
+    assert data.amplifier_gain_b is None
+    assert data.detune_gain is None
+    assert data.rf_test_status is None
+    assert not data.passed
+
+
+def test_rerun_failing_in_setup_rf_keeps_the_push_note(finished, record):
+    phase = make_phase(finished, record, confirmed_detune_gain=0.85)
+    phase.execute_step("read_results")
+    assert phase.execute_step("push_detune_gain").result == PhaseResult.SUCCESS
+    finished.setup_rf.side_effect = RuntimeError("SSA fault")
+    rerun = make_phase(finished, record)
+    rerun.execute_step("verify_initial_state")
+    assert rerun.execute_step("setup_rf").result == PhaseResult.FAILED
+    rerun.finalize_phase()
+    data = record.piezo_with_rf
+    assert data.detune_gain is None
+    assert data.rf_test_status is None
+    assert data.detune_gain_pushed is False
+    assert "Earlier run pushed detune gain 0.850000 (Pass)" in data.notes
+    # Noted once, not again by a later clear.
+    assert data.notes.count("Earlier run pushed") == 1
+
+
+def test_full_rerun_failing_in_wait_leaves_no_old_pass(finished, record):
+    record.set_phase_status(
+        CommissioningPhase.CAVITY_CHAR, PhaseStatus.COMPLETE
+    )
+    first = make_phase(finished, record)
+    first.execute_step("read_results")
+    assert record.piezo_with_rf.passed
+    # verify_initial_state and start_test read Complete; the test never
+    # reads Running, so wait_for_completion fails.
+    finished.piezo.withrf_check_status_pv_obj.get.side_effect = None
+    finished.piezo.withrf_check_status_pv_obj.get.return_value = COMPLETE
+    rerun = make_phase(finished, record)
+    assert rerun.run() is False
+    data = record.piezo_with_rf
+    assert data.detune_gain is None
+    assert data.rf_test_status is None
+    assert not data.passed
+
+
+def test_dry_run_verify_keeps_the_last_result(phase, finished, record):
+    phase.execute_step("read_results")
+    dry = make_phase(finished, record, dry_run=True)
+    dry.execute_step("verify_initial_state")
+    assert record.piezo_with_rf.detune_gain == 0.85
