@@ -75,20 +75,34 @@ def _pid_path(session_name: str) -> Path:
     return _local_dir() / f"{session_name}.pid"
 
 
-def _read_running_pid(session_name: str) -> int | None:
-    """Return the watcher's pid if its pid file names a live process."""
+def _read_running_pid(session_name: str, main_func) -> int | None:
+    """Return the pid from the watcher's pid file if that process is ours.
+
+    The pid must be a live process we may signal, and its command line must
+    name the watcher module. A pid file left behind after a reboot can point
+    at an unrelated process that reused the pid.
+    """
     try:
         pid = int(_pid_path(session_name).read_text().strip())
+        if pid <= 1:
+            return None
         os.kill(pid, 0)
     except (FileNotFoundError, ValueError, ProcessLookupError):
         return None
     except PermissionError:
-        pass
+        return None
+    command = subprocess.run(
+        ["ps", "-o", "command=", "-p", str(pid)],
+        capture_output=True,
+        text=True,
+    ).stdout
+    if main_func.__module__ not in command:
+        return None
     return pid
 
 
-def local_stop(session_name: str) -> None:
-    pid = _read_running_pid(session_name)
+def local_stop(session_name: str, main_func) -> None:
+    pid = _read_running_pid(session_name, main_func)
     if pid is None:
         print(f"{session_name} is not running")
     else:
@@ -99,7 +113,7 @@ def local_stop(session_name: str) -> None:
 
 
 def local_restart(session_name: str, main_func) -> None:
-    local_stop(session_name)
+    local_stop(session_name, main_func)
     _local_dir().mkdir(parents=True, exist_ok=True)
     log_path = _log_path(session_name)
     with open(log_path, "ab") as log:
@@ -148,7 +162,7 @@ def _stop(session_name: str) -> None:
     if _has_tmux_launcher():
         _run_tmux_command(build_stop_command(session_name, func))
     else:
-        local_stop(session_name)
+        local_stop(session_name, func)
 
 
 def show_watcher():

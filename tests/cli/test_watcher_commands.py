@@ -178,12 +178,17 @@ class TestLocalFallback:
         assert pid_file.read_text() == "4321"
         assert (without_tmux_launcher / "SC_CAV_QNCH_RESET.out").exists()
 
+    @patch("sc_linac_physics.cli.watcher_commands.subprocess.run")
     @patch("sc_linac_physics.cli.watcher_commands.os.killpg")
     @patch("sc_linac_physics.cli.watcher_commands.os.kill")
     @patch("sys.argv", ["watcher_commands", "stop", "SC_CAV_QNCH_RESET"])
     def test_stop_kills_running_watcher(
-        self, mock_kill, mock_killpg, without_tmux_launcher
+        self, mock_kill, mock_killpg, mock_run, without_tmux_launcher
     ):
+        module = watcher_commands.WATCHER_CONFIGS[
+            "SC_CAV_QNCH_RESET"
+        ].__module__
+        mock_run.return_value.stdout = f"python -m {module}\n"
         pid_file = without_tmux_launcher / "SC_CAV_QNCH_RESET.pid"
         pid_file.write_text("4321")
         watcher_commands.main()
@@ -252,3 +257,42 @@ class TestLocalFallback:
         watcher_commands.main()
         mock_execvp.assert_not_called()
         assert "No log" in capsys.readouterr().out
+
+    @pytest.mark.parametrize("contents", ["0", "1", "-5"])
+    @patch("sc_linac_physics.cli.watcher_commands.os.killpg")
+    @patch("sc_linac_physics.cli.watcher_commands.os.kill")
+    @patch("sys.argv", ["watcher_commands", "stop", "SC_CAV_QNCH_RESET"])
+    def test_stop_ignores_pid_zero_and_one(
+        self, mock_kill, mock_killpg, contents, without_tmux_launcher
+    ):
+        (without_tmux_launcher / "SC_CAV_QNCH_RESET.pid").write_text(contents)
+        watcher_commands.main()
+        mock_kill.assert_not_called()
+        mock_killpg.assert_not_called()
+
+    @patch(
+        "sc_linac_physics.cli.watcher_commands.os.kill",
+        side_effect=PermissionError,
+    )
+    @patch("sc_linac_physics.cli.watcher_commands.os.killpg")
+    @patch("sys.argv", ["watcher_commands", "stop", "SC_CAV_QNCH_RESET"])
+    def test_stop_skips_pid_we_cannot_signal(
+        self, mock_killpg, mock_kill, without_tmux_launcher
+    ):
+        (without_tmux_launcher / "SC_CAV_QNCH_RESET.pid").write_text("4321")
+        watcher_commands.main()
+        mock_killpg.assert_not_called()
+
+    @patch("sc_linac_physics.cli.watcher_commands.subprocess.run")
+    @patch("sc_linac_physics.cli.watcher_commands.os.killpg")
+    @patch("sc_linac_physics.cli.watcher_commands.os.kill")
+    @patch("sys.argv", ["watcher_commands", "stop", "SC_CAV_QNCH_RESET"])
+    def test_stop_skips_reused_pid(
+        self, mock_kill, mock_killpg, mock_run, without_tmux_launcher
+    ):
+        mock_run.return_value.stdout = "/usr/bin/some_other_process\n"
+        pid_file = without_tmux_launcher / "SC_CAV_QNCH_RESET.pid"
+        pid_file.write_text("4321")
+        watcher_commands.main()
+        mock_killpg.assert_not_called()
+        assert not pid_file.exists()
