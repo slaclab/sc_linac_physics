@@ -157,15 +157,15 @@ shrinks as detune grows.** Each move multiplies the remaining detune by
 scale-free:
 
 ```text
-travel / expectedSteps = undershoot / (1 - |1 - gain|)     <- no detune in it
-budget / expectedSteps = stepper_tol_factor(expectedSteps)  <- shrinks as detune grows
+travel / expected_steps = undershoot / (1 - |1 - gain|)     <- no detune in it
+budget / expected_steps = stepper_tol_factor(expected_steps)  <- shrinks as detune grows
 ```
 
 The travel a given miscalibration demands does not care how far out of tune you
 started. The budget does. At the page defaults in the "Drive It" simulation in section 2,
 <span data-fig="fig-example-detune-b">200</span> Hz is
 <span data-fig="fig-example-expected">36,363</span> expected steps and buys a
-budget of <span data-fig="fig-example-tol-factor">4.268</span> times the expected steps,
+budget of <span data-fig="fig-example-tol-factor">4.268</span> times the `expected_steps`,
 while the <span data-fig="fig-opened-detune">5000</span> Hz the page opens on is
 <span data-fig="fig-opened-expected">909,090</span> steps and buys only
 <span data-fig="fig-opened-tol-factor">1.376</span> times. (At the nominal 1.4/256
@@ -174,8 +174,8 @@ scale those same two figures are
 <span data-fig="fig-opened-tol-factor-nominal">1.369</span>×.) So the further
 out of tune a cavity starts, the less calibration error the loop tolerates.
 From that opening detune, undershoot 0.75 survives a true/believed scale ratio
-up to about <span data-fig="fig-window-undershoot">1.94</span>× and undershoot
-1.0 only to about <span data-fig="fig-window-unity">1.27</span>×. That is what
+up to about <span data-fig="fig-window-undershoot">1.94</span> times the believed scale and undershoot
+1.0 only to about <span data-fig="fig-window-unity">1.27</span> times the believed scale. That is what
 the 0.75 is really buying: budget headroom, not just mathematical stability.
 From the same detune, a gain of 1.8 converges in principle — `|1 - 1.8| < 1` —
 and still trips the runaway guard at every undershoot the slider offers.
