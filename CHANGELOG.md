@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.56.3 (2026-10-23)
+
+### Bug Fixes
+
+- **rf_commissioning**: Offer Re-push Slope only after a passing SSA calibration
+  ([#458](https://github.com/slaclab/sc_linac_physics/pull/458),
+  [`93a2e15`](https://github.com/slaclab/sc_linac_physics/commit/93a2e15b6f4f1016992c1e00bd197a6b3898c8e7))
+
+- **rf_commissioning**: Tie Re-push Slope to the cavity the calibration ran on
+  ([#458](https://github.com/slaclab/sc_linac_physics/pull/458),
+  [`93a2e15`](https://github.com/slaclab/sc_linac_physics/commit/93a2e15b6f4f1016992c1e00bd197a6b3898c8e7))
+
+
 ## v9.56.2 (2026-10-23)
 
 ### Bug Fixes
