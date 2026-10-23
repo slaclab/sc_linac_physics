@@ -48,18 +48,27 @@ _COMBO_STYLE = f"""
     }}
 """
 
+# The item under the mouse needs to stand out: with 60+ cryomodules in the
+# list, Haley Marts (testing on #318) almost picked the wrong one when the
+# highlight was a faint 18% tint. Items also match the 11pt of the combo.
 _POPUP_STYLE = f"""
     QAbstractItemView {{
         border: 1px solid {BORDER_EMPHASIS};
         outline: none;
         background-color: {BG_INTERACTIVE};
         color: {TEXT_SECONDARY};
-        selection-background-color: rgba(123, 140, 222, 0.18);
-        selection-color: {TEXT_PRIMARY};
+        font-size: 11pt;
+        selection-background-color: {COLOR_PRIMARY};
+        selection-color: {BG_PANEL};
     }}
     QAbstractItemView::item {{
         padding: 3px 6px;
         min-height: 22px;
+    }}
+    QAbstractItemView::item:hover,
+    QAbstractItemView::item:selected {{
+        background-color: {COLOR_PRIMARY};
+        color: {BG_PANEL};
     }}
 """
 

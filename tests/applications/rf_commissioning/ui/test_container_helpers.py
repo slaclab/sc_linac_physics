@@ -242,10 +242,10 @@ def test_tab_text_spells_out_urgent_statuses(host_stub):
     assert host_stub.tabs.tooltips[0] == "Piezo — Done"
 
     # Current phase: word inline as well, because that is the one an operator
-    # needs to spot without hovering. "In progress" rather than "Running" —
+    # needs to spot without hovering. "Up next" rather than "Running" —
     # the phase can be current while nothing is executing.
-    assert host_stub.tabs.text[1] == "▶ SSA · In progress"
-    assert host_stub.tabs.tooltips[1] == "SSA — In progress"
+    assert host_stub.tabs.text[1] == "▶ SSA · Up next"
+    assert host_stub.tabs.tooltips[1] == "SSA — Up next"
 
 
 def test_tab_text_spells_out_failure(host_stub):
@@ -324,6 +324,41 @@ def test_record_lifecycle_start_load_and_advance(host_stub):
 
     record_lifecycle.on_phase_advanced(host_stub, record)
     host_stub._update_sync_status.assert_called_with(True, "Phase completed")
+
+
+def test_phase_advance_selects_the_workflow_phase_not_the_record(host_stub):
+    """Haley's report on #318: the log said "Advanced to ssa_char" but the
+    window stayed on Piezo. record.current_phase is only set when a phase
+    starts, so it still read Piezo; the workflow projection had moved on.
+    """
+    host_stub.phase_specs = [
+        SimpleNamespace(phase=CommissioningPhase.PIEZO_PRE_RF),
+        SimpleNamespace(phase=CommissioningPhase.SSA_CHAR),
+    ]
+    host_stub.session.get_active_phase_projection.return_value = {
+        "current_phase": CommissioningPhase.SSA_CHAR,
+        "phase_status": {},
+    }
+    record = SimpleNamespace(current_phase=CommissioningPhase.PIEZO_PRE_RF)
+
+    record_lifecycle.on_phase_advanced(host_stub, record)
+
+    assert host_stub.tabs.current == 1
+
+
+def test_tab_selection_falls_back_to_the_record_without_a_projection(
+    host_stub,
+):
+    host_stub.phase_specs = [
+        SimpleNamespace(phase=CommissioningPhase.PIEZO_PRE_RF),
+        SimpleNamespace(phase=CommissioningPhase.SSA_CHAR),
+    ]
+    host_stub.session.get_active_phase_projection.return_value = None
+    record = SimpleNamespace(current_phase=CommissioningPhase.SSA_CHAR)
+
+    record_lifecycle.on_phase_advanced(host_stub, record)
+
+    assert host_stub.tabs.current == 1
 
 
 def test_sync_helpers_cover_change_and_reload_paths(host_stub, monkeypatch):
