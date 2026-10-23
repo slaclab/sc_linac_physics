@@ -26,8 +26,12 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status imp
     COLD_LANDING_TOOLTIP_SET,
     PUSH_DF_COLD_ATTENTION,
     PUSH_DF_COLD_NEUTRAL,
+    STAGE4_RERUN_LABEL,
+    STAGE4_RUN_LABEL,
     STAGE_CARD_STYLE_IDLE,
     STAGE_CARD_STYLE_RUNNING,
+    STAGE_RERUN_BTN_STYLE,
+    STAGE_RUN_BTN_STYLE,
     STAGE_STATUS_DONE,
     STAGE_STATUS_FAILED,
     STAGE_STATUS_NOT_STARTED,
@@ -569,6 +573,16 @@ class FrequencyTuningController(QObject):
         if btn is not None:
             btn.setEnabled(not success)
 
+    def _show_stage4_as_rerun(self, rerun: bool) -> None:
+        """Switch the Stage 4 button between "Run" and the muted "Re-run"."""
+        btn = getattr(self.view, "stage4_run_btn", None)
+        if btn is None:
+            return
+        btn.setText(STAGE4_RERUN_LABEL if rerun else STAGE4_RUN_LABEL)
+        btn.setStyleSheet(
+            STAGE_RERUN_BTN_STYLE if rerun else STAGE_RUN_BTN_STYLE
+        )
+
     def _enable_stage_btn(self, stage: int) -> None:
         btn = getattr(self.view, f"stage{stage}_run_btn", None)
         if btn is not None:
@@ -622,6 +636,7 @@ class FrequencyTuningController(QObject):
         self.context.parameters["status_update_callback"] = (
             lambda msg: self._log_signal.emit(msg)
         )
+        self._ensure_open_phase_instance()
         finalize = self._finalize_after_run
         steps = list(self._steps)
         current_stage = self._current_stage
@@ -823,6 +838,7 @@ class FrequencyTuningController(QObject):
         # Stage 4 (FSCAN) is repeatable — re-enable so the operator can re-scan
         # if the first result looked noisy or failed partway through.
         self._enable_stage_btn(4)
+        self._show_stage4_as_rerun(True)
 
         self._update_partial_results()
         if hasattr(self.view, "local_phase_status"):
@@ -1076,6 +1092,42 @@ class FrequencyTuningController(QObject):
                 return instance.get("id")
         return None
 
+    def _ensure_open_phase_instance(self) -> None:
+        """Make sure a frequency tuning attempt is open before a stage runs.
+
+        A failed stage marks the attempt that Stage 1 opened as failed
+        (on_phase_failed). The operator can still retry Stages 2-4 and
+        Confirm & Save after that, but with no open attempt, on_phase_completed
+        has nothing to mark complete and the tab stays "Failed" after a
+        successful Stage 4. So: reuse an attempt still in progress (one left
+        by an earlier session), else start a new one. Attempt 1 keeps its
+        failure, and the new attempt carries the result.
+
+        Looked up from the active record every time, not taken from the cached
+        _active_phase_instance_id: after switching cavities that id can belong
+        to the previous record, and completing it would leave this record's
+        attempt in progress. Stage 1's own fresh attempt is found by the same
+        lookup.
+        """
+        try:
+            if self.session.get_active_record_id() is None:
+                return
+            instance_id = self._find_open_phase_instance_id()
+            if instance_id is None:
+                phase_start = self.session.start_active_phase_instance(
+                    CommissioningPhase.FREQUENCY_TUNING,
+                    operator=self._get_operator(),
+                )
+                if phase_start is not None:
+                    instance_id = phase_start.phase_instance_id
+        except Exception as exc:
+            self.view.log_message(
+                f"Warning: could not open a frequency tuning attempt: {exc}"
+            )
+            return
+        self._active_phase_instance_id = instance_id
+        self.context.phase_instance_id = instance_id
+
     def on_phase_completed(self) -> None:
         self._paused = False
         self._clear_running_ui()
@@ -1132,12 +1184,24 @@ class FrequencyTuningController(QObject):
         if self._current_stage in (1, 2, 3):
             self._set_stage_done_ui(self._current_stage, success=False)
 
+        # A check_state step refusing to start (motor busy, DF_COLD not
+        # saved, ...) is a gate before the stage's stepper motion, not a
+        # failed measurement. It leaves the attempt in progress, so the
+        # retry continues the same attempt (_ensure_open_phase_instance finds
+        # it) and the history does not show a failure for a missed button.
+        # The reason stays in the activity log above.
+        refused = error_msg in {
+            f"Step failed: {_step_label('check_state_for_stage_2')}",
+            f"Step failed: {_step_label('check_state_for_stage_3')}",
+            f"Step failed: {_step_label('check_state_for_stage_4')}",
+        }
+
         try:
             if self.phase:
                 self.phase.finalize_phase()
             if self.session.save_active_record():
                 self.view.log_message("Partial results saved")
-            if self._active_phase_instance_id is not None:
+            if self._active_phase_instance_id is not None and not refused:
                 snapshot = None
                 if self.context and self.context.record.frequency_tuning:
                     snapshot = self.context.record.frequency_tuning.to_dict()
@@ -1157,12 +1221,7 @@ class FrequencyTuningController(QObject):
         finally:
             self._active_phase_instance_id = None
 
-        _check_state_failures = {
-            f"Step failed: {_step_label('check_state_for_stage_2')}",
-            f"Step failed: {_step_label('check_state_for_stage_3')}",
-            f"Step failed: {_step_label('check_state_for_stage_4')}",
-        }
-        if error_msg not in _check_state_failures:
+        if not refused:
             self.view.show_error(f"Frequency tuning failed: {error_msg}")
 
     # ------------------------------------------------------------------
@@ -1504,6 +1563,11 @@ class FrequencyTuningController(QObject):
             btn = getattr(self.view, f"stage{stage}_run_btn", None)
             if btn is not None:
                 btn.setEnabled(stage == 1)
+        self._show_stage4_as_rerun(False)
+
+        # The attempt belonged to the record being left; the next stage looks
+        # up this record's own (_ensure_open_phase_instance).
+        self._active_phase_instance_id = None
 
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None:
@@ -1644,6 +1708,7 @@ class FrequencyTuningController(QObject):
         }
         self._set_stage_done_ui(4, success=True)
         self._enable_stage_btn(4)
+        self._show_stage4_as_rerun(True)
 
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("PI MODES DONE")
