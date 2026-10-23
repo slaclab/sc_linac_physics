@@ -706,6 +706,9 @@ class _AttemptLedgerSession:
     def get_active_phase_instances(self):
         return list(self.instances)
 
+    def get_measurement_history(self, *_, **__):
+        return []
+
     def start_active_phase_instance(self, phase, operator):
         instance_id = len(self.instances) + 1
         self.instances.append(
@@ -757,6 +760,51 @@ def test_stage_retried_after_a_failed_check_completes_the_phase() -> None:
 
     assert [i["status"] for i in session.instances] == ["failed", "complete"]
     assert controller.context.phase_instance_id == 2
+
+
+def test_switching_records_between_stages_uses_the_new_records_attempt() -> (
+    None
+):
+    """Copilot review on #456: a cached attempt id from cavity A must not be
+    used for cavity B after the operator switches records."""
+    record_a = _record()
+    session_a = _AttemptLedgerSession(record_a)
+    session_a.start_active_phase_instance(
+        controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
+    )
+    controller = _make_controller(session=session_a)
+    controller.context = PhaseContext(record=record_a, operator="op")
+    controller._ensure_open_phase_instance()
+    assert controller._active_phase_instance_id == 1
+
+    # Cavity B: its own ledger, with its own open attempt under a new id.
+    record_b = _record()
+    session_b = _AttemptLedgerSession(record_b)
+    session_b.instances.append(
+        {"id": 7, "phase": "frequency_tuning", "status": "in_progress"}
+    )
+    controller.session = session_b
+    controller._rebuild_phase_context = Mock()
+    controller.restore_from_record(record_b)
+    controller.context = PhaseContext(record=record_b, operator="op")
+
+    controller._ensure_open_phase_instance()
+
+    assert controller._active_phase_instance_id == 7
+    assert controller.context.phase_instance_id == 7
+
+
+def test_cached_attempt_is_ignored_when_the_record_has_none_open() -> None:
+    record = _record()
+    session = _AttemptLedgerSession(record)
+    controller = _make_controller(session=session)
+    controller.context = PhaseContext(record=record, operator="op")
+    controller._active_phase_instance_id = 99
+
+    controller._ensure_open_phase_instance()
+
+    assert controller._active_phase_instance_id == 1
+    assert [i["status"] for i in session.instances] == ["in_progress"]
 
 
 def test_resumed_stage_reuses_the_open_attempt() -> None:

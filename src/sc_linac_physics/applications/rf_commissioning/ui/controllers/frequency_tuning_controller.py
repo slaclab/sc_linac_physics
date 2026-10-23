@@ -1087,9 +1087,13 @@ class FrequencyTuningController(QObject):
         successful Stage 4. So: reuse an attempt still in progress (one left
         by an earlier session), else start a new one. Attempt 1 keeps its
         failure, and the new attempt carries the result.
+
+        Looked up from the active record every time, not taken from the cached
+        _active_phase_instance_id: after switching cavities that id can belong
+        to the previous record, and completing it would leave this record's
+        attempt in progress. Stage 1's own fresh attempt is found by the same
+        lookup.
         """
-        if self._active_phase_instance_id is not None:
-            return
         try:
             if self.session.get_active_record_id() is None:
                 return
@@ -1537,6 +1541,10 @@ class FrequencyTuningController(QObject):
             btn = getattr(self.view, f"stage{stage}_run_btn", None)
             if btn is not None:
                 btn.setEnabled(stage == 1)
+
+        # The attempt belonged to the record being left; the next stage looks
+        # up this record's own (_ensure_open_phase_instance).
+        self._active_phase_instance_id = None
 
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None:
