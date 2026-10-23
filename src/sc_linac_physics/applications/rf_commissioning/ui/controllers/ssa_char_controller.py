@@ -56,6 +56,11 @@ class SSACharController(QObject):
         self._total_steps = 0
         self._steps: list[str] = []
         self._active_phase_instance_id: int | None = None
+        # The cavity whose calibration passed in this session, so Re-push
+        # Slope can be offered for it. validate_and_push has already pushed
+        # once by then; the button only repeats that push. None until a pass,
+        # and cleared when a new run starts or fails.
+        self._repushable_cavity = None
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
 
@@ -89,6 +94,7 @@ class SSACharController(QObject):
         try:
             cavity = self._get_machine_cavity(cm_int, cav_int)
             self._cavity = cavity
+            self._set_repush_enabled(cavity is self._repushable_cavity)
             ssa = cavity.ssa
             self._apply_ssa_pv_mapping(ssa, cavity)
             self.view.log_message(
@@ -256,6 +262,8 @@ class SSACharController(QObject):
         return True
 
     def _set_running_ui_state(self) -> None:
+        self._repushable_cavity = None
+        self._set_repush_enabled(False)
         self.view.run_button.setEnabled(False)
         self.view.pause_button.setEnabled(True)
         self.view.abort_button.setEnabled(True)
@@ -438,6 +446,9 @@ class SSACharController(QObject):
                     self.view.log_message("Warning: failed to save to database")
 
                 self._append_measurement_history()
+                if self.context.record.ssa_char.calibration_passed:
+                    self._repushable_cavity = self._cavity
+                    self._set_repush_enabled(True)
                 self.view._update_local_results(self.context.record.ssa_char)
                 self.view._update_stored_readout(self.context.record.ssa_char)
             else:
@@ -466,6 +477,8 @@ class SSACharController(QObject):
         self._step_mode = False
 
         self.view.log_message(f"SSA calibration failed: {error_msg}")
+        self._repushable_cavity = None
+        self._set_repush_enabled(False)
         self.view.local_phase_status.setText("FAILED")
         self._update_toolbar_state("error")
 
@@ -517,9 +530,32 @@ class SSACharController(QObject):
     # Manual Push / Save
     # ------------------------------------------------------------------
 
+    def _set_repush_enabled(self, enabled: bool) -> None:
+        push_btn = getattr(self.view, "push_btn", None)
+        if push_btn is not None:
+            push_btn.setEnabled(enabled)
+
+    def repush_slope_value(self) -> float | None:
+        """The slope this session's passing calibration measured, if any."""
+        if self._repushable_cavity is None or not self.context:
+            return None
+        ssa_char = self.context.record.ssa_char
+        return ssa_char.slope_new if ssa_char else None
+
     def on_push_slope(self) -> None:
+        """Process PUSH_SSA_SLOPE.PROC again for the calibrated cavity.
+
+        Only offered after a calibration passed, and only for that cavity:
+        validate_and_push has already pushed once, so this repeats it.
+        """
         cavity = self._resolve_cavity()
         if cavity is None:
+            return
+        if cavity is not self._repushable_cavity:
+            self.view.show_error(
+                "Run a calibration that passes on this cavity first. "
+                "A passing calibration pushes the slope itself."
+            )
             return
 
         def _push():

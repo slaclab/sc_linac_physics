@@ -517,15 +517,22 @@ class SSACharUI(PhaseUIBase):
         btn_row.setSpacing(8)
         btn_row.setContentsMargins(0, 6, 0, 0)
 
-        push_btn = self._register(
-            "push_btn", QPushButton("Push New Slope to Cavity")
-        )
+        # Optional: a passing calibration already pushes the slope in
+        # validate_and_push. This repeats that push, so it is off until a
+        # calibration passes and is styled as secondary, not as a next step.
+        push_btn = self._register("push_btn", QPushButton("Re-push Slope…"))
         push_btn.setStyleSheet(
-            "QPushButton { background-color: #1d6a3a; color: white; "
-            "font-weight: bold; padding: 6px 18px; border-radius: 4px; } "
-            "QPushButton:hover { background-color: #2d8a4a; } "
-            "QPushButton:disabled { background-color: #374151; color: #6b7280; }"
+            "QPushButton { background-color: transparent; color: #c9cdd6; "
+            "padding: 6px 18px; border-radius: 4px; "
+            "border: 1px solid #353a45; } "
+            "QPushButton:hover { background-color: #374151; } "
+            "QPushButton:disabled { color: #6b7280; }"
         )
+        push_btn.setToolTip(
+            "A passing calibration already pushes the new slope. "
+            "Use this only to push it again (PUSH_SSA_SLOPE)."
+        )
+        push_btn.setEnabled(False)
         self._connect(push_btn, "on_push_slope")
         btn_row.addWidget(push_btn)
 

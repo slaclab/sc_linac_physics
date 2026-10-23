@@ -195,7 +195,9 @@ def test_ssa_char_build_registers_result_widgets():
 def test_ssa_char_push_button_label():
     ui = SSACharUI(parent=_ParentWidget())
     group = ui._build_ssa_results()  # noqa: F841
-    assert "Push New Slope to Cavity" in ui.widgets["push_btn"].text()
+    button = ui.widgets["push_btn"]
+    assert button.text() == "Re-push Slope…"
+    assert not button.isEnabled()
 
 
 def test_ssa_char_pv_labels_default_text():
