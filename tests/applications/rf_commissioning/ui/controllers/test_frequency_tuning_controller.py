@@ -683,6 +683,100 @@ def test_completion_ignores_already_finished_instances() -> None:
     session.complete_active_phase_instance.assert_not_called()
 
 
+class _AttemptLedgerSession:
+    """Session stub that tracks phase-instance attempts like the database.
+
+    Starting adds an in_progress attempt; fail and complete set its status.
+    The tab reads the status of the latest attempt.
+    """
+
+    def __init__(self, record):
+        self.record = record
+        self.instances: list[dict] = []
+
+    def get_active_record(self):
+        return self.record
+
+    def get_active_record_id(self):
+        return 42
+
+    def save_active_record(self):
+        return True
+
+    def get_active_phase_instances(self):
+        return list(self.instances)
+
+    def start_active_phase_instance(self, phase, operator):
+        instance_id = len(self.instances) + 1
+        self.instances.append(
+            {"id": instance_id, "phase": phase.value, "status": "in_progress"}
+        )
+        return SimpleNamespace(phase_instance_id=instance_id)
+
+    def _set_status(self, phase_instance_id, status):
+        for instance in self.instances:
+            if instance["id"] == phase_instance_id:
+                instance["status"] = status
+
+    def fail_active_phase_instance(self, *, phase_instance_id, **_):
+        self._set_status(phase_instance_id, "failed")
+        return True
+
+    def complete_active_phase_instance(self, *, phase_instance_id, **_):
+        self._set_status(phase_instance_id, "complete")
+        return True
+
+
+def test_stage_retried_after_a_failed_check_completes_the_phase() -> None:
+    """Haley's report on #318: Stage 2 ran before DF_COLD was saved.
+
+    The failed check closed Stage 1's attempt as failed. After saving
+    DF_COLD and finishing Stages 2-4, the latest attempt must read complete,
+    or the tab stays "Failed" and the workflow never advances.
+    """
+    view = _ViewStub()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=-9571.0)
+    session = _AttemptLedgerSession(record)
+    controller = _make_controller(view=view, session=session)
+    controller.context = PhaseContext(record=record, operator="op")
+    controller.phase = Mock()
+    controller._phase_started = True
+    controller._df_cold_hz = -9571.0
+    controller._active_phase_instance_id = session.start_active_phase_instance(
+        controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
+    ).phase_instance_id
+    controller._current_stage = 2
+    controller.on_phase_failed("Step failed: Check State For Stage 2")
+    assert session.instances[-1]["status"] == "failed"
+
+    controller._execute_single_step = Mock(return_value=True)
+    controller._on_stage2_done = Mock()
+    controller.run_stage_2()
+    controller.confirm_and_save()
+
+    assert [i["status"] for i in session.instances] == ["failed", "complete"]
+    assert controller.context.phase_instance_id == 2
+
+
+def test_resumed_stage_reuses_the_open_attempt() -> None:
+    """An attempt left in progress by an earlier session is not duplicated."""
+    record = _record()
+    session = _AttemptLedgerSession(record)
+    session.start_active_phase_instance(
+        controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
+    )
+    controller = _make_controller(session=session)
+    controller.context = PhaseContext(record=record, operator="op")
+    controller._active_phase_instance_id = None
+
+    controller._ensure_open_phase_instance()
+
+    assert len(session.instances) == 1
+    assert controller._active_phase_instance_id == 1
+    assert controller.context.phase_instance_id == 1
+
+
 def test_stage_2_awaiting_confirm_is_not_reported_as_idle() -> None:
     """Blocked-on-operator must not read IDLE in the status bar.
 

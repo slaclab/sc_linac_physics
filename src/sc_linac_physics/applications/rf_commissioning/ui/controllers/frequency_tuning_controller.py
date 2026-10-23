@@ -622,6 +622,7 @@ class FrequencyTuningController(QObject):
         self.context.parameters["status_update_callback"] = (
             lambda msg: self._log_signal.emit(msg)
         )
+        self._ensure_open_phase_instance()
         finalize = self._finalize_after_run
         steps = list(self._steps)
         current_stage = self._current_stage
@@ -1075,6 +1076,38 @@ class FrequencyTuningController(QObject):
             ):
                 return instance.get("id")
         return None
+
+    def _ensure_open_phase_instance(self) -> None:
+        """Make sure a frequency tuning attempt is open before a stage runs.
+
+        A failed stage marks the attempt that Stage 1 opened as failed
+        (on_phase_failed). The operator can still retry Stages 2-4 and
+        Confirm & Save after that, but with no open attempt, on_phase_completed
+        has nothing to mark complete and the tab stays "Failed" after a
+        successful Stage 4. So: reuse an attempt still in progress (one left
+        by an earlier session), else start a new one. Attempt 1 keeps its
+        failure, and the new attempt carries the result.
+        """
+        if self._active_phase_instance_id is not None:
+            return
+        try:
+            if self.session.get_active_record_id() is None:
+                return
+            instance_id = self._find_open_phase_instance_id()
+            if instance_id is None:
+                phase_start = self.session.start_active_phase_instance(
+                    CommissioningPhase.FREQUENCY_TUNING,
+                    operator=self._get_operator(),
+                )
+                if phase_start is not None:
+                    instance_id = phase_start.phase_instance_id
+        except Exception as exc:
+            self.view.log_message(
+                f"Warning: could not open a frequency tuning attempt: {exc}"
+            )
+            return
+        self._active_phase_instance_id = instance_id
+        self.context.phase_instance_id = instance_id
 
     def on_phase_completed(self) -> None:
         self._paused = False
