@@ -1169,12 +1169,24 @@ class FrequencyTuningController(QObject):
         if self._current_stage in (1, 2, 3):
             self._set_stage_done_ui(self._current_stage, success=False)
 
+        # A check_state step refusing to start (motor busy, DF_COLD not
+        # saved, ...) is a gate before the stage's stepper motion, not a
+        # failed measurement. It leaves the attempt in progress, so the
+        # retry continues the same attempt (_ensure_open_phase_instance finds
+        # it) and the history does not show a failure for a missed button.
+        # The reason stays in the activity log above.
+        refused = error_msg in {
+            f"Step failed: {_step_label('check_state_for_stage_2')}",
+            f"Step failed: {_step_label('check_state_for_stage_3')}",
+            f"Step failed: {_step_label('check_state_for_stage_4')}",
+        }
+
         try:
             if self.phase:
                 self.phase.finalize_phase()
             if self.session.save_active_record():
                 self.view.log_message("Partial results saved")
-            if self._active_phase_instance_id is not None:
+            if self._active_phase_instance_id is not None and not refused:
                 snapshot = None
                 if self.context and self.context.record.frequency_tuning:
                     snapshot = self.context.record.frequency_tuning.to_dict()
@@ -1194,12 +1206,7 @@ class FrequencyTuningController(QObject):
         finally:
             self._active_phase_instance_id = None
 
-        _check_state_failures = {
-            f"Step failed: {_step_label('check_state_for_stage_2')}",
-            f"Step failed: {_step_label('check_state_for_stage_3')}",
-            f"Step failed: {_step_label('check_state_for_stage_4')}",
-        }
-        if error_msg not in _check_state_failures:
+        if not refused:
             self.view.show_error(f"Frequency tuning failed: {error_msg}")
 
     # ------------------------------------------------------------------

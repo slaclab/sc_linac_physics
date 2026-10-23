@@ -730,12 +730,12 @@ class _AttemptLedgerSession:
         return True
 
 
-def test_stage_retried_after_a_failed_check_completes_the_phase() -> None:
+def test_stage_retried_after_a_refused_check_completes_the_phase() -> None:
     """Haley's report on #318: Stage 2 ran before DF_COLD was saved.
 
-    The failed check closed Stage 1's attempt as failed. After saving
-    DF_COLD and finishing Stages 2-4, the latest attempt must read complete,
-    or the tab stays "Failed" and the workflow never advances.
+    The refused check leaves Stage 1's attempt open (Haley's review on #456).
+    After saving DF_COLD and finishing Stages 2-4, that same attempt must
+    read complete, or the tab stays "Failed" and the workflow never advances.
     """
     view = _ViewStub()
     record = _record()
@@ -750,8 +750,41 @@ def test_stage_retried_after_a_failed_check_completes_the_phase() -> None:
         controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
     ).phase_instance_id
     controller._current_stage = 2
-    controller.on_phase_failed("Step failed: Check State For Stage 2")
+    controller.on_phase_failed(
+        f"Step failed: {controller_module._step_label('check_state_for_stage_2')}"
+    )
+    assert session.instances[-1]["status"] == "in_progress"
+
+    controller._execute_single_step = Mock(return_value=True)
+    controller._on_stage2_done = Mock()
+    controller.run_stage_2()
+    controller.confirm_and_save()
+
+    assert [i["status"] for i in session.instances] == ["complete"]
+    assert controller.context.phase_instance_id == 1
+
+
+def test_stage_retried_after_a_real_failure_opens_a_new_attempt() -> None:
+    """A step that fails after the check (here, the probe) still fails the
+    attempt; the retry starts attempt 2 and that one completes."""
+    view = _ViewStub()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=-9571.0)
+    session = _AttemptLedgerSession(record)
+    controller = _make_controller(view=view, session=session)
+    controller.context = PhaseContext(record=record, operator="op")
+    controller.phase = Mock()
+    controller._phase_started = True
+    controller._df_cold_hz = -9571.0
+    controller._active_phase_instance_id = session.start_active_phase_instance(
+        controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
+    ).phase_instance_id
+    controller._current_stage = 2
+    controller.on_phase_failed(
+        f"Step failed: {controller_module._step_label('probe_stepper_direction')}"
+    )
     assert session.instances[-1]["status"] == "failed"
+    assert view.errors
 
     controller._execute_single_step = Mock(return_value=True)
     controller._on_stage2_done = Mock()
