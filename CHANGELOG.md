@@ -2,6 +2,85 @@
 
 <!-- version list -->
 
+## v9.56.1 (2026-10-23)
+
+### Bug Fixes
+
+- **rf_commissioning**: A refused stage check leaves the tuning attempt open
+  ([#456](https://github.com/slaclab/sc_linac_physics/pull/456),
+  [`148f283`](https://github.com/slaclab/sc_linac_physics/commit/148f2835fa911551ccf30db86bc3adca91331036))
+
+- **rf_commissioning**: Look up the frequency tuning attempt for the active record each stage
+  ([#456](https://github.com/slaclab/sc_linac_physics/pull/456),
+  [`148f283`](https://github.com/slaclab/sc_linac_physics/commit/148f2835fa911551ccf30db86bc3adca91331036))
+
+- **rf_commissioning**: Mark Push to Cavity as required and a finished Stage 4 as re-run
+  ([#457](https://github.com/slaclab/sc_linac_physics/pull/457),
+  [`a469411`](https://github.com/slaclab/sc_linac_physics/commit/a469411d951731586a08574c6281e42dce9aad44))
+
+- **rf_commissioning**: Retrying a failed frequency tuning stage can complete the phase
+  ([#456](https://github.com/slaclab/sc_linac_physics/pull/456),
+  [`148f283`](https://github.com/slaclab/sc_linac_physics/commit/148f2835fa911551ccf30db86bc3adca91331036))
+
+### Documentation
+
+- **tuning**: Added inline pointer to reference usage of 0.75
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Added steps_moved line to auto_tune block of code
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Added verb so that the sentence in Tolerances section can be read as a standalone
+  sentence
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Addressing a few PR comments at a time and implementing suggestions
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Addressing comments from Lisa and implementing suggested fixes
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Addressing CoPilot comment to clarify detune units versus calculated microstep count
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Addressing CoPilot comment to clarify SELA tuning applies beyond the GUI
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Addressing CoPilot comment to distinguish runaway step-budget guard from DetuneError
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Adjusted Piezo tuner role description as a result of integrator question
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Capitalized Drive It header and clarified reference to fault column in section 6
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Changed variable to expeted_steps and spelled out 1.94 and 1.27 times reference to
+  believed scale
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Changed wording regarding actuators splitting the work
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Claried language around commissioning stage refuses to tune until DF_COLD is pushed
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Fixed typo in Section 5
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Oops, noticed a typo
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Put parastic modes back in and flag CHECK for integral controller
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Specified name of table column reference in section 6
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+- **tuning**: Updated tuner table with SELA settling to reflect no wait after RF on
+  ([`e9726fd`](https://github.com/slaclab/sc_linac_physics/commit/e9726fd477c68224e25b9292c2837c519ba0c102))
+
+
 ## v9.56.0 (2026-10-22)
 
 ### Bug Fixes
