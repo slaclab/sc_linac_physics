@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.56.2 (2026-10-23)
+
+### Bug Fixes
+
+- **rf_commissioning**: Open the next phase's tab, label it "Up next", and highlight dropdown items
+  ([#459](https://github.com/slaclab/sc_linac_physics/pull/459),
+  [`c5f6382`](https://github.com/slaclab/sc_linac_physics/commit/c5f6382eac1eb139c1988c9cb27038a334b528df))
+
+- **rf_commissioning**: Paint the header dropdown hover highlight
+  ([#459](https://github.com/slaclab/sc_linac_physics/pull/459),
+  [`c5f6382`](https://github.com/slaclab/sc_linac_physics/commit/c5f6382eac1eb139c1988c9cb27038a334b528df))
+
+
 ## v9.56.1 (2026-10-23)
 
 ### Bug Fixes
