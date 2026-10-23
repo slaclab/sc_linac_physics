@@ -120,6 +120,48 @@ def last_characterization(cavity) -> LastSetupResult:
     )
 
 
+def decide_ssa_calibration(last: LastSetupResult | None, operator: str, ask):
+    """Keep or rerun the last SSA calibration. Reads and writes no PVs.
+
+    Returns (kept, skipped_by), or None if the operator cancelled. kept is
+    the LastSetupResult to keep, or None to calibrate; skipped_by is the
+    operator's name when they chose Skip.
+
+    - last is None (CALTS or CALSTAT could not be read): calibrate, since
+      nothing says the last one is usable.
+    - Good and under RECENT_RESULT_SECONDS (1 h): keep, without asking.
+    - Older or not Good: ask(last.describe()), which returns "rerun", "skip"
+      or "cancel".
+
+    Used by the cavity char and frequency tuning controllers, which pass the
+    result to their phase as parameters["kept_ssa_calibration"] and
+    parameters["ssa_calibration_skipped_by"].
+    """
+    if last is None:
+        return (None, None)
+    if last.is_recent():
+        return (last, None)
+    choice = ask(last.describe())
+    if choice == "skip":
+        return (last, operator)
+    if choice == "rerun":
+        return (None, None)
+    return None
+
+
+def kept_ssa_calibration_note(
+    kept: LastSetupResult, skipped_by: str | None
+) -> str:
+    """The line a phase adds to its record notes when it keeps a calibration.
+
+    E.g. "Kept the SSA calibration from 2026-10-19 08:17, 0.3 h old", or
+    "SSA calibration skipped by <name>: ..." when the operator chose Skip.
+    """
+    if skipped_by:
+        return f"SSA calibration skipped by {skipped_by}: {kept.describe()}"
+    return f"Kept the {kept.describe()}"
+
+
 def _aborted(context: PhaseContext, what: str) -> PhaseStepResult | None:
     if context.is_abort_requested():
         return PhaseStepResult(
