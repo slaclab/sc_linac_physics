@@ -820,10 +820,13 @@ def test_repush_turns_on_after_a_pass_and_off_when_a_run_starts() -> None:
     session = Mock()
     session.save_active_record.return_value = True
     controller = _make_controller(view=view, session=session)
+    cavity = Mock()
     controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
+        record=_record_with_result(),
+        operator="op",
+        parameters={"cavity": cavity},
     )
-    controller._cavity = Mock()
+    controller._cavity = cavity
     controller._append_measurement_history = Mock()
     view.push_btn.setEnabled(False)
 
@@ -836,6 +839,45 @@ def test_repush_turns_on_after_a_pass_and_off_when_a_run_starts() -> None:
 
     assert view.push_btn.enabled is False
     assert controller.repush_slope_value() is None
+
+
+def test_pass_on_one_cavity_does_not_enable_repush_for_another() -> None:
+    """Copilot review on #458: the operator switched to cavity B while A was
+    calibrating. A's pass must not make B re-pushable."""
+    view = _ViewStub()
+    session = Mock()
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    cavity_a, cavity_b = Mock(), Mock()
+    controller.context = PhaseContext(
+        record=_record_with_result(),
+        operator="op",
+        parameters={"cavity": cavity_a},
+    )
+    controller._cavity = cavity_b
+    controller._append_measurement_history = Mock()
+    view.push_btn.setEnabled(False)
+
+    controller.on_phase_completed()
+
+    assert view.push_btn.enabled is False
+    assert controller._repushable_cavity is cavity_a
+
+
+def test_unparseable_selection_clears_the_repush_target() -> None:
+    """Copilot review on #458: an early return in update_pv_addresses left
+    Re-push enabled and pointed at the previous cavity."""
+    view = _ViewStub(cavity=None)
+    controller = _make_controller(view=view)
+    cavity = Mock()
+    controller._cavity = cavity
+    controller._repushable_cavity = cavity
+    view.push_btn.setEnabled(True)
+
+    controller.update_pv_addresses()
+
+    assert view.push_btn.enabled is False
+    assert controller._cavity is None
 
 
 def test_repush_stays_off_when_the_calibration_did_not_pass() -> None:

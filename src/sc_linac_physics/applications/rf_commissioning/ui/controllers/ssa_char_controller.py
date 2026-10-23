@@ -77,6 +77,10 @@ class SSACharController(QObject):
         cryomodule: str | None = None,
         cavity_number: str | None = None,
     ) -> None:
+        # Drop the previous target first, so an early return below cannot
+        # leave Re-push enabled for a cavity that is no longer selected.
+        self._cavity = None
+        self._set_repush_enabled(False)
         cryomodule, cavity_number = resolve_cavity_selection(
             self.view, cryomodule, cavity_number
         )
@@ -447,8 +451,13 @@ class SSACharController(QObject):
 
                 self._append_measurement_history()
                 if self.context.record.ssa_char.calibration_passed:
-                    self._repushable_cavity = self._cavity
-                    self._set_repush_enabled(True)
+                    # The cavity the run calibrated, not the current selection:
+                    # the operator may have switched cavities mid-run.
+                    calibrated = self.context.parameters.get("cavity")
+                    self._repushable_cavity = calibrated
+                    self._set_repush_enabled(
+                        calibrated is not None and calibrated is self._cavity
+                    )
                 self.view._update_local_results(self.context.record.ssa_char)
                 self.view._update_stored_readout(self.context.record.ssa_char)
             else:
