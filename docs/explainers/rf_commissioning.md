@@ -52,7 +52,7 @@ Five layers, top to bottom:
 
 ## 2. Follow one click
 
-An operator presses *Run automated test* on the Piezo Pre-RF tab. Step through
+An operator presses *Start Test* on the Piezo Pre-RF tab. Step through
 what happens. The other two implemented phases follow the same path with their
 own controller.
 
