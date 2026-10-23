@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 import sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller as controller_module
 from pydm.widgets import PyDMSpinbox
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -119,12 +121,35 @@ def test_get_operator_empty_when_no_method() -> None:
 
 def test_parse_cavity_from_record_full_name() -> None:
     controller = _make_controller()
-    assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (2, 8)
+    assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (
+        "02",
+        8,
+    )
+
+
+def test_parse_cavity_from_record_keeps_harmonic_linearizer_names() -> None:
+    controller = _make_controller()
+    assert controller._parse_cavity_from_record("L1B_CMH1_CAV3", "H1") == (
+        "H1",
+        3,
+    )
 
 
 def test_parse_cavity_from_record_short_name_defaults_to_cav1() -> None:
     controller = _make_controller()
-    assert controller._parse_cavity_from_record("SHORT", "02") == (2, 1)
+    assert controller._parse_cavity_from_record("SHORT", "02") == ("02", 1)
+
+
+@pytest.mark.parametrize(
+    "selection, key", [("2", "02"), ("02", "02"), ("H1", "H1"), ("H2", "H2")]
+)
+def test_cryomodule_key(selection, key) -> None:
+    assert controller_module._cryomodule_key(selection) == key
+
+
+def test_cryomodule_key_rejects_unknown_names() -> None:
+    with pytest.raises(ValueError):
+        controller_module._cryomodule_key("...")
 
 
 def test_update_toolbar_state_delegates_to_ui() -> None:
@@ -215,6 +240,20 @@ def test_update_pv_addresses_binds_drive_max_spinbox_to_request_pv() -> None:
     controller.update_pv_addresses("02", "1")
 
     assert view.drive_max_spinbox.channel == "ca://PV:DRV_MAX_REQ"
+
+
+def test_update_pv_addresses_resolves_harmonic_linearizers() -> None:
+    """H1/H2 failed int() and the SSA tab logged "Invalid cavity/CM value"."""
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._apply_ssa_pv_mapping = Mock()
+    controller._get_machine_cavity = Mock(return_value=Mock())
+
+    controller.update_pv_addresses("H1", "3")
+
+    controller._get_machine_cavity.assert_called_once_with("H1", 3)
+    assert controller._cavity is controller._get_machine_cavity.return_value
+    assert not any("Invalid" in m for m in view.logs)
 
 
 def test_get_drive_max_reads_pydm_spinbox_value() -> None:
