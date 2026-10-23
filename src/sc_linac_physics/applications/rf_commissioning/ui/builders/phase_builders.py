@@ -22,10 +22,13 @@ from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
 from .stage_status import (
+    ACTION_NEEDED_BUTTON_STYLE,
     COLD_LANDING_TOOLTIP_NEEDED,
     PUSH_DF_COLD_NEUTRAL,
+    STAGE4_RUN_LABEL,
     STAGE_CARD_STYLE_IDLE,
     STAGE_STATUS_NOT_STARTED,
+    STAGE_RUN_BTN_STYLE,
     STAGE_STATUS_STYLE_NOT_STARTED,
 )
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
@@ -660,6 +663,7 @@ class CavityCharUI(PhaseUIBase):
             "push_results_button",
             QPushButton("Push to Cavity…", parent=self.parent),
         )
+        button.setStyleSheet(ACTION_NEEDED_BUTTON_STYLE)
         button.setEnabled(False)
         self._connect(button, "on_push_results")
         layout.addWidget(button, 5, 0, 1, 2)
@@ -715,18 +719,6 @@ class CavityCharUI(PhaseUIBase):
 class FrequencyTuningUI(PhaseUIBase):
     """Builds the Frequency Tuning display UI with 3-stage checklist layout."""
 
-    _STAGE_BTN_STYLE = """
-        QPushButton {
-            background-color: #2563eb;
-            color: white;
-            font-weight: bold;
-            padding: 5px 14px;
-            border-radius: 4px;
-            border: none;
-        }
-        QPushButton:hover { background-color: #1d4ed8; }
-        QPushButton:disabled { background-color: #374151; color: #6b7280; }
-    """
     _CONFIRM_BTN_STYLE = """
         QPushButton {
             background-color: #059669;
@@ -982,7 +974,7 @@ class FrequencyTuningUI(PhaseUIBase):
             title="④ Measure Pi Modes",
             description="Scan the cavity to find the 8π/9 and 7π/9 parasitic mode frequencies.",
             run_callback="on_run_stage_4",
-            run_label="▶ Run Stage 4",
+            run_label=STAGE4_RUN_LABEL,
             initially_enabled=False,
             extra_widgets=self._build_stage4_extra,
         )
@@ -1032,7 +1024,7 @@ class FrequencyTuningUI(PhaseUIBase):
         run_btn = self._register(
             f"stage{stage}_run_btn", QPushButton(run_label)
         )
-        run_btn.setStyleSheet(self._STAGE_BTN_STYLE)
+        run_btn.setStyleSheet(STAGE_RUN_BTN_STYLE)
         run_btn.setFixedHeight(28)
         run_btn.setEnabled(initially_enabled)
         self._connect(run_btn, run_callback)

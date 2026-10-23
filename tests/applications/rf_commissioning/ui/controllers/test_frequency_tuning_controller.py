@@ -1244,6 +1244,38 @@ def test_on_stage4_done() -> None:
     assert view.stage4_run_btn.enabled is True
 
 
+def test_finished_stage_4_reads_as_rerun_until_reset() -> None:
+    """Haley's report on #318: a finished Stage 4 still looked like it had to run.
+
+    It stays enabled so the operator can scan again, but switches to the
+    muted re-run label and style. Starting over puts the run look back.
+    """
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._save_stage_to_history = Mock(return_value=True)
+    controller._update_partial_results = Mock()
+    controller._pi_mode_data = {"mode_8pi_9_hz": 100.0, "mode_7pi_9_hz": None}
+
+    controller._on_stage4_done()
+
+    assert view.stage4_run_btn.text == controller_module.STAGE4_RERUN_LABEL
+    assert view.stage4_run_btn.style == controller_module.STAGE_RERUN_BTN_STYLE
+
+    controller._reset_all_stages()
+
+    assert view.stage4_run_btn.text == controller_module.STAGE4_RUN_LABEL
+    assert view.stage4_run_btn.style == controller_module.STAGE_RUN_BTN_STYLE
+
+
+def test_restored_stage_4_reads_as_rerun() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+
+    controller._restore_stage4({"mode_8pi_9_hz": 1.0, "mode_7pi_9_hz": 2.0})
+
+    assert view.stage4_run_btn.text == controller_module.STAGE4_RERUN_LABEL
+
+
 def test_on_stage4_done_save_fails() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)

@@ -26,8 +26,12 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status imp
     COLD_LANDING_TOOLTIP_SET,
     PUSH_DF_COLD_ATTENTION,
     PUSH_DF_COLD_NEUTRAL,
+    STAGE4_RERUN_LABEL,
+    STAGE4_RUN_LABEL,
     STAGE_CARD_STYLE_IDLE,
     STAGE_CARD_STYLE_RUNNING,
+    STAGE_RERUN_BTN_STYLE,
+    STAGE_RUN_BTN_STYLE,
     STAGE_STATUS_DONE,
     STAGE_STATUS_FAILED,
     STAGE_STATUS_NOT_STARTED,
@@ -569,6 +573,16 @@ class FrequencyTuningController(QObject):
         if btn is not None:
             btn.setEnabled(not success)
 
+    def _show_stage4_as_rerun(self, rerun: bool) -> None:
+        """Switch the Stage 4 button between "Run" and the muted "Re-run"."""
+        btn = getattr(self.view, "stage4_run_btn", None)
+        if btn is None:
+            return
+        btn.setText(STAGE4_RERUN_LABEL if rerun else STAGE4_RUN_LABEL)
+        btn.setStyleSheet(
+            STAGE_RERUN_BTN_STYLE if rerun else STAGE_RUN_BTN_STYLE
+        )
+
     def _enable_stage_btn(self, stage: int) -> None:
         btn = getattr(self.view, f"stage{stage}_run_btn", None)
         if btn is not None:
@@ -823,6 +837,7 @@ class FrequencyTuningController(QObject):
         # Stage 4 (FSCAN) is repeatable — re-enable so the operator can re-scan
         # if the first result looked noisy or failed partway through.
         self._enable_stage_btn(4)
+        self._show_stage4_as_rerun(True)
 
         self._update_partial_results()
         if hasattr(self.view, "local_phase_status"):
@@ -1504,6 +1519,7 @@ class FrequencyTuningController(QObject):
             btn = getattr(self.view, f"stage{stage}_run_btn", None)
             if btn is not None:
                 btn.setEnabled(stage == 1)
+        self._show_stage4_as_rerun(False)
 
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None:
@@ -1644,6 +1660,7 @@ class FrequencyTuningController(QObject):
         }
         self._set_stage_done_ui(4, success=True)
         self._enable_stage_btn(4)
+        self._show_stage4_as_rerun(True)
 
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("PI MODES DONE")
