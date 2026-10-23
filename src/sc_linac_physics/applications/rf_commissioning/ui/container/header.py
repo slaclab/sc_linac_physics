@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -131,6 +132,9 @@ def _make_combo(
     combo.setStyleSheet(_SELECTION_COMBO_STYLE if emphasized else _COMBO_STYLE)
     if fixed_width is not None:
         combo.setFixedWidth(fixed_width)
+    # QComboBox's default item delegate ignores the ::item rules in
+    # _POPUP_STYLE, so without this the hover highlight never paints.
+    combo.setItemDelegate(QStyledItemDelegate(combo))
     combo.view().setStyleSheet(_POPUP_STYLE)
     combo.view().setMinimumWidth(popup_min_width)
     return combo

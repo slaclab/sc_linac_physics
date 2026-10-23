@@ -995,3 +995,18 @@ def test_on_edit_note_measurement_type_calls_update(host_stub, monkeypatch):
         42, 0, "Alice", "new note"
     )
     host_stub._load_notes.assert_called()
+
+
+def test_header_combos_paint_the_popup_item_styles(qtbot):
+    """The default QComboBox delegate ignores ::item rules, so the hover
+    highlight Haley asked for on #318 needs a QStyledItemDelegate."""
+    from PyQt5.QtWidgets import QStyledItemDelegate
+
+    from sc_linac_physics.applications.rf_commissioning.ui.container import (
+        header,
+    )
+
+    combo = header._make_combo(emphasized=True)
+    qtbot.addWidget(combo)
+
+    assert isinstance(combo.itemDelegate(), QStyledItemDelegate)
