@@ -82,14 +82,18 @@ def apply_pv_mapping(pv_mapping: dict) -> None:
 def format_pv_update_message(
     cryomodule: str,
     cavity_number: str,
-    cm: int,
+    cm: int | str,
     cav: int,
 ) -> str:
-    """Format user-facing message describing active PV source."""
+    """Format user-facing message describing active PV source.
+
+    cm is a number (zero-padded here) or a cryomodule name such as "H1".
+    """
     linac = get_linac_for_cryomodule(cryomodule)
     cavity_display_name = (
         f"{linac}_CM{cryomodule}_CAV{cavity_number}"
         if linac
         else f"CM{cryomodule}_CAV{cavity_number}"
     )
-    return f"PVs updated for {cavity_display_name} (CM{cm:02d} Cav{cav})"
+    cm_label = f"{cm:02d}" if isinstance(cm, int) else cm
+    return f"PVs updated for {cavity_display_name} (CM{cm_label} Cav{cav})"

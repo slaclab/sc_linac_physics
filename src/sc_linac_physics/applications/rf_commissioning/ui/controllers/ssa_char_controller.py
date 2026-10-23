@@ -27,6 +27,21 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
 )
 from sc_linac_physics.utils.platform_paths import get_ssa_cal_base_dir
 from sc_linac_physics.utils.sc_linac.linac import Machine
+from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
+
+
+def _cryomodule_key(cryomodule: str) -> str:
+    """Return the Machine.cryomodules key for a header selection.
+
+    Numbered cryomodules are zero-padded ("2" -> "02"); the harmonic
+    linearizers keep their names ("H1", "H2"). Raises ValueError for
+    anything else.
+    """
+    name = str(cryomodule).strip()
+    key = f"{int(name):02d}" if name.isdigit() else name
+    if key not in ALL_CRYOMODULES:
+        raise ValueError(f"unknown cryomodule {cryomodule!r}")
+    return key
 
 
 class SSACharController(QObject):
@@ -90,20 +105,20 @@ class SSACharController(QObject):
 
         try:
             cav_int = int(cavity_number)
-            cm_int = int(cryomodule)
+            cm_key = _cryomodule_key(cryomodule)
         except ValueError as exc:
             self.view.log_message(f"Invalid cavity/CM value: {exc}")
             return
 
         try:
-            cavity = self._get_machine_cavity(cm_int, cav_int)
+            cavity = self._get_machine_cavity(cm_key, cav_int)
             self._cavity = cavity
             self._set_repush_enabled(cavity is self._repushable_cavity)
             ssa = cavity.ssa
             self._apply_ssa_pv_mapping(ssa, cavity)
             self.view.log_message(
                 format_pv_update_message(
-                    cryomodule, cavity_number, cm_int, cav_int
+                    cryomodule, cavity_number, cm_key, cav_int
                 )
             )
         except Exception as exc:
@@ -127,10 +142,11 @@ class SSACharController(QObject):
 
         apply_pv_mapping(pv_map)
 
-    def _get_machine_cavity(self, cm: int, cav: int):
+    def _get_machine_cavity(self, cm: str, cav: int):
+        """cm is a Machine.cryomodules key: "01".."35", "H1" or "H2"."""
         if not self.machine:
             self.machine = Machine()
-        return self.machine.cryomodules[f"{cm:02d}"].cavities[cav]
+        return self.machine.cryomodules[cm].cavities[cav]
 
     # ------------------------------------------------------------------
     # Phase execution
@@ -174,7 +190,7 @@ class SSACharController(QObject):
             return True
         return self._auto_create_record()
 
-    def _resolve_run_target(self) -> tuple[str, int, int] | None:
+    def _resolve_run_target(self) -> tuple[str, str, int] | None:
         cavity_info = self.view.get_current_cavity()
         if not cavity_info:
             self.view.show_error(
@@ -191,8 +207,8 @@ class SSACharController(QObject):
 
         return cavity_name, cm, cav
 
-    def _start_run_for_target(self, cm: int, cav: int, operator: str) -> None:
-        self.update_pv_addresses(f"{cm:02d}", str(cav))
+    def _start_run_for_target(self, cm: str, cav: int, operator: str) -> None:
+        self.update_pv_addresses(cm, str(cav))
         cavity = self._get_machine_cavity(cm, cav)
         self._cavity = cavity
 
@@ -671,12 +687,11 @@ class SSACharController(QObject):
 
     def _parse_cavity_from_record(
         self, cavity_name: str, cryomodule: str
-    ) -> tuple[int, int]:
+    ) -> tuple[str, int]:
         parts = cavity_name.split("_")
         cav_part = parts[2] if len(parts) >= 3 else "CAV1"
         cav = int(cav_part.replace("CAV", ""))
-        cm = int(cryomodule)
-        return cm, cav
+        return _cryomodule_key(cryomodule), cav
 
     def _update_toolbar_state(self, state: str) -> None:
         if hasattr(self.view, "ui") and hasattr(
