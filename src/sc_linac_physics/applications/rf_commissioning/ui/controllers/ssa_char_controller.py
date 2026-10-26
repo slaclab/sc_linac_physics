@@ -551,6 +551,12 @@ class SSACharController(QObject):
         ssa_char = self.context.record.ssa_char
         return ssa_char.slope_new if ssa_char else None
 
+    def repush_cavity_name(self) -> str | None:
+        """The cavity Re-push Slope writes to, e.g. "L2B CM10 Cavity 4"."""
+        if self._repushable_cavity is None:
+            return None
+        return str(self._repushable_cavity)
+
     def on_push_slope(self) -> None:
         """Process PUSH_SSA_SLOPE.PROC again for the calibrated cavity.
 
