@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 import sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller as controller_module
 from pydm.widgets import PyDMSpinbox
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -122,9 +124,24 @@ def test_parse_cavity_from_record_full_name() -> None:
     assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (2, 8)
 
 
-def test_parse_cavity_from_record_short_name_defaults_to_cav1() -> None:
+def test_parse_cavity_from_record_short_name() -> None:
     controller = _make_controller()
-    assert controller._parse_cavity_from_record("SHORT", "02") == (2, 1)
+    assert controller._parse_cavity_from_record("10-4", "10") == (10, 4)
+
+
+def test_parse_cavity_from_record_rejects_unreadable_names() -> None:
+    controller = _make_controller()
+    with pytest.raises(ValueError):
+        controller._parse_cavity_from_record("SHORT", "02")
+
+
+def test_run_target_uses_the_selected_cavity_number() -> None:
+    """The display hands over "10-4", which used to be read as cavity 1."""
+    record = CommissioningRecord(linac=2, cryomodule="10", cavity_number=4)
+    view = _ViewStub(cavity=(record.short_cavity_name, record.cryomodule))
+    controller = _make_controller(view=view)
+
+    assert controller._resolve_run_target()[1:] == (10, 4)
 
 
 def test_update_toolbar_state_delegates_to_ui() -> None:
