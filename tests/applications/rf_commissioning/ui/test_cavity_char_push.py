@@ -194,6 +194,24 @@ def test_a_successful_push_completes_and_advances(view, monkeypatch):
     assert c._active_phase_instance_id is None
 
 
+def test_a_successful_push_ends_at_100_percent(view, monkeypatch):
+    """Without the final update the bar stopped at 88%."""
+    c = _measured_controller(view, monkeypatch)
+    statuses = []
+    c._status_signal.connect(statuses.append)
+
+    c._on_push_finished(True, "")
+
+    view.local_progress_bar.setValue.assert_called_with(100)
+    assert statuses[-1] == "Pushed to the cavity; phase complete"
+
+
+def test_a_refused_push_leaves_the_progress_alone(view, monkeypatch):
+    c = _measured_controller(view, monkeypatch)
+    c._on_push_finished(False, "nothing pushed")
+    view.local_progress_bar.setValue.assert_not_called()
+
+
 def test_a_refused_push_keeps_the_phase_open(view, monkeypatch):
     c = _measured_controller(view, monkeypatch)
     c._on_push_finished(False, "nothing pushed")

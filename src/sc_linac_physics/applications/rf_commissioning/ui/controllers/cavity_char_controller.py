@@ -784,7 +784,14 @@ class CavityCharController(QObject):
             self.view.offer_save_retry()
             return
         self._active_phase_instance_id = None
-        self._log_signal.emit("Pushed to the cavity; phase complete")
+        # Progress only updates when a step starts, so without this the bar
+        # stops at 88% and the status still says "ready to finalize".
+        if hasattr(self.view, "local_progress_bar"):
+            self.view.local_progress_bar.setValue(100)
+        self._report(
+            "Pushed to the cavity; phase complete",
+            "Pushed to the cavity; phase complete",
+        )
         self.phase_completed.emit(self.session.get_active_record())
 
     # ------------------------------------------------------------------
