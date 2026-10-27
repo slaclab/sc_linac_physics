@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -48,18 +49,27 @@ _COMBO_STYLE = f"""
     }}
 """
 
+# The item under the mouse needs to stand out: with 60+ cryomodules in the
+# list, Haley Marts (testing on #318) almost picked the wrong one when the
+# highlight was a faint 18% tint. Items also match the 11pt of the combo.
 _POPUP_STYLE = f"""
     QAbstractItemView {{
         border: 1px solid {BORDER_EMPHASIS};
         outline: none;
         background-color: {BG_INTERACTIVE};
         color: {TEXT_SECONDARY};
-        selection-background-color: rgba(123, 140, 222, 0.18);
-        selection-color: {TEXT_PRIMARY};
+        font-size: 11pt;
+        selection-background-color: {COLOR_PRIMARY};
+        selection-color: {BG_PANEL};
     }}
     QAbstractItemView::item {{
         padding: 3px 6px;
         min-height: 22px;
+    }}
+    QAbstractItemView::item:hover,
+    QAbstractItemView::item:selected {{
+        background-color: {COLOR_PRIMARY};
+        color: {BG_PANEL};
     }}
 """
 
@@ -122,6 +132,9 @@ def _make_combo(
     combo.setStyleSheet(_SELECTION_COMBO_STYLE if emphasized else _COMBO_STYLE)
     if fixed_width is not None:
         combo.setFixedWidth(fixed_width)
+    # QComboBox's default item delegate ignores the ::item rules in
+    # _POPUP_STYLE, so without this the hover highlight never paints.
+    combo.setItemDelegate(QStyledItemDelegate(combo))
     combo.view().setStyleSheet(_POPUP_STYLE)
     combo.view().setMinimumWidth(popup_min_width)
     return combo

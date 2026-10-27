@@ -74,3 +74,4 @@ nav:
   - Explainers:
       - How auto-tune works: explainers/auto_tune.md
       - How RF commissioning is built: explainers/rf_commissioning.md
+      - How the Q0 app works: explainers/q0.md

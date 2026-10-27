@@ -1,5 +1,6 @@
 """Targeted tests for the Frequency Tuning controller."""
 
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -18,6 +19,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.cold_landing_dialog impor
     ColdLandingChoice,
     SOURCE_ENTERED,
     SOURCE_MEASURED,
+)
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
@@ -683,6 +687,181 @@ def test_completion_ignores_already_finished_instances() -> None:
     session.complete_active_phase_instance.assert_not_called()
 
 
+class _AttemptLedgerSession:
+    """Session stub that tracks phase-instance attempts like the database.
+
+    Starting adds an in_progress attempt; fail and complete set its status.
+    The tab reads the status of the latest attempt.
+    """
+
+    def __init__(self, record):
+        self.record = record
+        self.instances: list[dict] = []
+
+    def get_active_record(self):
+        return self.record
+
+    def get_active_record_id(self):
+        return 42
+
+    def save_active_record(self):
+        return True
+
+    def get_active_phase_instances(self):
+        return list(self.instances)
+
+    def get_measurement_history(self, *_, **__):
+        return []
+
+    def start_active_phase_instance(self, phase, operator):
+        instance_id = len(self.instances) + 1
+        self.instances.append(
+            {"id": instance_id, "phase": phase.value, "status": "in_progress"}
+        )
+        return SimpleNamespace(phase_instance_id=instance_id)
+
+    def _set_status(self, phase_instance_id, status):
+        for instance in self.instances:
+            if instance["id"] == phase_instance_id:
+                instance["status"] = status
+
+    def fail_active_phase_instance(self, *, phase_instance_id, **_):
+        self._set_status(phase_instance_id, "failed")
+        return True
+
+    def complete_active_phase_instance(self, *, phase_instance_id, **_):
+        self._set_status(phase_instance_id, "complete")
+        return True
+
+
+def test_stage_retried_after_a_refused_check_completes_the_phase() -> None:
+    """Haley's report on #318: Stage 2 ran before DF_COLD was saved.
+
+    The refused check leaves Stage 1's attempt open (Haley's review on #456).
+    After saving DF_COLD and finishing Stages 2-4, that same attempt must
+    read complete, or the tab stays "Failed" and the workflow never advances.
+    """
+    view = _ViewStub()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=-9571.0)
+    session = _AttemptLedgerSession(record)
+    controller = _make_controller(view=view, session=session)
+    controller.context = PhaseContext(record=record, operator="op")
+    controller.phase = Mock()
+    controller._phase_started = True
+    controller._df_cold_hz = -9571.0
+    controller._active_phase_instance_id = session.start_active_phase_instance(
+        controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
+    ).phase_instance_id
+    controller._current_stage = 2
+    controller.on_phase_failed(
+        f"Step failed: {controller_module._step_label('check_state_for_stage_2')}"
+    )
+    assert session.instances[-1]["status"] == "in_progress"
+
+    controller._execute_single_step = Mock(return_value=True)
+    controller._on_stage2_done = Mock()
+    controller.run_stage_2()
+    controller.confirm_and_save()
+
+    assert [i["status"] for i in session.instances] == ["complete"]
+    assert controller.context.phase_instance_id == 1
+
+
+def test_stage_retried_after_a_real_failure_opens_a_new_attempt() -> None:
+    """A step that fails after the check (here, the probe) still fails the
+    attempt; the retry starts attempt 2 and that one completes."""
+    view = _ViewStub()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=-9571.0)
+    session = _AttemptLedgerSession(record)
+    controller = _make_controller(view=view, session=session)
+    controller.context = PhaseContext(record=record, operator="op")
+    controller.phase = Mock()
+    controller._phase_started = True
+    controller._df_cold_hz = -9571.0
+    controller._active_phase_instance_id = session.start_active_phase_instance(
+        controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
+    ).phase_instance_id
+    controller._current_stage = 2
+    controller.on_phase_failed(
+        f"Step failed: {controller_module._step_label('probe_stepper_direction')}"
+    )
+    assert session.instances[-1]["status"] == "failed"
+    assert view.errors
+
+    controller._execute_single_step = Mock(return_value=True)
+    controller._on_stage2_done = Mock()
+    controller.run_stage_2()
+    controller.confirm_and_save()
+
+    assert [i["status"] for i in session.instances] == ["failed", "complete"]
+    assert controller.context.phase_instance_id == 2
+
+
+def test_switching_records_between_stages_uses_the_new_records_attempt() -> (
+    None
+):
+    """Copilot review on #456: a cached attempt id from cavity A must not be
+    used for cavity B after the operator switches records."""
+    record_a = _record()
+    session_a = _AttemptLedgerSession(record_a)
+    session_a.start_active_phase_instance(
+        controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
+    )
+    controller = _make_controller(session=session_a)
+    controller.context = PhaseContext(record=record_a, operator="op")
+    controller._ensure_open_phase_instance()
+    assert controller._active_phase_instance_id == 1
+
+    # Cavity B: its own ledger, with its own open attempt under a new id.
+    record_b = _record()
+    session_b = _AttemptLedgerSession(record_b)
+    session_b.instances.append(
+        {"id": 7, "phase": "frequency_tuning", "status": "in_progress"}
+    )
+    controller.session = session_b
+    controller._rebuild_phase_context = Mock()
+    controller.restore_from_record(record_b)
+    controller.context = PhaseContext(record=record_b, operator="op")
+
+    controller._ensure_open_phase_instance()
+
+    assert controller._active_phase_instance_id == 7
+    assert controller.context.phase_instance_id == 7
+
+
+def test_cached_attempt_is_ignored_when_the_record_has_none_open() -> None:
+    record = _record()
+    session = _AttemptLedgerSession(record)
+    controller = _make_controller(session=session)
+    controller.context = PhaseContext(record=record, operator="op")
+    controller._active_phase_instance_id = 99
+
+    controller._ensure_open_phase_instance()
+
+    assert controller._active_phase_instance_id == 1
+    assert [i["status"] for i in session.instances] == ["in_progress"]
+
+
+def test_resumed_stage_reuses_the_open_attempt() -> None:
+    """An attempt left in progress by an earlier session is not duplicated."""
+    record = _record()
+    session = _AttemptLedgerSession(record)
+    session.start_active_phase_instance(
+        controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
+    )
+    controller = _make_controller(session=session)
+    controller.context = PhaseContext(record=record, operator="op")
+    controller._active_phase_instance_id = None
+
+    controller._ensure_open_phase_instance()
+
+    assert len(session.instances) == 1
+    assert controller._active_phase_instance_id == 1
+    assert controller.context.phase_instance_id == 1
+
+
 def test_stage_2_awaiting_confirm_is_not_reported_as_idle() -> None:
     """Blocked-on-operator must not read IDLE in the status bar.
 
@@ -1003,6 +1182,7 @@ def test_reset_abort_and_speed() -> None:
 
     assert controller.context.abort_requested is False
     assert cavity.stepper_tuner.abort_flag is False
+    assert cavity.abort_flag is False
     assert controller.phase.limits.move_speed == 2.0
 
 
@@ -1242,6 +1422,38 @@ def test_on_stage4_done() -> None:
     controller._on_stage4_done()
 
     assert view.stage4_run_btn.enabled is True
+
+
+def test_finished_stage_4_reads_as_rerun_until_reset() -> None:
+    """Haley's report on #318: a finished Stage 4 still looked like it had to run.
+
+    It stays enabled so the operator can scan again, but switches to the
+    muted re-run label and style. Starting over puts the run look back.
+    """
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._save_stage_to_history = Mock(return_value=True)
+    controller._update_partial_results = Mock()
+    controller._pi_mode_data = {"mode_8pi_9_hz": 100.0, "mode_7pi_9_hz": None}
+
+    controller._on_stage4_done()
+
+    assert view.stage4_run_btn.text == controller_module.STAGE4_RERUN_LABEL
+    assert view.stage4_run_btn.style == controller_module.STAGE_RERUN_BTN_STYLE
+
+    controller._reset_all_stages()
+
+    assert view.stage4_run_btn.text == controller_module.STAGE4_RUN_LABEL
+    assert view.stage4_run_btn.style == controller_module.STAGE_RUN_BTN_STYLE
+
+
+def test_restored_stage_4_reads_as_rerun() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+
+    controller._restore_stage4({"mode_8pi_9_hz": 1.0, "mode_7pi_9_hz": 2.0})
+
+    assert view.stage4_run_btn.text == controller_module.STAGE4_RERUN_LABEL
 
 
 def test_on_stage4_done_save_fails() -> None:
@@ -1628,6 +1840,7 @@ def test_on_abort_requests_abort() -> None:
     assert controller.context.abort_requested is True
     assert view.abort_button.enabled is False
     assert cavity.stepper_tuner.abort_flag is True
+    assert cavity.abort_flag is True
 
 
 def test_on_abort_without_context_is_noop() -> None:
@@ -2354,3 +2567,136 @@ def test_run_stage_3_with_probe_proceeds() -> None:
     controller.run_stage_3()
 
     controller._run_phase_in_background.assert_called_once()
+
+
+# ------------------------------------------------------------------
+# Stage 1: keep or rerun the last SSA calibration
+# ------------------------------------------------------------------
+
+
+def _last_cal(good=True, hours_old=0.2):
+    return cavity_setup.LastSetupResult(
+        name="SSA calibration",
+        timestamp=datetime.now() - timedelta(hours=hours_old),
+        good=good,
+    )
+
+
+def _stage1_controller(monkeypatch, last=None, read_error=None):
+    """A controller whose stage 1 reads `last` (or raises read_error)."""
+    view = _ViewStub()
+    view.ask_rerun_ssa_calibration = Mock(return_value="rerun")
+    controller = _make_controller(view=view)
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._get_machine_cavity = Mock()
+    controller._start_stage = Mock()
+
+    def read(_cavity):
+        if read_error is not None:
+            raise read_error
+        return last
+
+    monkeypatch.setattr(cavity_setup, "last_ssa_calibration", read)
+    return controller, view
+
+
+def _stage1_params(controller):
+    return controller._start_stage.call_args.kwargs["extra_parameters"]
+
+
+def test_recent_good_calibration_is_kept_without_asking(monkeypatch) -> None:
+    last = _last_cal()
+    controller, view = _stage1_controller(monkeypatch, last)
+
+    controller.run_stage_1()
+
+    view.ask_rerun_ssa_calibration.assert_not_called()
+    assert _stage1_params(controller) == {
+        "kept_ssa_calibration": last,
+        "ssa_calibration_skipped_by": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "last", [_last_cal(hours_old=2), _last_cal(good=False)]
+)
+def test_old_or_bad_calibration_asks_and_rerun_calibrates(
+    monkeypatch, last
+) -> None:
+    controller, view = _stage1_controller(monkeypatch, last)
+
+    controller.run_stage_1()
+
+    view.ask_rerun_ssa_calibration.assert_called_once()
+    assert _stage1_params(controller)["kept_ssa_calibration"] is None
+
+
+def test_skip_keeps_the_old_calibration_and_records_the_operator(
+    monkeypatch,
+) -> None:
+    last = _last_cal(hours_old=5)
+    controller, view = _stage1_controller(monkeypatch, last)
+    view.ask_rerun_ssa_calibration.return_value = "skip"
+
+    controller.run_stage_1()
+
+    params = _stage1_params(controller)
+    assert params["kept_ssa_calibration"] is last
+    assert params["ssa_calibration_skipped_by"] == "Test Operator"
+
+
+def test_cancel_does_not_start_stage_1(monkeypatch) -> None:
+    controller, view = _stage1_controller(monkeypatch, _last_cal(hours_old=5))
+    view.ask_rerun_ssa_calibration.return_value = "cancel"
+
+    controller.run_stage_1()
+
+    controller._start_stage.assert_not_called()
+    assert "Not started" in view.stage1_status_label.text
+
+
+def test_unreadable_last_calibration_calibrates(monkeypatch) -> None:
+    controller, view = _stage1_controller(
+        monkeypatch, read_error=RuntimeError("CALTS timeout")
+    )
+
+    controller.run_stage_1()
+
+    view.ask_rerun_ssa_calibration.assert_not_called()
+    assert _stage1_params(controller)["kept_ssa_calibration"] is None
+
+
+def test_stage_1_saves_the_record_when_df_cold_is_unchanged() -> None:
+    """The SSA result from stage 1 must reach the database."""
+    view = _ViewStub()
+    session = Mock()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=9196.0)
+    session.get_active_record.return_value = record
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    controller._save_stage_to_history = Mock(return_value=True)
+    controller._update_partial_results = Mock()
+    controller.confirm_and_save = Mock()
+    controller._df_cold_hz = 9196.0
+
+    controller._on_stage1_done()
+
+    session.save_active_record.assert_called_once()
+
+
+def test_stage_1_fails_when_the_record_save_fails() -> None:
+    view = _ViewStub()
+    view.stage2_run_btn.setEnabled(False)
+    session = Mock()
+    session.get_active_record.return_value = _record()
+    session.save_active_record.side_effect = RuntimeError("version conflict")
+    controller = _make_controller(view=view, session=session)
+    controller._save_stage_to_history = Mock(return_value=True)
+    controller._df_cold_hz = 9196.0
+
+    controller._on_stage1_done()
+
+    assert "Failed" in view.stage1_status_label.text
+    assert view.stage2_run_btn.enabled is False
+    assert any("version conflict" in m for m in view.logs)

@@ -33,7 +33,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 |------|----------------|-----------|
 | [Auto Setup](applications/auto_setup.md) | Automated cavity turn-on: SSA calibration → auto-tune → characterization → RF ramp | [How auto-tune works](explainers/auto_tune.md) |
 | [RF Commissioning](applications/rf_commissioning.md) | Phase-gated acceptance workflow for newly-installed cavities | [How RF commissioning is built](explainers/rf_commissioning.md), [How auto-tune works](explainers/auto_tune.md) |
-| [Q0 Measurement](applications/q0.md) | Cavity quality-factor measurement under thermal load | |
+| [Q0 Measurement](applications/q0.md) | Cavity quality-factor measurement under thermal load | [How the Q0 app works](explainers/q0.md) |
 | [Microphonics](applications/microphonics.md) | Mechanical vibration noise acquisition and analysis | |
 | [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection | |
 | [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence | [How auto-tune works](explainers/auto_tune.md) |
