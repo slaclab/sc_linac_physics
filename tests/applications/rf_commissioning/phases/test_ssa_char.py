@@ -45,6 +45,8 @@ def mock_ssa():
 def mock_cavity(mock_ssa):
     cavity = Mock()
     cavity.ssa = mock_ssa
+    cavity.number = 1
+    cavity.rack.cavities = {}
     return cavity
 
 
@@ -232,6 +234,51 @@ def test_reset_and_power_on_success(phase, mock_cavity):
     mock_cavity.ssa.reset.assert_called_once()
     mock_cavity.ssa.turn_on.assert_called_once()
     mock_cavity.reset_interlocks.assert_called_once()
+
+
+def test_reset_and_power_on_turns_rf_off_and_zeroes_dac_first(
+    phase, mock_cavity
+):
+    """The state SetupCavity.request_ssa_cal() calibrates from."""
+    phase.validate_prerequisites()
+    order = Mock()
+    order.attach_mock(mock_cavity.turn_off, "turn_off")
+    order.attach_mock(mock_cavity.ssa.reset, "reset")
+    dac_at_reset = {}
+
+    def record_dac():
+        dac_at_reset["rfs1"] = mock_cavity.rack.rfs1.dac_amp
+        dac_at_reset["rfs2"] = mock_cavity.rack.rfs2.dac_amp
+
+    mock_cavity.ssa.reset.side_effect = record_dac
+
+    result = phase._reset_and_power_on()
+
+    assert result.result == PhaseResult.SUCCESS
+    assert [c[0] for c in order.mock_calls] == ["turn_off", "reset"]
+    assert dac_at_reset == {"rfs1": 0, "rfs2": 0}
+
+
+def test_reset_and_power_on_refuses_when_the_rack_is_in_use(phase, mock_cavity):
+    phase.validate_prerequisites()
+    other = Mock(number=2, is_on=True)
+    mock_cavity.rack.cavities = {2: other}
+
+    result = phase._reset_and_power_on()
+
+    assert result.result == PhaseResult.FAILED
+    assert "DAC_AMPLITUDE" in result.message
+    mock_cavity.turn_off.assert_not_called()
+    mock_cavity.ssa.reset.assert_not_called()
+
+
+def test_reset_and_power_on_dry_run_writes_nothing(context, mock_cavity):
+    context.dry_run = True
+    p = SSACharPhase(context)
+    p.validate_prerequisites()
+    p._reset_and_power_on()
+    mock_cavity.turn_off.assert_not_called()
+    assert not isinstance(mock_cavity.rack.rfs1.dac_amp, int)
 
 
 def test_reset_and_power_on_ssa_fault_error(phase, mock_cavity):
