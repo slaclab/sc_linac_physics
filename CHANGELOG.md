@@ -2,6 +2,91 @@
 
 <!-- version list -->
 
+## v9.57.0 (2026-10-27)
+
+### Bug Fixes
+
+- **rf-commissioning**: Add new phase columns to existing database files
+  ([#425](https://github.com/slaclab/sc_linac_physics/pull/425),
+  [`d9a612b`](https://github.com/slaclab/sc_linac_physics/commit/d9a612be9b459f0652f0f4245a20697e48357ae1))
+
+- **rf-commissioning**: Frequency tuning keeps a recent SSA cal, refuses while one runs
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+- Say what these comments mean in plain words
+  ([#402](https://github.com/slaclab/sc_linac_physics/pull/402),
+  [`0ab18fe`](https://github.com/slaclab/sc_linac_physics/commit/0ab18feec4ebfab921981c80955774dd6fa9de8f))
+
+- **rf-commissioning**: Say cavity char keeps a recent SSA calibration
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+- **rf-commissioning**: Say cavity char keeps a recent SSA calibration
+  ([#402](https://github.com/slaclab/sc_linac_physics/pull/402),
+  [`0ab18fe`](https://github.com/slaclab/sc_linac_physics/commit/0ab18feec4ebfab921981c80955774dd6fa9de8f))
+
+### Features
+
+- **rf-commissioning**: Ask before recalibrating an old SSA in cavity char
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+- **rf-commissioning**: Ask before recalibrating an old SSA in cavity char
+  ([#402](https://github.com/slaclab/sc_linac_physics/pull/402),
+  [`0ab18fe`](https://github.com/slaclab/sc_linac_physics/commit/0ab18feec4ebfab921981c80955774dd6fa9de8f))
+
+- **rf-commissioning**: Cavity char calibrates the SSA and tunes before measuring
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+- **rf-commissioning**: Cavity char calibrates the SSA and tunes before measuring
+  ([#402](https://github.com/slaclab/sc_linac_physics/pull/402),
+  [`0ab18fe`](https://github.com/slaclab/sc_linac_physics/commit/0ab18feec4ebfab921981c80955774dd6fa9de8f))
+
+- **rf-commissioning**: Cavity char panel runs the new setup steps
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+- **rf-commissioning**: Cavity char panel runs the new setup steps
+  ([#402](https://github.com/slaclab/sc_linac_physics/pull/402),
+  [`0ab18fe`](https://github.com/slaclab/sc_linac_physics/commit/0ab18feec4ebfab921981c80955774dd6fa9de8f))
+
+- **rf-commissioning**: Frequency tuning calibrates the SSA before tuning
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+- **rf-commissioning**: SSA char turns RF off and zeroes rack DACs before calibrating
+  ([#402](https://github.com/slaclab/sc_linac_physics/pull/402),
+  [`0ab18fe`](https://github.com/slaclab/sc_linac_physics/commit/0ab18feec4ebfab921981c80955774dd6fa9de8f))
+
+- **sc-linac**: Read the SSA calibration time from SSA:CALTS
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+- **sc-linac**: Read the SSA calibration time from SSA:CALTS
+  ([#402](https://github.com/slaclab/sc_linac_physics/pull/402),
+  [`0ab18fe`](https://github.com/slaclab/sc_linac_physics/commit/0ab18feec4ebfab921981c80955774dd6fa9de8f))
+
+### Refactoring
+
+- **rf-commissioning**: Share the keep-or-rerun SSA cal decision
+  ([#401](https://github.com/slaclab/sc_linac_physics/pull/401),
+  [`e18a027`](https://github.com/slaclab/sc_linac_physics/commit/e18a0278dda19c61f44ab3b12202b0731465bf29))
+
+### Testing
+
+- **rf-commissioning**: Check DACs are zero when the SSA resets
+  ([#402](https://github.com/slaclab/sc_linac_physics/pull/402),
+  [`0ab18fe`](https://github.com/slaclab/sc_linac_physics/commit/0ab18feec4ebfab921981c80955774dd6fa9de8f))
+
+
 ## v9.56.3 (2026-10-23)
 
 ### Bug Fixes
