@@ -7,7 +7,24 @@ from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo i
     CommissioningPiezo,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
-from sc_linac_physics.utils.sc_linac.linac_utils import get_linac_for_cryomodule
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    ALL_CRYOMODULES,
+    get_linac_for_cryomodule,
+)
+
+
+def cryomodule_key(cryomodule) -> str:
+    """Return the Machine.cryomodules key for a cryomodule selection.
+
+    Numbered cryomodules are zero-padded ("2" -> "02"); the harmonic
+    linearizers keep their names ("H1", "H2"). Raises ValueError for
+    anything else.
+    """
+    name = str(cryomodule).strip()
+    key = f"{int(name):02d}" if name.isdigit() else name
+    if key not in ALL_CRYOMODULES:
+        raise ValueError(f"unknown cryomodule {cryomodule!r}")
+    return key
 
 
 def resolve_cavity_selection(
@@ -38,15 +55,13 @@ def get_piezo_from_selection(
     machine: Machine | None,
     cryomodule: str,
     cavity_number: str,
-) -> tuple[CommissioningPiezo, int, int, Machine]:
-    """Return piezo object, parsed CM/CAV values, and resolved machine."""
+) -> tuple[CommissioningPiezo, str, int, Machine]:
+    """Return piezo object, cryomodule key, cavity number, and machine."""
     cav = int(cavity_number)
-    cm = int(cryomodule)
+    cm = cryomodule_key(cryomodule)
 
     active_machine = machine or Machine(piezo_class=CommissioningPiezo)
-    cm_str = f"{cm:02d}"
-    cryomodule_obj = active_machine.cryomodules[cm_str]
-    cavity = cryomodule_obj.cavities[cav]
+    cavity = active_machine.cryomodules[cm].cavities[cav]
     return cavity.piezo, cm, cav, active_machine
 
 
@@ -82,12 +97,12 @@ def apply_pv_mapping(pv_mapping: dict) -> None:
 def format_pv_update_message(
     cryomodule: str,
     cavity_number: str,
-    cm: int | str,
+    cm: str,
     cav: int,
 ) -> str:
     """Format user-facing message describing active PV source.
 
-    cm is a number (zero-padded here) or a cryomodule name such as "H1".
+    cm is a cryomodule key from cryomodule_key(): "02", "H1".
     """
     linac = get_linac_for_cryomodule(cryomodule)
     cavity_display_name = (
@@ -95,5 +110,4 @@ def format_pv_update_message(
         if linac
         else f"CM{cryomodule}_CAV{cavity_number}"
     )
-    cm_label = f"{cm:02d}" if isinstance(cm, int) else cm
-    return f"PVs updated for {cavity_display_name} (CM{cm_label} Cav{cav})"
+    return f"PVs updated for {cavity_display_name} (CM{cm} Cav{cav})"

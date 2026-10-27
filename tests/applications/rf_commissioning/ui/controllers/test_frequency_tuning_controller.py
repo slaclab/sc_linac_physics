@@ -350,7 +350,7 @@ def test_get_machine_cavity_builds_machine(monkeypatch) -> None:
     monkeypatch.setattr(controller_module, "Machine", _MachineStub)
     controller = _make_controller()
 
-    cavity = controller._get_machine_cavity(2, 1)
+    cavity = controller._get_machine_cavity("02", 1)
 
     assert cavity == "cavity-object"
     assert isinstance(controller.machine, _MachineStub)
@@ -398,8 +398,21 @@ def test_resolve_target_success(monkeypatch) -> None:
         lambda *_: ("02", "1"),
     )
 
-    assert controller._resolve_target() == ("CM02_CAV1", 2, 1)
+    assert controller._resolve_target() == ("CM02_CAV1", "02", 1)
     assert any("Created" in m for m in view.logs)
+
+
+def test_resolve_target_keeps_harmonic_linearizer_names(monkeypatch) -> None:
+    session = Mock()
+    session.start_new_record.return_value = (_record(), 5, True)
+    controller = _make_controller(view=_ViewStub(), session=session)
+    monkeypatch.setattr(
+        controller_module,
+        "resolve_cavity_selection",
+        lambda *_: ("H1", "3"),
+    )
+
+    assert controller._resolve_target() == ("CMH1_CAV3", "H1", 3)
 
 
 def test_resolve_target_record_error_shows_error(monkeypatch) -> None:

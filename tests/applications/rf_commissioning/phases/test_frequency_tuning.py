@@ -448,6 +448,21 @@ def test_validate_prerequisites_no_stepper(context):
     assert ok is False
 
 
+def test_validate_prerequisites_rejects_harmonic_linearizer(context):
+    context.parameters["cavity"].cryomodule.is_harmonic_linearizer = True
+    phase = FrequencyTuningPhase(context)
+    ok, msg = phase.validate_prerequisites()
+    assert ok is False
+    assert "harmonic linearizer" in msg
+    assert phase.cavity is None
+
+
+def test_validate_prerequisites_accepts_standard_cryomodule(context):
+    context.parameters["cavity"].cryomodule.is_harmonic_linearizer = False
+    ok, _ = FrequencyTuningPhase(context).validate_prerequisites()
+    assert ok is True
+
+
 def test_validate_prerequisites_no_temp_pv(context):
     context.parameters["cavity"].stepper_temp_pv = ""
     ok, _ = FrequencyTuningPhase(context).validate_prerequisites()

@@ -153,7 +153,7 @@ def test_get_machine_cavity_builds_machine_with_commissioning_piezo(
     monkeypatch.setattr(controller_module, "Machine", _MachineStub)
     controller = _make_controller()
 
-    cavity = controller._get_machine_cavity(2, 1)
+    cavity = controller._get_machine_cavity("02", 1)
 
     assert cavity == "cavity-object"
     assert isinstance(controller.machine, _MachineStub)
@@ -223,11 +223,11 @@ def test_get_selected_cavity_info_handles_parse_error() -> None:
 
 def test_get_selected_cavity_info_returns_parsed_values() -> None:
     controller = _make_controller()
-    controller._parse_cavity_from_record = Mock(return_value=(2, 1))
+    controller._parse_cavity_from_record = Mock(return_value=("02", 1))
 
     result = controller._get_selected_cavity_info()
 
-    assert result == ("L1B_CM02_CAV1", 2, 1)
+    assert result == ("L1B_CM02_CAV1", "02", 1)
 
 
 def test_execute_step_with_retries_success_calls_success_handler() -> None:
@@ -474,8 +474,19 @@ def test_sync_piezo_readbacks_error_and_no_handler_paths() -> None:
 
 def test_parse_cavity_from_record() -> None:
     controller = _make_controller()
-    assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (2, 8)
-    assert controller._parse_cavity_from_record("SHORT", "02") == (2, 1)
+    assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (
+        "02",
+        8,
+    )
+    assert controller._parse_cavity_from_record("SHORT", "02") == ("02", 1)
+
+
+def test_parse_cavity_from_record_keeps_harmonic_linearizer_names() -> None:
+    controller = _make_controller()
+    assert controller._parse_cavity_from_record("L1B_CMH1_CAV3", "H1") == (
+        "H1",
+        3,
+    )
 
 
 def test_prepare_phase_context_can_run_false() -> None:
@@ -590,7 +601,7 @@ def test_on_run_automated_test_success_path() -> None:
     session.has_active_record.return_value = True
     controller = _make_controller(view=view, session=session)
     controller._get_selected_cavity_info = Mock(
-        return_value=("L1B_CM02_CAV1", 2, 1)
+        return_value=("L1B_CM02_CAV1", "02", 1)
     )
     controller.update_pv_addresses = Mock()
     controller._get_machine_cavity = Mock(return_value=Mock())
@@ -611,7 +622,7 @@ def test_on_run_automated_test_exception_is_logged() -> None:
     session.has_active_record.return_value = True
     controller = _make_controller(view=view, session=session)
     controller._get_selected_cavity_info = Mock(
-        return_value=("L1B_CM02_CAV1", 2, 1)
+        return_value=("L1B_CM02_CAV1", "02", 1)
     )
     controller.update_pv_addresses = Mock(side_effect=RuntimeError("kaboom"))
 
@@ -746,7 +757,7 @@ def test_on_run_automated_test_stops_when_prepare_context_fails() -> None:
     session.has_active_record.return_value = True
     controller = _make_controller(session=session)
     controller._get_selected_cavity_info = Mock(
-        return_value=("L1B_CM02_CAV1", 2, 1)
+        return_value=("L1B_CM02_CAV1", "02", 1)
     )
     controller.update_pv_addresses = Mock()
     controller._get_machine_cavity = Mock(return_value=Mock())

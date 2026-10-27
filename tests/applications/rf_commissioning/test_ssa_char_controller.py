@@ -3,8 +3,6 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import pytest
-
 import sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller as controller_module
 from pydm.widgets import PyDMSpinbox
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -138,18 +136,6 @@ def test_parse_cavity_from_record_keeps_harmonic_linearizer_names() -> None:
 def test_parse_cavity_from_record_short_name_defaults_to_cav1() -> None:
     controller = _make_controller()
     assert controller._parse_cavity_from_record("SHORT", "02") == ("02", 1)
-
-
-@pytest.mark.parametrize(
-    "selection, key", [("2", "02"), ("02", "02"), ("H1", "H1"), ("H2", "H2")]
-)
-def test_cryomodule_key(selection, key) -> None:
-    assert controller_module._cryomodule_key(selection) == key
-
-
-def test_cryomodule_key_rejects_unknown_names() -> None:
-    with pytest.raises(ValueError):
-        controller_module._cryomodule_key("...")
 
 
 def test_update_toolbar_state_delegates_to_ui() -> None:

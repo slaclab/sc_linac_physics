@@ -22,26 +22,12 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
+    cryomodule_key,
     format_pv_update_message,
     resolve_cavity_selection,
 )
 from sc_linac_physics.utils.platform_paths import get_ssa_cal_base_dir
 from sc_linac_physics.utils.sc_linac.linac import Machine
-from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
-
-
-def _cryomodule_key(cryomodule: str) -> str:
-    """Return the Machine.cryomodules key for a header selection.
-
-    Numbered cryomodules are zero-padded ("2" -> "02"); the harmonic
-    linearizers keep their names ("H1", "H2"). Raises ValueError for
-    anything else.
-    """
-    name = str(cryomodule).strip()
-    key = f"{int(name):02d}" if name.isdigit() else name
-    if key not in ALL_CRYOMODULES:
-        raise ValueError(f"unknown cryomodule {cryomodule!r}")
-    return key
 
 
 class SSACharController(QObject):
@@ -105,7 +91,7 @@ class SSACharController(QObject):
 
         try:
             cav_int = int(cavity_number)
-            cm_key = _cryomodule_key(cryomodule)
+            cm_key = cryomodule_key(cryomodule)
         except ValueError as exc:
             self.view.log_message(f"Invalid cavity/CM value: {exc}")
             return
@@ -691,7 +677,7 @@ class SSACharController(QObject):
         parts = cavity_name.split("_")
         cav_part = parts[2] if len(parts) >= 3 else "CAV1"
         cav = int(cav_part.replace("CAV", ""))
-        return _cryomodule_key(cryomodule), cav
+        return cryomodule_key(cryomodule), cav
 
     def _update_toolbar_state(self, state: str) -> None:
         if hasattr(self.view, "ui") and hasattr(

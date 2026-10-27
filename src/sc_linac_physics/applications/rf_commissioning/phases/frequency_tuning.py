@@ -132,6 +132,19 @@ class FrequencyTuningPhase(PhaseBase):
         if not hasattr(cavity, "stepper_temp_pv") or not cavity.stepper_temp_pv:
             return False, "Cavity has no stepper_temp_pv defined"
 
+        # FrequencyTuningLimits holds one set of numbers for every cavity:
+        # tolerance_hz 50 (Cavity.move_to_resonance uses 500 on a harmonic
+        # linearizer), min_probe_delta_hz 100 (derived from the 1.3 GHz
+        # design figure) and the pi-mode scan window. Refuse H1/H2 until
+        # those are chosen per cavity class. "is True" so a Mock cavity in
+        # tests does not read as a harmonic linearizer.
+        cryomodule = getattr(cavity, "cryomodule", None)
+        if getattr(cryomodule, "is_harmonic_linearizer", False) is True:
+            return False, (
+                "Frequency tuning does not support harmonic linearizer "
+                "cavities (H1, H2) yet"
+            )
+
         self.cavity = cavity
         return True, "Prerequisites validated"
 
