@@ -11,6 +11,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     FrequencyTuningData,
     PhaseCheckpoint,
 )
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.frequency_tuning import (
     FrequencyTuningPhase,
 )
@@ -102,6 +105,8 @@ class FrequencyTuningController(QObject):
     _df_cold_committed_signal = pyqtSignal()
     hz_per_step_updated = pyqtSignal(float)
     _stage_done = pyqtSignal(int)  # 1, 2, 3, or 4 (=finalize)
+    # (LastSetupResult or None, error text) from the CALTS/CALSTAT read.
+    _last_ssa_cal_read = pyqtSignal(object, str)
 
     def __init__(self, view, session: CommissioningSession) -> None:
         super().__init__()
@@ -142,6 +147,9 @@ class FrequencyTuningController(QObject):
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
         self._stage_done.connect(self._on_stage_done)
+        self._last_ssa_cal_read.connect(self._on_last_ssa_cal_read)
+        # (cm, cav, operator) while the last SSA calibration is being read.
+        self._pending_stage1: tuple | None = None
 
     # ------------------------------------------------------------------
     # PV wiring
@@ -253,6 +261,39 @@ class FrequencyTuningController(QObject):
         self._net_steps = 0
 
         try:
+            cavity = self._get_machine_cavity(cm, cav)
+        except Exception as exc:
+            self._set_stage_status_not_started(1)
+            self.view.show_error(f"Failed to start Stage 1: {exc}")
+            return
+        self._pending_stage1 = (cm, cav, operator)
+        Thread(
+            target=lambda: self._read_last_ssa_calibration(cavity),
+            daemon=True,
+        ).start()
+
+    def _read_last_ssa_calibration(self, cavity) -> None:
+        """Runs on a daemon thread: CALTS and CALSTAT are EPICS reads."""
+        try:
+            last = cavity_setup.last_ssa_calibration(cavity)
+        except Exception as exc:
+            self._last_ssa_cal_read.emit(None, str(exc))
+            return
+        self._last_ssa_cal_read.emit(last, "")
+
+    def _on_last_ssa_cal_read(self, last, error: str) -> None:
+        """Back on the GUI thread: decide on the SSA calibration, then run."""
+        if self._pending_stage1 is None:
+            return
+        cm, cav, operator = self._pending_stage1
+        self._pending_stage1 = None
+        decision = self._decide_ssa_calibration(last, error, operator)
+        if decision is None:
+            self._set_stage_status_not_started(1)
+            self.view.log_message("Stage 1 cancelled")
+            return
+        kept, skipped_by = decision
+        try:
             self._start_stage(
                 stage=1,
                 steps=_STAGE1_STEPS,
@@ -260,6 +301,10 @@ class FrequencyTuningController(QObject):
                 cm=cm,
                 cav=cav,
                 operator=operator,
+                extra_parameters={
+                    "kept_ssa_calibration": kept,
+                    "ssa_calibration_skipped_by": skipped_by,
+                },
             )
         except Exception as exc:
             import traceback
@@ -267,6 +312,22 @@ class FrequencyTuningController(QObject):
             self._set_stage_status_not_started(1)
             self.view.show_error(f"Failed to start Stage 1: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
+
+    def _decide_ssa_calibration(self, last, error: str, operator: str):
+        """Return (kept, skipped_by), or None if the operator cancelled.
+
+        The same rule as cavity char: cavity_setup.decide_ssa_calibration.
+        """
+        if last is None:
+            self.view.log_message(
+                f"Could not read the last SSA calibration ({error}); "
+                "calibrating"
+            )
+        return cavity_setup.decide_ssa_calibration(
+            last,
+            operator,
+            lambda text: self.view.ask_rerun_ssa_calibration(text),
+        )
 
     def run_stage_2(self) -> None:
         """Probe stepper direction to measure Hz/step."""
@@ -441,6 +502,7 @@ class FrequencyTuningController(QObject):
         cm: str,
         cav: int,
         operator: str,
+        extra_parameters: dict | None = None,
     ) -> None:
         self.update_pv_addresses(cm, str(cav))
         cavity = self._get_machine_cavity(cm, cav)
@@ -468,7 +530,7 @@ class FrequencyTuningController(QObject):
         self.context = PhaseContext(
             record=record,
             operator=operator,
-            parameters={"cavity": cavity},
+            parameters={"cavity": cavity, **(extra_parameters or {})},
             phase_instance_id=self._active_phase_instance_id,
             run_intent="commissioning",
         )
@@ -610,6 +672,9 @@ class FrequencyTuningController(QObject):
         if self._cavity is not None:
             try:
                 self._cavity.stepper_tuner.abort_flag = False
+                # Cavity.check_abort() reads this one: the SSA calibration in
+                # stage 1 and the chirp setup stop on it.
+                self._cavity.abort_flag = False
             except Exception:
                 pass
         speed_spinbox = getattr(self.view, "speed_spinbox", None)
@@ -701,7 +766,11 @@ class FrequencyTuningController(QObject):
             _STAGE_COLD_LANDING,
             {"df_cold_hz": self._df_cold_hz},
         )
-        self._persist_df_cold_to_record()
+        # Always save, even when the detune is already on the record: Stage 1
+        # also replaced record.ssa_char or noted a kept calibration, and
+        # closing now must not lose that.
+        self._apply_df_cold_to_record()
+        saved = self._save_record_after_stage1() and saved
         self._set_stage_done_ui(1, success=saved)
         if not saved:
             return
@@ -858,6 +927,20 @@ class FrequencyTuningController(QObject):
         # the operator wants to re-scan with different results.
         self.confirm_and_save()
 
+    def _save_record_after_stage1(self) -> bool:
+        """Save the active record; False (and logged) if that failed."""
+        try:
+            if self.session.save_active_record():
+                return True
+            error = "save_active_record returned False"
+        except Exception as exc:
+            error = str(exc)
+        self.view.log_message(
+            f"✗ Could not save the SSA calibration result to the record: "
+            f"{error}. Re-run Stage 1."
+        )
+        return False
+
     def _persist_df_cold_to_record(self) -> None:
         """Write the cold-landing detune onto the record and save it.
 
@@ -868,23 +951,29 @@ class FrequencyTuningController(QObject):
         frequency recorded in history but invisible to the phase, and stage 2
         failed with "Cold landing frequency was not recorded".
         """
-        if self._df_cold_hz is None:
-            return
-        record = self.session.get_active_record()
-        if record is None:
-            return
-        existing = getattr(record.frequency_tuning, "df_cold_hz", None)
-        if existing == self._df_cold_hz:
-            return  # already durable; don't bump the record version for nothing
         try:
-            data = record.frequency_tuning or FrequencyTuningData()
-            data.df_cold_hz = self._df_cold_hz
-            record.frequency_tuning = data
-            self.session.save_active_record()
+            # Unchanged: already durable; don't bump the record version.
+            if self._apply_df_cold_to_record():
+                self.session.save_active_record()
         except Exception as exc:
             self._log_signal.emit(
                 f"Warning: could not persist cold landing to record: {exc}"
             )
+
+    def _apply_df_cold_to_record(self) -> bool:
+        """Put _df_cold_hz on record.frequency_tuning; True if it changed."""
+        if self._df_cold_hz is None:
+            return False
+        record = self.session.get_active_record()
+        if record is None:
+            return False
+        existing = getattr(record.frequency_tuning, "df_cold_hz", None)
+        if existing == self._df_cold_hz:
+            return False
+        data = record.frequency_tuning or FrequencyTuningData()
+        data.df_cold_hz = self._df_cold_hz
+        record.frequency_tuning = data
+        return True
 
     def _update_partial_results(self) -> None:
         """Populate Stored Data panel with whatever fields are known so far."""
@@ -1240,6 +1329,9 @@ class FrequencyTuningController(QObject):
         if self._cavity is not None:
             try:
                 self._cavity.stepper_tuner.abort_flag = True
+                # On its next check_abort() the cavity turns RF off and
+                # raises CavityAbortError.
+                self._cavity.abort_flag = True
             except Exception:
                 pass
 

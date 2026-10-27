@@ -4,10 +4,13 @@ Frequency Tuning Phase
 Tunes the cavity stepper to resonance after initial cool-down.  Cavities are
 expected to start at the COLD tune config.  Before moving the stepper this
 phase:
-  1. Checks that the stepper is idle, then prepares the cavity for tuning —
-     RF off, SSA on, reset interlocks, set up chirp (mirrors the production
-     SetupCavity + Cavity.setup_tuning path); warns (but does not fail) if the
-     cavity is not at the COLD tune config.
+  1. Checks that the stepper is idle, calibrates the SSA the way auto setup
+     does before tuning (cavity_setup.calibrate_ssa: RF off, rack DAC
+     amplitudes 0, SSA.calibrate(), slope pushed with no operator review),
+     then prepares the cavity for tuning — RF off, SSA on, reset interlocks,
+     set up chirp (mirrors the production SetupCavity + Cavity.setup_tuning
+     path); warns (but does not fail) if the cavity is not at the COLD tune
+     config.
   2. Records the cold-landing detune for display; the operator pushes it to
      DF_COLD via the UI after reviewing.
   3. Runs a probe move to measure Hz/microstep; the operator confirms and the UI
@@ -30,6 +33,9 @@ from datetime import datetime
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     FrequencyTuningData,
+)
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
@@ -105,7 +111,7 @@ class FrequencyTuningPhase(PhaseBase):
     Frequency Tuning Phase.
 
     Sequence:
-    1. verify_initial_state    – stepper idle; prepare cavity (SSA on, reset interlocks, setup_tuning)
+    1. verify_initial_state    – stepper idle; calibrate SSA; prepare cavity (SSA on, reset interlocks, setup_tuning)
     2. record_cold_landing     – record cold-landing detune (operator pushes to DF_COLD via UI)
     3. probe_stepper_direction – measure Hz/microstep (operator confirms; UI writes to SCALE_CALC.B)
     4. apply_hz_per_step       – write confirmed Hz/microstep to SCALE_CALC.B
@@ -123,6 +129,10 @@ class FrequencyTuningPhase(PhaseBase):
         self.cavity = None
         # Signed: positive means +steps increase cavity frequency (matches SCALE PV convention)
         self._hz_per_microstep: float | None = None
+        # Set once verify_initial_state has calibrated the SSA, so a RETRY of
+        # that step (a transient read in _prepare_and_read) does not run the
+        # calibration scan again.
+        self._ssa_calibrated = False
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -498,6 +508,10 @@ class FrequencyTuningPhase(PhaseBase):
                 message="Cavity is not online — cannot prepare it for tuning",
             )
 
+        calibration = self._calibrate_ssa(status_cb)
+        if calibration is not None:
+            return calibration
+
         _emit_status(
             status_cb, "✓ Stepper idle, cavity online — preparing cavity..."
         )
@@ -524,6 +538,69 @@ class FrequencyTuningPhase(PhaseBase):
                 "tune_config_warning": tune_config_warning,
             },
         )
+
+    def _calibrate_ssa(self, status_cb=None) -> "PhaseStepResult | None":
+        """Calibrate the SSA before tuning, as auto setup does. Stage 1 only.
+
+        Uses the drive max on record.ssa_char (the operator's choice in the SSA
+        char phase), else SSA.drive_max (DRV_MAX_SAVE). Replaces
+        record.ssa_char on success. The stage 2/3 re-prepare
+        (_ensure_tuning_setup) does not recalibrate.
+
+        Refuses, before any write, while CALSTS reads Running. Skips the
+        calibration when the controller passes kept_ssa_calibration: a good
+        one under an hour old, or an older one the operator chose to Skip
+        (then ssa_calibration_skipped_by holds their name). A skip writes no
+        PVs and adds a line to record.frequency_tuning.notes.
+
+        Returns None on success, else the failed calibration result.
+        """
+        if self._ssa_calibrated:
+            return None
+        try:
+            running = self.cavity.ssa.calibration_running
+        except Exception as exc:
+            return PhaseStepResult(
+                result=PhaseResult.RETRY,
+                message=f"Could not read SSA calibration status: {exc}",
+                retry_delay_seconds=3.0,
+            )
+        if running:
+            return PhaseStepResult(
+                result=PhaseResult.FAILED,
+                message=(
+                    "SSA calibration is running — wait for it to finish "
+                    "before tuning"
+                ),
+            )
+        kept = self.context.parameters.get("kept_ssa_calibration")
+        if kept is not None:
+            self._keep_ssa_calibration(kept, status_cb)
+            return None
+        _emit_status(status_cb, "Calibrating SSA...")
+        previous = getattr(self.context.record, "ssa_char", None)
+        result = cavity_setup.calibrate_ssa(
+            self.cavity,
+            self.context,
+            previous.max_drive if previous else None,
+        )
+        if result.result != PhaseResult.SUCCESS:
+            return result
+        self._ssa_calibrated = True
+        _emit_status(status_cb, f"✓ {result.message}")
+        return None
+
+    def _keep_ssa_calibration(self, kept, status_cb=None) -> None:
+        """Keep the slope already on the SSA and note why on the record."""
+        skipped_by = self.context.parameters.get("ssa_calibration_skipped_by")
+        note = cavity_setup.kept_ssa_calibration_note(kept, skipped_by)
+        record = getattr(self.context, "record", None)
+        if record is not None:
+            data = record.frequency_tuning or FrequencyTuningData()
+            data.notes = f"{data.notes}\n{note}" if data.notes else note
+            record.frequency_tuning = data
+        self._ssa_calibrated = True
+        _emit_status(status_cb, f"✓ {note}")
 
     def _prepare_and_read(
         self, status_cb=None
