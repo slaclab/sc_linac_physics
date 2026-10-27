@@ -23,6 +23,10 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     TEXT_SECONDARY,
 )
 
+from sc_linac_physics.applications.rf_commissioning.ui.ssa_calibration_dialog import (  # noqa: E501
+    ask_rerun_ssa_calibration,
+)
+
 from .base_placeholder import BasePlaceholderDisplay
 
 
@@ -37,16 +41,18 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
     # Emitted from the background worker thread; slot runs on the GUI thread.
     tuning_data_signal = pyqtSignal(float, float)
     # Carries (detune_hz, live_steps_or_None) from the 500ms EPICS read thread.
-    # Using a signal guarantees Qt dispatches the slot to the GUI thread;
-    # QTimer.singleShot(0, lambda) without a QObject context runs in the
-    # calling thread's event loop, which doesn't exist for daemon Thread()s.
+    # The plot can only be redrawn on the GUI thread. Emitting a signal from
+    # the read thread makes Qt run the handler there. QTimer.singleShot(0, ...)
+    # would not: it runs on the thread that called it, and a daemon thread
+    # never runs it at all.
     _live_detune_ready = pyqtSignal(float, object)
 
     def __init__(
         self, parent=None, session: CommissioningSession | None = None
     ):
         super().__init__(parent, session=session)
-        # super().__init__ → setup_ui() → _bind_ui_widgets() → self.tuning_plot set
+        # super().__init__ builds the widgets, so self.tuning_plot exists from
+        # here on.
         self._live_steps: list[int] = []
         self._live_hz: list[float] = []
         self._projection_curve: pg.PlotDataItem | None = None
@@ -406,6 +412,10 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             and self._controller._current_stage >= 3
         ):
             self.set_projection(0.0, abs(signed_hz))
+
+    def ask_rerun_ssa_calibration(self, last: str) -> str:
+        """Ask whether to recalibrate an SSA: last calibration old or bad."""
+        return ask_rerun_ssa_calibration(self, last, "tuning")
 
     def get_current_hz_per_step(self) -> float | None:
         """Return the current signed Hz/step value from the editable spinbox."""

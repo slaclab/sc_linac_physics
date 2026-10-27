@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from asyncio import sleep
 from random import uniform, random
 
@@ -9,6 +10,7 @@ from caproto.server import (
     PvpropertyEnum,
     PvpropertyFloat,
     PvpropertyInteger,
+    PvpropertyString,
     pvproperty,
 )
 
@@ -85,6 +87,11 @@ class SSAPVGroup(PVGroup):
         name="CALSTAT",
         enum_strings=("Good", "Warning", "Error"),
     )
+    cal_time: PvpropertyString = pvproperty(
+        name="CALTS",
+        dtype=ChannelType.STRING,
+        value=datetime.now().strftime("%Y-%m-%d-%H:%M:%S"),
+    )
     slope_old: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE", dtype=ChannelType.FLOAT
     )
@@ -94,32 +101,20 @@ class SSAPVGroup(PVGroup):
     saved_slope: PvpropertyFloat = pvproperty(
         value=0.0, name="SLOPE_SAVE", dtype=ChannelType.FLOAT
     )
-    # Enum index read by SSA.rated_power_kw, per
-    # linac_utils.SSA_TYPE_RATED_POWER_KW: 0 the 7 kW HE SSA, 2 a standard
-    # LCLS-II SSA, 3 the 3.9 GHz HL SSA. The sim picks by cryomodule: HL,
-    # then high energy (L4B, Cryomodule.is_high_energy), then standard. The
-    # real machine has 191 index-0 SSAs to L4B's 184, plus 4 index-1 HE
-    # prototypes, so this is close but not exact.
-    ssa_type: PvpropertyEnum = pvproperty(
-        value=2,
-        name="Type",
-        dtype=ChannelType.ENUM,
-        enum_strings=(
-            "RK CA1300 7kW",
-            "RK CA1300 4.6kW",
-            "RK CA1300",
-            "RK CA3900",
-            "RK CA186",
-            "RK CA199",
-        ),
+    # The SSA's rated power in kW, which SSA.rated_power_kw reads. The sim
+    # sets it by cryomodule: 1 kW on HL, 7 kW on high-energy cryomodules
+    # (L4B, Cryomodule.is_high_energy) and 3.8 kW everywhere else. The real machine also has 7 kW SSAs outside L4B and
+    # 4 HE prototypes at 4.6 kW, so this is close but not exact.
+    pwr_rating: PvpropertyFloat = pvproperty(
+        value=3.8, name="PwrRating", dtype=ChannelType.FLOAT, units="kW"
     )
 
-    @ssa_type.startup
-    async def ssa_type(self, instance, async_lib):
+    @pwr_rating.startup
+    async def pwr_rating(self, instance, async_lib):
         if self.cavityGroup.is_hl:
-            await instance.write(3)
+            await instance.write(1.0)
         elif self.is_high_energy:
-            await instance.write(0)
+            await instance.write(7.0)
 
     drive_max: PvpropertyFloat = pvproperty(
         name="DRV_MAX_REQ", value=0.8, dtype=ChannelType.FLOAT
@@ -164,8 +159,10 @@ class SSAPVGroup(PVGroup):
         self.cavityGroup: CavityPVGroup = cavityGroup
         self.is_high_energy = is_high_energy
         self._calibration_task: asyncio.Task | None = None
-        # Held from the running check until the task exists. The status write
-        # in between yields, so without it two starts could both pass.
+        # Lets only one calibration start at a time. Starting one checks that
+        # none is running, writes the status, then creates the task. Other PV
+        # writes can run during the status write, so without this lock two
+        # starts could both see "not running".
         self._calibration_start_lock = asyncio.Lock()
 
     CALIBRATION_DURATION_S = 5
@@ -190,6 +187,11 @@ class SSAPVGroup(PVGroup):
                 )
                 return 0
             self.log.info(f"{self.prefix} SSA calibration started")
+            # Stamped at the start, as cavity_service stamps PROBECALTS.
+            # CHECK: does the real IOC stamp CALTS at start or at finish?
+            await self.cal_time.write(
+                datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+            )
             await self.cal_status.write("Running")
             self._calibration_task = asyncio.get_running_loop().create_task(
                 self._finish_calibration()

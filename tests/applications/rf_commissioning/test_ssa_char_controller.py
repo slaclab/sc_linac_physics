@@ -46,6 +46,7 @@ class _ViewStub:
         self.run_button = _ButtonStub()
         self.pause_button = _ButtonStub()
         self.abort_button = _ButtonStub()
+        self.push_btn = _ButtonStub()
         self.local_phase_status = Mock()
         self.local_progress_bar = Mock()
         self.ui = SimpleNamespace(update_toolbar_state=Mock())
@@ -775,6 +776,7 @@ def test_on_push_slope_calls_cavity_push(monkeypatch) -> None:
     controller = _make_controller(view=view)
     cavity = Mock()
     controller._cavity = cavity
+    controller._repushable_cavity = cavity
     monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
 
     controller.on_push_slope()
@@ -789,11 +791,122 @@ def test_on_push_slope_logs_exception(monkeypatch) -> None:
     cavity = Mock()
     cavity.push_ssa_slope.side_effect = RuntimeError("push fail")
     controller._cavity = cavity
+    controller._repushable_cavity = cavity
     monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
 
     controller.on_push_slope()
 
     assert any("Push failed" in msg for msg in view.logs)
+
+
+def test_on_push_slope_refused_without_a_passing_calibration(
+    monkeypatch,
+) -> None:
+    """Haley's report on #318: the button pushed before any calibration ran."""
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    cavity = Mock()
+    controller._cavity = cavity
+    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
+
+    controller.on_push_slope()
+
+    cavity.push_ssa_slope.assert_not_called()
+    assert view.errors
+
+
+def test_repush_turns_on_after_a_pass_and_off_when_a_run_starts() -> None:
+    view = _ViewStub()
+    session = Mock()
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    cavity = Mock()
+    controller.context = PhaseContext(
+        record=_record_with_result(),
+        operator="op",
+        parameters={"cavity": cavity},
+    )
+    controller._cavity = cavity
+    controller._append_measurement_history = Mock()
+    view.push_btn.setEnabled(False)
+
+    controller.on_phase_completed()
+
+    assert view.push_btn.enabled is True
+    assert controller.repush_slope_value() == 1.02345
+
+    controller._set_running_ui_state()
+
+    assert view.push_btn.enabled is False
+    assert controller.repush_slope_value() is None
+
+
+def test_pass_on_one_cavity_does_not_enable_repush_for_another() -> None:
+    """Copilot review on #458: the operator switched to cavity B while A was
+    calibrating. A's pass must not make B re-pushable."""
+    view = _ViewStub()
+    session = Mock()
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    cavity_a, cavity_b = Mock(), Mock()
+    controller.context = PhaseContext(
+        record=_record_with_result(),
+        operator="op",
+        parameters={"cavity": cavity_a},
+    )
+    controller._cavity = cavity_b
+    controller._append_measurement_history = Mock()
+    view.push_btn.setEnabled(False)
+
+    controller.on_phase_completed()
+
+    assert view.push_btn.enabled is False
+    assert controller._repushable_cavity is cavity_a
+
+
+def test_unparseable_selection_clears_the_repush_target() -> None:
+    """Copilot review on #458: an early return in update_pv_addresses left
+    Re-push enabled and pointed at the previous cavity."""
+    view = _ViewStub(cavity=None)
+    controller = _make_controller(view=view)
+    cavity = Mock()
+    controller._cavity = cavity
+    controller._repushable_cavity = cavity
+    view.push_btn.setEnabled(True)
+
+    controller.update_pv_addresses()
+
+    assert view.push_btn.enabled is False
+    assert controller._cavity is None
+
+
+def test_repush_stays_off_when_the_calibration_did_not_pass() -> None:
+    view = _ViewStub()
+    session = Mock()
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    record = _record_with_result()
+    record.ssa_char.calibration_passed = False
+    controller.context = PhaseContext(record=record, operator="op")
+    controller._cavity = Mock()
+    controller._append_measurement_history = Mock()
+    view.push_btn.setEnabled(False)
+
+    controller.on_phase_completed()
+
+    assert view.push_btn.enabled is False
+
+
+def test_repush_turns_off_when_a_calibration_fails() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._repushable_cavity = Mock()
+    controller.phase = None
+
+    controller.on_phase_failed("bad")
+
+    assert view.push_btn.enabled is False
+    assert controller._repushable_cavity is None
 
 
 def test_on_push_slope_no_cavity_logs_message() -> None:

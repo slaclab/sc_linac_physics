@@ -27,6 +27,17 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     PIEZO_SCRIPT_RUNNING_VALUE,
 )
 
+# PZT:CHA_TESTSTAT / CHB_TESTSTAT enum states, read from production
+# (lcls-srv01, 2026-10-14). Only 0 counts as a pass.
+_CHANNEL_STATUS_LABELS = {0: "Pass", 1: "Warning", 2: "Fail"}
+
+
+def _status_label(status) -> str:
+    """Enum label for a channel status, given its index or its label."""
+    if isinstance(status, str):
+        return status
+    return _CHANNEL_STATUS_LABELS.get(status, f"status={status}")
+
 
 @dataclass
 class PiezoTestLimits:
@@ -161,7 +172,12 @@ class PiezoPreRFPhase(PhaseBase):
                 == PIEZO_PRE_RF_CHECKOUT_PASS_VALUE,
                 channel_b_passed=data.get("channel_b_status")
                 == PIEZO_PRE_RF_CHECKOUT_PASS_VALUE,
-                notes=f"Ch A: {data.get('channel_a_message', '')}, Ch B: {data.get('channel_b_message', '')}",
+                notes=(
+                    f"Ch A: {_status_label(data.get('channel_a_status'))} "
+                    f"({data.get('channel_a_message', '')}), "
+                    f"Ch B: {_status_label(data.get('channel_b_status'))} "
+                    f"({data.get('channel_b_message', '')})"
+                ),
             )
 
     # =========================================================================
@@ -387,11 +403,13 @@ class PiezoPreRFPhase(PhaseBase):
                 messages = []
                 if not cha_passed:
                     messages.append(
-                        f"Channel A failed (status={cha_status}): {cha_msg}"
+                        f"Channel A failed ({_status_label(cha_status)}): "
+                        f"{cha_msg}"
                     )
                 if not chb_passed:
                     messages.append(
-                        f"Channel B failed (status={chb_status}): {chb_msg}"
+                        f"Channel B failed ({_status_label(chb_status)}): "
+                        f"{chb_msg}"
                     )
                 message = "; ".join(messages)
                 result = PhaseResult.FAILED

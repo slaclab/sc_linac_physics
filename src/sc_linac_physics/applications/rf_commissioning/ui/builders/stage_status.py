@@ -25,8 +25,13 @@ from .theme import (
 __all__ = [
     "COLD_LANDING_TOOLTIP_NEEDED",
     "COLD_LANDING_TOOLTIP_SET",
+    "ACTION_NEEDED_BUTTON_STYLE",
     "PUSH_DF_COLD_ATTENTION",
     "PUSH_DF_COLD_NEUTRAL",
+    "STAGE4_RERUN_LABEL",
+    "STAGE4_RUN_LABEL",
+    "STAGE_RERUN_BTN_STYLE",
+    "STAGE_RUN_BTN_STYLE",
     "STAGE_CARD_STYLE_IDLE",
     "STAGE_CARD_STYLE_RUNNING",
     "STAGE_STATUS_DONE",
@@ -108,6 +113,51 @@ PUSH_DF_COLD_ATTENTION = f"""
     }}
     QPushButton:hover {{ background-color: rgba(212, 149, 106, 0.28); }}
 """
+
+# A button the operator has to click to finish a phase, such as Cavity
+# Characterization's Push to Cavity. Haley Marts, testing the app, read the
+# default grey as disabled and thought the run was stuck. Orange marks it the
+# same way as Save Cold Landing Frequency; disabled, it is the usual grey.
+ACTION_NEEDED_BUTTON_STYLE = f"""
+    QPushButton {{
+        background-color: {COLOR_WARNING_BG}; color: {COLOR_WARNING};
+        font-weight: bold; padding: 5px 14px;
+        border-radius: 4px; border: 2px solid {COLOR_WARNING};
+    }}
+    QPushButton:hover {{ background-color: rgba(212, 149, 106, 0.28); }}
+    QPushButton:disabled {{
+        background-color: #374151; color: #6b7280; border: none;
+    }}
+"""
+
+# Stage run buttons. Stage 4 stays enabled after it finishes so the operator
+# can scan again, and in the bright run style it read as "still needs to run".
+# Once it is done it switches to the muted re-run style and label.
+STAGE_RUN_BTN_STYLE = """
+    QPushButton {
+        background-color: #2563eb;
+        color: white;
+        font-weight: bold;
+        padding: 5px 14px;
+        border-radius: 4px;
+        border: none;
+    }
+    QPushButton:hover { background-color: #1d4ed8; }
+    QPushButton:disabled { background-color: #374151; color: #6b7280; }
+"""
+STAGE_RERUN_BTN_STYLE = f"""
+    QPushButton {{
+        background-color: transparent;
+        color: {TEXT_PRIMARY};
+        padding: 5px 14px;
+        border-radius: 4px;
+        border: 1px solid {BORDER};
+    }}
+    QPushButton:hover {{ background-color: #374151; }}
+    QPushButton:disabled {{ color: {TEXT_MUTED}; }}
+"""
+STAGE4_RUN_LABEL = "▶ Run Stage 4"
+STAGE4_RERUN_LABEL = "↻ Re-run Stage 4"
 
 COLD_LANDING_TOOLTIP_NEEDED = (
     "Commit the cavity's resting frequency to the DF_COLD PV.\n\n"

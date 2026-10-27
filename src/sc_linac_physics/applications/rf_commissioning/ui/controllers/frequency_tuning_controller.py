@@ -11,6 +11,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     FrequencyTuningData,
     PhaseCheckpoint,
 )
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.frequency_tuning import (
     FrequencyTuningPhase,
 )
@@ -26,8 +29,12 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status imp
     COLD_LANDING_TOOLTIP_SET,
     PUSH_DF_COLD_ATTENTION,
     PUSH_DF_COLD_NEUTRAL,
+    STAGE4_RERUN_LABEL,
+    STAGE4_RUN_LABEL,
     STAGE_CARD_STYLE_IDLE,
     STAGE_CARD_STYLE_RUNNING,
+    STAGE_RERUN_BTN_STYLE,
+    STAGE_RUN_BTN_STYLE,
     STAGE_STATUS_DONE,
     STAGE_STATUS_FAILED,
     STAGE_STATUS_NOT_STARTED,
@@ -97,6 +104,8 @@ class FrequencyTuningController(QObject):
     _df_cold_committed_signal = pyqtSignal()
     hz_per_step_updated = pyqtSignal(float)
     _stage_done = pyqtSignal(int)  # 1, 2, 3, or 4 (=finalize)
+    # (LastSetupResult or None, error text) from the CALTS/CALSTAT read.
+    _last_ssa_cal_read = pyqtSignal(object, str)
 
     def __init__(self, view, session: CommissioningSession) -> None:
         super().__init__()
@@ -137,6 +146,9 @@ class FrequencyTuningController(QObject):
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
         self._stage_done.connect(self._on_stage_done)
+        self._last_ssa_cal_read.connect(self._on_last_ssa_cal_read)
+        # (cm, cav, operator) while the last SSA calibration is being read.
+        self._pending_stage1: tuple | None = None
 
     # ------------------------------------------------------------------
     # PV wiring
@@ -202,9 +214,8 @@ class FrequencyTuningController(QObject):
             # Drive level is read-only here — drive_level_readback is a
             # PyDMLabel, shown next to a static "expect
             # SAFE_PULSED_DRIVE_LEVEL" hint, with no widget that writes it.
-            # Requested by @hmarts9 in review of PR #270; see
-            # FrequencyTuningUI._build_piezo_settings in
-            # ui/builders/phase_builders.py for what prompted it.
+            # Requested in review of PR #270, so operators can see piezo mode
+            # and drive level while moving the stepper by hand.
             ("piezo_enable_stat_readback", piezo.enable_stat_pv),
             ("piezo_enable_ctrl", piezo.enable_pv),
             ("piezo_mode_stat_readback", piezo.feedback_stat_pv),
@@ -262,6 +273,39 @@ class FrequencyTuningController(QObject):
         self._net_steps = 0
 
         try:
+            cavity = self._get_machine_cavity(cm, cav)
+        except Exception as exc:
+            self._set_stage_status_not_started(1)
+            self.view.show_error(f"Failed to start Stage 1: {exc}")
+            return
+        self._pending_stage1 = (cm, cav, operator)
+        Thread(
+            target=lambda: self._read_last_ssa_calibration(cavity),
+            daemon=True,
+        ).start()
+
+    def _read_last_ssa_calibration(self, cavity) -> None:
+        """Runs on a daemon thread: CALTS and CALSTAT are EPICS reads."""
+        try:
+            last = cavity_setup.last_ssa_calibration(cavity)
+        except Exception as exc:
+            self._last_ssa_cal_read.emit(None, str(exc))
+            return
+        self._last_ssa_cal_read.emit(last, "")
+
+    def _on_last_ssa_cal_read(self, last, error: str) -> None:
+        """Back on the GUI thread: decide on the SSA calibration, then run."""
+        if self._pending_stage1 is None:
+            return
+        cm, cav, operator = self._pending_stage1
+        self._pending_stage1 = None
+        decision = self._decide_ssa_calibration(last, error, operator)
+        if decision is None:
+            self._set_stage_status_not_started(1)
+            self.view.log_message("Stage 1 cancelled")
+            return
+        kept, skipped_by = decision
+        try:
             self._start_stage(
                 stage=1,
                 steps=_STAGE1_STEPS,
@@ -269,6 +313,10 @@ class FrequencyTuningController(QObject):
                 cm=cm,
                 cav=cav,
                 operator=operator,
+                extra_parameters={
+                    "kept_ssa_calibration": kept,
+                    "ssa_calibration_skipped_by": skipped_by,
+                },
             )
         except Exception as exc:
             import traceback
@@ -276,6 +324,22 @@ class FrequencyTuningController(QObject):
             self._set_stage_status_not_started(1)
             self.view.show_error(f"Failed to start Stage 1: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
+
+    def _decide_ssa_calibration(self, last, error: str, operator: str):
+        """Return (kept, skipped_by), or None if the operator cancelled.
+
+        The same rule as cavity char: cavity_setup.decide_ssa_calibration.
+        """
+        if last is None:
+            self.view.log_message(
+                f"Could not read the last SSA calibration ({error}); "
+                "calibrating"
+            )
+        return cavity_setup.decide_ssa_calibration(
+            last,
+            operator,
+            lambda text: self.view.ask_rerun_ssa_calibration(text),
+        )
 
     def run_stage_2(self) -> None:
         """Probe stepper direction to measure Hz/step."""
@@ -450,6 +514,7 @@ class FrequencyTuningController(QObject):
         cm: int,
         cav: int,
         operator: str,
+        extra_parameters: dict | None = None,
     ) -> None:
         self.update_pv_addresses(f"{cm:02d}", str(cav))
         cavity = self._get_machine_cavity(cm, cav)
@@ -477,7 +542,7 @@ class FrequencyTuningController(QObject):
         self.context = PhaseContext(
             record=record,
             operator=operator,
-            parameters={"cavity": cavity},
+            parameters={"cavity": cavity, **(extra_parameters or {})},
             phase_instance_id=self._active_phase_instance_id,
             run_intent="commissioning",
         )
@@ -584,6 +649,16 @@ class FrequencyTuningController(QObject):
         if btn is not None:
             btn.setEnabled(not success)
 
+    def _show_stage4_as_rerun(self, rerun: bool) -> None:
+        """Switch the Stage 4 button between "Run" and the muted "Re-run"."""
+        btn = getattr(self.view, "stage4_run_btn", None)
+        if btn is None:
+            return
+        btn.setText(STAGE4_RERUN_LABEL if rerun else STAGE4_RUN_LABEL)
+        btn.setStyleSheet(
+            STAGE_RERUN_BTN_STYLE if rerun else STAGE_RUN_BTN_STYLE
+        )
+
     def _enable_stage_btn(self, stage: int) -> None:
         btn = getattr(self.view, f"stage{stage}_run_btn", None)
         if btn is not None:
@@ -609,6 +684,9 @@ class FrequencyTuningController(QObject):
         if self._cavity is not None:
             try:
                 self._cavity.stepper_tuner.abort_flag = False
+                # Cavity.check_abort() reads this one: the SSA calibration in
+                # stage 1 and the chirp setup stop on it.
+                self._cavity.abort_flag = False
             except Exception:
                 pass
         speed_spinbox = getattr(self.view, "speed_spinbox", None)
@@ -637,6 +715,7 @@ class FrequencyTuningController(QObject):
         self.context.parameters["status_update_callback"] = (
             lambda msg: self._log_signal.emit(msg)
         )
+        self._ensure_open_phase_instance()
         finalize = self._finalize_after_run
         steps = list(self._steps)
         current_stage = self._current_stage
@@ -699,7 +778,11 @@ class FrequencyTuningController(QObject):
             _STAGE_COLD_LANDING,
             {"df_cold_hz": self._df_cold_hz},
         )
-        self._persist_df_cold_to_record()
+        # Always save, even when the detune is already on the record: Stage 1
+        # also replaced record.ssa_char or noted a kept calibration, and
+        # closing now must not lose that.
+        self._apply_df_cold_to_record()
+        saved = self._save_record_after_stage1() and saved
         self._set_stage_done_ui(1, success=saved)
         if not saved:
             return
@@ -838,6 +921,7 @@ class FrequencyTuningController(QObject):
         # Stage 4 (FSCAN) is repeatable — re-enable so the operator can re-scan
         # if the first result looked noisy or failed partway through.
         self._enable_stage_btn(4)
+        self._show_stage4_as_rerun(True)
 
         self._update_partial_results()
         if hasattr(self.view, "local_phase_status"):
@@ -855,6 +939,20 @@ class FrequencyTuningController(QObject):
         # the operator wants to re-scan with different results.
         self.confirm_and_save()
 
+    def _save_record_after_stage1(self) -> bool:
+        """Save the active record; False (and logged) if that failed."""
+        try:
+            if self.session.save_active_record():
+                return True
+            error = "save_active_record returned False"
+        except Exception as exc:
+            error = str(exc)
+        self.view.log_message(
+            f"✗ Could not save the SSA calibration result to the record: "
+            f"{error}. Re-run Stage 1."
+        )
+        return False
+
     def _persist_df_cold_to_record(self) -> None:
         """Write the cold-landing detune onto the record and save it.
 
@@ -865,23 +963,29 @@ class FrequencyTuningController(QObject):
         frequency recorded in history but invisible to the phase, and stage 2
         failed with "Cold landing frequency was not recorded".
         """
-        if self._df_cold_hz is None:
-            return
-        record = self.session.get_active_record()
-        if record is None:
-            return
-        existing = getattr(record.frequency_tuning, "df_cold_hz", None)
-        if existing == self._df_cold_hz:
-            return  # already durable; don't bump the record version for nothing
         try:
-            data = record.frequency_tuning or FrequencyTuningData()
-            data.df_cold_hz = self._df_cold_hz
-            record.frequency_tuning = data
-            self.session.save_active_record()
+            # Unchanged: already durable; don't bump the record version.
+            if self._apply_df_cold_to_record():
+                self.session.save_active_record()
         except Exception as exc:
             self._log_signal.emit(
                 f"Warning: could not persist cold landing to record: {exc}"
             )
+
+    def _apply_df_cold_to_record(self) -> bool:
+        """Put _df_cold_hz on record.frequency_tuning; True if it changed."""
+        if self._df_cold_hz is None:
+            return False
+        record = self.session.get_active_record()
+        if record is None:
+            return False
+        existing = getattr(record.frequency_tuning, "df_cold_hz", None)
+        if existing == self._df_cold_hz:
+            return False
+        data = record.frequency_tuning or FrequencyTuningData()
+        data.df_cold_hz = self._df_cold_hz
+        record.frequency_tuning = data
+        return True
 
     def _update_partial_results(self) -> None:
         """Populate Stored Data panel with whatever fields are known so far."""
@@ -1091,6 +1195,42 @@ class FrequencyTuningController(QObject):
                 return instance.get("id")
         return None
 
+    def _ensure_open_phase_instance(self) -> None:
+        """Make sure a frequency tuning attempt is open before a stage runs.
+
+        A failed stage marks the attempt that Stage 1 opened as failed
+        (on_phase_failed). The operator can still retry Stages 2-4 and
+        Confirm & Save after that, but with no open attempt, on_phase_completed
+        has nothing to mark complete and the tab stays "Failed" after a
+        successful Stage 4. So: reuse an attempt still in progress (one left
+        by an earlier session), else start a new one. Attempt 1 keeps its
+        failure, and the new attempt carries the result.
+
+        Looked up from the active record every time, not taken from the cached
+        _active_phase_instance_id: after switching cavities that id can belong
+        to the previous record, and completing it would leave this record's
+        attempt in progress. Stage 1's own fresh attempt is found by the same
+        lookup.
+        """
+        try:
+            if self.session.get_active_record_id() is None:
+                return
+            instance_id = self._find_open_phase_instance_id()
+            if instance_id is None:
+                phase_start = self.session.start_active_phase_instance(
+                    CommissioningPhase.FREQUENCY_TUNING,
+                    operator=self._get_operator(),
+                )
+                if phase_start is not None:
+                    instance_id = phase_start.phase_instance_id
+        except Exception as exc:
+            self.view.log_message(
+                f"Warning: could not open a frequency tuning attempt: {exc}"
+            )
+            return
+        self._active_phase_instance_id = instance_id
+        self.context.phase_instance_id = instance_id
+
     def on_phase_completed(self) -> None:
         self._paused = False
         self._clear_running_ui()
@@ -1147,12 +1287,24 @@ class FrequencyTuningController(QObject):
         if self._current_stage in (1, 2, 3):
             self._set_stage_done_ui(self._current_stage, success=False)
 
+        # A check_state step refusing to start (motor busy, DF_COLD not
+        # saved, ...) is a gate before the stage's stepper motion, not a
+        # failed measurement. It leaves the attempt in progress, so the
+        # retry continues the same attempt (_ensure_open_phase_instance finds
+        # it) and the history does not show a failure for a missed button.
+        # The reason stays in the activity log above.
+        refused = error_msg in {
+            f"Step failed: {_step_label('check_state_for_stage_2')}",
+            f"Step failed: {_step_label('check_state_for_stage_3')}",
+            f"Step failed: {_step_label('check_state_for_stage_4')}",
+        }
+
         try:
             if self.phase:
                 self.phase.finalize_phase()
             if self.session.save_active_record():
                 self.view.log_message("Partial results saved")
-            if self._active_phase_instance_id is not None:
+            if self._active_phase_instance_id is not None and not refused:
                 snapshot = None
                 if self.context and self.context.record.frequency_tuning:
                     snapshot = self.context.record.frequency_tuning.to_dict()
@@ -1172,12 +1324,7 @@ class FrequencyTuningController(QObject):
         finally:
             self._active_phase_instance_id = None
 
-        _check_state_failures = {
-            f"Step failed: {_step_label('check_state_for_stage_2')}",
-            f"Step failed: {_step_label('check_state_for_stage_3')}",
-            f"Step failed: {_step_label('check_state_for_stage_4')}",
-        }
-        if error_msg not in _check_state_failures:
+        if not refused:
             self.view.show_error(f"Frequency tuning failed: {error_msg}")
 
     # ------------------------------------------------------------------
@@ -1194,6 +1341,9 @@ class FrequencyTuningController(QObject):
         if self._cavity is not None:
             try:
                 self._cavity.stepper_tuner.abort_flag = True
+                # On its next check_abort() the cavity turns RF off and
+                # raises CavityAbortError.
+                self._cavity.abort_flag = True
             except Exception:
                 pass
 
@@ -1519,6 +1669,11 @@ class FrequencyTuningController(QObject):
             btn = getattr(self.view, f"stage{stage}_run_btn", None)
             if btn is not None:
                 btn.setEnabled(stage == 1)
+        self._show_stage4_as_rerun(False)
+
+        # The attempt belonged to the record being left; the next stage looks
+        # up this record's own (_ensure_open_phase_instance).
+        self._active_phase_instance_id = None
 
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None:
@@ -1659,6 +1814,7 @@ class FrequencyTuningController(QObject):
         }
         self._set_stage_done_ui(4, success=True)
         self._enable_stage_btn(4)
+        self._show_stage4_as_rerun(True)
 
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("PI MODES DONE")
