@@ -191,7 +191,7 @@ def test_update_pv_addresses_parse_error_logs_message() -> None:
 def test_update_pv_addresses_success_runs_mapping_and_sync() -> None:
     controller = _make_controller()
     controller._resolve_cavity_selection = Mock(return_value=("02", "1"))
-    controller._get_piezo_from_selection = Mock(return_value=(Mock(), 2, 1))
+    controller._get_piezo_from_selection = Mock(return_value=(Mock(), "02", 1))
     controller._build_pv_mapping = Mock(return_value={"k": Mock()})
     controller._apply_pv_mapping = Mock()
     controller._log_pv_update = Mock()
@@ -200,7 +200,7 @@ def test_update_pv_addresses_success_runs_mapping_and_sync() -> None:
     controller.update_pv_addresses()
 
     controller._apply_pv_mapping.assert_called_once()
-    controller._log_pv_update.assert_called_once_with("02", "1", 2, 1)
+    controller._log_pv_update.assert_called_once_with("02", "1", "02", 1)
     controller._sync_piezo_readbacks.assert_called_once()
 
 
@@ -379,12 +379,12 @@ def test_resolve_and_get_piezo_wrappers(monkeypatch) -> None:
     monkeypatch.setattr(
         controller_module,
         "get_piezo_from_selection",
-        lambda machine, cm, cav: (piezo, 2, 1, "machine-obj"),
+        lambda machine, cm, cav: (piezo, "02", 1, "machine-obj"),
     )
 
     assert controller._resolve_cavity_selection(None, None) == ("02", "1")
     result = controller._get_piezo_from_selection("02", "1")
-    assert result == (piezo, 2, 1)
+    assert result == (piezo, "02", 1)
     assert controller.machine == "machine-obj"
 
 
@@ -405,7 +405,7 @@ def test_update_pv_addresses_mapping_error_logs_message() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
     controller._resolve_cavity_selection = Mock(return_value=("02", "1"))
-    controller._get_piezo_from_selection = Mock(return_value=(Mock(), 2, 1))
+    controller._get_piezo_from_selection = Mock(return_value=(Mock(), "02", 1))
     controller._build_pv_mapping = Mock(side_effect=RuntimeError("map fail"))
 
     controller.update_pv_addresses()
@@ -437,10 +437,10 @@ def test_build_apply_log_wrappers_delegate(monkeypatch) -> None:
 
     mapping = controller._build_pv_mapping(piezo)
     controller._apply_pv_mapping(mapping)
-    controller._log_pv_update("02", "1", 2, 1)
+    controller._log_pv_update("02", "1", "02", 1)
 
     assert called["apply"] is True
-    assert view.logs[-1] == "02-1-2-1"
+    assert view.logs[-1] == "02-1-02-1"
 
 
 def test_sync_piezo_readbacks_branches() -> None:
@@ -452,7 +452,7 @@ def test_sync_piezo_readbacks_branches() -> None:
     view.update_piezo_readbacks.assert_called_once_with(piezo)
 
     controller._resolve_cavity_selection = Mock(return_value=("02", "1"))
-    controller._get_piezo_from_selection = Mock(return_value=(piezo, 2, 1))
+    controller._get_piezo_from_selection = Mock(return_value=(piezo, "02", 1))
     controller._sync_piezo_readbacks(None)
     assert controller._get_piezo_from_selection.called
 

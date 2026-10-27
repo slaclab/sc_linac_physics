@@ -476,7 +476,7 @@ def test_run_stage_1_marks_running_before_resolving_target() -> None:
 
     def _resolve():
         status_at_resolve_time["text"] = view.stage1_status_label.text
-        return ("CM02_CAV1", 2, 1)
+        return ("CM02_CAV1", "02", 1)
 
     controller._resolve_target = _resolve
     controller._start_stage = Mock()
@@ -501,7 +501,7 @@ def test_run_stage_1_reverts_status_when_target_unresolved() -> None:
 def test_run_stage_1_reverts_status_when_start_raises() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", "02", 1))
     controller._start_stage = Mock(side_effect=RuntimeError("boom"))
 
     controller.run_stage_1()
@@ -898,7 +898,7 @@ def test_stage_2_awaiting_confirm_is_not_reported_as_idle() -> None:
 def test_run_stage_1_success_calls_start_stage() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", "02", 1))
     controller._start_stage = Mock()
 
     controller.run_stage_1()
@@ -909,7 +909,7 @@ def test_run_stage_1_success_calls_start_stage() -> None:
 def test_run_stage_1_start_stage_exception_logged() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", "02", 1))
     controller._start_stage = Mock(side_effect=RuntimeError("boom"))
 
     controller.run_stage_1()
@@ -2600,7 +2600,7 @@ def _stage1_controller(monkeypatch, last=None, read_error=None):
     view = _ViewStub()
     view.ask_rerun_ssa_calibration = Mock(return_value="rerun")
     controller = _make_controller(view=view)
-    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", "02", 1))
     controller._get_machine_cavity = Mock()
     controller._start_stage = Mock()
 
