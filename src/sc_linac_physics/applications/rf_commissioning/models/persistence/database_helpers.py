@@ -108,21 +108,10 @@ def update_note(
     return updated
 
 
-# Phase values that were removed, and the phase a saved run at that value
-# resumes in. Without this entry a run saved at "high_power_ramp" would fall
-# back to PIEZO_PRE_RF below and restart the whole workflow.
-RETIRED_PHASES: dict[str, CommissioningPhase] = {
-    "high_power_ramp": CommissioningPhase.MP_PROCESSING,
-}
-
-
 def coerce_phase(value: str | CommissioningPhase | None) -> CommissioningPhase:
     """Convert stored phase values to a known enum value."""
     if isinstance(value, CommissioningPhase):
         return value
-
-    if str(value) in RETIRED_PHASES:
-        return RETIRED_PHASES[str(value)]
 
     try:
         return CommissioningPhase(str(value))

@@ -85,12 +85,6 @@ def test_serialize_measurement_data_uses_model_to_dict():
     assert parsed["is_complete"] is True
 
 
-def test_coerce_phase_resumes_retired_ramp_phase_in_mp_processing():
-    # HIGH_POWER_RAMP was folded into MP_PROCESSING. A run saved there must
-    # resume at MP processing, not restart at piezo pre-RF.
-    assert coerce_phase("high_power_ramp") is CommissioningPhase.MP_PROCESSING
-
-
 def test_coerce_phase_falls_back_to_first_phase_for_unknown_values():
     assert (
         coerce_phase(CommissioningPhase.SSA_CHAR) is CommissioningPhase.SSA_CHAR
