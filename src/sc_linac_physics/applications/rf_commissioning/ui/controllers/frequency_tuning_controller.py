@@ -131,8 +131,6 @@ class FrequencyTuningController(QObject):
 
         self._current_stage: int = 0
         self._stage_running: bool = False
-        self._hz_est_total_steps: float = 0.0
-        self._hz_est_total_hz: float = 0.0
         self._net_steps: int = 0
         self._tune_step_data: dict = {}
         self._probe_stage_confirmed: bool = False
@@ -254,8 +252,6 @@ class FrequencyTuningController(QObject):
         self.view.clear_results()
         self.view.reset_plot()
         self._df_cold_hz = None
-        self._hz_est_total_steps = 0.0
-        self._hz_est_total_hz = 0.0
         self._net_steps = 0
 
         try:
@@ -421,10 +417,6 @@ class FrequencyTuningController(QObject):
         self._finalize_after_run = True
         self._set_stage_running_ui(None)
         QTimer.singleShot(100, self._run_phase_in_background)
-
-    def on_confirm_and_tune(self) -> None:
-        """Backward-compat alias → run_stage_3."""
-        self.run_stage_3()
 
     def _check_data_prerequisites(self, stage: int) -> bool:
         """Check that data recorded by previous stages is available.
@@ -785,11 +777,6 @@ class FrequencyTuningController(QObject):
     def _on_stage2_done(self) -> None:
         signed_hz = self.phase._hz_per_microstep or 0.0
 
-        probe_steps = float(getattr(self.phase.limits, "probe_steps", 0))
-        if probe_steps > 0 and abs(signed_hz) > 0:
-            self._hz_est_total_steps = probe_steps
-            self._hz_est_total_hz = abs(signed_hz) * probe_steps
-
         self._pending_stage2_data = {
             "hz_per_microstep": signed_hz,
         }
@@ -985,14 +972,6 @@ class FrequencyTuningController(QObject):
         )
         if hasattr(self.view, "_update_local_results"):
             self.view._update_local_results(partial)
-
-    def _on_hz_chunk_update(self, steps: int, hz_delta: float) -> None:
-        """Called from background thread after each tuning move."""
-        if steps > 0 and hz_delta > 0:
-            self._hz_est_total_steps += steps
-            self._hz_est_total_hz += hz_delta
-            new_est = self._hz_est_total_hz / self._hz_est_total_steps
-            self.hz_per_step_updated.emit(new_est)
 
     # ------------------------------------------------------------------
     # Step execution
@@ -1676,8 +1655,6 @@ class FrequencyTuningController(QObject):
         self.context = None
         self._phase_started = False
         self._df_cold_hz = None
-        self._hz_est_total_steps = 0.0
-        self._hz_est_total_hz = 0.0
         self._net_steps = 0
         self._tune_step_data = {}
         self._probe_stage_confirmed = False
@@ -1762,12 +1739,6 @@ class FrequencyTuningController(QObject):
 
         if self.phase is not None and signed_hz:
             self.phase._hz_per_microstep = signed_hz
-
-        if abs(signed_hz) > 0 and self.phase is not None:
-            probe_steps = float(getattr(self.phase.limits, "probe_steps", 0))
-            if probe_steps > 0:
-                self._hz_est_total_steps = probe_steps
-                self._hz_est_total_hz = abs(signed_hz) * probe_steps
 
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None and signed_hz:
