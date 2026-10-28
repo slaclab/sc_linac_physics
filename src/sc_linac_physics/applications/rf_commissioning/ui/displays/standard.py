@@ -1,7 +1,6 @@
 """Standard placeholder phase displays."""
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
-    HighPowerRampData,
     MPProcessingData,
     OneHourRunData,
     PiezoWithRFTest,
@@ -23,15 +22,6 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
     PHASE_NAME = "Piezo with RF"
     DATA_ATTR = "piezo_with_rf"
     DATA_MODEL = PiezoWithRFTest
-
-
-class HighPowerRampDisplay(BasePlaceholderDisplay):
-    """Display for High Power Ramp phase."""
-
-    UI_CLASS = GenericPhaseUI
-    PHASE_NAME = "High Power Ramp"
-    DATA_ATTR = "high_power_ramp"
-    DATA_MODEL = HighPowerRampData
 
 
 class HighPowerMPProcessingDisplay(BasePlaceholderDisplay):

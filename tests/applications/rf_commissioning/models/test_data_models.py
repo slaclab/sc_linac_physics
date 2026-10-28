@@ -9,7 +9,6 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
     FrequencyTuningData,
-    HighPowerRampData,
     MPProcessingData,
     OneHourRunData,
     PHASE_REGISTRY,
@@ -36,7 +35,6 @@ class TestCommissioningPhase:
             CommissioningPhase.FREQUENCY_TUNING,
             CommissioningPhase.CAVITY_CHAR,
             CommissioningPhase.PIEZO_WITH_RF,
-            CommissioningPhase.HIGH_POWER_RAMP,
             CommissioningPhase.MP_PROCESSING,
             CommissioningPhase.ONE_HOUR_RUN,
             CommissioningPhase.COMPLETE,
@@ -109,12 +107,11 @@ class TestPhaseModels:
             amplifier_gain_b=1.2,
             detune_gain=0.9,
         )
-        high_power_initial = HighPowerRampData(
+        mp_processing = MPProcessingData(
             had_multipactor_event=True,
             field_emission_onset=14.0,
             max_amplitude_reached=16.0,
         )
-        mp_processing = MPProcessingData()
         mp_processing.add_quench(
             amplitude=15.2,
             timestamp=datetime(2026, 3, 20, 10, 0, 0),
@@ -130,7 +127,8 @@ class TestPhaseModels:
 
         assert cavity.is_complete is True
         assert piezo_rf.is_complete is True
-        assert high_power_initial.is_complete is True
+        assert mp_processing.is_complete is True
+        assert mp_processing.max_amplitude_reached == pytest.approx(16.0)
         assert mp_processing.quench_count == 2
         assert mp_processing.quench_intervals_seconds == [390.0]
         assert all(

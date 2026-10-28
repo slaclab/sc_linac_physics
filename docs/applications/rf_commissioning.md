@@ -26,10 +26,13 @@ For UI-only development without live EPICS, set `PYDM_DEFAULT_PROTOCOL=fake`.
 | 3 | `FREQUENCY_TUNING` | `frequency_tuning` | Frequency measurement and pi-mode map |
 | 4 | `CAVITY_CHAR` | `cavity_char` | RF cavity characterization (loaded Q, scale factor) |
 | 5 | `PIEZO_WITH_RF` | `piezo_with_rf` | Piezo testing with RF |
-| 6 | `HIGH_POWER_RAMP` | `high_power_ramp` | Initial high-power RF ramp |
-| 7 | `MP_PROCESSING` | `mp_processing` | Multipacting processing and quench tracking |
-| 8 | `ONE_HOUR_RUN` | `one_hour_run` | One-hour RF stability run |
-| 9 | `COMPLETE` | `complete` | Administrative sign-off and handoff |
+| 6 | `MP_PROCESSING` | `mp_processing` | Amplitude ramp with multipacting processing and quench tracking |
+| 7 | `ONE_HOUR_RUN` | `one_hour_run` | One-hour RF stability run |
+| 8 | `COMPLETE` | `complete` | Administrative sign-off and handoff |
+
+There is no separate high-power ramp phase: the amplitude is processed as
+it is raised. A run saved at the old `high_power_ramp` value resumes at
+`MP_PROCESSING` (`RETIRED_PHASES` in `models/persistence/database_helpers.py`).
 
 Phases are sequential. In normalized workflow validation, the previous phase must be `complete` (or explicitly `skipped`) before the next phase can start. In the current session helper (`CommissioningSession.can_run_phase`), the previous phase must be `complete`. `PIEZO_PRE_RF` is the only phase intentionally restartable at any time.
 
