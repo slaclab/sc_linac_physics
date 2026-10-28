@@ -14,7 +14,7 @@ from sc_linac_physics.applications.q0.q0_gui_utils import CalibrationWorker
 from sc_linac_physics.applications.q0.q0_measurement_widget import (
     Q0MeasurementWidget,
 )
-from sc_linac_physics.applications.q0.q0_utils import ValveParams
+from sc_linac_physics.applications.q0.q0_utils import ValveParams, logger
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
@@ -519,7 +519,7 @@ class Q0GUI(Display):
                 amplitudes[cav_num] = cav_amp_control.desAmpSpinbox.value()
             else:
                 amplitudes[cav_num] = 0
-        print(f"Cavity amplitudes: {amplitudes}")
+        logger.info(f"Cavity amplitudes: {amplitudes}")
         return amplitudes
 
     @pyqtSlot()
