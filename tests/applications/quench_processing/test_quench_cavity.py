@@ -925,3 +925,11 @@ class TestResetInterlocksDuringQuench:
 
         cavity._interlock_reset_pv_obj.put.assert_not_called()
         cavity.turn_off.assert_called_once()
+
+    def test_high_radiation_still_stops_the_reset(self, cavity):
+        cavity.decarad = Mock()
+        cavity.decarad.max_raw_dose = RADIATION_LIMIT + 1
+        with pytest.raises(QuenchError, match="Radiation"):
+            cavity.reset_interlocks()
+
+        cavity._interlock_reset_pv_obj.put.assert_not_called()
