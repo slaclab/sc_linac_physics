@@ -668,6 +668,33 @@ def test_run_phase_in_background_step_fails_emits_signal(monkeypatch) -> None:
     assert emitted[-1] == (False, "Step failed: step")
 
 
+RACK_BUSY = "Can't continue: RF is on for cavity 2 of L1B CM02."
+
+
+def test_a_failed_step_reports_its_own_message(monkeypatch) -> None:
+    """The popup shows why the step failed, not only which step it was."""
+    controller = _make_controller()
+    controller.phase = Mock()
+    controller.phase.get_phase_steps.return_value = ["reset_and_power_on"]
+    controller.phase.execute_step.return_value = PhaseStepResult(
+        result=PhaseResult.FAILED, message=RACK_BUSY
+    )
+    controller._check_pause_and_abort = Mock(return_value=True)
+    controller._create_step_checkpoint = Mock()
+    controller._execute_single_step = lambda step: (
+        controller._execute_step_with_retries(step, max_retries=3)
+    )
+    emitted = []
+    controller.phase_run_finished.connect(
+        lambda ok, msg: emitted.append((ok, msg))
+    )
+    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
+
+    controller._run_phase_in_background()
+
+    assert emitted[-1] == (False, RACK_BUSY)
+
+
 def test_run_phase_in_background_exception_emits_signal(monkeypatch) -> None:
     controller = _make_controller()
     controller.phase = Mock()

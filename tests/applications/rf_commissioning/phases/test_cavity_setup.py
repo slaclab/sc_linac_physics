@@ -143,6 +143,36 @@ def test_another_cavity_with_rf_on_blocks_the_dac_zeroing(cavity, context):
     cavity.ssa.calibrate.assert_not_called()
 
 
+def test_rack_message_names_the_cavities_the_write_and_the_fix(cavity, context):
+    cavity.number = 4
+    cavity.rack.cryomodule = "L1B CM02"
+    cavity.rack.cavities = {
+        n: _rack_cavity(n, rf_on=True) for n in (1, 2, 3)
+    } | {4: cavity}
+
+    result = cavity_setup.check_rack_free(cavity, context)
+
+    assert result.result == PhaseResult.FAILED
+    assert result.message == (
+        "Can't continue: RF is on for cavities 1, 2 and 3 of L1B CM02, which "
+        "share rack A with cavity 4. This step sets DAC_AMPLITUDE to 0 on "
+        "rack A's RFS1 and RFS2. Turn RF off on those cavities, then run it "
+        "again."
+    )
+
+
+def test_rack_message_for_one_cavity(cavity, context):
+    cavity.rack.cryomodule = "L1B CM02"
+    cavity.rack.cavities[2] = _rack_cavity(2, rf_on=True)
+
+    result = cavity_setup.check_rack_free(cavity, context)
+
+    assert "RF is on for cavity 2 of L1B CM02, which shares rack A" in (
+        result.message
+    )
+    assert "Turn RF off on that cavity, then run it again." in result.message
+
+
 def test_this_cavity_having_rf_on_does_not_block(cavity, context):
     """The cavity being set up is turned off by the step itself."""
     cavity.is_on = True
@@ -168,7 +198,13 @@ def test_rack_check_callback_can_refuse(cavity, context):
     result = cavity_setup.calibrate_ssa(cavity, context)
 
     assert result.result == PhaseResult.FAILED
-    assert "cavity 3" in result.message
+    assert result.message.startswith(
+        "Can't continue: another cavity in rack A is in use: "
+        "CM02 cavity 3 is mid-commissioning. This step sets DAC_AMPLITUDE"
+    )
+    assert result.message.endswith(
+        "Wait until that cavity is free, then run it again."
+    )
     cavity.turn_off.assert_not_called()
 
 
