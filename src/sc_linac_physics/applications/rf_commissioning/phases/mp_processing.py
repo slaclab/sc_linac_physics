@@ -235,29 +235,20 @@ class MPProcessingPhase(PhaseBase):
         if self.context.record.mp_processing is None:
             self.context.record.mp_processing = MPProcessingData()
         try:
-            end = float(self.cavity.ades_max)
-            amplitude = float(self.cavity.ades)
-            self._note_amplitude(amplitude)
-            while True:
-                at_end = amplitude >= end
-                hold = (
-                    self.limits.stable_seconds
-                    if at_end
-                    else self.limits.step_seconds
-                )
-                if self._quenched_within(hold):
-                    self._process_until_stable(amplitude)
-                if at_end:
-                    break
-                amplitude = round(min(amplitude + self.limits.step_mv, end), 3)
-                # PV write: ADES, in MV.
-                self.cavity.ades = amplitude
-                self._note_amplitude(amplitude)
+            amplitude = self._walk_to_ades_max()
         except CavityAbortError as exc:
             return self._failed(
                 f"Aborted during MP processing — RF is off: {exc}"
             )
         except CavityFaultError as exc:
+            # An abort requested while reset_interlocks was retrying has
+            # not turned RF off yet. check_abort does that, and raises.
+            try:
+                self.cavity.check_abort()
+            except CavityAbortError as abort:
+                return self._failed(
+                    f"Aborted during MP processing — RF is off: {abort}"
+                )
             return self._failed(f"Interlock reset failed: {exc}")
         data = self.context.record.mp_processing
         return self._success(
@@ -278,6 +269,33 @@ class MPProcessingPhase(PhaseBase):
     # Helpers
     # ------------------------------------------------------------------
 
+    def _walk_to_ades_max(self) -> float:
+        """The loop in _process. Returns the final ADES, in MV.
+
+        Raises CavityAbortError on abort, CavityFaultError if a reset fails.
+        """
+        end = float(self.cavity.ades_max)
+        amplitude = float(self.cavity.ades)
+        self._note_amplitude(amplitude)
+        while True:
+            at_end = amplitude >= end
+            hold = (
+                self.limits.stable_seconds
+                if at_end
+                else self.limits.step_seconds
+            )
+            if self._quenched_within(hold):
+                self._process_until_stable(amplitude)
+            if at_end:
+                return amplitude
+            # Round the step, then cap. Rounding after the cap could land
+            # just under an ADES_MAX like 16.600000381 every time, and the
+            # walk would never reach the final hold.
+            amplitude = min(round(amplitude + self.limits.step_mv, 3), end)
+            # PV write: ADES, in MV.
+            self.cavity.ades = amplitude
+            self._note_amplitude(amplitude)
+
     def _process_until_stable(self, amplitude: float) -> None:
         """Record and reset each quench until stable_seconds pass without one.
 
@@ -285,10 +303,16 @@ class MPProcessingPhase(PhaseBase):
         CavityFaultError if the cavity stays faulted). ADES is not changed.
         CHECK: after the reset, does the LLRF bring the field back to the
         same ADES in SELA on its own? quench_processing assumed so.
+
+        Abort is checked before the reset is written. Cavity.reset_interlocks
+        itself does not check abort: if the cavity stays faulted it retries
+        up to INTERLOCK_RESET_ATTEMPTS times, waiting 3, 5, 7... s, about
+        48 s in all, before raising CavityFaultError.
         """
         while True:
             self.context.record.mp_processing.add_quench(amplitude=amplitude)
             time.sleep(self.limits.quench_settle_seconds)
+            self.cavity.check_abort()
             self.cavity.reset_interlocks()
             if not self._quenched_within(self.limits.stable_seconds):
                 return
