@@ -58,7 +58,7 @@ positioning.
 
 **One critical rule:** never do blocking work (sleep, network calls, EPICS reads) on the main
 thread. Doing so freezes the UI. Long-running operations belong in a background thread — see
-`utils/qt.py` and `docs/utils/shared_utilities.md` once you're comfortable with the basics.
+`utils/background.py` and `docs/utils/shared_utilities.md` once you're comfortable with the basics.
 
 ### PyDM
 
@@ -442,6 +442,6 @@ Once you're comfortable with the exercises above, you can find more detailed doc
 - **`docs/utils/shared_utilities.md`** — the `PV` wrapper, `PVBatch`, logging.
 - **`docs/applications/auto_setup.md`** — the first real application to read. Its
   `applications/auto_setup/frontend/` directory uses the same patterns you just practiced.
-- **`utils/qt.py`** — the `Worker(QThread)` pattern for running blocking operations
+- **`utils/background.py`** — `BackgroundTask`, for running blocking operations
   without freezing the UI.
 - **`AGENTS.md`** — project-wide conventions you should follow when contributing.
