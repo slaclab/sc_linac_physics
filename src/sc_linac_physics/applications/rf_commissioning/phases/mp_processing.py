@@ -6,10 +6,11 @@ meeting (Lisa Zacarias and Sebastian Aderhold).
 
 What it does to the machine, in order:
 
-1. setup_rf: Cavity.setup_rf(start_amplitude_mv, calibrate_ssa=False,
-   characterize=False). That turns RF off, moves to resonance, turns on in
-   SELA and walks ADES up to the start amplitude. The SSA calibration and
-   the loaded Q / scale factor pushed by the earlier phases are kept.
+1. setup_rf: Cavity.setup_rf(start_amplitude_mv, ...). That turns RF off,
+   moves to resonance, turns on in SELA and walks ADES up to the start
+   amplitude. It re-runs the SSA calibration and the characterization only
+   when the last one is stale, as the piezo with RF phase does (see
+   _setup_rf).
 2. process: writes ADES (MV) up by step_mv every step_seconds, up to
    ADES_MAX. When the quench latch is set, it records the quench, waits
    quench_settle_seconds, writes the interlock reset (Cavity.
@@ -34,6 +35,12 @@ from dataclasses import dataclass
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     MPProcessingData,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.cavity_setup import (
+    RECENT_RESULT_SECONDS,
+    LastSetupResult,
+    last_characterization,
+    last_ssa_calibration,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
@@ -65,6 +72,9 @@ class MPProcessingLimits:
     # quench_cavity.wait_for_quench waits 1 s "just in case".
     quench_settle_seconds: float = 1.0
     poll_interval: float = 1.0
+    # setup_rf keeps an SSA calibration or characterization younger than
+    # this. Same one hour as the piezo with RF phase.
+    recent_result_seconds: float = RECENT_RESULT_SECONDS
 
 
 class MPProcessingPhase(PhaseBase):
@@ -121,32 +131,102 @@ class MPProcessingPhase(PhaseBase):
 
         A rerun replaces the last run's quenches and max amplitude. Reads
         PVs only. A dry run clears nothing.
+
+        Its data says whether the SSA calibration (CALTS, CALSTAT) and the
+        characterization (PROBECALTS, PROBECALSTS) are recent enough for
+        setup_rf to keep. The controller asks the operator Rerun or Skip for
+        each one that is not, as for piezo with RF.
         """
         if self.context.dry_run:
             return self._dry_run_result("cavity state check")
         try:
             if not self.cavity.is_online:
                 return self._failed("Cavity is not online — cannot process")
+            ssa_cal = last_ssa_calibration(self.cavity)
+            char = last_characterization(self.cavity)
         except Exception as exc:
             return self._retry(f"Could not read cavity state: {exc}")
+        max_age = self.limits.recent_result_seconds
         self.context.record.mp_processing = MPProcessingData()
-        return self._success("Cavity ready for MP processing")
+        return self._success(
+            "Cavity ready for MP processing",
+            data={
+                "ssa_calibration_time": ssa_cal.timestamp,
+                "ssa_calibration_good": bool(ssa_cal.good),
+                "ssa_calibration_recent": ssa_cal.is_recent(max_age),
+                "characterization_time": char.timestamp,
+                "characterization_complete": char.good,
+                "characterization_recent": char.is_recent(max_age),
+            },
+        )
 
     def _setup_rf(self) -> PhaseStepResult:
-        """Turn on in SELA at start_amplitude_mv; keep the earlier setup.
+        """Turn on in SELA at start_amplitude_mv with Cavity.setup_rf.
 
-        Cavity.setup_rf caps the amplitude at ADES_MAX.
+        Cavity.setup_rf caps the amplitude at ADES_MAX. It re-runs the SSA
+        calibration when CALTS is older than recent_result_seconds (1 h) or
+        CALSTAT is not Good. It re-runs the characterization (which pushes
+        loaded Q and scale factor) when PROBECALTS is older than 1 h or
+        PROBECALSTS is not Complete. Otherwise it keeps what is on the
+        machine. Same rule as the piezo with RF phase.
+
+        The operator can keep a stale result: context.parameters
+        ["rerun_ssa_calibration"] or ["rerun_characterization"] set to
+        False. A missing answer means re-run. True does not re-run a recent
+        result. What was kept or re-run goes in record.mp_processing.notes.
+
+        A failed read of the timestamps retries, since nothing has been
+        written yet. Any error after that fails the step without a retry,
+        since a retry could repeat an SSA calibration and a
+        characterization.
         """
         if self.context.dry_run:
             return self._dry_run_result("RF setup")
         start = self.limits.start_amplitude_mv
+        params = self.context.parameters
         try:
-            self.cavity.setup_rf(start, calibrate_ssa=False, characterize=False)
+            ssa_cal = last_ssa_calibration(self.cavity)
+            char = last_characterization(self.cavity)
+        except Exception as exc:
+            return self._retry(f"Could not read the last calibration: {exc}")
+        max_age = self.limits.recent_result_seconds
+        ssa_stale = not ssa_cal.is_recent(max_age)
+        char_stale = not char.is_recent(max_age)
+        calibrate_ssa = ssa_stale and bool(
+            params.get("rerun_ssa_calibration", True)
+        )
+        characterize = char_stale and bool(
+            params.get("rerun_characterization", True)
+        )
+        try:
+            self.cavity.setup_rf(
+                start, calibrate_ssa=calibrate_ssa, characterize=characterize
+            )
         except CavityAbortError as exc:
             return self._failed(f"Aborted during RF setup — RF is off: {exc}")
         except Exception as exc:
             return self._failed(f"RF setup failed: {exc}")
-        return self._success(f"RF on in SELA at {self.cavity.ades:.2f} MV")
+        ssa_note = (
+            "re-ran SSA calibration"
+            if calibrate_ssa
+            else self._kept_note("SSA calibration", ssa_stale, "CALTS", ssa_cal)
+        )
+        char_note = (
+            "re-ran characterization (pushed, not reviewed)"
+            if characterize
+            else self._kept_note(
+                "characterization", char_stale, "PROBECALTS", char
+            )
+        )
+        note = f"setup_rf() {ssa_note} and {char_note}"
+        self._append_note(note)
+        return self._success(
+            f"RF on in SELA at {self.cavity.ades:.2f} MV. {note}",
+            data={
+                "calibrated_ssa": calibrate_ssa,
+                "characterized": characterize,
+            },
+        )
 
     def _process(self) -> PhaseStepResult:
         """Walk ADES to ADES_MAX, processing each quench until stable."""
@@ -237,6 +317,28 @@ class MPProcessingPhase(PhaseBase):
             or amplitude > data.max_amplitude_reached
         ):
             data.max_amplitude_reached = amplitude
+
+    @staticmethod
+    def _kept_note(
+        what: str, stale: bool, pv: str, last: LastSetupResult
+    ) -> str:
+        """setup_rf's note for a result it did not re-run.
+
+        Same wording as PiezoWithRFPhase._kept_note.
+        """
+        if stale:
+            return (
+                f"kept a stale {what} ({pv} {last.timestamp:%Y-%m-%d %H:%M}; "
+                "operator chose Skip)"
+            )
+        return f"kept the {what} from the last hour"
+
+    def _append_note(self, note: str) -> None:
+        """Append a line to record.mp_processing.notes."""
+        record = self.context.record
+        data = record.mp_processing or MPProcessingData()
+        data.notes = f"{data.notes}\n{note}" if data.notes else note
+        record.mp_processing = data
 
     def _dry_run_result(self, what: str) -> PhaseStepResult:
         return PhaseStepResult(
