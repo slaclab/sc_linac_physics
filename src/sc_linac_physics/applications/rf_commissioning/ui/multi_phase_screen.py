@@ -130,7 +130,17 @@ class MultiPhaseCommissioningDisplay(
         #    heavier font in one state renders wider than the width it was
         #    allotted and the text clips. The selected tab is distinguished by
         #    background and underline instead.
+        # The #phaseTabs rule fills the strip right of the last tab, which
+        # otherwise shows the desktop's window colour (white under a light
+        # palette). A plain QWidget only paints a stylesheet background with
+        # WA_StyledBackground set. Scoped by object name so it does not reach
+        # any tab widget inside a phase page.
+        self.tabs.setObjectName("phaseTabs")
+        self.tabs.setAttribute(Qt.WA_StyledBackground, True)
         self.tabs.setStyleSheet(f"""
+            QTabWidget#phaseTabs {{
+                background-color: {BG_DEEP};
+            }}
             QTabWidget::pane {{
                 background-color: {BG_DEEP};
                 border: 1px solid {BORDER};

@@ -10,10 +10,10 @@ updates them cannot drift apart.
 
 from .theme import (
     BG_INSET,
+    BG_STAGE_RUNNING,
     BORDER,
     COLOR_ERROR,
     COLOR_PRIMARY,
-    COLOR_PRIMARY_BG,
     COLOR_SUCCESS,
     COLOR_WARNING,
     COLOR_WARNING_BG,
@@ -74,20 +74,26 @@ STAGE_STATUS_STYLE_FAILED = (
 #
 # Object-name scoped (`QFrame#stageCard`) so the background and border do not
 # cascade onto the card's child labels and buttons when the style is swapped at
-# runtime.
+# runtime. The one exception is a default text colour for the card's plain
+# labels ("Current detune:" and friends), which otherwise take the palette's
+# text colour: black on this dark fill under a light palette. A label's own
+# stylesheet still wins over this rule, so the title and status colours hold.
+# Both fills are opaque so that rule is right whatever sits behind the card.
 STAGE_CARD_STYLE_IDLE = f"""
     QFrame#stageCard {{
         background-color: {BG_INSET};
         border: 1px solid {BORDER};
         border-radius: {RADIUS_SM};
     }}
+    QFrame#stageCard QLabel {{ color: {TEXT_PRIMARY}; }}
 """
 STAGE_CARD_STYLE_RUNNING = f"""
     QFrame#stageCard {{
-        background-color: {COLOR_PRIMARY_BG};
+        background-color: {BG_STAGE_RUNNING};
         border: 2px solid {COLOR_PRIMARY};
         border-radius: {RADIUS_SM};
     }}
+    QFrame#stageCard QLabel {{ color: {TEXT_PRIMARY}; }}
 """
 
 

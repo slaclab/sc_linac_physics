@@ -688,6 +688,12 @@ class FrequencyTuningUI(PhaseUIBase):
         checklist_scroll.setWidget(checklist)
         checklist_scroll.setFrameShape(QFrame.NoFrame)
         checklist_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # A scroll viewport paints the desktop's window colour, which is a light
+        # strip under a light palette. Transparent lets the page's BG_DEEP show
+        # through. setWidget() turns autofill on for the content widget, so
+        # this has to come after it.
+        checklist_scroll.viewport().setAutoFillBackground(False)
+        checklist.setAutoFillBackground(False)
         main.addWidget(checklist_scroll, stretch=2)
 
         # Center: plot, then the two tuner-control panels side by side.
@@ -760,6 +766,7 @@ class FrequencyTuningUI(PhaseUIBase):
         frame.setStyleSheet(f"""
             QFrame {{
                 background-color: {BG_PANEL};
+                color: {TEXT_PRIMARY};
                 border: 1px solid {BORDER};
                 border-radius: {RADIUS_LG};
                 padding: 4px;
