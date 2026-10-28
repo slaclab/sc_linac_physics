@@ -72,6 +72,8 @@ class FakeCavity:
         self.setup_rf_calls = []
         self.abort_at = None
         self.reset_error = None
+        # Set to request an abort while reset_interlocks is retrying.
+        self.abort_during_reset = False
         # A good SSA calibration and characterization from 10 min ago:
         # recent, so setup_rf keeps both unless a test makes them stale.
         recent = datetime.now() - timedelta(minutes=10)
@@ -98,6 +100,8 @@ class FakeCavity:
         return self._latched
 
     def reset_interlocks(self):
+        if self.abort_during_reset:
+            self.abort_at = self.clock.now
         if self.reset_error:
             raise self.reset_error
         self.resets.append(self.clock.now)
@@ -330,6 +334,47 @@ def test_abort_fails_the_step_and_keeps_recorded_quenches(clock, record):
     assert result.result is PhaseResult.FAILED
     assert "RF is off" in result.message
     assert record.mp_processing.quench_count == 1
+
+
+def test_float_ades_max_is_reached_and_never_exceeded(clock, record):
+    # ADES_MAX as a float PV reads it back: just over 5.6.
+    ades_max = 5.600000381469727
+    cavity = FakeCavity(clock, start=5.0, ades_max=ades_max)
+    phase = make_phase(cavity, record, stable_seconds=300)
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    # 5.6 rounds just under the cap; the next step is capped at ADES_MAX
+    # exactly, and the final hold follows.
+    assert cavity.ades_writes[-1] == ades_max
+    assert len(cavity.ades_writes) == 4
+    assert max(cavity.ades_writes) <= ades_max
+
+
+def test_abort_during_the_settle_wait_writes_no_reset(clock, record):
+    cavity = FakeCavity(clock, start=5.0, ades_max=6.0, quench_at=[10])
+    # Requested after the quench is seen, before the settle wait ends.
+    cavity.abort_at = 10.5
+    phase = make_phase(cavity, record)
+
+    result = run_steps(phase)
+
+    assert result.result is PhaseResult.FAILED
+    assert "RF is off" in result.message
+    assert cavity.resets == []
+
+
+def test_abort_during_a_failing_reset_turns_rf_off(clock, record):
+    cavity = FakeCavity(clock, start=5.0, ades_max=6.0, quench_at=[10])
+    cavity.reset_error = CavityFaultError("still faulted")
+    cavity.abort_during_reset = True
+    phase = make_phase(cavity, record)
+
+    result = run_steps(phase)
+
+    assert result.result is PhaseResult.FAILED
+    # check_abort ran after the reset failed: the abort, not the fault.
+    assert "RF is off" in result.message
 
 
 def test_failed_reset_fails_the_step(clock, record):
