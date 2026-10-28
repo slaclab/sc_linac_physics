@@ -125,6 +125,36 @@ def test_dont_push_needs_a_justification(display, reply, declined):
     assert display.controller.on_decline_push.called is declined
 
 
+def test_after_a_failed_save_push_retries_without_asking(display):
+    # _on_finished has already cleared review_data by then.
+    display.controller = Mock(stage="unsaved", review_data=None)
+    with patch(f"{DISPLAY}.QMessageBox.question") as ask:
+        display.on_push()
+    ask.assert_not_called()
+    display.controller.on_push.assert_called_once()
+
+
+def test_after_a_failed_save_dont_push_retries_without_asking(display):
+    display.controller = Mock(stage="unsaved", review_data=None)
+    with patch(f"{DISPLAY}.QInputDialog.getText") as ask:
+        display.on_decline_push()
+    ask.assert_not_called()
+    display.controller.on_decline_push.assert_called_once()
+
+
+def test_changing_cavity_blanks_the_old_review(display):
+    display.show_review(READ_DATA)
+    display.controller.drop_review()
+    for label in (
+        display.gain_a_label,
+        display.detune_gain_label,
+        display.test_result_label,
+        display.local_phase_status,
+    ):
+        assert label.text() == "-"
+    assert not display.push_button.isEnabled()
+
+
 @pytest.mark.parametrize(
     "button, expected", [("Rerun", True), ("Skip", False), ("Cancel", None)]
 )

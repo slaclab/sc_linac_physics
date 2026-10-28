@@ -225,7 +225,9 @@ class PiezoWithRFController(QObject):
         self._unsaved = set()
         self.phase = self.context = self.run = None
         self._active_phase_instance_id = None
-        self.view.set_review_enabled(False)
+        # Blank the readouts too, or the old cavity's gains and result sit
+        # beside the new cavity's Live PVs.
+        self.view.clear_review()
 
     # ------------------------------------------------------------------
     # Segment 1: Start Test

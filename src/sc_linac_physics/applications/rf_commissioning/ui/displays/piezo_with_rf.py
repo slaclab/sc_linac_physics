@@ -151,6 +151,7 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
             "detune_gain_label",
             "test_result_label",
             "step_label",
+            "local_phase_status",
         ):
             getattr(self, name).setText("-")
         self.test_result_label.setStyleSheet("")
@@ -216,6 +217,11 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
 
     @pyqtSlot()
     def on_push(self):
+        if self.controller.stage == "unsaved":
+            # Retries the database writes only; nothing goes to the cavity,
+            # so there is nothing to confirm.
+            self.controller.on_push()
+            return
         data = self.controller.review_data
         if not data:
             return
@@ -231,6 +237,11 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
 
     @pyqtSlot()
     def on_decline_push(self):
+        if self.controller.stage == "unsaved":
+            # The reason was given the first time; this only retries the
+            # database writes.
+            self.controller.on_decline_push("")
+            return
         text, ok = QInputDialog.getText(
             self,
             "Don't push the detune gain",
