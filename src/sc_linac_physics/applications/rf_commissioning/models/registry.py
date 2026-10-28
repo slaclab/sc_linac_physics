@@ -35,7 +35,6 @@ def create_phase_registry() -> dict:
         CavityCharacterization,
         CommissioningPhase,
         FrequencyTuningData,
-        HighPowerRampData,
         MPProcessingData,
         OneHourRunData,
         PiezoPreRFCheck,
@@ -73,12 +72,6 @@ def create_phase_registry() -> dict:
             data_model=PiezoWithRFTest,
             display_label="Piezo with RF",
             progress_label="Piezo\n@ RF",
-        ),
-        CommissioningPhase.HIGH_POWER_RAMP: PhaseRegistration(
-            record_attr="high_power_ramp",
-            data_model=HighPowerRampData,
-            display_label="High Power Ramp",
-            progress_label="HP\nRamp",
         ),
         CommissioningPhase.MP_PROCESSING: PhaseRegistration(
             record_attr="mp_processing",

@@ -26,7 +26,6 @@ class CommissioningPhase(Enum):
     FREQUENCY_TUNING = "frequency_tuning"
     CAVITY_CHAR = "cavity_char"
     PIEZO_WITH_RF = "piezo_with_rf"
-    HIGH_POWER_RAMP = "high_power_ramp"
     MP_PROCESSING = "mp_processing"
     ONE_HOUR_RUN = "one_hour_run"
     COMPLETE = "complete"
@@ -44,7 +43,6 @@ class CommissioningPhase(Enum):
             cls.FREQUENCY_TUNING,
             cls.CAVITY_CHAR,
             cls.PIEZO_WITH_RF,
-            cls.HIGH_POWER_RAMP,
             cls.MP_PROCESSING,
             cls.ONE_HOUR_RUN,
             cls.COMPLETE,
@@ -472,56 +470,38 @@ class MPProcessingQuenchEvent:
 
 
 @dataclass
-class HighPowerRampData:
-    """High power initial ramp results."""
+class MPProcessingData:
+    """MP processing results: the amplitude ramp and its quench timing.
 
+    The amplitude is raised and the cavity processed in one phase. There
+    is no separate high-power ramp phase before this one (decided
+    2026-10-28).
+    """
+
+    session_id: str = field(
+        default_factory=lambda: datetime.now().strftime("mp_%Y%m%dT%H%M%S%f")
+    )
     had_multipactor_event: bool = phase_display_field(
         default=False,
         label="Multipactor Event",
-        widget_name="hp_initial_had_multipactor_event",
+        widget_name="hp_mp_had_multipactor_event",
         true_text="Yes",
         false_text="No",
     )
     field_emission_onset: float | None = phase_display_field(
         default=None,
         label="Field Emission Onset",
-        widget_name="hp_initial_field_emission_onset",
+        widget_name="hp_mp_field_emission_onset",
         format_spec=".3f",
         unit="MV",
     )  # MV, if observed
     max_amplitude_reached: float | None = phase_display_field(
         default=None,
         label="Max Amplitude Reached",
-        widget_name="hp_initial_max_amplitude_reached",
+        widget_name="hp_mp_max_amplitude_reached",
         format_spec=".3f",
         unit="MV",
     )  # MV
-    quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
-    decarad: int | None = None  # 1 or 2
-    timestamp: datetime = field(default_factory=datetime.now)
-    notes: str = ""
-
-    @property
-    def is_complete(self) -> bool:
-        """Check if initial ramp captured required data."""
-        return self.max_amplitude_reached is not None
-
-    @property
-    def passed(self) -> bool:
-        return self.is_complete
-
-    def to_dict(self) -> dict:
-        """Serialize to dictionary."""
-        return serialize_model(self, computed_fields=("is_complete", "passed"))
-
-
-@dataclass
-class MPProcessingData:
-    """High power MP processing session data and quench timing."""
-
-    session_id: str = field(
-        default_factory=lambda: datetime.now().strftime("mp_%Y%m%dT%H%M%S%f")
-    )
     quench_events: list[MPProcessingQuenchEvent] = field(default_factory=list)
     notes: str = ""
     decarad: int | None = None
@@ -666,7 +646,6 @@ class CommissioningRecord:
     ssa_char: SSACharacterization | None = None
     cavity_char: CavityCharacterization | None = None
     piezo_with_rf: PiezoWithRFTest | None = None
-    high_power_ramp: HighPowerRampData | None = None
     mp_processing: MPProcessingData | None = None
     one_hour_run: OneHourRunData | None = None
 
@@ -821,9 +800,6 @@ class CommissioningRecord:
             ),
             "piezo_with_rf": (
                 self.piezo_with_rf.to_dict() if self.piezo_with_rf else None
-            ),
-            "high_power_ramp": (
-                self.high_power_ramp.to_dict() if self.high_power_ramp else None
             ),
             "mp_processing": (
                 self.mp_processing.to_dict() if self.mp_processing else None
