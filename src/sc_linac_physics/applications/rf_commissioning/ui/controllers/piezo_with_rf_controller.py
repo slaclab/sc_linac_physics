@@ -17,11 +17,18 @@ each started from the GUI thread:
      a justification, then record_results and complete.
      record.piezo_with_rf.detune_gain_pushed stays False.
 
-Abort goes through cavity_abort_hook: PhaseRun.request_abort() sets
-context.abort_requested and calls cavity.request_abort(). The phase's waits
-call cavity.check_abort(), which turns RF off and raises. RunnerBridge clears
+Abort goes through _cavity_abort_hook: PhaseRun.request_abort() sets
+context.abort_requested and cavity.abort_flag. The phase's waits call
+cavity.check_abort(), which turns RF off and raises. RunnerBridge clears
 both before each segment.
+
+In step mode, wait_for_completion follows start_test without a Next hold. The
+wait has to see RFTESTSTS read Running, so a hold after the trigger could let
+the script finish unseen and fail a test that ran.
 """
+
+import logging
+import threading
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -39,10 +46,10 @@ from sc_linac_physics.applications.rf_commissioning.phases.piezo_with_rf import 
 )
 from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
     HOLD_STEP_MODE,
+    AbortHook,
     PhaseRun,
     SegmentOutcome,
     SegmentResult,
-    cavity_abort_hook,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
     apply_pv_mapping,
@@ -96,6 +103,30 @@ def live_pv_addresses(cavity) -> dict[str, str]:
     }
 
 
+def _cavity_abort_hook(cavity) -> AbortHook:
+    """Abort through Cavity.abort_flag, without blocking the GUI thread.
+
+    PhaseRun.request_abort() calls request() on the GUI thread when Abort is
+    pressed. cavity.request_abort() would also put "Abort requested" to the
+    cavity's status message PV and wait for the put, so a slow PV would
+    freeze the window. Here abort_flag is set at once, and the status message
+    is written on a daemon thread. check_abort() reads only abort_flag.
+    """
+
+    def request() -> None:
+        cavity.abort_flag = True
+        threading.Thread(
+            target=cavity.set_status_message,
+            args=("Abort requested", logging.WARNING),
+            daemon=True,
+        ).start()
+
+    def clear() -> None:
+        cavity.abort_flag = False
+
+    return AbortHook(request=request, clear=clear)
+
+
 class PiezoWithRFController(QObject):
     """Owns PiezoWithRFPhase execution for the Piezo with RF display."""
 
@@ -116,6 +147,10 @@ class PiezoWithRFController(QObject):
         self.review_data: dict | None = None
         self._step_mode = False
         self._active_phase_instance_id: int | None = None
+        # Database writes still owed after a finished run: "complete",
+        # "save", "history". While any is owed, stage is "unsaved" and the
+        # instance id is kept.
+        self._unsaved: set[str] = set()
 
         self.bridge = RunnerBridge(self)
         self.bridge.log.connect(self.view.log_message)
@@ -177,12 +212,17 @@ class PiezoWithRFController(QObject):
         return self.machine.cryomodules[key].cavities[cav]
 
     def drop_review(self) -> None:
-        """Forget an unpushed measurement. Its instance is left open."""
+        """Forget an unpushed measurement. Its instance is left open.
+
+        Also forgets database writes still owed after a finished run, since
+        the session's active record may have changed.
+        """
         if self.running:
             return
-        if self.stage == "review":
+        if self.stage in ("review", "unsaved"):
             self.stage = None
         self.review_data = None
+        self._unsaved = set()
         self.phase = self.context = self.run = None
         self._active_phase_instance_id = None
         self.view.set_review_enabled(False)
@@ -213,9 +253,15 @@ class PiezoWithRFController(QObject):
             started = self.session.start_active_phase_instance(
                 PHASE, operator=operator
             )
-            self._active_phase_instance_id = (
-                started.phase_instance_id if started else None
-            )
+            if started is None:
+                # Nothing has run yet. setup_rf and the gain push must not
+                # run without an attempt on record.
+                self.view.show_error(
+                    "Could not start a Piezo with RF attempt in the "
+                    "database; nothing was run"
+                )
+                return
+            self._active_phase_instance_id = started.phase_instance_id
         self.context = PhaseContext(
             record=self.session.get_active_record(),
             operator=operator,
@@ -229,7 +275,7 @@ class PiezoWithRFController(QObject):
             self.view.show_error(f"Prerequisites not met: {message}")
             return
         self.run = PhaseRun(
-            self.phase, abort_hooks=(cavity_abort_hook(self._cavity),)
+            self.phase, abort_hooks=(_cavity_abort_hook(self._cavity),)
         )
         self.run.set_step_mode(self._step_mode)
         self.review_data = None
@@ -282,8 +328,16 @@ class PiezoWithRFController(QObject):
         confirmed_detune_gain is the float read_results returned, never the
         text on screen. PiezoWithRFPhase._push_detune_gain refuses unless it
         equals the DFGAIN_NEW it read and DFGAIN_NEW is unchanged on the IOC.
+
+        After a finished run that was not saved, this only retries the
+        database writes. It writes nothing to the cavity.
         """
-        if self.running or self.stage != "review" or not self.review_data:
+        if self.running:
+            return
+        if self.stage == "unsaved":
+            self._persist_finish()
+            return
+        if self.stage != "review" or not self.review_data:
             return
         gain = self.review_data["detune_gain"]
         self.context.parameters["confirmed_detune_gain"] = gain
@@ -291,8 +345,17 @@ class PiezoWithRFController(QObject):
         self._start("finish", PUSH_STEPS, offset=7, complete=True)
 
     def on_decline_push(self, justification: str) -> None:
-        """Complete the phase without pushing. No PV is written."""
-        if self.running or self.stage != "review":
+        """Complete the phase without pushing. No PV is written.
+
+        After a finished run that was not saved, this only retries the
+        database writes, as on_push does.
+        """
+        if self.running:
+            return
+        if self.stage == "unsaved":
+            self._persist_finish()
+            return
+        if self.stage != "review":
             return
         try:
             self.run.skip_step(
@@ -301,10 +364,14 @@ class PiezoWithRFController(QObject):
         except ValueError as exc:
             self.view.show_error(str(exc))
             return
-        self.view.log_message(
-            f"⊘ push_detune_gain skipped by {self.context.operator}: "
+        line = (
+            f"push_detune_gain skipped by {self.context.operator}: "
             f"{justification.strip()}"
         )
+        # skip_step's checkpoint is in record.phase_history, which is not
+        # saved. The notes are, so the reason survives a reload.
+        self.phase._append_note(line)
+        self.view.log_message(f"⊘ {line}")
         self._start("finish", PUSH_STEPS[1:], offset=8, complete=True)
 
     # ------------------------------------------------------------------
@@ -340,28 +407,67 @@ class PiezoWithRFController(QObject):
 
     def _on_finished(self) -> None:
         """Push or Don't Push completed: close the instance and save."""
-        self.stage = None
         self.review_data = None
+        self._unsaved = {"complete", "save", "history"}
+        self._persist_finish()
+
+    def _persist_finish(self) -> None:
+        """Complete the instance, save the record and add the history entry.
+
+        Each call's result is checked, as in
+        CavityCharController._persist_push. Whatever fails stays in
+        _unsaved, with the instance id, and the phase is not reported
+        complete. Push or Don't Push then retries only these writes.
+        """
         record = self.context.record
         data = record.piezo_with_rf
-        try:
-            if self._active_phase_instance_id is not None:
-                self.session.complete_active_phase_instance(
+        writes = {
+            "complete": lambda: (
+                self._active_phase_instance_id is None
+                or self.session.complete_active_phase_instance(
                     phase_instance_id=self._active_phase_instance_id,
                     phase=PHASE,
                     artifact_payload=data.to_dict() if data else None,
                 )
-            if data is not None:
-                self.session.add_measurement_to_history(
+            ),
+            "save": self.session.save_active_record,
+            "history": lambda: (
+                data is None
+                or self.session.add_measurement_to_history(
                     PHASE,
                     data,
                     operator=self.context.operator,
                     phase_instance_id=self._active_phase_instance_id,
                 )
-        except Exception as exc:
-            self.view.log_message(f"Warning: closing the phase failed: {exc}")
+            ),
+        }
+        for name in ("complete", "save", "history"):
+            if name not in self._unsaved:
+                continue
+            try:
+                ok = writes[name]()
+            except Exception as exc:
+                self.view.log_message(f"Warning: {name} failed: {exc}")
+                ok = False
+            if ok:
+                self._unsaved.discard(name)
+
+        current = self.session.get_active_record()
+        if current is not None:
+            self.view.refresh_from_record(current)
+        if self._unsaved:
+            self.stage = "unsaved"
+            self.view.set_review_enabled(True)
+            self.view.show_error(
+                "Piezo with RF finished but was not saved "
+                f"({', '.join(sorted(self._unsaved))} failed). Press Push or "
+                "Don't Push again to retry the save. It writes nothing to "
+                "the cavity."
+            )
+            return
+        self.stage = None
         self._active_phase_instance_id = None
-        self._save("Piezo with RF complete")
+        self.view.log_message("Piezo with RF complete")
         self.view.on_phase_finished("COMPLETED")
         self.phase_completed.emit(record)
 
@@ -445,8 +551,14 @@ class PiezoWithRFController(QObject):
     def _on_step_started(self, step: str, index: int, total: int) -> None:
         self.view.set_next_enabled(False)
         self.view.set_step(f"{step} ({ALL_STEPS.index(step) + 1} of 9)")
+        if step == "start_test" and self.run is not None and self.run.step_mode:
+            # Let wait_for_completion start without a Next. PhaseRun counts
+            # Next presses, so one given now is used at the next hold.
+            self.run.next_step()
 
     def _on_holding(self, step: str, reason: str) -> None:
+        if step == "wait_for_completion":
+            return  # released by the Next given at start_test
         if reason == HOLD_STEP_MODE:
             self.view.log_message(f"Step mode: press Next to run {step}")
             self.view.set_next_enabled(True)
