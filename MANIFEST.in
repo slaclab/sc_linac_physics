@@ -13,16 +13,9 @@ recursive-include src *.csv
 recursive-include src *.md
 recursive-include src *.hdf5
 
-prune src/sc_linac_physics/applications/microphonics/test_data
-
-exclude .flake8
-exclude requirements.txt
-exclude *.sh
-exclude Makefile
-exclude mkdocs.yml
+# setuptools adds tests/test*.py and packaged .pyc files on its own, so these
+# two excludes are needed. Nothing else needs excluding: no rule above pulls
+# in dotfiles, Makefile, mkdocs.yml or microphonics/test_data, and an exclude
+# that matches nothing prints a warning on every build.
 recursive-exclude tests *
-recursive-exclude .github *
-recursive-exclude .claude *
-global-exclude __pycache__
 global-exclude *.pyc
-global-exclude *.pyo
