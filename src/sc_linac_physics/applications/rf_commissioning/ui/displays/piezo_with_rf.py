@@ -14,6 +14,10 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     STATUS_LABEL_PASS,
     PiezoWithRFUI,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    COLOR_WARNING,
+    SANS_FONT_STACK,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_with_rf_controller import (  # noqa: E501
     PiezoWithRFController,
 )
@@ -66,6 +70,12 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
 
     def refresh_from_record(self, record: CommissioningRecord) -> None:
         """Fill Stored Data. Never enables Push: that needs a fresh read."""
+        context = self.controller.context
+        if context is not None and record is not context.record:
+            # The session holds a different record object now, e.g. the
+            # same cavity reselected from the header, which reloads it. A
+            # push would update the old object while the new one is saved.
+            self.controller.drop_review()
         data = record.piezo_with_rf
         if data is None:
             self._clear_phase_specific_readouts()
@@ -102,15 +112,30 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
     # ------------------------------------------------------------------
 
     def set_running(self, running: bool) -> None:
-        self.run_button.setEnabled(not running)
-        self.pause_button.setEnabled(running)
-        self.abort_button.setEnabled(running)
+        # The toolbar's status indicator follows the run, as on the other
+        # phase tabs. "idle" and "running" set the buttons this tab needs.
+        self.ui.update_toolbar_state("running" if running else "idle")
         if running:
             self.set_review_enabled(False)
             self.local_phase_status.setText("RUNNING")
 
     def set_paused(self, paused: bool) -> None:
+        self.ui.update_toolbar_state("paused" if paused else "running")
+        if paused:
+            # "paused" offers Resume on Start Test. On this tab the Pause
+            # button resumes, so Start Test stays off.
+            self.run_button.setEnabled(False)
+            self.run_button.setText("▶ Start Test")
+            self.pause_button.setEnabled(True)
         self.pause_button.setText("▶ Resume" if paused else "⏸ Pause")
+
+    def _show_indicator(self, text: str, color: str) -> None:
+        indicator = self.ui.widgets["status_indicator"]
+        indicator.setText(text)
+        indicator.setStyleSheet(
+            f"QLabel {{ color: {color}; font-weight: bold; "
+            f"font-size: 10pt; font-family: {SANS_FONT_STACK}; }}"
+        )
 
     def set_next_enabled(self, enabled: bool) -> None:
         self.next_step_btn.setEnabled(enabled)
@@ -142,6 +167,7 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
         self.test_result_label.setText(text)
         self.test_result_label.setStyleSheet(style)
         self.local_phase_status.setText("REVIEW")
+        self._show_indicator("● REVIEW", COLOR_WARNING)
         self.set_review_enabled(data.get("detune_gain") is not None)
 
     def clear_review(self) -> None:
@@ -158,10 +184,14 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
         self.set_review_enabled(False)
 
     def on_phase_finished(self, status: str) -> None:
+        """status is "COMPLETED" or "FAILED"."""
         self.local_phase_status.setText(status)
         self.set_review_enabled(False)
         self.set_next_enabled(False)
-        self.set_paused(False)
+        self.pause_button.setText("⏸ Pause")
+        self.ui.update_toolbar_state(
+            "complete" if status == "COMPLETED" else "error"
+        )
 
     def ask_rerun(
         self, label: str, pv: str, stamp: datetime | None, good: bool | None

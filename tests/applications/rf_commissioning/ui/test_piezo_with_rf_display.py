@@ -188,7 +188,7 @@ def test_finishing_resets_the_panel(display):
 
 def test_loading_a_record_drops_the_review(display):
     display.show_review(READ_DATA)
-    display.controller = Mock()
+    display.controller = Mock(context=None)
     record = Mock(cryomodule="02", cavity_number=1, piezo_with_rf=None)
     display.on_record_loaded(record, 1)
     display.controller.drop_review.assert_called_once()
@@ -208,3 +208,44 @@ def test_stored_data_shows_the_record(display):
     )
     display.refresh_from_record(record)
     assert display.piezo_rf_detune_gain.text() == "0.004512"
+
+
+def test_a_reloaded_record_drops_the_review(display):
+    # Reselecting the same cavity from the header reloads its record as a
+    # new object; a push must not go to the old one.
+    old_record = Mock(piezo_with_rf=None)
+    display.controller = Mock(context=Mock(record=old_record))
+    display.refresh_from_record(old_record)
+    display.controller.drop_review.assert_not_called()
+    display.refresh_from_record(Mock(piezo_with_rf=None))
+    display.controller.drop_review.assert_called_once()
+
+
+def _indicator(display):
+    return display.ui.widgets["status_indicator"].text()
+
+
+def test_toolbar_indicator_follows_the_run(display):
+    display.set_running(True)
+    assert _indicator(display) == "● RUNNING"
+    display.set_paused(True)
+    assert _indicator(display) == "● PAUSED"
+    # Pause resumes on this tab; Start Test stays off.
+    assert display.pause_button.isEnabled()
+    assert not display.run_button.isEnabled()
+    display.set_paused(False)
+    assert _indicator(display) == "● RUNNING"
+    display.set_running(False)
+    display.show_review(READ_DATA)
+    assert _indicator(display) == "● REVIEW"
+
+
+@pytest.mark.parametrize(
+    "status, shown", [("COMPLETED", "✓ COMPLETE"), ("FAILED", "✗ ERROR")]
+)
+def test_toolbar_indicator_after_the_phase(display, status, shown):
+    display.set_running(True)
+    display.on_phase_finished(status)
+    assert _indicator(display) == shown
+    assert display.run_button.isEnabled()
+    assert not display.abort_button.isEnabled()
