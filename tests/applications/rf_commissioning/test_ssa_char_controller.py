@@ -647,6 +647,50 @@ def test_on_run_while_running_shows_error() -> None:
     assert controller.view.errors == ["A calibration is already running."]
 
 
+def test_rejected_start_keeps_the_running_run() -> None:
+    controller = _controller_with_phase(["a"], _ok)
+    running = _run_with_record()
+    controller.run = running
+    controller.bridge.start_segment = Mock(return_value=False)
+
+    controller._execute_phase_async()
+
+    assert controller.run is running
+
+
+def _paused_controller():
+    controller = _make_controller()
+    controller.run = _run_with_record()
+    controller.run.pause()
+    controller.bridge._busy = True
+    controller._start_run_for_target = Mock()
+    return controller
+
+
+def test_run_button_while_paused_resumes_the_same_run() -> None:
+    controller = _paused_controller()
+    paused = controller.run
+
+    controller.on_run_calibration()
+
+    assert controller.run is paused
+    assert paused.paused is False
+    assert controller.view.pause_button.text == "⏸ Pause"
+    controller._start_run_for_target.assert_not_called()
+    controller.session.start_active_phase_instance.assert_not_called()
+
+
+def test_run_button_while_running_is_refused_before_any_setup() -> None:
+    controller = _paused_controller()
+    controller.run.resume()
+
+    controller.on_run_calibration()
+
+    assert controller.view.errors == ["A calibration is already running."]
+    controller._start_run_for_target.assert_not_called()
+    controller.session.start_active_phase_instance.assert_not_called()
+
+
 # ------------------------------------------------------------------
 # on_phase_completed
 # ------------------------------------------------------------------

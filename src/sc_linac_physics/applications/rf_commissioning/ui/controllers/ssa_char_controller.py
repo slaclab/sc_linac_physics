@@ -151,6 +151,17 @@ class SSACharController(QObject):
     # ------------------------------------------------------------------
 
     def on_run_calibration(self) -> None:
+        # While paused the toolbar shows Run as "Resume". That press resumes
+        # the paused run. Any other press during a run is refused here,
+        # before a new phase, context or database phase instance replaces
+        # the ones the running worker is using.
+        if self.bridge.running:
+            if self.run and self.run.paused:
+                self.on_pause_test()
+            else:
+                self.view.show_error("A calibration is already running.")
+            return
+
         operator = self._validate_operator_for_run()
         if operator is None:
             return
@@ -294,12 +305,16 @@ class SSACharController(QObject):
         # No AbortHook, the same as before this controller used PhaseRun.
         # Abort only sets context.abort_requested, which SSACharPhase reads in
         # wait_for_completion. It doesn't call cavity.request_abort().
-        self.run = PhaseRun(self.phase)
-        self.run.set_step_mode(self._step_mode)
+        # self.run only changes once the bridge accepts the run, so Pause,
+        # Next and Abort keep reaching the worker that is running.
+        run = PhaseRun(self.phase)
+        run.set_step_mode(self._step_mode)
         if not self.bridge.start_segment(
-            self.run, self.phase.get_phase_steps(), then_complete=True
+            run, self.phase.get_phase_steps(), then_complete=True
         ):
             self.view.show_error("A calibration is already running.")
+            return
+        self.run = run
 
     def _on_segment_finished(self, result: SegmentResult) -> None:
         if result.outcome is SegmentOutcome.COMPLETED:
