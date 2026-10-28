@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.59.2 (2026-10-28)
+
+### Refactoring
+
+- **rf-commissioning**: Drop the retired-phase mapping
+  ([#467](https://github.com/slaclab/sc_linac_physics/pull/467),
+  [`ee31460`](https://github.com/slaclab/sc_linac_physics/commit/ee314602704ae33d9292e839edf082415c489bb9))
+
+- **rf-commissioning**: Fold HIGH_POWER_RAMP into MP_PROCESSING
+  ([#467](https://github.com/slaclab/sc_linac_physics/pull/467),
+  [`ee31460`](https://github.com/slaclab/sc_linac_physics/commit/ee314602704ae33d9292e839edf082415c489bb9))
+
+
 ## v9.59.1 (2026-10-28)
 
 ### Bug Fixes
