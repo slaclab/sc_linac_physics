@@ -1,9 +1,10 @@
 """
 SSA Calibration Phase
 
-Runs SSA calibration: resets the SSA, powers it on, triggers the calibration
-scan, validates results, and auto-pushes the new slope to the active cavity
-register so the operator can review before choosing to save.
+Runs SSA calibration: turns RF off and zeroes the rack's DAC amplitudes (as
+auto setup does before calibrating), resets the SSA, powers it on, triggers the
+calibration scan, validates results, and auto-pushes the new slope to the
+active cavity register so the operator can review before choosing to save.
 """
 
 import time
@@ -12,6 +13,9 @@ from dataclasses import dataclass
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     SSACharacterization,
+)
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
@@ -39,7 +43,8 @@ class SSACharPhase(PhaseBase):
     Sequence:
     1. verify_initial_state  – confirm SSA is accessible and not mid-run
     2. set_drive_max         – write requested drive max to DRV_MAX_REQ
-    3. reset_and_power_on    – reset faults, turn on SSA, reset cavity interlocks
+    3. reset_and_power_on    – RF off, rack DAC amplitudes 0, reset faults,
+                               turn on SSA, reset cavity interlocks
     4. start_calibration     – trigger CALSTRT and wait for scan to begin
     5. wait_for_completion   – poll until CALSTS leaves Running state
     6. validate_and_push     – check results and push new slope to cavity register
@@ -166,21 +171,35 @@ class SSACharPhase(PhaseBase):
         )
 
     def _reset_and_power_on(self) -> PhaseStepResult:
+        """Put the cavity in the state auto setup calibrates from.
+
+        SetupCavity.request_ssa_cal() turns RF off (RFCTRL 0) and writes
+        DAC_AMPLITUDE 0 on the rack's RFS1 and RFS2 before SSA.calibrate().
+        This step does the same, behind cavity_setup.check_rack_free(), then
+        SSA reset, SSA on and INTLK_RESET_ALL as before.
+        """
         if self.context.dry_run:
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
-                message="Dry run: skipping SSA reset / power-on",
+                message="Dry run: skipping RF off / DAC zero / SSA reset / power-on",
                 data={"dry_run": True},
             )
 
+        busy = cavity_setup.check_rack_free(self.cavity, self.context)
+        if busy is not None:
+            return busy
+
         ssa = self.cavity.ssa
         try:
+            cavity_setup.turn_off_and_zero_dac(self.cavity)
             ssa.reset()
             ssa.turn_on()
             self.cavity.reset_interlocks()
         except (
             linac_utils.SSAFaultError,
             linac_utils.SSACalibrationError,
+            linac_utils.CavityFaultError,
+            linac_utils.CavityAbortError,
         ) as exc:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
@@ -195,7 +214,10 @@ class SSACharPhase(PhaseBase):
 
         return PhaseStepResult(
             result=PhaseResult.SUCCESS,
-            message="SSA reset, powered on, and interlocks cleared",
+            message=(
+                "RF off, DAC amplitudes 0, SSA reset and powered on, "
+                "interlocks cleared"
+            ),
         )
 
     def _start_calibration(self) -> PhaseStepResult:

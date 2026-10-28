@@ -1,3 +1,4 @@
+from datetime import datetime
 from random import randint, uniform, choice
 from unittest.mock import MagicMock
 
@@ -200,6 +201,14 @@ def test_calibration_result_good(ssa):
         assert ssa.calibration_result_good
     else:
         assert not ssa.calibration_result_good
+
+
+def test_calibration_timestamp(ssa):
+    ssa._calibration_timestamp_pv_obj = make_mock_pv(
+        get_val="2025-12-03-08:17:16"
+    )
+    assert ssa.calibration_timestamp == datetime(2025, 12, 3, 8, 17, 16)
+    assert ssa.calibration_timestamp_pv.endswith("SSA:CALTS")
 
 
 def test_run_calibration(ssa):

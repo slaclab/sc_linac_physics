@@ -10,13 +10,36 @@ def _phase_column_definitions(column_names: Iterable[str]) -> str:
     return "\n".join(f"                    {col} TEXT," for col in column_names)
 
 
+def _add_missing_phase_columns(
+    cursor: sqlite3.Cursor, table_name: str, column_names: Iterable[str]
+) -> None:
+    """Add a TEXT column for each registry phase the table doesn't have.
+
+    ``CREATE TABLE IF NOT EXISTS`` leaves an existing table alone. A phase
+    added to the registry after a database file was made would otherwise
+    have no column there, and every INSERT/UPDATE naming it would fail.
+    New columns start NULL, which ``deserialize_phase_data`` reads as None.
+    """
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    existing = {row[1] for row in cursor.fetchall()}
+    for col in column_names:
+        if col not in existing:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col} TEXT")
+
+
 def initialize_database_schema(
     cursor: sqlite3.Cursor,
     *,
     phase_column_names: Iterable[str],
     cryomodule_phase_column_names: Iterable[str],
 ) -> None:
-    """Create the RF commissioning schema for a fresh/dev database."""
+    """Create the RF commissioning schema, or bring an older file up to it.
+
+    Tables and indexes are created if missing. Phase columns the registry
+    has gained since the file was made are added.
+    """
+    phase_column_names = list(phase_column_names)
+    cryomodule_phase_column_names = list(cryomodule_phase_column_names)
     phase_col_defs = _phase_column_definitions(phase_column_names)
     cm_phase_col_defs = _phase_column_definitions(cryomodule_phase_column_names)
 
@@ -40,6 +63,9 @@ def initialize_database_schema(
             general_notes TEXT NOT NULL DEFAULT '[]'
         )
         """)
+    _add_missing_phase_columns(
+        cursor, "commissioning_records", phase_column_names
+    )
 
     cursor.execute("DROP INDEX IF EXISTS idx_active_record_per_cavity")
 
@@ -216,6 +242,9 @@ def initialize_database_schema(
             notes TEXT NOT NULL DEFAULT ''
         )
         """)
+    _add_missing_phase_columns(
+        cursor, "cryomodule_records", cryomodule_phase_column_names
+    )
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_cm_linac_cryo
         ON cryomodule_records(linac, cryomodule)

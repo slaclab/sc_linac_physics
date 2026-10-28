@@ -1,10 +1,11 @@
 """Controller for batch Piezo Pre-RF execution across multiple cavities."""
 
+import functools
 import logging
 from dataclasses import dataclass, field
 from queue import Queue
-from threading import Event, Thread
-from typing import Optional
+from threading import Event, Lock, Thread
+from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -25,6 +26,9 @@ from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
+    cryomodule_key,
+)
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import get_linac_for_cryomodule
 
@@ -38,6 +42,80 @@ _LINAC_NAME_TO_IDX = {"L0B": 0, "L1B": 1, "L2B": 2, "L3B": 3, "L4B": 4}
 # quickly, and any "test already running" condition will surface during the
 # collect phase wait instead.
 TRIGGER_STEPS = ("setup_piezo", "trigger_prerf_test")
+
+
+class _TriggerPool:
+    """Worker threads, shared by every controller in the process, that run
+    trigger jobs.
+
+    The threads are daemons that wait on a Queue for jobs and never exit.
+    When a thread that used Channel Access exits, EPICS frees the data it
+    kept for that thread (free_threadInfo / cantProceed). Short-lived threads
+    hit pthread_attr_destroy errors there. Threads that never exit avoid
+    those errors.
+
+    One pool per process, not one per controller: each window used to start
+    its own 32 threads, and each thread held its controller alive forever.
+    A job is a plain callable, and a worker drops it once it has run, so the
+    pool keeps no controller alive.
+    """
+
+    def __init__(self, size: int) -> None:
+        self._size = size
+        self._queue: Queue = Queue()
+        self._lock = Lock()
+        self._started = False
+
+    def run_all(self, jobs: list[Callable[[], None]]) -> None:
+        """Run every job on the pool and return once all have finished.
+
+        Two batches running at once share the same workers.
+        """
+        self._start()
+        done_events = [Event() for _ in jobs]
+        for job, done in zip(jobs, done_events):
+            self._queue.put((job, done))
+        for done in done_events:
+            done.wait()
+
+    def _start(self) -> None:
+        with self._lock:
+            if self._started:
+                return
+            self._started = True
+            for _ in range(self._size):
+                Thread(target=self._work, daemon=True).start()
+
+    def _work(self) -> None:
+        """Attach to the CA context, then run queued jobs forever."""
+        try:
+            import epics
+
+            epics.ca.use_initial_context()
+        except Exception:
+            pass  # Not fatal; CA will self-initialize on first PV access
+
+        while True:
+            job, done = self._queue.get()
+            try:
+                job()
+            except Exception:
+                # A job reports its own errors; this only keeps the
+                # worker alive if one gets through.
+                logger.exception("Trigger job raised")
+            finally:
+                # Let go of the job now. Otherwise this worker keeps the last
+                # job, and the controller it belongs to, alive until the next
+                # job arrives. Do it before done.set(), so the caller never
+                # sees a finished job that a worker still holds.
+                del job
+                done.set()
+                del done
+
+
+# Maximum concurrent trigger workers. 32 is more than enough for a full
+# machine run and keeps CA channel churn manageable.
+_TRIGGER_POOL = _TriggerPool(size=32)
 COLLECT_STEPS = ("wait_for_completion", "validate_results")
 
 
@@ -114,21 +192,12 @@ class BatchPiezoPreRFController(QObject):
     STATUS_ERROR = "ERROR"
     STATUS_SKIPPED = "SKIPPED"
 
-    # Maximum concurrent trigger workers.  32 is more than enough for a full
-    # machine run and keeps CA channel churn manageable.
-    _POOL_SIZE = 32
-
     def __init__(self, session: CommissioningSession) -> None:
         super().__init__()
         self.session = session
         self._machine: Machine | None = None
         self._abort_event = Event()
         self._worker_thread: Thread | None = None
-
-        # Persistent trigger pool — threads are created once and never exit so
-        # EPICS's TLS cleanup (`free_threadInfo`) is never triggered.
-        self._trigger_queue: Queue = Queue()
-        self._pool_ready = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -285,48 +354,21 @@ class BatchPiezoPreRFController(QObject):
 
         self.cavity_status_changed.emit(cavity_spec.key, self.STATUS_PENDING)
 
-    def _ensure_pool(self) -> None:
-        """Lazily start the persistent trigger worker pool.
-
-        Workers are daemon threads that loop on a Queue and never exit.
-        Because they never exit, EPICS never runs its TLS cleanup
-        (free_threadInfo / cantProceed) and the pthread_attr_destroy errors
-        that occur when short-lived threads leave the CA layer are avoided.
-        """
-        if self._pool_ready:
-            return
-        self._pool_ready = True
-        for _ in range(self._POOL_SIZE):
-            t = Thread(target=self._pool_worker, daemon=True)
-            t.start()
-
-    def _pool_worker(self) -> None:
-        """Persistent worker loop — attach to the CA context, then run forever."""
+    def _trigger_one(self, state: CavityRunState) -> None:
+        """Trigger one cavity on a pool thread; report any exception as an error."""
         try:
-            import epics
-
-            epics.ca.use_initial_context()
-        except Exception:
-            pass  # Not fatal; CA will self-initialize on first PV access
-
-        while True:
-            state, done_event = self._trigger_queue.get()
-            try:
-                self._trigger_cavity(state)
-            except Exception as exc:
-                state.error = str(exc)
-                self.cavity_status_changed.emit(
-                    state.cavity_spec.key, self.STATUS_ERROR
-                )
-                self.log_message.emit(
-                    f"[{state.cavity_spec.key}] Trigger exception: {exc}"
-                )
-            finally:
-                self._trigger_queue.task_done()
-                done_event.set()
+            self._trigger_cavity(state)
+        except Exception as exc:
+            state.error = str(exc)
+            self.cavity_status_changed.emit(
+                state.cavity_spec.key, self.STATUS_ERROR
+            )
+            self.log_message.emit(
+                f"[{state.cavity_spec.key}] Trigger exception: {exc}"
+            )
 
     def _trigger_cavities_parallel(self, states: list[CavityRunState]) -> None:
-        """Dispatch trigger work to the persistent pool and wait for completion.
+        """Dispatch trigger work to the shared pool and wait for completion.
 
         Each cavity touches independent PVs on its own IOC, so there are no
         shared-resource conflicts. All CA connections and the per-cavity
@@ -339,14 +381,9 @@ class BatchPiezoPreRFController(QObject):
             self._mark_remaining_skipped(states, only_triggered=True)
             return
 
-        self._ensure_pool()
-
-        done_events = [Event() for _ in states]
-        for state, done in zip(states, done_events):
-            self._trigger_queue.put((state, done))
-
-        for done in done_events:
-            done.wait()
+        _TRIGGER_POOL.run_all(
+            [functools.partial(self._trigger_one, state) for state in states]
+        )
 
     def _run_step(self, state: CavityRunState, step: str) -> bool:
         """Run one step via _execute_step_with_retry so checkpoints are created.
@@ -526,9 +563,5 @@ class BatchPiezoPreRFController(QObject):
 
     def _get_machine_cavity(self, cavity_spec: CavitySpec):
         machine = self._get_machine()
-        cm_key = (
-            f"{int(cavity_spec.cryomodule):02d}"
-            if cavity_spec.cryomodule.isdigit()
-            else cavity_spec.cryomodule
-        )
+        cm_key = cryomodule_key(cavity_spec.cryomodule)
         return machine.cryomodules[cm_key].cavities[cavity_spec.cavity_number]

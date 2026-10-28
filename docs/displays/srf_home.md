@@ -19,6 +19,8 @@ SRFHome (PyDM Display)
 
 "Watchers" are long-running background services (e.g., `quench_resetter`, `tune_status_poll`) that run in tmux sessions and are monitored via EPICS heartbeat PVs.
 
+Where `tmux_launcher` is not on `PATH` (e.g. a laptop), `sc-watcher` runs each watcher as a local background process instead. Its pid and log go in `~/.sc_linac_physics/watchers/<name>.pid` and `<name>.log`. `stop` waits up to 30 s for the watcher to exit, and `restart` won't start a second copy if it hasn't. `show` tails the log in a terminal. Launched from SRF Home, it opens the log in Console on macOS or in an xterm on Linux.
+
 Watchers are defined in `cli/watcher_commands.py` (`WATCHER_CONFIGS` dict). SRF Home reads this config at startup and creates groupboxes dynamically — adding a new watcher requires only a `WATCHER_CONFIGS` entry, no display code change.
 
 Each watcher increments a heartbeat PV every loop cycle. SRF Home polls this PV; a static value (no increment for N seconds) signals a stalled process and is highlighted in the UI.

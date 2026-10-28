@@ -3,7 +3,6 @@
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QComboBox,
     QDoubleSpinBox,
     QFrame,
     QGridLayout,
@@ -22,10 +21,13 @@ from sc_linac_physics.utils.sc_linac import linac_utils
 
 from .base import PhaseUIBase
 from .stage_status import (
+    ACTION_NEEDED_BUTTON_STYLE,
     COLD_LANDING_TOOLTIP_NEEDED,
     PUSH_DF_COLD_NEUTRAL,
+    STAGE4_RUN_LABEL,
     STAGE_CARD_STYLE_IDLE,
     STAGE_STATUS_NOT_STARTED,
+    STAGE_RUN_BTN_STYLE,
     STAGE_STATUS_STYLE_NOT_STARTED,
 )
 from .styles import PV_CAP_STYLE, PV_LABEL_STYLE
@@ -152,73 +154,6 @@ class PiezoPreRFUI(PhaseUIBase):
 
         group.setLayout(layout)
         return group
-
-    def _build_setup_row(self) -> QHBoxLayout:
-        """Build compact single-row setup for operator and cavity selection."""
-        row = QHBoxLayout()
-        row.setSpacing(15)
-
-        operator_label = QLabel("👤 Operator:")
-        operator_label.setStyleSheet(
-            "QLabel { color: #ffd700; font-weight: bold; font-size: 10pt; }"
-        )
-
-        operator_combo = self._register("operator_combo", QComboBox())
-        operator_combo.setMinimumWidth(180)
-        operator_combo.setMaximumWidth(220)
-        operator_combo.setStyleSheet(
-            "QComboBox { background-color: #ffffff; color: #000000; "
-            "font-size: 10pt; font-weight: bold; padding: 4px; "
-            "border: 2px solid #5a9a3a; border-radius: 3px; } "
-            "QComboBox::drop-down { border: none; } "
-            "QComboBox QAbstractItemView { background-color: #ffffff; "
-            "color: #000000; selection-background-color: #5a9a3a; }"
-        )
-
-        cavity_label = QLabel("🎯 Cavity:")
-        cavity_label.setStyleSheet(
-            "QLabel { color: #4a9eff; font-weight: bold; font-size: 10pt; }"
-        )
-
-        cm_label = QLabel("CM:")
-        cm_combo = self._register("cm_spinbox", QComboBox())
-        cm_combo.setFixedWidth(60)
-        cm_combo.setStyleSheet("QComboBox { padding: 3px; font-weight: bold; }")
-        for i in range(1, 21):
-            cm_combo.addItem(str(i))
-        cm_combo.setCurrentIndex(0)
-
-        cav_label = QLabel("Cav:")
-        cav_combo = self._register("cav_spinbox", QComboBox())
-        cav_combo.setFixedWidth(60)
-        cav_combo.setStyleSheet(
-            "QComboBox { padding: 3px; font-weight: bold; }"
-        )
-        for i in range(1, 9):
-            cav_combo.addItem(str(i))
-        cav_combo.setCurrentIndex(0)
-
-        row.addWidget(operator_label)
-        row.addWidget(operator_combo)
-        row.addWidget(cavity_label)
-        row.addWidget(cm_label)
-        row.addWidget(cm_combo)
-        row.addWidget(cav_label)
-        row.addWidget(cav_combo)
-        row.addStretch()
-
-        frame = QFrame()
-        frame.setStyleSheet(
-            "QFrame { background-color: #2a2a2a; border: 1px solid #4a4a4a; "
-            "border-radius: 4px; padding: 6px; }"
-        )
-        frame.setLayout(row)
-
-        wrapper = QHBoxLayout()
-        wrapper.addWidget(frame)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-
-        return wrapper
 
     def _build_combined_results_section(
         self, phase_name: str = "Piezo Pre-RF"
@@ -517,15 +452,22 @@ class SSACharUI(PhaseUIBase):
         btn_row.setSpacing(8)
         btn_row.setContentsMargins(0, 6, 0, 0)
 
-        push_btn = self._register(
-            "push_btn", QPushButton("Push New Slope to Cavity")
-        )
+        # Optional: a passing calibration already pushes the slope in
+        # validate_and_push. This repeats that push, so it is off until a
+        # calibration passes and is styled as secondary, not as a next step.
+        push_btn = self._register("push_btn", QPushButton("Re-push Slope…"))
         push_btn.setStyleSheet(
-            "QPushButton { background-color: #1d6a3a; color: white; "
-            "font-weight: bold; padding: 6px 18px; border-radius: 4px; } "
-            "QPushButton:hover { background-color: #2d8a4a; } "
-            "QPushButton:disabled { background-color: #374151; color: #6b7280; }"
+            "QPushButton { background-color: transparent; color: #c9cdd6; "
+            "padding: 6px 18px; border-radius: 4px; "
+            "border: 1px solid #353a45; } "
+            "QPushButton:hover { background-color: #374151; } "
+            "QPushButton:disabled { color: #6b7280; }"
         )
+        push_btn.setToolTip(
+            "A passing calibration already pushes the new slope. "
+            "Use this only to push it again (PUSH_SSA_SLOPE)."
+        )
+        push_btn.setEnabled(False)
         self._connect(push_btn, "on_push_slope")
         btn_row.addWidget(push_btn)
 
@@ -660,6 +602,7 @@ class CavityCharUI(PhaseUIBase):
             "push_results_button",
             QPushButton("Push to Cavity…", parent=self.parent),
         )
+        button.setStyleSheet(ACTION_NEEDED_BUTTON_STYLE)
         button.setEnabled(False)
         self._connect(button, "on_push_results")
         layout.addWidget(button, 5, 0, 1, 2)
@@ -715,18 +658,6 @@ class CavityCharUI(PhaseUIBase):
 class FrequencyTuningUI(PhaseUIBase):
     """Builds the Frequency Tuning display UI with 3-stage checklist layout."""
 
-    _STAGE_BTN_STYLE = """
-        QPushButton {
-            background-color: #2563eb;
-            color: white;
-            font-weight: bold;
-            padding: 5px 14px;
-            border-radius: 4px;
-            border: none;
-        }
-        QPushButton:hover { background-color: #1d4ed8; }
-        QPushButton:disabled { background-color: #374151; color: #6b7280; }
-    """
     _CONFIRM_BTN_STYLE = """
         QPushButton {
             background-color: #059669;
@@ -982,7 +913,7 @@ class FrequencyTuningUI(PhaseUIBase):
             title="④ Measure Pi Modes",
             description="Scan the cavity to find the 8π/9 and 7π/9 parasitic mode frequencies.",
             run_callback="on_run_stage_4",
-            run_label="▶ Run Stage 4",
+            run_label=STAGE4_RUN_LABEL,
             initially_enabled=False,
             extra_widgets=self._build_stage4_extra,
         )
@@ -1032,7 +963,7 @@ class FrequencyTuningUI(PhaseUIBase):
         run_btn = self._register(
             f"stage{stage}_run_btn", QPushButton(run_label)
         )
-        run_btn.setStyleSheet(self._STAGE_BTN_STYLE)
+        run_btn.setStyleSheet(STAGE_RUN_BTN_STYLE)
         run_btn.setFixedHeight(28)
         run_btn.setEnabled(initially_enabled)
         self._connect(run_btn, run_callback)

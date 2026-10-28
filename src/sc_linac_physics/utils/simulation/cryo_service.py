@@ -167,7 +167,8 @@ class JTPVGroup(PVGroup):
     @manual.putter
     async def manual(self, instance, value):
         print("JT valve status: Manual")
-        # Update mode. verify_value=False skips the other PV's putter.
+        # Clear AUTO without running its putter, which would switch the valve
+        # straight back to auto.
         await self.auto.write(0, verify_value=False)
         await self.mode.write(0)
         await self.mode_string.write("MANUAL")
