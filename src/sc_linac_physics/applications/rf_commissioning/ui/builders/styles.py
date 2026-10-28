@@ -34,8 +34,8 @@ __all__ = [
 # Without it the text colour comes from the platform palette. That is white
 # under a dark desktop theme but black under a light one (offscreen Qt, and any
 # console without a dark theme), which puts black text on near-black. Setting
-# it here means a widget is readable wherever it is shown, not only inside the
-# multi-phase container.
+# it here means a widget is readable wherever it is shown, including outside a
+# PhaseDisplayBase page (which sets its own dark page style).
 PV_LABEL_STYLE = (
     f"background: {BG_INSET}; padding: 2px 6px; "
     f"border: 1px solid {ACCENT_PV}; border-left: 3px solid {ACCENT_PV}; "

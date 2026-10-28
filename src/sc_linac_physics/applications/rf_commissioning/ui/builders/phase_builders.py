@@ -688,11 +688,10 @@ class FrequencyTuningUI(PhaseUIBase):
         checklist_scroll.setWidget(checklist)
         checklist_scroll.setFrameShape(QFrame.NoFrame)
         checklist_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # Don't paint the palette's window colour behind the cards. Inside the
-        # container that was a light strip under a light palette; transparent
-        # lets the tab pane's BG_DEEP show through, as for the other columns.
-        # setWidget() turns autofill on for the content widget, so this has to
-        # come after it.
+        # A scroll viewport paints the desktop's window colour, which is a light
+        # strip under a light palette. Transparent lets the page's BG_DEEP show
+        # through. setWidget() turns autofill on for the content widget, so
+        # this has to come after it.
         checklist_scroll.viewport().setAutoFillBackground(False)
         checklist.setAutoFillBackground(False)
         main.addWidget(checklist_scroll, stretch=2)

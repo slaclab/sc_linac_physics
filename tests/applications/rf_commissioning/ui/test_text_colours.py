@@ -32,6 +32,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status imp
     STAGE_CARD_STYLE_RUNNING,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    BG_DEEP,
     TEXT_PRIMARY,
 )
 
@@ -123,6 +124,28 @@ def test_readouts_readable_on_a_bare_phase_display(
         )
 
 
+def test_bare_phase_display_paints_a_dark_page(qtbot, tmp_path, light_palette):
+    """Shown on its own, the page is dark like it is in the container."""
+    from sc_linac_physics.applications.rf_commissioning.ui.displays.cavity_char import (  # noqa: E501
+        CavityCharDisplay,
+    )
+
+    session = CommissioningSession(db_path=str(tmp_path / "c.db"))
+    with patch("PyQt5.QtCore.QTimer.singleShot"):
+        display = CavityCharDisplay(session=session)
+    qtbot.addWidget(display)
+    display.show()
+    qtbot.waitExposed(display)
+
+    assert display.palette().color(QPalette.Window) == QColor(BG_DEEP)
+    plain = [w for w in display.findChildren(QLabel) if not w.styleSheet()]
+    assert plain
+    for label in plain:
+        assert label.palette().color(QPalette.WindowText) == QColor(
+            TEXT_PRIMARY
+        ), label.text()
+
+
 def test_container_gives_plain_labels_a_light_text_colour(
     qtbot, tmp_path, light_palette
 ):
@@ -170,7 +193,7 @@ def test_stage_card_captions_readable_in_both_states(
 def test_dialog_on_a_phase_page_keeps_the_palette_text_colour(
     qtbot, tmp_path, light_palette
 ):
-    """Dialogs inherit the container rule but paint a light window."""
+    """Dialogs inherit the page rule but paint the desktop window colour."""
     from sc_linac_physics.applications.rf_commissioning.ui.cold_landing_dialog import (  # noqa: E501
         ColdLandingDialog,
     )
@@ -181,8 +204,13 @@ def test_dialog_on_a_phase_page_keeps_the_palette_text_colour(
     dialog.show()
     qtbot.waitExposed(dialog)
 
-    bg = dialog.palette().color(QPalette.Window)
+    # Some radios are disabled until a value exists, so compare the active
+    # colour group: the point is that the page colours did not leak in.
+    expected = QApplication.palette().color(
+        QPalette.Active, QPalette.WindowText
+    )
     radios = dialog.findChildren(QRadioButton)
     assert radios
     for radio in radios:
-        _assert_readable(radio, radio.palette().color(QPalette.WindowText), bg)
+        colour = radio.palette().color(QPalette.Active, QPalette.WindowText)
+        assert colour == expected, radio.text()
