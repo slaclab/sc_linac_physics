@@ -983,13 +983,6 @@ def test_run_stage_3_success_sets_hz_and_runs() -> None:
     controller._run_phase_in_background.assert_called_once()
 
 
-def test_on_confirm_and_tune_aliases_stage_3() -> None:
-    controller = _make_controller()
-    controller.run_stage_3 = Mock()
-    controller.on_confirm_and_tune()
-    controller.run_stage_3.assert_called_once()
-
-
 def test_run_stage_4_no_operator_shows_error() -> None:
     view = _ViewStub(current_operator="")
     _make_controller(view=view).run_stage_4()
@@ -1490,26 +1483,6 @@ def test_update_partial_results_calls_view() -> None:
     view._update_local_results.assert_called_once()
     arg = view._update_local_results.call_args[0][0]
     assert isinstance(arg, FrequencyTuningData)
-
-
-def test_on_hz_chunk_update_emits_estimate() -> None:
-    controller = _make_controller()
-    emitted = []
-    controller.hz_per_step_updated.connect(lambda v: emitted.append(v))
-
-    controller._on_hz_chunk_update(10, 20.0)
-
-    assert emitted[-1] == 2.0
-
-
-def test_on_hz_chunk_update_ignores_nonpositive() -> None:
-    controller = _make_controller()
-    emitted = []
-    controller.hz_per_step_updated.connect(lambda v: emitted.append(v))
-
-    controller._on_hz_chunk_update(0, 0.0)
-
-    assert emitted == []
 
 
 # ------------------------------------------------------------------
@@ -2367,19 +2340,6 @@ def test_restore_stage2_sets_hz() -> None:
     controller._enable_stage_btn.assert_called_once_with(3)
 
 
-def test_restore_stage2_seeds_hz_estimator_accumulators() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.phase.limits.probe_steps = 100
-    controller._enable_stage_btn = Mock()
-
-    controller._restore_stage2({"hz_per_microstep": 2.5}, has_tune=False)
-
-    assert controller._hz_est_total_steps == 100
-    assert controller._hz_est_total_hz == 2.5 * 100
-
-
 def test_restore_stage2_does_not_crash_when_phase_is_none() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
@@ -2388,10 +2348,6 @@ def test_restore_stage2_does_not_crash_when_phase_is_none() -> None:
 
     # Should not raise even when phase is None and signed_hz is nonzero
     controller._restore_stage2({"hz_per_microstep": 2.5}, has_tune=False)
-
-    # Accumulators should remain at their default (0.0) since phase is None
-    assert controller._hz_est_total_steps == 0.0
-    assert controller._hz_est_total_hz == 0.0
 
 
 def test_restore_stage3_sets_net_steps() -> None:

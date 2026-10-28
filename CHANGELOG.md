@@ -2,6 +2,62 @@
 
 <!-- version list -->
 
+## v9.57.1 (2026-10-28)
+
+### Bug Fixes
+
+- **rf-commissioning**: Share one trigger pool so batch controllers can be freed
+  ([#437](https://github.com/slaclab/sc_linac_physics/pull/437),
+  [`7f5bc48`](https://github.com/slaclab/sc_linac_physics/commit/7f5bc48e3142073920e47e68c63fcbc133882612))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#424](https://github.com/slaclab/sc_linac_physics/pull/424),
+  [`b3e5c98`](https://github.com/slaclab/sc_linac_physics/commit/b3e5c981cce07f93bac6d346174472d71d47a0b4))
+
+- Say what these comments mean in plain words
+  ([#437](https://github.com/slaclab/sc_linac_physics/pull/437),
+  [`7f5bc48`](https://github.com/slaclab/sc_linac_physics/commit/7f5bc48e3142073920e47e68c63fcbc133882612))
+
+- **q0**: Cite MOPMB090 for the Q0 method in the explainer
+  ([#418](https://github.com/slaclab/sc_linac_physics/pull/418),
+  [`820c0fd`](https://github.com/slaclab/sc_linac_physics/commit/820c0fd3abcffb78f1c543847b34b2c6111cf277))
+
+- **q0**: Explain the fits and comparison statistics in plain words
+  ([#418](https://github.com/slaclab/sc_linac_physics/pull/418),
+  [`820c0fd`](https://github.com/slaclab/sc_linac_physics/commit/820c0fd3abcffb78f1c543847b34b2c6111cf277))
+
+- **q0**: Explainer for how the Q0 app works
+  ([#418](https://github.com/slaclab/sc_linac_physics/pull/418),
+  [`820c0fd`](https://github.com/slaclab/sc_linac_physics/commit/820c0fd3abcffb78f1c543847b34b2c6111cf277))
+
+- **q0**: Fix the explainer where Copilot's #418 review found it wrong
+  ([#418](https://github.com/slaclab/sc_linac_physics/pull/418),
+  [`820c0fd`](https://github.com/slaclab/sc_linac_physics/commit/820c0fd3abcffb78f1c543847b34b2c6111cf277))
+
+- **q0**: Keep the fit verdict before the paper's error estimate
+  ([#418](https://github.com/slaclab/sc_linac_physics/pull/418),
+  [`820c0fd`](https://github.com/slaclab/sc_linac_physics/commit/820c0fd3abcffb78f1c543847b34b2c6111cf277))
+
+- **q0**: Update explainer for #406, #443 and #415
+  ([#418](https://github.com/slaclab/sc_linac_physics/pull/418),
+  [`820c0fd`](https://github.com/slaclab/sc_linac_physics/commit/820c0fd3abcffb78f1c543847b34b2c6111cf277))
+
+- **q0**: Wording fixes from review ([#418](https://github.com/slaclab/sc_linac_physics/pull/418),
+  [`820c0fd`](https://github.com/slaclab/sc_linac_physics/commit/820c0fd3abcffb78f1c543847b34b2c6111cf277))
+
+### Refactoring
+
+- **rf-commissioning**: One versioned UPDATE helper; drop dead DB forwarders
+  ([#424](https://github.com/slaclab/sc_linac_physics/pull/424),
+  [`b3e5c98`](https://github.com/slaclab/sc_linac_physics/commit/b3e5c981cce07f93bac6d346174472d71d47a0b4))
+
+- **rf-commissioning**: Remove UI code nothing calls
+  ([#423](https://github.com/slaclab/sc_linac_physics/pull/423),
+  [`e9fbc96`](https://github.com/slaclab/sc_linac_physics/commit/e9fbc96694b995441281bee1be9bcbf5fd32dcf0))
+
+
 ## v9.57.0 (2026-10-27)
 
 ### Bug Fixes

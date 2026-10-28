@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
 import sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller as controller_module
 from pydm.widgets import PyDMSpinbox
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -36,7 +37,7 @@ class _ViewStub:
         self,
         *,
         current_operator: str = "Test Operator",
-        cavity: tuple[str, str] | None = ("L1B_CM02_CAV1", "02"),
+        cavity: tuple[str, str] | None = ("02-1", "02"),
     ):
         self._current_operator = current_operator
         self._cavity = cavity
@@ -117,25 +118,25 @@ def test_get_operator_empty_when_no_method() -> None:
     assert SSACharController(SimpleNamespace(), Mock())._get_operator() == ""
 
 
-def test_parse_cavity_from_record_full_name() -> None:
-    controller = _make_controller()
-    assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (
-        "02",
-        8,
+@pytest.mark.parametrize("cryomodule, cavity", [("02", 8), ("H1", 3)])
+def test_parse_cavity_from_record_reads_short_cavity_name(
+    cryomodule, cavity
+) -> None:
+    # get_current_cavity() returns record.short_cavity_name: "02-8", "H1-3".
+    record = CommissioningRecord(
+        linac=1, cryomodule=cryomodule, cavity_number=cavity
     )
-
-
-def test_parse_cavity_from_record_keeps_harmonic_linearizer_names() -> None:
     controller = _make_controller()
-    assert controller._parse_cavity_from_record("L1B_CMH1_CAV3", "H1") == (
-        "H1",
-        3,
-    )
+    assert controller._parse_cavity_from_record(
+        record.short_cavity_name, cryomodule
+    ) == (cryomodule, cavity)
 
 
-def test_parse_cavity_from_record_short_name_defaults_to_cav1() -> None:
-    controller = _make_controller()
-    assert controller._parse_cavity_from_record("SHORT", "02") == ("02", 1)
+def test_parse_cavity_from_record_rejects_other_formats() -> None:
+    # It used to fall back to cavity 1 on anything without underscores,
+    # which included every real short_cavity_name.
+    with pytest.raises(ValueError):
+        _make_controller()._parse_cavity_from_record("SHORT", "02")
 
 
 def test_update_toolbar_state_delegates_to_ui() -> None:
