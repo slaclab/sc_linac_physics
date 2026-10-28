@@ -141,12 +141,19 @@ class MultiPhaseCommissioningDisplay(
         # where the palette's text colour is already right. That is why the
         # dark readout styles in builders/styles.py carry their own `color:`
         # rather than relying on this rule.
+        # The QDialog rule undoes it for dialogs and message boxes parented to
+        # a phase page. They inherit this stylesheet but paint the palette's
+        # window colour, so they need the palette's text colour back.
         # CHECK: what palette do the production Linux consoles use? If it is
         # already dark, this rule and the styles.py colours change nothing
         # there.
         self.tabs.setStyleSheet(f"""
             QLabel, QGroupBox, QCheckBox, QRadioButton {{
                 color: {TEXT_PRIMARY};
+            }}
+            QDialog QLabel, QDialog QGroupBox, QDialog QCheckBox,
+            QDialog QRadioButton {{
+                color: palette(window-text);
             }}
             QTabWidget::pane {{
                 background-color: {BG_DEEP};

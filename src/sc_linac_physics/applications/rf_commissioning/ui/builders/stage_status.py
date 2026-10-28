@@ -10,10 +10,10 @@ updates them cannot drift apart.
 
 from .theme import (
     BG_INSET,
+    BG_STAGE_RUNNING,
     BORDER,
     COLOR_ERROR,
     COLOR_PRIMARY,
-    COLOR_PRIMARY_BG,
     COLOR_SUCCESS,
     COLOR_WARNING,
     COLOR_WARNING_BG,
@@ -78,8 +78,7 @@ STAGE_STATUS_STYLE_FAILED = (
 # labels ("Current detune:" and friends), which otherwise take the palette's
 # text colour: black on this dark fill under a light palette. A label's own
 # stylesheet still wins over this rule, so the title and status colours hold.
-# The running card does not get the rule: its fill is translucent, so shown on
-# its own under a light palette it is light, and the palette's black is right.
+# Both fills are opaque so that rule is right whatever sits behind the card.
 STAGE_CARD_STYLE_IDLE = f"""
     QFrame#stageCard {{
         background-color: {BG_INSET};
@@ -90,10 +89,11 @@ STAGE_CARD_STYLE_IDLE = f"""
 """
 STAGE_CARD_STYLE_RUNNING = f"""
     QFrame#stageCard {{
-        background-color: {COLOR_PRIMARY_BG};
+        background-color: {BG_STAGE_RUNNING};
         border: 2px solid {COLOR_PRIMARY};
         border-radius: {RADIUS_SM};
     }}
+    QFrame#stageCard QLabel {{ color: {TEXT_PRIMARY}; }}
 """
 
 

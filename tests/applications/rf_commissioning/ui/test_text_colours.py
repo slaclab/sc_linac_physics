@@ -13,13 +13,23 @@ from unittest.mock import patch
 
 import pytest
 from PyQt5.QtGui import QColor, QPalette
-from PyQt5.QtWidgets import QApplication, QLabel, QStyleFactory
+from PyQt5.QtWidgets import (
+    QApplication,
+    QFrame,
+    QLabel,
+    QRadioButton,
+    QStyleFactory,
+)
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
 )
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status import (  # noqa: E501
+    STAGE_CARD_STYLE_IDLE,
+    STAGE_CARD_STYLE_RUNNING,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     TEXT_PRIMARY,
@@ -54,6 +64,29 @@ def light_palette(qapp):
     qapp.setPalette(original)
 
 
+def _assert_readable(widget, text: QColor, bg: QColor) -> None:
+    assert _contrast(text, bg) >= MIN_CONTRAST, (
+        f"{type(widget).__name__} {widget.objectName()!r}: "
+        f"{text.name()} on {bg.name()}"
+    )
+
+
+def _container(qtbot, tmp_path):
+    from sc_linac_physics.applications.rf_commissioning.ui.multi_phase_screen import (  # noqa: E501
+        MultiPhaseCommissioningDisplay,
+    )
+
+    session = CommissioningSession(db_path=str(tmp_path / "c.db"))
+    with patch("PyQt5.QtCore.QTimer.singleShot"):
+        display = MultiPhaseCommissioningDisplay(
+            session=session, refresh_interval_ms=0
+        )
+    qtbot.addWidget(display)
+    display.show()
+    qtbot.waitExposed(display)
+    return display
+
+
 def _styled_labels(widget):
     """Labels whose own stylesheet paints an opaque background."""
     for label in widget.findChildren(QLabel):
@@ -85,10 +118,8 @@ def test_readouts_readable_on_a_bare_phase_display(
     assert labels, "expected styled readout labels on the display"
     for label in labels:
         pal = label.palette()
-        text, bg = pal.color(QPalette.WindowText), pal.color(QPalette.Window)
-        assert _contrast(text, bg) >= MIN_CONTRAST, (
-            f"{type(label).__name__} {label.objectName()!r}: "
-            f"{text.name()} on {bg.name()}"
+        _assert_readable(
+            label, pal.color(QPalette.WindowText), pal.color(QPalette.Window)
         )
 
 
@@ -96,19 +127,7 @@ def test_container_gives_plain_labels_a_light_text_colour(
     qtbot, tmp_path, light_palette
 ):
     """The tab pane paints BG_DEEP, so plain labels need light text."""
-    from sc_linac_physics.applications.rf_commissioning.ui.multi_phase_screen import (  # noqa: E501
-        MultiPhaseCommissioningDisplay,
-    )
-
-    session = CommissioningSession(db_path=str(tmp_path / "c.db"))
-    with patch("PyQt5.QtCore.QTimer.singleShot"):
-        display = MultiPhaseCommissioningDisplay(
-            session=session, refresh_interval_ms=0
-        )
-    qtbot.addWidget(display)
-    display.show()
-    qtbot.waitExposed(display)
-
+    display = _container(qtbot, tmp_path)
     page = display.tabs.widget(0)
     plain = [w for w in page.findChildren(QLabel) if not w.styleSheet()]
     assert plain, "expected plain form labels on the first phase page"
@@ -116,3 +135,54 @@ def test_container_gives_plain_labels_a_light_text_colour(
         assert label.palette().color(QPalette.WindowText) == QColor(
             TEXT_PRIMARY
         ), label.text()
+
+
+@pytest.mark.parametrize(
+    "card_style",
+    [STAGE_CARD_STYLE_IDLE, STAGE_CARD_STYLE_RUNNING],
+    ids=["idle", "running"],
+)
+def test_stage_card_captions_readable_in_both_states(
+    qtbot, tmp_path, light_palette, card_style
+):
+    display = _container(qtbot, tmp_path)
+    cards = [
+        f
+        for f in display.tabs.findChildren(QFrame)
+        if f.objectName() == "stageCard"
+    ]
+    assert cards, "expected frequency tuning stage cards"
+    for card in cards:
+        card.setStyleSheet(card_style)
+    QApplication.processEvents()
+
+    for card in cards:
+        bg = card.palette().color(QPalette.Window)
+        assert bg.alpha() == 255, "card fill must be opaque"
+        for label in card.findChildren(QLabel):
+            if "background" in label.styleSheet():
+                continue
+            _assert_readable(
+                label, label.palette().color(QPalette.WindowText), bg
+            )
+
+
+def test_dialog_on_a_phase_page_keeps_the_palette_text_colour(
+    qtbot, tmp_path, light_palette
+):
+    """Dialogs inherit the container rule but paint a light window."""
+    from sc_linac_physics.applications.rf_commissioning.ui.cold_landing_dialog import (  # noqa: E501
+        ColdLandingDialog,
+    )
+
+    display = _container(qtbot, tmp_path)
+    dialog = ColdLandingDialog(None, None, parent=display.tabs.widget(0))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitExposed(dialog)
+
+    bg = dialog.palette().color(QPalette.Window)
+    radios = dialog.findChildren(QRadioButton)
+    assert radios
+    for radio in radios:
+        _assert_readable(radio, radio.palette().color(QPalette.WindowText), bg)
