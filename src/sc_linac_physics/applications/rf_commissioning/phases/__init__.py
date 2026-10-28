@@ -12,6 +12,7 @@ from .phase_base import (
 )
 from .cavity_char import CavityCharLimits, CavityCharPhase
 from .frequency_tuning import FrequencyTuningLimits, FrequencyTuningPhase
+from .mp_processing import MPProcessingLimits, MPProcessingPhase
 from .piezo_pre_rf import PiezoPreRFPhase
 from .piezo_with_rf import PiezoWithRFLimits, PiezoWithRFPhase
 from .ssa_char import SSACharPhase
@@ -26,6 +27,8 @@ __all__ = [
     "CavityCharLimits",
     "CavityCharPhase",
     "FrequencyTuningPhase",
+    "MPProcessingLimits",
+    "MPProcessingPhase",
     "PiezoPreRFPhase",
     "PiezoWithRFLimits",
     "PiezoWithRFPhase",
