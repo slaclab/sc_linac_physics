@@ -1031,3 +1031,48 @@ def test_second_run_while_running_shows_error() -> None:
     controller.execute_phase_steps()
 
     assert controller.view.errors == ["A Pre-RF test is already running."]
+
+
+def test_rejected_start_keeps_the_running_run() -> None:
+    controller = _controller_with_phase(["setup_piezo"], _ok)
+    running = _run_with_record()
+    controller.run = running
+    controller.bridge.start_segment = Mock(return_value=False)
+
+    controller.execute_phase_steps()
+
+    assert controller.run is running
+
+
+def _paused_controller():
+    controller = _make_controller()
+    controller.run = _run_with_record()
+    controller.run.pause()
+    controller.bridge._busy = True
+    controller.update_pv_addresses = Mock()
+    controller._prepare_phase_context = Mock()
+    return controller
+
+
+def test_start_button_while_paused_resumes_the_same_run() -> None:
+    controller = _paused_controller()
+    paused = controller.run
+
+    controller.on_run_automated_test()
+
+    assert controller.run is paused
+    assert paused.paused is False
+    assert controller.view.pause_button.text == "⏸ Pause"
+    controller._prepare_phase_context.assert_not_called()
+    controller.update_pv_addresses.assert_not_called()
+
+
+def test_start_button_while_running_is_refused_before_any_setup() -> None:
+    controller = _paused_controller()
+    controller.run.resume()
+
+    controller.on_run_automated_test()
+
+    assert controller.view.errors == ["A Pre-RF test is already running."]
+    controller._prepare_phase_context.assert_not_called()
+    controller.update_pv_addresses.assert_not_called()

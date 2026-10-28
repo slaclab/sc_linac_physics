@@ -270,6 +270,17 @@ class PiezoPreRFController(QObject):
 
         Auto-creates a record if needed based on parent's cavity selection.
         """
+        # While paused the toolbar shows Start as "Resume". That press resumes
+        # the paused run. Any other press during a run is refused here,
+        # before a new phase, context or database phase instance replaces
+        # the ones the running worker is using.
+        if self.bridge.running:
+            if self.run and self.run.paused:
+                self.on_pause_test()
+            else:
+                self.view.show_error("A Pre-RF test is already running.")
+            return
+
         operator = self._get_operator()
         if not operator:
             self.view.show_error(
@@ -416,12 +427,16 @@ class PiezoPreRFController(QObject):
         # No AbortHook: Abort sets context.abort_requested, which
         # PiezoPreRFPhase._wait_for_completion reads. That is how Abort
         # worked before this ran through PhaseRun.
-        self.run = PhaseRun(self.phase)
-        self.run.set_step_mode(self._step_mode)
+        # self.run only changes once the bridge accepts the run, so Pause,
+        # Next and Abort keep reaching the worker that is running.
+        run = PhaseRun(self.phase)
+        run.set_step_mode(self._step_mode)
         if not self.bridge.start_segment(
-            self.run, self.phase.get_phase_steps(), then_complete=True
+            run, self.phase.get_phase_steps(), then_complete=True
         ):
             self.view.show_error("A Pre-RF test is already running.")
+            return
+        self.run = run
 
     def _on_step_finished(self, step: str, result) -> None:
         if step == "setup_piezo" and result.result is PhaseResult.SUCCESS:
