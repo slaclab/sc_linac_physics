@@ -1,21 +1,24 @@
 """Controller for SSA Calibration display logic."""
 
-from datetime import datetime
 from threading import Thread
 
-from PyQt5.QtCore import QObject, QTimer, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QDoubleSpinBox
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
-    PhaseCheckpoint,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
-    PhaseResult,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.ssa_char import (
     SSACharPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
+    HOLD_STEP_MODE,
+    PhaseRun,
+    SegmentOutcome,
+    SegmentResult,
 )
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
@@ -27,6 +30,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
     format_pv_update_message,
     resolve_cavity_selection,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.runner_bridge import (
+    RunnerBridge,
+)
 from sc_linac_physics.utils.platform_paths import get_ssa_cal_base_dir
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -35,7 +41,6 @@ class SSACharController(QObject):
     """Owns phase execution and PV wiring for the SSA Calibration display."""
 
     phase_completed = pyqtSignal(object)
-    phase_run_finished = pyqtSignal(bool, str)
     # Thread-safe logging: emit from any thread; slot runs on the GUI thread.
     _log_signal = pyqtSignal(str)
 
@@ -43,28 +48,34 @@ class SSACharController(QObject):
         super().__init__()
         self.view = view
         self.session = session
+        self.bridge = RunnerBridge(self)
         if hasattr(self.view, "log_message"):
             self._log_signal.connect(self.view.log_message)
+            self.bridge.log.connect(self.view.log_message)
+        if hasattr(self.view, "step_progress_signal"):
+            self.bridge.progress.connect(
+                lambda step, pct: self.view.step_progress_signal.emit(step, pct)
+            )
+        self.bridge.holding.connect(self._on_holding)
+        self.bridge.step_started.connect(
+            lambda *_: self._set_next_button_enabled(False)
+        )
+        self.bridge.segment_finished.connect(self._on_segment_finished)
 
         self.context: PhaseContext | None = None
         self.phase: SSACharPhase | None = None
         self.machine: Machine | None = None
         self._cavity = None
+        self.run: PhaseRun | None = None
 
-        self._paused = False
+        # Step mode is chosen before Run and copied onto each new PhaseRun.
         self._step_mode = False
-        self._step_executing = False
-        self._current_step_index = 0
-        self._total_steps = 0
-        self._steps: list[str] = []
         self._active_phase_instance_id: int | None = None
         # The cavity whose calibration passed in this session, so Re-push
         # Slope can be offered for it. validate_and_push has already pushed
         # once by then; the button only repeats that push. None until a pass,
         # and cleared when a new run starts or fails.
         self._repushable_cavity = None
-
-        self.phase_run_finished.connect(self._on_phase_run_finished)
 
     # ------------------------------------------------------------------
     # PV wiring
@@ -140,6 +151,17 @@ class SSACharController(QObject):
     # ------------------------------------------------------------------
 
     def on_run_calibration(self) -> None:
+        # While paused the toolbar shows Run as "Resume". That press resumes
+        # the paused run. Any other press during a run is refused here,
+        # before a new phase, context or database phase instance replaces
+        # the ones the running worker is using.
+        if self.bridge.running:
+            if self.run and self.run.paused:
+                self.on_pause_test()
+            else:
+                self.view.show_error("A calibration is already running.")
+            return
+
         operator = self._validate_operator_for_run()
         if operator is None:
             return
@@ -280,155 +302,33 @@ class SSACharController(QObject):
         if not self.context or not self.phase:
             return
 
-        self.context.progress_callback = (
-            lambda step, prog: self.view.step_progress_signal.emit(step, prog)
-        )
-        self._steps = self.phase.get_phase_steps()
-        self._total_steps = len(self._steps)
-        self._current_step_index = 0
+        # No AbortHook, the same as before this controller used PhaseRun.
+        # Abort only sets context.abort_requested, which SSACharPhase reads in
+        # wait_for_completion. It doesn't call cavity.request_abort().
+        # self.run only changes once the bridge accepts the run, so Pause,
+        # Next and Abort keep reaching the worker that is running.
+        run = PhaseRun(self.phase)
+        run.set_step_mode(self._step_mode)
+        if not self.bridge.start_segment(
+            run, self.phase.get_phase_steps(), then_complete=True
+        ):
+            self.view.show_error("A calibration is already running.")
+            return
+        self.run = run
 
-        QTimer.singleShot(100, self._run_phase_in_background)
-
-    def _run_phase_in_background(self) -> None:
-        def worker() -> None:
-            try:
-                self.phase._mark_phase_started()
-                for step_name in self.phase.get_phase_steps():
-                    if not self._check_pause_and_abort():
-                        return
-
-                    success = self._execute_single_step(step_name)
-                    if not success:
-                        self.phase_run_finished.emit(
-                            False, f"Step failed: {step_name}"
-                        )
-                        return
-
-                self._finalize_background_phase()
-            except Exception as exc:
-                self.phase_run_finished.emit(False, str(exc))
-
-        Thread(target=worker, daemon=True).start()
-
-    def _execute_single_step(self, step_name: str) -> bool:
-        import time
-
-        while self._paused:
-            time.sleep(0.1)
-            if self.context and self.context.is_abort_requested():
-                return False
-
-        if self.context and self.context.is_abort_requested():
-            return False
-
-        if self.context and self.context.progress_callback:
-            idx = (
-                self._steps.index(step_name) if step_name in self._steps else 0
-            )
-            self.context.progress_callback(
-                step_name, int((idx / len(self._steps)) * 100)
-            )
-
-        return self._execute_step_with_retries(step_name, max_retries=3)
-
-    def _execute_step_with_retries(
-        self, step_name: str, max_retries: int
-    ) -> bool:
-        import time
-
-        retry_count = 0
-        while retry_count < max_retries:
-            try:
-                result = self.phase.execute_step(step_name)
-                self._create_step_checkpoint(step_name, result)
-
-                if result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP):
-                    self._log_signal.emit(f"✓ {step_name}")
-                    return True
-
-                if result.result == PhaseResult.RETRY:
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        delay = max(0.0, float(result.retry_delay_seconds))
-                        self._log_signal.emit(
-                            f"Retrying {retry_count}/{max_retries} in {delay:.1f}s: "
-                            f"{result.message}"
-                        )
-                        time.sleep(delay)
-                        continue
-                    self._log_signal.emit(
-                        f"Failed after {max_retries} retries: {result.message}"
-                    )
-                    return False
-
-                self._log_signal.emit(f"✗ {step_name}: {result.message}")
-                return False
-
-            except Exception as exc:
-                retry_count += 1
-                if retry_count < max_retries:
-                    self._log_signal.emit(
-                        f"Exception on retry {retry_count}: {exc}"
-                    )
-                    continue
-                self._log_signal.emit(
-                    f"Exception after {max_retries} retries: {exc}"
-                )
-                return False
-
-        return False
-
-    def _create_step_checkpoint(self, step_name: str, result) -> None:
-        measurements = dict(result.data or {})
-        if self.context.phase_instance_id is not None:
-            measurements.setdefault(
-                "phase_instance_id", self.context.phase_instance_id
-            )
-
-        checkpoint = PhaseCheckpoint(
-            phase=self.phase.phase_type,
-            timestamp=datetime.now(),
-            operator=self.context.operator,
-            step_name=step_name,
-            success=result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP),
-            notes=result.message,
-            measurements=measurements,
-        )
-        self.context.record.phase_history.append(checkpoint)
-
-    def _finalize_background_phase(self) -> None:
-        try:
-            self.phase.finalize_phase()
-            self.phase._mark_phase_completed()
-            self.phase_run_finished.emit(True, "")
-        except Exception as exc:
-            self.phase._handle_exception(exc)
-            self.phase_run_finished.emit(False, str(exc))
-
-    def _check_pause_and_abort(self) -> bool:
-        import time
-
-        while self._paused:
-            time.sleep(0.1)
-            if self.context and self.context.is_abort_requested():
-                self.phase_run_finished.emit(False, "Aborted")
-                return False
-
-        if self.context and self.context.is_abort_requested():
-            self.phase_run_finished.emit(False, "Aborted")
-            return False
-
-        return True
-
-    def _on_phase_run_finished(self, success: bool, error_msg: str) -> None:
-        if success:
+    def _on_segment_finished(self, result: SegmentResult) -> None:
+        if result.outcome is SegmentOutcome.COMPLETED:
             self.on_phase_completed()
         else:
-            self.on_phase_failed(error_msg or "Phase execution failed")
+            self.on_phase_failed(result.message or "Phase execution failed")
+
+    def _on_holding(self, step: str, reason: str) -> None:
+        if reason == HOLD_STEP_MODE:
+            self.view.log_message(f"Step mode: press Next to run {step}")
+            self._set_next_button_enabled(True)
 
     def on_phase_completed(self) -> None:
-        self._paused = False
-        self._step_mode = False
+        self._reset_run_controls()
 
         self.view.log_message("SSA calibration completed successfully")
         self.view.local_phase_status.setText("COMPLETED")
@@ -485,8 +385,7 @@ class SSACharController(QObject):
         self.view.abort_button.setEnabled(False)
 
     def on_phase_failed(self, error_msg: str) -> None:
-        self._paused = False
-        self._step_mode = False
+        self._reset_run_controls()
 
         self.view.log_message(f"SSA calibration failed: {error_msg}")
         self._repushable_cavity = None
@@ -646,22 +545,49 @@ class SSACharController(QObject):
     # ------------------------------------------------------------------
 
     def on_abort(self) -> None:
-        if self.context:
-            self.context.request_abort()
+        # request_abort also ends a retry delay or a pause at once.
+        if self.run:
+            self.run.request_abort()
             self.view.log_message("Abort requested...")
             self.view.abort_button.setEnabled(False)
 
     def on_pause_test(self) -> None:
-        if self._paused:
-            self._paused = False
+        if not self.run:
+            return
+        if self.run.paused:
+            self.run.resume()
             self.view.log_message("Test resumed...")
             self.view.pause_button.setText("⏸ Pause")
             self._update_toolbar_state("running")
         else:
-            self._paused = True
+            self.run.pause()
             self.view.log_message("Test paused...")
             self.view.pause_button.setText("▶ Resume")
             self._update_toolbar_state("paused")
+
+    def on_toggle_step_mode(self) -> None:
+        self._step_mode = not self._step_mode
+        if self.run:
+            self.run.set_step_mode(self._step_mode)
+        if self._step_mode:
+            self.view.log_message("Step mode on: press Next before each step")
+        else:
+            self.view.log_message("Step mode off")
+            self._set_next_button_enabled(False)
+
+    def on_next_step(self) -> None:
+        if self.run and self._step_mode:
+            self._set_next_button_enabled(False)
+            self.run.next_step()
+
+    def _reset_run_controls(self) -> None:
+        self._set_next_button_enabled(False)
+        if hasattr(self.view, "pause_button"):
+            self.view.pause_button.setText("⏸ Pause")
+
+    def _set_next_button_enabled(self, enabled: bool) -> None:
+        if hasattr(self.view, "next_step_btn"):
+            self.view.next_step_btn.setEnabled(enabled)
 
     # ------------------------------------------------------------------
     # Misc helpers

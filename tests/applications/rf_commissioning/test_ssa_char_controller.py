@@ -7,6 +7,7 @@ import pytest
 import sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller as controller_module
 from pydm.widgets import PyDMSpinbox
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
     CommissioningRecord,
     SSACharacterization,
 )
@@ -14,6 +15,12 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
     PhaseResult,
     PhaseStepResult,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
+    HOLD_STEP_MODE,
+    PhaseRun,
+    SegmentOutcome,
+    SegmentResult,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller import (
     SSACharController,
@@ -48,6 +55,7 @@ class _ViewStub:
         self.pause_button = _ButtonStub()
         self.abort_button = _ButtonStub()
         self.push_btn = _ButtonStub()
+        self.next_step_btn = _ButtonStub()
         self.local_phase_status = Mock()
         self.local_progress_bar = Mock()
         self.ui = SimpleNamespace(update_toolbar_state=Mock())
@@ -406,281 +414,281 @@ def test_set_running_ui_state() -> None:
 # ------------------------------------------------------------------
 
 
+def _run_with_record() -> PhaseRun:
+    phase = Mock()
+    phase.context = PhaseContext(record=_record_with_result(), operator="op")
+    phase.phase_type = CommissioningPhase.SSA_CHAR
+    return PhaseRun(phase)
+
+
 def test_on_abort_requests_abort_and_disables_button() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
+    controller.run = _run_with_record()
 
     controller.on_abort()
 
-    assert controller.context.abort_requested is True
+    assert controller.run.context.abort_requested is True
     assert view.abort_button.enabled is False
     assert "Abort requested..." in view.logs
 
 
-def test_on_abort_without_context_is_noop() -> None:
+def test_on_abort_without_run_is_noop() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller.context = None
 
     controller.on_abort()
 
     assert view.abort_button.enabled is True
 
 
-def test_on_pause_test_toggles_state_and_button_text() -> None:
+def test_on_pause_test_toggles_run_and_button_text() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
+    controller.run = _run_with_record()
 
     controller.on_pause_test()
-    assert controller._paused is True
+    assert controller.run.paused is True
     assert view.pause_button.text == "▶ Resume"
 
     controller.on_pause_test()
-    assert controller._paused is False
+    assert controller.run.paused is False
     assert view.pause_button.text == "⏸ Pause"
 
 
-# ------------------------------------------------------------------
-# _check_pause_and_abort
-# ------------------------------------------------------------------
-
-
-def test_check_pause_and_abort_normal_proceeds() -> None:
-    assert _make_controller()._check_pause_and_abort() is True
-
-
-def test_check_pause_and_abort_aborted() -> None:
-    controller = _make_controller()
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller.context.request_abort()
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-
-    assert controller._check_pause_and_abort() is False
-    assert emitted[-1] == (False, "Aborted")
-
-
-def test_check_pause_and_abort_paused_then_abort(monkeypatch) -> None:
-    controller = _make_controller()
-    controller.context = PhaseContext(
-        record=_record_with_result(), operator="op"
-    )
-    controller._paused = True
-
-    def _sleep(_):
-        controller.context.request_abort()
-
-    monkeypatch.setitem(
-        __import__("sys").modules, "time", SimpleNamespace(sleep=_sleep)
-    )
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-
-    assert controller._check_pause_and_abort() is False
-    assert emitted[-1] == (False, "Aborted")
-
-
-# ------------------------------------------------------------------
-# Step execution
-# ------------------------------------------------------------------
-
-
-def test_execute_step_with_retries_success() -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.execute_step.return_value = PhaseStepResult(
-        result=PhaseResult.SUCCESS, message="ok"
-    )
-    controller._create_step_checkpoint = Mock()
-
-    assert controller._execute_step_with_retries("step", max_retries=3) is True
-    assert any("✓" in msg for msg in controller.view.logs)
-
-
-def test_execute_step_with_retries_skip() -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.execute_step.return_value = PhaseStepResult(
-        result=PhaseResult.SKIP, message="skip"
-    )
-    controller._create_step_checkpoint = Mock()
-
-    assert controller._execute_step_with_retries("step", max_retries=3) is True
-
-
-def test_execute_step_with_retries_failed() -> None:
+def test_on_pause_test_without_run_is_noop() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.phase.execute_step.return_value = PhaseStepResult(
-        result=PhaseResult.FAILED, message="bad"
-    )
-    controller._create_step_checkpoint = Mock()
 
-    assert controller._execute_step_with_retries("step", max_retries=3) is False
-    assert any("✗" in msg for msg in view.logs)
+    controller.on_pause_test()
 
-
-def test_execute_step_with_retries_retry_exhausted() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.phase.execute_step.return_value = PhaseStepResult(
-        result=PhaseResult.RETRY, message="again", retry_delay_seconds=0.0
-    )
-    controller._create_step_checkpoint = Mock()
-
-    assert controller._execute_step_with_retries("step", max_retries=2) is False
-    assert any("Failed after 2 retries" in msg for msg in view.logs)
-
-
-def test_execute_step_with_retries_exception_exhausted() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.phase.execute_step.side_effect = RuntimeError("rpc down")
-
-    assert controller._execute_step_with_retries("step", max_retries=2) is False
-    assert any("Exception after 2 retries" in msg for msg in view.logs)
-
-
-def test_create_step_checkpoint_appends_to_history() -> None:
-    controller = _make_controller()
-    record = _record_with_result()
-    record.phase_history = []
-    controller.context = PhaseContext(record=record, operator="op")
-    controller.phase = Mock()
-    controller.phase.phase_type = "SSA_CHAR"
-
-    controller._create_step_checkpoint(
-        "verify_initial_state",
-        PhaseStepResult(
-            result=PhaseResult.SUCCESS, message="ok", data={"a": 1}
-        ),
-    )
-
-    assert len(record.phase_history) == 1
-    assert record.phase_history[0].step_name == "verify_initial_state"
-    assert record.phase_history[0].success is True
+    assert view.pause_button.text == ""
 
 
 # ------------------------------------------------------------------
-# Background phase finalization
+# Step mode
 # ------------------------------------------------------------------
 
 
-def test_finalize_background_phase_emits_success() -> None:
+def test_toggle_step_mode_sets_it_on_the_run() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller.run = _run_with_record()
+
+    controller.on_toggle_step_mode()
+    assert controller.run.step_mode is True
+
+    controller.on_toggle_step_mode()
+    assert controller.run.step_mode is False
+    assert view.next_step_btn.enabled is False
+
+
+def test_next_step_lets_one_step_run() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller.run = Mock()
+    controller._step_mode = True
+
+    controller.on_next_step()
+
+    controller.run.next_step.assert_called_once()
+    assert view.next_step_btn.enabled is False
+
+
+def test_next_step_ignored_outside_step_mode() -> None:
     controller = _make_controller()
-    controller.phase = Mock()
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
+    controller.run = Mock()
 
-    controller._finalize_background_phase()
+    controller.on_next_step()
 
-    assert emitted[-1] == (True, "")
+    controller.run.next_step.assert_not_called()
 
 
-def test_finalize_background_phase_emits_failure_on_exception() -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.finalize_phase.side_effect = RuntimeError("fail")
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
+def test_holding_in_step_mode_enables_next() -> None:
+    view = _ViewStub()
+    view.next_step_btn.enabled = False
+    controller = _make_controller(view=view)
 
-    controller._finalize_background_phase()
+    controller._on_holding("set_drive_max", "paused")
+    assert view.next_step_btn.enabled is False
 
-    assert emitted[-1] == (False, "fail")
+    controller._on_holding("set_drive_max", HOLD_STEP_MODE)
+    assert view.next_step_btn.enabled is True
 
 
-def test_on_phase_run_finished_routes_to_completed() -> None:
+# ------------------------------------------------------------------
+# Segment result routing
+# ------------------------------------------------------------------
+
+
+def test_segment_completed_routes_to_completed() -> None:
     controller = _make_controller()
     controller.on_phase_completed = Mock()
     controller.on_phase_failed = Mock()
 
-    controller._on_phase_run_finished(True, "")
+    controller._on_segment_finished(SegmentResult(SegmentOutcome.COMPLETED))
 
     controller.on_phase_completed.assert_called_once()
     controller.on_phase_failed.assert_not_called()
 
 
-def test_on_phase_run_finished_routes_to_failed_with_message() -> None:
+def test_segment_failed_routes_to_failed_with_message() -> None:
     controller = _make_controller()
     controller.on_phase_completed = Mock()
     controller.on_phase_failed = Mock()
 
-    controller._on_phase_run_finished(False, "boom")
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.ABORTED, "Aborted before set_drive_max")
+    )
 
-    controller.on_phase_failed.assert_called_once_with("boom")
+    controller.on_phase_failed.assert_called_once_with(
+        "Aborted before set_drive_max"
+    )
 
 
-def test_on_phase_run_finished_uses_default_error_message() -> None:
+def test_segment_failed_uses_default_error_message() -> None:
     controller = _make_controller()
-    controller.on_phase_completed = Mock()
     controller.on_phase_failed = Mock()
 
-    controller._on_phase_run_finished(False, "")
+    controller._on_segment_finished(SegmentResult(SegmentOutcome.FAILED))
 
     controller.on_phase_failed.assert_called_once_with("Phase execution failed")
 
 
 # ------------------------------------------------------------------
-# _run_phase_in_background
+# Running through the RunnerBridge
 # ------------------------------------------------------------------
 
 
-def test_run_phase_in_background_abort_path(monkeypatch) -> None:
-    controller = _make_controller()
+def _controller_with_phase(steps, execute_step):
+    view = _ViewStub()
+    view.next_step_btn.enabled = False
+    controller = _make_controller(view=view)
     controller.phase = Mock()
-    controller.phase.get_phase_steps.return_value = ["step"]
-    controller._check_pause_and_abort = Mock(return_value=False)
-    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
-
-    controller._run_phase_in_background()
-
-
-def test_run_phase_in_background_step_fails_emits_signal(monkeypatch) -> None:
-    controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.get_phase_steps.return_value = ["step"]
-    controller._check_pause_and_abort = Mock(return_value=True)
-    controller._execute_single_step = Mock(return_value=False)
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
+    controller.phase.phase_type = CommissioningPhase.SSA_CHAR
+    controller.phase.get_phase_steps.return_value = steps
+    controller.phase.execute_step.side_effect = execute_step
+    controller.context = PhaseContext(
+        record=_record_with_result(), operator="op"
     )
-    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
+    controller.phase.context = controller.context
+    controller.on_phase_completed = Mock()
+    controller.on_phase_failed = Mock()
+    return controller
 
-    controller._run_phase_in_background()
 
-    assert emitted[-1] == (False, "Step failed: step")
+def _ok(step):
+    return PhaseStepResult(result=PhaseResult.SUCCESS, message="ok")
 
 
-def test_run_phase_in_background_exception_emits_signal(monkeypatch) -> None:
+def test_run_completes_and_logs_steps(qtbot) -> None:
+    controller = _controller_with_phase(["a", "b"], _ok)
+
+    controller._execute_phase_async()
+    qtbot.waitUntil(lambda: controller.on_phase_completed.called, timeout=2000)
+
+    controller.phase.finalize_phase.assert_called_once()
+    controller.on_phase_failed.assert_not_called()
+    assert "✓ a: ok" in controller.view.logs
+    controller.view.step_progress_signal.emit.assert_any_call("b", 50)
+
+
+def test_exception_in_step_fails_without_retry(qtbot) -> None:
+    def _raise(step):
+        raise RuntimeError("rpc down")
+
+    controller = _controller_with_phase(["a", "b"], _raise)
+
+    controller._execute_phase_async()
+    qtbot.waitUntil(lambda: controller.on_phase_failed.called, timeout=2000)
+
+    assert controller.phase.execute_step.call_count == 1
+    assert "rpc down" in controller.on_phase_failed.call_args.args[0]
+    controller.on_phase_completed.assert_not_called()
+
+
+def test_abort_ends_retry_delay_at_once(qtbot) -> None:
+    def _retry(step):
+        return PhaseStepResult(
+            result=PhaseResult.RETRY,
+            message="not yet",
+            retry_delay_seconds=30.0,
+        )
+
+    controller = _controller_with_phase(["a"], _retry)
+    controller.bridge.retry_waiting.connect(lambda *_: controller.on_abort())
+
+    controller._execute_phase_async()
+    qtbot.waitUntil(lambda: controller.on_phase_failed.called, timeout=2000)
+
+    assert controller.phase.execute_step.call_count == 1
+    assert controller.on_phase_failed.call_args.args[0] == "Aborted before a"
+
+
+def test_step_mode_waits_for_next(qtbot) -> None:
+    controller = _controller_with_phase(["a"], _ok)
+    controller.on_toggle_step_mode()
+
+    controller._execute_phase_async()
+    qtbot.waitUntil(lambda: controller.view.next_step_btn.enabled, timeout=2000)
+    controller.phase.execute_step.assert_not_called()
+
+    controller.on_next_step()
+    qtbot.waitUntil(lambda: controller.on_phase_completed.called, timeout=2000)
+    controller.phase.execute_step.assert_called_once_with("a")
+
+
+def test_on_run_while_running_shows_error() -> None:
+    controller = _controller_with_phase(["a"], _ok)
+    controller.bridge.start_segment = Mock(return_value=False)
+
+    controller._execute_phase_async()
+
+    assert controller.view.errors == ["A calibration is already running."]
+
+
+def test_rejected_start_keeps_the_running_run() -> None:
+    controller = _controller_with_phase(["a"], _ok)
+    running = _run_with_record()
+    controller.run = running
+    controller.bridge.start_segment = Mock(return_value=False)
+
+    controller._execute_phase_async()
+
+    assert controller.run is running
+
+
+def _paused_controller():
     controller = _make_controller()
-    controller.phase = Mock()
-    controller.phase.get_phase_steps.side_effect = RuntimeError("worker fail")
-    emitted = []
-    controller.phase_run_finished.connect(
-        lambda ok, msg: emitted.append((ok, msg))
-    )
-    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
+    controller.run = _run_with_record()
+    controller.run.pause()
+    controller.bridge._busy = True
+    controller._start_run_for_target = Mock()
+    return controller
 
-    controller._run_phase_in_background()
 
-    assert emitted[-1] == (False, "worker fail")
+def test_run_button_while_paused_resumes_the_same_run() -> None:
+    controller = _paused_controller()
+    paused = controller.run
+
+    controller.on_run_calibration()
+
+    assert controller.run is paused
+    assert paused.paused is False
+    assert controller.view.pause_button.text == "⏸ Pause"
+    controller._start_run_for_target.assert_not_called()
+    controller.session.start_active_phase_instance.assert_not_called()
+
+
+def test_run_button_while_running_is_refused_before_any_setup() -> None:
+    controller = _paused_controller()
+    controller.run.resume()
+
+    controller.on_run_calibration()
+
+    assert controller.view.errors == ["A calibration is already running."]
+    controller._start_run_for_target.assert_not_called()
+    controller.session.start_active_phase_instance.assert_not_called()
 
 
 # ------------------------------------------------------------------
