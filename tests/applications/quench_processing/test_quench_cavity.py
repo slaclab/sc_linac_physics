@@ -874,3 +874,54 @@ class TestConstants:
         assert MAX_QUENCH_RETRIES is not None
         assert DECARAD_SETTLE_TIME is not None
         assert RADIATION_LIMIT is not None
+
+
+class TestResetInterlocksDuringQuench:
+    """reset_interlocks on a QuenchCavity checks only the operator abort.
+
+    QuenchCavity.check_abort raises on an uncaught quench, which is true
+    right after a quench, and reads decarad. Neither may block the reset.
+    """
+
+    @pytest.fixture
+    def cavity(self):
+        rack = Mock()
+        rack.cryomodule = Mock()
+        rack.cryomodule.name = "01"
+        rack.cryomodule.linac = Mock()
+        rack.cryomodule.linac.name = "L0B"
+        rack.cryomodule.is_harmonic_linearizer = False
+        rack.ssa_class = Mock(return_value=Mock())
+        rack.stepper_class = Mock(return_value=Mock())
+        rack.piezo_class = Mock(return_value=Mock())
+        rack.rack_name = "R01"
+        cav = QuenchCavity(cavity_num=1, rack_object=rack)
+        cav._interlock_reset_pv_obj = Mock()
+        cav._rf_permit_pv_obj = Mock()
+        cav._rf_permit_pv_obj.get.return_value = 1  # permit: reset worked
+        cav.turn_off = Mock()
+        return cav
+
+    def test_reset_goes_through_right_after_a_quench(self, cavity):
+        # decarad is None and has_uncaught_quench is True: check_abort
+        # would raise on either.
+        assert cavity.decarad is None
+        with (
+            patch.object(
+                QuenchCavity, "has_uncaught_quench", return_value=True
+            ),
+            patch("sc_linac_physics.utils.sc_linac.cavity.time.sleep"),
+        ):
+            cavity.reset_interlocks()
+
+        cavity._interlock_reset_pv_obj.put.assert_called_once_with(
+            1, wait=False
+        )
+
+    def test_operator_abort_still_stops_the_reset(self, cavity):
+        cavity.request_abort()
+        with pytest.raises(CavityAbortError):
+            cavity.reset_interlocks()
+
+        cavity._interlock_reset_pv_obj.put.assert_not_called()
+        cavity.turn_off.assert_called_once()

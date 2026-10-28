@@ -190,6 +190,16 @@ class QuenchCavity(Cavity):
                 super().check_abort()
                 time.sleep(1)
 
+    def check_operator_abort(self):
+        """Only Cavity's abort_flag check, for reset_interlocks.
+
+        check_abort below raises on an uncaught quench (AACT at or below
+        QUENCH_AMP_THRESHOLD x ADES in SELA), which is true right after a
+        quench. Calling it inside the reset would block the reset that
+        clears that quench. It also reads decarad, which may still be None.
+        """
+        Cavity.check_abort(self)
+
     def check_abort(self):
         """Check abort conditions including radiation and uncaught quench."""
         super().check_abort()

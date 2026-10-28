@@ -1154,6 +1154,15 @@ class Cavity(linac_utils.SCLinacObject):
         self.abort_flag = True
         self.set_status_message("Abort requested", logging.WARNING)
 
+    def check_operator_abort(self):
+        """The abort check used inside reset_interlocks.
+
+        Only an operator's abort belongs here. A subclass whose check_abort
+        adds checks that a reset is meant to clear (QuenchCavity's
+        uncaught-quench and radiation checks) overrides this to skip them.
+        """
+        self.check_abort()
+
     def check_abort(self):
         if self.abort_flag:
             self.abort_flag = False
@@ -1300,13 +1309,13 @@ class Cavity(linac_utils.SCLinacObject):
         Retries up to INTERLOCK_RESET_ATTEMPTS times, waiting 2 s longer
         each time (3, 5, 7... s), then raises CavityFaultError.
 
-        Abort is checked before each reset write and once a second while
-        waiting. On abort, check_abort() turns RF off and raises
-        CavityAbortError. Before, an abort waited out every retry, up to
-        about 48 s.
+        An operator abort is checked before each reset write and once a
+        second while waiting (check_operator_abort). On a plain Cavity that
+        turns RF off and raises CavityAbortError. Before, an abort waited
+        out every retry, up to about 48 s.
         """
         # TODO see if it makes more sense to implement this non-recursively
-        self.check_abort()
+        self.check_operator_abort()
         self.set_status_message(
             f"Resetting interlocks (attempt {attempt + 1}, wait {wait}s)",
             logging.INFO,
@@ -1358,11 +1367,11 @@ class Cavity(linac_utils.SCLinacObject):
         """
         remaining = seconds
         while remaining > 0:
-            self.check_abort()
+            self.check_operator_abort()
             step = min(1.0, remaining)
             time.sleep(step)
             remaining -= step
-        self.check_abort()
+        self.check_operator_abort()
 
     @property
     def characterization_timestamp(self) -> datetime:
