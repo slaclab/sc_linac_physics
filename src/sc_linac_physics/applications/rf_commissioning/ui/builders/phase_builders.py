@@ -760,6 +760,7 @@ class FrequencyTuningUI(PhaseUIBase):
         frame.setStyleSheet(f"""
             QFrame {{
                 background-color: {BG_PANEL};
+                color: {TEXT_PRIMARY};
                 border: 1px solid {BORDER};
                 border-radius: {RADIUS_LG};
                 padding: 4px;

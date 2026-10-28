@@ -15,6 +15,7 @@ from .theme import (
     MONO_FONT_STACK,
     RADIUS_SM,
     SANS_FONT_STACK,
+    TEXT_PRIMARY,
 )
 
 __all__ = [
@@ -29,16 +30,24 @@ __all__ = [
     "STATUS_LABEL_PASS",
 ]
 
+# Every style below that sets a dark background also sets its own `color:`.
+# Without it the text colour comes from the platform palette. That is white
+# under a dark desktop theme but black under a light one (offscreen Qt, and any
+# console without a dark theme), which puts black text on near-black. Setting
+# it here means a widget is readable wherever it is shown, not only inside the
+# multi-phase container.
 PV_LABEL_STYLE = (
     f"background: {BG_INSET}; padding: 2px 6px; "
     f"border: 1px solid {ACCENT_PV}; border-left: 3px solid {ACCENT_PV}; "
     f"font-size: 11px; border-radius: {RADIUS_SM};"
+    f" color: {TEXT_PRIMARY};"
 )
 
 PV_CAP_STYLE = (
     f"background-color: {BG_INSET}; padding: 2px 6px; "
     f"border: 1px solid {ACCENT_PV}; border-left: 3px solid {ACCENT_PV}; "
     f"font-family: {MONO_FONT_STACK}; font-size: 11px; border-radius: {RADIUS_SM};"
+    f" color: {TEXT_PRIMARY};"
 )
 
 # 12px, not 11: these carry the live step and phase text in the status bar, which
@@ -47,12 +56,14 @@ LOCAL_LABEL_STYLE = (
     f"background: {BG_LOCAL}; padding: 2px 6px; "
     f"border: 1px solid {BORDER}; border-left: 3px solid {ACCENT_LOCAL}; "
     f"font-size: 12px; border-radius: {RADIUS_SM};"
+    f" color: {TEXT_PRIMARY};"
 )
 
 LOCAL_CAP_STYLE = (
     f"background-color: {BG_LOCAL}; padding: 2px 6px; "
     f"border: 1px solid {BORDER}; border-left: 3px solid {ACCENT_LOCAL}; "
     f"font-family: {MONO_FONT_STACK}; font-size: 11px; border-radius: {RADIUS_SM};"
+    f" color: {TEXT_PRIMARY};"
 )
 
 STATUS_LABEL_PASS = (

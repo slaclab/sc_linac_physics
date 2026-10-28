@@ -74,13 +74,19 @@ STAGE_STATUS_STYLE_FAILED = (
 #
 # Object-name scoped (`QFrame#stageCard`) so the background and border do not
 # cascade onto the card's child labels and buttons when the style is swapped at
-# runtime.
+# runtime. The one exception is a default text colour for the card's plain
+# labels ("Current detune:" and friends), which otherwise take the palette's
+# text colour: black on this dark fill under a light palette. A label's own
+# stylesheet still wins over this rule, so the title and status colours hold.
+# The running card does not get the rule: its fill is translucent, so shown on
+# its own under a light palette it is light, and the palette's black is right.
 STAGE_CARD_STYLE_IDLE = f"""
     QFrame#stageCard {{
         background-color: {BG_INSET};
         border: 1px solid {BORDER};
         border-radius: {RADIUS_SM};
     }}
+    QFrame#stageCard QLabel {{ color: {TEXT_PRIMARY}; }}
 """
 STAGE_CARD_STYLE_RUNNING = f"""
     QFrame#stageCard {{
