@@ -214,3 +214,19 @@ def test_dialog_on_a_phase_page_keeps_the_palette_text_colour(
     for radio in radios:
         colour = radio.palette().color(QPalette.Active, QPalette.WindowText)
         assert colour == expected, radio.text()
+
+
+def test_tab_strip_right_of_the_last_tab_is_dark(
+    qtbot, tmp_path, light_palette
+):
+    """The tab row past the last tab showed the desktop's white window."""
+    display = _container(qtbot, tmp_path)
+    display.resize(1500, 900)
+    QApplication.processEvents()
+    tabs = display.tabs
+    bar = tabs.tabBar()
+    assert bar.width() < tabs.width(), "need an empty strip to check"
+
+    image = tabs.grab().toImage()
+    x = (bar.width() + tabs.width()) // 2
+    assert image.pixelColor(x, bar.height() // 2) == QColor(BG_DEEP)
