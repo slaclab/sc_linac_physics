@@ -1154,6 +1154,15 @@ class Cavity(linac_utils.SCLinacObject):
         self.abort_flag = True
         self.set_status_message("Abort requested", logging.WARNING)
 
+    def check_operator_abort(self):
+        """The abort check used inside reset_interlocks.
+
+        Only an operator's abort belongs here. A subclass whose check_abort
+        adds checks that a reset is meant to clear (QuenchCavity's
+        uncaught-quench and radiation checks) overrides this to skip them.
+        """
+        self.check_abort()
+
     def check_abort(self):
         if self.abort_flag:
             self.abort_flag = False
@@ -1295,7 +1304,18 @@ class Cavity(linac_utils.SCLinacObject):
                 )
 
     def reset_interlocks(self, wait: int = 3, attempt: int = 0):
+        """Write INTLK_RESET_ALL, wait, and retry while RF is inhibited.
+
+        Retries up to INTERLOCK_RESET_ATTEMPTS times, waiting 2 s longer
+        each time (3, 5, 7... s), then raises CavityFaultError.
+
+        An operator abort is checked before each reset write and once a
+        second while waiting (check_operator_abort). On a plain Cavity that
+        turns RF off and raises CavityAbortError. Before, an abort waited
+        out every retry, up to about 48 s.
+        """
         # TODO see if it makes more sense to implement this non-recursively
+        self.check_operator_abort()
         self.set_status_message(
             f"Resetting interlocks (attempt {attempt + 1}, wait {wait}s)",
             logging.INFO,
@@ -1310,7 +1330,7 @@ class Cavity(linac_utils.SCLinacObject):
             self._interlock_reset_pv_obj = PV(self.interlock_reset_pv)
 
         self._interlock_reset_pv_obj.put(1, wait=False)
-        time.sleep(wait)
+        self._sleep_checking_abort(wait)
 
         self.set_status_message("Checking RF permit status", logging.DEBUG)
         if self.rf_inhibited:
@@ -1338,6 +1358,20 @@ class Cavity(linac_utils.SCLinacObject):
             self.set_status_message(
                 "Interlocks successfully reset", logging.INFO
             )
+
+    def _sleep_checking_abort(self, seconds: float) -> None:
+        """Sleep for seconds in steps of at most 1 s, checking abort first.
+
+        Counts the steps instead of reading the clock, so a test that
+        replaces time.sleep still finishes.
+        """
+        remaining = seconds
+        while remaining > 0:
+            self.check_operator_abort()
+            step = min(1.0, remaining)
+            time.sleep(step)
+            remaining -= step
+        self.check_operator_abort()
 
     @property
     def characterization_timestamp(self) -> datetime:
