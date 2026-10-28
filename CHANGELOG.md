@@ -2,6 +2,83 @@
 
 <!-- version list -->
 
+## v9.58.0 (2026-10-28)
+
+### Bug Fixes
+
+- **rf-commissioning**: Reserve a PhaseRun before starting it; keep failed attempts in results
+  ([#417](https://github.com/slaclab/sc_linac_physics/pull/417),
+  [`53de7b5`](https://github.com/slaclab/sc_linac_physics/commit/53de7b5d034008243aa01e8076feaecf56a7666c))
+
+- **rf-commissioning**: Runner fails the phase on any step fault; bridge always finishes
+  ([#417](https://github.com/slaclab/sc_linac_physics/pull/417),
+  [`53de7b5`](https://github.com/slaclab/sc_linac_physics/commit/53de7b5d034008243aa01e8076feaecf56a7666c))
+
+- **rf_commissioning**: Let frequency tuning run on H1/H2, flag its limits
+  ([#460](https://github.com/slaclab/sc_linac_physics/pull/460),
+  [`835bd8a`](https://github.com/slaclab/sc_linac_physics/commit/835bd8a7da52f4d3cceedffc88ad507b7da5b1c7))
+
+- **rf_commissioning**: Let the SSA tab resolve H1 and H2 cryomodules
+  ([#460](https://github.com/slaclab/sc_linac_physics/pull/460),
+  [`835bd8a`](https://github.com/slaclab/sc_linac_physics/commit/835bd8a7da52f4d3cceedffc88ad507b7da5b1c7))
+
+- **rf_commissioning**: Offer Re-push Slope only after a passing SSA calibration
+  ([#460](https://github.com/slaclab/sc_linac_physics/pull/460),
+  [`835bd8a`](https://github.com/slaclab/sc_linac_physics/commit/835bd8a7da52f4d3cceedffc88ad507b7da5b1c7))
+
+- **rf_commissioning**: Resolve H1/H2 in every controller, refuse them in frequency tuning
+  ([#460](https://github.com/slaclab/sc_linac_physics/pull/460),
+  [`835bd8a`](https://github.com/slaclab/sc_linac_physics/commit/835bd8a7da52f4d3cceedffc88ad507b7da5b1c7))
+
+- **rf_commissioning**: Run SSA and piezo tests on the record's cavity
+  ([#460](https://github.com/slaclab/sc_linac_physics/pull/460),
+  [`835bd8a`](https://github.com/slaclab/sc_linac_physics/commit/835bd8a7da52f4d3cceedffc88ad507b7da5b1c7))
+
+- **rf_commissioning**: Run SSA and piezo tests on the record's cavity; support H1/H2
+  ([#460](https://github.com/slaclab/sc_linac_physics/pull/460),
+  [`835bd8a`](https://github.com/slaclab/sc_linac_physics/commit/835bd8a7da52f4d3cceedffc88ad507b7da5b1c7))
+
+- **rf_commissioning**: Tie Re-push Slope to the cavity the calibration ran on
+  ([#460](https://github.com/slaclab/sc_linac_physics/pull/460),
+  [`835bd8a`](https://github.com/slaclab/sc_linac_physics/commit/835bd8a7da52f4d3cceedffc88ad507b7da5b1c7))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#417](https://github.com/slaclab/sc_linac_physics/pull/417),
+  [`53de7b5`](https://github.com/slaclab/sc_linac_physics/commit/53de7b5d034008243aa01e8076feaecf56a7666c))
+
+### Features
+
+- **rf-commissioning**: Add PhaseRun, one step loop for every phase
+  ([#417](https://github.com/slaclab/sc_linac_physics/pull/417),
+  [`53de7b5`](https://github.com/slaclab/sc_linac_physics/commit/53de7b5d034008243aa01e8076feaecf56a7666c))
+
+- **rf-commissioning**: Add RunnerBridge, PhaseRun on a daemon thread
+  ([#417](https://github.com/slaclab/sc_linac_physics/pull/417),
+  [`53de7b5`](https://github.com/slaclab/sc_linac_physics/commit/53de7b5d034008243aa01e8076feaecf56a7666c))
+
+- **rf-commissioning**: Shared step runner (PhaseRun + RunnerBridge)
+  ([#417](https://github.com/slaclab/sc_linac_physics/pull/417),
+  [`53de7b5`](https://github.com/slaclab/sc_linac_physics/commit/53de7b5d034008243aa01e8076feaecf56a7666c))
+
+### Refactoring
+
+- **rf-commissioning**: Drop unused PhaseBase._handle_abort
+  ([#417](https://github.com/slaclab/sc_linac_physics/pull/417),
+  [`53de7b5`](https://github.com/slaclab/sc_linac_physics/commit/53de7b5d034008243aa01e8076feaecf56a7666c))
+
+- **rf-commissioning**: PhaseBase.run() runs through PhaseRun
+  ([#417](https://github.com/slaclab/sc_linac_physics/pull/417),
+  [`53de7b5`](https://github.com/slaclab/sc_linac_physics/commit/53de7b5d034008243aa01e8076feaecf56a7666c))
+
+### Testing
+
+- **rf_commissioning**: Pass cryomodule keys, not ints, in controller mocks
+  ([#460](https://github.com/slaclab/sc_linac_physics/pull/460),
+  [`835bd8a`](https://github.com/slaclab/sc_linac_physics/commit/835bd8a7da52f4d3cceedffc88ad507b7da5b1c7))
+
+
 ## v9.57.1 (2026-10-28)
 
 ### Bug Fixes
