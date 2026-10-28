@@ -35,7 +35,7 @@ cavity_display/
 Extends `Cavity` with fault monitoring. Key methods:
 
 - `create_faults()` — parses `faults.csv` and instantiates `Fault` objects keyed by hash. Each fault knows its PV name, threshold, and human-readable description.
-- `_batch_pv_init()` — connects status output PVs using `PV.batch_create()`. Input fault PVs are read-only and fetched via `caget_many()` (no persistent PV objects).
+- `_batch_pv_init()` — creates the three status output PVs together, then waits up to 0.5 s for each with `PV.ensure_connected()`. A PV that doesn't connect is left unset for its lazy property to retry. Input fault PVs are read-only and fetched via `caget_many()` (no persistent PV objects).
 - `get_faults()` — returns current fault status by batch-reading fault input PVs.
 - `check_archives()` — queries the EPICS archiver for historical fault frequency over a configurable time window.
 
