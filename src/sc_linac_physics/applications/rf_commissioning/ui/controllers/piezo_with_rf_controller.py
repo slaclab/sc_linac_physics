@@ -225,7 +225,9 @@ class PiezoWithRFController(QObject):
         self._unsaved = set()
         self.phase = self.context = self.run = None
         self._active_phase_instance_id = None
-        self.view.set_review_enabled(False)
+        # Blank the readouts too, or the old cavity's gains and result sit
+        # beside the new cavity's Live PVs.
+        self.view.clear_review()
 
     # ------------------------------------------------------------------
     # Segment 1: Start Test
@@ -291,6 +293,10 @@ class PiezoWithRFController(QObject):
             progress_offset=offset,
             progress_total=len(ALL_STEPS),
             then_complete=complete,
+            # setup_rf can run for minutes with nothing else to show; its
+            # cavity status lines ("Turning cavity off", "Walking amplitude")
+            # show it moving.
+            forward_logs=(self._cavity.logger,),
         )
         if not started:
             self.view.show_error("A Piezo with RF segment is already running")

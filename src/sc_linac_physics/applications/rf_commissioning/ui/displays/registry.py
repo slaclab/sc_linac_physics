@@ -11,13 +11,13 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
 
 from .base_placeholder import BasePlaceholderDisplay
 from .piezo_pre_rf import PiezoPreRFDisplay
+from .piezo_with_rf import PiezoWithRFDisplay
 from .ssa_char import SSACharDisplay
 from .cavity_char import CavityCharDisplay
 from .frequency_tuning import FrequencyTuningDisplay
 from .standard import (
     HighPowerMPProcessingDisplay,
     HighPowerOneHourRunDisplay,
-    PiezoWithRFDisplay,
 )
 
 PHASE_DISPLAY_MAP: dict[CommissioningPhase, type[BasePlaceholderDisplay]] = {

@@ -385,7 +385,7 @@ def test_changing_cavity_drops_an_unpushed_review(
     controller.update_pv_addresses("03", "2")
     assert controller.review_data is None
     assert controller.stage is None
-    view.set_review_enabled.assert_called_with(False)
+    view.clear_review.assert_called()
 
 
 # --------------------------------------------------- pause and step mode
