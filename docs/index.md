@@ -24,6 +24,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 |------|----------------|
 | [Linac Hardware Model](utils/linac_model.md) | `Machine → Linac → Cryomodule → Rack → Cavity` class hierarchy, PV naming, cryomodule groupings, all constants |
 | [Shared Utilities](utils/shared_utilities.md) | EPICS `PV` wrapper, `PVBatch`, `platform_paths`, `custom_logger`, Qt helpers |
+| [Reading an IOC Record](utils/epics_records.md) | What a PV does from a terminal: record types, processing, link fields and flags, and when to put with `wait=False` |
 | [Archiver Client](utils/archiver.md) | Reading archived PV data: ranges, value-at-time, plotting two signals |
 
 ### Applications
@@ -32,7 +33,7 @@ Everything in `applications/` and `displays/` is built on top of `utils/`. Start
 |------|----------------|-----------|
 | [Auto Setup](applications/auto_setup.md) | Automated cavity turn-on: SSA calibration → auto-tune → characterization → RF ramp | [How auto-tune works](explainers/auto_tune.md) |
 | [RF Commissioning](applications/rf_commissioning.md) | Phase-gated acceptance workflow for newly-installed cavities | [How auto-tune works](explainers/auto_tune.md) |
-| [Q0 Measurement](applications/q0.md) | Cavity quality-factor measurement under thermal load | |
+| [Q0 Measurement](applications/q0.md) | Cavity quality-factor measurement under thermal load | [How the Q0 app works](explainers/q0.md) |
 | [Microphonics](applications/microphonics.md) | Mechanical vibration noise acquisition and analysis | |
 | [Quench Processing](applications/quench_processing.md) | Automated fake-quench reset and real-quench detection | |
 | [Tuning](applications/tuning.md) | Cavity frequency control, state polling, and trend persistence | [How auto-tune works](explainers/auto_tune.md) |
@@ -51,6 +52,7 @@ as a link; opened on its own it also works offline.
 | [Cavity Display](displays/cavity_display.md) | Fault monitoring dashboard for all 296 cavities with heatmap and audio alerts |
 | [Fault Heatmap](displays/fault_heatmap.md) | Fault counts per cavity over a time window, as a heatmap |
 | [SRF Home](displays/srf_home.md) | Top-level launcher panel and watcher management |
+| [EDM Screens](displays/edm_screens.md) | `sc-edm`: open an SRF EDM screen from the terminal |
 
 ## Quick orientation
 

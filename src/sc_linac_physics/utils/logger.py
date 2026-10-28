@@ -335,7 +335,8 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
-        # default=str: extra_data may hold Path, numpy, datetime values
+        # extra_data can hold values JSON can't store, such as a Path, a
+        # numpy number or a datetime. default=str writes those as text.
         return json.dumps(log_data, ensure_ascii=False, default=str)
 
 

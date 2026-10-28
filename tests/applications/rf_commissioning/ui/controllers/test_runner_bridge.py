@@ -240,3 +240,53 @@ def test_start_segment_refuses_a_run_already_running(qtbot):
         assert second.start_segment(run, ["a"]) is False
         assert cleared == []
         phase.gate.set()
+
+
+def test_two_bridges_cannot_start_one_run_before_its_worker_runs(
+    qtbot, monkeypatch
+):
+    """The run is reserved by start_segment, not when the worker begins."""
+    from sc_linac_physics.applications.rf_commissioning.ui.controllers import (
+        runner_bridge,
+    )
+
+    class _NotStarted:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass  # the first bridge's worker never gets to run_steps
+
+    cleared = []
+    hook = AbortHook(request=lambda: None, clear=lambda: cleared.append(1))
+    _, run = _run({"a": [_ok()]}, abort_hooks=[hook])
+    first, second = RunnerBridge(), RunnerBridge()
+    monkeypatch.setattr(runner_bridge.threading, "Thread", _NotStarted)
+
+    assert first.start_segment(run, ["a"]) is True
+    cleared.clear()
+
+    assert second.start_segment(run, ["a"]) is False
+    assert cleared == []
+    assert run.listener is first
+
+
+def test_failed_thread_start_releases_the_run(qtbot, monkeypatch):
+    from sc_linac_physics.applications.rf_commissioning.ui.controllers import (
+        runner_bridge,
+    )
+
+    class _CannotStart:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    _, run = _run({"a": [_ok()]})
+    bridge = RunnerBridge()
+    monkeypatch.setattr(runner_bridge.threading, "Thread", _CannotStart)
+
+    assert bridge.start_segment(run, ["a"]) is False
+    assert run.running is False
+    assert bridge.running is False

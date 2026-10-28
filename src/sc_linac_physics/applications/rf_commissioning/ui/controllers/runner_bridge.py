@@ -3,8 +3,9 @@
 A controller owns one RunnerBridge, connects its signals to the view, and
 calls start_segment() from a button. The steps run on a daemon
 threading.Thread (not a QThread). Each StepListener call is re-emitted as a
-signal, so slots on the GUI thread receive it queued and in emit order: a
-step_finished slot always runs before that segment's segment_finished slot.
+signal. Qt runs the connected handlers on the GUI thread, in the order the
+signals were sent. So a step_finished handler always runs before that
+segment's segment_finished handler.
 """
 
 import logging
@@ -65,9 +66,11 @@ class RunnerBridge(QObject, StepListener):
         completes is followed by run.complete() (finalize_phase and COMPLETE)
         on the same thread.
         """
-        # run.running catches a PhaseRun another bridge or thread is driving:
-        # clear_abort() below would otherwise cancel that run's Abort.
-        if self._busy or run.running:
+        # The reservation is taken before the listener is swapped or Abort
+        # cleared, and held until the worker exits. Checking run.running
+        # alone left a gap before the worker entered run_steps, in which a
+        # second bridge could clear this run's Abort and repeat its steps.
+        if self._busy or not run.try_reserve():
             return False
         self._busy = True
         steps = list(steps)
@@ -98,14 +101,22 @@ class RunnerBridge(QObject, StepListener):
                     self._log_outcome(result)
                 except Exception:
                     logger.exception("Logging the segment outcome failed")
-                # Cleared before the emit, so a segment_finished slot may
-                # start the next segment straight away.
+                # Free the run before signalling that the segment finished,
+                # so a segment_finished handler can start the next segment
+                # straight away.
+                run.release()
                 self._busy = False
                 self.segment_finished.emit(result)
 
-        threading.Thread(
-            target=work, name="phase-step-runner", daemon=True
-        ).start()
+        try:
+            threading.Thread(
+                target=work, name="phase-step-runner", daemon=True
+            ).start()
+        except Exception:
+            logger.exception("Could not start the step runner thread")
+            run.release()
+            self._busy = False
+            return False
         return True
 
     def _log_outcome(self, result: SegmentResult) -> None:

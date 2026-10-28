@@ -1,6 +1,7 @@
 """SSA Calibration commissioning display."""
 
 from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtWidgets import QMessageBox
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
@@ -138,7 +139,26 @@ class SSACharDisplay(BasePlaceholderDisplay):
 
     @pyqtSlot()
     def on_push_slope(self):
-        self.controller.on_push_slope()
+        slope = self.controller.repush_slope_value()
+        measured = f"{slope:.5f}" if slope is not None else "unknown"
+        text = (
+            "The calibration already pushed the new slope to the cavity.\n\n"
+            f"Push it again (PUSH_SSA_SLOPE)?\nMeasured slope: {measured}"
+        )
+        if self._ask_confirm(text):
+            self.controller.on_push_slope()
+
+    def _ask_confirm(self, text: str) -> bool:
+        return (
+            QMessageBox.question(
+                self,
+                "Re-push SSA slope",
+                text,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            == QMessageBox.Yes
+        )
 
     @pyqtSlot()
     def on_plot(self):

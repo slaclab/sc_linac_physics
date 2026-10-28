@@ -355,7 +355,11 @@ class BackendCavity(Cavity):
     def get_fault_counts(
         self, start_time: datetime, end_time: datetime
     ) -> DefaultDict[str, FaultCounter]:
-        """Fault counts by TLC over a time range; see get_fault_history."""
+        """Count this cavity's faults by TLC between two times.
+
+        Reads the archiver through get_fault_history. Returns no counts if
+        the archiver query fails.
+        """
         counts, _ = self.get_fault_history(start_time, end_time)
         return counts
 

@@ -164,6 +164,7 @@ class PhaseRun:
         self._sleep_fn = sleep_fn
         self._cond = threading.Condition()
         self._running = False
+        self._reserved = False
         self._started = False
         self._paused = False
         self._step_mode = False
@@ -173,7 +174,25 @@ class PhaseRun:
 
     @property
     def running(self) -> bool:
-        return self._running
+        """True while a segment runs or a RunnerBridge has reserved the run."""
+        return self._running or self._reserved
+
+    def try_reserve(self) -> bool:
+        """Claim the run for one segment. False if it is reserved or running.
+
+        RunnerBridge calls this before it touches the listener or clears
+        Abort, and holds it until its worker exits, so two bridges cannot
+        both start this run (and repeat its steps' PV writes).
+        """
+        with self._cond:
+            if self._running or self._reserved:
+                return False
+            self._reserved = True
+            return True
+
+    def release(self) -> None:
+        with self._cond:
+            self._reserved = False
 
     @property
     def paused(self) -> bool:
@@ -235,7 +254,10 @@ class PhaseRun:
         self.phase._mark_phase_started()
 
     def complete(self) -> SegmentResult:
-        """finalize_phase(), then COMPLETE with a phase_complete checkpoint."""
+        """Run finalize_phase(), then mark the phase COMPLETE.
+
+        Marking it complete also saves a "phase_complete" checkpoint.
+        """
         try:
             self.phase.finalize_phase()
         except Exception as exc:
@@ -262,9 +284,8 @@ class PhaseRun:
             raise ValueError("Skipping a step needs the operator's name")
         if not justification or not justification.strip():
             raise ValueError("Skipping a step needs a justification")
-        with self._cond:
-            if self._running:
-                raise RuntimeError("Cannot skip a step while a segment runs")
+        if self.running:
+            raise RuntimeError("Cannot skip a step while a segment runs")
         justification = justification.strip()
         self.phase._create_checkpoint(
             step_name=step,
@@ -343,10 +364,10 @@ class PhaseRun:
             attempt += 1
 
             result, raised = self._execute(step)
-            if raised:
-                return self._step_failed(step, result)
             results[step] = result
             self._notify("on_attempt", step, attempt, result)
+            if raised:
+                return self._step_failed(step, result)
 
             if result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP):
                 self._notify("on_step_finished", step, result)
@@ -370,7 +391,10 @@ class PhaseRun:
                 return self._abort_before(step)
 
     def _execute(self, step: str) -> tuple[PhaseStepResult, bool]:
-        """One attempt and its checkpoint. True alongside if the step raised."""
+        """Run one attempt of step and save its checkpoint.
+
+        Returns the step's result, and True if the step raised an error.
+        """
         try:
             result = self.phase.execute_step(step)
             if not isinstance(result, PhaseStepResult):
@@ -448,7 +472,9 @@ class PhaseRun:
                 if reason == announced:
                     self._cond.wait(self._POLL_SECONDS)
                     continue
-            # Outside the lock, so a listener can call back into the run.
+            # Tell listeners after releasing the lock. A listener may then
+            # call back into this run, such as to resume it, without
+            # waiting on a lock this thread holds.
             announced = reason
             self._notify("on_holding", step, reason)
 
