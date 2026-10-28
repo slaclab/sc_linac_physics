@@ -31,8 +31,7 @@ For UI-only development without live EPICS, set `PYDM_DEFAULT_PROTOCOL=fake`.
 | 8 | `COMPLETE` | `complete` | Administrative sign-off and handoff |
 
 There is no separate high-power ramp phase: the amplitude is processed as
-it is raised. A run saved at the old `high_power_ramp` value resumes at
-`MP_PROCESSING` (`RETIRED_PHASES` in `models/persistence/database_helpers.py`).
+it is raised.
 
 Phases are sequential. In normalized workflow validation, the previous phase must be `complete` (or explicitly `skipped`) before the next phase can start. In the current session helper (`CommissioningSession.can_run_phase`), the previous phase must be `complete`. `PIEZO_PRE_RF` is the only phase intentionally restartable at any time.
 
