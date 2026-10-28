@@ -2525,6 +2525,46 @@ def test_run_stage_3_with_probe_proceeds() -> None:
     controller._run_phase_in_background.assert_called_once()
 
 
+def test_failed_selection_drops_the_previous_cavity() -> None:
+    # Left/Right and the push buttons check _cavity before writing.
+    controller = _make_controller(view=_ViewStub())
+    controller._cavity = Mock(name="old cavity")
+    controller._get_machine_cavity = Mock(side_effect=KeyError("no such CM"))
+
+    controller.update_pv_addresses("02", "1")
+
+    assert controller._cavity is None
+
+
+def test_failed_selection_during_a_stage_keeps_the_cavity_for_abort() -> None:
+    controller = _make_controller(view=_ViewStub())
+    old = Mock(name="old cavity")
+    controller._cavity = old
+    controller._stage_running = True
+    controller._get_machine_cavity = Mock(side_effect=KeyError("no such CM"))
+
+    controller.update_pv_addresses("02", "1")
+
+    assert controller._cavity is old
+
+
+def test_selection_change_during_a_stage_keeps_the_cavity_for_abort() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    old = Mock(name="old cavity")
+    controller._cavity = old
+    controller._stage_running = True
+    controller._get_machine_cavity = Mock(return_value=Mock(name="new"))
+    controller._apply_stepper_pv_mapping = Mock()
+
+    controller.update_pv_addresses("03", "2")
+
+    assert controller._cavity is old
+    controller._apply_stepper_pv_mapping.assert_not_called()
+    controller.on_abort()
+    assert old.stepper_tuner.abort_flag is True
+
+
 # ------------------------------------------------------------------
 # Stage 1: keep or rerun the last SSA calibration
 # ------------------------------------------------------------------

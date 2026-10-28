@@ -170,6 +170,14 @@ class FrequencyTuningController(QObject):
         try:
             cm, cav = int(cryomodule), int(cavity_number)
             cavity = self._get_machine_cavity(cm, cav)
+            if self._stage_running and cavity is not self._cavity:
+                # on_abort() sets abort_flag on self._cavity, so it stays the
+                # cavity being tuned until the stage ends.
+                self.view.log_message(
+                    f"Cavity selection changed during a stage; this panel "
+                    f"stays on {self._cavity} until the stage ends"
+                )
+                return
             self._cavity = cavity
             self._step_signed_pv_obj = None
             self._apply_stepper_pv_mapping(cavity)
@@ -178,6 +186,12 @@ class FrequencyTuningController(QObject):
             )
         except Exception as exc:
             self.view.log_message(f"Error setting PVs: {exc}")
+            if not self._stage_running:
+                # Leaving the last good cavity cached would let Left/Right,
+                # Save Cold Landing Frequency and Push → Scale write to it
+                # while the header names another.
+                self._cavity = None
+                self._step_signed_pv_obj = None
 
     def _apply_stepper_pv_mapping(self, cavity) -> None:
         stepper = cavity.stepper_tuner
