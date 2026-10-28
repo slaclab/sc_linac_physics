@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v9.59.1 (2026-10-28)
+
+### Bug Fixes
+
+- **rf-commissioning**: Give dark phase readouts their own text colour
+  ([#466](https://github.com/slaclab/sc_linac_physics/pull/466),
+  [`00da465`](https://github.com/slaclab/sc_linac_physics/commit/00da465c59440a1e6c572fb9032b21058e99899a))
+
+- **rf-commissioning**: Keep running stage cards and dialogs readable
+  ([#466](https://github.com/slaclab/sc_linac_physics/pull/466),
+  [`00da465`](https://github.com/slaclab/sc_linac_physics/commit/00da465c59440a1e6c572fb9032b21058e99899a))
+
+- **rf-commissioning**: Paint phase displays dark when shown on their own
+  ([#466](https://github.com/slaclab/sc_linac_physics/pull/466),
+  [`00da465`](https://github.com/slaclab/sc_linac_physics/commit/00da465c59440a1e6c572fb9032b21058e99899a))
+
+- **rf-commissioning**: Paint the empty tab strip BG_DEEP
+  ([#466](https://github.com/slaclab/sc_linac_physics/pull/466),
+  [`00da465`](https://github.com/slaclab/sc_linac_physics/commit/00da465c59440a1e6c572fb9032b21058e99899a))
+
+### Testing
+
+- **microphonics**: Freeze the clock in the progress-estimate test
+  ([#465](https://github.com/slaclab/sc_linac_physics/pull/465),
+  [`d526aa9`](https://github.com/slaclab/sc_linac_physics/commit/d526aa9d385fad1a65c2451ad0313dd64a725399))
+
+
 ## v9.59.0 (2026-10-28)
 
 ### Bug Fixes
