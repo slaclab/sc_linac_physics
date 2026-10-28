@@ -767,9 +767,10 @@ def test_stage_retried_after_a_refused_check_completes_the_phase() -> None:
         controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
     ).phase_instance_id
     controller._current_stage = 2
-    controller.on_phase_failed(
-        f"Step failed: {controller_module._step_label('check_state_for_stage_2')}"
+    controller._failed_step = (
+        "check_state_for_stage_2"  # set by the stage worker
     )
+    controller.on_phase_failed("the step's own message")
     assert session.instances[-1]["status"] == "in_progress"
 
     controller._execute_single_step = Mock(return_value=True)
@@ -797,9 +798,10 @@ def test_stage_retried_after_a_real_failure_opens_a_new_attempt() -> None:
         controller_module.CommissioningPhase.FREQUENCY_TUNING, "op"
     ).phase_instance_id
     controller._current_stage = 2
-    controller.on_phase_failed(
-        f"Step failed: {controller_module._step_label('probe_stepper_direction')}"
+    controller._failed_step = (
+        "probe_stepper_direction"  # set by the stage worker
     )
+    controller.on_phase_failed("the step's own message")
     assert session.instances[-1]["status"] == "failed"
     assert view.errors
 
@@ -1219,6 +1221,37 @@ def test_run_phase_in_background_step_fail_emits() -> None:
     controller._run_phase_in_background()
 
     assert emitted[-1] == (False, "Step failed: Step")
+
+
+RACK_BUSY = "Can't continue: RF is on for cavity 2 of L1B CM02."
+
+
+def test_a_failed_step_reports_its_own_message() -> None:
+    """The popup shows why the step failed; the step name is kept apart."""
+    controller = _make_controller()
+    controller.context = PhaseContext(record=_record(), operator="op")
+    controller.phase = Mock()
+    controller.phase.execute_step.return_value = PhaseStepResult(
+        result=PhaseResult.FAILED, message=RACK_BUSY
+    )
+    controller._steps = ["calibrate_ssa"]
+    controller._finalize_after_run = False
+    controller._check_pause_and_abort = Mock(return_value=True)
+    controller._create_step_checkpoint = Mock()
+    controller._execute_single_step = lambda step: (
+        controller._execute_step_with_retries(step, max_retries=3)
+    )
+    emitted = []
+    # on_phase_failed reads _failed_step and then clears it. Disconnect it
+    # so the recorder below sees what the worker left.
+    controller.phase_run_finished.disconnect()
+    controller.phase_run_finished.connect(
+        lambda ok, msg: emitted.append((ok, msg, controller._failed_step))
+    )
+
+    controller._run_phase_in_background()
+
+    assert emitted[-1] == (False, RACK_BUSY, "calibrate_ssa")
 
 
 def test_run_phase_in_background_abort_returns() -> None:

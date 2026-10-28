@@ -511,7 +511,9 @@ class CavityCharController(QObject):
                         return
                     if not self._execute_single_step(step_name):
                         self.phase_run_finished.emit(
-                            False, f"Step failed: {step_name}"
+                            False,
+                            self._last_step_message
+                            or f"Step failed: {step_name}",
                         )
                         return
                     if step_name == "start_characterization":

@@ -57,6 +57,8 @@ class SSACharController(QObject):
         self._current_step_index = 0
         self._total_steps = 0
         self._steps: list[str] = []
+        # Why the last step did not succeed, for the failure popup.
+        self._last_step_message = ""
         self._active_phase_instance_id: int | None = None
         # The cavity whose calibration passed in this session, so Re-push
         # Slope can be offered for it. validate_and_push has already pushed
@@ -297,10 +299,13 @@ class SSACharController(QObject):
                     if not self._check_pause_and_abort():
                         return
 
+                    self._last_step_message = ""
                     success = self._execute_single_step(step_name)
                     if not success:
                         self.phase_run_finished.emit(
-                            False, f"Step failed: {step_name}"
+                            False,
+                            self._last_step_message
+                            or f"Step failed: {step_name}",
                         )
                         return
 
@@ -341,6 +346,7 @@ class SSACharController(QObject):
             try:
                 result = self.phase.execute_step(step_name)
                 self._create_step_checkpoint(step_name, result)
+                self._last_step_message = result.message
 
                 if result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP):
                     self._log_signal.emit(f"✓ {step_name}")
@@ -365,6 +371,7 @@ class SSACharController(QObject):
                 return False
 
             except Exception as exc:
+                self._last_step_message = f"{step_name}: {exc}"
                 retry_count += 1
                 if retry_count < max_retries:
                     self._log_signal.emit(
