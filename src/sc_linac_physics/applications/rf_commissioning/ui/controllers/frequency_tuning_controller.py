@@ -52,6 +52,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.step_labels import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
+    cryomodule_key,
     format_pv_update_message,
     resolve_cavity_selection,
 )
@@ -168,7 +169,7 @@ class FrequencyTuningController(QObject):
             return
 
         try:
-            cm, cav = int(cryomodule), int(cavity_number)
+            cm, cav = cryomodule_key(cryomodule), int(cavity_number)
             cavity = self._get_machine_cavity(cm, cav)
             self._cavity = cavity
             self._step_signed_pv_obj = None
@@ -210,10 +211,11 @@ class FrequencyTuningController(QObject):
                 pv_map[getattr(self.view, widget_name)] = pv_addr
         apply_pv_mapping(pv_map)
 
-    def _get_machine_cavity(self, cm: int, cav: int):
+    def _get_machine_cavity(self, cm: str, cav: int):
+        """cm is a Machine.cryomodules key: "01".."35", "H1" or "H2"."""
         if not self.machine:
             self.machine = Machine()
-        return self.machine.cryomodules[f"{cm:02d}"].cavities[cav]
+        return self.machine.cryomodules[cm].cavities[cav]
 
     # ------------------------------------------------------------------
     # Public stage entry points
@@ -459,7 +461,7 @@ class FrequencyTuningController(QObject):
             return None
 
         try:
-            cm, cav = int(cryomodule), int(cavity_number)
+            cm, cav = cryomodule_key(cryomodule), int(cavity_number)
         except ValueError:
             self.view.show_error(
                 f"Invalid cavity selection: CM={cryomodule} Cav={cavity_number}"
@@ -482,19 +484,19 @@ class FrequencyTuningController(QObject):
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
             return None
 
-        return f"CM{cm:02d}_CAV{cav}", cm, cav
+        return f"CM{cm}_CAV{cav}", cm, cav
 
     def _start_stage(
         self,
         stage: int,
         steps: list[str],
         finalize: bool,
-        cm: int,
+        cm: str,
         cav: int,
         operator: str,
         extra_parameters: dict | None = None,
     ) -> None:
-        self.update_pv_addresses(f"{cm:02d}", str(cav))
+        self.update_pv_addresses(cm, str(cav))
         cavity = self._get_machine_cavity(cm, cav)
         self._cavity = cavity
 
@@ -1712,7 +1714,7 @@ class FrequencyTuningController(QObject):
     def _rebuild_phase_context(self, record) -> None:
         """Reconstruct phase + context from record so stages 2/3 can run."""
         try:
-            cm = int(record.cryomodule)
+            cm = cryomodule_key(record.cryomodule)
             cav = int(record.cavity_number)
             cavity = self._get_machine_cavity(cm, cav)
             self._cavity = cavity

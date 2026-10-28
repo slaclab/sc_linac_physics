@@ -64,6 +64,9 @@ _DRIVE_TOLERANCE = 0.5
 class FrequencyTuningLimits:
     """Configurable limits for the frequency tuning phase."""
 
+    # Used for every cavity, including H1/H2. Cavity.move_to_resonance uses
+    # 500 Hz on a harmonic linearizer and 50 Hz otherwise.
+    # CHECK: should a harmonic linearizer cavity be tuned to 50 Hz here?
     tolerance_hz: float = 50.0
     probe_steps: int = 50_000
     # Run commissioning moves at max speed; StepperTuner.move() restores the
@@ -90,7 +93,11 @@ class FrequencyTuningLimits:
     # CM2-6, cavity 1 on CM4 and CM5 lower again). That is a few percent, so
     # 100 Hz sits well below anything a healthy stepper should produce and
     # catches a badly degraded one rather than a slightly off one.
+    # CHECK: the 273 Hz figure is for 1.3 GHz tuners. Does a healthy H1/H2
+    # tuner move more than 100 Hz over probe_steps microsteps?
     min_probe_delta_hz: float = 100.0
+    # Window searched for the 8pi/9 and 7pi/9 modes, used for every cavity.
+    # CHECK: do the H1/H2 cavities' 8pi/9 and 7pi/9 modes fall inside it?
     pi_scan_freq_start: int = -3_500_000
     pi_scan_freq_stop: int = 50_000
     pi_scan_rms_thresh: float = 10.0

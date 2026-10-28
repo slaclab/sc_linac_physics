@@ -26,6 +26,9 @@ from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
+    cryomodule_key,
+)
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import get_linac_for_cryomodule
 
@@ -560,9 +563,5 @@ class BatchPiezoPreRFController(QObject):
 
     def _get_machine_cavity(self, cavity_spec: CavitySpec):
         machine = self._get_machine()
-        cm_key = (
-            f"{int(cavity_spec.cryomodule):02d}"
-            if cavity_spec.cryomodule.isdigit()
-            else cavity_spec.cryomodule
-        )
+        cm_key = cryomodule_key(cavity_spec.cryomodule)
         return machine.cryomodules[cm_key].cavities[cavity_spec.cavity_number]

@@ -566,6 +566,18 @@ class TestGetMachineCavity:
 
         assert "01" in accessed_keys
 
+    def test_harmonic_linearizer_name_kept(self, monkeypatch):
+        class _MachineStub:
+            def __init__(self, *, piezo_class):
+                self.cryomodules = {
+                    "H1": SimpleNamespace(cavities={3: "hl-cav"})
+                }
+
+        monkeypatch.setattr(ctrl_module, "Machine", _MachineStub)
+        ctrl = _make_controller()
+
+        assert ctrl._get_machine_cavity(CavitySpec("H1", 3)) == "hl-cav"
+
 
 # ---------------------------------------------------------------------------
 # _persist_record
