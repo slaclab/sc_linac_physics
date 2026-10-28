@@ -293,6 +293,10 @@ class PiezoWithRFController(QObject):
             progress_offset=offset,
             progress_total=len(ALL_STEPS),
             then_complete=complete,
+            # setup_rf can run for minutes with nothing else to show; its
+            # cavity status lines ("Turning cavity off", "Walking amplitude")
+            # show it moving.
+            forward_logs=(self._cavity.logger,),
         )
         if not started:
             self.view.show_error("A Piezo with RF segment is already running")
