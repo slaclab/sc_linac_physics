@@ -185,32 +185,54 @@ def check_rack_free(cavity, context: PhaseContext) -> PhaseStepResult | None:
     """
     rack = cavity.rack
     rack_check = context.parameters.get("rack_check_callback")
+    on: list[int] = []
     try:
         if rack_check is not None:
             ok, reason = rack_check(rack)
         else:
             on = [
-                str(other)
+                other.number
                 for other in rack.cavities.values()
                 if other.number != cavity.number and other.is_on
             ]
             ok = not on
-            reason = f"RF is on for {', '.join(on)}"
     except Exception as exc:
         return PhaseStepResult(
             result=PhaseResult.RETRY,
             message=f"Could not check the rest of rack {rack.rack_name}: {exc}",
             retry_delay_seconds=5.0,
         )
-    if not ok:
-        return PhaseStepResult(
-            result=PhaseResult.FAILED,
-            message=(
-                f"Not zeroing DAC_AMPLITUDE: another cavity in rack "
-                f"{rack.rack_name} is in use. {reason}"
-            ),
+    if ok:
+        return None
+
+    # The message says what is in the way, which write it protects, and what
+    # the operator can do about it.
+    if on:
+        one = len(on) == 1
+        problem = (
+            f"RF is on for {_cavity_list(on)} of {rack.cryomodule}, which "
+            f"{'shares' if one else 'share'} rack {rack.rack_name} with "
+            f"cavity {cavity.number}"
         )
-    return None
+        fix = f"Turn RF off on {'that cavity' if one else 'those cavities'}"
+    else:
+        problem = f"another cavity in rack {rack.rack_name} is in use: {reason}"
+        fix = "Wait until that cavity is free"
+    return PhaseStepResult(
+        result=PhaseResult.FAILED,
+        message=(
+            f"Can't continue: {problem}. This step sets DAC_AMPLITUDE to 0 on "
+            f"rack {rack.rack_name}'s RFS1 and RFS2. {fix}, then run it again."
+        ),
+    )
+
+
+def _cavity_list(numbers: list[int]) -> str:
+    """[2] -> "cavity 2"; [1, 2, 3] -> "cavities 1, 2 and 3"."""
+    if len(numbers) == 1:
+        return f"cavity {numbers[0]}"
+    listed = ", ".join(str(n) for n in numbers[:-1])
+    return f"cavities {listed} and {numbers[-1]}"
 
 
 def turn_off_and_zero_dac(cavity) -> None:
