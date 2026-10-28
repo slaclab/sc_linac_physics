@@ -672,9 +672,12 @@ class SSACharController(QObject):
     def _parse_cavity_from_record(
         self, cavity_name: str, cryomodule: str
     ) -> tuple[int, int]:
-        parts = cavity_name.split("_")
-        cav_part = parts[2] if len(parts) >= 3 else "CAV1"
-        cav = int(cav_part.replace("CAV", ""))
+        # The display passes record.short_cavity_name, like "02-3". A name
+        # we can't read raises instead of quietly becoming cavity 1.
+        if "_" in cavity_name:
+            cav = int(cavity_name.rsplit("_", 1)[-1].replace("CAV", ""))
+        else:
+            cav = int(cavity_name.rsplit("-", 1)[-1])
         cm = int(cryomodule)
         return cm, cav
 

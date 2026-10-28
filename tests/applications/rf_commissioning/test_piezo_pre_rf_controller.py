@@ -475,7 +475,18 @@ def test_sync_piezo_readbacks_error_and_no_handler_paths() -> None:
 def test_parse_cavity_from_record() -> None:
     controller = _make_controller()
     assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (2, 8)
-    assert controller._parse_cavity_from_record("SHORT", "02") == (2, 1)
+    assert controller._parse_cavity_from_record("02-8", "02") == (2, 8)
+    with pytest.raises(ValueError):
+        controller._parse_cavity_from_record("SHORT", "02")
+
+
+def test_selected_cavity_comes_from_the_records_short_name() -> None:
+    """The display hands over "10-4", which used to be read as cavity 1."""
+    record = CommissioningRecord(linac=2, cryomodule="10", cavity_number=4)
+    view = _ViewStub(cavity=(record.short_cavity_name, record.cryomodule))
+    controller = _make_controller(view=view)
+
+    assert controller._get_selected_cavity_info()[1:] == (10, 4)
 
 
 def test_prepare_phase_context_can_run_false() -> None:
