@@ -165,9 +165,10 @@ class FaultDataFetcher(QThread):
     MAX_WORKERS = 8
     # How often run() checks for an abort while waiting on cavities
     ABORT_POLL_S = 0.2
-    # Archiver slots shared by every fetcher. An aborted fetch's in-flight
-    # requests keep their slots until they finish, so abort-and-refetch
-    # can't stack pools past MAX_WORKERS requests.
+    # Caps archiver requests at MAX_WORKERS across every fetcher at once.
+    # Requests from an aborted fetch still count until they finish. So
+    # aborting and refetching can't pile up more than MAX_WORKERS requests
+    # on the archiver.
     _archiver_slots = threading.BoundedSemaphore(MAX_WORKERS)
 
     def run(self) -> None:
@@ -189,9 +190,10 @@ class FaultDataFetcher(QThread):
             todo.put(cavity_args)
         done: "queue.SimpleQueue" = queue.SimpleQueue()
 
-        # Daemon threads, not ThreadPoolExecutor: Python joins a pool's
-        # workers at exit, so a request stuck for utils.archiver's
-        # MAX_RETRIES x RANGE_TIMEOUT kept the app open after it closed.
+        # Plain daemon threads, because Python doesn't wait for them when the
+        # app exits. With ThreadPoolExecutor it did wait, so one stuck
+        # archiver request kept the app open after it closed, for up to
+        # utils.archiver's MAX_RETRIES x RANGE_TIMEOUT (about 5 minutes).
         for _ in range(min(self.MAX_WORKERS, total)):
             threading.Thread(
                 target=self._work, args=(todo, done), daemon=True
@@ -226,8 +228,8 @@ class FaultDataFetcher(QThread):
         self, cm_name: str, cavity_num: int, cavity
     ) -> CavityFaultResult:
         """Query the archiver for one cavity. Runs on a worker thread."""
-        # Release the semaphore that was acquired, even if the class
-        # attribute is swapped meanwhile (tests patch it)
+        # Keep a reference to the request cap taken here, so the same one is
+        # released at the end. Tests replace _archiver_slots on the class.
         slots = self._archiver_slots
         # Wait for a slot, still noticing an abort while waiting
         while not slots.acquire(timeout=self.ABORT_POLL_S):

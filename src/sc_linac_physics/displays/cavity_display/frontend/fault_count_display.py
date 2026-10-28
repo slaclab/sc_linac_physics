@@ -30,8 +30,9 @@ from sc_linac_physics.utils.sc_linac.linac_utils import ALL_CRYOMODULES
 
 
 class FaultCountDisplay(Display):
-    # request id, Dict[str, FaultCounter]; emitted from the fetch thread,
-    # delivered on the Qt main thread (queued connection)
+    # Carries the fault counts for one request: (request id, counts by TLC).
+    # Emitted from the fetch thread; Qt runs the handler on the main thread,
+    # where it is safe to update the display.
     counts_ready = pyqtSignal(int, object)
     fetch_failed = pyqtSignal(int, str)  # request id, error message
 
@@ -204,8 +205,9 @@ class FaultCountDisplay(Display):
                 request_id, cavity.get_fault_counts(start, end)
             )
         except Exception as e:
-            # get_fault_counts already logs archiver errors and returns {};
-            # this is anything else, or the display was deleted mid-fetch.
+            # An archiver error doesn't land here: get_fault_counts logs it
+            # and returns no counts. This catches any other error, including
+            # the display being deleted while the fetch ran.
             utils.cavity_fault_logger.error(f"Fault count fetch failed: {e}")
             try:
                 self.fetch_failed.emit(request_id, str(e))

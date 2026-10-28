@@ -75,7 +75,7 @@ class _PersistenceMixin:
             return self._handle_save_conflict(error)
 
     def _handle_save_conflict(self, conflict: RecordConflictError) -> bool:
-        """Handle optimistic locking conflict via merge dialog."""
+        """Show the merge dialog when someone else saved the record first."""
         if not self.session.has_active_record():
             return False
 

@@ -44,6 +44,8 @@ def ades_pv(self) -> PV:
 
 This keeps import time and test startup fast by avoiding hundreds of CA connections at module load.
 
+To find out what a PV's record does, and when a put needs `wait=False`, see [Reading an IOC Record](epics_records.md).
+
 ### `PVBatch` (`batch.py`)
 
 Use for bulk reads/writes. Internally calls `epics.caget_many()` to fetch many PVs in a single round-trip, with fallback to individual reads on partial failure.

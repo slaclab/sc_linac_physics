@@ -56,6 +56,7 @@ nav:
   - Infrastructure:
       - Linac Hardware Model: utils/linac_model.md
       - Shared Utilities: utils/shared_utilities.md
+      - Reading an IOC Record: utils/epics_records.md
       - Archiver Client: utils/archiver.md
   - Applications:
       - Auto Setup: applications/auto_setup.md
@@ -69,5 +70,7 @@ nav:
       - Cavity Display: displays/cavity_display.md
       - Fault Heatmap: displays/fault_heatmap.md
       - SRF Home: displays/srf_home.md
+      - EDM Screens: displays/edm_screens.md
   - Explainers:
       - How auto-tune works: explainers/auto_tune.md
+      - How the Q0 app works: explainers/q0.md

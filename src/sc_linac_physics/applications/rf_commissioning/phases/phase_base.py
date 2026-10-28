@@ -119,7 +119,8 @@ class PhaseBase(ABC):
         self._max_retries_per_step: int = 3
         self._retry_count: int = 0
         self._sleep_fn = sleep_fn or time.sleep
-        # Only an injected sleep_fn replaces PhaseRun's abortable retry wait.
+        # PhaseRun waits between retries in a way an abort can interrupt.
+        # Only a sleep_fn passed in here (tests pass one) replaces that wait.
         self._injected_sleep_fn = sleep_fn
         self._default_retry_delay_seconds = 5.0
 
@@ -421,22 +422,6 @@ class PhaseBase(ABC):
             return None
 
         return phase_data.to_dict()
-
-    def _handle_abort(self, current_step: str) -> None:
-        """Handle abort request.
-
-        Args:
-            current_step: The step that was running when abort was requested
-        """
-        self.context.record.set_phase_status(
-            self.phase_type, PhaseStatus.FAILED
-        )
-        self._create_checkpoint(
-            step_name=current_step,
-            success=False,
-            notes="Phase aborted by user request",
-            error_message="User requested abort",
-        )
 
     def _handle_exception(self, exception: Exception) -> None:
         """Handle unexpected exception during phase execution.

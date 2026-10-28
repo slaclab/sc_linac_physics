@@ -49,7 +49,7 @@ class _ViewStub:
         *,
         current_operator: str = "Test Operator",
         selected_operator: str = "",
-        cavity: tuple[str, str] | None = ("L1B_CM02_CAV1", "02"),
+        cavity: tuple[str, str] | None = ("02-1", "02"),
     ):
         self._current_operator = current_operator
         self._selected_operator = selected_operator
@@ -161,7 +161,7 @@ def test_get_machine_cavity_builds_machine_with_commissioning_piezo(
     monkeypatch.setattr(controller_module, "Machine", _MachineStub)
     controller = _make_controller()
 
-    cavity = controller._get_machine_cavity(2, 1)
+    cavity = controller._get_machine_cavity("02", 1)
 
     assert cavity == "cavity-object"
     assert isinstance(controller.machine, _MachineStub)
@@ -199,7 +199,7 @@ def test_update_pv_addresses_parse_error_logs_message() -> None:
 def test_update_pv_addresses_success_runs_mapping_and_sync() -> None:
     controller = _make_controller()
     controller._resolve_cavity_selection = Mock(return_value=("02", "1"))
-    controller._get_piezo_from_selection = Mock(return_value=(Mock(), 2, 1))
+    controller._get_piezo_from_selection = Mock(return_value=(Mock(), "02", 1))
     controller._build_pv_mapping = Mock(return_value={"k": Mock()})
     controller._apply_pv_mapping = Mock()
     controller._log_pv_update = Mock()
@@ -208,7 +208,7 @@ def test_update_pv_addresses_success_runs_mapping_and_sync() -> None:
     controller.update_pv_addresses()
 
     controller._apply_pv_mapping.assert_called_once()
-    controller._log_pv_update.assert_called_once_with("02", "1", 2, 1)
+    controller._log_pv_update.assert_called_once_with("02", "1", "02", 1)
     controller._sync_piezo_readbacks.assert_called_once()
 
 
@@ -231,11 +231,11 @@ def test_get_selected_cavity_info_handles_parse_error() -> None:
 
 def test_get_selected_cavity_info_returns_parsed_values() -> None:
     controller = _make_controller()
-    controller._parse_cavity_from_record = Mock(return_value=(2, 1))
+    controller._parse_cavity_from_record = Mock(return_value=("02", 1))
 
     result = controller._get_selected_cavity_info()
 
-    assert result == ("L1B_CM02_CAV1", 2, 1)
+    assert result == ("02-1", "02", 1)
 
 
 def test_set_next_button_enabled_no_next_step_button_is_safe() -> None:
@@ -275,12 +275,12 @@ def test_resolve_and_get_piezo_wrappers(monkeypatch) -> None:
     monkeypatch.setattr(
         controller_module,
         "get_piezo_from_selection",
-        lambda machine, cm, cav: (piezo, 2, 1, "machine-obj"),
+        lambda machine, cm, cav: (piezo, "02", 1, "machine-obj"),
     )
 
     assert controller._resolve_cavity_selection(None, None) == ("02", "1")
     result = controller._get_piezo_from_selection("02", "1")
-    assert result == (piezo, 2, 1)
+    assert result == (piezo, "02", 1)
     assert controller.machine == "machine-obj"
 
 
@@ -301,7 +301,7 @@ def test_update_pv_addresses_mapping_error_logs_message() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
     controller._resolve_cavity_selection = Mock(return_value=("02", "1"))
-    controller._get_piezo_from_selection = Mock(return_value=(Mock(), 2, 1))
+    controller._get_piezo_from_selection = Mock(return_value=(Mock(), "02", 1))
     controller._build_pv_mapping = Mock(side_effect=RuntimeError("map fail"))
 
     controller.update_pv_addresses()
@@ -333,10 +333,10 @@ def test_build_apply_log_wrappers_delegate(monkeypatch) -> None:
 
     mapping = controller._build_pv_mapping(piezo)
     controller._apply_pv_mapping(mapping)
-    controller._log_pv_update("02", "1", 2, 1)
+    controller._log_pv_update("02", "1", "02", 1)
 
     assert called["apply"] is True
-    assert view.logs[-1] == "02-1-2-1"
+    assert view.logs[-1] == "02-1-02-1"
 
 
 def test_sync_piezo_readbacks_branches() -> None:
@@ -348,7 +348,7 @@ def test_sync_piezo_readbacks_branches() -> None:
     view.update_piezo_readbacks.assert_called_once_with(piezo)
 
     controller._resolve_cavity_selection = Mock(return_value=("02", "1"))
-    controller._get_piezo_from_selection = Mock(return_value=(piezo, 2, 1))
+    controller._get_piezo_from_selection = Mock(return_value=(piezo, "02", 1))
     controller._sync_piezo_readbacks(None)
     assert controller._get_piezo_from_selection.called
 
@@ -368,10 +368,25 @@ def test_sync_piezo_readbacks_error_and_no_handler_paths() -> None:
     controller_no_hook._sync_piezo_readbacks(Mock())
 
 
-def test_parse_cavity_from_record() -> None:
+@pytest.mark.parametrize("cryomodule, cavity", [("02", 8), ("H1", 3)])
+def test_parse_cavity_from_record_reads_short_cavity_name(
+    cryomodule, cavity
+) -> None:
+    # get_current_cavity() returns record.short_cavity_name: "02-8", "H1-3".
+    record = CommissioningRecord(
+        linac=1, cryomodule=cryomodule, cavity_number=cavity
+    )
     controller = _make_controller()
-    assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (2, 8)
-    assert controller._parse_cavity_from_record("SHORT", "02") == (2, 1)
+    assert controller._parse_cavity_from_record(
+        record.short_cavity_name, cryomodule
+    ) == (cryomodule, cavity)
+
+
+def test_parse_cavity_from_record_rejects_other_formats() -> None:
+    # It used to fall back to cavity 1 on anything without underscores,
+    # which included every real short_cavity_name.
+    with pytest.raises(ValueError):
+        _make_controller()._parse_cavity_from_record("SHORT", "02")
 
 
 def test_prepare_phase_context_can_run_false() -> None:
@@ -485,9 +500,7 @@ def test_on_run_automated_test_success_path() -> None:
     session = Mock()
     session.has_active_record.return_value = True
     controller = _make_controller(view=view, session=session)
-    controller._get_selected_cavity_info = Mock(
-        return_value=("L1B_CM02_CAV1", 2, 1)
-    )
+    controller._get_selected_cavity_info = Mock(return_value=("02-1", "02", 1))
     controller.update_pv_addresses = Mock()
     controller._get_machine_cavity = Mock(return_value=Mock())
     controller._prepare_phase_context = Mock(return_value=True)
@@ -506,9 +519,7 @@ def test_on_run_automated_test_exception_is_logged() -> None:
     session = Mock()
     session.has_active_record.return_value = True
     controller = _make_controller(view=view, session=session)
-    controller._get_selected_cavity_info = Mock(
-        return_value=("L1B_CM02_CAV1", 2, 1)
-    )
+    controller._get_selected_cavity_info = Mock(return_value=("02-1", "02", 1))
     controller.update_pv_addresses = Mock(side_effect=RuntimeError("kaboom"))
 
     controller.on_run_automated_test()
@@ -641,9 +652,7 @@ def test_on_run_automated_test_stops_when_prepare_context_fails() -> None:
     session = Mock()
     session.has_active_record.return_value = True
     controller = _make_controller(session=session)
-    controller._get_selected_cavity_info = Mock(
-        return_value=("L1B_CM02_CAV1", 2, 1)
-    )
+    controller._get_selected_cavity_info = Mock(return_value=("02-1", "02", 1))
     controller.update_pv_addresses = Mock()
     controller._get_machine_cavity = Mock(return_value=Mock())
     controller._prepare_phase_context = Mock(return_value=False)
