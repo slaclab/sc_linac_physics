@@ -66,6 +66,48 @@ class BaseRepository:
             raise ValueError(missing_message)
         raise RecordConflictError(row_id, expected_version, int(row["version"]))
 
+    def update_versioned_row(
+        self,
+        *,
+        cursor: sqlite3.Cursor,
+        table_name: str,
+        row_id: int,
+        set_clause: str,
+        params: tuple,
+        expected_version: int | None,
+        missing_message: str,
+    ) -> bool:
+        """Run ``UPDATE table_name SET set_clause`` on one row, bumping version.
+
+        Every update adds 1 to the row's version. With ``expected_version``,
+        the row is updated only if its version still matches, which means no
+        one else saved it since it was read. If nothing is updated, this
+        raises ``RecordConflictError``, or ``ValueError`` if the row is gone.
+        Without ``expected_version``, the row is updated whatever its version.
+        If the row is missing, this returns False and the caller decides what
+        that means.
+        """
+        sql = (
+            f"UPDATE {table_name} SET {set_clause}, version = version + 1 "
+            "WHERE id = ?"
+        )
+        args = (*params, row_id)
+        if expected_version is not None:
+            sql += " AND version = ?"
+            args = (*args, expected_version)
+        cursor.execute(sql, args)
+        if cursor.rowcount > 0:
+            return True
+        if expected_version is not None:
+            self.raise_conflict_error(
+                cursor=cursor,
+                table_name=table_name,
+                row_id=row_id,
+                expected_version=expected_version,
+                missing_message=missing_message,
+            )
+        return False
+
     def update_versioned_json_list(
         self,
         *,
@@ -78,33 +120,12 @@ class BaseRepository:
         expected_version: int | None,
         missing_message: str,
     ) -> bool:
-        serialized = dumps_json(payload)
-        if expected_version is not None:
-            cursor.execute(
-                f"""
-                UPDATE {table_name}
-                SET {column_name} = ?, updated_at = ?, version = version + 1
-                WHERE id = ? AND version = ?
-                """,
-                (serialized, updated_at, row_id, expected_version),
-            )
-            if cursor.rowcount == 0:
-                self.raise_conflict_error(
-                    cursor=cursor,
-                    table_name=table_name,
-                    row_id=row_id,
-                    expected_version=expected_version,
-                    missing_message=missing_message,
-                )
-        else:
-            cursor.execute(
-                f"""
-                UPDATE {table_name}
-                SET {column_name} = ?, updated_at = ?, version = version + 1
-                WHERE id = ?
-                """,
-                (serialized, updated_at, row_id),
-            )
-            if cursor.rowcount == 0:
-                return False
-        return cursor.rowcount > 0
+        return self.update_versioned_row(
+            cursor=cursor,
+            table_name=table_name,
+            row_id=row_id,
+            set_clause=f"{column_name} = ?, updated_at = ?",
+            params=(dumps_json(payload), updated_at),
+            expected_version=expected_version,
+            missing_message=missing_message,
+        )

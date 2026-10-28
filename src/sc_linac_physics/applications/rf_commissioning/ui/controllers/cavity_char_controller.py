@@ -16,6 +16,9 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PhaseCheckpoint,
 )
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.cavity_char import (
     CavityCharLimits,
     CavityCharPhase,
@@ -29,6 +32,7 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
     apply_pv_mapping,
+    cryomodule_key,
     resolve_cavity_selection,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
@@ -47,6 +51,10 @@ from sc_linac_physics.utils.sc_linac.linac import Machine
 # its own button, and the phase is finalized after it, not here.
 MEASURE_STEPS = (
     "verify_initial_state",
+    # SSA calibration (PUSH_SSA_SLOPE.PROC with no review) and the stepper
+    # moves to resonance run here, before the measurement. See cavity_setup.
+    "calibrate_ssa",
+    "tune_to_resonance",
     "set_drive_level",
     "start_characterization",
     "wait_for_completion",
@@ -90,9 +98,11 @@ class CavityCharController(QObject):
     phase_run_finished = pyqtSignal(bool, str)
     # The measurement is read and on the record, awaiting operator review.
     measurement_finished = pyqtSignal()
-    # read_results' data (CavityCharPhase._result_data), for the review panel.
+    # The measured values for the review panel, as read_results stored them
+    # (CavityCharPhase._result_data).
     results_ready = pyqtSignal(dict)
-    # Push outcome: success, and the step's message on failure.
+    # Sent when a push ends: whether it succeeded, and the step's message if
+    # it failed.
     push_finished = pyqtSignal(bool, str)
     # Seconds since PROBECALSTRT was started, ticked by _elapsed_timer on
     # the GUI thread from start_characterization until the wait settles.
@@ -104,10 +114,14 @@ class CavityCharController(QObject):
     # Everything the worker thread wants to show goes through these. The
     # steps run on a daemon thread, and calling view.log_message() or
     # view.set_char_status() from there would mutate Qt widgets off the GUI
-    # thread. Emitting lets Qt marshal the call. Same arrangement as
-    # ssa_char_controller._log_signal.
+    # thread. Emitting a signal instead makes Qt run the call on the GUI
+    # thread. ssa_char_controller does the same with its _log_signal.
     _log_signal = pyqtSignal(str)
     _status_signal = pyqtSignal(str)
+    # The last SSA calibration (a LastSetupResult, or None if the read
+    # failed) and the read error, emitted from the thread that reads CALTS
+    # and CALSTAT so Start Test never blocks the GUI on them.
+    _last_ssa_cal_read = pyqtSignal(object, str)
 
     def __init__(self, view, session: CommissioningSession) -> None:
         super().__init__()
@@ -124,20 +138,27 @@ class CavityCharController(QObject):
         self._active_phase_instance_id: int | None = None
         self._steps: list[str] = list(MEASURE_STEPS)
         self._last_step_message = ""
-        # Persistence calls still owed after a push that reached the cavity:
-        # a subset of {"complete", "save", "history"}. Retry Save runs these
-        # and nothing else, so it never repeats a PUSH_*.PROC write.
+        # After a push reaches the cavity, the record still has to be marked
+        # complete, saved, and given a history entry. Any of those that
+        # failed is listed here ("complete", "save", "history"). Retry Save
+        # runs only these, so it never writes PUSH_*.PROC a second time.
         self._unsaved_push: set[str] = set()
         self._elapsed_started_at = 0.0
         self._elapsed_timer = QTimer(self)
         self._elapsed_timer.setInterval(1000)
         self._elapsed_timer.timeout.connect(self._tick_elapsed)
+        # Set by _decide_ssa_calibration before each run, read by
+        # _prepare_phase_context: (kept LastSetupResult or None, the name of
+        # the operator who chose Skip or None).
+        self._ssa_cal_decision: tuple = (None, None)
+        self._pending_start: tuple | None = None
+        self._last_ssa_cal_read.connect(self._on_last_ssa_cal_read)
         self._char_started.connect(self._on_char_started)
         self._char_settled.connect(self._on_char_settled)
 
         self.phase_run_finished.connect(self._on_phase_run_finished)
-        # Queued: measurement_finished is emitted from the worker thread and
-        # this slot lives on the controller, whose affinity is the GUI thread.
+        # measurement_finished is emitted from the worker thread. The
+        # controller belongs to the GUI thread, so Qt runs this handler there.
         self.measurement_finished.connect(self._on_measurement_finished)
         self.push_finished.connect(self._on_push_finished)
         if hasattr(self.view, "log_message"):
@@ -227,8 +248,7 @@ class CavityCharController(QObject):
         """Machine.cryomodules is keyed "01".."35", "H1", "H2"."""
         if not self.machine:
             self.machine = Machine()
-        key = f"{int(cm):02d}" if str(cm).isdigit() else str(cm)
-        return self.machine.cryomodules[key].cavities[cav]
+        return self.machine.cryomodules[cryomodule_key(cm)].cavities[cav]
 
     # ------------------------------------------------------------------
     # Abort and pause
@@ -369,12 +389,62 @@ class CavityCharController(QObject):
         # this run's wait call turn_off() straight away.
         self._cavity.abort_flag = False
 
-        if not self._prepare_phase_context(self._cavity, operator, drive_level):
-            return
-
+        # Locked from here, so a second click cannot start a second read.
         self._running = True
         self._set_running_ui_state(True)
+        cavity = self._cavity
+        self._pending_start = (cavity, operator, drive_level)
+        threading.Thread(
+            target=lambda: self._read_last_ssa_calibration(cavity),
+            daemon=True,
+        ).start()
+
+    def _read_last_ssa_calibration(self, cavity) -> None:
+        """Runs on a daemon thread: CALTS and CALSTAT are EPICS reads."""
+        try:
+            last = cavity_setup.last_ssa_calibration(cavity)
+        except Exception as exc:
+            self._last_ssa_cal_read.emit(None, str(exc))
+            return
+        self._last_ssa_cal_read.emit(last, "")
+
+    def _on_last_ssa_cal_read(self, last, error: str) -> None:
+        """Back on the GUI thread: decide on the SSA calibration, then run."""
+        cavity, operator, drive_level = self._pending_start
+        self._pending_start = None
+        decision = self._decide_ssa_calibration(last, error, operator)
+        if decision is None:
+            self._report("Start cancelled", "Cancelled")
+            self._end_run()
+            return
+        self._ssa_cal_decision = decision
+        if not self._prepare_phase_context(cavity, operator, drive_level):
+            self._end_run()
+            return
         self._execute_phase_async()
+
+    def _decide_ssa_calibration(self, last, error: str, operator: str):
+        """Return (kept, skipped_by), or None if the operator cancelled.
+
+        The rule is cavity_setup.decide_ssa_calibration: keep a good one
+        under an hour old, ask about an older or bad one, calibrate if CALTS
+        or CALSTAT could not be read.
+        """
+        if last is None:
+            self._report(
+                f"Could not read the last SSA calibration ({error}); "
+                "calibrating",
+                "Calibrating SSA",
+            )
+        return cavity_setup.decide_ssa_calibration(
+            last,
+            operator,
+            lambda text: self.view.ask_rerun_ssa_calibration(text),
+        )
+
+    def _end_run(self) -> None:
+        self._running = False
+        self._set_running_ui_state(False)
 
     def _prepare_phase_context(
         self, cavity, operator: str, drive_level: float
@@ -403,7 +473,12 @@ class CavityCharController(QObject):
         self.context = PhaseContext(
             record=record,
             operator=operator,
-            parameters={"cavity": cavity, "drive_level": drive_level},
+            parameters={
+                "cavity": cavity,
+                "drive_level": drive_level,
+                "kept_ssa_calibration": self._ssa_cal_decision[0],
+                "ssa_calibration_skipped_by": self._ssa_cal_decision[1],
+            },
             phase_instance_id=self._active_phase_instance_id,
             run_intent="commissioning",
         )

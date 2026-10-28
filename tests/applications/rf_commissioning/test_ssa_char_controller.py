@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
 import sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller as controller_module
 from pydm.widgets import PyDMSpinbox
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -36,7 +37,7 @@ class _ViewStub:
         self,
         *,
         current_operator: str = "Test Operator",
-        cavity: tuple[str, str] | None = ("L1B_CM02_CAV1", "02"),
+        cavity: tuple[str, str] | None = ("02-1", "02"),
     ):
         self._current_operator = current_operator
         self._cavity = cavity
@@ -46,6 +47,7 @@ class _ViewStub:
         self.run_button = _ButtonStub()
         self.pause_button = _ButtonStub()
         self.abort_button = _ButtonStub()
+        self.push_btn = _ButtonStub()
         self.local_phase_status = Mock()
         self.local_progress_bar = Mock()
         self.ui = SimpleNamespace(update_toolbar_state=Mock())
@@ -116,14 +118,25 @@ def test_get_operator_empty_when_no_method() -> None:
     assert SSACharController(SimpleNamespace(), Mock())._get_operator() == ""
 
 
-def test_parse_cavity_from_record_full_name() -> None:
+@pytest.mark.parametrize("cryomodule, cavity", [("02", 8), ("H1", 3)])
+def test_parse_cavity_from_record_reads_short_cavity_name(
+    cryomodule, cavity
+) -> None:
+    # get_current_cavity() returns record.short_cavity_name: "02-8", "H1-3".
+    record = CommissioningRecord(
+        linac=1, cryomodule=cryomodule, cavity_number=cavity
+    )
     controller = _make_controller()
-    assert controller._parse_cavity_from_record("L1B_CM02_CAV8", "02") == (2, 8)
+    assert controller._parse_cavity_from_record(
+        record.short_cavity_name, cryomodule
+    ) == (cryomodule, cavity)
 
 
-def test_parse_cavity_from_record_short_name_defaults_to_cav1() -> None:
-    controller = _make_controller()
-    assert controller._parse_cavity_from_record("SHORT", "02") == (2, 1)
+def test_parse_cavity_from_record_rejects_other_formats() -> None:
+    # It used to fall back to cavity 1 on anything without underscores,
+    # which included every real short_cavity_name.
+    with pytest.raises(ValueError):
+        _make_controller()._parse_cavity_from_record("SHORT", "02")
 
 
 def test_update_toolbar_state_delegates_to_ui() -> None:
@@ -214,6 +227,20 @@ def test_update_pv_addresses_binds_drive_max_spinbox_to_request_pv() -> None:
     controller.update_pv_addresses("02", "1")
 
     assert view.drive_max_spinbox.channel == "ca://PV:DRV_MAX_REQ"
+
+
+def test_update_pv_addresses_resolves_harmonic_linearizers() -> None:
+    """H1/H2 failed int() and the SSA tab logged "Invalid cavity/CM value"."""
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._apply_ssa_pv_mapping = Mock()
+    controller._get_machine_cavity = Mock(return_value=Mock())
+
+    controller.update_pv_addresses("H1", "3")
+
+    controller._get_machine_cavity.assert_called_once_with("H1", 3)
+    assert controller._cavity is controller._get_machine_cavity.return_value
+    assert not any("Invalid" in m for m in view.logs)
 
 
 def test_get_drive_max_reads_pydm_spinbox_value() -> None:
@@ -775,6 +802,7 @@ def test_on_push_slope_calls_cavity_push(monkeypatch) -> None:
     controller = _make_controller(view=view)
     cavity = Mock()
     controller._cavity = cavity
+    controller._repushable_cavity = cavity
     monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
 
     controller.on_push_slope()
@@ -789,11 +817,122 @@ def test_on_push_slope_logs_exception(monkeypatch) -> None:
     cavity = Mock()
     cavity.push_ssa_slope.side_effect = RuntimeError("push fail")
     controller._cavity = cavity
+    controller._repushable_cavity = cavity
     monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
 
     controller.on_push_slope()
 
     assert any("Push failed" in msg for msg in view.logs)
+
+
+def test_on_push_slope_refused_without_a_passing_calibration(
+    monkeypatch,
+) -> None:
+    """Haley's report on #318: the button pushed before any calibration ran."""
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    cavity = Mock()
+    controller._cavity = cavity
+    monkeypatch.setattr(controller_module, "Thread", _ThreadStub)
+
+    controller.on_push_slope()
+
+    cavity.push_ssa_slope.assert_not_called()
+    assert view.errors
+
+
+def test_repush_turns_on_after_a_pass_and_off_when_a_run_starts() -> None:
+    view = _ViewStub()
+    session = Mock()
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    cavity = Mock()
+    controller.context = PhaseContext(
+        record=_record_with_result(),
+        operator="op",
+        parameters={"cavity": cavity},
+    )
+    controller._cavity = cavity
+    controller._append_measurement_history = Mock()
+    view.push_btn.setEnabled(False)
+
+    controller.on_phase_completed()
+
+    assert view.push_btn.enabled is True
+    assert controller.repush_slope_value() == 1.02345
+
+    controller._set_running_ui_state()
+
+    assert view.push_btn.enabled is False
+    assert controller.repush_slope_value() is None
+
+
+def test_pass_on_one_cavity_does_not_enable_repush_for_another() -> None:
+    """Copilot review on #458: the operator switched to cavity B while A was
+    calibrating. A's pass must not make B re-pushable."""
+    view = _ViewStub()
+    session = Mock()
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    cavity_a, cavity_b = Mock(), Mock()
+    controller.context = PhaseContext(
+        record=_record_with_result(),
+        operator="op",
+        parameters={"cavity": cavity_a},
+    )
+    controller._cavity = cavity_b
+    controller._append_measurement_history = Mock()
+    view.push_btn.setEnabled(False)
+
+    controller.on_phase_completed()
+
+    assert view.push_btn.enabled is False
+    assert controller._repushable_cavity is cavity_a
+
+
+def test_unparseable_selection_clears_the_repush_target() -> None:
+    """Copilot review on #458: an early return in update_pv_addresses left
+    Re-push enabled and pointed at the previous cavity."""
+    view = _ViewStub(cavity=None)
+    controller = _make_controller(view=view)
+    cavity = Mock()
+    controller._cavity = cavity
+    controller._repushable_cavity = cavity
+    view.push_btn.setEnabled(True)
+
+    controller.update_pv_addresses()
+
+    assert view.push_btn.enabled is False
+    assert controller._cavity is None
+
+
+def test_repush_stays_off_when_the_calibration_did_not_pass() -> None:
+    view = _ViewStub()
+    session = Mock()
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    record = _record_with_result()
+    record.ssa_char.calibration_passed = False
+    controller.context = PhaseContext(record=record, operator="op")
+    controller._cavity = Mock()
+    controller._append_measurement_history = Mock()
+    view.push_btn.setEnabled(False)
+
+    controller.on_phase_completed()
+
+    assert view.push_btn.enabled is False
+
+
+def test_repush_turns_off_when_a_calibration_fails() -> None:
+    view = _ViewStub()
+    controller = _make_controller(view=view)
+    controller._repushable_cavity = Mock()
+    controller.phase = None
+
+    controller.on_phase_failed("bad")
+
+    assert view.push_btn.enabled is False
+    assert controller._repushable_cavity is None
 
 
 def test_on_push_slope_no_cavity_logs_message() -> None:

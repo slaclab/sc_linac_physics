@@ -39,8 +39,9 @@ class Q0Cryomodule(Cryomodule):
 
         self.cryo_access_pv: str = f"CRYO:{self.cryo_name}:0:CAS_ACCESS"
 
-        # PV objects by name, created on first use (see _pv), and the
-        # callback index of each monitor (see _monitor).
+        # PV objects by name. _pv creates each the first time it's used.
+        # _monitor stores each monitor's callback index here, which is
+        # needed to remove the callback later.
         self._pvs: Dict[str, PV] = {}
         self._monitor_indices: Dict[str, int] = {}
 
@@ -75,10 +76,15 @@ class Q0Cryomodule(Cryomodule):
 
         self.abort_flag: bool = False
 
+        # SP_RQST as read at the start of the last calibration or Q0 run.
+        # restore_cryo puts it back. None until a run has started.
+        self._starting_ds_level_setpoint: Optional[float] = None
+
     def check_abort(self):
         if self.abort_flag:
             self.abort_flag = False
-            # Flag the cavities first, so a failed cryo restore can't skip it.
+            # Flag the cavities before restoring cryo. If restore_cryo raises,
+            # the cavities still see the abort.
             for cavity in self.cavities.values():
                 cavity.abort_flag = True
             self.restore_cryo()
@@ -199,19 +205,34 @@ class Q0Cryomodule(Cryomodule):
         """Hand the heaters back to the sequencer (SEQUENCER=1, waited)."""
         self._pv(self.heater_sequencer_pv).put(1, wait=True)
 
-    def shut_off(self):
-        """Restore cryo, then turn every cavity and SSA off.
+    def _restore_ds_level_setpoint(self) -> None:
+        """Put the saved starting value back to SP_RQST, if one was saved."""
+        if self._starting_ds_level_setpoint is None:
+            print(
+                f"{self}: no starting liquid level setpoint saved,"
+                " leaving SP_RQST as is"
+            )
+            return
+        self.ds_liquid_level = self._starting_ds_level_setpoint
 
-        Each step is attempted even if an earlier one fails.
+    def shut_off(self):
+        """Restore cryo, then turn every cavity off. SSAs are left on.
+
+        Order: heater SEQUENCER, JT AUTO, SP_RQST back to its starting
+        value, then each cavity off. Each step is attempted even if an
+        earlier one fails.
         """
-        print("Restoring cryo, turning cavities and SSAs off")
+        print("Restoring cryo, turning cavities off")
         steps = [
             ("heater SEQUENCER", self._select_heater_sequencer),
             ("JT AUTO", self.select_jt_auto),
+            (
+                f"ds_liquid_level = {self._starting_ds_level_setpoint}",
+                self._restore_ds_level_setpoint,
+            ),
         ]
         for cavity in self.cavities.values():
             steps.append((f"{cavity} turn_off", cavity.turn_off))
-            steps.append((f"{cavity} SSA turn_off", cavity.ssa.turn_off))
         self._attempt_each(steps)
 
     @property
@@ -238,7 +259,9 @@ class Q0Cryomodule(Cryomodule):
 
     @ds_liquid_level.setter
     def ds_liquid_level(self, value):
-        self.ds_level_pv_obj.put(value)
+        # Reads come from DS:LVL; writes go to the JT's SP_RQST.
+        # CHECK: is PVJT:SP_RQST the downstream level target?
+        self._pv(self.ds_liq_lev_setpoint_pv).put(value)
 
     def fill(
         self, desired_level=q0_utils.MAX_DS_LL, turn_cavities_off: bool = True
@@ -458,9 +481,21 @@ class Q0Cryomodule(Cryomodule):
         self.q0_measurement.save_results()
         self.restore_cryo()
 
+    def _save_starting_ds_level_setpoint(self) -> None:
+        """Read SP_RQST so restore_cryo can put it back after the run."""
+        self._starting_ds_level_setpoint = self._pv(
+            self.ds_liq_lev_setpoint_pv
+        ).get()
+        print(
+            f"Starting liquid level setpoint: {self._starting_ds_level_setpoint}"
+        )
+
     def setup_for_q0(
         self, desiredAmplitudes, desired_ll, jt_search_end, jt_search_start
     ):
+        # Saved here, not in takeNewQ0Measurement: the fill() below already
+        # writes desired_ll to SP_RQST before the measurement starts.
+        self._save_starting_ds_level_setpoint()
         self.q0_measurement = Q0Measurement(cryomodule=self)
         self.q0_measurement.amplitudes = desiredAmplitudes
         self.q0_measurement.heater_run_heatload = (
@@ -509,8 +544,7 @@ class Q0Cryomodule(Cryomodule):
         print(f"setting {self} heater to {self.valveParams.refHeatLoadDes} W")
         self.heater_power = self.valveParams.refHeatLoadDes
 
-        starting_ll_setpoint = self._pv(self.ds_liq_lev_setpoint_pv).get()
-        print(f"Starting liquid level setpoint: {starting_ll_setpoint}")
+        self._save_starting_ds_level_setpoint()
 
         self._monitor(self.ds_level_pv, self.monitor_ll)
 
@@ -537,19 +571,21 @@ class Q0Cryomodule(Cryomodule):
         self._clear_monitor(self.ds_level_pv)
 
     def restore_cryo(self):
-        """JT AUTO, ds_liquid_level = 92, heater SEQUENCER, in that order.
+        """JT AUTO, SP_RQST back to its starting value, heater SEQUENCER.
 
-        Each step is attempted even if an earlier one fails.
+        The starting value is the one saved when the last calibration or Q0
+        run started. With none saved (Restore Cryo pressed before any run),
+        SP_RQST is not written. Each step is attempted even if an earlier
+        one fails.
         """
         print("Restoring initial cryo conditions")
-
-        def set_ds_level_92():
-            self.ds_liquid_level = 92
-
         self._attempt_each(
             [
                 ("JT AUTO", self.select_jt_auto),
-                ("ds_liquid_level = 92", set_ds_level_92),
+                (
+                    f"ds_liquid_level = {self._starting_ds_level_setpoint}",
+                    self._restore_ds_level_setpoint,
+                ),
                 ("heater SEQUENCER", self._select_heater_sequencer),
             ]
         )

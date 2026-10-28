@@ -19,6 +19,9 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     CavityCharUI,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.builders.stage_status import (  # noqa: E501
+    ACTION_NEEDED_BUTTON_STYLE,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_char_controller import (  # noqa: E501
     PUSH_STEPS,
     CavityCharController,
@@ -70,6 +73,14 @@ def test_push_button_is_built_disabled(qapp_global):
     button = ui.widgets["push_results_button"]
     assert isinstance(button, QPushButton)
     assert not button.isEnabled()
+
+
+def test_push_button_wears_the_action_needed_style(qapp_global):
+    """Haley's report on #318: the default grey read as disabled."""
+    ui = CavityCharUI(QWidget(), callbacks={})
+    ui.build()
+    button = ui.widgets["push_results_button"]
+    assert button.styleSheet() == ACTION_NEEDED_BUTTON_STYLE
 
 
 def test_results_rows_are_built(qapp_global):
