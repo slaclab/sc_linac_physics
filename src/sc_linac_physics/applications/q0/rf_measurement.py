@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Optional, Dict, TYPE_CHECKING
+from typing import Optional, Dict, Tuple, TYPE_CHECKING
 
 import numpy as np
 
@@ -29,12 +29,28 @@ class Q0Measurement:
     def amplitudes(self):
         return self._amplitudes
 
-    def _reset_calculated_properties(self):
+    def reset_calculated_properties(self):
         """Reset all calculated properties when base data changes"""
         self._raw_heat = None
         self._adjustment = None
         self._heat_load = None
         self._q0 = None
+
+    def set_fit_window(
+        self,
+        run: q0_utils.DataRun,
+        window: Optional[Tuple[float, float]],
+    ) -> None:
+        """Fit run's dLL/dt to the samples in window only (None for all).
+
+        run is heater_run or rf_run. Clears the cached heat loads and Q0.
+        """
+        if run is not self.heater_run and run is not self.rf_run:
+            raise ValueError(
+                f"{run} is not this measurement's heater or RF run"
+            )
+        run.fit_window = window
+        self.reset_calculated_properties()
 
     @amplitudes.setter
     def amplitudes(self, amplitudes: Dict[int, float]):
@@ -57,7 +73,7 @@ class Q0Measurement:
                 raise ValueError(f"Amplitude cannot be negative: {amp}")
         self._amplitudes = amplitudes
         self.rf_run = RFRun(amplitudes)
-        self._reset_calculated_properties()  # Reset when data changes
+        self.reset_calculated_properties()  # Reset when data changes
 
     @property
     def heater_run_heatload(self):
@@ -156,6 +172,7 @@ class Q0Measurement:
         self.heater_run.ll_data = ll_data
 
     def save_data(self):
+        q0_utils.require_no_fit_windows([self.heater_run, self.rf_run])
         q0_utils.make_json_file(self.cryomodule.q0_data_file)
         heater_data = {
             q0_utils.JSON_START_KEY: self.heater_run.start_time,
@@ -185,6 +202,12 @@ class Q0Measurement:
         )
 
     def save_results(self):
+        # The results also come from the calibration curve, so its runs
+        # must be unwindowed too.
+        q0_utils.require_no_fit_windows(
+            [self.heater_run, self.rf_run]
+            + self.cryomodule.calibration.heater_runs
+        )
         newData = {
             q0_utils.JSON_START_KEY: self.start_time,
             q0_utils.JSON_CAV_AMPS_KEY: self.rf_run.amplitudes,
