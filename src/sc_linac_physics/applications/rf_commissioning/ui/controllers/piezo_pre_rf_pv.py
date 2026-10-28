@@ -51,6 +51,19 @@ def resolve_cavity_selection(
     return None, None
 
 
+def cavity_number_from_short_name(short_name) -> int:
+    """Return the cavity number from a CommissioningRecord.short_cavity_name.
+
+    short_cavity_name is "{cryomodule}-{cavity_number}": "02-3" -> 3,
+    "H1-3" -> 3. Raises ValueError for anything else rather than guessing a
+    cavity, since the caller runs the phase on the cavity this returns.
+    """
+    _, sep, cavity = str(short_name).rpartition("-")
+    if not sep:
+        raise ValueError(f"not a short cavity name: {short_name!r}")
+    return int(cavity)
+
+
 def get_piezo_from_selection(
     machine: Machine | None,
     cryomodule: str,

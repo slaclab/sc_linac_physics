@@ -21,6 +21,7 @@ from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
     build_pv_mapping,
+    cavity_number_from_short_name,
     cryomodule_key,
     format_pv_update_message,
     get_piezo_from_selection,
@@ -164,9 +165,7 @@ class PiezoPreRFController(QObject):
         self, cavity_name: str, cryomodule: str
     ) -> tuple[str, int]:
         """Return the cryomodule key and cavity number for a record."""
-        parts = cavity_name.split("_")
-        cav_part = parts[2] if len(parts) >= 3 else "CAV1"
-        cav = int(cav_part.replace("CAV", ""))
+        cav = cavity_number_from_short_name(cavity_name)
         return cryomodule_key(cryomodule), cav
 
     def _prepare_phase_context(self, cavity, operator: str) -> bool:

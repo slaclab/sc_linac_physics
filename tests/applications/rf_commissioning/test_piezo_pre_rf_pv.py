@@ -3,6 +3,7 @@
 import pytest
 
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
+    cavity_number_from_short_name,
     cryomodule_key,
     format_pv_update_message,
 )
@@ -25,3 +26,14 @@ def test_cryomodule_key_rejects_unknown_names(selection) -> None:
 def test_format_pv_update_message_uses_the_key() -> None:
     message = format_pv_update_message("H1", "3", "H1", 3)
     assert message.endswith("(CMH1 Cav3)")
+
+
+@pytest.mark.parametrize("name, cavity", [("02-3", 3), ("H1-8", 8)])
+def test_cavity_number_from_short_name(name, cavity) -> None:
+    assert cavity_number_from_short_name(name) == cavity
+
+
+@pytest.mark.parametrize("name", ["L1B_CM02_CAV8", "SHORT", "02-", ""])
+def test_cavity_number_from_short_name_rejects_other_formats(name) -> None:
+    with pytest.raises(ValueError):
+        cavity_number_from_short_name(name)
