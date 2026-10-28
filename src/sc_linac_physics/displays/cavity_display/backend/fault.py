@@ -297,8 +297,9 @@ class Fault:
         try:
             invalid = obj.severity == EPICS_INVALID_VAL or obj.status is None
         except PVConnectionError as e:
-            # PV.severity raises when disconnected. Callers (EnumLabel, the
-            # runner) handle PVInvalidError, so report it the same way.
+            # Reading severity from a disconnected PV raises. Report it as
+            # PVInvalidError, like an INVALID severity, because that is what
+            # callers handle: EnumLabel, for example, shows INVALID.
             raise PVInvalidError(self.pv) from e
         if invalid:
             raise PVInvalidError(self.pv)

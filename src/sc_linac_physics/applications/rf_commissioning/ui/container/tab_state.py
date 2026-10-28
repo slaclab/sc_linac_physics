@@ -24,15 +24,17 @@ from sc_linac_physics.applications.rf_commissioning.models.persistence.database 
 # for the settled states, because nine tabs have to fit across the window; the
 # running phase is the one an operator needs to spot at a glance, so it — and a
 # failure — also get the word inline on the tab itself.
-# "In progress", not "Running": ▶ is returned for phase == current_phase, which
+# "Up next", not "Running": ▶ is returned for phase == current_phase, which
 # means "this is where you are in the workflow", not "a stage is executing right
 # now". Calling it Running contradicted the status bar, which legitimately reads
-# IDLE while the current phase sits waiting for an operator confirmation.
+# IDLE while the current phase sits waiting for an operator confirmation. The
+# label after that, "In progress", still read as running to Haley Marts testing
+# the app on #318: she didn't realize she had to open the tab and press Start.
 _PHASE_STATUS_WORDS = {
     "○": "Not started",
     "✓": "Done",
     "✗": "Failed",
-    "▶": "In progress",
+    "▶": "Up next",
     "●": "Overview",
 }
 

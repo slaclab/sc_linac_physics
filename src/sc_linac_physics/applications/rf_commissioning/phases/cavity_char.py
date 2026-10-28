@@ -24,35 +24,56 @@ happens:
 - An operator may push an out-of-tolerance value after confirming
   (`_push_results`). `finish_characterization()` refuses.
 
+Before measuring it redoes the setup the measurement depends on, the way auto
+setup does before characterizing (`SetupCavity.setup()`). It tunes to resonance
+every run, even if the frequency tuning phase already did (Lisa Zacarias,
+2026-10-14). It calibrates the SSA unless the controller passes
+kept_ssa_calibration: the last calibration is under an hour old and Good, or
+the operator chose Skip (see `_keep_ssa_calibration`). Both calls live in
+`cavity_setup`, which documents the PVs they write. Two of those writes have no
+operator review: the SSA slope push (PUSH_SSA_SLOPE.PROC) and the stepper
+moves.
+
 Sequence:
-  1. verify_initial_state    – cavity online, stepper idle, SSA on and not
-                               calibrating; warn if SSA calibration or tuning
-                               are stale
-  2. set_drive_level         – clamp drive for characterization (operator may
+  1. verify_initial_state    – cavity online, stepper idle, SSA not
+                               calibrating
+  2. calibrate_ssa           – cavity_setup.calibrate_ssa: RF off, rack DAC
+                               amplitudes 0, SSA.calibrate(), slope pushed;
+                               replaces record.ssa_char. Skipped, with a note
+                               on the record, when the controller passes
+                               kept_ssa_calibration (see
+                               _keep_ssa_calibration)
+  3. tune_to_resonance       – cavity_setup.tune_to_resonance:
+                               Cavity.move_to_resonance() with the stepper
+                               temperature guard; leaves RF on in chirp mode
+  4. set_drive_level         – clamp drive for characterization (operator may
                                override the default)
-  3. start_characterization  – kick off PROBECALSTRT; clear the previous
+  5. start_characterization  – kick off PROBECALSTRT; clear the previous
                                run's results from the record
-  4. wait_for_completion     – poll PROBECALSTS until it settles, then reject a
+  6. wait_for_completion     – poll PROBECALSTS until it settles, then reject a
                                crash, or a PROBECALTS too old or not later
                                than the one read before the start
-  5. read_results            – read loaded Q and scale factor, trigger the
+  7. read_results            – read loaded Q and scale factor, trigger the
                                probe-Q calculation and read probe Q, flag
                                loaded Q or scale factor out of tolerance.
                                Nothing is pushed.
-  6. push_results            – refused unless parameters["confirmed_loaded_q"]
-                               matches the loaded Q read in step 5 and the
+  8. push_results            – refused unless parameters["confirmed_loaded_q"]
+                               matches the loaded Q read in step 7 and the
                                cavity's result is unchanged since; then push
                                loaded Q, scale factor and probe Q
-  7. record_results          – write CavityCharacterization onto the record
+  9. record_results          – write CavityCharacterization onto the record
 """
 
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CavityCharacterization,
     CommissioningPhase,
+)
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
@@ -84,11 +105,10 @@ class CavityCharLimits:
     status_settle_delay: float = 2.0
     characterization_timeout_seconds: float = 300.0
 
-    # How old an SSA calibration or frequency tuning result may be before this
-    # phase warns. Best practice is to characterize against a freshly calibrated
-    # and tuned cavity; stale inputs are a warning rather than a hard stop
-    # because the workflow already enforces that those phases ran at all.
-    prerequisite_staleness_hours: float = 24.0
+    # Highest stepper temperature in kelvin, passed to
+    # Cavity.move_to_resonance() in tune_to_resonance. Frequency tuning uses
+    # the same default (FrequencyTuningLimits.temp_limit_k).
+    stepper_temp_limit_k: float = linac_utils.STEPPER_TEMP_LIMIT
 
 
 class CavityCharPhase(PhaseBase):
@@ -109,8 +129,9 @@ class CavityCharPhase(PhaseBase):
         # PROBECALTS read just before this phase wrote PROBECALSTRT. None until
         # then, and after a session resumed past start_characterization.
         self._prestart_timestamp: datetime | None = None
-        # PROBECALTS as of read_results: identifies the run the operator
-        # reviewed, so push_results can refuse if another run started since.
+        # PROBECALTS when read_results ran, which identifies the run the
+        # operator reviewed. push_results refuses if PROBECALTS has changed,
+        # since that means another run started.
         self._reviewed_run_timestamp: datetime | None = None
 
     @property
@@ -129,6 +150,8 @@ class CavityCharPhase(PhaseBase):
     def get_phase_steps(self) -> list[str]:
         return [
             "verify_initial_state",
+            "calibrate_ssa",
+            "tune_to_resonance",
             "set_drive_level",
             "start_characterization",
             "wait_for_completion",
@@ -145,6 +168,8 @@ class CavityCharPhase(PhaseBase):
 
         steps = {
             "verify_initial_state": self._verify_initial_state,
+            "calibrate_ssa": self._calibrate_ssa,
+            "tune_to_resonance": self._tune_to_resonance,
             "set_drive_level": self._set_drive_level,
             "start_characterization": self._start_characterization,
             "wait_for_completion": self._wait_for_completion,
@@ -164,18 +189,15 @@ class CavityCharPhase(PhaseBase):
     # ------------------------------------------------------------------
 
     def _verify_initial_state(self) -> PhaseStepResult:
-        """Check the cavity is ready, and warn about stale inputs."""
+        """Refuse what the setup steps cannot fix. Read-only.
+
+        An SSA that is off is not refused: calibrate_ssa turns it on.
+        """
         if self.context.dry_run:
-            # HW_MODE and the stepper's motor_moving are PV reads, so skip
-            # them; _stale_prerequisites reads the record only, and a
-            # rehearsal is exactly when its warning is worth seeing.
-            stale = self._stale_prerequisites()
-            message = "Dry run: cavity state check simulated"
-            if stale:
-                message += f" — note: {', '.join(stale)}"
+            # HW_MODE, the stepper's motor_moving and CALSTS are PV reads.
             return PhaseStepResult(
                 result=PhaseResult.SUCCESS,
-                message=message,
+                message="Dry run: cavity state check simulated",
                 data={"dry_run": True},
             )
         try:
@@ -192,14 +214,6 @@ class CavityCharPhase(PhaseBase):
                         "characterizing"
                     ),
                 )
-            # Read-only checks. Cavity.characterize() makes neither, but the
-            # phase sets drive and starts PROBECALSTRT next, so refuse here
-            # rather than characterize against an SSA that is off or busy.
-            if not self.cavity.ssa.is_on:
-                return PhaseStepResult(
-                    result=PhaseResult.FAILED,
-                    message="SSA is not on — cannot characterize",
-                )
             if self.cavity.ssa.calibration_running:
                 return PhaseStepResult(
                     result=PhaseResult.FAILED,
@@ -214,43 +228,56 @@ class CavityCharPhase(PhaseBase):
                 message=f"Could not read cavity state: {exc}",
                 retry_delay_seconds=3.0,
             )
-
-        stale = self._stale_prerequisites()
-        message = "Cavity ready for characterization"
-        if stale:
-            # A warning, not a failure: the workflow already guarantees these
-            # phases ran, and re-running them is the operator's call rather than
-            # something to trigger from here.
-            message += f" — note: {', '.join(stale)}"
-
-        return PhaseStepResult(result=PhaseResult.SUCCESS, message=message)
-
-    def _stale_prerequisites(self) -> list[str]:
-        """Names of upstream results older than the staleness window.
-
-        Best practice is to characterize a cavity whose SSA was recently
-        calibrated and which was recently tuned to resonance. Both results carry
-        a timestamp on the record, so this is a record read rather than a reason
-        to re-drive hardware.
-        """
-        record = getattr(self.context, "record", None)
-        if record is None:
-            return []
-
-        cutoff = datetime.now() - timedelta(
-            hours=self.limits.prerequisite_staleness_hours
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message="Cavity ready for setup",
         )
-        stale = []
-        for attr, label in (
-            ("ssa_char", "SSA calibration"),
-            ("frequency_tuning", "frequency tuning"),
-        ):
-            data = getattr(record, attr, None)
-            timestamp = getattr(data, "timestamp", None) if data else None
-            if timestamp is not None and timestamp < cutoff:
-                age_hours = (datetime.now() - timestamp).total_seconds() / 3600
-                stale.append(f"{label} is {age_hours:.0f} h old")
-        return stale
+
+    def _calibrate_ssa(self) -> PhaseStepResult:
+        """Recalibrate the SSA at the drive max the SSA char phase used.
+
+        Skipped when the controller passes kept_ssa_calibration; see
+        _keep_ssa_calibration.
+
+        record.ssa_char.max_drive is the value the operator chose there. With
+        no SSA char result on the record, calibrate_ssa falls back to
+        SSA.drive_max (DRV_MAX_SAVE), as auto setup does.
+        """
+        previous = getattr(self.context.record, "ssa_char", None)
+        drive_max = previous.max_drive if previous else None
+        kept = self.context.parameters.get("kept_ssa_calibration")
+        if kept is not None and not self.context.dry_run:
+            return self._keep_ssa_calibration(kept)
+        return cavity_setup.calibrate_ssa(self.cavity, self.context, drive_max)
+
+    def _keep_ssa_calibration(
+        self, kept: cavity_setup.LastSetupResult
+    ) -> PhaseStepResult:
+        """Skip the calibration and keep the slope already on the SSA.
+
+        The controller sets parameters["kept_ssa_calibration"] in two cases.
+        A good one under an hour old is kept without asking. An older or bad
+        one is kept only if the operator chose Skip, and then
+        parameters["ssa_calibration_skipped_by"] holds their name. Either way
+        a line goes onto record.cavity_char.notes. record.ssa_char is left
+        alone. Writes no PVs.
+        """
+        skipped_by = self.context.parameters.get("ssa_calibration_skipped_by")
+        note = cavity_setup.kept_ssa_calibration_note(kept, skipped_by)
+        self._append_note(note)
+        return PhaseStepResult(
+            result=PhaseResult.SUCCESS,
+            message=note,
+            data={
+                "ssa_calibration_kept": kept.timestamp.isoformat(),
+                "skipped_by": skipped_by,
+            },
+        )
+
+    def _tune_to_resonance(self) -> PhaseStepResult:
+        return cavity_setup.tune_to_resonance(
+            self.cavity, self.context, self.limits.stepper_temp_limit_k
+        )
 
     def _set_drive_level(self) -> PhaseStepResult:
         """Clamp the drive level for characterization.
@@ -338,8 +365,9 @@ class CavityCharPhase(PhaseBase):
         #
         # A new run invalidates the last one's numbers. Clear them now so a
         # read that fails later cannot leave this run's record carrying the
-        # previous run's probe Q (or loaded Q) — _store_phase_fields skips
-        # None and finalize_phase keeps what is on the record. A session
+        # previous run's probe Q (or loaded Q). Saving never overwrites a
+        # stored value with None (_store_phase_fields, finalize_phase), so a
+        # stale value would otherwise stay. A session
         # resumed past this step does not come back through here, so its
         # values survive.
         self._clear_measured_fields()
@@ -459,7 +487,8 @@ class CavityCharPhase(PhaseBase):
             )
             self._loaded_q = float(self.cavity.measured_loaded_q)
             self._scale_factor = float(self.cavity.measured_scale_factor)
-            # The same checks finish_characterization() makes before pushing.
+            # Whether loaded Q and scale factor are in tolerance: the same two
+            # checks finish_characterization() makes before pushing.
             self._loaded_q_in_tolerance = bool(
                 self.cavity.measured_loaded_q_in_tolerance
             )
@@ -685,6 +714,15 @@ class CavityCharPhase(PhaseBase):
         for name, value in fields.items():
             if value is not None:
                 setattr(data, name, value)
+        record.cavity_char = data
+
+    def _append_note(self, note: str) -> None:
+        """Append a line to record.cavity_char.notes; keeps what is there."""
+        record = getattr(self.context, "record", None)
+        if record is None:
+            return
+        data = record.cavity_char or CavityCharacterization()
+        data.notes = f"{data.notes}\n{note}" if data.notes else note
         record.cavity_char = data
 
     def finalize_phase(self) -> None:

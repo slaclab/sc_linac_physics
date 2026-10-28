@@ -1,10 +1,13 @@
 import json
+import shutil
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
 
 import numpy as np
 import pytest
 
+from sc_linac_physics.applications.q0 import q0_utils
 from sc_linac_physics.applications.q0.rf_measurement import Q0Measurement
 from sc_linac_physics.applications.q0.rf_run import RFRun
 
@@ -379,7 +382,34 @@ class TestLoadDataMethod:
         assert measurement.start_time == valid_timestamp
         mock_load_heater.assert_called_once()
         mock_load_rf.assert_called_once()
-        mock_save.assert_called_once()
+        mock_save.assert_not_called()
+
+    def test_load_data_leaves_data_file_unchanged(
+        self, mock_cryomodule, tmp_path
+    ):
+        """Loading must not rewrite the stored record.
+
+        save_data writes dLL/dt from today's refit, so a save on load
+        would replace values stored with an older fit.
+        """
+        packaged = (
+            Path(q0_utils.__file__).parent
+            / "data"
+            / "q0_measurements"
+            / "cm07.json"
+        )
+        data_file = tmp_path / "cm07.json"
+        shutil.copy(packaged, data_file)
+        before = data_file.read_bytes()
+        # Stored dLL/dt for this run predates siegelslopes, so a refit
+        # differs from it.
+        time_stamp = "07/25/22 19:14:24"
+
+        assert time_stamp in json.loads(before)
+        mock_cryomodule.q0_data_file = str(data_file)
+        Q0Measurement(mock_cryomodule).load_data(time_stamp)
+
+        assert data_file.read_bytes() == before
 
 
 class TestLoadHelperMethods:

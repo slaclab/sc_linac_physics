@@ -423,22 +423,6 @@ class PhaseBase(ABC):
 
         return phase_data.to_dict()
 
-    def _handle_abort(self, current_step: str) -> None:
-        """Handle abort request.
-
-        Args:
-            current_step: The step that was running when abort was requested
-        """
-        self.context.record.set_phase_status(
-            self.phase_type, PhaseStatus.FAILED
-        )
-        self._create_checkpoint(
-            step_name=current_step,
-            success=False,
-            notes="Phase aborted by user request",
-            error_message="User requested abort",
-        )
-
     def _handle_exception(self, exception: Exception) -> None:
         """Handle unexpected exception during phase execution.
 

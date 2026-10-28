@@ -159,8 +159,10 @@ class SSAPVGroup(PVGroup):
         self.cavityGroup: CavityPVGroup = cavityGroup
         self.is_high_energy = is_high_energy
         self._calibration_task: asyncio.Task | None = None
-        # Held from the running check until the task exists. The status write
-        # in between yields, so without it two starts could both pass.
+        # Lets only one calibration start at a time. Starting one checks that
+        # none is running, writes the status, then creates the task. Other PV
+        # writes can run during the status write, so without this lock two
+        # starts could both see "not running".
         self._calibration_start_lock = asyncio.Lock()
 
     CALIBRATION_DURATION_S = 5

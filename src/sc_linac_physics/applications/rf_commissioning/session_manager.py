@@ -288,7 +288,11 @@ class CommissioningSession:
         return self.db.add_operator(name)
 
     def save_active_record(self) -> bool:
-        """Save the active record to database with optimistic locking.
+        """Save the active record, refusing if someone else saved it first.
+
+        Each save checks the record's version number. If another user saved
+        since this one was loaded, the version has changed and nothing is
+        written.
 
         Returns:
             True if saved successfully, False otherwise

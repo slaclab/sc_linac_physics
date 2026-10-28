@@ -31,6 +31,11 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     PiezoWithRFTest,
 )
+from sc_linac_physics.applications.rf_commissioning.phases.cavity_setup import (
+    LastSetupResult,
+    last_characterization,
+    last_ssa_calibration,
+)
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
     PhaseContext,
@@ -146,13 +151,24 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     def _verify_initial_state(self) -> PhaseStepResult:
-        """Check HWMODE, SSA calibration, stepper motion and RFTESTSTS.
+        """Clear the last run's results, then check HWMODE, SSA calibration,
+        stepper motion and RFTESTSTS.
 
-        Only reads; writes nothing.
+        Only reads PVs; writes nothing to the machine.
 
         Refuses a with-RF test that is already running here, before
         setup_rf turns RF off under it. start_test checks again just before
         it writes RFTESTSTRT.
+
+        Clearing here, the first step, rather than only in read_results: a
+        rerun that fails in any step before read_results (setup_rf,
+        wait_for_completion, ...) would otherwise leave the last run's Pass
+        and gains on record.piezo_with_rf, though setup_rf has already turned
+        RF off and the IOC's DFGAIN_NEW may no longer hold that gain. The
+        rerun replaces the old result whether or not it finishes.
+        _clear_measured_fields keeps a note if that old result had been
+        pushed, since the pushed gain is still live in DFGAIN. A dry run
+        clears nothing, as read_results doesn't in a dry run.
 
         Its data says whether the SSA calibration and the characterization
         are recent enough for setup_rf to keep (see _setup_rf), with CALTS
@@ -162,6 +178,7 @@ class PiezoWithRFPhase(PhaseBase):
         """
         if self.context.dry_run:
             return self._dry_run_result("cavity state check")
+        self._clear_measured_fields()
         try:
             if not self.cavity.is_online:
                 return self._failed("Cavity is not online — cannot run test")
@@ -181,19 +198,16 @@ class PiezoWithRFPhase(PhaseBase):
                     "A with-RF test is already running (RFTESTSTS = "
                     "Running) — wait for it to finish"
                 )
-            ssa = self.cavity.ssa
+            ssa_cal = last_ssa_calibration(self.cavity)
+            char = last_characterization(self.cavity)
+            max_age = self.limits.recent_result_seconds
             data = {
-                "ssa_calibration_time": ssa.calibration_timestamp,
-                "ssa_calibration_good": bool(ssa.calibration_result_good),
-                "ssa_calibration_recent": self._ssa_calibration_recent(),
-                "characterization_time": (
-                    self.cavity.characterization_timestamp
-                ),
-                "characterization_complete": (
-                    self.cavity.characterization_status
-                    == linac_utils.CALIBRATION_COMPLETE_VALUE
-                ),
-                "characterization_recent": self._characterization_recent(),
+                "ssa_calibration_time": ssa_cal.timestamp,
+                "ssa_calibration_good": bool(ssa_cal.good),
+                "ssa_calibration_recent": ssa_cal.is_recent(max_age),
+                "characterization_time": char.timestamp,
+                "characterization_complete": char.good,
+                "characterization_recent": char.is_recent(max_age),
             }
         except Exception as exc:
             return self._retry(f"Could not read cavity state: {exc}")
@@ -269,10 +283,11 @@ class PiezoWithRFPhase(PhaseBase):
         amplitude = self._test_amplitude()
         params = self.context.parameters
         try:
-            ssa_stale = not self._ssa_calibration_recent()
-            char_stale = not self._characterization_recent()
-            ssa_time = self.cavity.ssa.calibration_timestamp
-            char_time = self.cavity.characterization_timestamp
+            ssa_cal = last_ssa_calibration(self.cavity)
+            char = last_characterization(self.cavity)
+            max_age = self.limits.recent_result_seconds
+            ssa_stale = not ssa_cal.is_recent(max_age)
+            char_stale = not char.is_recent(max_age)
             calibrate_ssa = ssa_stale and bool(
                 params.get("rerun_ssa_calibration", True)
             )
@@ -302,15 +317,13 @@ class PiezoWithRFPhase(PhaseBase):
         ssa_note = (
             "re-ran SSA calibration"
             if calibrate_ssa
-            else self._kept_note(
-                "SSA calibration", ssa_stale, "CALTS", ssa_time
-            )
+            else self._kept_note("SSA calibration", ssa_stale, "CALTS", ssa_cal)
         )
         char_note = (
             "re-ran characterization (pushed, not reviewed)"
             if characterize
             else self._kept_note(
-                "characterization", char_stale, "PROBECALTS", char_time
+                "characterization", char_stale, "PROBECALTS", char
             )
         )
         note = (
@@ -331,34 +344,16 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     @staticmethod
-    def _kept_note(what: str, stale: bool, pv: str, stamp: datetime) -> str:
+    def _kept_note(
+        what: str, stale: bool, pv: str, last: LastSetupResult
+    ) -> str:
         """setup_rf's note for a result it did not re-run."""
         if stale:
             return (
-                f"kept a stale {what} ({pv} {stamp:%Y-%m-%d %H:%M}; "
+                f"kept a stale {what} ({pv} {last.timestamp:%Y-%m-%d %H:%M}; "
                 "operator chose Skip)"
             )
         return f"kept the {what} from the last hour"
-
-    def _is_recent(self, timestamp: datetime) -> bool:
-        age = (datetime.now() - timestamp).total_seconds()
-        return age < self.limits.recent_result_seconds
-
-    def _ssa_calibration_recent(self) -> bool:
-        """CALTS under recent_result_seconds old and CALSTAT Good."""
-        ssa = self.cavity.ssa
-        return (
-            self._is_recent(ssa.calibration_timestamp)
-            and ssa.calibration_result_good
-        )
-
-    def _characterization_recent(self) -> bool:
-        """PROBECALTS under recent_result_seconds old, PROBECALSTS Complete."""
-        return (
-            self._is_recent(self.cavity.characterization_timestamp)
-            and self.cavity.characterization_status
-            == linac_utils.CALIBRATION_COMPLETE_VALUE
-        )
 
     def _setup_piezo(self) -> PhaseStepResult:
         """Enable the piezo, then put it in manual.
@@ -508,6 +503,9 @@ class PiezoWithRFPhase(PhaseBase):
         """
         if self.context.dry_run:
             return self._dry_run_result("result read")
+        # verify_initial_state already cleared the record at the start of
+        # the run. Clear again so a RETRY of this step, or a call outside
+        # run(), never mixes gains from two reads.
         self._clear_measured_fields()
         piezo = self.cavity.piezo
         try:
@@ -570,9 +568,10 @@ class PiezoWithRFPhase(PhaseBase):
         PhaseBase.run() goes straight from read_results to here, so the gate
         is in this step: it refuses unless
         context.parameters["confirmed_detune_gain"] equals the DFGAIN_NEW that
-        read_results stored. Just before pushing it re-reads DFGAIN_NEW and
-        RFTESTSTS from the IOC, and refuses unless the gain is unchanged and
-        RFTESTSTS still reads Complete.
+        read_results stored. Just before pushing it re-reads DFGAIN_NEW,
+        RFTESTSTS and RFTESTSTAT from the IOC, and refuses unless the gain is
+        unchanged, RFTESTSTS still reads Complete and RFTESTSTAT still reads
+        the Pass or Warning that read_results stored.
 
         It writes PUSH_DFGAIN.PROC = 1, then SAVE_DFGAIN.PROC = 1, each with
         wait=True: PV.put returns once the IOC confirms the record processed,
@@ -662,11 +661,19 @@ class PiezoWithRFPhase(PhaseBase):
         )
 
     def _check_before_push(self) -> PhaseStepResult | None:
-        """Re-read DFGAIN_NEW and RFTESTSTS just before pushing.
+        """Re-read DFGAIN_NEW, RFTESTSTS and RFTESTSTAT just before pushing.
 
-        Both reads pass use_monitor=False, so they ask the IOC now rather than
-        return the last monitor update. RFTESTSTS must still read Complete:
-        Running or Crash means another test has run since review.
+        All three reads pass use_monitor=False, so they ask the IOC now rather
+        than return the last monitor update. RFTESTSTS must still read
+        Complete: Running or Crash means another test has run since review.
+        RFTESTSTAT must still read the label read_results stored in
+        self._rf_test_status (Pass or Warning). Another run can end Complete
+        with Fail (2) and leave RFTESTSTS at Complete; the RFTESTSTAT check
+        refuses that even if DFGAIN_NEW reads the same as at review.
+
+        CHECK: does a with-RF run that ends in Fail rewrite DFGAIN_NEW, or
+        leave the last run's value? If it leaves it, the DFGAIN_NEW check
+        alone would not catch a Fail run since review.
 
         Returns a result that stops the push, or None if it can go ahead.
         """
@@ -675,6 +682,9 @@ class PiezoWithRFPhase(PhaseBase):
             now_gain = float(piezo.detunegain_new_pv_obj.get(use_monitor=False))
             now_status = int(
                 piezo.withrf_check_status_pv_obj.get(use_monitor=False)
+            )
+            now_test_status = int(
+                piezo.withrf_status_pv_obj.get(use_monitor=False)
             )
         except Exception as exc:
             return self._retry(f"Could not re-read before pushing: {exc}")
@@ -686,6 +696,18 @@ class PiezoWithRFPhase(PhaseBase):
             return self._failed(
                 f"RFTESTSTS reads {name}, not Complete — another with-RF test "
                 "has run since review; nothing pushed. Rerun the test."
+            )
+        now_label = self._TEST_STATUS_LABELS.get(now_test_status)
+        if now_label != self._rf_test_status:
+            name = now_label or (
+                "Fail"
+                if now_test_status == linac_utils.PIEZO_WITH_RF_FAIL_VALUE
+                else str(now_test_status)
+            )
+            return self._failed(
+                f"RFTESTSTAT reads {name}, not the {self._rf_test_status} "
+                "reviewed — another with-RF test has run since review; "
+                "nothing pushed. Rerun the test."
             )
         if now_gain != self._detune_gain:
             return self._failed(

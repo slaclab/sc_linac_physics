@@ -99,9 +99,20 @@ class _RecordLifecycleMixin:
         self._select_tab_for_record_phase(record)
 
     def _select_tab_for_record_phase(self, record) -> None:
-        """Select the tab that matches the record's current phase."""
+        """Select the tab for the workflow's current phase.
+
+        The workflow run's current_phase (the same projection the tab icons
+        use) moves on when a phase instance completes. record.current_phase
+        does not: PhaseBase only sets it when a phase starts. Using the record
+        left the window on Piezo Pre-RF after the log said "Advanced to
+        ssa_char". The record is the fallback when there is no projection.
+        """
+        projection = self.session.get_active_phase_projection()
+        current_phase = (
+            projection.get("current_phase") if projection else None
+        ) or record.current_phase
         for i, spec in enumerate(self.phase_specs):
-            if spec.phase == record.current_phase:
+            if spec.phase == current_phase:
                 self.tabs.setCurrentIndex(i)
                 break
 

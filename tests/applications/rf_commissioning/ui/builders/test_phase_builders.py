@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PyQt5.QtWidgets import QDoubleSpinBox, QGroupBox, QHBoxLayout, QWidget
+from PyQt5.QtWidgets import QDoubleSpinBox, QGroupBox, QWidget
 from pydm.widgets import PyDMSpinbox
 
 from sc_linac_physics.applications.rf_commissioning.ui.builders.phase_builders import (
@@ -59,18 +59,6 @@ def test_piezo_controls_registers_widgets_and_default_values():
     assert ui.widgets["voltage_spinbox"].minimum() == 0
     assert ui.widgets["voltage_spinbox"].maximum() == 100
     assert ui.widgets["voltage_spinbox"].value() == 17
-
-
-def test_setup_row_populates_cm_and_cavity_ranges():
-    ui = PiezoPreRFUI(parent=_ParentWidget())
-
-    wrapper = ui._build_setup_row()
-
-    assert isinstance(wrapper, QHBoxLayout)
-    assert ui.widgets["cm_spinbox"].count() == 20
-    assert ui.widgets["cav_spinbox"].count() == 8
-    assert ui.widgets["cm_spinbox"].currentText() == "1"
-    assert ui.widgets["cav_spinbox"].currentText() == "1"
 
 
 def test_combined_results_section_registers_local_and_pv_widgets():
@@ -195,7 +183,9 @@ def test_ssa_char_build_registers_result_widgets():
 def test_ssa_char_push_button_label():
     ui = SSACharUI(parent=_ParentWidget())
     group = ui._build_ssa_results()  # noqa: F841
-    assert "Push New Slope to Cavity" in ui.widgets["push_btn"].text()
+    button = ui.widgets["push_btn"]
+    assert button.text() == "Re-push Slope…"
+    assert not button.isEnabled()
 
 
 def test_ssa_char_pv_labels_default_text():

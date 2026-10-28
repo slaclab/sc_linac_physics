@@ -49,8 +49,9 @@ _executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 4)
 class _ChannelWatcher(PyDMLabel):
     """Zero-size PyDMLabel that delivers channel updates to a callback.
 
-    bare PyDMChannel.value_slot does not receive live value changes;
-    PyDMWidget subclasses do.
+    A plain PyDMChannel with a value_slot callback never receives value
+    changes. A PyDM widget does, so this zero-size PyDM label receives the
+    live value changes and passes each one to the callback.
     """
 
     def __init__(self, init_channel: str, callback):
@@ -356,7 +357,12 @@ class GUICavity:
     def trigger_setup(self):
         if self.locked:
             return
-        # Read checkbox state now on the main thread; EPICS I/O runs off it.
+        # Checkbox states are read here, on the main thread, into ssa_cal,
+        # auto_tune, cav_char and rf_ramp. _run, defined below, runs on a
+        # background thread so the window doesn't freeze while it writes the
+        # request PVs and starts setup. Qt only allows widgets like these
+        # checkboxes to be used from the main thread, so _run writes those
+        # four variables and never reads the checkboxes itself.
         ssa_cal = self.settings.ssa_cal_checkbox.isChecked()
         auto_tune = self.settings.auto_tune_checkbox.isChecked()
         cav_char = self.settings.cav_char_checkbox.isChecked()

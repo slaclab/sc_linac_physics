@@ -141,17 +141,48 @@ def test_start_test_needs_an_operator(controller, view):
     controller.bridge.start_segment.assert_not_called()
 
 
-def test_abort_reaches_the_cavity_and_clearing_resets_its_flag(
-    controller, cavity
+def test_start_test_runs_nothing_when_the_attempt_cannot_start(
+    controller, session, view
 ):
+    session.start_active_phase_instance.return_value = None
+    controller.on_start_test()
+    controller.bridge.start_segment.assert_not_called()
+    assert "nothing was run" in view.show_error.call_args.args[0]
+    assert controller.run is None
+
+
+class _ThreadRecorder:
+    """Stands in for threading.Thread: records the call, runs nothing."""
+
+    made = []
+
+    def __init__(self, target, args=(), daemon=None):
+        self.target, self.args, self.daemon = target, args, daemon
+        self.started = False
+        _ThreadRecorder.made.append(self)
+
+    def start(self):
+        self.started = True
+
+
+def test_abort_sets_the_flag_now_and_writes_the_status_pv_off_thread(
+    controller, cavity, monkeypatch
+):
+    _ThreadRecorder.made = []
+    monkeypatch.setattr(module.threading, "Thread", _ThreadRecorder)
     controller.on_start_test()
     controller.run.clear_abort()  # what RunnerBridge does before a segment
     assert cavity.abort_flag is False
-    controller.bridge.start_segment.reset_mock()
     controller.bridge._busy = True  # a segment is running
     controller.on_abort()
     assert controller.context.abort_requested is True
-    cavity.request_abort.assert_called_once()
+    assert cavity.abort_flag is True
+    cavity.request_abort.assert_not_called()
+    cavity.set_status_message.assert_not_called()  # not on this thread
+    (thread,) = _ThreadRecorder.made
+    assert thread.started and thread.daemon
+    assert thread.target is cavity.set_status_message
+    assert thread.args[0] == "Abort requested"
 
 
 # ------------------------------------------------------- stale prompts
@@ -242,7 +273,11 @@ def test_decline_skips_the_push_and_completes(controller, record):
     assert skip.step_name == "push_detune_gain"
     assert skip.measurements["skipped_by"] == "lisa"
     assert skip.measurements["justification"] == "gain looks wrong"
-    assert record.piezo_with_rf is None  # push_detune_gain never ran
+    # phase_history is not saved, so the reason also goes in the notes.
+    assert record.piezo_with_rf.notes == (
+        "push_detune_gain skipped by lisa: gain looks wrong"
+    )
+    assert record.piezo_with_rf.detune_gain_pushed is False
 
 
 def test_decline_without_a_justification_runs_nothing(controller, view):
@@ -265,6 +300,37 @@ def test_finish_completes_the_instance_and_announces_it(
     session.add_measurement_to_history.assert_called_once()
     view.on_phase_finished.assert_called_with("COMPLETED")
     assert controller.stage is None
+
+
+def test_a_failed_save_keeps_the_instance_and_push_retries_only_the_save(
+    controller, session, view, record, qtbot
+):
+    to_review(controller)
+    record.piezo_with_rf = PiezoWithRFTest(detune_gain=0.3)
+    controller.on_push()
+    session.save_active_record.return_value = False
+    session.complete_active_phase_instance.return_value = True
+    session.add_measurement_to_history.return_value = False
+    controller._on_segment_finished(completed(record_results={}))
+
+    assert controller.stage == "unsaved"
+    assert controller._active_phase_instance_id == 42
+    assert controller._unsaved == {"save", "history"}
+    view.on_phase_finished.assert_not_called()
+    assert "writes nothing to the cavity" in view.show_error.call_args.args[0]
+    view.set_review_enabled.assert_called_with(True)
+
+    controller.bridge.start_segment.reset_mock()
+    session.save_active_record.return_value = True
+    session.add_measurement_to_history.return_value = True
+    with qtbot.waitSignal(controller.phase_completed):
+        controller.on_push()
+    controller.bridge.start_segment.assert_not_called()  # no second push
+    session.complete_active_phase_instance.assert_called_once()
+    assert session.add_measurement_to_history.call_count == 2
+    view.on_phase_finished.assert_called_with("COMPLETED")
+    assert controller.stage is None
+    assert controller._active_phase_instance_id is None
 
 
 def test_a_failed_segment_fails_the_instance(controller, session, view):
@@ -346,6 +412,24 @@ def test_step_mode_is_copied_onto_the_next_run(controller, view):
     view.set_next_enabled.assert_called_with(False)
     controller.on_toggle_step_mode()
     assert not controller.run.step_mode
+
+
+def test_step_mode_does_not_hold_between_start_test_and_the_wait(
+    controller, view
+):
+    controller.on_toggle_step_mode()
+    controller.on_start_test()
+    controller._on_step_started("start_test", 3, 6)
+    assert controller.run._step_permits == 1  # wait_for_completion's Next
+    view.set_next_enabled.reset_mock()
+    controller._on_holding("wait_for_completion", "step_mode")
+    view.set_next_enabled.assert_not_called()
+
+
+def test_start_test_gives_no_extra_next_outside_step_mode(controller):
+    controller.on_start_test()
+    controller._on_step_started("start_test", 3, 6)
+    assert controller.run._step_permits == 0
 
 
 def test_step_label_counts_across_all_nine_steps(controller, view):
