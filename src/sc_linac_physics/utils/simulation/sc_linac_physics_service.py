@@ -489,7 +489,9 @@ class SCLinacPhysicsService(Service):
         )
         cavity_group.ssa_group = ssa_group
         self.add_pvs(ssa_group)
-        self.add_pvs(CavFaultPVGroup(prefix=cav_prefix))
+        self.add_pvs(
+            CavFaultPVGroup(prefix=cav_prefix, cavity_group=cavity_group)
+        )
         jt_prefix = f"CLIC:{_cryo_name(cm_name)}:3001:PVJT:"
         jt_group = JTPVGroup(prefix=jt_prefix, cm_group=cm_group)
         self.add_pvs(jt_group)
