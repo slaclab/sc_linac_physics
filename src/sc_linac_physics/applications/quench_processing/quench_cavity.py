@@ -347,6 +347,9 @@ class QuenchCavity(Cavity):
         for time_0, timestamp in enumerate(time_data):
             if timestamp >= 0:
                 break
+        else:
+            # No sample at t >= 0: keep nothing, not the last sample
+            time_0 = len(time_data)
 
         fault_data = fault_data[time_0:]
         time_data = time_data[time_0:]
@@ -360,6 +363,19 @@ class QuenchCavity(Cavity):
 
         fault_data = fault_data[:end_decay]
         time_data = time_data[:end_decay]
+
+        if len(fault_data) == 0:
+            # No sample at t >= 0, or the amplitude is already below 0.002
+            # there. Same answer as a failed fit: report real, so neither
+            # caller resets the interlock.
+            # CHECK: does an empty decay mean the buffer missed this fault
+            # (never written, or not re-armed), rather than a fault with no
+            # decay to see?
+            self.logger.warning(
+                "No decay in fault waveform (no sample at t >= 0 above"
+                " 0.002), cannot calculate loaded Q. Assuming real quench."
+            )
+            return True
 
         saved_loaded_q = self.current_q_loaded_pv_obj.get()
         self.pre_quench_amp = fault_data[0]
