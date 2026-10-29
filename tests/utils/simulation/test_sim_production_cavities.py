@@ -179,7 +179,15 @@ def test_unknown_prefix_keeps_the_old_fault_time_axis():
     assert np.count_nonzero(t < 0) == 4096
 
 
-def test_decay_is_written_on_the_production_axis():
+@pytest.fixture
+def no_noise():
+    # _generate_decay_waveform adds np.random.randn noise; zero it so the
+    # final-sample check doesn't fail when noise lands above 0.01 MV.
+    with patch.object(np.random, "randn", lambda n: np.zeros(n)):
+        yield
+
+
+def test_decay_is_written_on_the_production_axis(no_noise):
     cavity = make_cavity("ACCL:L1B:H110:", is_hl=True)
     t, a = cavity._generate_decay_waveform(5.0, 1e7)
     assert len(t) == len(a) == 16384
@@ -188,7 +196,7 @@ def test_decay_is_written_on_the_production_axis():
     assert a[-1] < 0.01  # decayed by the end
 
 
-def test_l4b_buffer_has_no_decay():
+def test_l4b_buffer_has_no_decay(no_noise):
     cavity = make_cavity("ACCL:L4B:3710:")
     t, a = cavity._generate_decay_waveform(16.0, 4e7)
     assert len(a) == 2048
