@@ -154,6 +154,7 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
     "displays/**/*",
     "applications/q0/calibrations/*",
     "applications/q0/data/*",
+    "utils/simulation/data/*",
     "*.ui",
     "*.yaml",
     "*.yml",

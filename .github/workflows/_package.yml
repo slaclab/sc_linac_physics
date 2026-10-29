@@ -35,6 +35,7 @@ jobs:
         run: |
           TARBALL=$(ls dist/*.tar.gz)
           tar -tzf "$TARBALL" | grep -q "faults.csv" || (echo "ERROR: faults.csv missing from package!" && exit 1)
+          tar -tzf "$TARBALL" | grep -q "production_cavities.csv" || (echo "ERROR: production_cavities.csv missing from package!" && exit 1)
           echo "Data files in package:"
           tar -tzf "$TARBALL" | grep -E '\.(csv|yaml|yml|json|ui|mat)$' || true
 
@@ -45,6 +46,7 @@ jobs:
           pip install "$(ls dist/*.whl)"
           python -c "import sc_linac_physics; print('Import OK:', sc_linac_physics.__version__)"
           python3 -c "from pathlib import Path; import sc_linac_physics; p = Path(sc_linac_physics.__file__).parent / 'displays/cavity_display/utils/faults.csv'; assert p.exists(), f'faults.csv not found at {p}'; print('faults.csv OK')"
+          python3 -c "from pathlib import Path; import sc_linac_physics; p = Path(sc_linac_physics.__file__).parent / 'utils/simulation/data/production_cavities.csv'; assert p.exists(), f'production_cavities.csv not found at {p}'; print('production_cavities.csv OK')"
           sc-linac --help > /dev/null 2>&1 && echo "CLI OK" || echo "CLI skipped (may require display)"
           deactivate
 

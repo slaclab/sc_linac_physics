@@ -1,5 +1,8 @@
 import asyncio
+import csv
 from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
 from random import randrange, randint
 from typing import TYPE_CHECKING
 
@@ -21,6 +24,18 @@ from caproto.server import (
 )
 
 from sc_linac_physics.utils.sc_linac.linac_utils import (
+    CAVITY_SCALE_LOWER_LIMIT,
+    CAVITY_SCALE_LOWER_LIMIT_HL,
+    CAVITY_SCALE_UPPER_LIMIT,
+    CAVITY_SCALE_UPPER_LIMIT_HL,
+    HW_MODE_OFFLINE_VALUE,
+    HW_MODE_ONLINE_VALUE,
+    LOADED_Q_LOWER_LIMIT,
+    LOADED_Q_LOWER_LIMIT_HE,
+    LOADED_Q_LOWER_LIMIT_HL,
+    LOADED_Q_UPPER_LIMIT,
+    LOADED_Q_UPPER_LIMIT_HE,
+    LOADED_Q_UPPER_LIMIT_HL,
     NOMINAL_PULSED_ONTIME,
 )
 
@@ -31,6 +46,55 @@ if TYPE_CHECKING:
 
 
 WAVEFORM_POINTS = 16384
+
+# ADES_MAX_<group> PV suffix -> CavityPVGroup attribute.
+ADES_MAX_LIMIT_ATTRS = {
+    "ADES_MAX_SRF": "adesMaxSRF",
+    "ADES_MAX_OPS": "adesMaxOPS",
+    "ADES_MAX_RF": "adesMaxRF",
+    "ADES_MAX_CRYO": "adesMaxCRYO",
+    "ADES_MAX_ADMIN": "adesMaxADMIN",
+}
+
+PRODUCTION_CAVITIES_CSV = (
+    Path(__file__).parent / "data" / "production_cavities.csv"
+)
+
+
+@lru_cache(maxsize=1)
+def _load_production_cavities() -> dict[str, dict[str, float]]:
+    """Per-cavity starting values, keyed by "ACCL:L0B:0110".
+
+    Each column is named for the PV it fills. All 480 cavities were read
+    with caget on lcls-srv01 on 2026-10-28. HWMODE is the enum index
+    (0 Online, 1 Maintenance, 2 Offline).
+
+    One deliberate difference from production: production L4B reads
+    ADES_MAX_SRF/OPS/RF 21.798 and ADES_MAX_ADMIN 18.684, which Lisa
+    Zacarias says is wrong. The file has 26 for those four on every L4B
+    cavity. ADES_MAX_CRYO stays at its production 31.
+
+    The rest of L4B is copied as read: ACON and ADES 0, QLOADED 4e7,
+    CAV:SCALER_SEL.B 1 and DF_COLD 0 on every cavity.
+    """
+    with open(PRODUCTION_CAVITIES_CSV, newline="") as f:
+        return {
+            row.pop("cavity"): {pv: float(v) for pv, v in row.items()}
+            for row in csv.DictReader(f)
+        }
+
+
+def ades_max_for(limits, hw_mode: int) -> float:
+    """ADES_MAX in MV: 0 if HWMODE is Offline, else the lowest limit.
+
+    Derived from production, not from the IOC source: on 2026-10-28 this
+    rule gave the ADES_MAX read on all 480 cavities. All 20 Offline
+    cavities read 0, and every other cavity read its lowest limit.
+    CHECK: is that how the IOC computes ADES_MAX?
+    """
+    if hw_mode == HW_MODE_OFFLINE_VALUE:
+        return 0.0
+    return min(limits)
 
 
 def _enum_to_int(value, enum_strings) -> int:
@@ -170,12 +234,63 @@ class CavityPVGroup(PVGroup):
         ),
         read_only=True,
     )
+    # Amplitude limits in MV, one per group. ADES_MAX comes from
+    # ades_max_for and is recomputed whenever a limit or HWMODE is
+    # written. Each cavity starts at its row in data/production_cavities.csv
+    # (see _load_production_cavities); 21 MV is only the fallback for a
+    # prefix missing from the file.
     adesMaxSRF: PvpropertyFloat = pvproperty(
         value=21, name="ADES_MAX_SRF", dtype=ChannelType.FLOAT
+    )
+    adesMaxOPS: PvpropertyFloat = pvproperty(
+        value=21, name="ADES_MAX_OPS", dtype=ChannelType.FLOAT
+    )
+    adesMaxRF: PvpropertyFloat = pvproperty(
+        value=21, name="ADES_MAX_RF", dtype=ChannelType.FLOAT
+    )
+    adesMaxCRYO: PvpropertyFloat = pvproperty(
+        value=21, name="ADES_MAX_CRYO", dtype=ChannelType.FLOAT
+    )
+    adesMaxADMIN: PvpropertyFloat = pvproperty(
+        value=21, name="ADES_MAX_ADMIN", dtype=ChannelType.FLOAT
     )
     adesMax: PvpropertyFloat = pvproperty(
         value=21, name="ADES_MAX", dtype=ChannelType.FLOAT
     )
+
+    async def _recompute_ades_max(self, changed: str = None, value=None):
+        """Write ADES_MAX from the limits and self.hw_mode.
+
+        A limit's putter passes its PV suffix and new value, because
+        caproto stores the value only after the putter returns.
+        """
+        limits = {
+            pv: getattr(self, attr).value
+            for pv, attr in ADES_MAX_LIMIT_ATTRS.items()
+        }
+        if changed:
+            limits[changed] = value
+        await self.adesMax.write(ades_max_for(limits.values(), self.hw_mode))
+
+    @adesMaxSRF.putter
+    async def adesMaxSRF(self, instance, value):
+        await self._recompute_ades_max("ADES_MAX_SRF", value)
+
+    @adesMaxOPS.putter
+    async def adesMaxOPS(self, instance, value):
+        await self._recompute_ades_max("ADES_MAX_OPS", value)
+
+    @adesMaxRF.putter
+    async def adesMaxRF(self, instance, value):
+        await self._recompute_ades_max("ADES_MAX_RF", value)
+
+    @adesMaxCRYO.putter
+    async def adesMaxCRYO(self, instance, value):
+        await self._recompute_ades_max("ADES_MAX_CRYO", value)
+
+    @adesMaxADMIN.putter
+    async def adesMaxADMIN(self, instance, value):
+        await self._recompute_ades_max("ADES_MAX_ADMIN", value)
 
     pdes: PvpropertyFloat = pvproperty(value=0.0, name="PDES")
     pmean: PvpropertyFloat = pvproperty(value=0.0, name="PMEAN")
@@ -276,13 +391,19 @@ class CavityPVGroup(PVGroup):
 
     @qloaded_new.startup
     async def qloaded_new(self, instance, async_lib):
-        # HL tolerance [1.5e7, 3.5e7]; regular [2.5e7, 5.1e7]
-        initial_q = 2.5e7 if self.is_hl else 4e7
+        if self.production:
+            # The _NEW values start equal to the current production ones.
+            initial_q = self.production["QLOADED"]
+            initial_scale = self.production["CAV:SCALER_SEL.B"]
+        else:
+            # HL tolerance [1.5e7, 3.5e7]; regular [2.5e7, 5.1e7]
+            initial_q = 2.5e7 if self.is_hl else 4e7
+            # HL scale tolerance [5, 25]; regular [10, 125]
+            initial_scale = 15.0 if self.is_hl else 30.0
         await self.qloaded_new.write(initial_q)
         await self.qloaded.write(initial_q)
-        # HL scale tolerance [5, 25]; regular [10, 125]
-        await self.scale_new.write(15.0 if self.is_hl else 30.0)
-        await self.current_cav_scale.write(15.0 if self.is_hl else 30.0)
+        await self.scale_new.write(initial_scale)
+        await self.current_cav_scale.write(initial_scale)
 
     scale_new = pvproperty(
         name="CAV:CAL_SCALEB_NEW", value=30.0, dtype=ChannelType.DOUBLE
@@ -498,6 +619,33 @@ class CavityPVGroup(PVGroup):
         self.piezo_group = None
         self._characterization_task: asyncio.Task | None = None
 
+        # HWMODE is served by CavFaultPVGroup, which keeps this in step.
+        self.hw_mode: int = HW_MODE_ONLINE_VALUE
+        self.production = _load_production_cavities().get(prefix.rstrip(":"))
+        if self.production:
+            self._load_production_values(self.production)
+
+    def _load_production_values(self, row: dict[str, float]):
+        """Start this cavity at its production values.
+
+        Runs before the server starts, so it sets values directly and no
+        putter runs. QLOADED, CAV:SCALER_SEL.B and DF_COLD are applied in
+        their startup hooks, which would otherwise overwrite them.
+        """
+        for pv, attr in ADES_MAX_LIMIT_ATTRS.items():
+            getattr(self, attr)._data["value"] = row[pv]
+        self.hw_mode = int(row["HWMODE"])
+        self.adesMax._data["value"] = ades_max_for(
+            [row[pv] for pv in ADES_MAX_LIMIT_ATTRS], self.hw_mode
+        )
+        self.acon._data["value"] = row["ACON"]
+        # Same relations the ADES and GDES putters keep:
+        # AACT = AACTMEAN = ADES, and GDES = GACT = ADES / length.
+        for channel in (self.ades, self.aact, self.amean):
+            channel._data["value"] = row["ADES"]
+        for channel in (self.gdes, self.gact):
+            channel._data["value"] = row["ADES"] / self.length
+
     @property
     def power(self):
         """Calculate RF power dissipated in cavity (Watts)."""
@@ -551,7 +699,10 @@ class CavityPVGroup(PVGroup):
         await instance.write(val)
         await self.detune_rfs.write(val)
         await self.detune_chirp.write(val)
-        await self.df_cold.write(randint(-10000, 200000))
+        if self.production:
+            await self.df_cold.write(int(self.production["DF_COLD"]))
+        else:
+            await self.df_cold.write(randint(-10000, 200000))
 
     @detune.putter
     async def detune(self, instance, value):
@@ -745,8 +896,41 @@ class CavityPVGroup(PVGroup):
             )
             await self.probe_cal_stat.write("Crash")
             return
+        q, scale = self._simulated_characterization_result()
+        await self.qloaded_new.write(q)
+        await self.scale_new.write(scale)
         await self.probe_cal_stat.write("Complete")
         self.log.info(f"{self.prefix} cavity characterization complete")
+
+    def _simulated_characterization_result(self) -> tuple[float, float]:
+        """QLOADED_NEW and CAV:CAL_SCALEB_NEW for a run that completes.
+
+        Each is the cavity's current QLOADED or CAV:SCALER_SEL.B when that
+        is inside the limits Cavity.finish_characterization checks, and the
+        sim's old default otherwise. Production L4B scales all read 1,
+        below the limit of 10, so without this a simulated L4B cavity
+        could never pass characterization.
+        """
+        if self.is_hl:
+            q_limits = (LOADED_Q_LOWER_LIMIT_HL, LOADED_Q_UPPER_LIMIT_HL)
+            scale_limits = (
+                CAVITY_SCALE_LOWER_LIMIT_HL,
+                CAVITY_SCALE_UPPER_LIMIT_HL,
+            )
+            defaults = (2.5e7, 15.0)
+        else:
+            if self.prefix.startswith("ACCL:L4B:"):
+                q_limits = (LOADED_Q_LOWER_LIMIT_HE, LOADED_Q_UPPER_LIMIT_HE)
+            else:
+                q_limits = (LOADED_Q_LOWER_LIMIT, LOADED_Q_UPPER_LIMIT)
+            scale_limits = (CAVITY_SCALE_LOWER_LIMIT, CAVITY_SCALE_UPPER_LIMIT)
+            defaults = (4e7, 30.0)
+        q, scale = self.qloaded.value, self.current_cav_scale.value
+        if not q_limits[0] <= q <= q_limits[1]:
+            q = defaults[0]
+        if not scale_limits[0] <= scale <= scale_limits[1]:
+            scale = defaults[1]
+        return q, scale
 
     @interlock_reset.putter
     async def interlock_reset(self, instance, value):
