@@ -67,7 +67,13 @@ def _load_production_cavities() -> dict[str, dict[str, float]]:
 
     Each column is named for the PV it fills. All 480 cavities were read
     with caget on lcls-srv01 on 2026-10-28. HWMODE is the enum index
-    (0 Online, 1 Maintenance, 2 Offline).
+    (0 Online, 1 Maintenance, 2 Offline). The FLTTWF_* columns describe
+    the CAV:FLTTWF time axis rather than holding a PV value (see
+    _fault_time_axis).
+
+    CHECK: is a cavity's fault buffer always captured with this layout,
+    or does its spacing change with the decimation setting at the time
+    of the fault?
 
     One deliberate difference from production: production L4B reads
     ADES_MAX_SRF/OPS/RF 21.798 and ADES_MAX_ADMIN 18.684, which Lisa
@@ -75,7 +81,9 @@ def _load_production_cavities() -> dict[str, dict[str, float]]:
     cavity. ADES_MAX_CRYO stays at its production 31.
 
     The rest of L4B is copied as read: ACON and ADES 0, QLOADED 4e7,
-    CAV:SCALER_SEL.B 1 and DF_COLD 0 on every cavity.
+    CAV:SCALER_SEL.B 1 and DF_COLD 0 on every cavity. Most L4B fault
+    buffers also put every sample before t = 0, so a simulated L4B quench
+    has no decay in it.
     """
     with open(PRODUCTION_CAVITIES_CSV, newline="") as f:
         return {
@@ -784,7 +792,31 @@ class CavityPVGroup(PVGroup):
 
         self.log.info(
             f"Waveforms written: {len(amplitude_wf)} points, "
-            f"A0={amplitude_wf[WAVEFORM_POINTS // 4]:.3f} MV"
+            f"A0={amplitude_wf[np.argmax(time_wf >= 0)]:.3f} MV"
+        )
+
+    def _fault_time_axis(self) -> np.ndarray:
+        """CAV:FLTTWF in seconds, with t = 0 at the fault.
+
+        With production data, this is the cavity's own buffer as read on
+        lcls-srv01 on 2026-10-28: FLTTWF_POINTS samples FLTTWF_DT apart,
+        FLTTWF_PRE_POINTS of them before t = 0. Those three were derived
+        from the first and last time values, printed to 4 significant
+        figures, so the spacing is good to about 1 part in 10^4.
+
+        Without production data: 16384 points from -500 us to +1500 us,
+        a quarter of them before t = 0, as before.
+        """
+        if self.production:
+            points = int(self.production["FLTTWF_POINTS"])
+            pre = int(self.production["FLTTWF_PRE_POINTS"])
+            return (np.arange(points) - pre) * self.production["FLTTWF_DT"]
+        pre = WAVEFORM_POINTS // 4
+        return np.concatenate(
+            [
+                np.linspace(-500e-6, 0, pre, endpoint=False),
+                np.linspace(0, 1500e-6, WAVEFORM_POINTS - pre),
+            ]
         )
 
     def _generate_decay_waveform(
@@ -798,14 +830,10 @@ class CavityPVGroup(PVGroup):
         Returns:
             Tuple of (time_array_in_seconds, amplitude_array)
         """
-        total_points = WAVEFORM_POINTS
-        pre_quench_points = WAVEFORM_POINTS // 4  # 25% before quench
-        post_quench_points = total_points - pre_quench_points
-
-        # Time in SECONDS (not microseconds)
-        time_pre = np.linspace(-500e-6, 0, pre_quench_points, endpoint=False)
-        time_post = np.linspace(0, 1500e-6, post_quench_points)
-        time_wf = np.concatenate([time_pre, time_post])
+        time_wf = self._fault_time_axis()
+        total_points = len(time_wf)
+        pre_quench_points = int(np.count_nonzero(time_wf < 0))
+        time_post = time_wf[pre_quench_points:]
 
         # Amplitude waveform
         amplitude_wf = np.zeros(total_points, dtype=np.float64)
