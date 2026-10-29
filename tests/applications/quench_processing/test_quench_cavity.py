@@ -645,6 +645,35 @@ class TestValidateQuench:
 
         assert is_real is True
 
+    def _set_waveforms(self, cavity, time_data, fault_data):
+        cavity._fault_time_waveform_pv_obj = Mock(
+            get=Mock(return_value=time_data)
+        )
+        cavity._fault_waveform_pv_obj = Mock(get=Mock(return_value=fault_data))
+        cavity._current_q_loaded_pv_obj = Mock(get=Mock(return_value=3e7))
+
+    def test_validate_quench_all_negative_time(self, cavity):
+        """Buffer with no sample at t >= 0 (L4B shape on 2026-10-28)."""
+        time_data = np.linspace(-0.5, -0.001, 2048)
+        fault_data = np.full(2048, 1e-5)
+        self._set_waveforms(cavity, time_data, fault_data)
+
+        assert cavity.validate_quench(wait_for_update=False) is True
+
+    def test_validate_quench_all_negative_time_with_amplitude(self, cavity):
+        """No sample at t >= 0 must not fall back to the last sample."""
+        time_data = np.linspace(-0.5, -0.001, 1638)
+        fault_data = np.full(1638, 16.0)
+        self._set_waveforms(cavity, time_data, fault_data)
+
+        assert cavity.validate_quench(wait_for_update=False) is True
+
+    def test_validate_quench_all_zero_buffer(self, cavity):
+        """Never-written buffer (L0B-L3B on 2026-10-28): time and amp 0."""
+        self._set_waveforms(cavity, np.zeros(2048), np.zeros(2048))
+
+        assert cavity.validate_quench(wait_for_update=False) is True
+
 
 class TestResetQuench:
     """Tests for reset_quench method."""

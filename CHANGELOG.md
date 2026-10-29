@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v9.59.3 (2026-10-29)
+
+### Bug Fixes
+
+- **quench**: Don't crash validate_quench on a fault buffer with no decay
+  ([#473](https://github.com/slaclab/sc_linac_physics/pull/473),
+  [`61784d6`](https://github.com/slaclab/sc_linac_physics/commit/61784d6f410bb8532630044bf65253a511ddcffa))
+
+### Build System
+
+- Drop MANIFEST.in excludes that never match
+  ([#470](https://github.com/slaclab/sc_linac_physics/pull/470),
+  [`746086d`](https://github.com/slaclab/sc_linac_physics/commit/746086d86c2e5957bcadd4bf1d17e3034610eea4))
+
+### Continuous Integration
+
+- Skip data-folder CSVs in the PR size count
+  ([#472](https://github.com/slaclab/sc_linac_physics/pull/472),
+  [`487e65c`](https://github.com/slaclab/sc_linac_physics/commit/487e65c0afad6b4c8a6a0f1ef153d89a2c2b41d8))
+
+
 ## v9.59.2 (2026-10-28)
 
 ### Refactoring
