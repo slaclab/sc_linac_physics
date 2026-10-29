@@ -24,8 +24,18 @@ from caproto.server import (
 )
 
 from sc_linac_physics.utils.sc_linac.linac_utils import (
+    CAVITY_SCALE_LOWER_LIMIT,
+    CAVITY_SCALE_LOWER_LIMIT_HL,
+    CAVITY_SCALE_UPPER_LIMIT,
+    CAVITY_SCALE_UPPER_LIMIT_HL,
     HW_MODE_OFFLINE_VALUE,
     HW_MODE_ONLINE_VALUE,
+    LOADED_Q_LOWER_LIMIT,
+    LOADED_Q_LOWER_LIMIT_HE,
+    LOADED_Q_LOWER_LIMIT_HL,
+    LOADED_Q_UPPER_LIMIT,
+    LOADED_Q_UPPER_LIMIT_HE,
+    LOADED_Q_UPPER_LIMIT_HL,
     NOMINAL_PULSED_ONTIME,
 )
 
@@ -914,8 +924,41 @@ class CavityPVGroup(PVGroup):
             )
             await self.probe_cal_stat.write("Crash")
             return
+        q, scale = self._simulated_characterization_result()
+        await self.qloaded_new.write(q)
+        await self.scale_new.write(scale)
         await self.probe_cal_stat.write("Complete")
         self.log.info(f"{self.prefix} cavity characterization complete")
+
+    def _simulated_characterization_result(self) -> tuple[float, float]:
+        """QLOADED_NEW and CAV:CAL_SCALEB_NEW for a run that completes.
+
+        Each is the cavity's current QLOADED or CAV:SCALER_SEL.B when that
+        is inside the limits Cavity.finish_characterization checks, and the
+        sim's old default otherwise. Production L4B scales all read 1,
+        below the limit of 10, so without this a simulated L4B cavity
+        could never pass characterization.
+        """
+        if self.is_hl:
+            q_limits = (LOADED_Q_LOWER_LIMIT_HL, LOADED_Q_UPPER_LIMIT_HL)
+            scale_limits = (
+                CAVITY_SCALE_LOWER_LIMIT_HL,
+                CAVITY_SCALE_UPPER_LIMIT_HL,
+            )
+            defaults = (2.5e7, 15.0)
+        else:
+            if self.prefix.startswith("ACCL:L4B:"):
+                q_limits = (LOADED_Q_LOWER_LIMIT_HE, LOADED_Q_UPPER_LIMIT_HE)
+            else:
+                q_limits = (LOADED_Q_LOWER_LIMIT, LOADED_Q_UPPER_LIMIT)
+            scale_limits = (CAVITY_SCALE_LOWER_LIMIT, CAVITY_SCALE_UPPER_LIMIT)
+            defaults = (4e7, 30.0)
+        q, scale = self.qloaded.value, self.current_cav_scale.value
+        if not q_limits[0] <= q <= q_limits[1]:
+            q = defaults[0]
+        if not scale_limits[0] <= scale <= scale_limits[1]:
+            scale = defaults[1]
+        return q, scale
 
     @interlock_reset.putter
     async def interlock_reset(self, instance, value):
