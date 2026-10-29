@@ -2,6 +2,8 @@
 
 `applications/rf_commissioning/` implements the acceptance workflow for newly-installed or returned cavities. It enforces an ordered, phase-gated process with persistent records, phase-attempt history, artifacts, and operator audit data in SQLite.
 
+For how the app is built, what one click does on its way to the machine and SQLite, and what each phase writes, see the explainer: [How RF commissioning is built](../explainers/rf_commissioning.md).
+
 For how the auto-tune loop converges, its guards, and how it fails, see the explainer: [How auto-tune works](../explainers/auto_tune.md).
 
 Related in-source architecture docs:
