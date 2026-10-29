@@ -131,9 +131,12 @@ class SSACharDisplay(BasePlaceholderDisplay):
     def on_push_slope(self):
         slope = self.controller.repush_slope_value()
         measured = f"{slope:.5f}" if slope is not None else "unknown"
+        # Show which cavity, since this writes to the machine.
+        cavity = self.controller.repush_cavity_name() or "unknown"
         text = (
             "The calibration already pushed the new slope to the cavity.\n\n"
-            f"Push it again (PUSH_SSA_SLOPE)?\nMeasured slope: {measured}"
+            f"Push it again to {cavity} (PUSH_SSA_SLOPE)?\n"
+            f"Measured slope: {measured}"
         )
         if self._ask_confirm(text):
             self.controller.on_push_slope()
