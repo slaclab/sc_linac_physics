@@ -6,7 +6,7 @@ _load_production_cavities). ADES_MAX is 0 for an Offline cavity and the
 lowest of the five limits otherwise.
 """
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -148,3 +148,46 @@ async def test_writing_hwmode_recomputes_ades_max():
     await faults.offline.write("Offline")
     assert cavity.hw_mode == 2
     assert cavity.adesMax.value == 0
+
+
+async def complete_characterization(cavity):
+    cavity.log = Mock()
+    with (
+        patch(
+            "sc_linac_physics.utils.simulation.cavity_service.asyncio.sleep",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "sc_linac_physics.utils.simulation.cavity_service.np.random.random",
+            return_value=0.99,  # above the crash probability
+        ),
+    ):
+        await CavityPVGroup.qloaded_new.pvspec.startup(
+            cavity, cavity.qloaded_new, None
+        )
+        await cavity._finish_characterization()
+
+
+async def test_l4b_characterization_measures_an_in_limit_scale():
+    """Production L4B scale is 1, below the limit of 10; the run gives 30."""
+    cavity = make_cavity("ACCL:L4B:3710:")
+    await complete_characterization(cavity)
+    assert cavity.current_cav_scale.value == pytest.approx(1)
+    assert cavity.scale_new.value == pytest.approx(30)
+    assert cavity.qloaded_new.value == pytest.approx(4e7)
+
+
+@pytest.mark.parametrize(
+    "prefix, q, scale",
+    [
+        ("ACCL:L1B:0210:", 4.47746e7, 28.8468),
+        ("ACCL:L1B:H110:", 2.88588e7, 9.22092),
+    ],
+)
+async def test_characterization_keeps_in_limit_production_values(
+    prefix, q, scale
+):
+    cavity = make_cavity(prefix, is_hl="H" in prefix)
+    await complete_characterization(cavity)
+    assert cavity.qloaded_new.value == pytest.approx(q)
+    assert cavity.scale_new.value == pytest.approx(scale)
