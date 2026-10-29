@@ -98,11 +98,16 @@ jobs:
             exit 0
           fi
 
+          # A CSV in a data/ folder is a table of values, such as the sim's
+          # production_cavities.csv, so it is skipped like an asset. Other
+          # CSVs still count: faults.csv decides what the cavity display
+          # shows, so an edit to it is a change to behavior.
           read -r ADD DEL SKIPPED < <(
             awk -F'\t' '
                 NF < 3 { next }
                 $3 ~ /(^|\/)(tests?)\// { s++; next }
                 $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { s++; next }
+                $3 ~ /(^|\/)data\/[^\/]+\.csv$/ { s++; next }
                 { a += $1; d += $2 }
                 END { printf "%d %d %d\n", a+0, d+0, s+0 }' <<< "$NUMSTAT"
           )
@@ -131,6 +136,7 @@ jobs:
                 NF < 3 { next }
                 $3 ~ /(^|\/)(tests?)\// { next }
                 $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { next }
+                $3 ~ /(^|\/)data\/[^\/]+\.csv$/ { next }
                 { printf "%d\t+%s/-%s\t%s\n", $1+$2, $1, $2, $3 }' <<< "$NUMSTAT" \
               | sort -rn \
               | awk -F'\t' 'NR <= 5 {
