@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.60.0 (2026-10-29)
+
+### Bug Fixes
+
+- **sim**: Give a completed characterization an in-limit measurement
+  ([#471](https://github.com/slaclab/sc_linac_physics/pull/471),
+  [`ae56ded`](https://github.com/slaclab/sc_linac_physics/commit/ae56ded42f4e1508cf108816194347dff0c1617b))
+
+### Features
+
+- **sim**: Start each cavity at its production values
+  ([#471](https://github.com/slaclab/sc_linac_physics/pull/471),
+  [`ae56ded`](https://github.com/slaclab/sc_linac_physics/commit/ae56ded42f4e1508cf108816194347dff0c1617b))
+
+
 ## v9.59.3 (2026-10-29)
 
 ### Bug Fixes
