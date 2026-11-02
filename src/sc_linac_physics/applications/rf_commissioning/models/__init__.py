@@ -1,5 +1,6 @@
 """Data models and persistence for RF commissioning."""
 
+from .commissioning_cavity import CommissioningCavity
 from .commissioning_piezo import CommissioningPiezo
 from .data_models import (
     CommissioningPhase,
@@ -43,5 +44,6 @@ __all__ = [
     "CryomoduleCheckoutRecord",
     "CRYOMODULE_PHASE_REGISTRY",
     "CommissioningDatabase",
+    "CommissioningCavity",
     "CommissioningPiezo",
 ]

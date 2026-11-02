@@ -18,9 +18,6 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.batch_piezo_p
     TRIGGER_STEPS,
     COLLECT_STEPS,
 )
-from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
-    CommissioningPiezo,
-)
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningRecord,
     PiezoPreRFCheck,
@@ -515,33 +512,35 @@ class TestAbort:
 
 
 class TestGetMachineCavity:
-    def test_builds_machine_with_commissioning_piezo(self, monkeypatch):
+    def test_builds_commissioning_machine(self, monkeypatch):
         class _MachineStub:
-            def __init__(self, *, piezo_class):
-                self.piezo_class = piezo_class
+            def __init__(self):
                 self.cryomodules = {
                     "01": SimpleNamespace(cavities={1: "cav-obj"})
                 }
 
-        monkeypatch.setattr(ctrl_module, "Machine", _MachineStub)
+        monkeypatch.setattr(
+            ctrl_module, "build_commissioning_machine", _MachineStub
+        )
         ctrl = _make_controller()
         result = ctrl._get_machine_cavity(CavitySpec("01", 1))
 
         assert result == "cav-obj"
-        assert ctrl._machine.piezo_class is CommissioningPiezo
 
     def test_reuses_existing_machine(self, monkeypatch):
         call_count = 0
 
         class _MachineStub:
-            def __init__(self, *, piezo_class):
+            def __init__(self):
                 nonlocal call_count
                 call_count += 1
                 self.cryomodules = {
                     "01": SimpleNamespace(cavities={1: "cav-obj"})
                 }
 
-        monkeypatch.setattr(ctrl_module, "Machine", _MachineStub)
+        monkeypatch.setattr(
+            ctrl_module, "build_commissioning_machine", _MachineStub
+        )
         ctrl = _make_controller()
         ctrl._get_machine_cavity(CavitySpec("01", 1))
         ctrl._get_machine_cavity(CavitySpec("01", 1))
@@ -557,10 +556,12 @@ class TestGetMachineCavity:
                 return SimpleNamespace(cavities={1: "cav"})
 
         class _MachineStub:
-            def __init__(self, *, piezo_class):
+            def __init__(self):
                 self.cryomodules = _CMStub()
 
-        monkeypatch.setattr(ctrl_module, "Machine", _MachineStub)
+        monkeypatch.setattr(
+            ctrl_module, "build_commissioning_machine", _MachineStub
+        )
         ctrl = _make_controller()
         ctrl._get_machine_cavity(CavitySpec("1", 1))
 
@@ -568,12 +569,14 @@ class TestGetMachineCavity:
 
     def test_harmonic_linearizer_name_kept(self, monkeypatch):
         class _MachineStub:
-            def __init__(self, *, piezo_class):
+            def __init__(self):
                 self.cryomodules = {
                     "H1": SimpleNamespace(cavities={3: "hl-cav"})
                 }
 
-        monkeypatch.setattr(ctrl_module, "Machine", _MachineStub)
+        monkeypatch.setattr(
+            ctrl_module, "build_commissioning_machine", _MachineStub
+        )
         ctrl = _make_controller()
 
         assert ctrl._get_machine_cavity(CavitySpec("H1", 3)) == "hl-cav"

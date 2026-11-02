@@ -35,6 +35,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
     cryomodule_key,
     resolve_cavity_selection,
 )
+from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
+    build_commissioning_machine,
+)
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 # The steps Start Test runs.
@@ -247,7 +250,7 @@ class CavityCharController(QObject):
     def _get_machine_cavity(self, cm: str, cav: int):
         """Machine.cryomodules is keyed "01".."35", "H1", "H2"."""
         if not self.machine:
-            self.machine = Machine()
+            self.machine = build_commissioning_machine()
         return self.machine.cryomodules[cryomodule_key(cm)].cavities[cav]
 
     # ------------------------------------------------------------------

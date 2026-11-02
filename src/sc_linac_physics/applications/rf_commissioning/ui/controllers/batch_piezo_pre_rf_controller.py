@@ -9,9 +9,6 @@ from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
-    CommissioningPiezo,
-)
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
@@ -28,6 +25,9 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
     cryomodule_key,
+)
+from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
+    build_commissioning_machine,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import get_linac_for_cryomodule
@@ -558,7 +558,7 @@ class BatchPiezoPreRFController(QObject):
 
     def _get_machine(self) -> Machine:
         if self._machine is None:
-            self._machine = Machine(piezo_class=CommissioningPiezo)
+            self._machine = build_commissioning_machine()
         return self._machine
 
     def _get_machine_cavity(self, cavity_spec: CavitySpec):

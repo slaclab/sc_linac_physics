@@ -16,7 +16,8 @@ phase:
   3. Runs a probe move to measure Hz/microstep; the operator confirms and the UI
      writes the value (to SCALE_CALC.B) via apply_hz_per_step.
   4. Gates on DF_COLD having been recorded, then delegates to
-     Cavity._auto_tune to move to resonance (with a per-iteration stepper
+     CommissioningCavity.tune_to_resonance_chirp (which runs
+     Cavity._auto_tune) to move to resonance (with a per-iteration stepper
      temperature guard).  There is no automatic cool-down: if the temperature
      exceeds the limit the step fails and the operator must investigate and
      re-run with a higher acknowledgement ceiling (over_temp_ack_k).  After
@@ -115,7 +116,7 @@ class FrequencyTuningPhase(PhaseBase):
     2. record_cold_landing     – record cold-landing detune (operator pushes to DF_COLD via UI)
     3. probe_stepper_direction – measure Hz/microstep (operator confirms; UI writes to SCALE_CALC.B)
     4. apply_hz_per_step       – write confirmed Hz/microstep to SCALE_CALC.B
-    5. tune_to_resonance       – delegate to Cavity._auto_tune (temp guard); write NSTEPS_COLD
+    5. tune_to_resonance       – tune_to_resonance_chirp (temp guard); write NSTEPS_COLD
     6. measure_pi_modes        – single-cavity FSCAN for 8π/9 and 7π/9 parasitic modes
     7. record_results          – write FrequencyTuningData to commissioning record
     """
@@ -984,14 +985,13 @@ class FrequencyTuningPhase(PhaseBase):
         return self._tuning_success_result(signed_total, ack_ceiling)
 
     def _run_auto_tune(self, max_temp: float) -> "PhaseStepResult | None":
-        """Delegate the tuning loop to Cavity._auto_tune.
+        """Run CommissioningCavity.tune_to_resonance_chirp on CHIRP:DF.
 
         Returns a FAILED/RETRY PhaseStepResult on failure, or None on success.
         """
         try:
-            self.cavity._auto_tune(
-                delta_hz_func=lambda: self.cavity.detune_chirp,
-                tolerance=self.limits.tolerance_hz,
+            self.cavity.tune_to_resonance_chirp(
+                tolerance_hz=self.limits.tolerance_hz,
                 iteration_callback=self._tuning_iteration_hook,
                 max_stepper_temp=max_temp,
             )
