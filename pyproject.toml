@@ -155,6 +155,7 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
     "applications/q0/calibrations/*",
     "applications/q0/data/*",
     "utils/simulation/data/*",
+    "utils/sc_linac/data/*",
     "*.ui",
     "*.yaml",
     "*.yml",
@@ -235,6 +236,11 @@ sc-edm = "sc_linac_physics.cli.edm_commands:main"
 # EPICS record inspection (read-only)
 # ============================================================================
 sc-pv-info = "sc_linac_physics.cli.pv_info:main"
+
+# ============================================================================
+# Archive analysis (read-only)
+# ============================================================================
+sc-hl-tuner-curves = "sc_linac_physics.cli.hl_tuner_curves:main"
 
 # ============================================================================
 # Simulation/Testing
