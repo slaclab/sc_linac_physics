@@ -948,13 +948,17 @@ def test_tune_to_resonance_tolerance_follows_cavity_class(
     phase._tune_to_resonance()
 
     expected = 22.0 if is_hl else 11.0
-    assert mock_cavity._auto_tune.call_args.kwargs["tolerance"] == expected
+    assert (
+        mock_cavity.tune_to_resonance_chirp.call_args.kwargs["tolerance_hz"]
+        == expected
+    )
 
 
-def test_tune_to_resonance_delegates_to_auto_tune(
+def test_tune_to_resonance_delegates_to_commissioning_cavity(
     phase, mock_cavity, mock_stepper
 ):
-    # Happy path: the phase delegates the loop to Cavity._auto_tune, then
+    # Happy path: the phase delegates the loop to
+    # CommissioningCavity.tune_to_resonance_chirp, then
     # reads REG_TOTSGN for NSTEPS_COLD and sets tune_config=RESONANCE.
     _setup_phase(phase)
     mock_cavity.stepper_tuner.step_signed_pv_obj.get.return_value = 4000
@@ -962,10 +966,10 @@ def test_tune_to_resonance_delegates_to_auto_tune(
     result = phase._tune_to_resonance()
 
     assert result.result == PhaseResult.SUCCESS
-    mock_cavity._auto_tune.assert_called_once()
+    mock_cavity.tune_to_resonance_chirp.assert_called_once()
     # max_stepper_temp defaults to the plain limit, and an iteration_callback
     # is supplied for abort + live plot.
-    kwargs = mock_cavity._auto_tune.call_args.kwargs
+    kwargs = mock_cavity.tune_to_resonance_chirp.call_args.kwargs
     assert kwargs["max_stepper_temp"] == phase.limits.temp_limit_k
     assert callable(kwargs["iteration_callback"])
     # NSTEPS_COLD = negation of the accumulated signed steps.
@@ -982,7 +986,7 @@ def test_tune_to_resonance_fails_when_df_cold_not_recorded(phase, mock_cavity):
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
     assert "record_cold_landing" in result.message
-    mock_cavity._auto_tune.assert_not_called()
+    mock_cavity.tune_to_resonance_chirp.assert_not_called()
 
 
 def test_tune_to_resonance_fails_when_df_cold_mismatched(phase, mock_cavity):
@@ -993,16 +997,16 @@ def test_tune_to_resonance_fails_when_df_cold_mismatched(phase, mock_cavity):
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
     assert "DF_COLD does not match" in result.message
-    mock_cavity._auto_tune.assert_not_called()
+    mock_cavity.tune_to_resonance_chirp.assert_not_called()
 
 
 def test_tune_to_resonance_over_temp_fails_with_ack_flag(phase, mock_cavity):
-    # _auto_tune raises StepperTempError on an over-temp breach; the phase
+    # tune_to_resonance_chirp raises StepperTempError on an over-temp breach; the phase
     # maps it to FAILED + requires_over_temp_ack for the UI to prompt.
     _setup_phase(phase)
     phase.limits.temp_limit_k = 70.0
     phase.cavity.stepper_temp_pv_obj.get.return_value = 85.0
-    mock_cavity._auto_tune.side_effect = StepperTempError(
+    mock_cavity.tune_to_resonance_chirp.side_effect = StepperTempError(
         "stepper motor temp 85.0 K exceeds limit 70 K"
     )
 
@@ -1016,7 +1020,7 @@ def test_tune_to_resonance_over_temp_fails_with_ack_flag(phase, mock_cavity):
 def test_tune_to_resonance_passes_ack_ceiling_and_records(
     phase, mock_cavity, context
 ):
-    # Operator-supplied over_temp_ack_k raises the ceiling passed to _auto_tune
+    # Operator-supplied over_temp_ack_k raises the ceiling passed to the tune
     # and is recorded (with the operator) on success.
     _setup_phase(phase)
     phase.limits.temp_limit_k = 70.0
@@ -1025,28 +1029,35 @@ def test_tune_to_resonance_passes_ack_ceiling_and_records(
 
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.SUCCESS
-    assert mock_cavity._auto_tune.call_args.kwargs["max_stepper_temp"] == 90.0
+    assert (
+        mock_cavity.tune_to_resonance_chirp.call_args.kwargs["max_stepper_temp"]
+        == 90.0
+    )
     assert result.data["over_temp_acknowledged_c"] == 90.0
     assert result.data["over_temp_acknowledged_by"] == context.operator
 
 
 def test_tune_to_resonance_detune_error_fails(phase, mock_cavity):
     _setup_phase(phase)
-    mock_cavity._auto_tune.side_effect = DetuneError("motor moved too far")
+    mock_cavity.tune_to_resonance_chirp.side_effect = DetuneError(
+        "motor moved too far"
+    )
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
 
 
 def test_tune_to_resonance_abort_fails(phase, mock_cavity):
     _setup_phase(phase)
-    mock_cavity._auto_tune.side_effect = CavityAbortError("aborted")
+    mock_cavity.tune_to_resonance_chirp.side_effect = CavityAbortError(
+        "aborted"
+    )
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
 
 
 def test_tune_to_resonance_transient_error_retries(phase, mock_cavity):
     _setup_phase(phase)
-    mock_cavity._auto_tune.side_effect = RuntimeError("PV timeout")
+    mock_cavity.tune_to_resonance_chirp.side_effect = RuntimeError("PV timeout")
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.RETRY
 
@@ -1057,7 +1068,7 @@ def test_tune_to_resonance_missing_hz_per_microstep(phase, mock_cavity):
     result = phase._tune_to_resonance()
     assert result.result == PhaseResult.FAILED
     assert "probe_stepper_direction" in result.message
-    mock_cavity._auto_tune.assert_not_called()
+    mock_cavity.tune_to_resonance_chirp.assert_not_called()
 
 
 def test_tune_to_resonance_signed_step_read_error_retries(phase, mock_cavity):

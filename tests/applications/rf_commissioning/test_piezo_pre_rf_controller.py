@@ -10,9 +10,6 @@ import sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_r
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_controller import (
     PiezoPreRFController,
 )
-from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
-    CommissioningPiezo,
-)
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
@@ -148,24 +145,24 @@ def test_append_measurement_history_no_context_is_noop() -> None:
     session.add_measurement_to_history.assert_not_called()
 
 
-def test_get_machine_cavity_builds_machine_with_commissioning_piezo(
+def test_get_machine_cavity_builds_commissioning_machine(
     monkeypatch,
 ) -> None:
     class _MachineStub:
-        def __init__(self, *, piezo_class):
-            self.piezo_class = piezo_class
+        def __init__(self):
             self.cryomodules = {
                 "02": SimpleNamespace(cavities={1: "cavity-object"})
             }
 
-    monkeypatch.setattr(controller_module, "Machine", _MachineStub)
+    monkeypatch.setattr(
+        controller_module, "build_commissioning_machine", _MachineStub
+    )
     controller = _make_controller()
 
     cavity = controller._get_machine_cavity("02", 1)
 
     assert cavity == "cavity-object"
     assert isinstance(controller.machine, _MachineStub)
-    assert controller.machine.piezo_class is CommissioningPiezo
 
 
 def test_get_operator_does_not_use_legacy_selector() -> None:

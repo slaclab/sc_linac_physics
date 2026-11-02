@@ -351,7 +351,9 @@ def test_get_machine_cavity_builds_machine(monkeypatch) -> None:
                 "02": SimpleNamespace(cavities={1: "cavity-object"})
             }
 
-    monkeypatch.setattr(controller_module, "Machine", _MachineStub)
+    monkeypatch.setattr(
+        controller_module, "build_commissioning_machine", _MachineStub
+    )
     controller = _make_controller()
 
     cavity = controller._get_machine_cavity("02", 1)
