@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from sc_linac_physics.utils.simulation.cryomodule_service import (
         CryomodulePVGroup,
     )
+    from sc_linac_physics.utils.simulation.rack_service import RACKPVGroup
 
 
 WAVEFORM_POINTS = 16384
@@ -333,8 +334,14 @@ class CavityPVGroup(PVGroup):
     detune_rfs: PvpropertyDouble = pvproperty(
         value=0.0, name="DF", dtype=ChannelType.DOUBLE
     )
+    # Its own alarm group: every pvproperty without one shares a single
+    # alarm across this group, so an INVALID CHIRP:DF outside the chirp
+    # window would otherwise mark every cavity PV INVALID.
     detune_chirp: PvpropertyDouble = pvproperty(
-        value=0.0, name="CHIRP:DF", dtype=ChannelType.DOUBLE
+        value=0.0,
+        name="CHIRP:DF",
+        dtype=ChannelType.DOUBLE,
+        alarm_group="chirp_detune",
     )
     tune_config: PvpropertyEnum = pvproperty(
         name="TUNE_CONFIG",
@@ -617,6 +624,9 @@ class CavityPVGroup(PVGroup):
         self.frequency = self.HL_FREQ if isHL else self.NORMAL_FREQ
         self.cm_group: "CryomodulePVGroup" = cm_group
         self.piezo_group = None
+        # The RACKPVGroup serving this cavity's FREQ_OFFSET. Set by
+        # SCLinacPhysicsService once the rack exists.
+        self.rack_group: "RACKPVGroup | None" = None
         self._characterization_task: asyncio.Task | None = None
 
         # HWMODE is served by CavFaultPVGroup, which keeps this in step.
@@ -693,12 +703,71 @@ class CavityPVGroup(PVGroup):
             status, severity = AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
         await instance.alarm.write(status=status, severity=severity)
 
+    def _freq_offset(self) -> float:
+        """The rack's FREQ_OFFSET in Hz, or 0 before a rack is attached."""
+        if self.rack_group is None:
+            return 0.0
+        return float(self.rack_group.freq_offset.value)
+
+    async def write_detune(
+        self, real_hz: float, freq_offset: float | None = None
+    ):
+        """Set the cavity's real detune, in Hz.
+
+        DFBEST and DF get the real detune. CHIRP:DF gets real detune minus the
+        rack FREQ_OFFSET: on the H1/H2 racks, real detune = CHIRP:DF +
+        FREQ_OFFSET (66 idle offset changes in the 2023-2025 archive, ratio
+        -1.00; Lisa Zacarias, "Stepper SCALE on the harmonic linearizers",
+        2026-11-02). The sim applies the same rule on every rack.
+
+        CHECK: do DF and DFBEST also read relative to FREQ_OFFSET? Only
+        CHIRP:DF was checked against the archive.
+
+        freq_offset overrides the rack value. The rack's FREQ_OFFSET putter
+        passes the new value, which isn't stored until the putter returns.
+        """
+        if freq_offset is None:
+            freq_offset = self._freq_offset()
+        chirp_hz = real_hz - freq_offset
+        await self.detune.write(real_hz)
+        await self.detune_rfs.write(real_hz)
+        await self.detune_chirp.write(chirp_hz)
+        # After the write, not in CHIRP:DF's putter: caproto rewrites a
+        # channel's alarm at the end of its own write, which would undo it.
+        await self._update_chirp_alarm(chirp_hz)
+
+    def _outside_chirp_window(self, chirp_hz, start=None, stop=None) -> bool:
+        """Whether chirp_hz is outside CHIRP:FREQ_START..CHIRP:FREQ_STOP.
+
+        start and stop override the PVs, for putters that run before the new
+        value is stored.
+        """
+        start = self.chirp_start.value if start is None else start
+        stop = self.chirp_stop.value if stop is None else stop
+        return not (min(start, stop) <= chirp_hz <= max(start, stop))
+
+    async def _update_chirp_alarm(self, chirp_hz, start=None, stop=None):
+        """Mark CHIRP:DF INVALID when it is outside the chirp window.
+
+        Production code treats an INVALID CHIRP:DF as "no detune found" and
+        widens the window (Cavity.find_chirp_range), so this is what makes a
+        cavity far from FREQ_OFFSET look lost in the sim, as it does on the
+        machine.
+
+        CHECK: on the real IOC, is CHIRP:DF INVALID outside the window, or
+        does it read a wrong value with a good severity?
+        """
+        if self._outside_chirp_window(chirp_hz, start, stop):
+            await self.detune_chirp.alarm.write(
+                status=AlarmStatus.UDF, severity=AlarmSeverity.INVALID_ALARM
+            )
+        else:
+            await self._update_detune_alarm(self.detune_chirp, chirp_hz)
+
     @detune.startup
     async def detune(self, instance, async_lib):
         val = randrange(-10000, 10000)
-        await instance.write(val)
-        await self.detune_rfs.write(val)
-        await self.detune_chirp.write(val)
+        await self.write_detune(val)
         if self.production:
             await self.df_cold.write(int(self.production["DF_COLD"]))
         else:
@@ -715,6 +784,16 @@ class CavityPVGroup(PVGroup):
     @detune_chirp.putter
     async def detune_chirp(self, instance, value):
         await self._update_detune_alarm(instance, value)
+
+    @chirp_start.putter
+    async def chirp_start(self, instance, value):
+        await self._update_chirp_alarm(self.detune_chirp.value, start=value)
+        return value
+
+    @chirp_stop.putter
+    async def chirp_stop(self, instance, value):
+        await self._update_chirp_alarm(self.detune_chirp.value, stop=value)
+        return value
 
     @quench_latch.putter
     async def quench_latch(self, instance, value):
