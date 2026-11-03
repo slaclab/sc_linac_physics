@@ -81,15 +81,23 @@ def _last_at(series: pd.Series, t) -> float:
     return float(series.iloc[k]) if k >= 0 else np.nan
 
 
+def _offset_in(offset: pd.Series, a, b) -> float:
+    """FREQ_OFFSET over [a, b], or NaN if it took more than one value there."""
+    values = {_last_at(offset, a), *offset[a:b]}
+    return values.pop() if len(values) == 1 else np.nan
+
+
 def find_moves(
     steps: pd.Series, chirp_df: pd.Series, offset: pd.Series
 ) -> pd.DataFrame:
     """Every stepper move, with real detune before and after it.
 
     Port of absdetune.py. A move is a run of REG_TOTSGN changes with no gap
-    over MOVE_GAP_S. Moves without MIN_SAMPLES of CHIRP:DF in both windows
-    are dropped. ``offset_stable`` is False if FREQ_OFFSET changed inside a
-    window, which would mix two references.
+    over MOVE_GAP_S. Pass REG_TOTSGN with resets undone (unwrap_position),
+    so a reset isn't read as a move. Moves without MIN_SAMPLES of CHIRP:DF
+    in both windows are dropped. ``offset_stable`` is False if FREQ_OFFSET
+    took more than one value inside a window, which would mix two
+    references.
     """
     rows = []
     changed = steps.diff().fillna(0).to_numpy() != 0
@@ -113,14 +121,15 @@ def find_moves(
             + timedelta(seconds=AFTER_S[1])
         ]
         if len(before) >= MIN_SAMPLES and len(after) >= MIN_SAMPLES:
-            off_before = _last_at(offset, t[i])
-            off_after = _last_at(offset, t[j] + timedelta(seconds=AFTER_S[0]))
-            stable = (
-                _last_at(offset, t[i] - timedelta(seconds=BEFORE_S))
-                == off_before
-                and _last_at(offset, t[j] + timedelta(seconds=AFTER_S[1]))
-                == off_after
+            off_before = _offset_in(
+                offset, t[i] - timedelta(seconds=BEFORE_S), t[i]
             )
+            off_after = _offset_in(
+                offset,
+                t[j] + timedelta(seconds=AFTER_S[0]),
+                t[j] + timedelta(seconds=AFTER_S[1]),
+            )
+            stable = not (np.isnan(off_before) or np.isnan(off_after))
             rows.append(
                 dict(
                     t=t[j],
@@ -198,9 +207,10 @@ def fit_curve(
     usteps, hz = np.zeros(len(edges) - 1), np.zeros(len(edges) - 1)
     for lo, hi, n in segments:
         if hi - lo < FLAT_HZ:
-            k = np.clip(
-                np.searchsorted(edges, (lo + hi) / 2) - 1, 0, len(hz) - 1
-            )
+            mid = (lo + hi) / 2
+            if not edges[0] <= mid < edges[-1]:
+                continue
+            k = np.searchsorted(edges, mid, side="right") - 1
             usteps[k] += n
             hz[k] += hi - lo
             continue
@@ -247,7 +257,8 @@ def _fetch(pv: str, start: datetime, end: datetime) -> pd.Series:
     The archiver has returned HTTP 500 on some quarters of these PVs. Those
     are reported and the fit goes on without them.
     """
-    edges = [start, *pd.date_range(start, end, freq="QS")[1:], end]
+    quarters = pd.date_range(start, end, freq="QS")
+    edges = [start, *(q for q in quarters if start < q < end), end]
     parts = []
     for a, b in zip(edges, edges[1:]):
         try:
@@ -295,14 +306,15 @@ def main(argv=None) -> None:
             offsets[offset_pv] = _fetch(
                 offset_pv, args.start - timedelta(days=92), args.end
             )
-        steps = _fetch(prefix + "STEP:REG_TOTSGN", args.start, args.end)
-        chirp = _fetch(prefix + "CHIRP:DF", args.start, args.end)
-        moves = find_moves(steps, chirp, offsets[offset_pv])
-        segments = (
-            run_segments(moves, unwrap_position(steps)) if len(moves) else []
+        position = unwrap_position(
+            _fetch(prefix + "STEP:REG_TOTSGN", args.start, args.end)
         )
+        chirp = _fetch(prefix + "CHIRP:DF", args.start, args.end)
+        moves = find_moves(position, chirp, offsets[offset_pv])
+        segments = run_segments(moves, position) if len(moves) else []
         cold = df_cold.get(prefix + "DF_COLD")
-        curve = fit_curve(segments, float(cold.value)) if cold else None
+        valid = cold is not None and cold.valid
+        curve = fit_curve(segments, float(cold.value)) if valid else None
         if curve is None:
             print(f"{prefix}: no curve ({len(segments)} segments)", flush=True)
             continue

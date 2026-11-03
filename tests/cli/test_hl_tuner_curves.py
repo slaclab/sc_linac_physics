@@ -222,3 +222,75 @@ def test_hl_cavities_racks():
     assert len(cavities) == 16
     assert cavities["ACCL:L1B:H140:"] == "ACCL:L1B:H100:RACKA:FREQ_OFFSET"
     assert cavities["ACCL:L1B:H250:"] == "ACCL:L1B:H200:RACKB:FREQ_OFFSET"
+
+
+def test_offset_change_and_back_inside_window_is_unstable():
+    steps, chirp, offset = linear_run(n_moves=2)
+    t = steps.index[1]
+    blip = pd.Series(
+        [0.0, OFFSET], index=[t - pd.Timedelta("20s"), t - pd.Timedelta("10s")]
+    )
+    moves = H.find_moves(steps, chirp, pd.concat([offset, blip]))
+    assert list(moves.offset_stable) == [False, True]
+
+
+def test_flat_segment_outside_range_is_dropped():
+    base = [(-600e3, 0.0, 12e6)] * 3
+    below = H.fit_curve(base + [(-900e3, -899.5e3, 3e6)], -600e3)
+    pd.testing.assert_frame_equal(below, H.fit_curve(base, -600e3))
+
+
+def test_reset_mid_run_adds_no_steps():
+    steps, chirp, offset = three_runs()
+    clean = H.run_segments(
+        H.find_moves(H.unwrap_position(steps), chirp, offset),
+        H.unwrap_position(steps),
+    )
+    # REG_TOTSGN resets to 0 between two moves of the first run.
+    t_reset = steps.index[5] + pd.Timedelta("50s")
+    reset = steps.copy()
+    reset[reset.index > t_reset] -= steps.iloc[5]
+    reset[t_reset] = 0.0
+    reset = reset.sort_index()
+    position = H.unwrap_position(reset)
+    moves = H.find_moves(position, chirp, offset)
+    assert H.run_segments(moves, position) == clean
+
+
+def test_fetch_splits_on_quarters_inside_range():
+    windows = []
+
+    def get_series(pvs, a, b):
+        windows.append((a, b))
+        return {pvs[0]: pd.Series(dtype=float, index=pd.DatetimeIndex([]))}
+
+    start, end = datetime(2024, 1, 15), datetime(2024, 7, 1)
+    with patch.object(H, "get_series", side_effect=get_series):
+        H._fetch("X", start, end)
+    assert windows == [
+        (start, pd.Timestamp(2024, 4, 1)),
+        (pd.Timestamp(2024, 4, 1), end),
+    ]
+
+
+def test_main_skips_invalid_df_cold(tmp_path, capsys):
+    prefix, offset_pv = "ACCL:L1B:H110:", "ACCL:L1B:H100:RACKA:FREQ_OFFSET"
+    steps, chirp, offset = three_runs()
+    data = {
+        prefix + "STEP:REG_TOTSGN": steps,
+        prefix + "CHIRP:DF": chirp,
+        offset_pv: offset,
+    }
+    invalid = ArchiverSample(datetime.now(), DF_COLD, 3, 0)
+    with (
+        patch.object(H, "hl_cavities", return_value=[(prefix, offset_pv)]),
+        patch.object(
+            H, "get_series", side_effect=lambda p, a, b: {p[0]: data[p[0]]}
+        ),
+        patch.object(
+            H, "get_values_at_time", return_value={prefix + "DF_COLD": invalid}
+        ),
+    ):
+        with pytest.raises(SystemExit):
+            H.main(["2024-01-01", "2024-03-01", "-o", str(tmp_path / "c.csv")])
+    assert "no curve" in capsys.readouterr().out
