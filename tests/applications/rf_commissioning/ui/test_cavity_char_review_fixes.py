@@ -50,7 +50,7 @@ def view():
 def _controller(view):
     c = CavityCharController(view, Mock())
     c.context = Mock()
-    c.context.parameters = {}
+    c.context.parameters = {"cavity": Mock()}
     c.context.is_abort_requested.return_value = False
     c.context.record.cavity_char = CavityCharacterization(loaded_q=4.1e7)
     c.phase = Mock()

@@ -56,7 +56,11 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.runner_bridge
     RunnerBridge,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
-    build_commissioning_machine,
+    get_commissioning_machine,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_hold import (
+    CavityHold,
+    refusal_message,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -138,6 +142,8 @@ class PiezoWithRFController(QObject):
         self.session = session
         self.machine: Machine | None = None
         self._cavity = None
+        # Held while a segment runs, so no other tab starts on this cavity.
+        self._cavity_hold = CavityHold("the Piezo with RF tab")
         self.context: PhaseContext | None = None
         self.phase: PiezoWithRFPhase | None = None
         self.run: PhaseRun | None = None
@@ -207,7 +213,7 @@ class PiezoWithRFController(QObject):
     def _get_machine_cavity(self, cm: str, cav: int):
         """The phase needs CommissioningPiezo for the with-RF PVs."""
         if not self.machine:
-            self.machine = build_commissioning_machine()
+            self.machine = get_commissioning_machine()
         key = f"{int(cm):02d}" if str(cm).isdigit() else str(cm)
         return self.machine.cryomodules[key].cavities[cav]
 
@@ -245,6 +251,9 @@ class PiezoWithRFController(QObject):
         if not can_run:
             self.view.show_error(f"Cannot run Piezo with RF: {reason}")
             return
+        if not self._cavity_hold.take(self._cavity):
+            self.view.show_error(refusal_message(self._cavity))
+            return
 
         # An unpushed measurement leaves its instance open; a new test
         # continues that attempt, as cavity char does.
@@ -256,6 +265,7 @@ class PiezoWithRFController(QObject):
             if started is None:
                 # Nothing has run yet. setup_rf and the gain push must not
                 # run without an attempt on record.
+                self._cavity_hold.release()
                 self.view.show_error(
                     "Could not start a Piezo with RF attempt in the "
                     "database; nothing was run"
@@ -272,6 +282,7 @@ class PiezoWithRFController(QObject):
         self.phase = PiezoWithRFPhase(self.context)
         ok, message = self.phase.validate_prerequisites()
         if not ok:
+            self._cavity_hold.release()
             self.view.show_error(f"Prerequisites not met: {message}")
             return
         self.run = PhaseRun(
@@ -284,6 +295,9 @@ class PiezoWithRFController(QObject):
 
     def _start(self, stage: str, steps, offset: int, complete=False) -> None:
         """Start a segment; progress is reported across all nine steps."""
+        if not self._cavity_hold.take(self._cavity):
+            self.view.show_error(refusal_message(self._cavity))
+            return
         self.stage = stage
         started = self.bridge.start_segment(
             self.run,
@@ -379,6 +393,7 @@ class PiezoWithRFController(QObject):
     # ------------------------------------------------------------------
 
     def _on_segment_finished(self, result: SegmentResult) -> None:
+        self._cavity_hold.release()
         self.view.set_running(False)
         if result.outcome is not SegmentOutcome.COMPLETED:
             self._on_failed(result.message or "Phase execution failed")

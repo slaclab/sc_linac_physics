@@ -111,7 +111,7 @@ def _measured_controller(view, monkeypatch):
     session.get_active_record.return_value = Mock()
     c = CavityCharController(view, session)
     c.context = Mock()
-    c.context.parameters = {}
+    c.context.parameters = {"cavity": Mock()}
     c.context.is_abort_requested.return_value = False
     c.context.record.cavity_char = CavityCharacterization(loaded_q=4.1e7)
     c.phase = Mock()

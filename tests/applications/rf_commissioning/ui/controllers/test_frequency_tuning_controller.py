@@ -352,7 +352,7 @@ def test_get_machine_cavity_builds_machine(monkeypatch) -> None:
             }
 
     monkeypatch.setattr(
-        controller_module, "build_commissioning_machine", _MachineStub
+        controller_module, "get_commissioning_machine", _MachineStub
     )
     controller = _make_controller()
 
