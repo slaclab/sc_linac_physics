@@ -238,11 +238,6 @@ sc-edm = "sc_linac_physics.cli.edm_commands:main"
 sc-pv-info = "sc_linac_physics.cli.pv_info:main"
 
 # ============================================================================
-# Archive analysis (read-only)
-# ============================================================================
-sc-hl-tuner-curves = "sc_linac_physics.cli.hl_tuner_curves:main"
-
-# ============================================================================
 # Simulation/Testing
 # ============================================================================
 sc-sim = "sc_linac_physics.utils.simulation.sc_linac_physics_service:main"

@@ -1,7 +1,7 @@
 # H1/H2 stepper response: microsteps from cold landing vs real detune (CHIRP:DF + FREQ_OFFSET).
 # Archive 2023-01-01 to 2026-01-01 (lcls-archapp); DF_COLD as of 2026-11-02.
-# Made 2026-11-02 by fit_curves.py, Drive folder 'Stepper SCALE on HL' (analysis/),
-# using each cavity's FREQ_OFFSET PV. Refit with sc-hl-tuner-curves, which reads RACK*:FREQ_OFFSET.
+# Made 2026-11-02 by fit_curves.py in Drive folder 'Stepper SCALE on HL' (analysis/),
+# using each cavity's FREQ_OFFSET PV. Method: README.md there.
 # covered=False: no data in that bin, filled from the nearest covered bin.
 cavity_pv_prefix,real_detune_hz,usteps_from_cold,covered
 ACCL:L1B:H110:,-700000,-128418,False
