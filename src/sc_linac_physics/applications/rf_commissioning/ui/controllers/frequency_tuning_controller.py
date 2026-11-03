@@ -129,7 +129,8 @@ class FrequencyTuningController(QObject):
         self.phase: FrequencyTuningPhase | None = None
         self.machine: Machine | None = None
         self._cavity = None
-        # Held while a stage runs, so no other tab starts on this cavity.
+        # Held from Stage 1 until the phase completes, fails or is aborted,
+        # or this tab selects another cavity, so no other tab starts on it.
         self._cavity_hold = CavityHold("the Frequency Tuning tab")
 
         self._paused = False
@@ -180,6 +181,8 @@ class FrequencyTuningController(QObject):
         try:
             cm, cav = cryomodule_key(cryomodule), int(cavity_number)
             cavity = self._get_machine_cavity(cm, cav)
+            if cavity is not self._cavity and not self._stage_running:
+                self._cavity_hold.release()
             self._cavity = cavity
             self._step_signed_pv_obj = None
             self._apply_stepper_pv_mapping(cavity)
@@ -516,6 +519,7 @@ class FrequencyTuningController(QObject):
         self.update_pv_addresses(cm, str(cav))
         cavity = self._get_machine_cavity(cm, cav)
         self._cavity = cavity
+        held_before = self._cavity_hold.holds(cavity)
         if not self._take_cavity():
             return
 
@@ -527,7 +531,8 @@ class FrequencyTuningController(QObject):
             CommissioningPhase.FREQUENCY_TUNING
         )
         if not can_run:
-            self._cavity_hold.release()
+            if not held_before:
+                self._cavity_hold.release()
             self.view.show_error(f"Cannot run frequency tuning phase: {reason}")
             return
 
@@ -552,7 +557,8 @@ class FrequencyTuningController(QObject):
 
         is_valid, message = self.phase.validate_prerequisites()
         if not is_valid:
-            self._cavity_hold.release()
+            if not held_before:
+                self._cavity_hold.release()
             self.view.show_error(f"Prerequisites not met: {message}")
             return
 
@@ -674,7 +680,6 @@ class FrequencyTuningController(QObject):
 
     def _clear_running_ui(self) -> None:
         self._stage_running = False
-        self._cavity_hold.release()
         self._clear_all_stage_highlights()
         pause_btn = getattr(self.view, "pause_button", None)
         if pause_btn:
@@ -1230,6 +1235,7 @@ class FrequencyTuningController(QObject):
     def on_phase_completed(self) -> None:
         self._paused = False
         self._clear_running_ui()
+        self._cavity_hold.release()
         self.view.log_message("Frequency tuning completed and saved")
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("COMPLETED")
@@ -1275,6 +1281,7 @@ class FrequencyTuningController(QObject):
     def on_phase_failed(self, error_msg: str) -> None:
         self._paused = False
         self._clear_running_ui()
+        self._cavity_hold.release()
         self.view.log_message(f"✗ Stage failed — {error_msg}")
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("FAILED")
