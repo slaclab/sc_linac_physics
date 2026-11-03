@@ -2,6 +2,45 @@
 
 <!-- version list -->
 
+## v9.62.0 (2026-11-03)
+
+### Bug Fixes
+
+- **tuning**: Harden sc-hl-tuner-curves fit against resets and bad samples
+  ([#478](https://github.com/slaclab/sc_linac_physics/pull/478),
+  [`4fe822a`](https://github.com/slaclab/sc_linac_physics/commit/4fe822a7f098a708615609d6f97d6641a58b6588))
+
+### Features
+
+- **tuning**: Package HL tuner response curves
+  ([#478](https://github.com/slaclab/sc_linac_physics/pull/478),
+  [`4fe822a`](https://github.com/slaclab/sc_linac_physics/commit/4fe822a7f098a708615609d6f97d6641a58b6588))
+
+- **tuning**: Package HL tuner response curves and add sc-hl-tuner-curves
+  ([#478](https://github.com/slaclab/sc_linac_physics/pull/478),
+  [`4fe822a`](https://github.com/slaclab/sc_linac_physics/commit/4fe822a7f098a708615609d6f97d6641a58b6588))
+
+### Refactoring
+
+- **tuning**: Drop sc-hl-tuner-curves, keep only the packaged curves
+  ([#478](https://github.com/slaclab/sc_linac_physics/pull/478),
+  [`4fe822a`](https://github.com/slaclab/sc_linac_physics/commit/4fe822a7f098a708615609d6f97d6641a58b6588))
+
+
+## v9.61.0 (2026-11-03)
+
+### Chores
+
+- **ci**: Bump actions/setup-python ([#475](https://github.com/slaclab/sc_linac_physics/pull/475),
+  [`fcf7490`](https://github.com/slaclab/sc_linac_physics/commit/fcf74902ecb22d1ca042820be49fb3fba8196cc8))
+
+### Features
+
+- **sim**: Serve rack FREQ_OFFSET and mark CHIRP:DF invalid outside the chirp window
+  ([#476](https://github.com/slaclab/sc_linac_physics/pull/476),
+  [`6ff7825`](https://github.com/slaclab/sc_linac_physics/commit/6ff7825eef361e49cb22a5eec0e8911372669f24))
+
+
 ## v9.60.0 (2026-10-29)
 
 ### Bug Fixes
