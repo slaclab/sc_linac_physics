@@ -884,3 +884,49 @@ class TestMoveRunsAsTask:
             release.set()
             await stepper_group._move_task
         assert mv.call_count == 1
+
+
+class TestHLResponseCurve:
+    """H1/H2 cavities with a packaged curve move along it, not by SCALE."""
+
+    @staticmethod
+    def _hl_stepper(prefix="ACCL:L1B:H250:"):
+        cavity = Mock()
+        cavity.is_hl = True
+        cavity.prefix = prefix
+        cavity.detune = _RecordingChannel()
+        piezo = PiezoPVGroup("TEST:PZT:", cavity)
+        return StepperPVGroup(f"{prefix}STEP:", cavity, piezo), cavity
+
+    def test_slope_follows_the_curve(self):
+        from sc_linac_physics.utils.sc_linac.tuner_response import (
+            TunerResponse,
+        )
+
+        stepper, cavity = self._hl_stepper()
+        response = TunerResponse.for_cavity("ACCL:L1B:H250:")
+        for real_hz in (-650_000, -250_000, 0):
+            cavity.detune.value = real_hz
+            assert stepper._hz_per_microstep_now() == pytest.approx(
+                response.hz_per_microstep(real_hz)
+            )
+
+    def test_flat_zone_is_slower(self):
+        # H2 cav 5 has the strongest flat zone in the archive.
+        stepper, cavity = self._hl_stepper()
+        cavity.detune.value = -250_000
+        flat = stepper._hz_per_microstep_now()
+        cavity.detune.value = 0
+        assert flat < stepper._hz_per_microstep_now()
+
+    @pytest.mark.asyncio
+    async def test_scale_write_does_not_change_the_response(self):
+        stepper, cavity = self._hl_stepper()
+        cavity.detune.value = -100_000
+        before = stepper._hz_per_microstep_now()
+        await stepper.hz_per_microstep.write(1.0, verify_value=False)
+        assert stepper._hz_per_microstep_now() == before
+
+    def test_no_curve_falls_back_to_scale(self):
+        stepper, _ = self._hl_stepper(prefix="TEST:HL:")
+        assert stepper.response is None

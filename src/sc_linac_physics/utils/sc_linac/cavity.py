@@ -753,6 +753,7 @@ class Cavity(linac_utils.SCLinacObject):
         def delta_detune():
             return self.detune
 
+        self._refuse_nonzero_freq_offset()
         self.setup_tuning(use_sela=use_sela)
         mode = "SELA" if use_sela else "chirp"
         self.set_status_message(
@@ -782,6 +783,46 @@ class Cavity(linac_utils.SCLinacObject):
             )
 
         self.tune_config_pv_obj.put(linac_utils.TUNE_CONFIG_RESONANCE_VALUE)
+
+    def _refuse_nonzero_freq_offset(self):
+        """Raise DetuneError if the rack FREQ_OFFSET is nonzero.
+
+        move_to_resonance drives CHIRP:DF (or DFBEST) to 0. CHIRP:DF reads
+        relative to the rack FREQ_OFFSET, so with an offset it would stop at
+        the offset, not at resonance, and still write TUNE_CONFIG RESONANCE.
+        Reads one PV and writes nothing.
+
+        CHECK: does DFBEST also read relative to FREQ_OFFSET? The SELA pass
+        reads it. Only CHIRP:DF was checked against the archive.
+        """
+        freq_offset = self.rack.freq_offset
+        if freq_offset != 0:
+            message = (
+                f"{self} not tuning: {self.rack.freq_offset_pv} is "
+                f"{freq_offset} Hz. Tuning would stop at the offset, not at "
+                "resonance. Zero it first."
+            )
+            self.set_status_message(
+                message,
+                logging.ERROR,
+                extra_data={
+                    "freq_offset_hz": freq_offset,
+                    "freq_offset_pv": self.rack.freq_offset_pv,
+                    "cavity": str(self),
+                },
+            )
+            raise linac_utils.DetuneError(message)
+
+    @property
+    def real_detune(self) -> float:
+        """Detune from resonance in Hz: CHIRP:DF + the rack FREQ_OFFSET.
+
+        CHIRP:DF reads relative to the offset. On H1/H2, CHIRP:DF dropped by
+        exactly the offset change on 66 idle offset changes in the 2023-2025
+        archive (Lisa Zacarias, "Stepper SCALE on the harmonic linearizers",
+        2026-11-02).
+        """
+        return self.detune_chirp + self.rack.freq_offset
 
     @property
     def detune_best_pv_obj(self) -> PV:
@@ -866,14 +907,36 @@ class Cavity(linac_utils.SCLinacObject):
         reset_signed_steps: bool = False,
         iteration_callback: Optional[Callable[[], None]] = None,
         max_stepper_temp: Optional[float] = None,
+        expected_steps: Optional[int] = None,
+        step_estimator: Optional[Callable[[float], float]] = None,
+        min_tol_factor: float = 1.0,
     ):
+        """Step the tuner until abs(delta_hz_func()) <= tolerance.
+
+        The last three arguments let a caller replace the single-SCALE step
+        model, for tuners whose Hz per microstep changes along the range (the
+        H1/H2 flat zone). Left at their defaults, behavior is unchanged.
+
+        expected_steps: the step count the runaway guard compares against,
+            instead of the starting detune times microsteps_per_hz.
+        step_estimator: given delta_hz, the microsteps it takes to cover it.
+            Only the magnitude is used; the direction still comes from the
+            signs of delta_hz and SCALE, as without it.
+        min_tol_factor: a floor under linac_utils.stepper_tol_factor.
+        """
         if self.detune_invalid:
             raise linac_utils.DetuneError(f"{self} detune invalid")
 
         delta_hz = delta_hz_func()
-        expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))
+        expected_steps = (
+            abs(int(delta_hz * self.microsteps_per_hz))
+            if expected_steps is None
+            else expected_steps
+        )
 
-        stepper_tol_factor = linac_utils.stepper_tol_factor(expected_steps)
+        stepper_tol_factor = max(
+            linac_utils.stepper_tol_factor(expected_steps), min_tol_factor
+        )
 
         steps_moved: int = 0
         # Tracks whether the reported detune has ever budged. A tuner that is
@@ -908,9 +971,8 @@ class Cavity(linac_utils.SCLinacObject):
                 iteration_callback()
 
             microsteps_per_hz = self.microsteps_per_hz
-            # Undershoot on purpose; the reasoning is at the constant.
-            est_steps = int(
-                linac_utils.AUTO_TUNE_UNDERSHOOT * delta_hz * microsteps_per_hz
+            est_steps = self._estimate_steps(
+                delta_hz, microsteps_per_hz, step_estimator
             )
 
             # A zero step estimate commands no motion, so the detune cannot
@@ -993,6 +1055,25 @@ class Cavity(linac_utils.SCLinacObject):
             delta_hz = delta_hz_func()
             if delta_hz != previous_delta_hz:
                 detune_ever_changed = True
+
+    @staticmethod
+    def _estimate_steps(
+        delta_hz: float,
+        microsteps_per_hz: float,
+        step_estimator: Optional[Callable[[float], float]] = None,
+    ) -> int:
+        """Signed microsteps for one _auto_tune move.
+
+        Without step_estimator: delta_hz * microsteps_per_hz (from SCALE).
+        With it: its magnitude, signed as delta_hz * microsteps_per_hz is.
+        Either way, times AUTO_TUNE_UNDERSHOOT, which undershoots on purpose;
+        the reasoning is at the constant.
+        """
+        steps = delta_hz * microsteps_per_hz
+        if step_estimator is not None:
+            sign = 1 if steps > 0 else -1 if steps < 0 else 0
+            steps = sign * abs(step_estimator(delta_hz))
+        return int(linac_utils.AUTO_TUNE_UNDERSHOOT * steps)
 
     def check_detune(self):
         if self.detune_invalid:
