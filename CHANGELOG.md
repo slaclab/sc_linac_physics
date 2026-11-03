@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v9.61.0 (2026-11-03)
+
+### Chores
+
+- **ci**: Bump actions/setup-python ([#475](https://github.com/slaclab/sc_linac_physics/pull/475),
+  [`fcf7490`](https://github.com/slaclab/sc_linac_physics/commit/fcf74902ecb22d1ca042820be49fb3fba8196cc8))
+
+### Features
+
+- **sim**: Serve rack FREQ_OFFSET and mark CHIRP:DF invalid outside the chirp window
+  ([#476](https://github.com/slaclab/sc_linac_physics/pull/476),
+  [`6ff7825`](https://github.com/slaclab/sc_linac_physics/commit/6ff7825eef361e49cb22a5eec0e8911372669f24))
+
+
 ## v9.60.0 (2026-10-29)
 
 ### Bug Fixes
