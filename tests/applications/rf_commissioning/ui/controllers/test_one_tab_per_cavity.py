@@ -1,0 +1,202 @@
+"""A cavity another tab is running is refused before anything is written."""
+
+from unittest.mock import Mock
+
+import pytest
+
+from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
+    get_commissioning_machine,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.batch_piezo_pre_rf_controller import (
+    BatchPiezoPreRFController,
+    CavityRunState,
+    CavitySpec,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_char_controller import (
+    CavityCharController,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_hold import (
+    CavityHold,
+    refusal_message,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.frequency_tuning_controller import (
+    FrequencyTuningController,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_controller import (
+    PiezoPreRFController,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_with_rf_controller import (
+    PiezoWithRFController,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.ssa_char_controller import (
+    SSACharController,
+)
+
+
+@pytest.fixture
+def cavity():
+    return get_commissioning_machine().cryomodules["02"].cavities[1]
+
+
+@pytest.fixture
+def other_tab(cavity):
+    """Another tab already running the cavity."""
+    hold = CavityHold("the Other tab")
+    assert hold.take(cavity)
+    return hold
+
+
+def _refused(view) -> bool:
+    view.show_error.assert_called_once()
+    return "the Other tab" in view.show_error.call_args.args[0]
+
+
+# ---------------------------------------------------------------------------
+# CavityHold
+# ---------------------------------------------------------------------------
+
+
+def test_hold_release_frees_every_cavity():
+    machine = get_commissioning_machine()
+    first = machine.cryomodules["02"].cavities[1]
+    second = machine.cryomodules["02"].cavities[2]
+    hold = CavityHold("the Test tab")
+    assert hold.take(first) and hold.take(second)
+
+    hold.release()
+
+    assert first.claimed_by is None
+    assert second.claimed_by is None
+
+
+def test_hold_refused_while_another_hold_has_it(cavity, other_tab):
+    assert not CavityHold("the Test tab").take(cavity)
+    assert "the Other tab" in refusal_message(cavity)
+
+
+def test_every_tab_gets_the_same_cavity_object():
+    ft = FrequencyTuningController(Mock(), Mock())
+    cc = CavityCharController(Mock(), Mock())
+
+    assert ft._get_machine_cavity("02", 1) is cc._get_machine_cavity("02", 1)
+
+
+# ---------------------------------------------------------------------------
+# Refused starts write nothing to the database or the machine
+# ---------------------------------------------------------------------------
+
+
+def test_frequency_tuning_stage_1_refused(cavity, other_tab):
+    view, session = Mock(), Mock()
+    c = FrequencyTuningController(view, session)
+    c.update_pv_addresses = Mock()
+
+    c._start_stage(1, ["verify_initial_state"], False, "02", 1, "op")
+
+    assert _refused(view)
+    session.can_run_phase.assert_not_called()
+    session.start_active_phase_instance.assert_not_called()
+
+
+def test_frequency_tuning_later_stage_refused(cavity, other_tab):
+    view = Mock()
+    c = FrequencyTuningController(view, Mock())
+    c._get_operator = Mock(return_value="op")
+    c._check_data_prerequisites = Mock(return_value=True)
+    c.phase, c.context, c._cavity = Mock(), Mock(), cavity
+
+    c.run_stage_2()
+
+    assert _refused(view)
+    assert not c._stage_running
+
+
+def test_frequency_tuning_releases_when_running_ui_clears(cavity):
+    c = FrequencyTuningController(Mock(), Mock())
+    c._cavity = cavity
+    assert c._take_cavity()
+
+    c._clear_running_ui()
+
+    assert cavity.claimed_by is None
+
+
+def test_ssa_refused(cavity, other_tab):
+    view, session = Mock(), Mock()
+    c = SSACharController(view, session)
+    c.update_pv_addresses = Mock()
+    c._get_drive_max = Mock(return_value=0.8)
+
+    c._start_run_for_target("02", 1, "op")
+
+    assert _refused(view)
+    session.start_active_phase_instance.assert_not_called()
+
+
+def test_ssa_releases_on_failure(cavity):
+    c = SSACharController(Mock(), Mock())
+    assert c._cavity_hold.take(cavity)
+
+    c.on_phase_failed("boom")
+
+    assert cavity.claimed_by is None
+
+
+def test_piezo_pre_rf_refused(cavity, other_tab):
+    view, session = Mock(), Mock()
+    c = PiezoPreRFController(view, session)
+    c._get_operator = Mock(return_value="op")
+    c._get_selected_cavity_info = Mock(return_value=("02-1", "02", 1))
+    c.update_pv_addresses = Mock()
+    c._prepare_phase_context = Mock()
+
+    c.on_run_automated_test()
+
+    assert _refused(view)
+    c._prepare_phase_context.assert_not_called()
+
+
+def test_cavity_char_refused(cavity, other_tab):
+    view = Mock()
+    view.get_current_operator.return_value = "op"
+    c = CavityCharController(view, Mock())
+    c._get_drive_level = Mock(return_value=10.0)
+    c._cavity = cavity
+
+    c.on_run_characterization()
+
+    assert _refused(view)
+    assert not c._running
+
+
+def test_piezo_with_rf_refused(cavity, other_tab):
+    view, session = Mock(), Mock()
+    view.get_current_operator.return_value = "op"
+    session.can_run_phase.return_value = (True, "")
+    c = PiezoWithRFController(view, session)
+    c._cavity = cavity
+
+    c.on_start_test()
+
+    assert _refused(view)
+    session.start_active_phase_instance.assert_not_called()
+
+
+def test_batch_skips_a_cavity_another_tab_is_running(cavity, other_tab):
+    session = Mock()
+    ctrl = BatchPiezoPreRFController(session)
+    state = CavityRunState(spec=CavitySpec(cryomodule="02", cavity_number=1))
+
+    with pytest.raises(ValueError, match="the Other tab"):
+        ctrl._init_record_and_context(state, "op")
+
+    session.get_record_id_for_cavity.assert_not_called()
+
+
+def test_batch_releases_when_the_run_ends(cavity):
+    ctrl = BatchPiezoPreRFController(Mock())
+    assert ctrl._cavity_hold.take(cavity)
+
+    ctrl._run_batch([], "op")
+
+    assert cavity.claimed_by is None

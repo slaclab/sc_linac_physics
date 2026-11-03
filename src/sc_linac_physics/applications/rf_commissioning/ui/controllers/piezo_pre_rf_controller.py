@@ -34,7 +34,11 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
-    build_commissioning_machine,
+    get_commissioning_machine,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_hold import (
+    CavityHold,
+    refusal_message,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.runner_bridge import (
     RunnerBridge,
@@ -72,6 +76,8 @@ class PiezoPreRFController(QObject):
         self.phase: PiezoPreRFPhase | None = None
         self.machine: Machine | None = None
         self.run: PhaseRun | None = None
+        # Held while a run is in flight, so no other tab starts on it.
+        self._cavity_hold = CavityHold("the Piezo Pre-RF tab")
 
         # Step mode is chosen before Run and copied onto each new PhaseRun.
         self._step_mode = False
@@ -265,7 +271,7 @@ class PiezoPreRFController(QObject):
     def _get_machine_cavity(self, cm: str, cav: int):
         """cm is a Machine.cryomodules key: "01".."35", "H1" or "H2"."""
         if not self.machine:
-            self.machine = build_commissioning_machine()
+            self.machine = get_commissioning_machine()
         return self.machine.cryomodules[cm].cavities[cav]
 
     def on_run_automated_test(self) -> None:
@@ -309,7 +315,11 @@ class PiezoPreRFController(QObject):
             self.update_pv_addresses(cm, str(cav))
             cavity = self._get_machine_cavity(cm, cav)
 
+            if not self._cavity_hold.take(cavity):
+                self.view.show_error(refusal_message(cavity))
+                return
             if not self._prepare_phase_context(cavity, operator):
+                self._cavity_hold.release()
                 return
 
             self._set_running_ui_state()
@@ -319,6 +329,7 @@ class PiezoPreRFController(QObject):
         except Exception as exc:
             import traceback
 
+            self._cavity_hold.release()
             self.view.show_error(f"Failed to start test: {exc}")
             self.view.log_message(f"Error: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
@@ -459,6 +470,7 @@ class PiezoPreRFController(QObject):
 
     def on_phase_completed(self) -> None:
         """Handle phase completion."""
+        self._cavity_hold.release()
         self._reset_run_controls()
 
         self.view.log_message("Phase completed successfully")
@@ -538,6 +550,7 @@ class PiezoPreRFController(QObject):
 
     def on_phase_failed(self, error_msg: str) -> None:
         """Handle phase failure."""
+        self._cavity_hold.release()
         self._reset_run_controls()
 
         self.view.log_message(f"Phase failed: {error_msg}")

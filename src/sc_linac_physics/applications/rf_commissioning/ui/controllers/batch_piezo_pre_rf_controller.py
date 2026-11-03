@@ -27,7 +27,11 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
     cryomodule_key,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
-    build_commissioning_machine,
+    get_commissioning_machine,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_hold import (
+    CavityHold,
+    refusal_message,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import get_linac_for_cryomodule
@@ -196,6 +200,8 @@ class BatchPiezoPreRFController(QObject):
         super().__init__()
         self.session = session
         self._machine: Machine | None = None
+        # Held for the whole batch, so no tab starts on a batch cavity.
+        self._cavity_hold = CavityHold("the batch Piezo Pre-RF run")
         self._abort_event = Event()
         self._worker_thread: Thread | None = None
 
@@ -244,24 +250,28 @@ class BatchPiezoPreRFController(QObject):
             f"Starting batch run for {total} cavit{'y' if total == 1 else 'ies'}"
         )
 
-        states = self._prepare_states(cavities, operator)
+        try:
+            states = self._prepare_states(cavities, operator)
 
-        # Phase 1: trigger sweep — run all cavities in parallel so CA connections
-        # and the per-cavity sleep(0.5) overlap instead of stacking.
-        self.log_message.emit("--- Trigger sweep (parallel) ---")
-        self._trigger_cavities_parallel(states)
+            # Phase 1: trigger sweep — run all cavities in parallel so CA
+            # connections and the per-cavity sleep(0.5) overlap instead of
+            # stacking.
+            self.log_message.emit("--- Trigger sweep (parallel) ---")
+            self._trigger_cavities_parallel(states)
 
-        # Phase 2: collect sweep
-        self.log_message.emit("--- Collect sweep ---")
-        completed = 0
-        for state in states:
-            if self._abort_event.is_set():
-                self._mark_remaining_skipped(states, only_triggered=True)
-                break
-            if state.triggered:
-                self._collect_cavity(state)
-            completed += 1
-            self.batch_progress.emit(completed, total)
+            # Phase 2: collect sweep
+            self.log_message.emit("--- Collect sweep ---")
+            completed = 0
+            for state in states:
+                if self._abort_event.is_set():
+                    self._mark_remaining_skipped(states, only_triggered=True)
+                    break
+                if state.triggered:
+                    self._collect_cavity(state)
+                completed += 1
+                self.batch_progress.emit(completed, total)
+        finally:
+            self._cavity_hold.release()
 
         self.log_message.emit("Batch run finished")
         self.batch_finished.emit()
@@ -295,6 +305,12 @@ class BatchPiezoPreRFController(QObject):
             raise ValueError(
                 f"Cannot determine linac for CM {cavity_spec.cryomodule!r}"
             )
+
+        # Claimed before the record is touched. A cavity another tab is
+        # running is reported as an error and skipped; the rest still run.
+        machine_cavity = self._get_machine_cavity(cavity_spec)
+        if not self._cavity_hold.take(machine_cavity):
+            raise ValueError(refusal_message(machine_cavity))
 
         # Load or create the commissioning record for this cavity
         record_id = self.session.get_record_id_for_cavity(
@@ -338,7 +354,6 @@ class BatchPiezoPreRFController(QObject):
             )
             state.phase_instance_id = None
 
-        machine_cavity = self._get_machine_cavity(cavity_spec)
         state.context = PhaseContext(
             record=record,
             operator=operator,
@@ -558,7 +573,7 @@ class BatchPiezoPreRFController(QObject):
 
     def _get_machine(self) -> Machine:
         if self._machine is None:
-            self._machine = build_commissioning_machine()
+            self._machine = get_commissioning_machine()
         return self._machine
 
     def _get_machine_cavity(self, cavity_spec: CavitySpec):

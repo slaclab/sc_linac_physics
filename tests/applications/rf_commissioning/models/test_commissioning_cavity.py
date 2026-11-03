@@ -13,6 +13,7 @@ from sc_linac_physics.applications.rf_commissioning.models.commissioning_cavity 
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
     build_commissioning_machine,
+    get_commissioning_machine,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (
     CommissioningPiezo,
@@ -31,6 +32,51 @@ def test_machine_uses_commissioning_cavity_and_piezo(cavity):
 
 def test_machine_is_new_each_call():
     assert build_commissioning_machine() is not build_commissioning_machine()
+
+
+def test_shared_machine_is_the_same_each_call():
+    assert get_commissioning_machine() is get_commissioning_machine()
+
+
+def test_claim_free_cavity(cavity):
+    holder = object()
+
+    assert cavity.claim(holder)
+    assert cavity.claimed_by is holder
+
+
+def test_claim_again_by_the_same_holder(cavity):
+    holder = object()
+    cavity.claim(holder)
+
+    assert cavity.claim(holder)
+
+
+def test_claim_refused_while_another_holder_has_it(cavity):
+    first, second = object(), object()
+    cavity.claim(first)
+
+    assert not cavity.claim(second)
+    assert cavity.claimed_by is first
+
+
+def test_release_by_another_holder_does_nothing(cavity):
+    first = object()
+    cavity.claim(first)
+
+    cavity.release(object())
+
+    assert cavity.claimed_by is first
+
+
+def test_release_frees_the_cavity(cavity):
+    holder = object()
+    cavity.claim(holder)
+
+    cavity.release(holder)
+
+    assert cavity.claimed_by is None
+    assert cavity.claim(object())
 
 
 def test_tune_to_resonance_chirp_passes_args_to_auto_tune(cavity):

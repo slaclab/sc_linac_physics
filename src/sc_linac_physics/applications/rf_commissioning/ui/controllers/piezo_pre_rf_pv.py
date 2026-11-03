@@ -7,7 +7,7 @@ from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo i
     CommissioningPiezo,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
-    build_commissioning_machine,
+    get_commissioning_machine,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 from sc_linac_physics.utils.sc_linac.linac_utils import (
@@ -76,7 +76,7 @@ def get_piezo_from_selection(
     cav = int(cavity_number)
     cm = cryomodule_key(cryomodule)
 
-    active_machine = machine or build_commissioning_machine()
+    active_machine = machine or get_commissioning_machine()
     cavity = active_machine.cryomodules[cm].cavities[cav]
     return cavity.piezo, cm, cav, active_machine
 
