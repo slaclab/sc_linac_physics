@@ -57,7 +57,11 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
     resolve_cavity_selection,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
-    build_commissioning_machine,
+    get_commissioning_machine,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_hold import (
+    CavityHold,
+    refusal_message,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -125,6 +129,8 @@ class FrequencyTuningController(QObject):
         self.phase: FrequencyTuningPhase | None = None
         self.machine: Machine | None = None
         self._cavity = None
+        # Held while a stage runs, so no other tab starts on this cavity.
+        self._cavity_hold = CavityHold("the Frequency Tuning tab")
 
         self._paused = False
         self._steps: list[str] = []
@@ -234,7 +240,7 @@ class FrequencyTuningController(QObject):
     def _get_machine_cavity(self, cm: str, cav: int):
         """cm is a Machine.cryomodules key: "01".."35", "H1" or "H2"."""
         if not self.machine:
-            self.machine = build_commissioning_machine()
+            self.machine = get_commissioning_machine()
         return self.machine.cryomodules[cm].cavities[cav]
 
     # ------------------------------------------------------------------
@@ -372,6 +378,8 @@ class FrequencyTuningController(QObject):
         self._current_stage = 2
         self._steps = list(_STAGE2_STEPS)
         self._finalize_after_run = False
+        if not self._take_cavity():
+            return
         self._set_stage_running_ui(2)
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -401,6 +409,8 @@ class FrequencyTuningController(QObject):
         self._current_stage = 3
         self._steps = list(_STAGE3_STEPS)
         self._finalize_after_run = False
+        if not self._take_cavity():
+            return
         self._set_stage_running_ui(3)
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -424,6 +434,8 @@ class FrequencyTuningController(QObject):
         self._current_stage = 4
         self._steps = list(_STAGE4_STEPS)
         self._finalize_after_run = False
+        if not self._take_cavity():
+            return
         self._set_stage_running_ui(4)
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -437,6 +449,8 @@ class FrequencyTuningController(QObject):
         self._current_stage = 5
         self._steps = list(_STAGE4_FINALIZE_STEPS)
         self._finalize_after_run = True
+        if not self._take_cavity():
+            return
         self._set_stage_running_ui(None)
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -519,6 +533,8 @@ class FrequencyTuningController(QObject):
         self.update_pv_addresses(cm, str(cav))
         cavity = self._get_machine_cavity(cm, cav)
         self._cavity = cavity
+        if not self._take_cavity():
+            return
 
         record = self.session.get_active_record()
         record_id = self.session.get_active_record_id()
@@ -528,6 +544,7 @@ class FrequencyTuningController(QObject):
             CommissioningPhase.FREQUENCY_TUNING
         )
         if not can_run:
+            self._cavity_hold.release()
             self.view.show_error(f"Cannot run frequency tuning phase: {reason}")
             return
 
@@ -552,6 +569,7 @@ class FrequencyTuningController(QObject):
 
         is_valid, message = self.phase.validate_prerequisites()
         if not is_valid:
+            self._cavity_hold.release()
             self.view.show_error(f"Prerequisites not met: {message}")
             return
 
@@ -614,6 +632,13 @@ class FrequencyTuningController(QObject):
         if desc is not None:
             desc.setVisible(visible)
 
+    def _take_cavity(self) -> bool:
+        """Claim the cavity for this tab. False, with an error, if taken."""
+        if self._cavity is None or self._cavity_hold.take(self._cavity):
+            return True
+        self.view.show_error(refusal_message(self._cavity))
+        return False
+
     def _set_stage_running_ui(self, stage: int | None) -> None:
         self._stage_running = True
         if stage is not None:
@@ -666,6 +691,7 @@ class FrequencyTuningController(QObject):
 
     def _clear_running_ui(self) -> None:
         self._stage_running = False
+        self._cavity_hold.release()
         self._clear_all_stage_highlights()
         pause_btn = getattr(self.view, "pause_button", None)
         if pause_btn:
