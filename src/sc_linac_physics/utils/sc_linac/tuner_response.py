@@ -9,7 +9,7 @@ them from each cavity's measured curve instead.
 The curves are packaged in data/hl_tuner_response.csv. Each row is one 10 kHz
 bin: cavity PV prefix, real detune (CHIRP:DF + FREQ_OFFSET) in Hz, microsteps
 from cold landing, and whether archived moves covered that bin. The file's
-header says where it came from. sc-hl-tuner-curves refits it.
+header says where it came from and how it was made.
 """
 
 import csv
