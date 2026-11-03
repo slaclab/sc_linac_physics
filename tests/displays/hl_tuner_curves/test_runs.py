@@ -148,6 +148,13 @@ def test_step_ratio_none_without_segments():
     assert R.step_ratio(R.Run(start=T0), linear_curve()) is None
 
 
+def test_step_ratio_leaves_out_segments_past_curve():
+    run = R.Run(start=T0, segments=[(40e3, 60e3, 1e9)])
+    assert R.step_ratio(run, linear_curve()) is None
+    run.segments.append((-500e3, -400e3, 100e3 / HZ_PER_USTEP))
+    assert R.step_ratio(run, linear_curve()) == pytest.approx(1.0)
+
+
 def test_overlay_follows_matching_curve():
     (run,) = one_run()
     x, y = R.overlay(run, linear_curve())
@@ -167,6 +174,28 @@ def test_fetch_skips_failing_quarter():
     assert list(s) == [1.0, 7.0]
 
 
+def test_fetch_raises_when_every_quarter_fails():
+    with patch.object(R, "get_series", side_effect=ArchiverError("down")):
+        with pytest.raises(ArchiverError, match="Every archiver request"):
+            R._fetch("PV", datetime(2026, 1, 1), datetime(2026, 9, 1))
+
+
+def test_fetch_strict_raises_on_one_failing_quarter():
+    def series(pvs, a, b):
+        if a.month == 4:
+            raise ArchiverError("HTTP 500")
+        return {"PV": pd.Series([1.0], index=pd.DatetimeIndex([a]))}
+
+    with patch.object(R, "get_series", side_effect=series):
+        with pytest.raises(ArchiverError, match="HTTP 500"):
+            R._fetch(
+                "PV",
+                datetime(2026, 1, 1),
+                datetime(2026, 9, 1),
+                skip_errors=False,
+            )
+
+
 def test_fetch_runs_reads_rack_offset():
     steps, chirp, offset = linear_run()
     data = {
@@ -174,6 +203,12 @@ def test_fetch_runs_reads_rack_offset():
         "ACCL:L1B:H250:CHIRP:DF": chirp,
         "ACCL:L1B:H200:RACKB:FREQ_OFFSET": offset,
     }
-    with patch.object(R, "_fetch", side_effect=lambda pv, a, b: data[pv]):
+
+    def fetch(pv, a, b, skip_errors=True):
+        # Only CHIRP:DF may skip a failing quarter.
+        assert skip_errors == pv.endswith("CHIRP:DF")
+        return data[pv]
+
+    with patch.object(R, "_fetch", side_effect=fetch):
         runs = R.fetch_runs("ACCL:L1B:H250:", T0, T0)
     assert len(runs) == 1 and runs[0].segments

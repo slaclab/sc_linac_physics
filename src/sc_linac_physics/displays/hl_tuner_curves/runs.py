@@ -208,12 +208,19 @@ def step_ratio(run: Run, curve: pd.DataFrame) -> Optional[float]:
     """Actual microsteps / the curve's microsteps, over the run's segments.
 
     The curve's count for a segment is its rise between the segment's low
-    and high detune. None if the run has no segments or the curve doesn't
-    rise over them.
+    and high detune. Segments reaching past the curve's detune range are
+    left out of both totals; np.interp would clamp them and undercount the
+    curve. None if no segment is left or the curve doesn't rise over them.
     """
     if not run.segments:
         return None
     lo, hi, actual = np.array(run.segments).T
+    inside = (lo >= curve.real_detune_hz.iloc[0]) & (
+        hi <= curve.real_detune_hz.iloc[-1]
+    )
+    if not inside.any():
+        return None
+    lo, hi, actual = lo[inside], hi[inside], actual[inside]
     expected = np.sum(_curve_at(curve, hi) - _curve_at(curve, lo))
     return float(actual.sum() / expected) if expected > 0 else None
 
@@ -230,10 +237,14 @@ def overlay(run: Run, curve: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
     return detune, _curve_at(curve, detune[0]) + (pos - pos[0])
 
 
-def _fetch(pv: str, start: datetime, end: datetime) -> pd.Series:
-    """Valid samples, a quarter at a time; a quarter that errors is skipped.
+def _fetch(
+    pv: str, start: datetime, end: datetime, skip_errors: bool = True
+) -> pd.Series:
+    """Valid samples, a quarter at a time.
 
-    The archiver has returned HTTP 500 on some quarters of these PVs.
+    The archiver has returned HTTP 500 on some quarters of these PVs. With
+    skip_errors, a quarter that errors is skipped; otherwise it raises.
+    Raises if every quarter errored, so an outage isn't read as no data.
     """
     quarters = pd.date_range(start, end, freq="QS")
     edges = [start, *(q for q in quarters if start < q < end), end]
@@ -244,8 +255,12 @@ def _fetch(pv: str, start: datetime, end: datetime) -> pd.Series:
         except PVNotArchivedError:
             raise
         except ArchiverError as e:
+            if not skip_errors:
+                raise
             logger.warning(f"Skipped {pv} {a:%Y-%m-%d}..{b:%Y-%m-%d}: {e}")
-    s = pd.concat(parts).astype(float) if parts else pd.Series(dtype=float)
+    if not parts:
+        raise ArchiverError(f"Every archiver request for {pv} failed")
+    s = pd.concat(parts).astype(float)
     return s[~s.index.duplicated()].sort_index()
 
 
@@ -256,7 +271,17 @@ def fetch_runs(prefix: str, start: datetime, end: datetime) -> List[Run]:
     # 09:52-10:07, when H200:RACKB read -300 kHz and H250/H270's own PVs had
     # no samples (still 0). Which offset did those cavities see?
     # From a quarter early, so the offset at the first move is known.
-    offset = _fetch(rack_offset_pv(prefix), start - timedelta(days=92), end)
-    position = unwrap_position(_fetch(prefix + "STEP:REG_TOTSGN", start, end))
+    # A gap in FREQ_OFFSET or REG_TOTSGN would carry the last value across
+    # it and give wrong detunes or a fake move, so those must fetch whole. A
+    # gap in CHIRP:DF only drops the moves inside it.
+    offset = _fetch(
+        rack_offset_pv(prefix),
+        start - timedelta(days=92),
+        end,
+        skip_errors=False,
+    )
+    position = unwrap_position(
+        _fetch(prefix + "STEP:REG_TOTSGN", start, end, skip_errors=False)
+    )
     chirp = _fetch(prefix + "CHIRP:DF", start, end)
     return find_runs(find_moves(position, chirp, offset), position)
