@@ -142,7 +142,9 @@ class PiezoWithRFController(QObject):
         self.session = session
         self.machine: Machine | None = None
         self._cavity = None
-        # Held while a segment runs, so no other tab starts on this cavity.
+        # Held from Start Test until Push or Don't Push finishes, the phase
+        # fails, or this tab drops the measurement, so no other tab starts
+        # on this cavity between segments.
         self._cavity_hold = CavityHold("the Piezo with RF tab")
         self.context: PhaseContext | None = None
         self.phase: PiezoWithRFPhase | None = None
@@ -225,6 +227,7 @@ class PiezoWithRFController(QObject):
         """
         if self.running:
             return
+        self._cavity_hold.release()
         if self.stage in ("review", "unsaved"):
             self.stage = None
         self.review_data = None
@@ -253,10 +256,30 @@ class PiezoWithRFController(QObject):
         if not can_run:
             self.view.show_error(f"Cannot run Piezo with RF: {reason}")
             return
+        held_before = self._cavity_hold.holds(self._cavity)
         if not self._cavity_hold.take(self._cavity):
             self.view.show_error(refusal_message(self._cavity))
             return
+        if not self._open_attempt(operator):
+            # Only drop a hold this click took, not one an unpushed
+            # measurement on this cavity already had.
+            if not held_before:
+                self._cavity_hold.release()
+            return
+        self.run = PhaseRun(
+            self.phase, abort_hooks=(_cavity_abort_hook(self._cavity),)
+        )
+        self.run.set_step_mode(self._step_mode)
+        self.review_data = None
+        self.view.clear_review()
+        self._start("check", CHECK_STEPS, offset=0)
 
+    def _open_attempt(self, operator: str) -> bool:
+        """Open or continue the phase instance and build the phase.
+
+        False, with an error shown, if nothing can run. Writes only to the
+        commissioning database.
+        """
         # An unpushed measurement leaves its instance open; a new test
         # continues that attempt, as cavity char does.
         record_id = self.session.get_active_record_id()
@@ -267,12 +290,11 @@ class PiezoWithRFController(QObject):
             if started is None:
                 # Nothing has run yet. setup_rf and the gain push must not
                 # run without an attempt on record.
-                self._cavity_hold.release()
                 self.view.show_error(
                     "Could not start a Piezo with RF attempt in the "
                     "database; nothing was run"
                 )
-                return
+                return False
             self._active_phase_instance_id = started.phase_instance_id
         self.context = PhaseContext(
             record=self.session.get_active_record(),
@@ -284,16 +306,9 @@ class PiezoWithRFController(QObject):
         self.phase = PiezoWithRFPhase(self.context)
         ok, message = self.phase.validate_prerequisites()
         if not ok:
-            self._cavity_hold.release()
             self.view.show_error(f"Prerequisites not met: {message}")
-            return
-        self.run = PhaseRun(
-            self.phase, abort_hooks=(_cavity_abort_hook(self._cavity),)
-        )
-        self.run.set_step_mode(self._step_mode)
-        self.review_data = None
-        self.view.clear_review()
-        self._start("check", CHECK_STEPS, offset=0)
+            return False
+        return True
 
     def _start(self, stage: str, steps, offset: int, complete=False) -> None:
         """Start a segment; progress is reported across all nine steps."""
@@ -399,7 +414,6 @@ class PiezoWithRFController(QObject):
     # ------------------------------------------------------------------
 
     def _on_segment_finished(self, result: SegmentResult) -> None:
-        self._cavity_hold.release()
         self.view.set_running(False)
         if result.outcome is not SegmentOutcome.COMPLETED:
             self._on_failed(result.message or "Phase execution failed")
@@ -428,6 +442,7 @@ class PiezoWithRFController(QObject):
 
     def _on_finished(self) -> None:
         """Push or Don't Push completed: close the instance and save."""
+        self._cavity_hold.release()
         self.review_data = None
         self._unsaved = {"complete", "save", "history"}
         self._persist_finish()
@@ -494,6 +509,7 @@ class PiezoWithRFController(QObject):
 
     def _on_failed(self, message: str) -> None:
         """The runner has marked the phase FAILED; record that and say so."""
+        self._cavity_hold.release()
         self.stage = None
         self.review_data = None
         snapshot = None
