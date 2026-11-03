@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v9.62.0 (2026-11-03)
+
+### Bug Fixes
+
+- **tuning**: Harden sc-hl-tuner-curves fit against resets and bad samples
+  ([#478](https://github.com/slaclab/sc_linac_physics/pull/478),
+  [`4fe822a`](https://github.com/slaclab/sc_linac_physics/commit/4fe822a7f098a708615609d6f97d6641a58b6588))
+
+### Features
+
+- **tuning**: Package HL tuner response curves
+  ([#478](https://github.com/slaclab/sc_linac_physics/pull/478),
+  [`4fe822a`](https://github.com/slaclab/sc_linac_physics/commit/4fe822a7f098a708615609d6f97d6641a58b6588))
+
+- **tuning**: Package HL tuner response curves and add sc-hl-tuner-curves
+  ([#478](https://github.com/slaclab/sc_linac_physics/pull/478),
+  [`4fe822a`](https://github.com/slaclab/sc_linac_physics/commit/4fe822a7f098a708615609d6f97d6641a58b6588))
+
+### Refactoring
+
+- **tuning**: Drop sc-hl-tuner-curves, keep only the packaged curves
+  ([#478](https://github.com/slaclab/sc_linac_physics/pull/478),
+  [`4fe822a`](https://github.com/slaclab/sc_linac_physics/commit/4fe822a7f098a708615609d6f97d6641a58b6588))
+
+
 ## v9.61.0 (2026-11-03)
 
 ### Chores
