@@ -7,6 +7,9 @@ import pytest
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
     get_commissioning_machine,
 )
+from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
+    SegmentOutcome,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.batch_piezo_pre_rf_controller import (
     BatchPiezoPreRFController,
     CavityRunState,
@@ -111,14 +114,60 @@ def test_frequency_tuning_later_stage_refused(cavity, other_tab):
     assert not c._stage_running
 
 
-def test_frequency_tuning_releases_when_running_ui_clears(cavity):
+def _frequency_tuning_holding(cavity):
     c = FrequencyTuningController(Mock(), Mock())
     c._cavity = cavity
     assert c._take_cavity()
+    return c
 
+
+def test_frequency_tuning_keeps_the_cavity_between_stages(cavity):
+    c = _frequency_tuning_holding(cavity)
+
+    # What a finished stage does before enabling the next one.
     c._clear_running_ui()
 
+    assert cavity.claimed_by is c._cavity_hold
+
+
+@pytest.mark.parametrize(
+    "end", [lambda c: c.on_phase_completed(), lambda c: c.on_phase_failed("x")]
+)
+def test_frequency_tuning_releases_when_the_phase_ends(cavity, end):
+    c = _frequency_tuning_holding(cavity)
+
+    end(c)
+
     assert cavity.claimed_by is None
+
+
+def test_frequency_tuning_releases_on_another_cavity(cavity, monkeypatch):
+    c = _frequency_tuning_holding(cavity)
+    other = get_commissioning_machine().cryomodules["02"].cavities[2]
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "frequency_tuning_controller.resolve_cavity_selection",
+        lambda view, cm, cav: (cm, cav),
+    )
+    c._apply_stepper_pv_mapping = Mock()
+
+    c.update_pv_addresses("02", "2")
+
+    assert cavity.claimed_by is None
+    assert c._cavity is other
+
+
+def test_frequency_tuning_failed_restart_keeps_an_earlier_hold(cavity):
+    session = Mock()
+    session.can_run_phase.return_value = (False, "gated")
+    c = FrequencyTuningController(Mock(), session)
+    c.update_pv_addresses = Mock()
+    c._cavity = cavity
+    assert c._take_cavity()
+
+    c._start_stage(1, ["verify_initial_state"], False, "02", 1, "op")
+
+    assert cavity.claimed_by is c._cavity_hold
 
 
 def test_ssa_refused(cavity, other_tab):
@@ -198,5 +247,36 @@ def test_batch_releases_when_the_run_ends(cavity):
     assert ctrl._cavity_hold.take(cavity)
 
     ctrl._run_batch([], "op")
+
+    assert cavity.claimed_by is None
+
+
+def _piezo_with_rf_holding(cavity):
+    c = PiezoWithRFController(Mock(), Mock())
+    c._cavity = cavity
+    assert c._cavity_hold.take(cavity)
+    return c
+
+
+def test_piezo_with_rf_keeps_the_cavity_between_segments(cavity):
+    c = _piezo_with_rf_holding(cavity)
+    c.stage = "measure"
+    c._on_measured = Mock()
+    result = Mock(outcome=SegmentOutcome.COMPLETED, results={})
+    result.results = {"read_results": Mock(data={})}
+
+    c._on_segment_finished(result)
+
+    assert cavity.claimed_by is c._cavity_hold
+
+
+@pytest.mark.parametrize(
+    "end", [lambda c: c._on_failed("x"), lambda c: c.drop_review()]
+)
+def test_piezo_with_rf_releases(cavity, end):
+    c = _piezo_with_rf_holding(cavity)
+    c.context = None
+
+    end(c)
 
     assert cavity.claimed_by is None
