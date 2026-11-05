@@ -16,9 +16,9 @@ name: PR size
 # equivalent pre-commit check locally; that copy is untracked, so this workflow
 # is the authoritative one.
 
+# Any base, not only main: a stacked PR's base is the branch below it.
 on:
   pull_request:
-    branches: ["main"]
     types: [opened, synchronize, reopened]
 
 concurrency:
