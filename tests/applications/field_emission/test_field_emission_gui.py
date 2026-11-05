@@ -80,6 +80,8 @@ def display(qtbot):
         patch.object(feg, "unify_axes"),
     ):
         widget = FieldEmission()
+        # Run plot data fetches inline so tests see the result immediately
+        widget._run_in_background = lambda target: target()
         qtbot.addWidget(widget)
         yield widget
 
@@ -750,3 +752,58 @@ class TestSignalWiring:
         for cb in display.rad_chan_cb:
             cb.setChecked(True)
         assert display.sel_all_rad_btn.text() == "Deselect All Channels"
+
+
+class TestPlotLoading:
+    def _ready(self, display):
+        with patch.object(
+            feg,
+            "match_measurement_dates",
+            return_value=list(SAMPLE_MEASUREMENTS),
+        ):
+            display.cryo_dropdown.setCurrentIndex(0)
+            _select_rows(display, [0])
+        display.cavity_cb[0].setChecked(True)
+        display.rad_chan_cb[0].setChecked(True)
+
+    def test_button_disabled_while_loading(self, display):
+        self._ready(display)
+        display._run_in_background = lambda target: None  # never finishes
+
+        display.on_plot_btn_clicked()
+
+        assert display.plot_btn.text() == "LOADING..."
+        assert not display.plot_btn.isEnabled()
+        display.cavity_cb[1].setChecked(True)  # re-checks button state
+        assert not display.plot_btn.isEnabled()
+
+    def test_button_restored_after_plot(self, display):
+        self._ready(display)
+        result = [_make_plot_result(SAMPLE_MEASUREMENTS[0], [1])]
+        with patch.object(feg, "fetch_plot_data", return_value=result):
+            display.on_plot_btn_clicked()
+
+        assert display.plot_btn.text() == "PLOT"
+        assert display.plot_btn.isEnabled()
+
+    def test_fetch_error_shown_on_canvas(self, display):
+        self._ready(display)
+        with patch.object(
+            feg, "fetch_plot_data", side_effect=ConnectionError("archiver down")
+        ):
+            display.on_plot_btn_clicked()
+
+        texts = [t.get_text() for t in display.fig.texts]
+        assert any("archiver down" in t for t in texts)
+        assert display.plot_btn.isEnabled()
+
+    def test_fetch_runs_on_a_daemon_thread(self, display):
+        self._ready(display)
+        del display._run_in_background  # back to the real one
+        started = []
+        with patch.object(feg.threading, "Thread") as thread:
+            thread.return_value.start.side_effect = lambda: started.append(1)
+            display.on_plot_btn_clicked()
+
+        assert thread.call_args.kwargs["daemon"] is True
+        assert started == [1]

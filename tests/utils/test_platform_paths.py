@@ -2,6 +2,7 @@ from pathlib import Path
 
 from sc_linac_physics.utils.platform_paths import (
     get_database_dir,
+    get_field_emission_dir,
     get_json_dir,
     get_log_base_dir,
     get_srf_base_dir,
@@ -26,6 +27,9 @@ def test_platform_paths_linux():
     assert get_log_base_dir(system_name="Linux", home_dir=home) == Path(
         "/home/physics/srf/logfiles"
     )
+    assert get_field_emission_dir(system_name="Linux", home_dir=home) == Path(
+        "/home/physics/srf/field_emission"
+    )
 
 
 def test_platform_paths_macos_like():
@@ -41,6 +45,10 @@ def test_platform_paths_macos_like():
     assert (
         get_log_base_dir(system_name="Darwin", home_dir=home)
         == base / "logfiles"
+    )
+    assert (
+        get_field_emission_dir(system_name="Darwin", home_dir=home)
+        == base / "field_emission"
     )
 
 
