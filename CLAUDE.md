@@ -71,19 +71,18 @@ same repo, and an open PR can't move off a fork. Stacking fork PRs meant
 closing and reopening them (#404 became #482). Merged branches are deleted
 automatically.
 
-### Stacked PRs are GitHub stacks, and stay drafts
+### Stacked PRs are GitHub stacks
 
-Open a stack with `gh stack submit --remote upstream`, or link existing PRs
-with `gh stack link --remote upstream <PR>...` (install with
-`gh extension install github/gh-stack`). Each PR's base is the branch below
-it, so its diff shows only its own commits. A stack merges only with a
-straight history, so rebase onto `main` instead of merging `main` in.
-Auto-merge doesn't work on stacked PRs.
+Open a stack with `gh stack submit --remote upstream --open`, or link existing
+PRs with `gh stack link --remote upstream --open <PR>...` (install with
+`gh extension install github/gh-stack`). Without `--open` the PRs open as
+drafts. Each PR's base is the branch below it, so its diff shows only its own
+commits, and the stack map at the top of each PR shows the order. No "Stacked
+on #N" line or draft is needed. A PR in a stack merges only together with
+everything below it.
 
-Every PR above the bottom one opens as a draft. It stays a draft until every
-PR it builds on has merged. Start its description with "Stacked on #N". A
-draft also keeps CODEOWNERS from requesting review before the PR can be read
-on its own.
+A stack merges only with a straight history, so rebase onto `main` instead of
+merging `main` in. Auto-merge doesn't work on stacked PRs.
 
 ### Flag operator-visible changes
 
