@@ -63,13 +63,27 @@ are exempt but should be their own PR, never mixed with logic changes.
 When a change is growing past the target mid-work, stop and propose a split
 rather than continuing.
 
-### Stacked PRs stay drafts
+### Branches live in slaclab, not a fork
 
-A PR whose branch builds on other unmerged PRs opens as a draft
-(`gh pr create --draft`). It stays a draft until every PR it builds on has
-merged. Start its description with "Stacked on #N" and say which commits to
-review. Until then the diff includes the earlier PRs' commits. A draft also
-keeps CODEOWNERS from requesting review before the PR can be read on its own.
+Push branches to `slaclab/sc_linac_physics` (usually the `upstream` remote),
+not to a personal fork. Why: GitHub can only stack a PR on a branch in the
+same repo, and an open PR can't move off a fork. Stacking fork PRs meant
+closing and reopening them (#404 became #482). Merged branches are deleted
+automatically.
+
+### Stacked PRs are GitHub stacks, and stay drafts
+
+Open a stack with `gh stack submit --remote upstream`, or link existing PRs
+with `gh stack link --remote upstream <PR>...` (install with
+`gh extension install github/gh-stack`). Each PR's base is the branch below
+it, so its diff shows only its own commits. A stack merges only with a
+straight history, so rebase onto `main` instead of merging `main` in.
+Auto-merge doesn't work on stacked PRs.
+
+Every PR above the bottom one opens as a draft. It stays a draft until every
+PR it builds on has merged. Start its description with "Stacked on #N". A
+draft also keeps CODEOWNERS from requesting review before the PR can be read
+on its own.
 
 ### Flag operator-visible changes
 
