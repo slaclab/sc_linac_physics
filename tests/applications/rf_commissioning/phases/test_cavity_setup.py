@@ -295,3 +295,51 @@ def test_last_characterization_is_good_only_when_complete(status, good):
     cavity.characterization_timestamp = NOW
     cavity.characterization_status = status
     assert cavity_setup.last_characterization(cavity).good is good
+
+
+def _cal(good=True, hours_old=0.2):
+    return cavity_setup.LastSetupResult(
+        name="SSA calibration",
+        timestamp=datetime.now() - timedelta(hours=hours_old),
+        good=good,
+    )
+
+
+def test_decide_keeps_a_recent_good_calibration_without_asking():
+    last = _cal()
+    ask = Mock()
+
+    assert cavity_setup.decide_ssa_calibration(last, "op", ask) == (last, None)
+    ask.assert_not_called()
+
+
+def test_decide_calibrates_when_the_last_one_could_not_be_read():
+    ask = Mock()
+
+    assert cavity_setup.decide_ssa_calibration(None, "op", ask) == (None, None)
+    ask.assert_not_called()
+
+
+@pytest.mark.parametrize("last", [_cal(hours_old=2), _cal(good=False)])
+@pytest.mark.parametrize(
+    "choice, expected",
+    [("rerun", (None, None)), ("skip", "kept"), ("cancel", None)],
+)
+def test_decide_asks_about_an_old_or_bad_calibration(last, choice, expected):
+    ask = Mock(return_value=choice)
+
+    decision = cavity_setup.decide_ssa_calibration(last, "op", ask)
+
+    ask.assert_called_once_with(last.describe())
+    assert decision == ((last, "op") if expected == "kept" else expected)
+
+
+def test_kept_note_names_who_skipped():
+    last = _cal(hours_old=5)
+
+    assert cavity_setup.kept_ssa_calibration_note(last, None).startswith(
+        "Kept the SSA calibration from"
+    )
+    assert cavity_setup.kept_ssa_calibration_note(last, "op").startswith(
+        "SSA calibration skipped by op: SSA calibration from"
+    )

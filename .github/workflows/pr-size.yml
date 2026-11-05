@@ -71,6 +71,10 @@ jobs:
             fi
           done
 
+          # A CSV in a data/ folder is a table of values, such as the sim's
+          # production_cavities.csv, so it is skipped like an asset. Other
+          # CSVs still count: faults.csv decides what the cavity display
+          # shows, so an edit to it is a change to behavior.
           # numstat is "<add> <del> <path>", so filter on $3 rather than the
           # whole line. Binary files show "-" and contribute 0.
           read -r ADD DEL SKIPPED < <(
@@ -78,6 +82,7 @@ jobs:
             | awk -F'\t' '
                 $3 ~ /(^|\/)(tests?)\// { s++; next }
                 $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { s++; next }
+                $3 ~ /(^|\/)data\/[^\/]+\.csv$/ { s++; next }
                 { a += $1; d += $2 }
                 END { printf "%d %d %d\n", a+0, d+0, s+0 }'
           )
@@ -96,7 +101,7 @@ jobs:
             echo
             echo "| Largest files | Change |"
             echo "|---|---|"
-            # Same two exclusions as the total above. Without the asset line, a
+            # Same exclusions as the total above. Without the asset line, a
             # large regenerated .ui or lockfile tops this table while counting
             # zero toward the reported size. NR <= 5 rather than `head -5`:
             # with pipefail, `head` exiting early can kill `sort` with SIGPIPE
@@ -105,6 +110,7 @@ jobs:
               | awk -F'\t' '
                   $3 ~ /(^|\/)(tests?)\// { next }
                   $3 ~ /\.(lock|svg|png|jpg|ui|ipynb)$/ { next }
+                  $3 ~ /(^|\/)data\/[^\/]+\.csv$/ { next }
                   { printf "%d\t+%s/-%s\t%s\n", $1+$2, $1, $2, $3 }' \
               | sort -rn \
               | awk -F'\t' 'NR <= 5 { printf "| `%s` | %s |\n", $3, $2 }'

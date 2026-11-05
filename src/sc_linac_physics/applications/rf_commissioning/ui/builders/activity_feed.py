@@ -140,10 +140,6 @@ class ActivityFeedWidget(QWidget):
         self._placeholder.show()
         self._scroll.hide()
 
-    def _scroll_to_bottom(self) -> None:
-        bar = self._scroll.verticalScrollBar()
-        bar.setValue(bar.maximum())
-
     @staticmethod
     def _dot_style(entry_type: str) -> str:
         dot_color = _DOT_COLORS.get(entry_type, TEXT_MUTED)

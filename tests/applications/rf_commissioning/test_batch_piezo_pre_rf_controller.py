@@ -1,9 +1,12 @@
 """Tests for BatchPiezoPreRFController."""
 
+import gc
 import sys
+import threading
+import weakref
 from threading import Event
 from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -108,10 +111,6 @@ class TestCavitySpec:
 
 
 class TestControllerInit:
-    def test_pool_not_started_on_init(self):
-        ctrl = _make_controller()
-        assert not ctrl._pool_ready
-
     def test_abort_event_clear_on_init(self):
         ctrl = _make_controller()
         assert not ctrl._abort_event.is_set()
@@ -567,6 +566,18 @@ class TestGetMachineCavity:
 
         assert "01" in accessed_keys
 
+    def test_harmonic_linearizer_name_kept(self, monkeypatch):
+        class _MachineStub:
+            def __init__(self, *, piezo_class):
+                self.cryomodules = {
+                    "H1": SimpleNamespace(cavities={3: "hl-cav"})
+                }
+
+        monkeypatch.setattr(ctrl_module, "Machine", _MachineStub)
+        ctrl = _make_controller()
+
+        assert ctrl._get_machine_cavity(CavitySpec("H1", 3)) == "hl-cav"
+
 
 # ---------------------------------------------------------------------------
 # _persist_record
@@ -770,21 +781,46 @@ class TestFailPhaseInstanceException:
 
 
 # ---------------------------------------------------------------------------
-# _ensure_pool and _trigger_cavities_parallel
+# _TriggerPool and _trigger_cavities_parallel
 # ---------------------------------------------------------------------------
 
 
-class TestEnsurePool:
-    def test_sets_pool_ready(self):
-        ctrl = _make_controller()
-        assert not ctrl._pool_ready
-        ctrl._ensure_pool()
-        assert ctrl._pool_ready
+class TestTriggerPool:
+    def test_runs_every_job_before_returning(self):
+        pool = ctrl_module._TriggerPool(size=2)
+        ran = []
+        pool.run_all([lambda i=i: ran.append(i) for i in range(5)])
+        assert sorted(ran) == [0, 1, 2, 3, 4]
 
-    def test_idempotent_second_call_safe(self):
+    def test_starts_its_threads_once(self):
+        pool = ctrl_module._TriggerPool(size=2)
+        with patch.object(
+            ctrl_module, "Thread", wraps=threading.Thread
+        ) as thread:
+            pool.run_all([lambda: None])
+            pool.run_all([lambda: None])
+        assert thread.call_count == 2
+
+    def test_controllers_share_one_pool(self, monkeypatch):
+        pool = Mock()
+        monkeypatch.setattr(ctrl_module, "_TRIGGER_POOL", pool)
+        state = CavityRunState(spec=CavitySpec("01", 1))
+        _make_controller()._trigger_cavities_parallel([state])
+        _make_controller()._trigger_cavities_parallel([state])
+        assert pool.run_all.call_count == 2
+
+    def test_pool_does_not_keep_controller_alive(self):
+        # Each window used to start 32 threads that held its controller
+        # forever. After a batch, nothing in the pool should hold it.
         ctrl = _make_controller()
-        ctrl._ensure_pool()
-        ctrl._ensure_pool()  # should not raise or start more threads
+        ctrl._trigger_cavity = lambda state: None
+        ctrl._trigger_cavities_parallel(
+            [CavityRunState(spec=CavitySpec("01", 1))]
+        )
+        ref = weakref.ref(ctrl)
+        del ctrl
+        gc.collect()
+        assert ref() is None
 
 
 class TestTriggerCavitiesParallel:
@@ -800,9 +836,11 @@ class TestTriggerCavitiesParallel:
         state.triggered = False
         state.error = None
 
-        ctrl._trigger_cavities_parallel([state])
-        # Pool should not have been started since abort happened first
-        assert not ctrl._pool_ready
+        pool = Mock()
+        with patch.object(ctrl_module, "_TRIGGER_POOL", pool):
+            ctrl._trigger_cavities_parallel([state])
+        # Nothing should reach the pool once abort is set
+        pool.run_all.assert_not_called()
 
     def test_abort_before_dispatch_marks_untriggered_as_skipped(self):
         ctrl = _make_controller()
@@ -1015,9 +1053,10 @@ class TestMarkRemainingSkipped:
 
 class TestPoolWorker:
     class _QueueOnce:
+        """Hands out one item, then stops the worker loop."""
+
         def __init__(self, item):
             self._item = item
-            self.task_done_calls = 0
             self._calls = 0
 
         def get(self):
@@ -1026,33 +1065,34 @@ class TestPoolWorker:
                 return self._item
             raise SystemExit()
 
-        def task_done(self):
-            self.task_done_calls += 1
-
-    def test_trigger_exception_sets_error_and_signals_done(self):
+    def test_trigger_exception_sets_error_and_emits_error_status(self):
         ctrl = _make_controller()
         state = CavityRunState(spec=CavitySpec("01", 1))
-        done = Event()
-
-        queue_stub = self._QueueOnce((state, done))
-        ctrl._trigger_queue = queue_stub
         ctrl._trigger_cavity = Mock(side_effect=RuntimeError("boom"))
+        statuses = []
+        ctrl.cavity_status_changed.connect(lambda k, s: statuses.append(s))
 
-        with pytest.raises(SystemExit):
-            ctrl._pool_worker()
+        ctrl._trigger_one(state)
 
         assert state.error == "boom"
+        assert statuses == [BatchPiezoPreRFController.STATUS_ERROR]
+
+    def test_raising_job_still_signals_done_and_worker_continues(self):
+        pool = ctrl_module._TriggerPool(size=1)
+        done = Event()
+        pool._queue = self._QueueOnce(
+            (Mock(side_effect=RuntimeError("boom")), done)
+        )
+
+        # SystemExit comes from the second get(): the loop kept going.
+        with pytest.raises(SystemExit):
+            pool._work()
+
         assert done.is_set()
-        assert queue_stub.task_done_calls == 1
 
     def test_uses_initial_epics_context_when_available(self, monkeypatch):
-        ctrl = _make_controller()
-        state = CavityRunState(spec=CavitySpec("01", 1))
-        done = Event()
-
-        queue_stub = self._QueueOnce((state, done))
-        ctrl._trigger_queue = queue_stub
-        ctrl._trigger_cavity = Mock()
+        pool = ctrl_module._TriggerPool(size=1)
+        pool._queue = self._QueueOnce((Mock(), Event()))
 
         use_initial_context = Mock()
         fake_epics = SimpleNamespace(
@@ -1061,6 +1101,6 @@ class TestPoolWorker:
         monkeypatch.setitem(sys.modules, "epics", fake_epics)
 
         with pytest.raises(SystemExit):
-            ctrl._pool_worker()
+            pool._work()
 
         use_initial_context.assert_called_once()

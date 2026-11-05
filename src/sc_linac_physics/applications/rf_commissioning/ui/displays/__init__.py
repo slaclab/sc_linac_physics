@@ -9,7 +9,6 @@ from .ssa_char import SSACharDisplay
 from .standard import (
     HighPowerMPProcessingDisplay,
     HighPowerOneHourRunDisplay,
-    HighPowerRampDisplay,
     PiezoWithRFDisplay,
 )
 
@@ -20,7 +19,6 @@ __all__ = [
     "SSACharDisplay",
     "CavityCharDisplay",
     "PiezoWithRFDisplay",
-    "HighPowerRampDisplay",
     "HighPowerMPProcessingDisplay",
     "HighPowerOneHourRunDisplay",
     "PHASE_DISPLAY_MAP",

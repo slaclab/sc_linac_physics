@@ -6,6 +6,7 @@ from caproto.server import (
     PvpropertyDouble,
 )
 
+from sc_linac_physics.utils.simulation.cavity_service import _enum_to_int
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
 
@@ -115,6 +116,22 @@ class CavFaultPVGroup(PVGroup):
             "Ready",
         ),
     )
+
+    def __init__(self, prefix, cavity_group=None):
+        super().__init__(prefix)
+        self.cavity_group = cavity_group
+        if cavity_group is not None:
+            # Start at the cavity's production HWMODE, before the server runs.
+            self.offline._data["value"] = cavity_group.hw_mode
+
+    @offline.putter
+    async def offline(self, instance, value):
+        if self.cavity_group is not None:
+            self.cavity_group.hw_mode = _enum_to_int(
+                value, instance.enum_strings
+            )
+            await self.cavity_group._recompute_ades_max()
+
     check_phase: PvpropertyDouble = pvproperty(
         name="CKPSUM", value=0.0, dtype=ChannelType.DOUBLE
     )

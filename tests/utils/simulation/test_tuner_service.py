@@ -294,6 +294,14 @@ def detune_cavity_group():
     cavity.detune = _RecordingChannel()
     cavity.detune_rfs = _RecordingChannel()
     cavity.detune_chirp = _RecordingChannel()
+
+    async def write_detune(real_hz, freq_offset=None):
+        # CavityPVGroup.write_detune with no rack: FREQ_OFFSET 0.
+        await cavity.detune.write(real_hz)
+        await cavity.detune_rfs.write(real_hz)
+        await cavity.detune_chirp.write(real_hz - (freq_offset or 0.0))
+
+    cavity.write_detune = write_detune
     return cavity
 
 
