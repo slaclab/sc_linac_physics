@@ -472,6 +472,56 @@ class TestQ0GUIQ0MeasurementWorkflow:
         gui.kill_rf()
         assert mock_cryomodule.abort_flag is True
 
+    def test_kill_rf_during_ramp_leaves_no_stale_cm_flag(
+        self, qtbot, mock_cryomodule
+    ):
+        """Abort during the cavity ramp: setup worker already finished.
+
+        Only the running ramp worker's cavity is flagged. The cryomodule
+        flag stays False so the next calibration or Q0 run is not aborted.
+        """
+        from sc_linac_physics.applications.q0.q0_gui import Q0GUI
+
+        gui = Q0GUI()
+        qtbot.addWidget(gui)
+        mock_cryomodule.abort_flag = False
+
+        finished_setup_worker = Mock()
+        finished_setup_worker.isRunning.return_value = False
+        finished_setup_worker.cryomodule = mock_cryomodule
+        gui.q0_setup_worker = finished_setup_worker
+
+        ramping_cavity = Mock(abort_flag=False)
+        ramp_worker = Mock(cavity=ramping_cavity)
+        ramp_worker.isRunning.return_value = True
+        done_cavity = Mock(abort_flag=False)
+        done_ramp_worker = Mock(cavity=done_cavity)
+        done_ramp_worker.isRunning.return_value = False
+        gui.q0_ramp_workers = {1: ramp_worker, 2: done_ramp_worker, 3: None}
+        gui.q0_meas_worker = None
+
+        gui.kill_rf()
+
+        assert mock_cryomodule.abort_flag is False
+        assert ramping_cavity.abort_flag is True
+        assert done_cavity.abort_flag is False
+
+    def test_kill_calibration_after_finish_leaves_no_flag(
+        self, qtbot, mock_cryomodule
+    ):
+        from sc_linac_physics.applications.q0.q0_gui import Q0GUI
+
+        gui = Q0GUI()
+        qtbot.addWidget(gui)
+        mock_cryomodule.abort_flag = False
+        finished_worker = Mock(cryomodule=mock_cryomodule)
+        finished_worker.isRunning.return_value = False
+        gui.calibration_worker = finished_worker
+
+        gui.kill_calibration()
+
+        assert mock_cryomodule.abort_flag is False
+
 
 class TestQ0GUIControlMethods:
     """Test control methods."""

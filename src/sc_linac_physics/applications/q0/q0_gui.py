@@ -139,23 +139,42 @@ class Q0GUI(Display):
                 "Restore Cryo Error", f"Failed to restore cryo: {str(e)}"
             )
 
+    @staticmethod
+    def _is_running(worker) -> bool:
+        """True if worker exists and its thread has not finished.
+
+        Only running workers get an abort flag. A flag set on a finished
+        worker's cryomodule or cavity is never consumed, so it would abort
+        the next run on that hardware at its first check_abort.
+        """
+        return worker is not None and worker.isRunning()
+
     @pyqtSlot()
     def kill_rf(self):
         """Kill all RF-related processes."""
-        if self.q0_setup_worker and self.q0_setup_worker.cryomodule:
+        if (
+            self._is_running(self.q0_setup_worker)
+            and self.q0_setup_worker.cryomodule
+        ):
             self.q0_setup_worker.cryomodule.abort_flag = True
 
         for worker in self.q0_ramp_workers.values():
-            if worker and worker.cavity:
+            if self._is_running(worker) and worker.cavity:
                 worker.cavity.abort_flag = True
 
-        if self.q0_meas_worker and self.q0_meas_worker.cryomodule:
+        if (
+            self._is_running(self.q0_meas_worker)
+            and self.q0_meas_worker.cryomodule
+        ):
             self.q0_meas_worker.cryomodule.abort_flag = True
 
     @pyqtSlot()
     def kill_calibration(self):
         """Kill calibration process."""
-        if self.calibration_worker and self.calibration_worker.cryomodule:
+        if (
+            self._is_running(self.calibration_worker)
+            and self.calibration_worker.cryomodule
+        ):
             self.calibration_worker.cryomodule.abort_flag = True
 
     @pyqtSlot(str)
