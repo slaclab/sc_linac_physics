@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -12,7 +13,17 @@ from matplotlib.axes import Axes
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from scipy.stats import linregress, siegelslopes
 
+from sc_linac_physics.utils.logger import BASE_LOG_DIR, custom_logger
+
 USE_SIEGELSLOPES = True
+
+Q0_LOG_DIR = BASE_LOG_DIR / "q0"
+
+# One logger for the whole app. While a GUI worker runs, its INFO records
+# also go to the worker's status signal (q0_gui_utils.forward_logs_to_status).
+logger = custom_logger(
+    "q0", log_dir=Q0_LOG_DIR, log_filename="q0", level=logging.INFO
+)
 
 DATETIME_FORMATTER = "%m/%d/%y %H:%M:%S"
 
@@ -200,7 +211,7 @@ def calc_q0(
     # variation of the 2 K helium
 
     uncorrected_q0 = ((amplitude * 1e6) ** 2) / (r_over_q * rf_heat_load)
-    print(f"Uncorrected Q0: {uncorrected_q0}")
+    logger.info(f"Uncorrected Q0: {uncorrected_q0}")
 
     # We can correct Q0 for the helium temperature
     mbar_to_torr = 0.750062
@@ -219,7 +230,7 @@ def calc_q0(
         + c1 / uncorrected_q0
         - (c7 / temp_from_press) * np.exp(c6 / temp_from_press)
     )
-    print(f"Corrected Q0: {corrected_q0}")
+    logger.info(f"Corrected Q0: {corrected_q0}")
 
     return corrected_q0 if use_correction else uncorrected_q0
 

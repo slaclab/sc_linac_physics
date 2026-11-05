@@ -60,7 +60,7 @@ class Calibration:
                     refHeatLoadDes=data["Total Reference Heater Setpoint"],
                     refHeatLoadAct=data["Total Reference Heater Readback"],
                 )
-                print("Loaded new reference parameters")
+                q0_utils.logger.info("Loaded new reference parameters")
 
     def save_data(self):
         new_data = {}
