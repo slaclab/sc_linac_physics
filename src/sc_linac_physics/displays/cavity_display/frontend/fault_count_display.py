@@ -74,8 +74,8 @@ class FaultCountDisplay(Display):
         self.start_selector.setMinimumDateTime(min_date_time)
         self.start_selector.setDateTime(intermediate_time)
         self.end_selector.setDateTime(end_date_time)
-        self.start_selector.editingFinished.connect(self.update_plot)
-        self.end_selector.editingFinished.connect(self.update_plot)
+        self.start_selector.editingFinished.connect(self._on_range_edited)
+        self.end_selector.editingFinished.connect(self._on_range_edited)
 
         self.omit_tlc_text = QLabel(text="Select a fault to omit:")
         self.hide_fault_combo_box = QComboBox()
@@ -117,6 +117,8 @@ class FaultCountDisplay(Display):
         # late (e.g. after switching cavity, or closing the window) is
         # dropped.
         self._request_id = 0
+        # Range of the newest fetch; None means the next edit always fetches
+        self._fetched_range = None
         self.counts_ready.connect(self._on_counts_ready)
         self.fetch_failed.connect(self._on_fetch_failed)
         self.cm_combo_box.currentIndexChanged.connect(self.update_cavity)
@@ -167,6 +169,15 @@ class FaultCountDisplay(Display):
             self.num_invalids.append(counter_obj.invalid_count)
             self.num_warnings.append(counter_obj.warning_count)
 
+    def _on_range_edited(self):
+        """Refetch only if the start or end time actually changed.
+
+        editingFinished also fires on every focus-out of a date editor,
+        edited or not, and each call used to start an archiver query.
+        """
+        if self._selected_range() != self._fetched_range:
+            self.update_plot()
+
     def update_plot(self):
         """Start fetching counts; the plot redraws when they arrive."""
         if not self.cavity:
@@ -176,6 +187,7 @@ class FaultCountDisplay(Display):
         self._request_id += 1
         request_id = self._request_id
         start, end = self._selected_range()
+        self._fetched_range = (start, end)
         self.status_label.setText(
             f"Loading fault counts for CM{self.cm_combo_box.currentText()} "
             f"cavity {self.cav_combo_box.currentText()}..."
@@ -218,11 +230,16 @@ class FaultCountDisplay(Display):
         # CavityDisplay keeps this window and shows it again, so nothing is
         # shut down here; a fetch still running is just not drawn.
         self._request_id += 1
+        self._fetched_range = None
         super().closeEvent(event)
 
     def _on_counts_ready(self, request_id, data):
         if request_id != self._request_id:
             return
+        if not data:
+            # get_fault_counts returns {} when the archiver query fails, so
+            # an empty result may be a failure; let the next edit retry
+            self._fetched_range = None
         self.data = data
         self._redraw_last_result()
 
@@ -249,6 +266,7 @@ class FaultCountDisplay(Display):
     def _on_fetch_failed(self, request_id, message):
         if request_id != self._request_id:
             return
+        self._fetched_range = None  # let the next edit retry
         self.status_label.setText(f"Fetch failed: {message}")
 
     def _draw(self):
@@ -293,4 +311,12 @@ class FaultCountDisplay(Display):
         self.plot_window.addItem(invalid_bars)
         self.plot_window.addItem(warning_bars)
 
-        print("Displaying plot for", self.cavity.cryomodule, self.cavity.number)
+        utils.cavity_fault_logger.debug(
+            "Displaying fault counts",
+            extra={
+                "extra_data": {
+                    "cryomodule": str(self.cavity.cryomodule),
+                    "cavity": self.cavity.number,
+                }
+            },
+        )
