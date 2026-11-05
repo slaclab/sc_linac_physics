@@ -6,7 +6,7 @@ from sc_linac_physics.utils.epics.logger import get_logger
 
 
 class PVBatch:
-    """Utilities for batch PV operations using raw EPICS calls"""
+    """Batch PV reads using raw EPICS calls"""
 
     @staticmethod
     def get_values(
@@ -50,41 +50,3 @@ class PVBatch:
                 except Exception:
                     values.append(None)
             return values
-
-    @staticmethod
-    def put_values(
-        pv_names: List[str],
-        values: List[Any],
-        timeout: float = 1.0,
-        wait: bool = True,
-    ) -> List[bool]:
-        """
-        Batch write multiple PV values efficiently.
-
-        Args:
-            pv_names: List of PV names to write
-            values: List of values to write (must match length of pv_names)
-            timeout: Timeout for each put operation
-            wait: Wait for completion
-
-        Returns:
-            List of success status (True/False) for each PV
-
-        Raises:
-            ValueError: If pv_names and values lengths don't match
-        """
-        if len(pv_names) != len(values):
-            raise ValueError(
-                f"Length mismatch: {len(pv_names)} PVs but {len(values)} values"
-            )
-
-        results = []
-        for pv_name, value in zip(pv_names, values):
-            try:
-                status = epics.caput(pv_name, value, wait=wait, timeout=timeout)
-                results.append(status == 1)
-            except Exception as e:
-                get_logger().warning(f"Failed to put {pv_name}={value}: {e}")
-                results.append(False)
-
-        return results
