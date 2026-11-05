@@ -302,7 +302,6 @@ def fast_q0_cryo(cryo_name, mock_linac_object):
     with patch.multiple(
         "sc_linac_physics.applications.q0.q0_cryomodule",
         sleep=Mock(),
-        isfile=Mock(return_value=True),
     ):
         # Create mock class and add real methods
         mock_class = _create_mock_q0_cryomodule_class()
@@ -2725,6 +2724,29 @@ class TestCleanupAttemptsEveryStep:
 
         assert cavity.abort_flag is True
         assert fast_q0_cryo.abort_flag is False
+
+
+@pytest.mark.parametrize(
+    "prop, relative",
+    [
+        ("calib_idx_file", "calibrations/cm01.json"),
+        ("calib_data_file", "data/calibrations/cm01.json"),
+        ("q0_idx_file", "q0_measurements/cm01.json"),
+        ("q0_data_file", "data/q0_measurements/cm01.json"),
+    ],
+)
+def test_data_files_live_under_data_dir(prop, relative, q0_data_dir):
+    """Each file property resolves under data_dir, not the package."""
+    from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+
+    cryo = object.__new__(Q0Cryomodule)
+    cryo._calib_idx_file = "calibrations/cm01.json"
+    cryo._calib_data_file = "data/calibrations/cm01.json"
+    cryo._q0_idx_file = "q0_measurements/cm01.json"
+    cryo._q0_data_file = "data/q0_measurements/cm01.json"
+
+    assert getattr(cryo, prop) == str(q0_data_dir / relative)
+    assert (q0_data_dir / relative).is_file()
 
 
 class TestDsLevelSetpoint:
