@@ -25,6 +25,7 @@ dependencies = [
     "pyyaml",
     "pydantic",
     "h5py",
+    "pyarrow",
     "requests",
     "scipy",
     "scikit-learn",
