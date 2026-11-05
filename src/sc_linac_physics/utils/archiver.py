@@ -100,6 +100,20 @@ RETRY_STATUS = frozenset({502, 503, 504})
 # many times bigger.
 CHUNK_SAMPLES = 250_000
 
+# get_binned_values: the archiver reads every raw sample to bin them, about
+# 2 M samples/s (count_3600 timings, 2026-10-12), but sends back one value per
+# bin. So a binned request is limited by raw samples read, not by what comes
+# back: 20 M is about 10 s.
+BINNED_CHUNK_SAMPLES = 20_000_000
+# Each bin still comes back as one JSON datum, so a request is also capped at
+# this many bins, the same budget CHUNK_SAMPLES gives raw samples.
+BINNED_CHUNK_BINS = CHUNK_SAMPLES
+
+# Statistics get_binned_values asks for, each checked on site against the raw
+# samples of one hour (2026-10-12): mean, min and max matched exactly, std is
+# the sample (n-1) standard deviation.
+STATISTICS = ("mean", "min", "max", "std", "count")
+
 # Chunks are planned from the archiver's own sample counts, not guessed:
 # count_3600(pv) returns the samples in each UTC hour, timestamped at the
 # hour's midpoint (checked on site; counts matched raw). The archiver reads
@@ -255,7 +269,11 @@ def _iter_chunks(
 
 
 def _plan_chunks(
-    pv: str, start: datetime, end: datetime, timeout: float
+    pv: str,
+    start: datetime,
+    end: datetime,
+    timeout: float,
+    limit: int = CHUNK_SAMPLES,
 ) -> Optional[List[datetime]]:
     """Return chunk boundaries from start to end; None if not archived.
 
@@ -268,7 +286,7 @@ def _plan_chunks(
     window_start = start
     while window_start < end:
         window_end = min(window_start + COUNT_WINDOW, end)
-        planned = _plan_window(pv, window_start, window_end, timeout)
+        planned = _plan_window(pv, window_start, window_end, timeout, limit)
         if planned is None:
             return None
         bounds.extend(planned[1:])
@@ -277,7 +295,7 @@ def _plan_chunks(
 
 
 def _plan_window(
-    pv: str, start: datetime, end: datetime, timeout: float
+    pv: str, start: datetime, end: datetime, timeout: float, limit: int
 ) -> Optional[List[datetime]]:
     # The archiver applies an operator to a PV when the operator wraps the
     # PV's name in the "pv" parameter: "count_3600(ACCL:...)" returns how
@@ -291,13 +309,17 @@ def _plan_window(
         return None
     bins = payload[0]["data"] if payload else []
     if not bins:
-        return _split_by_total(pv, start, end, timeout)
+        return _split_by_total(pv, start, end, timeout, limit)
     counts = {_bin_start(datum["secs"]): datum["val"] for datum in bins}
-    return _group_bins(start, end, counts)
+    return _group_bins(start, end, counts, limit)
 
 
 def _split_by_total(
-    pv: str, start: datetime, end: datetime, timeout: float
+    pv: str,
+    start: datetime,
+    end: datetime,
+    timeout: float,
+    limit: int = CHUNK_SAMPLES,
 ) -> Optional[List[datetime]]:
     """Bound start..end for a PV count_3600 gives no bins for.
 
@@ -306,32 +328,35 @@ def _split_by_total(
     CUDSEVR, an enum, was not). ncount(pv), one total for the window, does
     work on strings, and matched the raw samples. A string PV can change
     fast (a CUDSTATUS flapping between the cavity number and POT), so a
-    window over CHUNK_SAMPLES is halved, and each half counted again.
+    window over limit is halved, and each half counted again.
     """
     payload = _get_json(f"ncount({pv})", start, end, timeout)
     if payload is None:
         return None
     data = payload[0]["data"] if payload else []
     total = data[0]["val"] if data else 0
-    if total <= CHUNK_SAMPLES or end - start <= MIN_SPLIT:
+    if total <= limit or end - start <= MIN_SPLIT:
         return [start, end]
     middle = start + (end - start) / 2
-    left = _split_by_total(pv, start, middle, timeout)
+    left = _split_by_total(pv, start, middle, timeout, limit)
     if left is None:
         return None
-    right = _split_by_total(pv, middle, end, timeout)
+    right = _split_by_total(pv, middle, end, timeout, limit)
     if right is None:
         return None
     return left + right[1:]
 
 
 def _group_bins(
-    start: datetime, end: datetime, counts: Dict[int, float]
+    start: datetime,
+    end: datetime,
+    counts: Dict[int, float],
+    limit: int = CHUNK_SAMPLES,
 ) -> List[datetime]:
-    """Cut start..end into chunks of at most CHUNK_SAMPLES.
+    """Cut start..end into chunks of at most limit samples.
 
     counts maps each COUNT_BIN's start (UTC epoch seconds) to its samples;
-    a missing bin has none. A bin with more than CHUNK_SAMPLES is split into
+    a missing bin has none. A bin with more than limit is split into
     equal parts, assuming its samples are spread evenly.
     """
     step = int(COUNT_BIN.total_seconds())
@@ -341,10 +366,10 @@ def _group_bins(
         lo = max(_utc(t), start)
         hi = min(_utc(t + step), end)
         n = counts.get(t, 0.0)
-        if in_chunk and in_chunk + n > CHUNK_SAMPLES:
+        if in_chunk and in_chunk + n > limit:
             bounds.append(lo)
             in_chunk = 0.0
-        parts = max(1, math.ceil(n / CHUNK_SAMPLES))
+        parts = max(1, math.ceil(n / limit))
         bounds.extend(lo + (hi - lo) * k / parts for k in range(1, parts))
         in_chunk += n / parts
         t += step
@@ -375,6 +400,141 @@ def _utc(secs: int) -> datetime:
 
 def _key(datum: dict) -> tuple:
     return datum["secs"], datum.get("nanos", 0)
+
+
+def get_binned_values(
+    pvs: Iterable[str],
+    start: datetime,
+    end: datetime,
+    bin_size: timedelta,
+    statistic: str = "mean",
+    timeout: float = RANGE_TIMEOUT,
+    max_workers: int = MAX_WORKERS,
+) -> Dict[str, pd.DataFrame]:
+    """Return one statistic per bin for each PV, computed by the archiver.
+
+    For plotting or skimming long spans of a numeric PV without fetching every
+    sample: a year in 1-hour bins is 8,760 values. One DataFrame per PV with
+    columns timestamp (each bin's start, America/Los_Angeles), value and count
+    (samples in the bin). Bins are aligned to UTC multiples of bin_size, so a
+    bin straddling start covers time before it; its count says how many
+    samples it holds.
+
+    Bins with no samples are left out: the archiver fills them with the
+    previous bin's value (checked on site), which would draw a gap as a flat
+    line. statistic is one of STATISTICS. Raises PVNotArchivedError, naming
+    every unknown PV, once all requests have finished.
+    """
+    if statistic not in STATISTICS:
+        raise ValueError(f"statistic must be one of {STATISTICS}")
+    step = int(bin_size.total_seconds())
+    if step < 1 or step != bin_size.total_seconds():
+        raise ValueError("bin_size must be a whole number of seconds")
+    pvs = list(pvs)
+    start = _aware(start).astimezone(timezone.utc)
+    end = _aware(end).astimezone(timezone.utc)
+
+    def fetch(pv: str) -> Optional[pd.DataFrame]:
+        try:
+            return _fetch_binned(pv, start, end, step, statistic, timeout)
+        except ArchiverError as e:
+            raise type(e)(f"{pv}: {e}") from e
+
+    frames = dict(zip(pvs, _map_in_daemon_threads(fetch, pvs, max_workers)))
+    missing = [pv for pv, frame in frames.items() if frame is None]
+    if missing:
+        raise PVNotArchivedError(missing)
+    return frames
+
+
+def _fetch_binned(
+    pv: str,
+    start: datetime,
+    end: datetime,
+    step: int,
+    statistic: str,
+    timeout: float,
+) -> Optional[pd.DataFrame]:
+    planned = _plan_chunks(pv, start, end, timeout, BINNED_CHUNK_SAMPLES)
+    if planned is None:
+        return None
+    bounds = _binned_bounds(pv, planned, start, end, step)
+    rows = []
+    last = len(bounds) - 2
+    for i, (lo, hi) in enumerate(zip(bounds, bounds[1:])):
+        values = _get_json(f"{statistic}_{step}({pv})", lo, hi, timeout)
+        if values is None:
+            return None
+        if statistic == "count":
+            counts = values  # the same request; don't send it twice
+        else:
+            counts = _get_json(f"count_{step}({pv})", lo, hi, timeout)
+            if counts is None:
+                return None
+        # A sample exactly on hi comes back in both windows around it; its
+        # bin belongs to the next chunk
+        upper = hi if i < last else None
+        rows.extend(_binned_rows(values, counts, lo, upper, step))
+    return pd.DataFrame(rows, columns=["timestamp", "value", "count"])
+
+
+def _binned_bounds(
+    pv: str, planned: List[datetime], start: datetime, end: datetime, step: int
+) -> List[datetime]:
+    """Chunk edges for binned requests, all on bin edges.
+
+    No bin is split between two requests, each request reads at most about
+    BINNED_CHUNK_SAMPLES raw samples (the planned edges) and returns at most
+    BINNED_CHUNK_BINS bins. Raises ValueError if putting the planned edges on
+    bin edges would merge two planned chunks: that bin alone holds more
+    samples than one request should read.
+    """
+    inner = [_floor_to(b, step) for b in planned[1:-1]]
+    kept = {b for b in inner if start < b < end}
+    if len(kept) < len(inner):
+        raise ValueError(
+            f"{pv}: one {step} s bin holds more than {BINNED_CHUNK_SAMPLES} "
+            "samples; use a smaller bin_size"
+        )
+    span = BINNED_CHUNK_BINS * step
+    first = _floor_to(start, step).timestamp()
+    by_bins = {
+        _utc(first + k * span)
+        for k in range(1, int((end.timestamp() - first) // span) + 1)
+    }
+    kept |= {b for b in by_bins if start < b < end}
+    return [start] + sorted(kept) + [end]
+
+
+def _binned_rows(
+    values: list,
+    counts: list,
+    lo: datetime,
+    hi: Optional[datetime],
+    step: int,
+):
+    """(bin start, value, count) for the bins from lo up to hi.
+
+    Each window's first bin can be the one before lo, holding only the
+    sample before the window; a bin ending at or before lo is dropped. A
+    bin starting at or after hi is dropped too, unless hi is None (the last
+    chunk): it belongs to the next request.
+    """
+    count_of = {
+        (d["secs"] // step) * step: d["val"]
+        for d in (counts[0]["data"] if counts else [])
+    }
+    for datum in values[0]["data"] if values else []:
+        bin_start = (datum["secs"] // step) * step
+        n = count_of.get(bin_start, 0)
+        if hi is not None and bin_start >= hi.timestamp():
+            continue
+        if n > 0 and bin_start + step > lo.timestamp():
+            yield _timestamp(bin_start, 0), datum["val"], int(n)
+
+
+def _floor_to(moment: datetime, step: int) -> datetime:
+    return _utc((int(moment.timestamp()) // step) * step)
 
 
 def get_series(
