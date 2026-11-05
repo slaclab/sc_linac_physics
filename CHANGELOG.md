@@ -2,6 +2,63 @@
 
 <!-- version list -->
 
+## v9.63.0 (2026-11-05)
+
+### Bug Fixes
+
+- **rf-commissioning**: Reserve a PhaseRun before starting it; keep failed attempts in results
+  ([#426](https://github.com/slaclab/sc_linac_physics/pull/426),
+  [`5de5e1d`](https://github.com/slaclab/sc_linac_physics/commit/5de5e1db01b9dddc36e354026cb43cb8bb59a274))
+
+- **rf-commissioning**: Resume during piezo pre-RF pause resumes the paused run
+  ([#426](https://github.com/slaclab/sc_linac_physics/pull/426),
+  [`5de5e1d`](https://github.com/slaclab/sc_linac_physics/commit/5de5e1db01b9dddc36e354026cb43cb8bb59a274))
+
+- **rf-commissioning**: Runner fails the phase on any step fault; bridge always finishes
+  ([#426](https://github.com/slaclab/sc_linac_physics/pull/426),
+  [`5de5e1d`](https://github.com/slaclab/sc_linac_physics/commit/5de5e1db01b9dddc36e354026cb43cb8bb59a274))
+
+### Continuous Integration
+
+- Run the size check and explainer preview on stacked PRs too
+  ([#501](https://github.com/slaclab/sc_linac_physics/pull/501),
+  [`a4b10e1`](https://github.com/slaclab/sc_linac_physics/commit/a4b10e1ed31d58d59f6ec67c20fbbb87805538ad))
+
+### Documentation
+
+- **claude**: Push branches to slaclab and stack PRs with gh stack
+  ([#489](https://github.com/slaclab/sc_linac_physics/pull/489),
+  [`0bf5e97`](https://github.com/slaclab/sc_linac_physics/commit/0bf5e979e8e2a4f19a147cd658c1fd58df79bd02))
+
+- **claude**: Stacked PRs no longer need to be drafts
+  ([#502](https://github.com/slaclab/sc_linac_physics/pull/502),
+  [`30a642c`](https://github.com/slaclab/sc_linac_physics/commit/30a642c941e3f512d1be1b45db229cc35df24de2))
+
+- **rf-commissioning**: Say what the bridge signals comment means in plain words
+  ([#426](https://github.com/slaclab/sc_linac_physics/pull/426),
+  [`5de5e1d`](https://github.com/slaclab/sc_linac_physics/commit/5de5e1db01b9dddc36e354026cb43cb8bb59a274))
+
+### Features
+
+- **rf-commissioning**: Add PhaseRun, one step loop for every phase
+  ([#426](https://github.com/slaclab/sc_linac_physics/pull/426),
+  [`5de5e1d`](https://github.com/slaclab/sc_linac_physics/commit/5de5e1db01b9dddc36e354026cb43cb8bb59a274))
+
+- **rf-commissioning**: Add RunnerBridge, PhaseRun on a daemon thread
+  ([#426](https://github.com/slaclab/sc_linac_physics/pull/426),
+  [`5de5e1d`](https://github.com/slaclab/sc_linac_physics/commit/5de5e1db01b9dddc36e354026cb43cb8bb59a274))
+
+### Refactoring
+
+- **rf-commissioning**: PhaseBase.run() runs through PhaseRun
+  ([#426](https://github.com/slaclab/sc_linac_physics/pull/426),
+  [`5de5e1d`](https://github.com/slaclab/sc_linac_physics/commit/5de5e1db01b9dddc36e354026cb43cb8bb59a274))
+
+- **rf-commissioning**: Run piezo pre-RF through PhaseRun and RunnerBridge
+  ([#426](https://github.com/slaclab/sc_linac_physics/pull/426),
+  [`5de5e1d`](https://github.com/slaclab/sc_linac_physics/commit/5de5e1db01b9dddc36e354026cb43cb8bb59a274))
+
+
 ## v9.62.0 (2026-11-03)
 
 ### Bug Fixes
