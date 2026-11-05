@@ -1,66 +1,50 @@
-# README
+# Field Emission
 
-The purpose of the GUI is to aid in the visualization and characterization of field emission from linac cavities. This collection of scripts is to generate the appropriate data files, update, and run the field emission GUI.
+Plots cavity amplitude against decarad radiation for past measurement runs, one plot per cavity.
 
-Radiation data is collected by one of two decarads with 10 channels each and is recorded in the archiver. The display fetches each run from the archiver once and keeps it in a local cache, so runs stay viewable when the archiver is down.
+For how it works — what it plots, where each run's data comes from, how the cache fills and fails — see the explainer: [How the field emission display works](../explainers/field_emission.md).
 
-The collection consists of:
-
-## GUI Suite
-
-- **`field_emission_runs.csv`**: the runs known to git, one row per run, in the "To Add Data" column order below.
-
-- **`added_runs.csv`**, in the field-emission directory (`get_field_emission_dir()`: `/home/physics/srf/field_emission/` on Linux, `~/.sc_linac_physics/field_emission/` on macOS): runs added from the display, same columns as `field_emission_runs.csv`.
-
-- **The run data cache** is the shared `ArchiverStore` cache (`get_archiver_cache_dir()`: `/home/physics/srf/archiver_cache/` on Linux, `~/.sc_linac_physics/archiver_cache/` on macOS). Each run is one Parquet file per PV at `<pv>/windows/<start>_<end>.parquet`, times in UTC, fetched from the archiver the first time the run is needed. Safe to delete; a deleted run is fetched again. See [archiver.md](../utils/archiver.md).
-
-- **`field_emission_gui.py`**: the display, launched by `sc-linac field-emission`. On open it fetches every listed run not cached yet, one at a time, with progress in the window title; it stops at the first failure. Plotting a run that isn't cached fetches it first (PLOT shows LOADING...).
-
-- **`run_cache.py`**: reads the run list (committed plus added) and loads each run from the cache, fetching it if needed.
-
-- **`add_run_dialogs.py`**: the "Add New Data" dialogs used by the display.
-
-- **`measurements.py`**: called by `field_emission_gui.py` to list runs and load their data.
-
-
-- **`plot_me.py`**: called by `field_emission_gui.py` for plotting. Contains the `fit_equation` method, to be further adjusted for improved fit line.
-
-
-## Additional Scripts
-
-- **`amp_vs_radiation_from_csv.py`**: takes start and end time data to find radiation during active cavity session. Necessary for gui_updater use. Contains the `align_pvs_to_common_time` method, used to give common timebase between process variables which may have inconsistencies in time data.
-
-
-- **`gui_updater.py`**: validates "Add New Data" input; its worker adds the runs to `added_runs.csv` and fetches them into the cache.
-
-
-
-## To Add Data
-
-Use the "Add New Data" button next to the plot toolbar in `sc-linac field-emission`. Added runs go into `added_runs.csv` in the field-emission directory, so everyone using that directory sees them, and are fetched right away. Data can be added individually, by cryomodule, or by CSV for multiple entries.  If using CSV, though actual header names can be anything, columns should be written in the following order:
-
-"Cryomodule, Start Date, Start Time, End Date, End Time, Decarad #, Link to Measurement, Notes, Recharacterization, Multipacting, Commissioning"
-
-The run list refreshes when the dialog closes. To make a run permanent for every installation, add its row to `field_emission_runs.csv` in a PR.
-
-> **NOTE:** CSV reader is written with the expectation of a header row in multi-entry CSV.
-
-> **NOTE:** Including "#" in the first column of a row skips it.
-
-> **NOTE:** A column should be included for end date in the case of overnight operation where the start date and end date will not be the same (albeit only one day apart), regardless of if that column has data.
-
-
-## Possible Additional Work to Be Done
-
-
-- **Extra filter for measurement characteristics:** columns have been included in csv reader and gui handler for additional filtering of cryomodule data (recharacterization/multipacting/commissioning). They are kept in the run list. Reflection in display (possibly) necessary.
-
-
-- **Overlapping Plots:** due to time constraints, the ability to overlap data for further comparison has been excluded. If added, this ability can become a radio button setting in addition to the Amplitude vs Radiation and Fit Line toggles above the Plot button.
-
-
-## Entry point
+## Run it
 
 ```bash
 sc-linac field-emission
 ```
+
+## Where the data lives
+
+| What | Where |
+|---|---|
+| Runs known to git | `src/sc_linac_physics/applications/field_emission/field_emission_runs.csv` |
+| Runs added from the display | `field_emission/added_runs.csv` |
+| Cached run data | `archiver_cache/<pv>/windows/<start>_<end>.parquet`, one file per PV per run, times in UTC |
+
+Both are under `/home/physics/srf/` on Linux and `~/.sc_linac_physics/` on macOS. `archiver_cache/` is shared with other apps that read archived data. A run that ended less than a day ago isn't cached yet, so it is fetched each time.
+
+## Add a run
+
+Click **Add New Data** next to the plot toolbar. Use **Single CM** for one run, or **Multi CMs from CSV** for a file of runs. CSV columns, in order, with a header row:
+
+```
+Cryomodule, Start Date, Start Time, End Date, End Time, Decarad #, Link to Measurement, Notes, Recharacterization, Multipacting, Commissioning
+```
+
+- Dates are `mm/dd/yy`, times `hh:mm` (24 h). Leave End Date empty when the run ends on its start date.
+- Times are Pacific. A time that daylight saving repeats or skips, such as 1:15 on the fall-back Sunday, is refused.
+- Decarad is `1` or `2`. Filters are `Y` or `N`.
+- A `#` in the first column skips the row.
+- The eLog link may be empty. If given, it must be an `mccelog` link.
+- Every row is checked before any is added. The first bad row is reported with its line number.
+
+Added runs are shared by everyone using the same `field_emission/` directory. To make a run permanent for every installation, add its row to `field_emission_runs.csv` in a PR.
+
+## Files
+
+| File | Role |
+|---|---|
+| `field_emission_gui.py` | The display |
+| `run_cache.py` | Run list; reads each run through the archiver cache |
+| `amp_vs_radiation.py` | Fetches and aligns one run's PVs |
+| `measurements.py` | Lists runs and loads their data for the display |
+| `plot_me.py` | Plotting and the fit line |
+| `gui_updater.py` | Validates Add New Data input; adds and fetches runs |
+| `add_run_dialogs.py` | The Add New Data dialogs |
