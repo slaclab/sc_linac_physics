@@ -4,7 +4,9 @@ import tempfile
 from datetime import datetime
 from unittest.mock import Mock, patch
 
+import numpy as np
 import pytest
+from scipy.stats import linregress
 
 from sc_linac_physics.applications.q0 import q0_utils
 from sc_linac_physics.applications.q0.calibration import Calibration
@@ -468,3 +470,38 @@ class TestFitWindow:
         with pytest.raises(q0_utils.DataError):
             windowed_calibration.save_results()
         mock_update.assert_not_called()
+
+
+class TestLinregressLine:
+    """linregress_line is the calibration line built from linregress slopes."""
+
+    @pytest.fixture
+    def noisy_calibration(self, calibration):
+        rng = np.random.default_rng(1)
+        runs = []
+        for heat in (130.0, 140.0, 150.0, 160.0):
+            run = q0_utils.HeaterRun(heat)
+            run.average_heat = heat
+            times = np.arange(60.0)
+            run.ll_data = dict(
+                zip(times, 93.0 - 1e-4 * heat * times + rng.normal(0, 0.05, 60))
+            )
+            runs.append(run)
+        calibration.heater_runs = runs
+        return calibration
+
+    def test_uses_linregress_run_slopes(self, noisy_calibration):
+        runs = noisy_calibration.heater_runs
+        expected = linregress(
+            [r.average_heat for r in runs], [r.dll_dt_linregress for r in runs]
+        )
+        slope, intercept = noisy_calibration.linregress_line()
+        assert slope == pytest.approx(expected.slope)
+        assert intercept == pytest.approx(expected.intercept)
+
+    def test_leaves_official_line_alone(self, noisy_calibration):
+        slope = noisy_calibration.dLLdt_dheat
+        adjustment = noisy_calibration.adjustment
+        noisy_calibration.linregress_line()
+        assert noisy_calibration.dLLdt_dheat == slope
+        assert noisy_calibration.adjustment == adjustment
