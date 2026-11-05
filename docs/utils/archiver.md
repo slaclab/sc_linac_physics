@@ -32,17 +32,21 @@ samples = get_values_at_time(["ACCL:L0B:0110:AACTMEAN"], datetime(2023, 10, 2, 9
 - Windows longer than an hour are fetched in chunks, each PV's chunks one
   after another, so no request reaches the proxy's 60 s cutoff. The chunks
   are planned from the archiver's own hourly sample counts (`count_3600`),
-  at most `CHUNK_SAMPLES` (250k, about 25 MB) each:
+  at most `CSV_CHUNK_SAMPLES` (1 M) each:
   <span class="cite">archiver.py::_plan_chunks</span>. The result is the
-  same as one request. String PVs get no hourly counts, so they are
-  planned from totals (`ncount`), halving any window that is too big.
-- Live, 2026-10-12: 60 days of a 1 Hz PV took 21 requests, the largest 25 MB.
-  A year of two fault PVs took 16, mostly counts.
+  same as one request.
+- Numeric chunks are read as CSV (`getData.csv`): half the bytes of JSON,
+  8x faster to parse, a quarter of the memory, and the same frame. String
+  PVs get no hourly counts, so they are planned from totals (`ncount`),
+  halving any window over `CHUNK_SAMPLES` (250k), and read as JSON, which
+  keeps their values strings. Windows up to an hour are one JSON request.
+- Live, 2026-10-12: 60 days of a 1 Hz PV took 6 chunks and 14.5 s (49 s as
+  JSON). A year of two fault PVs took 16 requests, mostly counts.
 - `iter_range_chunks(pv, start, end)` yields the same samples one chunk at a
   time, for processing or storing a long window without holding all of it.
-- Memory: parsing peaks at about 6.5x a chunk's JSON, about 190 MB per PV,
-  for up to `MAX_WORKERS` PVs at once. The 60-day result was 156 MB. Raw
-  pulls of a year or more don't fit in memory. A disk store is planned.
+- Memory: mostly the frames returned, about 33 bytes a sample. 8 PVs x 30
+  days (18.9 M samples) peaked at 1.9 GB. Raw pulls of a year or more don't
+  fit in memory. A disk store is planned.
 - Errors: `PVNotArchivedError` (names every unknown PV), `ArchiverTimeoutError`,
   `ArchiverConnectionError`, all subclasses of `ArchiverError`. Timeouts,
   connection errors and HTTP 502/503/504 are retried first (`MAX_RETRIES`
