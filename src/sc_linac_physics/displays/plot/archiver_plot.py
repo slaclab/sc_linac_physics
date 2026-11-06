@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QLabel, QStackedWidget, QVBoxLayout, QWidget
 from pydm.widgets import PyDMArchiverTimePlot
 from pydm.widgets.archiver_time_plot import ArchivePlotCurveItem
 from pydm.widgets.timeplot import updateMode
@@ -40,9 +40,11 @@ class ArchiverPlot(QWidget):
         time_span: int = DEFAULT_TIME_SPAN_SECONDS,
         parent=None,
         axis_titles: bool = True,
+        empty_hint: str = "",
     ):
         """`axis_titles=False` drops each Y axis's title and colors its tick
-        numbers like its first curve instead, for small plots."""
+        numbers like its first curve instead, for small plots. `empty_hint`
+        is shown instead of an empty plot."""
         super().__init__(parent)
         self._axis_titles = axis_titles
         # PyDM's archiver plugin reads PYDM_ARCHIVER_URL on every request and
@@ -60,9 +62,19 @@ class ArchiverPlot(QWidget):
         self.plot.updateMode = updateMode.AtFixedRate
         self.plot.showLegend = True
 
+        # An empty PyDM plot shows a meaningless time axis, so show the hint
+        # until the first curve. The plot page must be current before a curve
+        # is added: PyDM drops archive data for curves that aren't visible.
+        self._pages = QStackedWidget()
+        self._pages.addWidget(self.plot)
+        if empty_hint:
+            hint = QLabel(empty_hint)
+            hint.setAlignment(Qt.AlignCenter)
+            self._pages.addWidget(hint)
+            self._pages.setCurrentIndex(1)
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.plot)
+        layout.addWidget(self._pages)
         self.setLayout(layout)
 
         if curve_set is not None:
@@ -90,6 +102,7 @@ class ArchiverPlot(QWidget):
         """Add one curve. A PV that is already plotted is skipped."""
         if curve.pv in self._curves:
             return
+        self._pages.setCurrentIndex(0)
 
         if curve.color is None:
             curve = Curve(
@@ -130,6 +143,18 @@ class ArchiverPlot(QWidget):
         self.plot.removeYChannel(self._items.pop(pv))
         if not any(c.axis == curve.axis for c in self._curves.values()):
             self._remove_axis(curve.axis)
+        if not self._curves and self._pages.count() > 1:
+            self._pages.setCurrentIndex(1)
+
+    def curve(self, pv: str) -> Optional[Curve]:
+        """The curve for `pv` as plotted, with its assigned color."""
+        return self._curves.get(pv)
+
+    def set_curve_visible(self, pv: str, visible: bool) -> None:
+        """Hide or show one curve, keeping its data and color."""
+        item = self._items.get(pv)
+        if item is not None:
+            item.setVisible(visible)
 
     def clear(self) -> None:
         """Remove every curve and axis."""
