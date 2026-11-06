@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from PyQt5.QtCore import QObject, QThread
+from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal
 
 from sc_linac_physics.applications.microphonics.gui.data_acquisition import (
@@ -34,6 +34,11 @@ class MeasurementConfig:
 class AsyncDataManager(QObject):
     """Manages asynch data acquisition across chassis using res_data_acq.py
 
+    Each chassis gets a DataAcquisitionManager on the main thread. It
+    needs no thread of its own: it runs res_data_acq.py as a QProcess and
+    polls with a QTimer, and neither blocks. Only the output-file parse
+    runs off the main thread (DataAcquisitionManager.parse_runner).
+
     Provides an interface for data acquisition, where it handles:
     - Configuration validation
     - Acquisition management
@@ -52,7 +57,7 @@ class AsyncDataManager(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Track workers and their threads
+        # chassis_id -> DataAcquisitionManager
         self.active_workers = {}
         self.worker_progress = {}
         self.worker_data = {}
@@ -96,38 +101,34 @@ class AsyncDataManager(QObject):
 
         # Start parallel acquisitions
         for chassis_id, config in chassis_config.items():
+            # A chassis that fails to start reports its error before
+            # _start_worker_for_chassis returns, and that ends the job.
+            # Don't start the rest.
+            if not self.job_running:
+                break
             self._start_worker_for_chassis(chassis_id, config)
 
     def _start_worker_for_chassis(self, chassis_id: str, config: dict):
-        """Create and start a worker thread for one chassis"""
-
-        # Create thread and worker
-        thread = QThread()
+        """Create a DataAcquisitionManager for one chassis and start it."""
         worker = DataAcquisitionManager()
-
-        worker.moveToThread(thread)
-        # Connect worker signals to our handlers
         worker.acquisitionProgress.connect(self._handle_worker_progress)
         worker.acquisitionError.connect(self._handle_worker_error)
         worker.acquisitionComplete.connect(self._handle_worker_complete)
         worker.dataReceived.connect(self._handle_worker_data)
-
-        # Store worker and thread
-        self.active_workers[chassis_id] = (thread, worker)
-
-        # Automatic cleanup
-        thread.started.connect(
-            lambda: worker.start_acquisition(chassis_id, config)
+        worker.acquisitionComplete.connect(
+            lambda _: self._forget_worker(chassis_id)
         )
-        worker.acquisitionComplete.connect(thread.quit)
-        worker.acquisitionError.connect(thread.quit)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(
-            lambda: self.active_workers.pop(chassis_id, None)
+        worker.acquisitionError.connect(
+            lambda *_: self._forget_worker(chassis_id)
         )
-        # Schedule acquisition start
-        thread.start()
+
+        self.active_workers[chassis_id] = worker
+        worker.start_acquisition(chassis_id, config)
+
+    def _forget_worker(self, chassis_id: str):
+        worker = self.active_workers.pop(chassis_id, None)
+        if worker is not None:
+            worker.deleteLater()
 
     def _handle_worker_progress(
         self, chassis_id: str, cavity_num: int, progress: int
@@ -212,7 +213,7 @@ class AsyncDataManager(QObject):
             self.stop_all()
 
     def stop_all(self):
-        """Stop all measurements and cleanup thread"""
+        """Stop all measurements"""
         self._stop_all_workers()
         self.job_running = False
 
@@ -224,18 +225,7 @@ class AsyncDataManager(QObject):
 
     def _stop_worker(self, chassis_id: str):
         """Stop a specific worker"""
-        worker_info = self.active_workers.get(chassis_id)
-        if worker_info:
-            thread, worker = worker_info
-
-            # Stop acquisition
+        worker = self.active_workers.get(chassis_id)
+        if worker:
             worker.stop_acquisition(chassis_id)
-
-            # Clean up thread
-            thread.quit()
-            if not thread.wait(5000):
-                thread.terminate()
-                thread.wait()
-
-            # Remove from tracking
-            self.active_workers.pop(chassis_id, None)
+            self._forget_worker(chassis_id)
