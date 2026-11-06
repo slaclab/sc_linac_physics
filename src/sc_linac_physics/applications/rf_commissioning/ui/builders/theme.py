@@ -40,6 +40,10 @@ BG_INTERACTIVE = "#2d3344"
 BG_INSET = "#1c2030"
 BG_PV = "#1c2030"
 BG_LOCAL = "#211d18"
+# Running stage card fill: COLOR_PRIMARY_BG (12% COLOR_PRIMARY) pre-blended
+# over BG_INSET. Opaque so the card's text colour does not depend on whatever
+# is painted behind it.
+BG_STAGE_RUNNING = "#2b3046"
 
 # Status display backgrounds (used in stored-data status labels)
 BG_STATUS_PASS = "#1e3020"

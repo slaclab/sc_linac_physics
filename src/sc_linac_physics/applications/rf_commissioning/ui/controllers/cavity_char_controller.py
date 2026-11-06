@@ -32,6 +32,7 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
     apply_pv_mapping,
+    cryomodule_key,
     resolve_cavity_selection,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
@@ -247,8 +248,7 @@ class CavityCharController(QObject):
         """Machine.cryomodules is keyed "01".."35", "H1", "H2"."""
         if not self.machine:
             self.machine = Machine()
-        key = f"{int(cm):02d}" if str(cm).isdigit() else str(cm)
-        return self.machine.cryomodules[key].cavities[cav]
+        return self.machine.cryomodules[cryomodule_key(cm)].cavities[cav]
 
     # ------------------------------------------------------------------
     # Abort and pause
@@ -511,7 +511,9 @@ class CavityCharController(QObject):
                         return
                     if not self._execute_single_step(step_name):
                         self.phase_run_finished.emit(
-                            False, f"Step failed: {step_name}"
+                            False,
+                            self._last_step_message
+                            or f"Step failed: {step_name}",
                         )
                         return
                     if step_name == "start_characterization":

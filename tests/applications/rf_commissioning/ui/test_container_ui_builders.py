@@ -10,12 +10,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from sc_linac_physics.applications.rf_commissioning.models.data_models import (
-    CommissioningPhase,
-)
 from sc_linac_physics.applications.rf_commissioning.ui.container import (
     header,
-    progress_panel,
     records,
 )
 
@@ -50,41 +46,6 @@ def test_build_header_panel_wires_controls_and_actions(qtbot):
     assert "Batch Pre-RF" in labels
     assert "Measurements" in labels
     assert "Database" in labels
-
-
-def test_build_progress_bar_and_update_indicator_states(qtbot):
-    host = QWidget()
-    qtbot.addWidget(host)
-
-    projection = {
-        "current_phase": CommissioningPhase.SSA_CHAR,
-        "phase_status": {
-            CommissioningPhase.PIEZO_PRE_RF: SimpleNamespace(value="complete"),
-            CommissioningPhase.SSA_CHAR: SimpleNamespace(value="failed"),
-        },
-    }
-    host.session = SimpleNamespace(
-        get_active_phase_projection=Mock(return_value=projection)
-    )
-
-    widget = progress_panel.build_compact_progress_bar(host)
-    qtbot.addWidget(widget)
-
-    assert len(host.phase_indicators) > 0
-    assert len(host.phase_connectors) == len(host.phase_indicators) - 1
-
-    progress_panel.update_progress_indicator(host, record=object())
-
-    assert (
-        host.phase_indicators[CommissioningPhase.PIEZO_PRE_RF]
-        .text()
-        .startswith("✔")
-    )
-    assert (
-        host.phase_indicators[CommissioningPhase.SSA_CHAR]
-        .text()
-        .startswith("✖")
-    )
 
 
 def test_show_record_selector_renders_table_and_hooks_actions(

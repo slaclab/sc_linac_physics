@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -16,7 +15,6 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
     PHASE_REGISTRY,
-    PhaseStatus,
 )
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database_errors import (
     RecordDeletionDisabledError,
@@ -25,9 +23,6 @@ from sc_linac_physics.applications.rf_commissioning.models.persistence.database_
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database_schema import (
     initialize_database_schema,
 )
-from sc_linac_physics.applications.rf_commissioning.models.serialization import (
-    deserialize_model,
-)
 from sc_linac_physics.applications.rf_commissioning.models.persistence.repositories import (
     CryomoduleRepository,
     MeasurementRepository,
@@ -35,9 +30,6 @@ from sc_linac_physics.applications.rf_commissioning.models.persistence.repositor
     OperatorRepository,
     QueryRepository,
     RecordRepository,
-)
-from sc_linac_physics.applications.rf_commissioning.models.persistence.repositories.base import (
-    BaseRepository,
 )
 
 __all__ = [
@@ -116,72 +108,6 @@ class CommissioningDatabase:
     ) -> tuple[CommissioningRecord, int] | None:
         return self._records.get_record_with_version(record_id)
 
-    def _row_to_record(self, row: sqlite3.Row, cursor: sqlite3.Cursor):
-        return self._records.row_to_record(row, cursor)
-
-    def _load_workflow_state(
-        self,
-        *,
-        cursor: sqlite3.Cursor,
-        record_id: int,
-    ) -> tuple[CommissioningPhase, str, dict[CommissioningPhase, PhaseStatus]]:
-        return self._records.load_workflow_state(
-            cursor=cursor,
-            record_id=record_id,
-        )
-
-    @staticmethod
-    def _serialize_phase_data(phase_data) -> str | None:
-        if phase_data is None:
-            return None
-        return json.dumps(phase_data.to_dict())
-
-    @staticmethod
-    def _deserialize_phase_data(payload: str | None, model_cls):
-        if not payload:
-            return None
-        return deserialize_model(model_cls, json.loads(payload))
-
-    @staticmethod
-    def _raise_conflict_error(
-        *,
-        cursor: sqlite3.Cursor,
-        table_name: str,
-        row_id: int,
-        expected_version: int,
-        missing_message: str,
-    ) -> None:
-        return BaseRepository.raise_conflict_error(
-            cursor=cursor,
-            table_name=table_name,
-            row_id=row_id,
-            expected_version=expected_version,
-            missing_message=missing_message,
-        )
-
-    def _update_versioned_json_list(
-        self,
-        *,
-        cursor: sqlite3.Cursor,
-        table_name: str,
-        row_id: int,
-        column_name: str,
-        payload: list[dict],
-        updated_at: str,
-        expected_version: int | None,
-        missing_message: str,
-    ) -> bool:
-        return self._notes.update_versioned_json_list(
-            cursor=cursor,
-            table_name=table_name,
-            row_id=row_id,
-            column_name=column_name,
-            payload=payload,
-            updated_at=updated_at,
-            expected_version=expected_version,
-            missing_message=missing_message,
-        )
-
     def get_record_by_cavity(
         self,
         linac: int,
@@ -236,11 +162,6 @@ class CommissioningDatabase:
         self, linac: str, cryomodule: str
     ) -> int | None:
         return self._cryomodules.get_cryomodule_record_id(linac, cryomodule)
-
-    def _get_record_summaries(
-        self, where_clause: str = "", params: list | None = None
-    ) -> list[dict]:
-        return self._queries.get_record_summaries(where_clause, params)
 
     def get_all_records(self) -> list[dict]:
         return self._queries.get_all_records()
@@ -381,6 +302,3 @@ class CommissioningDatabase:
             linac,
             cryomodule,
         )
-
-    def _cm_row_to_record(self, row: sqlite3.Row) -> CryomoduleCheckoutRecord:
-        return self._cryomodules.cm_row_to_record(row)

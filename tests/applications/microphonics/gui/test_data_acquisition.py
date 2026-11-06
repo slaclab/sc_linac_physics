@@ -1,4 +1,3 @@
-import time
 from unittest.mock import Mock, patch, MagicMock
 
 import pytest
@@ -1068,10 +1067,18 @@ class TestDataAcquisition:
         chassis_id = "ACCL:L1B:0300:RESA"
 
         mock_timer = Mock(spec=QTimer)
+        # Freeze the clock. With a live clock, a slow CI runner adds
+        # enough elapsed time to turn 50% into 51%.
+        now = 1_000_000.0
+        frozen_clock = patch(
+            "sc_linac_physics.applications.microphonics.gui."
+            "data_acquisition.time.time",
+            return_value=now,
+        )
 
         # Test 50% progress
         acquisition_manager.active_processes[chassis_id] = {
-            "start_time": time.time() - 8.0,
+            "start_time": now - 8.0,
             "expected_duration": 16.0,
             "last_progress": 0,
             "cavities": [1],
@@ -1079,20 +1086,26 @@ class TestDataAcquisition:
             "progress_timer": mock_timer,
         }
 
-        with patch.object(
-            acquisition_manager, "acquisitionProgress"
-        ) as mock_signal:
+        with (
+            frozen_clock,
+            patch.object(
+                acquisition_manager, "acquisitionProgress"
+            ) as mock_signal,
+        ):
             acquisition_manager._update_progress_estimate(chassis_id)
             mock_signal.emit.assert_called_with(chassis_id, 1, 50)
 
         acquisition_manager.active_processes[chassis_id]["start_time"] = (
-            time.time() - 20.0
+            now - 20.0
         )
         acquisition_manager.active_processes[chassis_id]["last_progress"] = 0
 
-        with patch.object(
-            acquisition_manager, "acquisitionProgress"
-        ) as mock_signal:
+        with (
+            frozen_clock,
+            patch.object(
+                acquisition_manager, "acquisitionProgress"
+            ) as mock_signal,
+        ):
             acquisition_manager._update_progress_estimate(chassis_id)
             mock_signal.emit.assert_called_with(
                 chassis_id, 1, 90

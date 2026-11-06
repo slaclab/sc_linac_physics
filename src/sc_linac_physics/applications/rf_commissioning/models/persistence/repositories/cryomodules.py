@@ -74,53 +74,31 @@ class CryomoduleRepository(BaseRepository):
                 return int(cursor.lastrowid)
 
             cm_set_clauses = ", ".join(f"{col} = ?" for col in cm_col_names)
-            params = (
-                record.linac,
-                record.cryomodule,
-                record.start_time.isoformat(),
-                record.end_time.isoformat() if record.end_time else None,
-                *cm_values,
-                phase_status_json,
-                now,
-                record.notes,
-                record_id,
+            missing = f"CM record {record_id} not found"
+            updated = self.update_versioned_row(
+                cursor=cursor,
+                table_name="cryomodule_records",
+                row_id=record_id,
+                set_clause=(
+                    "linac = ?, cryomodule = ?, start_time = ?, end_time = ?, "
+                    f"{cm_set_clauses}, phase_status = ?, updated_at = ?, "
+                    "notes = ?"
+                ),
+                params=(
+                    record.linac,
+                    record.cryomodule,
+                    record.start_time.isoformat(),
+                    record.end_time.isoformat() if record.end_time else None,
+                    *cm_values,
+                    phase_status_json,
+                    now,
+                    record.notes,
+                ),
+                expected_version=expected_version,
+                missing_message=missing,
             )
-            if expected_version is not None:
-                cursor.execute(
-                    f"""
-                    UPDATE cryomodule_records SET
-                        linac = ?, cryomodule = ?, start_time = ?, end_time = ?,
-                        {cm_set_clauses},
-                        phase_status = ?,
-                        updated_at = ?, notes = ?,
-                        version = version + 1
-                    WHERE id = ? AND version = ?
-                    """,
-                    (*params, expected_version),
-                )
-                if cursor.rowcount == 0:
-                    self.raise_conflict_error(
-                        cursor=cursor,
-                        table_name="cryomodule_records",
-                        row_id=record_id,
-                        expected_version=expected_version,
-                        missing_message=f"CM record {record_id} not found",
-                    )
-            else:
-                cursor.execute(
-                    f"""
-                    UPDATE cryomodule_records SET
-                        linac = ?, cryomodule = ?, start_time = ?, end_time = ?,
-                        {cm_set_clauses},
-                        phase_status = ?,
-                        updated_at = ?, notes = ?,
-                        version = version + 1
-                    WHERE id = ?
-                    """,
-                    params,
-                )
-                if cursor.rowcount == 0:
-                    raise ValueError(f"CM record {record_id} not found")
+            if not updated:
+                raise ValueError(missing)
             return record_id
 
     def get_cryomodule_record(self, linac: str, cryomodule: str):

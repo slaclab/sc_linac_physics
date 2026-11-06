@@ -407,7 +407,20 @@ class SCLinacPhysicsService(Service):
 
         for rack_suffix, rack_letter in rack_config:
             rack_prefix = f"{cm_prefix}00:{rack_suffix}"
-            self.add_pvs(RACKPVGroup(prefix=rack_prefix))
+            cm_group = self._cm_group.get(cm_name)
+            rack_cavities = [
+                cavity_group
+                for cav_num, cavity_group in (
+                    cm_group.cavities.items() if cm_group else ()
+                )
+                if (cav_num in RACK_A_CAVITIES) == (rack_letter == "A")
+            ]
+            rack_group = RACKPVGroup(
+                prefix=rack_prefix, cavity_groups=rack_cavities
+            )
+            for cavity_group in rack_cavities:
+                cavity_group.rack_group = rack_group
+            self.add_pvs(rack_group)
 
             # Create rack launcher groups for each launcher type
             for launcher_type, classes in LAUNCHER_TYPES.items():
@@ -489,7 +502,9 @@ class SCLinacPhysicsService(Service):
         )
         cavity_group.ssa_group = ssa_group
         self.add_pvs(ssa_group)
-        self.add_pvs(CavFaultPVGroup(prefix=cav_prefix))
+        self.add_pvs(
+            CavFaultPVGroup(prefix=cav_prefix, cavity_group=cavity_group)
+        )
         jt_prefix = f"CLIC:{_cryo_name(cm_name)}:3001:PVJT:"
         jt_group = JTPVGroup(prefix=jt_prefix, cm_group=cm_group)
         self.add_pvs(jt_group)

@@ -259,9 +259,7 @@ class StepperPVGroup(PVGroup):
                 freq_move_sign * delta
             )
 
-            await self.cavity_group.detune.write(new_detune)
-            await self.cavity_group.detune_rfs.write(new_detune)
-            await self.cavity_group.detune_chirp.write(new_detune)
+            await self.cavity_group.write_detune(new_detune)
             await sleep(1)
 
         if self._abort_requested:
@@ -291,9 +289,7 @@ class StepperPVGroup(PVGroup):
             await self.piezo_group.voltage.write(
                 self.piezo_group.voltage.value + voltage_change
             )
-        await self.cavity_group.detune.write(new_detune)
-        await self.cavity_group.detune_rfs.write(new_detune)
-        await self.cavity_group.detune_chirp.write(new_detune)
+        await self.cavity_group.write_detune(new_detune)
 
         await self.motor_moving.write("Not moving")
         await self.motor_done.write("Done")

@@ -104,8 +104,10 @@ for phase, measurement in [
     (CommissioningPhase.FREQUENCY_TUNING, {"df_cold_hz": 5000.0}),
     (CommissioningPhase.CAVITY_CHAR, {"loaded_q": 2.8e7}),
     (CommissioningPhase.PIEZO_WITH_RF, {"detune_gain": 0.10}),
-    (CommissioningPhase.HIGH_POWER_RAMP, {"max_amplitude_reached": 17.5}),
-    (CommissioningPhase.MP_PROCESSING, {"quench_count": 3}),
+    (
+        CommissioningPhase.MP_PROCESSING,
+        {"max_amplitude_reached": 17.5, "quench_count": 3},
+    ),
     (CommissioningPhase.ONE_HOUR_RUN, {"one_hour_complete": True}),
 ]:
     run_phase(

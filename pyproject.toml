@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sc_linac_physics"
-version = "9.57.0"
+version = "9.64.0"
 description = "Controls, analysis, and displays for SC Linac operations"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -154,6 +154,8 @@ exclude = ["tests*", "docs*", "examples*", "logfiles*"]
     "displays/**/*",
     "applications/q0/calibrations/*",
     "applications/q0/data/*",
+    "utils/simulation/data/*",
+    "utils/sc_linac/data/*",
     "*.ui",
     "*.yaml",
     "*.yml",

@@ -52,6 +52,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.step_labels import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
+    cryomodule_key,
     format_pv_update_message,
     resolve_cavity_selection,
 )
@@ -126,13 +127,14 @@ class FrequencyTuningController(QObject):
         self._steps: list[str] = []
         self._finalize_after_run: bool = False
         self._phase_started: bool = False
+        # The last step that did not succeed, and why, for on_phase_failed.
+        self._failed_step: str | None = None
+        self._last_step_message = ""
         self._df_cold_hz: float | None = None
         self._active_phase_instance_id: int | None = None
 
         self._current_stage: int = 0
         self._stage_running: bool = False
-        self._hz_est_total_steps: float = 0.0
-        self._hz_est_total_hz: float = 0.0
         self._net_steps: int = 0
         self._tune_step_data: dict = {}
         self._probe_stage_confirmed: bool = False
@@ -170,7 +172,7 @@ class FrequencyTuningController(QObject):
             return
 
         try:
-            cm, cav = int(cryomodule), int(cavity_number)
+            cm, cav = cryomodule_key(cryomodule), int(cavity_number)
             cavity = self._get_machine_cavity(cm, cav)
             if self._stage_running and cavity is not self._cavity:
                 # on_abort() sets abort_flag on self._cavity, so it stays the
@@ -226,10 +228,11 @@ class FrequencyTuningController(QObject):
                 pv_map[getattr(self.view, widget_name)] = pv_addr
         apply_pv_mapping(pv_map)
 
-    def _get_machine_cavity(self, cm: int, cav: int):
+    def _get_machine_cavity(self, cm: str, cav: int):
+        """cm is a Machine.cryomodules key: "01".."35", "H1" or "H2"."""
         if not self.machine:
             self.machine = Machine()
-        return self.machine.cryomodules[f"{cm:02d}"].cavities[cav]
+        return self.machine.cryomodules[cm].cavities[cav]
 
     # ------------------------------------------------------------------
     # Public stage entry points
@@ -268,8 +271,6 @@ class FrequencyTuningController(QObject):
         self.view.clear_results()
         self.view.reset_plot()
         self._df_cold_hz = None
-        self._hz_est_total_steps = 0.0
-        self._hz_est_total_hz = 0.0
         self._net_steps = 0
 
         try:
@@ -436,10 +437,6 @@ class FrequencyTuningController(QObject):
         self._set_stage_running_ui(None)
         QTimer.singleShot(100, self._run_phase_in_background)
 
-    def on_confirm_and_tune(self) -> None:
-        """Backward-compat alias → run_stage_3."""
-        self.run_stage_3()
-
     def _check_data_prerequisites(self, stage: int) -> bool:
         """Check that data recorded by previous stages is available.
 
@@ -481,7 +478,7 @@ class FrequencyTuningController(QObject):
             return None
 
         try:
-            cm, cav = int(cryomodule), int(cavity_number)
+            cm, cav = cryomodule_key(cryomodule), int(cavity_number)
         except ValueError:
             self.view.show_error(
                 f"Invalid cavity selection: CM={cryomodule} Cav={cavity_number}"
@@ -504,19 +501,19 @@ class FrequencyTuningController(QObject):
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
             return None
 
-        return f"CM{cm:02d}_CAV{cav}", cm, cav
+        return f"CM{cm}_CAV{cav}", cm, cav
 
     def _start_stage(
         self,
         stage: int,
         steps: list[str],
         finalize: bool,
-        cm: int,
+        cm: str,
         cav: int,
         operator: str,
         extra_parameters: dict | None = None,
     ) -> None:
-        self.update_pv_addresses(f"{cm:02d}", str(cav))
+        self.update_pv_addresses(cm, str(cav))
         cavity = self._get_machine_cavity(cm, cav)
         self._cavity = cavity
 
@@ -730,10 +727,15 @@ class FrequencyTuningController(QObject):
                     if not self._check_pause_and_abort():
                         return
 
+                    self._failed_step = None
+                    self._last_step_message = ""
                     success = self._execute_single_step(step_name)
                     if not success:
+                        self._failed_step = step_name
                         self.phase_run_finished.emit(
-                            False, f"Step failed: {_step_label(step_name)}"
+                            False,
+                            self._last_step_message
+                            or f"Step failed: {_step_label(step_name)}",
                         )
                         return
 
@@ -798,11 +800,6 @@ class FrequencyTuningController(QObject):
 
     def _on_stage2_done(self) -> None:
         signed_hz = self.phase._hz_per_microstep or 0.0
-
-        probe_steps = float(getattr(self.phase.limits, "probe_steps", 0))
-        if probe_steps > 0 and abs(signed_hz) > 0:
-            self._hz_est_total_steps = probe_steps
-            self._hz_est_total_hz = abs(signed_hz) * probe_steps
 
         self._pending_stage2_data = {
             "hz_per_microstep": signed_hz,
@@ -1000,14 +997,6 @@ class FrequencyTuningController(QObject):
         if hasattr(self.view, "_update_local_results"):
             self.view._update_local_results(partial)
 
-    def _on_hz_chunk_update(self, steps: int, hz_delta: float) -> None:
-        """Called from background thread after each tuning move."""
-        if steps > 0 and hz_delta > 0:
-            self._hz_est_total_steps += steps
-            self._hz_est_total_hz += hz_delta
-            new_est = self._hz_est_total_hz / self._hz_est_total_steps
-            self.hz_per_step_updated.emit(new_est)
-
     # ------------------------------------------------------------------
     # Step execution
     # ------------------------------------------------------------------
@@ -1041,6 +1030,7 @@ class FrequencyTuningController(QObject):
             try:
                 result = self.phase.execute_step(step_name)
                 self._create_step_checkpoint(step_name, result)
+                self._last_step_message = result.message
 
                 if result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP):
                     self._resolve_log_signal.emit(
@@ -1072,6 +1062,7 @@ class FrequencyTuningController(QObject):
                 return False
 
             except Exception as exc:
+                self._last_step_message = f"{step_name}: {exc}"
                 retry_count += 1
                 if retry_count < max_retries:
                     self._log_signal.emit(
@@ -1293,11 +1284,12 @@ class FrequencyTuningController(QObject):
         # retry continues the same attempt (_ensure_open_phase_instance finds
         # it) and the history does not show a failure for a missed button.
         # The reason stays in the activity log above.
-        refused = error_msg in {
-            f"Step failed: {_step_label('check_state_for_stage_2')}",
-            f"Step failed: {_step_label('check_state_for_stage_3')}",
-            f"Step failed: {_step_label('check_state_for_stage_4')}",
+        refused = self._failed_step in {
+            "check_state_for_stage_2",
+            "check_state_for_stage_3",
+            "check_state_for_stage_4",
         }
+        self._failed_step = None  # so a later failure isn't read as this one
 
         try:
             if self.phase:
@@ -1690,8 +1682,6 @@ class FrequencyTuningController(QObject):
         self.context = None
         self._phase_started = False
         self._df_cold_hz = None
-        self._hz_est_total_steps = 0.0
-        self._hz_est_total_hz = 0.0
         self._net_steps = 0
         self._tune_step_data = {}
         self._probe_stage_confirmed = False
@@ -1749,7 +1739,7 @@ class FrequencyTuningController(QObject):
     def _rebuild_phase_context(self, record) -> None:
         """Reconstruct phase + context from record so stages 2/3 can run."""
         try:
-            cm = int(record.cryomodule)
+            cm = cryomodule_key(record.cryomodule)
             cav = int(record.cavity_number)
             cavity = self._get_machine_cavity(cm, cav)
             self._cavity = cavity
@@ -1776,12 +1766,6 @@ class FrequencyTuningController(QObject):
 
         if self.phase is not None and signed_hz:
             self.phase._hz_per_microstep = signed_hz
-
-        if abs(signed_hz) > 0 and self.phase is not None:
-            probe_steps = float(getattr(self.phase.limits, "probe_steps", 0))
-            if probe_steps > 0:
-                self._hz_est_total_steps = probe_steps
-                self._hz_est_total_hz = abs(signed_hz) * probe_steps
 
         spinbox = getattr(self.view, "hz_per_step_spinbox", None)
         if spinbox is not None and signed_hz:

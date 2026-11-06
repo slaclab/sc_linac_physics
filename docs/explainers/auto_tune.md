@@ -311,9 +311,10 @@ The seven steps in the sequence are as follows:
 ### What the commissioning phase does that `move_to_resonance` does not
 
 - **Measures Hz/microstep instead of inheriting it.** A 50,000-microstep probe
-  move must produce at least 100 Hz of detune change
+  move must produce at least 100 Hz of detune change, or 200 Hz on a harmonic
+  linearizer
   <span class="cite">
-  `phases/frequency_tuning.py::FrequencyTuningLimits.min_probe_delta_hz, enforced phases/frequency_tuning.py::FrequencyTuningPhase._probe_stepper_direction “abs(delta) < self.limits.min_probe_delta_hz”`</span>.
+  `phases/frequency_tuning.py::FrequencyTuningLimits.min_probe_delta_for, enforced phases/frequency_tuning.py::FrequencyTuningPhase._probe_stepper_direction “abs(delta) < min_delta”`</span>.
   Below that it fails and points at the physical cause: the stepper is not
   mechanically connected to the tuner.
 - **Applies an explicit sign convention.**

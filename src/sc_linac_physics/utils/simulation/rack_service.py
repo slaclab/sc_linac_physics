@@ -1,9 +1,15 @@
 from asyncio import sleep
+from typing import TYPE_CHECKING, Iterable
 
 from caproto import ChannelType
 from caproto.server import PVGroup, pvproperty, PvpropertyDouble
 
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
+
+if TYPE_CHECKING:
+    from sc_linac_physics.utils.simulation.cavity_service import (
+        CavityPVGroup,
+    )
 
 _FSCAN_STAT_SEARCH = 3
 _FSCAN_STAT_DONE = 5
@@ -47,6 +53,28 @@ class RACKPVGroup(PVGroup):
     pjt: PvpropertyDouble = pvproperty(
         value=0, name="PRLJITSUM", dtype=ChannelType.DOUBLE
     )
+    # Hz. Shifts the rack's RF frequency, so every cavity on the rack reads
+    # CHIRP:DF relative to it (see CavityPVGroup.write_detune). Nothing in
+    # src/ writes it yet; operators set it by hand to tune H1/H2 cavities
+    # from cold landing.
+    # CHECK: is FREQ_OFFSET a double or a long on production, and in Hz?
+    freq_offset: PvpropertyDouble = pvproperty(
+        value=0.0, name="FREQ_OFFSET", dtype=ChannelType.DOUBLE
+    )
+
+    def __init__(self, prefix, cavity_groups: "Iterable[CavityPVGroup]" = ()):
+        super().__init__(prefix)
+        # The rack's four cavities, whose CHIRP:DF follows FREQ_OFFSET.
+        self.cavity_groups = list(cavity_groups)
+
+    @freq_offset.putter
+    async def freq_offset(self, instance, value):
+        # The real detune doesn't move; only what the chirp reads does.
+        for cavity_group in self.cavity_groups:
+            await cavity_group.write_detune(
+                cavity_group.detune.value, freq_offset=value
+            )
+        return value
 
     @fscan_start.putter
     async def fscan_start(self, instance, value):

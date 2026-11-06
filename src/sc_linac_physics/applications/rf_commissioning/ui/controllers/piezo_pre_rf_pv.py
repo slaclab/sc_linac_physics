@@ -7,7 +7,24 @@ from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo i
     CommissioningPiezo,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
-from sc_linac_physics.utils.sc_linac.linac_utils import get_linac_for_cryomodule
+from sc_linac_physics.utils.sc_linac.linac_utils import (
+    ALL_CRYOMODULES,
+    get_linac_for_cryomodule,
+)
+
+
+def cryomodule_key(cryomodule) -> str:
+    """Return the Machine.cryomodules key for a cryomodule selection.
+
+    Numbered cryomodules are zero-padded ("2" -> "02"); the harmonic
+    linearizers keep their names ("H1", "H2"). Raises ValueError for
+    anything else.
+    """
+    name = str(cryomodule).strip()
+    key = f"{int(name):02d}" if name.isdigit() else name
+    if key not in ALL_CRYOMODULES:
+        raise ValueError(f"unknown cryomodule {cryomodule!r}")
+    return key
 
 
 def resolve_cavity_selection(
@@ -34,19 +51,30 @@ def resolve_cavity_selection(
     return None, None
 
 
+def cavity_number_from_short_name(short_name) -> int:
+    """Return the cavity number from a CommissioningRecord.short_cavity_name.
+
+    short_cavity_name is "{cryomodule}-{cavity_number}": "02-3" -> 3,
+    "H1-3" -> 3. Raises ValueError for anything else rather than guessing a
+    cavity, since the caller runs the phase on the cavity this returns.
+    """
+    _, sep, cavity = str(short_name).rpartition("-")
+    if not sep:
+        raise ValueError(f"not a short cavity name: {short_name!r}")
+    return int(cavity)
+
+
 def get_piezo_from_selection(
     machine: Machine | None,
     cryomodule: str,
     cavity_number: str,
-) -> tuple[CommissioningPiezo, int, int, Machine]:
-    """Return piezo object, parsed CM/CAV values, and resolved machine."""
+) -> tuple[CommissioningPiezo, str, int, Machine]:
+    """Return piezo object, cryomodule key, cavity number, and machine."""
     cav = int(cavity_number)
-    cm = int(cryomodule)
+    cm = cryomodule_key(cryomodule)
 
     active_machine = machine or Machine(piezo_class=CommissioningPiezo)
-    cm_str = f"{cm:02d}"
-    cryomodule_obj = active_machine.cryomodules[cm_str]
-    cavity = cryomodule_obj.cavities[cav]
+    cavity = active_machine.cryomodules[cm].cavities[cav]
     return cavity.piezo, cm, cav, active_machine
 
 
@@ -82,14 +110,17 @@ def apply_pv_mapping(pv_mapping: dict) -> None:
 def format_pv_update_message(
     cryomodule: str,
     cavity_number: str,
-    cm: int,
+    cm: str,
     cav: int,
 ) -> str:
-    """Format user-facing message describing active PV source."""
+    """Format user-facing message describing active PV source.
+
+    cm is a cryomodule key from cryomodule_key(): "02", "H1".
+    """
     linac = get_linac_for_cryomodule(cryomodule)
     cavity_display_name = (
         f"{linac}_CM{cryomodule}_CAV{cavity_number}"
         if linac
         else f"CM{cryomodule}_CAV{cavity_number}"
     )
-    return f"PVs updated for {cavity_display_name} (CM{cm:02d} Cav{cav})"
+    return f"PVs updated for {cavity_display_name} (CM{cm} Cav{cav})"

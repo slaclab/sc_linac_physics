@@ -12,7 +12,6 @@ from .displays import (
     SSACharDisplay,
     CavityCharDisplay,
     PiezoWithRFDisplay,
-    HighPowerRampDisplay,
     HighPowerMPProcessingDisplay,
     HighPowerOneHourRunDisplay,
 )
@@ -30,7 +29,6 @@ __all__ = [
     "SSACharDisplay",
     "CavityCharDisplay",
     "PiezoWithRFDisplay",
-    "HighPowerRampDisplay",
     "HighPowerMPProcessingDisplay",
     "HighPowerOneHourRunDisplay",
     "PhaseDisplayBase",

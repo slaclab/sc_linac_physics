@@ -256,6 +256,40 @@ def test_a_failed_step_stops_the_run(controller, monkeypatch):
     assert "start_characterization" in finished[0][1]
 
 
+RACK_BUSY = "Can't continue: RF is on for cavity 2 of L1B CM02."
+
+
+def test_a_failed_step_reports_its_own_message(controller, monkeypatch):
+    """The popup shows why calibrate_ssa failed, not only its name."""
+    controller.phase = Mock()
+    controller.context = Mock()
+    controller.context.is_abort_requested.return_value = False
+
+    def fail_at_calibrate_ssa(step):
+        if step == "calibrate_ssa":
+            controller._last_step_message = RACK_BUSY
+            return False
+        return True
+
+    monkeypatch.setattr(
+        controller, "_execute_single_step", fail_at_calibrate_ssa
+    )
+    monkeypatch.setattr("threading.Thread", RunInline)
+    finished = []
+    controller.phase_run_finished.connect(
+        lambda ok, msg: finished.append((ok, msg))
+    )
+
+    controller._run_phase_in_background()
+
+    assert finished == [
+        (
+            False,
+            RACK_BUSY,
+        )
+    ]
+
+
 def test_an_exception_in_the_worker_is_reported_not_swallowed(
     controller, monkeypatch
 ):
