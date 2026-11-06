@@ -152,7 +152,7 @@ class ArchiverStore:
         """
         start = archiver._aware(start).astimezone(timezone.utc)
         end = archiver._aware(end).astimezone(timezone.utc)
-        if all(self.path(pv, m).exists() for m, _ in _months(start, end)):
+        if all(_exists(self.path(pv, m)) for m, _ in _months(start, end)):
             return self.read(pv, start, end)
         if _settled(end):
             path = self.window_path(pv, start, end)
@@ -196,17 +196,22 @@ class ArchiverStore:
         start = archiver._aware(start).astimezone(timezone.utc)
         end = archiver._aware(end).astimezone(timezone.utc)
         months = _months(start, end)
-        return all(self.path(pv, m).exists() for m, _ in months) or (
-            self.window_path(pv, start, end).exists()
+        return all(_exists(self.path(pv, m)) for m, _ in months) or (
+            _exists(self.window_path(pv, start, end))
         )
 
     def path(self, pv: str, month_start: datetime) -> Path:
         return self.root / quote(pv, safe=":") / f"{month_start:%Y-%m}.parquet"
 
     def window_path(self, pv: str, start: datetime, end: datetime) -> Path:
-        """<root>/<pv>/windows/<start>_<end>.parquet, times in UTC."""
+        """<root>/<pv>/windows/<start>_<end>.parquet, times in UTC.
+
+        Naive datetimes are read as America/Los_Angeles, as in read_window.
+        """
         fmt = "%Y%m%dT%H%M%S.%fZ"
-        name = f"{start.astimezone(timezone.utc):{fmt}}_{end.astimezone(timezone.utc):{fmt}}"
+        start = archiver._aware(start).astimezone(timezone.utc)
+        end = archiver._aware(end).astimezone(timezone.utc)
+        name = f"{start:{fmt}}_{end:{fmt}}"
         return self.root / quote(pv, safe=":") / "windows" / f"{name}.parquet"
 
     def _month(
