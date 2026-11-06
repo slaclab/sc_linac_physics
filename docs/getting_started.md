@@ -445,3 +445,5 @@ Once you're comfortable with the exercises above, you can find more detailed doc
 - **`utils/qt.py`** — the `Worker(QThread)` pattern for running blocking operations
   without freezing the UI.
 - **`AGENTS.md`** — project-wide conventions you should follow when contributing.
+- **Opening a PR:** push your branch to `slaclab/sc_linac_physics`, not to a
+  personal fork. See "Branches and pull requests" in the README.
