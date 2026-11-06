@@ -1199,6 +1199,7 @@ class TestQ0GUIFitRegions:
             heater_run_heatload=40.0,
             q0=2.5e10,
         )
+        measurement.cryomodule = mock_cryomodule
         mock_cryomodule.calibration = calibration
         mock_cryomodule.q0_measurement = measurement
 
@@ -1227,12 +1228,12 @@ class TestQ0GUIFitRegions:
 
     def test_windows_get_regions_for_their_runs(self, gui):
         cm = gui.selected_cm
-        gui.calibration_regions.set_runs.assert_called_with(
-            cm.calibration.heater_runs
-        )
-        gui.q0_regions.set_runs.assert_called_with(
-            [cm.q0_measurement.rf_run, cm.q0_measurement.heater_run]
-        )
+        runs, callback = gui.calibration_regions.set_runs.call_args[0]
+        assert runs == cm.calibration.heater_runs
+        assert callback.args == (cm.calibration,)
+        runs, callback = gui.q0_regions.set_runs.call_args[0]
+        assert runs == [cm.q0_measurement.rf_run, cm.q0_measurement.heater_run]
+        assert callback.args == (cm.q0_measurement,)
         gui.mock_popup.assert_not_called()
 
     def test_fit_titles_show_slope_and_q0(self, gui):
@@ -1249,18 +1250,66 @@ class TestQ0GUIFitRegions:
         gui.calibration_fit_plot.plot.reset_mock()
         gui.q0_fit_plot.plot.reset_mock()
 
-        gui._on_calibration_fit_window_changed(run, (1.0, 1.5))
+        gui._on_calibration_fit_window_changed(cm.calibration, run, (1.0, 1.5))
 
         cm.calibration.set_fit_window.assert_called_once_with(run, (1.0, 1.5))
         assert gui.calibration_fit_plot.plot.called
         assert gui.q0_fit_plot.plot.called
+
+    def test_plotted_calibration_refits_after_selecting_another_cm(self, gui):
+        # The callback is bound to the plotted calibration, so selecting
+        # another cryomodule doesn't send its runs to the wrong backend.
+        plotted = gui.selected_cm.calibration
+        run = plotted.heater_runs[0]
+        gui.selected_cm = Mock()
+        callback = gui.calibration_regions.set_runs.call_args[0][1]
+
+        callback(run, (1.0, 1.5))
+
+        plotted.set_fit_window.assert_called_once_with(run, (1.0, 1.5))
+        gui.selected_cm.calibration.set_fit_window.assert_not_called()
+
+    def test_other_calibration_change_leaves_plots_alone(self, gui):
+        # A dropped run from an earlier calibration is cleared through that
+        # calibration; the plots show a different one, so they stay put.
+        old_calibration = Mock()
+        gui.calibration_fit_plot.plot.reset_mock()
+        gui.q0_fit_plot.plot.reset_mock()
+
+        gui._on_calibration_fit_window_changed(old_calibration, Mock(), None)
+
+        old_calibration.set_fit_window.assert_called_once()
+        assert not gui.calibration_fit_plot.plot.called
+        assert not gui.q0_fit_plot.plot.called
+
+    def test_window_refused_while_measurement_runs(self, gui):
+        cm = gui.selected_cm
+        gui.q0_meas_worker = Mock()
+        gui.q0_meas_worker.isRunning.return_value = True
+
+        gui._on_calibration_fit_window_changed(
+            cm.calibration, cm.calibration.heater_runs[0], (1.0, 1.5)
+        )
+
+        cm.calibration.set_fit_window.assert_not_called()
+        gui.mock_popup.assert_called_once()
+
+    def test_clearing_window_allowed_while_measurement_runs(self, gui):
+        cm = gui.selected_cm
+        gui.q0_meas_worker = Mock()
+        gui.q0_meas_worker.isRunning.return_value = True
+        run = cm.q0_measurement.rf_run
+
+        gui._on_q0_fit_window_changed(cm.q0_measurement, run, None)
+
+        cm.q0_measurement.set_fit_window.assert_called_once_with(run, None)
 
     def test_q0_window_change_refits(self, gui):
         cm = gui.selected_cm
         run = cm.q0_measurement.rf_run
         gui.q0_fit_plot.plot.reset_mock()
 
-        gui._on_q0_fit_window_changed(run, None)
+        gui._on_q0_fit_window_changed(cm.q0_measurement, run, None)
 
         cm.q0_measurement.set_fit_window.assert_called_once_with(run, None)
         assert gui.q0_fit_plot.plot.called
@@ -1269,7 +1318,18 @@ class TestQ0GUIFitRegions:
         cm = gui.selected_cm
         cm.calibration.set_fit_window.side_effect = ValueError("bad window")
 
-        gui._on_calibration_fit_window_changed(Mock(), (1.0, 1.5))
+        gui._on_calibration_fit_window_changed(
+            cm.calibration, Mock(), (1.0, 1.5)
+        )
 
         gui.mock_popup.assert_called_once()
         assert "bad window" in gui.mock_popup.call_args[0][1]
+
+    def test_q0_measurement_refused_with_calibration_window(self, gui):
+        gui.selected_cm.calibration.heater_runs[0].fit_window = (1.0, 1.5)
+        with patch(
+            "sc_linac_physics.applications.q0.q0_gui.q0_gui_utils.Q0SetupWorker"
+        ) as mock_worker:
+            gui.take_new_q0_measurement()
+        mock_worker.assert_not_called()
+        gui.mock_popup.assert_called_once()
