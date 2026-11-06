@@ -117,9 +117,8 @@ git push -u origin fix/short-description
 ```
 
 Why: GitHub can only stack a PR on a branch in the same repository, and an
-open PR can't move off a fork. Fork PRs also get a read-only GitHub token, so
-CI can't comment on them. Ask a maintainer for write access if you don't have
-it. Stacking and PR conventions are in [`CLAUDE.md`](CLAUDE.md) under "Scope
+open PR can't move off a fork. Ask a maintainer for write access if you don't
+have it. Stacking and PR conventions are in [`CLAUDE.md`](CLAUDE.md) under "Scope
 and shipping".
 
 ### Testing
