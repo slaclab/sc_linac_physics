@@ -11,7 +11,6 @@ recursive-include src *.json
 recursive-include src *.mat
 recursive-include src *.csv
 recursive-include src *.md
-recursive-include src *.hdf5
 
 # setuptools adds tests/test*.py and packaged .pyc files on its own, so these
 # two excludes are needed. Nothing else needs excluding: no rule above pulls
