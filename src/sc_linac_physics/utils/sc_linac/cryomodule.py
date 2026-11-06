@@ -1,6 +1,6 @@
-from typing import Type, Dict, List, TYPE_CHECKING, Optional
+from typing import Type, Dict, List, TYPE_CHECKING
 
-from sc_linac_physics.utils.epics import PV
+from sc_linac_physics.utils.epics import LazyPV
 from sc_linac_physics.utils.sc_linac.linac_utils import (
     L4B,
     SCLinacObject,
@@ -72,7 +72,6 @@ class Cryomodule(SCLinacObject):
         self.heater_prefix = f"CPIC:{self.cryo_name}:0000:EHCV:"
 
         self.ds_level_pv: str = f"CLL:CM{self.name}:2301:DS:LVL"
-        self._ds_level_pv_obj: Optional[PV] = None
 
         self.us_level_pv: str = f"CLL:CM{self.name}:2601:US:LVL"
         self.ds_pressure_pv: str = f"CPT:CM{self.name}:2302:DS:PRESS"
@@ -120,11 +119,7 @@ class Cryomodule(SCLinacObject):
     def make_jt_pv(self, suffix: str) -> str:
         return self.jt_prefix + suffix
 
-    @property
-    def ds_level_pv_obj(self) -> PV:
-        if not self._ds_level_pv_obj:
-            self._ds_level_pv_obj = PV(self.ds_level_pv)
-        return self._ds_level_pv_obj
+    ds_level_pv_obj = LazyPV("ds_level_pv")
 
     @property
     def ds_level(self):

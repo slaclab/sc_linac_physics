@@ -35,7 +35,7 @@ def test_rack_fscan_pv_obj_lazy_and_cached(rack, prop_name, addr_attr):
     setattr(rack, f"_{prop_name}", None)
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.rack.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = getattr(rack, prop_name)
         second = getattr(rack, prop_name)
