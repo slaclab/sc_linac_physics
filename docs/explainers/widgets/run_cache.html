@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run cache: what a fill on open does — SC Linac</title>
+<link rel="stylesheet" href="widgets.css">
+<style>
+
+  /* ---- run-cache simulator: one square per run ---- */
+  .runs { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; max-width: 26rem; }
+  .runs > i {
+    display: block; aspect-ratio: 1; border-radius: 3px;
+    border: 1px solid var(--line); background: var(--bg);
+  }
+  .runs > i.cached { background: var(--ok); border-color: var(--ok); }
+  .runs > i.failed { background: var(--bad); border-color: var(--bad); }
+  .runs > i.partial { background: var(--warn); border-color: var(--warn); }
+  .runs > i.tmp { outline: 2px dashed var(--ink); outline-offset: -5px; }
+  .runs > i.recent { border: 2px solid var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <p class="standalone-only note"><a href="https://slaclab.github.io/sc_linac_physics/explainers/field_emission/">Part of: How the field emission display works</a></p>
+    <div class="panel">
+      <div class="ctl">
+        <label for="ncached">Runs already cached</label>
+        <input id="ncached" type="range" min="0" max="20" value="6">
+        <span class="val" id="ncached-v"></span>
+
+        <label for="recent">Newest run ended</label>
+        <select id="recent">
+          <option value="old" selected>more than a day ago</option>
+          <option value="new">less than a day ago</option>
+        </select>
+        <span class="val"></span>
+
+        <label for="fail">During the fill</label>
+        <select id="fail">
+          <option value="none">nothing goes wrong</option>
+          <option value="outage" selected>the archiver goes down</option>
+          <option value="killed">the display is killed mid-write</option>
+        </select>
+        <span class="val"></span>
+
+        <label for="where">…while loading missing run</label>
+        <input id="where" type="range" min="1" max="20" value="5">
+        <span class="val" id="where-v"></span>
+      </div>
+
+      <div class="grids">
+        <div><div class="grid-title">After this open</div><div class="runs" id="g0"></div></div>
+        <div><div class="grid-title">Next open</div><div class="runs" id="g1"></div></div>
+      </div>
+      <div class="legend">
+        <span><i></i>not on disk</span>
+        <span><i style="background:var(--ok);border-color:var(--ok)"></i>all 28 PVs on disk</span>
+        <span><i style="background:var(--warn);border-color:var(--warn)"></i>some PVs on disk</span>
+        <span><i style="background:var(--bad);border-color:var(--bad)"></i>load failed, fill stopped</span>
+        <span><i style="outline:2px dashed var(--ink);outline-offset:-5px"></i>stray temp files</span>
+        <span><i style="border:2px solid var(--ink)"></i>ended under a day ago</span>
+      </div>
+      <div id="verdict"></div>
+    </div>
+</main>
+<script>
+const N_RUNS = 20;
+const $ = (id) => document.getElementById(id);
+
+/* A run: {state, recent, tmp}. state is "none", "partial", "cached" or
+   "failed" (partial, and the fill stopped on it this open). recent: ended
+   less than SETTLE = 1 day ago, so ArchiverStore.read_window never writes it.
+   tmp: a hard kill left temp files next to its window files. */
+
+/* One fill on open, mirroring run_cache.fill_cache. A run is missing unless
+   all 28 PVs are on disk (is_cached). Its 28 reads all finish before the
+   first error is raised, so a failed run keeps the PVs that came back.
+   fail: {kind: "none"|"outage"|"killed", at: index among missing runs, from 1} */
+function fill(runs, fail) {
+  // Last open's failure: kept PVs stay, except for a recent run, which kept none.
+  const out = runs.map((r) => ({
+    ...r,
+    state: r.state === "failed" ? (r.recent ? "none" : "partial") : r.state,
+  }));
+  const missing = out.map((r, i) => i).filter((i) => out[i].state !== "cached");
+  for (let k = 0; k < missing.length; k++) {
+    const r = out[missing[k]];
+    if (fail.kind !== "none" && k + 1 === fail.at) {
+      // A recent run's window is never written, so nothing of it stays.
+      if (fail.kind === "outage") r.state = "failed";
+      else r.state = r.recent ? "none" : "partial";
+      if (fail.kind === "killed" && !r.recent) r.tmp = true;
+      return out;
+    }
+    // Read through the store; written only once it ended a day ago.
+    r.state = r.recent ? "none" : "cached";
+  }
+  return out;
+}
+
+function initial(nCached, recent) {
+  return Array.from({ length: N_RUNS }, (_, i) => ({
+    state: i < nCached ? "cached" : "none",
+    recent: recent && i === N_RUNS - 1,
+    tmp: false,
+  }));
+}
+
+function render(el, runs) {
+  el.replaceChildren(...runs.map((r) => {
+    const i = document.createElement("i");
+    const cls = [];
+    if (r.state !== "none") cls.push(r.state);
+    if (r.tmp) cls.push("tmp");
+    if (r.recent) cls.push("recent");
+    i.className = cls.join(" ");
+    return i;
+  }));
+}
+
+function para(cls, parts) {
+  const p = document.createElement("p");
+  p.className = cls;
+  for (const [text, spanCls] of parts) {
+    if (spanCls) {
+      const s = document.createElement("span");
+      s.className = spanCls;
+      s.textContent = text;
+      p.append(s);
+    } else {
+      p.append(text);
+    }
+  }
+  return p;
+}
+
+function update() {
+  const recent = $("recent").value === "new";
+  const nCached = Math.min(+$("ncached").value, recent ? N_RUNS - 1 : N_RUNS);
+  $("ncached").value = nCached;
+  const kind = $("fail").value;
+  const where = $("where");
+  const nMissing = N_RUNS - nCached;
+  where.max = Math.max(1, nMissing);
+  if (+where.value > +where.max) where.value = where.max;
+  where.disabled = kind === "none" || nMissing === 0;
+  $("ncached-v").textContent = `${nCached} of ${N_RUNS}`;
+  $("where-v").textContent = where.disabled ? "—" : `${where.value} of ${nMissing}`;
+
+  const first = fill(initial(nCached, recent), { kind, at: +where.value });
+  const next = fill(first, { kind: "none" });
+  render($("g0"), first); render($("g1"), next);
+
+  const cached = (runs) => runs.filter((r) => r.state === "cached").length;
+  const stopped = kind !== "none" && nMissing > 0;
+  const out = [para("verdict", [
+    [`This open loaded ${stopped ? +where.value - 1 : nMissing} missing run(s)`, null],
+    [stopped ? ", then stopped." : ".", null],
+    [cached(next) === N_RUNS ? ` Next open: all ${N_RUNS} cached.` : "", "good"],
+    [cached(next) === N_RUNS - 1 && recent ? ` Next open: ${N_RUNS - 1} cached.` : "", "good"],
+  ])];
+  if (recent) {
+    out.push(para("note", [["The newest run is fetched on every open but never written, until it ended a day ago.", null]]));
+  }
+  // The recent run is the last missing one, so it is interrupted only at the end.
+  const hitRecent = stopped && recent && +where.value === nMissing;
+  if (stopped && hitRecent) {
+    out.push(para("note", [["The interrupted run ended under a day ago, so none of its PVs were written. Next open fetches all 28 again.", null]]));
+  } else if (kind === "outage" && nMissing) {
+    out.push(para("note", [["PVs of the failed run that came back before the outage stay on disk. Next open fetches only the rest.", null]]));
+  }
+  else if (kind === "killed" && nMissing) {
+    out.push(para("note", [["The killed run keeps the PVs already written. The ones mid-write left only temp files, so they are fetched next open. The temp files stay.", null]]));
+  }
+  $("verdict").replaceChildren(...out);
+}
+
+for (const id of ["ncached", "recent", "fail", "where"]) $(id).addEventListener("input", update);
+update();
+
+/* Self-check against the cases worked out by hand in section 4. */
+(function selfCheck() {
+  const fails = [];
+  const expect = (cond, msg) => { if (!cond) fails.push(msg); };
+  const all = (runs, s) => runs.every((r) => r.state === s);
+  const states = (runs) => runs.map((r) => r.state);
+
+  expect(all(fill(initial(0, false), { kind: "none" }), "cached"), "clean fill caches every run");
+  expect(all(fill(initial(N_RUNS, false), { kind: "outage", at: 1 }), "cached"),
+    "nothing missing means nothing fetched, nothing fails");
+
+  // Outage at the 3rd missing run, 5 already cached: runs 6-7 cached, 8 failed.
+  const out = fill(initial(5, false), { kind: "outage", at: 3 });
+  const s = states(out);
+  expect(s.slice(0, 7).every((x) => x === "cached") && s[7] === "failed" &&
+    s.slice(8).every((x) => x === "none"), "outage stops at the failed run");
+  expect(all(fill(out, { kind: "none" }), "cached"), "next open finishes the failed run");
+
+  // Killed at the 1st missing run: partial with temp files, cached next open.
+  const killed = fill(initial(5, false), { kind: "killed", at: 1 });
+  expect(killed[5].state === "partial" && killed[5].tmp &&
+    killed.slice(6).every((r) => r.state === "none"), "kill leaves temp files and stops");
+  const after = fill(killed, { kind: "none" });
+  expect(all(after, "cached") && after[5].tmp, "next open caches it; temp files stay");
+
+  // A run that ended under a day ago is never cached, however many opens.
+  const recent = fill(fill(initial(0, true), { kind: "none" }), { kind: "none" });
+  expect(recent[N_RUNS - 1].state === "none" &&
+    recent.slice(0, N_RUNS - 1).every((r) => r.state === "cached"),
+    "recent run stays uncached");
+
+  // An outage on a recent run is still marked, and nothing of it stays.
+  const recentOut = fill(initial(N_RUNS - 1, true), { kind: "outage", at: 1 });
+  expect(recentOut[N_RUNS - 1].state === "failed", "outage on a recent run is marked");
+  expect(fill(recentOut, { kind: "none" })[N_RUNS - 1].state === "none",
+    "next open refetches the recent run from scratch");
+  const recentKill = fill(initial(N_RUNS - 1, true), { kind: "killed", at: 1 });
+  expect(recentKill[N_RUNS - 1].state === "none" && !recentKill[N_RUNS - 1].tmp,
+    "kill on a recent run leaves nothing on disk");
+
+  if (fails.length) console.error("SELF-CHECK FAILED\n" + fails.join("\n"));
+  else console.log("SELF-CHECK PASSED (10 cases)");
+})();
+</script>
+</body>
+</html>
