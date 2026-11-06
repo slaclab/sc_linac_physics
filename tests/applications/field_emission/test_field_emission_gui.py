@@ -807,3 +807,54 @@ class TestPlotLoading:
 
         assert thread.call_args.kwargs["daemon"] is True
         assert started == [1]
+
+
+class TestAddRuns:
+    def test_button_opens_dialog_and_refreshes_list(self, display):
+        with (
+            patch.object(feg, "UpdateButtons") as dialog,
+            patch.object(display, "on_cryomodule_updated") as refresh,
+        ):
+            dialog.return_value.exec.return_value = False  # closed on error
+            display.update_btn.click()
+        dialog.assert_called_once_with(display)
+        refresh.assert_called_once()
+
+
+class TestBackgroundCacheFill:
+    def test_starts_once_on_first_show(self, display):
+        with patch.object(display, "_start_cache_fill") as start:
+            display.show()
+            display.hide()
+            display.show()
+        start.assert_called_once()
+
+    def test_progress_then_title_restored(self, display):
+        titles = []
+        display.cache_status.connect(titles.append)
+
+        def fake_fill(runs, progress):
+            progress(0, 2, None)
+            progress(1, 2, None)
+            return 2
+
+        with (
+            patch.object(feg, "read_run_list", return_value=[]),
+            patch.object(feg, "fill_cache", side_effect=fake_fill),
+        ):
+            display._start_cache_fill()
+        assert titles[0].endswith("caching runs from the archiver 1/2")
+        assert titles[-1] == feg.TITLE
+        assert display.windowTitle() == feg.TITLE
+
+    def test_failure_shown_in_title(self, display):
+        with (
+            patch.object(feg, "read_run_list", return_value=[]),
+            patch.object(
+                feg, "fill_cache", side_effect=ConnectionError("archiver down")
+            ),
+        ):
+            display._start_cache_fill()
+        assert display.windowTitle().endswith(
+            "background caching stopped (ConnectionError)"
+        )
