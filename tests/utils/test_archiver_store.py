@@ -223,6 +223,19 @@ def test_fill_writes_settled_months_and_names_unknown_pvs(store):
     assert not store.path("A:PV", this_month).exists()
 
 
+def test_progress_names_each_month_and_where_it_comes_from(store):
+    fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
+    messages = []
+    with served:
+        store.read("A:PV", JAN, FEB)
+        store.read("A:PV", JAN, MAR, progress=messages.append)
+
+    assert messages == [
+        "Jan 2024 (1 of 2): from disk",
+        "Feb 2024 (2 of 2): fetching from the archiver",
+    ]
+
+
 def test_pv_names_are_safe_directory_names(store):
     path = store.path("A:B/C D", JAN)
 
@@ -281,10 +294,15 @@ def test_unreadable_cache_file_is_fetched_without_it(store):
             ),
             patch.object(archiver, "get_logger") as get_logger,
         ):
-            frame = store.read("A:PV", JAN, FEB)
+            messages = []
+            frame = store.read("A:PV", JAN, FEB, progress=messages.append)
 
     assert _values(frame) == [1.0]
     assert len(fake.calls) == 2
+    assert messages == [
+        "Jan 2024 (1 of 1): from disk",
+        "Jan 2024 (1 of 1): fetching from the archiver",
+    ]
     log = get_logger.return_value
     assert "cannot read" in log.warning.call_args.args[0]
     summary = log.info.call_args.args[0] % log.info.call_args.args[1:]

@@ -23,7 +23,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Tuple
+from typing import Callable, Iterable, Iterator, List, Optional, Tuple
 from urllib.parse import quote
 
 import pandas as pd
@@ -42,6 +42,11 @@ SETTLE = timedelta(days=1)
 
 STORED_COLUMNS = [c for c in archiver.COLUMNS if c != "valid"]
 
+# Called with a short message before each month, e.g. "May 2026 (2 of 3):
+# from disk", so a display can say more than "loading". Runs on the reading
+# thread.
+Progress = Optional[Callable[[str], None]]
+
 
 def get_archiver_cache_dir() -> Path:
     """The shared cache: /home/physics/srf/archiver_cache on Linux."""
@@ -59,7 +64,11 @@ class ArchiverStore:
         self.root = Path(root) if root else get_archiver_cache_dir()
 
     def iter_months(
-        self, pv: str, start: datetime, end: datetime
+        self,
+        pv: str,
+        start: datetime,
+        end: datetime,
+        progress: Progress = None,
     ) -> Iterator[pd.DataFrame]:
         """Yield the PV's samples from start to end, one month at a time.
 
@@ -67,16 +76,24 @@ class ArchiverStore:
         first time. Frames are in time order, never empty, with no sample
         twice. Naive datetimes are read as America/Los_Angeles.
         Raises archiver.PVNotArchivedError if the archiver does not know the
-        PV.
+        PV. progress, if given, is called before each month.
         """
         start = archiver._aware(start).astimezone(timezone.utc)
         end = archiver._aware(end).astimezone(timezone.utc)
         before: Optional[pd.DataFrame] = None
         last = None
         began, months, from_disk, samples = time.monotonic(), 0, 0, 0
-        for month_start, month_end in _months(start, end):
+        all_months = _months(start, end)
+        for month_start, month_end in all_months:
             months += 1
-            frame, cached = self._month(pv, month_start, month_end, start, end)
+            fetching = _announce(
+                progress,
+                f"{month_start:%b %Y} ({months} of {len(all_months)})",
+                _exists(self.path(pv, month_start)),
+            )
+            frame, cached = self._month(
+                pv, month_start, month_end, start, end, fetching
+            )
             from_disk += cached
             # A month can start with the sample before it, which the month
             # before already returned.
@@ -109,9 +126,15 @@ class ArchiverStore:
             time.monotonic() - began,
         )
 
-    def read(self, pv: str, start: datetime, end: datetime) -> pd.DataFrame:
+    def read(
+        self,
+        pv: str,
+        start: datetime,
+        end: datetime,
+        progress: Progress = None,
+    ) -> pd.DataFrame:
         """The PV's samples from start to end as one DataFrame."""
-        frames = list(self.iter_months(pv, start, end))
+        frames = list(self.iter_months(pv, start, end, progress))
         if not frames:
             return _with_valid(_empty())
         return pd.concat(frames, ignore_index=True)
@@ -156,6 +179,7 @@ class ArchiverStore:
         month_end: datetime,
         start: datetime,
         end: datetime,
+        on_fallback: Callable[[], None] = lambda: None,
     ) -> Tuple[pd.DataFrame, bool]:
         """One month's samples, from the cache when the month is settled.
 
@@ -163,7 +187,8 @@ class ArchiverStore:
         and not written. If the cache can't be written or read (no
         permission, disk full), that overlap is fetched without it: the cache
         only saves time. Also returns whether the samples came from a file
-        that was on disk before this call.
+        that was on disk before this call. on_fallback is called just before
+        a settled month is fetched without the cache.
         """
         path = self.path(pv, month_start)
         was_on_disk = _exists(path)
@@ -183,6 +208,7 @@ class ArchiverStore:
                     "cache: %s %s from %s", pv, f"{month_start:%Y-%m}", path
                 )
                 return frame, was_on_disk
+            on_fallback()
         lo, hi = max(month_start, start), min(month_end, end)
         return _join(archiver.iter_range_chunks(pv, lo, hi)), False
 
@@ -250,6 +276,19 @@ def _write_atomically(path: Path, chunks: Iterator[pd.DataFrame]) -> None:
         if writer is not None:
             writer.close()
         tmp.unlink(missing_ok=True)
+
+
+def _announce(progress: Progress, label: str, on_disk: bool):
+    """Say where a month will come from; return what to call on fallback.
+
+    If a file on disk can't be read, the month is fetched after all, and
+    the returned function says so before that fetch.
+    """
+    if not progress:
+        return lambda: None
+    fetch = f"{label}: fetching from the archiver"
+    progress(f"{label}: from disk" if on_disk else fetch)
+    return (lambda: progress(fetch)) if on_disk else (lambda: None)
 
 
 def _months(start: datetime, end: datetime) -> List[Tuple[datetime, datetime]]:
