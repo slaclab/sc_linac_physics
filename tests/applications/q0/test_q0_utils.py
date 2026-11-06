@@ -7,7 +7,7 @@ import tempfile
 import unittest
 import warnings
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -248,6 +248,21 @@ class TestDataRunLinregress(unittest.TestCase):
             self.data_run.dll_dt_stderr, _corrected_stderr(window)
         )
         self.assertNotAlmostEqual(self.data_run.dll_dt_stderr, full)
+
+    def test_stderr_filters_the_window_once(self):
+        # Copilot review on #487: reading fit_ll_data once per sample
+        # re-filtered the whole run each time.
+        self.data_run.fit_window = (0.0, 99.0)
+        _ = self.data_run.dll_dt_linregress
+        window = self.data_run.fit_ll_data
+        with patch.object(
+            DataRun,
+            "fit_ll_data",
+            new_callable=PropertyMock,
+            return_value=window,
+        ) as fit_ll_data:
+            _ = self.data_run.dll_dt_stderr
+        self.assertEqual(fit_ll_data.call_count, 1)
 
     def test_two_sample_window_has_no_stderr(self):
         # A line through two points has no spread to estimate; scipy versions
