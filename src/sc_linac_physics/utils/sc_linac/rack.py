@@ -73,6 +73,14 @@ class Rack(SCLinacObject):
         self.fscan_stat_pv: str = self.pv_addr("FSCAN:STAT")
         self._fscan_stat_pv_obj: Optional[PV] = None
 
+        # Hz. Shifts the RF frequency of every cavity on this rack, so each
+        # reads CHIRP:DF relative to it (see Cavity.real_detune). Operators
+        # set it by hand to tune H1/H2 cavities from cold landing. On the
+        # 1.3 GHz racks it exists and is never changed (Lisa Zacarias,
+        # 2026-11-02).
+        self.freq_offset_pv: str = self.pv_addr("FREQ_OFFSET")
+        self._freq_offset_pv_obj: Optional[PV] = None
+
         if rack_name == "A":
             # rack A always has cavities 1 - 4
             for cavityNum in range(1, 5):
@@ -93,6 +101,17 @@ class Rack(SCLinacObject):
     @property
     def pv_prefix(self):
         return self._pv_prefix
+
+    @property
+    def freq_offset_pv_obj(self) -> PV:
+        if not self._freq_offset_pv_obj:
+            self._freq_offset_pv_obj = PV(self.freq_offset_pv)
+        return self._freq_offset_pv_obj
+
+    @property
+    def freq_offset(self) -> float:
+        """The rack's FREQ_OFFSET, in Hz. Read only here."""
+        return self.freq_offset_pv_obj.get()
 
     @property
     def fscan_freq_start_pv_obj(self) -> PV:

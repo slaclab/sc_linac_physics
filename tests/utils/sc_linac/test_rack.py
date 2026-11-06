@@ -29,6 +29,7 @@ def rack():
         ("fscan_mode_overlap_pv_obj", "fscan_mode_overlap_pv"),
         ("fscan_start_pv_obj", "fscan_start_pv"),
         ("fscan_stat_pv_obj", "fscan_stat_pv"),
+        ("freq_offset_pv_obj", "freq_offset_pv"),
     ],
 )
 def test_rack_fscan_pv_obj_lazy_and_cached(rack, prop_name, addr_attr):
@@ -157,3 +158,14 @@ def test_run_fscan_status_callback_invoked(rack, monkeypatch):
     rack.run_fscan([target], status_callback=msgs.append, **_params())
 
     assert any("FSCAN" in m for m in msgs)
+
+
+def test_freq_offset_pv_name(rack):
+    assert rack.freq_offset_pv == "ACCL:L0B:0100:RACKA:FREQ_OFFSET"
+    hl_rack_b = MACHINE.cryomodules["H1"].cavities[5].rack
+    assert hl_rack_b.freq_offset_pv == "ACCL:L1B:H100:RACKB:FREQ_OFFSET"
+
+
+def test_freq_offset_reads_the_pv(rack):
+    rack._freq_offset_pv_obj = make_mock_pv(get_val=-400_000)
+    assert rack.freq_offset == -400_000

@@ -121,7 +121,17 @@ total `steps_moved` ever exceeds the budget, the loop decides something is wrong
 a bad `SCALE` or a slipping tuner, and raises `DetuneError` rather than keep
 driving the motor. This step-budget check is called the runaway guard throughout this page.
 <span class="cite">
-`cavity.py::Cavity._auto_tune “expected_steps: int = abs(int(delta_hz * self.microsteps_per_hz))”, cavity.py::Cavity._auto_tune “if steps_moved > expected_steps * stepper_tol_factor:”`</span>
+`cavity.py::Cavity._auto_tune “abs(int(delta_hz * self.microsteps_per_hz))”, cavity.py::Cavity._auto_tune “if steps_moved > expected_steps * stepper_tol_factor:”`</span>
+
+**Replacing the single-SCALE model.** Three optional arguments change the model
+for one call. Every current caller leaves them at their defaults, so nothing
+above changes. `expected_steps` sets the guard's step count directly.
+`step_estimator` sizes each move from a function of `delta_hz` instead of
+`delta_hz * microsteps_per_hz`. Only its magnitude is used, and the sign still
+comes from `delta_hz` and `SCALE`. `min_tol_factor` puts a floor under
+`stepper_tol_factor`. They exist for H1/H2 tunes sized from each cavity's
+measured response curve.
+<span class="cite">`cavity.py::Cavity._auto_tune “min_tol_factor: float = 1.0”, cavity.py::Cavity._estimate_steps “sign * abs(step_estimator(delta_hz))”, tuner_response.py::TunerResponse`</span>
 
 ### Drive It
 

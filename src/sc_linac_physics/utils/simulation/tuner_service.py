@@ -19,6 +19,7 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     MICROSTEPS_PER_STEP,
     PIEZO_HZ_PER_VOLT,
 )
+from sc_linac_physics.utils.sc_linac.tuner_response import TunerResponse
 from sc_linac_physics.utils.simulation.cavity_service import CavityPVGroup
 from sc_linac_physics.utils.simulation.severity_prop import SeverityProp
 
@@ -200,6 +201,13 @@ class StepperPVGroup(PVGroup):
             self.steps_per_hertz = ESTIMATED_MICROSTEPS_PER_HZ
         else:
             self.steps_per_hertz = ESTIMATED_MICROSTEPS_PER_HZ_HL
+        # H1/H2 cavities with a packaged response curve move along it, so the
+        # sim has the flat zone near -250 kHz that one SCALE can't model.
+        self.response: TunerResponse | None = (
+            TunerResponse.for_cavity(self.cavity_group.prefix)
+            if self.cavity_group.is_hl
+            else None
+        )
 
     # Restored: these were dropped while the PVs stayed defined, which made
     # StepperTuner.reset_signed_steps() a silent no-op in simulation. The
@@ -221,8 +229,30 @@ class StepperPVGroup(PVGroup):
         self._abort_requested = True
         return 0
 
+    def _detune_after(self, microsteps: float) -> float:
+        """Real detune after moving microsteps from the current detune.
+
+        Positive microsteps raise the detune; move() applies the direction.
+        With a response curve the move follows the curve across bins, so the
+        endpoint depends only on the microsteps, not on VELO (how many go in
+        each chunk). Without one, the move uses SCALE at the current detune,
+        which is the same everywhere.
+        """
+        detune = self.cavity_group.detune.value
+        if self.response is not None:
+            return self.response.detune_at(
+                self.response.position(detune) + microsteps
+            )
+        return detune + microsteps * self._hz_per_microstep_now()
+
     def _hz_per_microstep_now(self) -> float:
-        """Hz of detune per microstep, taken from the SCALE PV.
+        """Hz of detune per microstep at the current detune.
+
+        An H1/H2 cavity with a packaged response curve (TunerResponse) uses
+        the curve's local slope at its real detune (DFBEST). Writing SCALE
+        then doesn't change how that cavity moves, as on the machine: the
+        tuner's response is the tuner's, and SCALE is only the controls'
+        estimate of it. Every other cavity uses the SCALE PV, as below.
 
         SCALE is the single source of truth for how the simulated cavity
         responds to the stepper. Deriving the response from a separate constant
@@ -231,6 +261,10 @@ class StepperPVGroup(PVGroup):
         match the SCALE readback, and pushing a freshly measured value to SCALE
         changed nothing about how the simulation behaved.
         """
+        if self.response is not None:
+            return self.response.hz_per_microstep(
+                self.cavity_group.detune.value
+            )
         scale = _to_float(self.hz_per_microstep.value)
         if scale is None or scale == 0.0:
             # Fall back to the nominal slope rather than freezing the tuner.
@@ -254,10 +288,7 @@ class StepperPVGroup(PVGroup):
             await self.step_signed.write(self.step_signed.value + step_change)
 
             steps += self.speed.value
-            delta = self.speed.value * self._hz_per_microstep_now()
-            new_detune = self.cavity_group.detune.value + (
-                freq_move_sign * delta
-            )
+            new_detune = self._detune_after(freq_move_sign * self.speed.value)
 
             await self.cavity_group.write_detune(new_detune)
             await sleep(1)
@@ -272,8 +303,7 @@ class StepperPVGroup(PVGroup):
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = remainder * self._hz_per_microstep_now()
-        new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
+        new_detune = self._detune_after(freq_move_sign * remainder)
 
         enable_int = _enum_to_int(
             self.piezo_group.enable_stat.value,

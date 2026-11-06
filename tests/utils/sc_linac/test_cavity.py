@@ -89,6 +89,9 @@ def make_rack(is_hl=False):
     # truthy Mock and would select the HE loaded-Q window. The linac name above
     # is always L0B-L3B, so this fixture is never a high-energy cavity.
     rack.cryomodule.is_high_energy = False
+    # move_to_resonance refuses a nonzero offset; a bare Mock isn't 0.
+    rack.freq_offset = 0
+    rack.freq_offset_pv = "ACCL:L1B:H100:RACKA:FREQ_OFFSET"
     return rack
 
 
@@ -1380,3 +1383,89 @@ def test_wait_aborts_when_the_abort_arrives_as_the_run_completes(cavity):
             cavity.wait_for_characterization(poll_interval=0.01)
 
     cavity.turn_off.assert_called_once()
+
+
+def test_move_to_resonance_refuses_a_nonzero_freq_offset(cavity):
+    cavity.rack.freq_offset = -400_000
+    cavity.setup_tuning = MagicMock()
+    cavity._auto_tune = MagicMock()
+    cavity._status_msg_pv_obj = make_mock_pv()
+
+    with pytest.raises(DetuneError, match="FREQ_OFFSET is -400000 Hz"):
+        cavity.move_to_resonance()
+
+    # Refused before writing anything to the cavity.
+    cavity.setup_tuning.assert_not_called()
+    cavity._auto_tune.assert_not_called()
+
+
+def test_move_to_resonance_refuses_on_hl_too(hl_cavity):
+    hl_cavity.rack.freq_offset = 200_000
+    hl_cavity.setup_tuning = MagicMock()
+    hl_cavity._status_msg_pv_obj = make_mock_pv()
+
+    with pytest.raises(DetuneError):
+        hl_cavity.move_to_resonance()
+    hl_cavity.setup_tuning.assert_not_called()
+
+
+def test_real_detune_adds_the_rack_offset(hl_cavity):
+    hl_cavity._detune_chirp_pv_obj = make_mock_pv(get_val=-50_000)
+    hl_cavity.rack.freq_offset = -600_000
+    assert hl_cavity.real_detune == -650_000
+
+
+@pytest.mark.parametrize(
+    "delta_hz, microsteps_per_hz, estimate, expected",
+    [
+        # Without an estimator: 0.75 * delta * microsteps_per_hz.
+        (1000, 100, None, 75_000),
+        (-1000, 100, None, -75_000),
+        # With one: its magnitude, the sign of delta * microsteps_per_hz.
+        (1000, 100, 200_000, 150_000),
+        (-1000, 100, 200_000, -150_000),
+        (-1000, -100, -200_000, 150_000),
+        (0, 100, 200_000, 0),
+    ],
+)
+def test__estimate_steps(delta_hz, microsteps_per_hz, estimate, expected):
+    estimator = None if estimate is None else (lambda _: estimate)
+    assert (
+        Cavity._estimate_steps(delta_hz, microsteps_per_hz, estimator)
+        == expected
+    )
+
+
+def test__auto_tune_expected_steps_overrides_the_guard(cavity):
+    """A small expected_steps trips the guard a SCALE estimate would pass."""
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    cavity.stepper_tuner.hz_per_microstep = 0.01
+    detunes = iter([1000, 0])
+
+    with pytest.raises(DetuneError, match="more steps than expected"):
+        cavity._auto_tune(
+            delta_hz_func=lambda: next(detunes), expected_steps=100
+        )
+
+
+def test__auto_tune_min_tol_factor_raises_the_floor(cavity):
+    # 10M expected steps: stepper_tol_factor alone allows ~1.08x.
+    cavity._rf_mode_pv_obj = make_mock_pv(get_val=RF_MODE_CHIRP)
+    cavity._detune_chirp_pv_obj = make_mock_pv(severity=EPICS_NO_ALARM_VAL)
+    cavity._tune_config_pv_obj = make_mock_pv(get_val=HW_MODE_ONLINE_VALUE)
+    cavity.stepper_tuner.move = MagicMock()
+    cavity.stepper_tuner.hz_per_microstep = 0.01
+    # One move of 0.75 * 160,000 Hz / 0.01 = 12M steps: 1.2x expected.
+    detunes = iter([160_000, 0])
+    kwargs = dict(expected_steps=10_000_000, min_tol_factor=1.3)
+
+    cavity._auto_tune(delta_hz_func=lambda: next(detunes), **kwargs)
+
+    detunes = iter([160_000, 0])
+    with pytest.raises(DetuneError):
+        cavity._auto_tune(
+            delta_hz_func=lambda: next(detunes), expected_steps=10_000_000
+        )
