@@ -2,6 +2,45 @@
 
 <!-- version list -->
 
+## v9.65.0 (2026-11-06)
+
+### Bug Fixes
+
+- **rf-commissioning**: Resume during SSA pause resumes the paused run
+  ([#419](https://github.com/slaclab/sc_linac_physics/pull/419),
+  [`2b676c0`](https://github.com/slaclab/sc_linac_physics/commit/2b676c0b0c4da81912affc1d857c3272278630e6))
+
+- **rf-commissioning**: Runner fails the phase on any step fault; bridge always finishes
+  ([#419](https://github.com/slaclab/sc_linac_physics/pull/419),
+  [`2b676c0`](https://github.com/slaclab/sc_linac_physics/commit/2b676c0b0c4da81912affc1d857c3272278630e6))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#419](https://github.com/slaclab/sc_linac_physics/pull/419),
+  [`2b676c0`](https://github.com/slaclab/sc_linac_physics/commit/2b676c0b0c4da81912affc1d857c3272278630e6))
+
+### Features
+
+- **rf-commissioning**: Add PhaseRun, one step loop for every phase
+  ([#419](https://github.com/slaclab/sc_linac_physics/pull/419),
+  [`2b676c0`](https://github.com/slaclab/sc_linac_physics/commit/2b676c0b0c4da81912affc1d857c3272278630e6))
+
+- **rf-commissioning**: Add RunnerBridge, PhaseRun on a daemon thread
+  ([#419](https://github.com/slaclab/sc_linac_physics/pull/419),
+  [`2b676c0`](https://github.com/slaclab/sc_linac_physics/commit/2b676c0b0c4da81912affc1d857c3272278630e6))
+
+### Refactoring
+
+- **rf-commissioning**: PhaseBase.run() runs through PhaseRun
+  ([#419](https://github.com/slaclab/sc_linac_physics/pull/419),
+  [`2b676c0`](https://github.com/slaclab/sc_linac_physics/commit/2b676c0b0c4da81912affc1d857c3272278630e6))
+
+- **rf-commissioning**: Run SSA calibration through PhaseRun and RunnerBridge
+  ([#419](https://github.com/slaclab/sc_linac_physics/pull/419),
+  [`2b676c0`](https://github.com/slaclab/sc_linac_physics/commit/2b676c0b0c4da81912affc1d857c3272278630e6))
+
+
 ## v9.64.0 (2026-11-06)
 
 ### Bug Fixes
