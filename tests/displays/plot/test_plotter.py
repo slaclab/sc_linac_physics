@@ -335,7 +335,18 @@ def test_time_span_reaches_every_cryo_plot(cryo_display):
     cryo_display.linac_combo.setCurrentIndex(1)
     with patch.object(plotter.ArchiverPlot, "set_time_span") as set_span:
         cryo_display.time_span_combo.setCurrentText("6 hours")
-    assert set_span.call_count == 4
+    # 4 cryo plots plus the hidden Custom plot.
+    assert set_span.call_count == 5
+
+
+def test_time_span_survives_view_switch(cryo_display):
+    cryo_display.time_span_combo.setCurrentText("6 hours")
+    cryo_display.view_combo.setCurrentText(plotter.CUSTOM_VIEW)
+    assert cryo_display.plot.plot.getTimeSpan() == 6 * 3600
+    cryo_display.time_span_combo.setCurrentText("1 hour")
+    cryo_display.view_combo.setCurrentText(plotter.CRYO_VIEW)
+    (plot,) = cryo_display.cryo_plots
+    assert plot.plot.getTimeSpan() == 3600
 
 
 def test_curve_sets_without_ranges_use_defaults():

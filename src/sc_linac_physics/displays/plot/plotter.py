@@ -173,7 +173,7 @@ class PlotterDisplay(Display):
         self.time_span_combo.addItems(TIME_SPANS)
         self.time_span_combo.setCurrentText(DEFAULT_TIME_SPAN)
         self.time_span_combo.currentTextChanged.connect(
-            lambda text: self._for_each_plot("set_time_span", TIME_SPANS[text])
+            self._on_time_span_changed
         )
         self.legend_check = QCheckBox("Show legend")
         self.legend_check.setChecked(True)
@@ -385,9 +385,11 @@ class PlotterDisplay(Display):
         self.plot.set_legend_visible(shown)
         self.cryo_legend.setVisible(shown)
 
-    def _for_each_plot(self, method: str, value) -> None:
-        for plot in self.plots:
-            getattr(plot, method)(value)
+    def _on_time_span_changed(self, text: str) -> None:
+        # Both views share one selector, so set the span on the hidden view's
+        # plots too. Switching views then shows the span the selector shows.
+        for plot in [self.plot, *self.cryo_plots]:
+            plot.set_time_span(TIME_SPANS[text])
 
     def _on_view_changed(self, view: str) -> None:
         cryo = view == CRYO_VIEW
