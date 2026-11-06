@@ -2,6 +2,195 @@
 
 <!-- version list -->
 
+## v9.64.0 (2026-11-06)
+
+### Bug Fixes
+
+- **quench-processing**: Keep the radiation check inside reset_interlocks
+  ([#469](https://github.com/slaclab/sc_linac_physics/pull/469),
+  [`e03a183`](https://github.com/slaclab/sc_linac_physics/commit/e03a183f235572ff6cd7cf5334cb0706b81c5063))
+
+- **rf-commissioning**: Blank the review on cavity change; let Push retry a failed save
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Clearer rack-check refusal, and failure popups that say why
+  ([#464](https://github.com/slaclab/sc_linac_physics/pull/464),
+  [`e742509`](https://github.com/slaclab/sc_linac_physics/commit/e742509b5f45fbf215e1d934afa66e46dd93e4ea))
+
+- **rf-commissioning**: Confirm the detune gain push before recording it
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Drop the review when the record is reloaded; toolbar status follows the run
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Failure popups show why the step failed
+  ([#464](https://github.com/slaclab/sc_linac_physics/pull/464),
+  [`e742509`](https://github.com/slaclab/sc_linac_physics/commit/e742509b5f45fbf215e1d934afa66e46dd93e4ea))
+
+- **rf-commissioning**: Keep a live detune gain on record when SAVE fails
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Push the detune gain without waiting on the put; keep the record's wording
+  exact ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Read RFTESTSTAT, the with-RF result PV the IOC serves
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Refuse a running with-RF test before setup; time the wait by the clock
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Reserve a PhaseRun before starting it; keep failed attempts in results
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Resume the with-RF wait after a read error; flag IOC assumptions
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Runner fails the phase on any step fault; bridge always finishes
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Say setup_rf raises on out-of-tolerance results
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Say which cavities block the rack DAC zeroing, and what to do
+  ([#464](https://github.com/slaclab/sc_linac_physics/pull/464),
+  [`e742509`](https://github.com/slaclab/sc_linac_physics/commit/e742509b5f45fbf215e1d934afa66e46dd93e4ea))
+
+- **rf-commissioning**: Start the with-RF test without waiting on the put; note what a failed
+  setup_rf left ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf_commissioning**: HL tolerance and probe floor in frequency tuning
+  ([#463](https://github.com/slaclab/sc_linac_physics/pull/463),
+  [`6102a70`](https://github.com/slaclab/sc_linac_physics/commit/6102a70cfec363111e78cfc374ed56422b6622bf))
+
+- **rf_commissioning**: Let frequency tuning run on H1/H2, flag its limits
+  ([#463](https://github.com/slaclab/sc_linac_physics/pull/463),
+  [`6102a70`](https://github.com/slaclab/sc_linac_physics/commit/6102a70cfec363111e78cfc374ed56422b6622bf))
+
+- **rf_commissioning**: Let the SSA tab resolve H1 and H2 cryomodules
+  ([#463](https://github.com/slaclab/sc_linac_physics/pull/463),
+  [`6102a70`](https://github.com/slaclab/sc_linac_physics/commit/6102a70cfec363111e78cfc374ed56422b6622bf))
+
+- **rf_commissioning**: Offer Re-push Slope only after a passing SSA calibration
+  ([#463](https://github.com/slaclab/sc_linac_physics/pull/463),
+  [`6102a70`](https://github.com/slaclab/sc_linac_physics/commit/6102a70cfec363111e78cfc374ed56422b6622bf))
+
+- **rf_commissioning**: Resolve H1/H2 in every controller, refuse them in frequency tuning
+  ([#463](https://github.com/slaclab/sc_linac_physics/pull/463),
+  [`6102a70`](https://github.com/slaclab/sc_linac_physics/commit/6102a70cfec363111e78cfc374ed56422b6622bf))
+
+- **rf_commissioning**: Tie Re-push Slope to the cavity the calibration ran on
+  ([#463](https://github.com/slaclab/sc_linac_physics/pull/463),
+  [`6102a70`](https://github.com/slaclab/sc_linac_physics/commit/6102a70cfec363111e78cfc374ed56422b6622bf))
+
+- **sc_linac**: Check only the operator abort inside reset_interlocks
+  ([#469](https://github.com/slaclab/sc_linac_physics/pull/469),
+  [`e03a183`](https://github.com/slaclab/sc_linac_physics/commit/e03a183f235572ff6cd7cf5334cb0706b81c5063))
+
+- **sc_linac**: Let an abort stop Cavity.reset_interlocks
+  ([#469](https://github.com/slaclab/sc_linac_physics/pull/469),
+  [`e03a183`](https://github.com/slaclab/sc_linac_physics/commit/e03a183f235572ff6cd7cf5334cb0706b81c5063))
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Cite PUSH_DFGAIN's links; DFGAIN_NEW is copied, not computed
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Cite SAVE_DFGAIN's links; narrow its CHECK to who reads DFGAIN_SAVE
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Drop the old-records note on PiezoWithRFTest
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Explain PUSH_DFGAIN and SAVE_DFGAIN links in plain words
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Point the SAVE_DFGAIN CHECK at CavityCharPhase._push_results, not closed
+  #285 ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+### Features
+
+- **rf-commissioning**: Add PhaseRun, one step loop for every phase
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Add RunnerBridge, PhaseRun on a daemon thread
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Piezo with RF asks before re-running a stale setup
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Piezo with RF controller on the shared step runner
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Piezo with RF phase, detune check, start and wait for the test
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Piezo with RF phase, read results and push the reviewed detune gain
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Piezo with RF phase, RF and piezo setup
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Real Piezo with RF tab replaces the placeholder
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Record the with-RF test status; Warning is not passed
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Show setup_rf's cavity status lines in Phase History
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+### Refactoring
+
+- **rf-commissioning**: PhaseBase.run() runs through PhaseRun
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+### Testing
+
+- **rf-commissioning**: Drop the old-record PiezoWithRFTest tests
+  ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf-commissioning**: Feed the full-run tests the extra RFTESTSTS read; check the run reached the
+  test ([#452](https://github.com/slaclab/sc_linac_physics/pull/452),
+  [`c0ac4d0`](https://github.com/slaclab/sc_linac_physics/commit/c0ac4d0f34b4c426c8caf5392d29547a94d2a90e))
+
+- **rf_commissioning**: Pass cryomodule keys, not ints, in controller mocks
+  ([#463](https://github.com/slaclab/sc_linac_physics/pull/463),
+  [`6102a70`](https://github.com/slaclab/sc_linac_physics/commit/6102a70cfec363111e78cfc374ed56422b6622bf))
+
+
 ## v9.63.0 (2026-11-05)
 
 ### Bug Fixes
