@@ -102,6 +102,32 @@ def test_cm_pv_in_a_cavity_group_is_labeled_by_the_cm(qtbot):
     assert picker.labels["C1:ADES"] == "CM02 Cavity 1 ades"
 
 
+def test_only_cm_in_a_linac_is_labeled_by_the_cm(qtbot):
+    """L0B has one CM, so its CM attributes hold one PV each. CM01's sum
+    must not take the linac's label."""
+    from sc_linac_physics.displays.plot.pv_picker import PVPicker
+    from sc_linac_physics.displays.plot.utils import (
+        CryomodulePVs,
+        HierarchicalPVs,
+        LinacPVs,
+    )
+
+    linac_key = ("Linac", "aact_mean_sum_pv")
+    cm_key = ("Cryomodule", "aact_mean_sum_pv")
+    linac = LinacPVs(
+        name="L0B",
+        pvs=PVGroup({linac_key: ["L0B:SUM"], cm_key: ["CM01:SUM"]}),
+    )
+    cm = CryomodulePVs(
+        name="01", linac_name="L0B", pvs=PVGroup({cm_key: ["CM01:SUM"]})
+    )
+    groups = HierarchicalPVs(linacs={"L0B": linac}, cryomodules={"01": cm})
+    picker = PVPicker(groups)
+    qtbot.addWidget(picker)
+    assert picker.labels["L0B:SUM"] == "L0B aact mean sum"
+    assert picker.labels["CM01:SUM"] == "CM01 aact mean sum"
+
+
 def test_attribute_from_two_sources_gets_two_axes():
     group = PVGroup(
         {

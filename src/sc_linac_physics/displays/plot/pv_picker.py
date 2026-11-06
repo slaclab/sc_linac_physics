@@ -29,6 +29,11 @@ from sc_linac_physics.utils.sc_linac.decarad import Decarad
 
 PVKey = Tuple[str, str]  # (source class name, attribute name)
 
+# Source classes that are tree levels. A node labels only its own level's
+# PVs: L0B has one CM, so L0B's CM attributes hold one PV each, and must
+# not label CM01's PVs "L0B ...".
+LEVELS = ("Machine", "Linac", "Cryomodule", "Rack", "Cavity")
+
 
 def axis_for(attribute: str) -> str:
     """One Y axis per attribute: 'ades_pv' and 'ades_pvs' -> 'ades'."""
@@ -86,6 +91,7 @@ class NodePVs:
 
     pvs: PVGroup
     labels: Dict[str, str] = field(default_factory=dict)
+    level: Optional[str] = None  # one of LEVELS, or None for decarads
 
 
 def decarad_pvs(heads) -> NodePVs:
@@ -198,15 +204,25 @@ class PVPicker(QWidget):
 
         Returns the Machine node.
         """
-        machine = _node(self.tree, "Machine", NodePVs(groups.get_machine().pvs))
+        machine = _node(
+            self.tree,
+            "Machine",
+            NodePVs(groups.get_machine().pvs, level="Machine"),
+        )
         for linac_name in sorted(groups.linacs):
             linac = _node(
-                self.tree, linac_name, NodePVs(groups.linacs[linac_name].pvs)
+                self.tree,
+                linac_name,
+                NodePVs(groups.linacs[linac_name].pvs, level="Linac"),
             )
             for cm_name in sorted(groups.cryomodules):
                 cm = groups.cryomodules[cm_name]
                 if cm.linac_name == linac_name:
-                    cm_item = _node(linac, f"CM{cm_name}", NodePVs(cm.pvs))
+                    cm_item = _node(
+                        linac,
+                        f"CM{cm_name}",
+                        NodePVs(cm.pvs, level="Cryomodule"),
+                    )
                     _add_racks(cm_item, cm_name, groups)
         if decarads:
             _add_decarads(_node(self.tree, "Decarads", None), decarads)
@@ -272,11 +288,17 @@ def _add_racks(cm_item, cm_name: str, groups: HierarchicalPVs) -> list:
         if cm_key != cm_name:
             continue
         rack = groups.racks[(cm_key, rack_name)]
-        rack_item = _node(cm_item, f"Rack {rack_name}", NodePVs(rack.pvs))
+        rack_item = _node(
+            cm_item, f"Rack {rack_name}", NodePVs(rack.pvs, level="Rack")
+        )
         for (cm_key, number), cavity in sorted(groups.cavities.items()):
             if cm_key == cm_name and cavity.rack_name == rack_name:
                 cavities.append(
-                    _node(rack_item, f"Cavity {number}", NodePVs(cavity.pvs))
+                    _node(
+                        rack_item,
+                        f"Cavity {number}",
+                        NodePVs(cavity.pvs, level="Cavity"),
+                    )
                 )
     return cavities
 
@@ -295,7 +317,8 @@ def _owner_labels(tree: QTreeWidget) -> Dict[str, str]:
     "L0B aact mean sum". A pick of many PVs then still gets labels.
 
     Shallowest, not deepest: a cavity's group also holds its cryomodule's
-    PVs, and the CM sum is not that cavity's.
+    PVs, and the CM sum is not that cavity's. A PV whose source is a tree
+    level (see LEVELS) is labeled only at a node of that level.
     """
     labels: Dict[str, str] = {}
     queue = deque(tree.topLevelItem(i) for i in range(tree.topLevelItemCount()))
@@ -305,7 +328,9 @@ def _owner_labels(tree: QTreeWidget) -> Dict[str, str]:
         node = item.data(0, Qt.UserRole)
         if node is None:
             continue
-        for (_, attribute), pvs in node.pvs.pvs.items():
+        for (source, attribute), pvs in node.pvs.pvs.items():
+            if source in LEVELS and source != node.level:
+                continue
             if len(pvs) == 1:
                 labels.setdefault(
                     pvs[0], f"{short_path(item)} {readable(attribute)}"
