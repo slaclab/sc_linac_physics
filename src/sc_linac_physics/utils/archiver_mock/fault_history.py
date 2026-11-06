@@ -31,6 +31,10 @@ SEVERITY_SUFFIX = ":CUDSEVR"
 MAX_FAULTS_PER_DAY = 40.0
 MEAN_FAULT_MINUTES = 10.0
 MAX_FAULTS_PER_WINDOW = 5_000
+# BackendCavity.process_fault_history rounds timestamps to 10 ms before it
+# pairs a status with a severity. Two transitions 20 ms apart stay distinct
+# after that rounding, so a short fault keeps its own severity.
+MIN_EVENT_SPACING_S = 0.02
 
 
 def is_fault_history_pv(pv: str) -> bool:
@@ -88,18 +92,19 @@ def _timeline(
     )
     fault_starts = np.sort(rng.uniform(t0, t1, n_faults))
     durations = rng.exponential(MEAN_FAULT_MINUTES * 60.0, n_faults)
-    rows = rng.integers(0, len(_fault_codes()), n_faults)
+    fault_codes = _fault_codes(prefix)
+    rows = rng.integers(0, len(fault_codes), n_faults)
 
     times, codes, severities = [t0], [ok], [0]  # OK when the window opens
     for i, (fault_start, row) in enumerate(zip(fault_starts, rows)):
         next_start = fault_starts[i + 1] if i + 1 < n_faults else t1
-        if fault_start <= times[-1]:
-            continue  # starts before the previous fault cleared
-        code, severity = _fault_codes()[row]
+        if fault_start < times[-1] + MIN_EVENT_SPACING_S:
+            continue  # starts before (or right as) the previous one cleared
+        code, severity = fault_codes[row]
         times.append(fault_start)
         codes.append(code)
         severities.append(severity)
-        cleared = fault_start + durations[i]
+        cleared = fault_start + max(durations[i], MIN_EVENT_SPACING_S)
         if cleared < next_start:
             times.append(cleared)
             codes.append(ok)
@@ -107,13 +112,29 @@ def _timeline(
     return np.array(times), codes, severities
 
 
-@lru_cache(maxsize=1)
-def _fault_codes() -> Tuple[Tuple[str, int], ...]:
-    """(three-letter code, Severity) for every fault the runner checks."""
+def _fault_codes(prefix: str) -> Tuple[Tuple[str, int], ...]:
+    """(three-letter code, Severity) for every fault the runner checks on
+    this cavity.
+
+    Same row filter as BackendCavity._build_fault_pv: RACK rows only for the
+    cavity's own rack (A = cavities 1-4, B = 5-8), and CM rows only for the
+    matching CM Type (3.9 for H1/H2, 1.3 for the rest).
+    """
+    harmonic = prefix.rsplit(":", 1)[-1].startswith("H")
+    rack = "A" if int(cavity_number(prefix)) <= 4 else "B"
+    return _fault_codes_for(rack, harmonic)
+
+
+@lru_cache(maxsize=4)
+def _fault_codes_for(rack: str, harmonic: bool) -> Tuple[Tuple[str, int], ...]:
     # Data only: the cavity display's own fault list, so mock codes are ones
     # the heatmap's code filter knows.
     from sc_linac_physics.displays.cavity_display.utils.utils import parse_csv
 
+    skip_cm_type = "1.3" if harmonic else "3.9"
     return tuple(
-        (row["Three Letter Code"], int(row["Severity"])) for row in parse_csv()
+        (row["Three Letter Code"], int(row["Severity"]))
+        for row in parse_csv()
+        if not (row["Level"] == "RACK" and row["Rack"] != rack)
+        and not (row["Level"] == "CM" and row["CM Type"] == skip_cm_type)
     )

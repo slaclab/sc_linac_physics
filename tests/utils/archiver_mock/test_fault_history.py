@@ -121,3 +121,74 @@ def test_fault_count_is_capped():
 def test_empty_window():
     status, _ = _both(start=END, end=START)
     assert status.empty
+
+
+def test_process_fault_history_reads_each_severity():
+    """A fault that clears within 10 ms of starting still reads as a fault."""
+    from sc_linac_physics.displays.cavity_display.backend.backend_machine import (
+        BackendMachine,
+    )
+
+    machine = BackendMachine(lazy_fault_pvs=True)
+    for cm in ("02", "03", "04", "05", "06"):
+        for cavity in machine.cryomodules[cm].cavities.values():
+            # A long window packs in many short faults. It ends before the
+            # November DST change: process_fault_history compares naive
+            # Pacific times, which run backwards across it.
+            status, sevr = _both(
+                cavity.pv_prefix.rstrip(":"),
+                start=START,
+                end=START + timedelta(days=150),
+            )
+            _, events = cavity.process_fault_history(status, sevr)
+            # Skip statuses in the last 5 ms of a second: _round_to_10ms
+            # carries those a full second late (ts + 1 s, microseconds
+            # kept), a separate bug that picks up the next severity.
+            kept = (status["timestamp"].dt.microsecond < 995_000).tolist()
+            got = [e.severity for e, k in zip(events, kept) if k]
+            want = [v for v, k in zip(sevr["value"], kept) if k]
+            assert got == want
+
+
+def _codes_seen(prefix):
+    status, _ = _both(prefix, start=START, end=START + timedelta(days=365))
+    return set(status["value"]) - {cavity_number(prefix)}
+
+
+def test_harmonic_linearizer_gets_no_1p3_cm_faults():
+    # faults.csv: MGT rows are CM Type 1.3, which _build_fault_pv skips
+    # for H1/H2
+    seen = set().union(
+        *(
+            _codes_seen(f"ACCL:L1B:H{c}{n}0")
+            for c in (1, 2)
+            for n in range(1, 9)
+        )
+    )
+    assert seen
+    assert "MGT" not in seen
+    seen_13 = set().union(*(_codes_seen(p) for p in _busy_prefixes()))
+    assert "MGT" in seen_13
+
+
+def test_rows_match_what_build_fault_pv_keeps():
+    from sc_linac_physics.utils.archiver_mock.fault_history import (
+        _fault_codes,
+    )
+
+    rows = parse_csv()
+
+    def expected(rack, harmonic):
+        return sorted(
+            (r["Three Letter Code"], int(r["Severity"]))
+            for r in rows
+            if not (r["Level"] == "RACK" and r["Rack"] != rack)
+            and not (r["Level"] == "CM" and r["CM Type"] == "1.3" and harmonic)
+            and not (
+                r["Level"] == "CM" and r["CM Type"] == "3.9" and not harmonic
+            )
+        )
+
+    assert sorted(_fault_codes("ACCL:L1B:0210")) == expected("A", False)
+    assert sorted(_fault_codes("ACCL:L1B:0250")) == expected("B", False)
+    assert sorted(_fault_codes("ACCL:L1B:H150")) == expected("B", True)
