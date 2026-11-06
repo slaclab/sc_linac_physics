@@ -2,6 +2,45 @@
 
 <!-- version list -->
 
+## v9.66.0 (2026-11-06)
+
+### Bug Fixes
+
+- **sim**: HL stepper moves follow the response curve across bins
+  ([#480](https://github.com/slaclab/sc_linac_physics/pull/480),
+  [`12ef955`](https://github.com/slaclab/sc_linac_physics/commit/12ef955d62ce2b3e59e0cda80b5ba34e415fb342))
+
+- **tuning**: Harden sc-hl-tuner-curves fit against resets and bad samples
+  ([#480](https://github.com/slaclab/sc_linac_physics/pull/480),
+  [`12ef955`](https://github.com/slaclab/sc_linac_physics/commit/12ef955d62ce2b3e59e0cda80b5ba34e415fb342))
+
+### Documentation
+
+- **tuning**: Drop the refit command from TunerResponse's docstring
+  ([#480](https://github.com/slaclab/sc_linac_physics/pull/480),
+  [`12ef955`](https://github.com/slaclab/sc_linac_physics/commit/12ef955d62ce2b3e59e0cda80b5ba34e415fb342))
+
+### Features
+
+- **sim**: Serve rack FREQ_OFFSET and mark CHIRP:DF invalid outside the chirp window
+  ([#480](https://github.com/slaclab/sc_linac_physics/pull/480),
+  [`12ef955`](https://github.com/slaclab/sc_linac_physics/commit/12ef955d62ce2b3e59e0cda80b5ba34e415fb342))
+
+- **tuning**: Package HL tuner response curves and add sc-hl-tuner-curves
+  ([#480](https://github.com/slaclab/sc_linac_physics/pull/480),
+  [`12ef955`](https://github.com/slaclab/sc_linac_physics/commit/12ef955d62ce2b3e59e0cda80b5ba34e415fb342))
+
+- **tuning**: Refuse move_to_resonance on a nonzero rack FREQ_OFFSET; add curve-based tuning guard
+  ([#480](https://github.com/slaclab/sc_linac_physics/pull/480),
+  [`12ef955`](https://github.com/slaclab/sc_linac_physics/commit/12ef955d62ce2b3e59e0cda80b5ba34e415fb342))
+
+### Refactoring
+
+- **tuning**: Drop sc-hl-tuner-curves, keep only the packaged curves
+  ([#480](https://github.com/slaclab/sc_linac_physics/pull/480),
+  [`12ef955`](https://github.com/slaclab/sc_linac_physics/commit/12ef955d62ce2b3e59e0cda80b5ba34e415fb342))
+
+
 ## v9.65.1 (2026-11-06)
 
 ### Bug Fixes
