@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.65.1 (2026-11-06)
+
+### Bug Fixes
+
+- **rf-commissioning**: Drop a stale cavity on a failed selection; fix the magnet conflict message
+  ([#422](https://github.com/slaclab/sc_linac_physics/pull/422),
+  [`9e4a9f7`](https://github.com/slaclab/sc_linac_physics/commit/9e4a9f76fa9697db667448e18f76c618d7c26eff))
+
+- **rf-commissioning**: Refuse a header cavity change while a tuning stage runs
+  ([#422](https://github.com/slaclab/sc_linac_physics/pull/422),
+  [`9e4a9f7`](https://github.com/slaclab/sc_linac_physics/commit/9e4a9f76fa9697db667448e18f76c618d7c26eff))
+
+
 ## v9.65.0 (2026-11-06)
 
 ### Bug Fixes
