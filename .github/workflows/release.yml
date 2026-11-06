@@ -47,7 +47,11 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          token: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          # Pushes go over SSH with a write deploy key. "Deploy keys" is the
+          # bypass actor on the main ruleset, so this release push
+          # is the one way to update main without a PR. API calls use the
+          # built-in GITHUB_TOKEN.
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -66,13 +70,12 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global url."https://x-access-token:${{ secrets.SEMANTIC_RELEASE_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Run semantic-release
         id: release
         env:
-          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git log --oneline -5
           semantic-release version
@@ -80,8 +83,8 @@ jobs:
       - name: Build and publish
         if: steps.release.outputs.released == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python -m build
           semantic-release publish
@@ -95,7 +98,7 @@ jobs:
         id: notes
         if: steps.release.outputs.released == 'true'
         env:
-          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG=$(git describe --tags --abbrev=0)
           python .github/scripts/operator_notes.py --tag "$TAG"
