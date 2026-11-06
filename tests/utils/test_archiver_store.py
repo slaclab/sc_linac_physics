@@ -283,3 +283,9 @@ def test_fill_does_not_read_months_back(store):
     read_table.assert_not_called()
     assert len(fake.calls) == 1
     assert store.path("A:PV", JAN).exists()
+
+
+def test_path_that_cannot_be_checked_does_not_exist(tmp_path):
+    denied = PermissionError("Permission denied")
+    with patch.object(archiver_store.Path, "exists", side_effect=denied):
+        assert not archiver_store._exists(tmp_path / "x.parquet")
