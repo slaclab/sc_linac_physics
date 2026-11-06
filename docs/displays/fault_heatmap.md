@@ -24,7 +24,7 @@ Backend (pre-existing)
   FaultCounter, EPICS archiver queries
 ```
 
-The frontend never talks to the archiver directly. `FaultDataFetcher` calls `BackendCavity.get_fault_counts()`, which queries the CUDSTATUS and CUDSEVR PVs from the EPICS archiver. Results are emitted back via Qt signals, keeping the UI responsive.
+The frontend never talks to the archiver directly. `FaultDataFetcher` calls `BackendCavity.get_fault_counts()`, which reads the CUDSTATUS and CUDSEVR PVs through the shared archiver cache (`ArchiverStore`, see [Archiver client](../utils/archiver.md)). Months that ended over a day ago come from disk after the first load; newer data comes from the archiver. Results are emitted back via Qt signals, keeping the UI responsive.
 
 ## File Breakdown
 
