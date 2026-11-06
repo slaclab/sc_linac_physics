@@ -247,9 +247,10 @@ and written, then the load raises `PVNotArchivedError` naming every unknown PV.
 <span class="cite">`utils/archiver_store.py::ArchiverStore.read_windows “Raises archiver.PVNotArchivedError naming every unknown PV once all finish.”`</span>
 
 **The cache can't be written** (no permission, disk full). The store logs a
-warning and fetches without it. The plot still works, but nothing is kept, so
-every open fetches every run again.
-<span class="cite">`utils/archiver_store.py::ArchiverStore._cache “archiver cache: cannot write”, utils/archiver_store.py::ArchiverStore._cached “fetching %s without it”`</span>
+warning and fetches without it, so the plot still works. Windows already on
+disk are still read from disk. Only the windows it couldn't save are fetched
+again, on every load and every open, until a write succeeds.
+<span class="cite">`utils/archiver_store.py::ArchiverStore._cache “archiver cache: cannot write”, utils/archiver_store.py::ArchiverStore._cached “fetching %s without it”, utils/archiver_store.py::ArchiverStore._cache “if path.exists():”, field_emission/run_cache.py::fill_cache “if not is_cached(run, store)”`</span>
 
 **Two people fetch the same PV.** Both write a temp file and the second rename
 wins. Both files hold the same archiver data. `/home` is NFS v4 on the
@@ -273,12 +274,15 @@ help if whole months cover the run, since those are read first.
 
 !!! note "One empty PV empties a dataset"
 
-    A PV with no samples in the window is written as an empty file, so it
-    isn't asked again. The align step drops every row with a missing value, so
-    that PV leaves 0 rows. All 8 cavities share the same 10 decarad PVs, so one
+    The archiver can return the last sample before the window starts, so a PV
+    that held one value through the run is not empty: the align step carries
+    that value forward. Only when the archiver returns nothing at all, not
+    even that earlier sample, is the PV written as an empty file, so it isn't
+    asked again. The align step drops every row with a missing value, so that
+    PV leaves 0 rows. All 8 cavities share the same 10 decarad PVs, so one
     empty head blanks all 8 datasets for that readout, and the run still counts
     as cached.
-    <span class="cite">`utils/archiver_store.py::_write_atomically “Nothing archived that month: record it, so it isn't asked again.”, field_emission/amp_vs_radiation.py::align_pvs_to_common_time “dropna(how="any")”`</span>
+    <span class="cite">`utils/archiver.py::iter_range_chunks “A window can start with the last sample before "from"”, field_emission/amp_vs_radiation.py::align_pvs_to_common_time “aligned.ffill()”, utils/archiver_store.py::_write_atomically “Nothing archived that month: record it, so it isn't asked again.”, field_emission/amp_vs_radiation.py::align_pvs_to_common_time “dropna(how="any")”`</span>
 
 ### Try it
 
