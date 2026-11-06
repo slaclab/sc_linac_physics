@@ -105,6 +105,22 @@ Setup commands (`sc-setup-all`, `sc-setup-linac`, `sc-setup-cm`, `sc-setup-cav`)
 
 ## Development
 
+### Branches and pull requests
+
+Open pull requests from a branch on `slaclab/sc_linac_physics`, not from a
+fork. Clone this repository directly (above), then branch from `main`:
+
+```bash
+git switch main && git pull
+git switch -c fix/short-description
+git push -u origin fix/short-description
+```
+
+Why: GitHub can only stack a PR on a branch in the same repository, and an
+open PR can't move off a fork. Ask a maintainer for write access if you don't
+have it. Stacking and PR conventions are in [`CLAUDE.md`](CLAUDE.md) under "Scope
+and shipping".
+
 ### Testing
 
 80% coverage is required and enforced in CI. Tests mock EPICS and do not require the simulator.
