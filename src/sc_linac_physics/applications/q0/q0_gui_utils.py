@@ -129,10 +129,12 @@ class Q0Worker(RFWorker):
             )
         # calc_q0 raises ValueError for a non-positive RF heat load or
         # amplitude. Reaching the error signal is what shows the popup and
-        # runs cm.shut_off() (q0_gui.py connects both to it).
+        # runs cm.shut_off() (q0_gui.py connects both to it). DataError is
+        # a fit window set on the measurement or its calibration.
         except (
             TypeError,
             ValueError,
+            q0_utils.DataError,
             CavityAbortError,
             q0_utils.Q0AbortError,
             *PV_ERRORS,

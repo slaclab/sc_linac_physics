@@ -201,13 +201,21 @@ class Q0Measurement:
             self.cryomodule.q0_data_file, self.start_time, new_data
         )
 
-    def save_results(self):
-        # The results also come from the calibration curve, so its runs
-        # must be unwindowed too.
+    def require_no_fit_windows(self) -> None:
+        """Raise DataError if this measurement or its calibration has a
+        fit window set.
+
+        The results also come from the calibration curve, so its runs must
+        be unwindowed too. takeNewQ0Measurement calls this before it touches
+        the cryo, so a window can't stop save_results after the run.
+        """
         q0_utils.require_no_fit_windows(
             [self.heater_run, self.rf_run]
             + self.cryomodule.calibration.heater_runs
         )
+
+    def save_results(self):
+        self.require_no_fit_windows()
         newData = {
             q0_utils.JSON_START_KEY: self.start_time,
             q0_utils.JSON_CAV_AMPS_KEY: self.rf_run.amplitudes,

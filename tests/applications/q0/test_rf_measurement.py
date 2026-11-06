@@ -850,3 +850,12 @@ class TestFitWindow:
         with pytest.raises(q0_utils.DataError):
             measurement.save_results()
         mock_update.assert_not_called()
+
+    def test_require_no_fit_windows_passes_without_windows(
+        self, setup_complete_measurement
+    ):
+        measurement = setup_complete_measurement()
+        measurement.cryomodule.calibration.heater_runs = [
+            q0_utils.HeaterRun(10.0)
+        ]
+        measurement.require_no_fit_windows()
