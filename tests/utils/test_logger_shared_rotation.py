@@ -139,3 +139,53 @@ def test_custom_logger_uses_it_for_both_files(tmp_path):
 
     names = sorted(Path(c.args[0]).name for c in cls.call_args_list)
     assert names == ["ops.jsonl", "ops.log"]
+
+
+def test_file_made_by_rollover_is_group_writable(tmp_path):
+    path = tmp_path / "ops.log"
+    handler = SharedRotatingFileHandler(path, maxBytes=10, backupCount=2)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    old = os.umask(0o022)
+    try:
+        handler.emit(_record("first line, past 10 bytes"))
+        handler.emit(_record("rotates before this one"))
+    finally:
+        os.umask(old)
+        handler.close()
+
+    assert (tmp_path / "ops.log.1").exists()
+    assert os.stat(path).st_mode & 0o777 == 0o664
+
+
+def test_reopen_leaves_existing_permissions_alone(tmp_path):
+    path = tmp_path / "ops.log"
+    path.touch()
+    os.chmod(path, 0o640)
+    handler = SharedRotatingFileHandler(path)
+    handler.emit(_record("x"))
+    handler.close()
+
+    assert os.stat(path).st_mode & 0o777 == 0o640
+
+
+def test_failed_reopen_after_rotation_does_not_raise(tmp_path):
+    path = tmp_path / "ops.log"
+    handler = SharedRotatingFileHandler(path)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    handler.emit(_record("before"))
+    os.rename(path, tmp_path / "ops.log.1")
+
+    real_open = handler._open
+    with (
+        patch.object(handler, "_open", side_effect=PermissionError),
+        patch.object(handler, "handleError") as handle_error,
+    ):
+        handler.emit(_record("dropped"))  # must not raise
+    handle_error.assert_called_once()
+
+    handler._open = real_open
+    handler.emit(_record("after"))  # writes once the file opens again
+    handler.close()
+
+    with open(path, encoding="utf-8") as f:
+        assert f.read() == "after\n"
