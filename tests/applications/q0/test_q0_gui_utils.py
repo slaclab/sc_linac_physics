@@ -9,6 +9,7 @@ import pytest
 # Import the classes to test
 from sc_linac_physics.applications.q0 import q0_utils
 from sc_linac_physics.applications.q0.q0_gui_utils import (
+    format_q0,
     CryoParamSetupWorker,
     Q0Worker,
     Q0SetupWorker,
@@ -34,6 +35,9 @@ def mock_cryomodule():
     # Mock Q0 measurement
     mock_q0_measurement = Mock()
     mock_q0_measurement.q0 = 1.2e10
+    mock_q0_measurement.q0_sigma = 3e8
+    mock_q0_measurement.q0_linregress = 1.25e10
+    mock_q0_measurement.fit_sensitive = False
     mock_cm.q0_measurement = mock_q0_measurement
 
     # Mock calibration
@@ -144,7 +148,7 @@ class TestQ0Worker:
             worker.status.emit.assert_called_with("Taking new Q0 Measurement")
             mock_cryomodule.takeNewQ0Measurement.assert_called_once()
             worker.finished.emit.assert_called_with(
-                f"Recorded Q0: {mock_cryomodule.q0_measurement.q0:.2e}"
+                "Recorded Q0 1.20e+10 ± 3.0e+08 (siegel) · linregress 1.25e+10"
             )
 
     def test_q0_measurement_with_cavity_abort(self, mock_cryomodule):
@@ -683,3 +687,46 @@ class TestPVErrorsReachTheErrorSignal:
 
         worker.error.emit.assert_called_once_with("JT AUTO")
         worker.finished.emit.assert_not_called()
+
+
+class TestFormatQ0:
+    def test_quiet_when_fits_agree(self):
+        m = Mock(q0=1.2e10, q0_sigma=3e8, q0_linregress=1.25e10)
+        m.fit_sensitive = False
+        assert format_q0(m) == (
+            "Q0 1.20e+10 ± 3.0e+08 (siegel) · linregress 1.25e+10"
+        )
+
+    def test_warns_when_fit_sensitive(self):
+        m = Mock(q0=1.2e10, q0_sigma=3e8, q0_linregress=1.31e10)
+        m.fit_sensitive = True
+        assert format_q0(m).endswith("linregress 1.31e+10 ⚠ fit-sensitive")
+
+    def test_bad_linregress_q0_reads_n_a(self):
+        # Copilot review on #487: an outlier can give a non-positive
+        # linregress heat load while the official Q0 is fine.
+        m = Mock(q0=1.2e10, q0_sigma=3e8)
+        type(m).q0_linregress = PropertyMock(
+            side_effect=ValueError("RF heat load must be positive")
+        )
+        type(m).fit_sensitive = PropertyMock(
+            side_effect=AssertionError("must not be read")
+        )
+        assert format_q0(m) == (
+            "Q0 1.20e+10 ± 3.0e+08 (siegel) · linregress n/a"
+        )
+
+    def test_bad_official_q0_still_raises(self):
+        m = Mock(q0_sigma=3e8, q0_linregress=1.2e10)
+        type(m).q0 = PropertyMock(
+            side_effect=ValueError("RF heat load must be positive")
+        )
+        with pytest.raises(ValueError):
+            format_q0(m)
+
+    def test_no_sigma_for_two_sample_fit(self):
+        m = Mock(q0=1.2e10, q0_sigma=float("nan"), q0_linregress=1.31e10)
+        m.fit_sensitive = False
+        assert format_q0(m) == (
+            "Q0 1.20e+10 ± n/a (siegel) · linregress 1.31e+10"
+        )
