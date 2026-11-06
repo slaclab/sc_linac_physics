@@ -105,7 +105,9 @@ def _severity_at(timestamp, severity_samples):
                 * 10000
             )
         except ValueError:
-            rounded_ts = severity_timestamp + timedelta(seconds=1)
+            rounded_ts = severity_timestamp.replace(microsecond=0) + timedelta(
+                seconds=1
+            )
         if (timestamp - rounded_ts).total_seconds() >= 0:
             sevr = severity
         else:
@@ -113,7 +115,44 @@ def _severity_at(timestamp, severity_samples):
     return sevr
 
 
+class TestRoundTo10ms:
+    def test_rounds_to_nearest_10ms(self):
+        ts = datetime(2025, 6, 2, 12, 0, 26, 994000)
+        assert BackendCavity._round_to_10ms(ts) == ts.replace(
+            microsecond=990000
+        )
+
+    def test_carry_goes_to_start_of_next_second(self):
+        ts = datetime(2025, 6, 2, 12, 0, 26, 996000)
+        assert BackendCavity._round_to_10ms(ts) == datetime(
+            2025, 6, 2, 12, 0, 27
+        )
+
+    def test_carry_across_minute(self):
+        ts = datetime(2025, 6, 2, 12, 0, 59, 999999)
+        assert BackendCavity._round_to_10ms(ts) == datetime(
+            2025, 6, 2, 12, 1, 0
+        )
+
+
 class TestProcessFaultHistory:
+    def test_status_near_end_of_second_ignores_later_severity(self, cavity):
+        """A status at .996 s must not pick up a severity 0.6 s later."""
+        base = datetime(2025, 6, 2, 12, 0, 0)
+        status_ts = base + timedelta(seconds=26, microseconds=996000)
+        statuses = _make_frame([("SSA", status_ts)])
+        severities = _make_frame(
+            [
+                (2, status_ts),
+                (0, status_ts + timedelta(milliseconds=600)),
+            ]
+        )
+
+        counts, events = cavity.process_fault_history(statuses, severities)
+
+        assert events[0].severity == 2
+        assert counts["SSA"].alarm_count == 1
+
     def test_counts_and_events_match_severities(self, cavity):
         """Statuses pick up the severity in effect at their timestamp."""
         base = datetime(2025, 6, 2, 12, 0, 0)
