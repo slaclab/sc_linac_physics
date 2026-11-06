@@ -204,8 +204,27 @@ class SharedRotatingFileHandler(RotatingFileHandler):
         if same:
             self.stream.seek(0, os.SEEK_END)
         else:
+            # Reopen inside RotatingFileHandler.emit, which opens a None
+            # stream and sends any error to handleError instead of raising.
             self.stream.close()
-            self.stream = self._open()
+            self.stream = None
+
+    def _open(self):
+        """Open the log file. A file this call creates is set to 664.
+
+        Rollover creates the new file here, after the factory's
+        safe_umask(0o002) has ended. Without the chmod, a 022 umask would
+        make it 644, and other group members could no longer write it.
+        Existing files keep their permissions.
+        """
+        created = not os.path.exists(self.baseFilename)
+        stream = super()._open()
+        if created:
+            try:
+                os.fchmod(stream.fileno(), 0o664)
+            except (OSError, AttributeError):  # no os.fchmod on old Windows
+                pass  # the file still works for whoever made it
+        return stream
 
 
 class ExtraDataMixin:
