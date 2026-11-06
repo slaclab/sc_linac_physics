@@ -8,6 +8,7 @@ lowest of the five limits otherwise.
 
 from unittest.mock import AsyncMock, Mock, patch
 
+import numpy as np
 import pytest
 
 from sc_linac_physics.utils.sc_linac.linac_utils import (
@@ -148,6 +149,59 @@ async def test_writing_hwmode_recomputes_ades_max():
     await faults.offline.write("Offline")
     assert cavity.hw_mode == 2
     assert cavity.adesMax.value == 0
+
+
+@pytest.mark.parametrize(
+    "prefix, points, dt, pre",
+    [
+        ("ACCL:L1B:0210:", 16384, 7.001e-7, 0),
+        ("ACCL:L1B:H110:", 16384, 1.785e-4, 1024),
+        ("ACCL:L1B:H130:", 16384, 6.999e-7, 1024),
+        ("ACCL:L1B:H140:", 16384, 5.6e-6, 1024),
+        ("ACCL:L4B:3710:", 2048, 1.785e-4, 2048),
+        ("ACCL:L4B:3950:", 1638, 1.785e-4, 1639),
+        ("ACCL:L4B:4410:", 16384, 1.785e-4, 2048),
+    ],
+)
+def test_fault_time_axis_matches_production(prefix, points, dt, pre):
+    cavity = make_cavity(prefix, is_hl="H" in prefix)
+    t = cavity._fault_time_axis()
+    assert len(t) == points
+    assert np.diff(t) == pytest.approx(dt, rel=1e-3)
+    assert np.count_nonzero(t < 0) == min(pre, points)
+
+
+def test_unknown_prefix_keeps_the_old_fault_time_axis():
+    t = make_cavity("TEST:CAV:")._fault_time_axis()
+    assert len(t) == 16384
+    assert t[0] == pytest.approx(-500e-6)
+    assert t[-1] == pytest.approx(1500e-6)
+    assert np.count_nonzero(t < 0) == 4096
+
+
+@pytest.fixture
+def no_noise():
+    # _generate_decay_waveform adds np.random.randn noise; zero it so the
+    # final-sample check doesn't fail when noise lands above 0.01 MV.
+    with patch.object(np.random, "randn", lambda n: np.zeros(n)):
+        yield
+
+
+def test_decay_is_written_on_the_production_axis(no_noise):
+    cavity = make_cavity("ACCL:L1B:H110:", is_hl=True)
+    t, a = cavity._generate_decay_waveform(5.0, 1e7)
+    assert len(t) == len(a) == 16384
+    assert a[:1024].mean() == pytest.approx(5.0, rel=0.01)  # flat before
+    assert a[1024] == pytest.approx(5.0, rel=0.01)  # t = 0
+    assert a[-1] < 0.01  # decayed by the end
+
+
+def test_l4b_buffer_has_no_decay(no_noise):
+    cavity = make_cavity("ACCL:L4B:3710:")
+    t, a = cavity._generate_decay_waveform(16.0, 4e7)
+    assert len(a) == 2048
+    assert (t < 0).all()
+    assert a.mean() == pytest.approx(16.0, rel=0.01)
 
 
 async def complete_characterization(cavity):
