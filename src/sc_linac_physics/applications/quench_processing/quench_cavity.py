@@ -190,16 +190,22 @@ class QuenchCavity(Cavity):
                 super().check_abort()
                 time.sleep(1)
 
+    def check_operator_abort(self):
+        """The abort check for reset_interlocks: abort flag and radiation.
+
+        Leaves out check_abort's uncaught-quench check (AACT at or below
+        QUENCH_AMP_THRESHOLD x ADES in SELA). That is true right after a
+        quench, so it would block the reset that clears the quench. The
+        radiation check stays, skipped only while decarad is None.
+        """
+        Cavity.check_abort(self)
+        if self.decarad is not None:
+            self._check_radiation()
+
     def check_abort(self):
         """Check abort conditions including radiation and uncaught quench."""
         super().check_abort()
-
-        if self.decarad.max_raw_dose > RADIATION_LIMIT:
-            self.logger.error(
-                f"Max radiation dose exceeded "
-                f"({self.decarad.max_raw_dose:.2e} > {RADIATION_LIMIT:.2e})"
-            )
-            raise QuenchError("Max Radiation Dose Exceeded")
+        self._check_radiation()
 
         if self.has_uncaught_quench():
             self.logger.error(
@@ -207,6 +213,15 @@ class QuenchCavity(Cavity):
                 f"(AACT={self.aact:.2f}, threshold={QUENCH_AMP_THRESHOLD * self.ades:.2f})"
             )
             raise QuenchError("Potential uncaught quench detected")
+
+    def _check_radiation(self):
+        """Raise QuenchError if the decarad max raw dose is over the limit."""
+        if self.decarad.max_raw_dose > RADIATION_LIMIT:
+            self.logger.error(
+                f"Max radiation dose exceeded "
+                f"({self.decarad.max_raw_dose:.2e} > {RADIATION_LIMIT:.2e})"
+            )
+            raise QuenchError("Max Radiation Dose Exceeded")
 
     def has_uncaught_quench(self) -> bool:
         """Check if cavity has an uncaught quench condition."""

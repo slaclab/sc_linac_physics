@@ -992,6 +992,46 @@ def test_reset_interlocks(cavity):
     cavity._interlock_reset_pv_obj.put.assert_called_with(1, wait=False)
 
 
+def test_reset_interlocks_abort_before_the_write(cavity):
+    cavity._interlock_reset_pv_obj = make_mock_pv()
+    cavity.turn_off = MagicMock()
+    cavity.request_abort()
+
+    with pytest.raises(CavityAbortError):
+        cavity.reset_interlocks()
+
+    cavity._interlock_reset_pv_obj.put.assert_not_called()
+    cavity.turn_off.assert_called_once()
+
+
+def test_reset_interlocks_abort_during_the_wait_stops_the_retries(cavity):
+    """A faulted cavity would retry for ~48 s; an abort ends it at once."""
+    cavity._interlock_reset_pv_obj = make_mock_pv()
+    cavity._rf_permit_pv_obj = make_mock_pv(get_val=0)
+    cavity.turn_off = MagicMock()
+
+    with patch(
+        "sc_linac_physics.utils.sc_linac.cavity.time.sleep",
+        side_effect=lambda _: cavity.request_abort(),
+    ) as sleep:
+        with pytest.raises(CavityAbortError):
+            cavity.reset_interlocks()
+
+    cavity._interlock_reset_pv_obj.put.assert_called_once_with(1, wait=False)
+    assert sleep.call_count == 1
+    cavity.turn_off.assert_called_once()
+
+
+def test_reset_interlocks_waits_in_one_second_steps(cavity):
+    cavity._interlock_reset_pv_obj = make_mock_pv()
+    cavity._rf_permit_pv_obj = make_mock_pv(get_val=1)
+
+    with patch("sc_linac_physics.utils.sc_linac.cavity.time.sleep") as sleep:
+        cavity.reset_interlocks(wait=3)
+
+    assert [c.args[0] for c in sleep.call_args_list] == [1.0, 1.0, 1.0]
+
+
 def test_characterization_timestamp(cavity):
     cavity._char_timestamp_pv_obj = make_mock_pv(get_val="2024-04-11-15:17:17")
     assert cavity.characterization_timestamp == datetime(
