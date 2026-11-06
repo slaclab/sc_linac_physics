@@ -76,8 +76,8 @@ class ArchiverStore:
         began, months, from_disk, samples = time.monotonic(), 0, 0, 0
         for month_start, month_end in _months(start, end):
             months += 1
-            from_disk += self.path(pv, month_start).exists()
-            frame = self._month(pv, month_start, month_end, start, end)
+            frame, cached = self._month(pv, month_start, month_end, start, end)
+            from_disk += cached
             # A month can start with the sample before it, which the month
             # before already returned.
             if last is not None:
@@ -156,16 +156,18 @@ class ArchiverStore:
         month_end: datetime,
         start: datetime,
         end: datetime,
-    ) -> pd.DataFrame:
+    ) -> Tuple[pd.DataFrame, bool]:
         """One month's samples, from the cache when the month is settled.
 
         A month not yet settled is fetched only where it overlaps start..end,
         and not written. If the cache can't be written or read (no
         permission, disk full), that overlap is fetched without it: the cache
-        only saves time.
+        only saves time. Also returns whether the samples came from a file
+        that was on disk before this call.
         """
+        path = self.path(pv, month_start)
+        was_on_disk = _exists(path)
         if _settled(month_end) and self._cache(pv, month_start, month_end):
-            path = self.path(pv, month_start)
             log = archiver.get_logger()
             try:
                 frame = pq.read_table(path).to_pandas()
@@ -180,9 +182,9 @@ class ArchiverStore:
                 log.debug(
                     "cache: %s %s from %s", pv, f"{month_start:%Y-%m}", path
                 )
-                return frame
+                return frame, was_on_disk
         lo, hi = max(month_start, start), min(month_end, end)
-        return _join(archiver.iter_range_chunks(pv, lo, hi))
+        return _join(archiver.iter_range_chunks(pv, lo, hi)), False
 
     def _cache(
         self, pv: str, month_start: datetime, month_end: datetime
@@ -203,12 +205,13 @@ class ArchiverStore:
         except OSError as e:
             log.warning("cache: cannot write %s (%s)", path, e)
             return False
-        log.info(
-            "cache: wrote %s %s, %.0f kB",
-            pv,
-            f"{month_start:%Y-%m}",
-            path.stat().st_size / 1e3,
-        )
+        try:
+            size = f", {path.stat().st_size / 1e3:.0f} kB"
+        except OSError:
+            # Shared cache: another user may have removed it already. The
+            # write itself worked, so this is only a log detail.
+            size = ""
+        log.info("cache: wrote %s %s%s", pv, f"{month_start:%Y-%m}", size)
         return True
 
 
