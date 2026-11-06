@@ -161,6 +161,9 @@ class FrequencyTuningController(QObject):
         self._last_ssa_cal_read.connect(self._on_last_ssa_cal_read)
         # (cm, cav, operator) while the last SSA calibration is being read.
         self._pending_stage1: tuple | None = None
+        # True while a Stage 1 press holds a cavity this tab did not hold
+        # before it. A press that never starts the stage releases it.
+        self._stage1_new_claim = False
 
     # ------------------------------------------------------------------
     # PV wiring
@@ -274,7 +277,7 @@ class FrequencyTuningController(QObject):
 
         target = self._resolve_target()
         if target is None:
-            self._set_stage_status_not_started(1)
+            self._abandon_stage1()
             return
 
         cavity_name, cm, cav = target
@@ -289,7 +292,7 @@ class FrequencyTuningController(QObject):
         try:
             cavity = self._get_machine_cavity(cm, cav)
         except Exception as exc:
-            self._set_stage_status_not_started(1)
+            self._abandon_stage1()
             self.view.show_error(f"Failed to start Stage 1: {exc}")
             return
         self._pending_stage1 = (cm, cav, operator)
@@ -315,7 +318,7 @@ class FrequencyTuningController(QObject):
         self._pending_stage1 = None
         decision = self._decide_ssa_calibration(last, error, operator)
         if decision is None:
-            self._set_stage_status_not_started(1)
+            self._abandon_stage1()
             self.view.log_message("Stage 1 cancelled")
             return
         kept, skipped_by = decision
@@ -335,9 +338,44 @@ class FrequencyTuningController(QObject):
         except Exception as exc:
             import traceback
 
-            self._set_stage_status_not_started(1)
+            self._abandon_stage1()
             self.view.show_error(f"Failed to start Stage 1: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
+            return
+        if self._stage_running:
+            self._stage1_new_claim = False
+        else:
+            # _start_stage refused (gated phase, prerequisites) and said why.
+            self._abandon_stage1()
+
+    def _abandon_stage1(self) -> None:
+        """A Stage 1 press that will not start: undo what the press did.
+
+        Shows the stage as not started, and frees the cavity if this press
+        is what claimed it. A hold from an earlier stage stays.
+        """
+        self._set_stage_status_not_started(1)
+        if self._stage1_new_claim:
+            self._cavity_hold.release()
+        self._stage1_new_claim = False
+
+    def _claim_for_stage1(self, cm: str, cav: int) -> bool:
+        """Claim the cavity before Stage 1 loads its record.
+
+        start_new_record replaces the session's active record, so a press
+        that another tab's claim refuses must stop before it.
+        """
+        try:
+            cavity = self._get_machine_cavity(cm, cav)
+        except Exception as exc:
+            self.view.show_error(f"Failed to start Stage 1: {exc}")
+            return False
+        newly_claimed = not self._cavity_hold.holds(cavity)
+        if not self._cavity_hold.take(cavity):
+            self.view.show_error(refusal_message(cavity))
+            return False
+        self._stage1_new_claim = newly_claimed
+        return True
 
     def _decide_ssa_calibration(self, last, error: str, operator: str):
         """Return (kept, skipped_by), or None if the operator cancelled.
@@ -504,6 +542,9 @@ class FrequencyTuningController(QObject):
             self.view.show_error(
                 f"Invalid cavity selection: CM={cryomodule} Cav={cavity_number}"
             )
+            return None
+
+        if not self._claim_for_stage1(cm, cav):
             return None
 
         try:

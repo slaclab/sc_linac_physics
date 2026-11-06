@@ -14,11 +14,20 @@ class CavityHold:
         self._cavities: list = []
 
     def take(self, cavity) -> bool:
-        """Claim cavity for this tab. False if another tab is running it."""
+        """Claim cavity for this tab. False if another tab is running it.
+
+        A new claim clears cavity.abort_flag and stepper_tuner.abort_flag.
+        All tabs share one Machine, so an abort another tab set after its
+        last check_abort() would otherwise stop this tab's run. No run in
+        this app is using a cavity nobody holds, so any flag left set is
+        stale. A tab taking a cavity it already holds keeps its flags.
+        """
         if not cavity.claim(self):
             return False
         if not self.holds(cavity):
             self._cavities.append(cavity)
+            cavity.abort_flag = False
+            cavity.stepper_tuner.abort_flag = False
         return True
 
     def holds(self, cavity) -> bool:
