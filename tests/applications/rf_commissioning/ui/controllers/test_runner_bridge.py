@@ -1,6 +1,9 @@
 """Tests for RunnerBridge: PhaseRun on a daemon thread, reported by signal."""
 
+import logging
 import threading
+
+import pytest
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
@@ -290,3 +293,70 @@ def test_failed_thread_start_releases_the_run(qtbot, monkeypatch):
     assert bridge.start_segment(run, ["a"]) is False
     assert run.running is False
     assert bridge.running is False
+
+
+# ------------------------------------------------- forwarding a logger
+
+
+@pytest.fixture
+def logging_on():
+    """conftest disables logging for every test; these tests need it."""
+    logging.disable(logging.NOTSET)
+    yield
+    logging.disable(logging.CRITICAL)
+
+
+class _LoggingPhase(_Phase):
+    """Logs to cavity_log during its step, as Cavity.setup_rf() does."""
+
+    def __init__(self, context, cavity_log):
+        super().__init__(context, {"setup_rf": [_ok("RF on")]})
+        self.cavity_log = cavity_log
+
+    def execute_step(self, step_name):
+        self.cavity_log.info("Turning cavity off")
+        self.cavity_log.debug("Setting piezo bias voltage to 25.00V")
+        # Another thread on the same logger, e.g. another run.
+        other = threading.Thread(
+            target=lambda: self.cavity_log.info("Another run's line")
+        )
+        other.start()
+        other.join()
+        return super().execute_step(step_name)
+
+
+def _logging_run(cavity_log):
+    context = PhaseContext(
+        record=CommissioningRecord(linac=1, cryomodule="02", cavity_number=1),
+        operator="tester",
+    )
+    return PhaseRun(_LoggingPhase(context, cavity_log))
+
+
+def test_forwarded_logger_lines_reach_the_panel(qtbot, logging_on):
+    cavity_log = logging.getLogger("test_runner_bridge.cavity")
+    cavity_log.setLevel(logging.DEBUG)
+    bridge = RunnerBridge()
+    events = _record(bridge)
+    run = _logging_run(cavity_log)
+
+    with qtbot.waitSignal(bridge.segment_finished, timeout=2000):
+        bridge.start_segment(run, ["setup_rf"], forward_logs=(cavity_log,))
+
+    lines = [e[1] for e in events if e[0] == "log"]
+    # INFO from the segment's thread, before the step's ✓ line.
+    assert lines == ["    Turning cavity off", "✓ setup_rf: RF on"]
+    # The handler is gone once the segment ends.
+    assert not cavity_log.handlers
+
+
+def test_no_forwarding_unless_asked(qtbot, logging_on):
+    cavity_log = logging.getLogger("test_runner_bridge.cavity2")
+    bridge = RunnerBridge()
+    events = _record(bridge)
+    run = _logging_run(cavity_log)
+
+    with qtbot.waitSignal(bridge.segment_finished, timeout=2000):
+        bridge.start_segment(run, ["setup_rf"])
+
+    assert [e[1] for e in events if e[0] == "log"] == ["✓ setup_rf: RF on"]

@@ -28,6 +28,29 @@ from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
 logger = logging.getLogger(__name__)
 
 
+class _ForwardToPanel(logging.Handler):
+    """Copy one thread's INFO and higher records to the panel's log.
+
+    Only records made on the segment's own thread are copied, so another
+    run logging to the same cavity logger does not appear in this panel.
+    """
+
+    def __init__(self, emit_line, thread_id: int) -> None:
+        super().__init__(level=logging.INFO)
+        self._emit_line = emit_line
+        self._thread_id = thread_id
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # utils/logger.py notes its own file-handler housekeeping on the
+        # same logger ("File logging restored ..."); that is not a step.
+        if record.thread != self._thread_id or record.module == "logger":
+            return
+        try:
+            self._emit_line(f"    {record.getMessage()}")
+        except Exception:
+            self.handleError(record)
+
+
 class RunnerBridge(QObject, StepListener):
     """One segment at a time, on a daemon thread."""
 
@@ -57,6 +80,7 @@ class RunnerBridge(QObject, StepListener):
         progress_offset: int = 0,
         progress_total: int | None = None,
         then_complete: bool = False,
+        forward_logs: Iterable[logging.Logger] = (),
     ) -> bool:
         """Start steps on a daemon thread. False if a segment is running.
 
@@ -65,6 +89,11 @@ class RunnerBridge(QObject, StepListener):
         context and on every AbortHook. With then_complete, a segment that
         completes is followed by run.complete() (finalize_phase and COMPLETE)
         on the same thread.
+
+        forward_logs: loggers, such as cavity.logger, whose INFO and higher
+        records from this segment's thread are also sent to log, indented
+        under the step that made them. Display only: the records still go
+        to the loggers' own files as before.
         """
         # The reservation is taken before the listener is swapped or Abort
         # cleared, and held until the worker exits. Checking run.running
@@ -78,8 +107,13 @@ class RunnerBridge(QObject, StepListener):
         self._max_attempts = run.max_attempts
         run.clear_abort()
 
+        forward_logs = list(forward_logs)
+
         def work() -> None:
             result = SegmentResult(SegmentOutcome.FAILED, "Run did not finish")
+            handler = _ForwardToPanel(self.log.emit, threading.get_ident())
+            for source in forward_logs:
+                source.addHandler(handler)
             try:
                 result = run.run_steps(
                     steps,
@@ -97,6 +131,8 @@ class RunnerBridge(QObject, StepListener):
                     f"Run failed: {type(exc).__name__}: {exc}",
                 )
             finally:
+                for source in forward_logs:
+                    source.removeHandler(handler)
                 try:
                     self._log_outcome(result)
                 except Exception:
