@@ -48,14 +48,22 @@ NO_CRYO_ACCESS = "Required cryo permissions not granted - call cryo ops"
 def format_q0(measurement) -> str:
     """The official Q0 with its sigma, the linregress Q0 beside it, and a
     warning when the two differ by more than q0_utils.FIT_SENSITIVE_SIGMAS
-    sigma (Q0Measurement.fit_sensitive)."""
+    sigma (Q0Measurement.fit_sensitive).
+
+    The official Q0 is read first, so a ValueError from it still reaches the
+    caller. If only the linregress Q0 raises (calc_q0 refuses a non-positive
+    linregress heat load), the comparison reads "n/a" and has no flag.
+    """
     fit = "siegel" if q0_utils.USE_SIEGELSLOPES else "linregress"
+    q0 = measurement.q0
     sigma = measurement.q0_sigma
     sigma_text = "n/a" if math.isnan(sigma) else f"{sigma:.1e}"
-    text = (
-        f"Q0 {measurement.q0:.2e} ± {sigma_text} ({fit})"
-        f" · linregress {measurement.q0_linregress:.2e}"
-    )
+    text = f"Q0 {q0:.2e} ± {sigma_text} ({fit})"
+    try:
+        q0_linregress = measurement.q0_linregress
+    except ValueError:
+        return text + " · linregress n/a"
+    text += f" · linregress {q0_linregress:.2e}"
     if measurement.fit_sensitive:
         text += " ⚠ fit-sensitive"
     return text

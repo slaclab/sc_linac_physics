@@ -702,6 +702,28 @@ class TestFormatQ0:
         m.fit_sensitive = True
         assert format_q0(m).endswith("linregress 1.31e+10 ⚠ fit-sensitive")
 
+    def test_bad_linregress_q0_reads_n_a(self):
+        # Copilot review on #487: an outlier can give a non-positive
+        # linregress heat load while the official Q0 is fine.
+        m = Mock(q0=1.2e10, q0_sigma=3e8)
+        type(m).q0_linregress = PropertyMock(
+            side_effect=ValueError("RF heat load must be positive")
+        )
+        type(m).fit_sensitive = PropertyMock(
+            side_effect=AssertionError("must not be read")
+        )
+        assert format_q0(m) == (
+            "Q0 1.20e+10 ± 3.0e+08 (siegel) · linregress n/a"
+        )
+
+    def test_bad_official_q0_still_raises(self):
+        m = Mock(q0_sigma=3e8, q0_linregress=1.2e10)
+        type(m).q0 = PropertyMock(
+            side_effect=ValueError("RF heat load must be positive")
+        )
+        with pytest.raises(ValueError):
+            format_q0(m)
+
     def test_no_sigma_for_two_sample_fit(self):
         m = Mock(q0=1.2e10, q0_sigma=float("nan"), q0_linregress=1.31e10)
         m.fit_sensitive = False

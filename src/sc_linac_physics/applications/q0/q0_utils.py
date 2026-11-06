@@ -232,11 +232,14 @@ class DataRun:
         plus some new noise. At rho = 0.97 the factor is about 8.
         """
         fit = self._linregress_fit()
-        times = np.array(sorted(self.fit_ll_data))
+        # Read once: with a fit window set, each read of fit_ll_data filters
+        # a new copy of the whole run.
+        data = self.fit_ll_data
+        times = np.array(sorted(data))
         if len(times) < 3:
             # A line through two points has no spread to estimate.
             return np.nan
-        levels = np.array([self.fit_ll_data[t] for t in times])
+        levels = np.array([data[t] for t in times])
         resid = levels - (fit.intercept + fit.slope * times)
         if np.std(resid[:-1]) == 0 or np.std(resid[1:]) == 0:
             # Every reading sits on the line, so there is no correlation to
