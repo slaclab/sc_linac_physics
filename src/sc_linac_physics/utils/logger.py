@@ -216,15 +216,24 @@ class SharedRotatingFileHandler(RotatingFileHandler):
         safe_umask(0o002) has ended. Without the chmod, a 022 umask would
         make it 644, and other group members could no longer write it.
         Existing files keep their permissions.
+
+        O_EXCL makes "did this call create it" one step, and refuses a
+        symlink at the path, as in _open_lock_file.
         """
-        created = not os.path.exists(self.baseFilename)
-        stream = super()._open()
-        if created:
+        try:
+            fd = os.open(
+                self.baseFilename, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            )
+        except OSError:
+            pass  # exists already, or super()._open() reports the error
+        else:
             try:
-                os.fchmod(stream.fileno(), 0o664)
+                os.fchmod(fd, 0o664)
             except (OSError, AttributeError):  # no os.fchmod on old Windows
                 pass  # the file still works for whoever made it
-        return stream
+            finally:
+                os.close(fd)
+        return super()._open()
 
 
 class ExtraDataMixin:
