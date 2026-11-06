@@ -128,6 +128,53 @@ def test_only_cm_in_a_linac_is_labeled_by_the_cm(qtbot):
     assert picker.labels["CM01:SUM"] == "CM01 aact mean sum"
 
 
+def test_sub_object_pv_label_names_its_source(qtbot):
+    """Cavity and SSA both define status_pv; the SSA's label says SSA."""
+    from sc_linac_physics.displays.plot.pv_picker import PVPicker
+    from sc_linac_physics.displays.plot.utils import (
+        CavityPVs,
+        CryomodulePVs,
+        HierarchicalPVs,
+        LinacPVs,
+        MachinePVs,
+        RackPVs,
+    )
+
+    pvs = {
+        ("Cavity", "status_pv"): ["C1:AUTO:STATUS"],
+        ("SSA", "status_pv"): ["C1:SSA:StatusMsg"],
+        ("SSA", "on_pv"): ["C1:SSA:PowerOn"],
+    }
+    cavity = CavityPVs(
+        number=1,
+        rack_name="A",
+        cryomodule_name="02",
+        linac_name="L1B",
+        pvs=PVGroup(pvs),
+    )
+    # The machine group holds a second cavity too, as the real one does.
+    machine = PVGroup(
+        {key: [*names, f"C2{names[0][2:]}"] for key, names in pvs.items()}
+    )
+    groups = HierarchicalPVs(
+        machine=MachinePVs(pvs=machine),
+        linacs={"L1B": LinacPVs(name="L1B")},
+        cryomodules={"02": CryomodulePVs(name="02", linac_name="L1B")},
+        racks={
+            ("02", "A"): RackPVs(
+                rack_name="A", cryomodule_name="02", linac_name="L1B"
+            )
+        },
+        cavities={("02", 1): cavity},
+    )
+    picker = PVPicker(groups)
+    qtbot.addWidget(picker)
+    assert picker.labels["C1:AUTO:STATUS"] == "CM02 Cavity 1 status"
+    assert picker.labels["C1:SSA:StatusMsg"] == "CM02 Cavity 1 SSA status"
+    # Only shared attributes name the source.
+    assert picker.labels["C1:SSA:PowerOn"] == "CM02 Cavity 1 on"
+
+
 def test_attribute_from_two_sources_gets_two_axes():
     group = PVGroup(
         {

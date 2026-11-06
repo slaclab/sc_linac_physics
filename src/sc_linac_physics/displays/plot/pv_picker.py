@@ -192,8 +192,8 @@ class PVPicker(QWidget):
         layout.addWidget(self.splitter)
 
         machine = self._build_tree(pv_groups, list(decarads))
-        self.labels = _owner_labels(self.tree)
         self.shared = shared_attributes(pv_groups.get_machine().pvs)
+        self.labels = _owner_labels(self.tree, self.shared)
         # Start on Machine with the tree collapsed, so every top-level
         # choice is visible at once. Machine-level picks can be large; the
         # display's curve cap asks before plotting many.
@@ -311,7 +311,7 @@ def _add_decarads(parent, decarads) -> None:
             _node(unit, f"Head {head.number}", decarad_pvs([head]))
 
 
-def _owner_labels(tree: QTreeWidget) -> Dict[str, str]:
+def _owner_labels(tree: QTreeWidget, shared=()) -> Dict[str, str]:
     """A readable label for every PV, from the shallowest node that has it
     as the only PV for its attribute, e.g. "CM02 Cavity 1 aact" or
     "L0B aact mean sum". A pick of many PVs then still gets labels.
@@ -319,6 +319,10 @@ def _owner_labels(tree: QTreeWidget) -> Dict[str, str]:
     Shallowest, not deepest: a cavity's group also holds its cryomodule's
     PVs, and the CM sum is not that cavity's. A PV whose source is a tree
     level (see LEVELS) is labeled only at a node of that level.
+
+    An attribute in `shared` that comes from a sub-object names it, so a
+    cavity's status and its SSA's status read "CM02 Cavity 1 status" and
+    "CM02 Cavity 1 SSA status".
     """
     labels: Dict[str, str] = {}
     queue = deque(tree.topLevelItem(i) for i in range(tree.topLevelItemCount()))
@@ -332,9 +336,10 @@ def _owner_labels(tree: QTreeWidget) -> Dict[str, str]:
             if source in LEVELS and source != node.level:
                 continue
             if len(pvs) == 1:
-                labels.setdefault(
-                    pvs[0], f"{short_path(item)} {readable(attribute)}"
-                )
+                what = readable(attribute)
+                if source not in LEVELS and attribute in shared:
+                    what = f"{source} {what}"
+                labels.setdefault(pvs[0], f"{short_path(item)} {what}")
     return labels
 
 
