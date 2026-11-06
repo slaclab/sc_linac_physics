@@ -218,14 +218,15 @@ title: "LCLS-II Field Emission", or "background caching stopped (...)"
 ### Add New Data
 
 Next to the plot toolbar. *Single CM* takes one run in a form; *Multi CMs from
-CSV* takes a file with the run list's columns. Each run is checked (a known
-cryomodule, dates in `mm/dd/yy hh:mm`, end after start, decarad 1 or 2, an
-`mccelog` link, Y/N filters), appended to `added_runs.csv`, and fetched. A CSV
+CSV* takes a file with the run list's columns. Each run is checked (all 11
+columns, a known cryomodule, dates in `mm/dd/yy hh:mm`, no Pacific time that
+DST repeats or skips, end after start, decarad 1 or 2, an `mccelog` link, Y/N
+filters), appended to `added_runs.csv`, and fetched. A CSV
 row may leave the elog link empty, as 7 runs in git do. The first bad CSV row
 is reported with its line number, and no row from that file is added. The run
 list refreshes when the dialog closes. To make a run permanent for every
 installation, add its row to `field_emission_runs.csv` in a PR.
-<span class="cite">`gui_updater.py::validate_emission_data, gui_updater.py::UpdateWorker.multi_update “validate_emission_data(row, require_elog=False)”, gui_updater.py::UpdateWorker._add_and_fetch “added = add_runs(rows)”, gui_updater.py::UpdateWorker._add_and_fetch “fetched = fill_cache(runs, self._report)”, field_emission/run_cache.py::add_runs “with open(added_path, "a", newline="")”, field_emission_gui.py::FieldEmission.open_update_dialog “self.on_cryomodule_updated()”`</span>
+<span class="cite">`gui_updater.py::validate_emission_data “len(RUN_LIST_HEADER)”, gui_updater.py::_validate_dates “archiver._aware(moment)”, gui_updater.py::UpdateWorker.multi_update “validate_emission_data(row, require_elog=False)”, gui_updater.py::UpdateWorker._add_and_fetch “added = add_runs(rows)”, gui_updater.py::UpdateWorker._add_and_fetch “fetched = fill_cache(runs, self._report)”, field_emission/run_cache.py::add_runs “with open(added_path, "a", newline="")”, field_emission_gui.py::FieldEmission.open_update_dialog “self.on_cryomodule_updated()”`</span>
 
 ## 4. How it fails
 
@@ -233,7 +234,7 @@ installation, add its row to `field_emission_runs.csv` in a PR.
 renamed when complete, so one PV's file is either all there or not there. A run
 can be partly cached: some of its 28 PVs on disk, the rest not. It counts as
 not cached, and the next load fetches only the PVs still missing.
-<span class="cite">`utils/archiver_store.py::_write_atomically “all or nothing”, utils/archiver_store.py::ArchiverStore._cache “if path.exists():”`</span>
+<span class="cite">`utils/archiver_store.py::_write_atomically “all or nothing”, utils/archiver_store.py::ArchiverStore._cache “if _exists(path):”`</span>
 
 **The archiver is down.** Cached runs plot as usual. Plotting an uncached run
 shows the connection error. The 28 reads of one run all finish before the
@@ -250,7 +251,7 @@ and written, then the load raises `PVNotArchivedError` naming every unknown PV.
 warning and fetches without it, so the plot still works. Windows already on
 disk are still read from disk. Only the windows it couldn't save are fetched
 again, on every load and every open, until a write succeeds.
-<span class="cite">`utils/archiver_store.py::ArchiverStore._cache “archiver cache: cannot write”, utils/archiver_store.py::ArchiverStore._cached “fetching %s without it”, utils/archiver_store.py::ArchiverStore._cache “if path.exists():”, field_emission/run_cache.py::fill_cache “if not is_cached(run, store)”`</span>
+<span class="cite">`utils/archiver_store.py::ArchiverStore._cache “archiver cache: cannot write”, utils/archiver_store.py::ArchiverStore._cached “fetching %s without it”, utils/archiver_store.py::ArchiverStore._cache “if _exists(path):”, field_emission/run_cache.py::fill_cache “if not is_cached(run, store)”`</span>
 
 **Two people fetch the same PV.** Both write a temp file and the second rename
 wins. Both files hold the same archiver data. `/home` is NFS v4 on the
