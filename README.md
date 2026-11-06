@@ -2,7 +2,6 @@
 
 Operator displays, analysis tools, and command-line interface for the LCLS-II superconducting (SC) linac at SLAC.
 
-[![CI](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-app.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/python-app.yml)
 [![Release](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/slaclab/sc_linac_physics/actions/workflows/release.yml)
 
 The LCLS superconducting linac accelerates an electron beam through five sections (L0B–L4B) containing 60 cryomodules and 480 superconducting RF cavities. This package provides the software used by operators and physicists to control, monitor, and commission those cavities: PyDM-based GUIs, hierarchical setup automation, fault monitoring, and analysis tools for Q0 measurement, microphonics, and tuning.
