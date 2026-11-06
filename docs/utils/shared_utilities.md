@@ -61,7 +61,7 @@ PVBatch.put_values(pv_names, [5.0, 5.0])
 # returns [True, True] — per-PV success flags
 ```
 
-Prefer `PVBatch` when touching more than ~5 PVs at once (e.g., reading all 296 cavity amplitudes).
+Prefer `PVBatch` when touching more than ~5 PVs at once (e.g., reading all 480 cavity amplitudes).
 
 ### Exception types (`exceptions.py`)
 
