@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch, mock_open, PropertyMock
 import pytest
 
 # Import the classes to test
+from sc_linac_physics.applications.q0 import q0_utils
 from sc_linac_physics.applications.q0.q0_gui_utils import (
     CryoParamSetupWorker,
     Q0Worker,
@@ -203,6 +204,22 @@ class TestQ0Worker:
 
         worker.error.emit.assert_called_once_with(
             "RF heat load must be positive"
+        )
+        worker.finished.emit.assert_not_called()
+
+    def test_data_error_from_measurement_emits_error(self, mock_cryomodule):
+        # A fit window refused by takeNewQ0Measurement must reach the error
+        # signal too, not end the thread silently.
+        mock_cryomodule.cryo_access_granted = True
+        mock_cryomodule.takeNewQ0Measurement.side_effect = q0_utils.DataError(
+            "Clear the fit windows before saving"
+        )
+        worker = self._make_worker(mock_cryomodule)
+
+        worker.run()
+
+        worker.error.emit.assert_called_once_with(
+            "Clear the fit windows before saving"
         )
         worker.finished.emit.assert_not_called()
 
