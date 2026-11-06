@@ -399,7 +399,7 @@ class DataAcquisitionManager(QObject):
                 output_path = process_info["output_path"]
                 QTimer.singleShot(
                     20000,
-                    lambda: self._process_output_file_wrapper(
+                    lambda: self._process_output_file_if_current(
                         chassis_id, output_path, process_info
                     ),
                 )
@@ -431,6 +431,19 @@ class DataAcquisitionManager(QObject):
         finally:
             self._cleanup_process_resources(process_info)
 
+    def _process_output_file_if_current(
+        self, chassis_id: str, output_path: Path, process_info: dict
+    ):
+        """Run the delayed parse only if this acquisition is still listed.
+
+        stop_acquisition during the 20 s wait drops the chassis, and
+        AsyncDataManager then deletes this manager. The timer still fires,
+        so check before touching Qt.
+        """
+        if self.active_processes.get(chassis_id) is not process_info:
+            return
+        self._process_output_file_wrapper(chassis_id, output_path, process_info)
+
     def _process_output_file_wrapper(
         self, chassis_id: str, output_path: Path, process_info: dict
     ):
@@ -447,6 +460,14 @@ class DataAcquisitionManager(QObject):
             self.acquisitionError.emit(
                 chassis_id,
                 f"Output file {output_path.name} missing after wait.",
+            )
+            self._forget_process(chassis_id)
+            return
+        except OSError as e:
+            logger.error(f"Cannot read {output_path}: {e}")
+            self.acquisitionError.emit(
+                chassis_id,
+                f"Cannot read output file {output_path.name}: {e}",
             )
             self._forget_process(chassis_id)
             return
@@ -521,6 +542,8 @@ class DataAcquisitionManager(QObject):
                 if not process.waitForFinished(2000):
                     process.kill()
                     process.waitForFinished(1000)
+            # handle_finished skipped this chassis, so clean up here.
+            self._cleanup_process_resources(process_info)
 
     def stop_all(self):
         """Stop all acquisitions"""

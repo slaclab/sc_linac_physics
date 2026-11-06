@@ -1320,3 +1320,60 @@ def test_stopping_does_not_also_report_a_crash(qapp):
     process.terminate.assert_called_once()
     assert errors == []
     assert "chassis_1" not in manager.active_processes
+
+
+def test_delayed_parse_skipped_after_stop(qapp, tmp_path):
+    """stop_acquisition during the 20 s wait drops the chassis. The delayed
+    callback must then do nothing, since the manager may be deleted."""
+    manager = DataAcquisitionManager()
+    info = {"output_path": tmp_path / "out.dat"}
+    with patch.object(manager, "_process_output_file_wrapper") as wrapper:
+        manager._process_output_file_if_current(
+            "chassis_1", info["output_path"], info
+        )
+        wrapper.assert_not_called()
+
+        manager.active_processes["chassis_1"] = info
+        manager._process_output_file_if_current(
+            "chassis_1", info["output_path"], info
+        )
+        wrapper.assert_called_once_with("chassis_1", info["output_path"], info)
+
+
+def test_output_file_stat_oserror_reports_error(qapp, tmp_path):
+    manager = DataAcquisitionManager()
+    output_file = tmp_path / "out.dat"
+    info = {"output_path": output_file}
+    manager.active_processes["chassis_1"] = info
+    errors = []
+    manager.acquisitionError.connect(lambda *args: errors.append(args))
+
+    with patch.object(
+        type(output_file), "stat", side_effect=PermissionError("denied")
+    ):
+        manager._process_output_file_wrapper("chassis_1", output_file, info)
+
+    assert len(errors) == 1
+    assert "Cannot read output file" in errors[0][1]
+    assert "chassis_1" not in manager.active_processes
+
+
+def test_stop_acquisition_cleans_up_process(qapp):
+    """handle_finished skips a stopped chassis, so stop_acquisition must
+    release the QProcess and progress timer itself."""
+    manager = DataAcquisitionManager()
+    process = Mock(spec=QProcess)
+    process.state.return_value = QProcess.Running
+    process.waitForFinished.return_value = True
+    process.readyReadStandardOutput = MagicMock()
+    process.readyReadStandardError = MagicMock()
+    process.finished = MagicMock()
+    timer = QTimer()
+    info = {"process": process, "progress_timer": timer}
+    manager.active_processes["chassis_1"] = info
+
+    manager.stop_acquisition("chassis_1")
+
+    process.finished.disconnect.assert_called_once()
+    assert info["process"] is None
+    assert info["progress_timer"] is None
