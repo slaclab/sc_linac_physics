@@ -1,6 +1,9 @@
+import logging
 import os
 import subprocess
 import sys
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -794,6 +797,41 @@ class TestLogging:
 
         line = log.info.call_args.args[0] % log.info.call_args.args[1:]
         assert "1 of 2 PVs" in line
+
+
+class TestGetLogger:
+    @pytest.fixture(autouse=True)
+    def fresh(self):
+        with patch.object(archiver, "_logger", None):
+            yield
+
+    def test_logger_is_info_but_its_handlers_pass_debug(self):
+        made = logging.getLogger("test_archiver.levels")
+        with patch.object(
+            archiver, "custom_logger", return_value=made
+        ) as custom:
+            logger = archiver.get_logger()
+
+        assert custom.call_args.kwargs["level"] == logging.DEBUG
+        assert logger.level == logging.INFO
+
+    def test_concurrent_first_calls_make_one_logger(self):
+        def slow_custom_logger(*args, **kwargs):
+            time.sleep(0.05)
+            return logging.getLogger("test_archiver.once")
+
+        with patch.object(
+            archiver, "custom_logger", side_effect=slow_custom_logger
+        ) as custom:
+            threads = [
+                threading.Thread(target=archiver.get_logger) for _ in range(4)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+        assert custom.call_count == 1
 
 
 class TestGroupBins:

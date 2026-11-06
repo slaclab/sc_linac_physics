@@ -269,7 +269,7 @@ def test_integer_then_fractional_values_are_cached(store):
     pd.testing.assert_frame_equal(fetched, cached)
 
 
-def test_unreadable_cache_file_is_fetched_without_it(store, caplog):
+def test_unreadable_cache_file_is_fetched_without_it(store):
     fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
     with served:
         store.read("A:PV", JAN, FEB)
@@ -279,13 +279,50 @@ def test_unreadable_cache_file_is_fetched_without_it(store, caplog):
                 "read_table",
                 side_effect=PermissionError("Permission denied"),
             ),
-            caplog.at_level("WARNING", logger=archiver_store.__name__),
+            patch.object(archiver, "get_logger") as get_logger,
         ):
             frame = store.read("A:PV", JAN, FEB)
 
     assert _values(frame) == [1.0]
     assert len(fake.calls) == 2
-    assert "cannot read" in caplog.text
+    log = get_logger.return_value
+    assert "cannot read" in log.warning.call_args.args[0]
+    summary = log.info.call_args.args[0] % log.info.call_args.args[1:]
+    assert "0 of 1 month(s) from disk" in summary
+
+
+def test_cache_that_cannot_be_checked_is_fetched_without_it(store):
+    fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
+    denied = PermissionError("Permission denied")
+    with (
+        served,
+        patch.object(archiver_store.Path, "exists", side_effect=denied),
+        patch.object(archiver_store, "_write_atomically", side_effect=denied),
+    ):
+        frame = store.read("A:PV", JAN, FEB)
+
+    assert _values(frame) == [1.0]
+
+
+def test_size_of_a_written_month_is_only_logged_if_readable(store):
+    fake, served = _serve({"A:PV": [(JAN + timedelta(days=1), 1.0)]})
+    real_stat = archiver_store.Path.stat
+
+    def stat(path, *args, **kwargs):
+        if path.suffix == ".parquet":
+            raise FileNotFoundError(path)
+        return real_stat(path, *args, **kwargs)
+
+    with (
+        served,
+        patch.object(archiver, "get_logger") as get_logger,
+        patch.object(archiver_store.Path, "stat", stat),
+    ):
+        frame = store.read("A:PV", JAN, FEB)
+
+    assert _values(frame) == [1.0]
+    first = get_logger.return_value.info.call_args_list[0]
+    assert first.args[0] % first.args[1:] == "cache: wrote A:PV 2024-01"
 
 
 def test_fill_does_not_read_months_back(store):

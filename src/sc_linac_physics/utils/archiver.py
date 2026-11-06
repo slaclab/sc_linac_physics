@@ -123,18 +123,27 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 # on first use, as utils/epics/logger.py does, so importing this module opens
 # no log files.
 _logger: Optional[logging.Logger] = None
+# Fetch workers can ask for the logger at the same moment, and
+# custom_logger's check-then-add isn't locked: two first calls would each
+# add handlers, and every line would print twice.
+_logger_lock = threading.Lock()
 
 
 def get_logger() -> logging.Logger:
     """The archiver client's logger: console, and logfiles/archiver/."""
     global _logger
-    if _logger is None:
-        _logger = custom_logger(
-            "sc_linac_physics.utils.archiver",
-            log_dir=BASE_LOG_DIR / "archiver",
-            log_filename="archiver",
-            level=logging.INFO,
-        )
+    with _logger_lock:
+        if _logger is None:
+            # Handlers pass DEBUG; the logger's own level picks what shows,
+            # so get_logger().setLevel(logging.DEBUG) is enough to see more.
+            logger = custom_logger(
+                "sc_linac_physics.utils.archiver",
+                log_dir=BASE_LOG_DIR / "archiver",
+                log_filename="archiver",
+                level=logging.DEBUG,
+            )
+            logger.setLevel(logging.INFO)
+            _logger = logger
     return _logger
 
 
