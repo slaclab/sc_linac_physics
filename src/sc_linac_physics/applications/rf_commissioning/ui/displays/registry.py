@@ -17,7 +17,6 @@ from .frequency_tuning import FrequencyTuningDisplay
 from .standard import (
     HighPowerMPProcessingDisplay,
     HighPowerOneHourRunDisplay,
-    HighPowerRampDisplay,
     PiezoWithRFDisplay,
 )
 
@@ -27,7 +26,6 @@ PHASE_DISPLAY_MAP: dict[CommissioningPhase, type[BasePlaceholderDisplay]] = {
     CommissioningPhase.SSA_CHAR: SSACharDisplay,
     CommissioningPhase.CAVITY_CHAR: CavityCharDisplay,
     CommissioningPhase.PIEZO_WITH_RF: PiezoWithRFDisplay,
-    CommissioningPhase.HIGH_POWER_RAMP: HighPowerRampDisplay,
     CommissioningPhase.MP_PROCESSING: HighPowerMPProcessingDisplay,
     CommissioningPhase.ONE_HOUR_RUN: HighPowerOneHourRunDisplay,
 }

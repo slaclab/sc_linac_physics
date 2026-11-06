@@ -60,14 +60,25 @@ def _emit_status(cb, msg: str) -> None:
 _DRIVE_TOLERANCE = 0.5
 
 
+def _is_harmonic_linearizer(cavity) -> bool:
+    """True for an H1/H2 cavity.
+
+    Compared with "is True" so a Mock cavity in tests reads as a standard
+    1.3 GHz cavity rather than a harmonic linearizer.
+    """
+    cryomodule = getattr(cavity, "cryomodule", None)
+    return getattr(cryomodule, "is_harmonic_linearizer", False) is True
+
+
 @dataclass
 class FrequencyTuningLimits:
     """Configurable limits for the frequency tuning phase."""
 
-    # Used for every cavity, including H1/H2. Cavity.move_to_resonance uses
-    # 500 Hz on a harmonic linearizer and 50 Hz otherwise.
-    # CHECK: should a harmonic linearizer cavity be tuned to 50 Hz here?
+    # Detune window tune_to_resonance stops inside. The same values as
+    # Cavity.move_to_resonance: 500 Hz on a harmonic linearizer (H1/H2),
+    # 50 Hz otherwise. Pick with tolerance_for(cavity).
     tolerance_hz: float = 50.0
+    hl_tolerance_hz: float = 500.0
     probe_steps: int = 50_000
     # Run commissioning moves at max speed; StepperTuner.move() restores the
     # speed to DEFAULT_STEPPER_SPEED via restore_defaults() after each move.
@@ -93,9 +104,16 @@ class FrequencyTuningLimits:
     # CM2-6, cavity 1 on CM4 and CM5 lower again). That is a few percent, so
     # 100 Hz sits well below anything a healthy stepper should produce and
     # catches a badly degraded one rather than a slightly off one.
-    # CHECK: the 273 Hz figure is for 1.3 GHz tuners. Does a healthy H1/H2
-    # tuner move more than 100 Hz over probe_steps microsteps?
     min_probe_delta_hz: float = 100.0
+    # Harmonic linearizers (H1/H2). Chosen from archived 2023-2025 moves of
+    # 50k-1M microsteps on all 16 HL cavities, scaled to probe_steps: median
+    # about 2,200 Hz, and 5% of moves under 235 Hz when the move reversed the
+    # previous direction (backlash). Every Stage 2 re-run is a reversal: the
+    # probe returns with move(-probe). 200 Hz passes those and still fails a
+    # tuner moving under a tenth of normal (Lisa Zacarias, 2026-10-27). With
+    # the stepper idle, 99% of CHIRP:DF changes over 2-5 s in the same data
+    # are under 30 Hz, so drift alone rarely reaches 200 Hz.
+    hl_min_probe_delta_hz: float = 200.0
     # Window searched for the 8pi/9 and 7pi/9 modes, used for every cavity.
     # CHECK: do the H1/H2 cavities' 8pi/9 and 7pi/9 modes fall inside it?
     pi_scan_freq_start: int = -3_500_000
@@ -104,6 +122,18 @@ class FrequencyTuningLimits:
     pi_scan_mode_overlap: int = 1_000
     pi_scan_poll_interval: float = 2.0
     pi_scan_timeout_seconds: float = 300.0
+
+    def tolerance_for(self, cavity) -> float:
+        """Detune tolerance in Hz for this cavity's class."""
+        if _is_harmonic_linearizer(cavity):
+            return self.hl_tolerance_hz
+        return self.tolerance_hz
+
+    def min_probe_delta_for(self, cavity) -> float:
+        """Smallest probe detune change in Hz that passes, by cavity class."""
+        if _is_harmonic_linearizer(cavity):
+            return self.hl_min_probe_delta_hz
+        return self.min_probe_delta_hz
 
 
 class FrequencyTuningPhase(PhaseBase):
@@ -821,13 +851,14 @@ class FrequencyTuningPhase(PhaseBase):
             )
 
         delta = detune1_hz - detune0_hz
+        min_delta = self.limits.min_probe_delta_for(self.cavity)
 
-        if abs(delta) < self.limits.min_probe_delta_hz:
+        if abs(delta) < min_delta:
             return PhaseStepResult(
                 result=PhaseResult.FAILED,
                 message=(
                     f"Probe move of {probe} steps produced only {abs(delta):.1f} Hz change "
-                    f"(minimum {self.limits.min_probe_delta_hz:.1f} Hz required). "
+                    f"(minimum {min_delta:.1f} Hz required). "
                     "Check that the stepper is mechanically connected to the tuner."
                 ),
             )
@@ -991,7 +1022,7 @@ class FrequencyTuningPhase(PhaseBase):
         try:
             self.cavity._auto_tune(
                 delta_hz_func=lambda: self.cavity.detune_chirp,
-                tolerance=self.limits.tolerance_hz,
+                tolerance=self.limits.tolerance_for(self.cavity),
                 iteration_callback=self._tuning_iteration_hook,
                 max_stepper_temp=max_temp,
             )

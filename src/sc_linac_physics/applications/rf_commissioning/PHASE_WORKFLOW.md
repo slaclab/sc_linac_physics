@@ -20,10 +20,9 @@ Phases execute in fixed order:
 3. `FREQUENCY_TUNING`
 4. `CAVITY_CHAR`
 5. `PIEZO_WITH_RF`
-6. `HIGH_POWER_RAMP`
-7. `MP_PROCESSING`
-8. `ONE_HOUR_RUN`
-9. `COMPLETE`
+6. `MP_PROCESSING`
+7. `ONE_HOUR_RUN`
+8. `COMPLETE`
 
 `COMPLETE` is administrative sign-off after technical work is done.
 

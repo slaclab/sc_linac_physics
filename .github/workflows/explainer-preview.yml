@@ -12,9 +12,9 @@ name: Explainer preview
 # No `paths` filter, on purpose. It would skip the push that reverts the last
 # explainer change, and that push is the one that must clear the comment.
 
+# Any base, not only main: a stacked PR's base is the branch below it.
 on:
   pull_request:
-    branches: ["main"]
     types: [opened, synchronize, reopened]
 
 permissions:

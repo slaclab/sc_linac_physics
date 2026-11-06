@@ -808,6 +808,30 @@ def test_probe_stepper_direction_positive_decreases_frequency(
     mock_stepper.hz_per_microstep_pv_obj.put.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "is_hl, change_hz, passes",
+    [(False, 150.0, True), (True, 150.0, False), (True, 250.0, True)],
+)
+def test_probe_floor_follows_cavity_class(
+    phase, mock_cavity, mock_stepper, is_hl, change_hz, passes
+):
+    # Defaults: 100 Hz on a standard cavity, 200 Hz on a harmonic linearizer.
+    phase.limits = FrequencyTuningLimits(probe_steps=10)
+    mock_cavity.cryomodule.is_harmonic_linearizer = is_hl
+    _setup_phase(phase)
+    mock_cavity.detune_chirp = 1000.0
+
+    def after_move(steps, *args, **kwargs):
+        if steps > 0:
+            mock_cavity.detune_chirp = 1000.0 + change_hz
+
+    mock_stepper.move.side_effect = after_move
+
+    result = phase._probe_stepper_direction()
+
+    assert (result.result != PhaseResult.FAILED) is passes
+
+
 def test_probe_stepper_direction_delta_too_small(
     phase, mock_cavity, mock_stepper
 ):
@@ -897,6 +921,34 @@ def test_tune_to_resonance_dry_run(context, fast_limits):
     result = p._tune_to_resonance()
     assert result.result == PhaseResult.SUCCESS
     assert result.data["dry_run"] is True
+
+
+def test_default_tolerances_match_move_to_resonance():
+    # Cavity.move_to_resonance: 500 Hz on a harmonic linearizer, else 50 Hz.
+    limits = FrequencyTuningLimits()
+    hl, standard = Mock(), Mock()
+    hl.cryomodule.is_harmonic_linearizer = True
+    standard.cryomodule.is_harmonic_linearizer = False
+    assert limits.tolerance_for(hl) == 500.0
+    assert limits.tolerance_for(standard) == 50.0
+    # A bare Mock cavity reads as standard, not as a harmonic linearizer.
+    assert limits.tolerance_for(Mock()) == 50.0
+
+
+@pytest.mark.parametrize("is_hl", [False, True])
+def test_tune_to_resonance_tolerance_follows_cavity_class(
+    phase, mock_cavity, is_hl
+):
+    mock_cavity.cryomodule.is_harmonic_linearizer = is_hl
+    phase.limits.tolerance_hz = 11.0
+    phase.limits.hl_tolerance_hz = 22.0
+    _setup_phase(phase)
+    mock_cavity.stepper_tuner.step_signed_pv_obj.get.return_value = 4000
+
+    phase._tune_to_resonance()
+
+    expected = 22.0 if is_hl else 11.0
+    assert mock_cavity._auto_tune.call_args.kwargs["tolerance"] == expected
 
 
 def test_tune_to_resonance_delegates_to_auto_tune(

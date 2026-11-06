@@ -607,6 +607,23 @@ def test_exception_in_step_fails_without_retry(qtbot) -> None:
     controller.on_phase_completed.assert_not_called()
 
 
+RACK_BUSY = "Can't continue: RF is on for cavity 2 of L1B CM02."
+
+
+def test_a_failed_step_reports_its_own_message(qtbot) -> None:
+    """The popup shows why the step failed, not only which step it was."""
+
+    def _rack_busy(step):
+        return PhaseStepResult(result=PhaseResult.FAILED, message=RACK_BUSY)
+
+    controller = _controller_with_phase(["reset_and_power_on"], _rack_busy)
+
+    controller._execute_phase_async()
+    qtbot.waitUntil(lambda: controller.on_phase_failed.called, timeout=2000)
+
+    assert RACK_BUSY in controller.on_phase_failed.call_args.args[0]
+
+
 def test_abort_ends_retry_delay_at_once(qtbot) -> None:
     def _retry(step):
         return PhaseStepResult(

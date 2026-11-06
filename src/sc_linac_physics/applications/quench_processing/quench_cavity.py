@@ -190,16 +190,22 @@ class QuenchCavity(Cavity):
                 super().check_abort()
                 time.sleep(1)
 
+    def check_operator_abort(self):
+        """The abort check for reset_interlocks: abort flag and radiation.
+
+        Leaves out check_abort's uncaught-quench check (AACT at or below
+        QUENCH_AMP_THRESHOLD x ADES in SELA). That is true right after a
+        quench, so it would block the reset that clears the quench. The
+        radiation check stays, skipped only while decarad is None.
+        """
+        Cavity.check_abort(self)
+        if self.decarad is not None:
+            self._check_radiation()
+
     def check_abort(self):
         """Check abort conditions including radiation and uncaught quench."""
         super().check_abort()
-
-        if self.decarad.max_raw_dose > RADIATION_LIMIT:
-            self.logger.error(
-                f"Max radiation dose exceeded "
-                f"({self.decarad.max_raw_dose:.2e} > {RADIATION_LIMIT:.2e})"
-            )
-            raise QuenchError("Max Radiation Dose Exceeded")
+        self._check_radiation()
 
         if self.has_uncaught_quench():
             self.logger.error(
@@ -207,6 +213,15 @@ class QuenchCavity(Cavity):
                 f"(AACT={self.aact:.2f}, threshold={QUENCH_AMP_THRESHOLD * self.ades:.2f})"
             )
             raise QuenchError("Potential uncaught quench detected")
+
+    def _check_radiation(self):
+        """Raise QuenchError if the decarad max raw dose is over the limit."""
+        if self.decarad.max_raw_dose > RADIATION_LIMIT:
+            self.logger.error(
+                f"Max radiation dose exceeded "
+                f"({self.decarad.max_raw_dose:.2e} > {RADIATION_LIMIT:.2e})"
+            )
+            raise QuenchError("Max Radiation Dose Exceeded")
 
     def has_uncaught_quench(self) -> bool:
         """Check if cavity has an uncaught quench condition."""
@@ -347,6 +362,9 @@ class QuenchCavity(Cavity):
         for time_0, timestamp in enumerate(time_data):
             if timestamp >= 0:
                 break
+        else:
+            # No sample at t >= 0: keep nothing, not the last sample
+            time_0 = len(time_data)
 
         fault_data = fault_data[time_0:]
         time_data = time_data[time_0:]
@@ -360,6 +378,19 @@ class QuenchCavity(Cavity):
 
         fault_data = fault_data[:end_decay]
         time_data = time_data[:end_decay]
+
+        if len(fault_data) == 0:
+            # No sample at t >= 0, or the amplitude is already below 0.002
+            # there. Same answer as a failed fit: report real, so neither
+            # caller resets the interlock.
+            # CHECK: does an empty decay mean the buffer missed this fault
+            # (never written, or not re-armed), rather than a fault with no
+            # decay to see?
+            self.logger.warning(
+                "No decay in fault waveform (no sample at t >= 0 above"
+                " 0.002), cannot calculate loaded Q. Assuming real quench."
+            )
+            return True
 
         saved_loaded_q = self.current_q_loaded_pv_obj.get()
         self.pre_quench_amp = fault_data[0]

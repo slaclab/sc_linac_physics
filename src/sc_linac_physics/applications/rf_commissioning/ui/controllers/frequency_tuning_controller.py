@@ -127,6 +127,9 @@ class FrequencyTuningController(QObject):
         self._steps: list[str] = []
         self._finalize_after_run: bool = False
         self._phase_started: bool = False
+        # The last step that did not succeed, and why, for on_phase_failed.
+        self._failed_step: str | None = None
+        self._last_step_message = ""
         self._df_cold_hz: float | None = None
         self._active_phase_instance_id: int | None = None
 
@@ -710,10 +713,15 @@ class FrequencyTuningController(QObject):
                     if not self._check_pause_and_abort():
                         return
 
+                    self._failed_step = None
+                    self._last_step_message = ""
                     success = self._execute_single_step(step_name)
                     if not success:
+                        self._failed_step = step_name
                         self.phase_run_finished.emit(
-                            False, f"Step failed: {_step_label(step_name)}"
+                            False,
+                            self._last_step_message
+                            or f"Step failed: {_step_label(step_name)}",
                         )
                         return
 
@@ -1008,6 +1016,7 @@ class FrequencyTuningController(QObject):
             try:
                 result = self.phase.execute_step(step_name)
                 self._create_step_checkpoint(step_name, result)
+                self._last_step_message = result.message
 
                 if result.result in (PhaseResult.SUCCESS, PhaseResult.SKIP):
                     self._resolve_log_signal.emit(
@@ -1039,6 +1048,7 @@ class FrequencyTuningController(QObject):
                 return False
 
             except Exception as exc:
+                self._last_step_message = f"{step_name}: {exc}"
                 retry_count += 1
                 if retry_count < max_retries:
                     self._log_signal.emit(
@@ -1260,11 +1270,12 @@ class FrequencyTuningController(QObject):
         # retry continues the same attempt (_ensure_open_phase_instance finds
         # it) and the history does not show a failure for a missed button.
         # The reason stays in the activity log above.
-        refused = error_msg in {
-            f"Step failed: {_step_label('check_state_for_stage_2')}",
-            f"Step failed: {_step_label('check_state_for_stage_3')}",
-            f"Step failed: {_step_label('check_state_for_stage_4')}",
+        refused = self._failed_step in {
+            "check_state_for_stage_2",
+            "check_state_for_stage_3",
+            "check_state_for_stage_4",
         }
+        self._failed_step = None  # so a later failure isn't read as this one
 
         try:
             if self.phase:

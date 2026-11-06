@@ -477,7 +477,6 @@ class TestDisplayRegistry:
             CommissioningPhase.SSA_CHAR,
             CommissioningPhase.CAVITY_CHAR,
             CommissioningPhase.PIEZO_WITH_RF,
-            CommissioningPhase.HIGH_POWER_RAMP,
             CommissioningPhase.MP_PROCESSING,
             CommissioningPhase.ONE_HOUR_RUN,
         ]
