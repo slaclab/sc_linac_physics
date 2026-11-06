@@ -264,6 +264,18 @@ class TestDisplayLaunchers:
             assert call_args.args[0] == mock_display
             assert call_args.kwargs["standalone"] is True
 
+    def test_launch_hl_tuner_curves(self):
+        """Test HL tuner curve viewer launcher."""
+        from sc_linac_physics.cli.launchers import launch_hl_tuner_curves
+
+        with patch(
+            "sc_linac_physics.displays.hl_tuner_curves.hl_tuner_curves_display.HLTunerCurvesDisplay"
+        ) as mock_display:
+            launch_hl_tuner_curves(standalone=True)
+
+            assert self.mock_launch.called
+            assert self.mock_launch.call_args.args[0] == mock_display
+
     def test_launch_fault_heatmap(self):
         """Test fault heatmap launcher."""
         from sc_linac_physics.cli.launchers import launch_fault_heatmap
