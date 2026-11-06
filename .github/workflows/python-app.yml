@@ -1,8 +1,10 @@
 name: CI
 
+# Any base, not only main: a stacked PR's base is the branch below it, and
+# a stack that starts from another PR's branch (#510-#512 on #498) got no
+# test run at all.
 on:
   pull_request:
-    branches: ["main"]
   # Runs CI on the merge queue's combined commit: main plus every PR queued
   # ahead. Each PR alone can pass against its own base while two together
   # fail on main (#284, #294 and #311 moved lines #288 cites, and the
