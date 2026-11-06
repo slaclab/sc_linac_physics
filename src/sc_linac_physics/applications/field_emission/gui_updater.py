@@ -3,6 +3,7 @@ import re
 
 from datetime import datetime
 from sc_linac_physics.applications.field_emission.run_cache import (
+    RUN_LIST_HEADER,
     parse_row,
     add_runs,
     fill_cache,
@@ -14,6 +15,7 @@ from sc_linac_physics.applications.field_emission.constants import (
     STANDARD_DATE_FORMAT,
 )
 from PyQt5.QtCore import QObject, pyqtSignal
+from sc_linac_physics.utils import archiver
 
 
 def validate_emission_data(input_row, require_elog=True):
@@ -22,6 +24,10 @@ def validate_emission_data(input_row, require_elog=True):
     require_elog=False lets an empty eLog link through, as 7 of the runs in
     field_emission_runs.csv have. A link that is given is still checked.
     """
+    if len(input_row) < len(RUN_LIST_HEADER):
+        raise ValueError(
+            f"Expected {len(RUN_LIST_HEADER)} columns, got {len(input_row)}"
+        )
     cm = _validate_cryomodule(input_row[0])
     d_start, d_end = _validate_dates(
         input_row[1], input_row[2], input_row[3], input_row[4]
@@ -73,6 +79,10 @@ def _validate_dates(date_start, time_start, date_end, time_end):
         )
     if d_start_fmt > d_end_fmt:
         raise ValueError("End date is before start date")
+    # The archiver cache reads these as Pacific and refuses a wall time that
+    # DST repeats or skips. Refuse it here, before the run is saved.
+    for moment in (d_start_fmt, d_end_fmt):
+        archiver._aware(moment)
     return d_start_fmt, d_end_fmt
 
 
