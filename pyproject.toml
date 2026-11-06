@@ -178,6 +178,12 @@ major_on_zero = false
 tag_format = "v{version}"
 commit_message = "chore(release): {version} [skip ci]"
 
+# Push through the checkout's SSH remote (the release deploy key), not an
+# HTTPS URL built from GITHUB_TOKEN. GITHUB_TOKEN cannot bypass the main
+# ruleset; the deploy key can.
+[tool.semantic_release.remote]
+ignore_token_for_push = true
+
 [tool.semantic_release.commit_parser_options]
 allowed_tags = ["feat", "fix", "perf", "docs", "style", "chore", "test", "build", "ci", "refactor"]
 minor_tags = ["feat"]
