@@ -36,7 +36,11 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
     resolve_cavity_selection,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
-    build_commissioning_machine,
+    get_commissioning_machine,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_hold import (
+    CavityHold,
+    refusal_message,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -138,6 +142,8 @@ class CavityCharController(QObject):
         self._cavity = None
         self._paused = False
         self._running = False
+        # Held while _running, so no other tab starts on this cavity.
+        self._cavity_hold = CavityHold("the Cavity Characterization tab")
         self._active_phase_instance_id: int | None = None
         self._steps: list[str] = list(MEASURE_STEPS)
         self._last_step_message = ""
@@ -250,7 +256,7 @@ class CavityCharController(QObject):
     def _get_machine_cavity(self, cm: str, cav: int):
         """Machine.cryomodules is keyed "01".."35", "H1", "H2"."""
         if not self.machine:
-            self.machine = build_commissioning_machine()
+            self.machine = get_commissioning_machine()
         return self.machine.cryomodules[cryomodule_key(cm)].cavities[cav]
 
     # ------------------------------------------------------------------
@@ -308,6 +314,7 @@ class CavityCharController(QObject):
         from the push button.
         """
         self._running = False
+        self._cavity_hold.release()
         self._paused = False
         self._set_running_ui_state(False)
         try:
@@ -345,6 +352,7 @@ class CavityCharController(QObject):
             return
 
         self._running = False
+        self._cavity_hold.release()
         self._paused = False
         self._set_running_ui_state(False)
         try:
@@ -386,6 +394,10 @@ class CavityCharController(QObject):
 
         if self._cavity is None:
             self.view.show_error("No cavity selected")
+            return
+
+        if not self._cavity_hold.take(self._cavity):
+            self.view.show_error(refusal_message(self._cavity))
             return
 
         # A flag left from an Abort pressed after the last wait would make
@@ -447,6 +459,7 @@ class CavityCharController(QObject):
 
     def _end_run(self) -> None:
         self._running = False
+        self._cavity_hold.release()
         self._set_running_ui_state(False)
 
     def _prepare_phase_context(
@@ -690,6 +703,10 @@ class CavityCharController(QObject):
         self.context.parameters["confirmed_loaded_q"] = self.phase._loaded_q
         # An Abort pressed after the measurement would stop this push before
         # its first attempt.
+        cavity = self.context.parameters["cavity"]
+        if not self._cavity_hold.take(cavity):
+            self.view.show_error(refusal_message(cavity))
+            return
         self.context.abort_requested = False
         self._running = True
         self._set_running_ui_state(True)
@@ -730,6 +747,7 @@ class CavityCharController(QObject):
         measurement and push.
         """
         self._running = False
+        self._cavity_hold.release()
         self._set_running_ui_state(False)
         if not success:
             self.view.show_error(message)

@@ -57,7 +57,11 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
     resolve_cavity_selection,
 )
 from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
-    build_commissioning_machine,
+    get_commissioning_machine,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_hold import (
+    CavityHold,
+    refusal_message,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -125,6 +129,9 @@ class FrequencyTuningController(QObject):
         self.phase: FrequencyTuningPhase | None = None
         self.machine: Machine | None = None
         self._cavity = None
+        # Held from Stage 1 until the phase completes, fails or is aborted,
+        # or this tab selects another cavity, so no other tab starts on it.
+        self._cavity_hold = CavityHold("the Frequency Tuning tab")
 
         self._paused = False
         self._steps: list[str] = []
@@ -154,6 +161,9 @@ class FrequencyTuningController(QObject):
         self._last_ssa_cal_read.connect(self._on_last_ssa_cal_read)
         # (cm, cav, operator) while the last SSA calibration is being read.
         self._pending_stage1: tuple | None = None
+        # True while a Stage 1 press holds a cavity this tab did not hold
+        # before it. A press that never starts the stage releases it.
+        self._stage1_new_claim = False
 
     # ------------------------------------------------------------------
     # PV wiring
@@ -185,6 +195,9 @@ class FrequencyTuningController(QObject):
                     f"stays on {self._cavity} until the stage ends"
                 )
                 return
+            if cavity is not self._cavity:
+                # No stage is running here (the guard above returned).
+                self._cavity_hold.release()
             self._cavity = cavity
             self._step_signed_pv_obj = None
             self._apply_stepper_pv_mapping(cavity)
@@ -234,7 +247,7 @@ class FrequencyTuningController(QObject):
     def _get_machine_cavity(self, cm: str, cav: int):
         """cm is a Machine.cryomodules key: "01".."35", "H1" or "H2"."""
         if not self.machine:
-            self.machine = build_commissioning_machine()
+            self.machine = get_commissioning_machine()
         return self.machine.cryomodules[cm].cavities[cav]
 
     # ------------------------------------------------------------------
@@ -264,7 +277,7 @@ class FrequencyTuningController(QObject):
 
         target = self._resolve_target()
         if target is None:
-            self._set_stage_status_not_started(1)
+            self._abandon_stage1()
             return
 
         cavity_name, cm, cav = target
@@ -279,7 +292,7 @@ class FrequencyTuningController(QObject):
         try:
             cavity = self._get_machine_cavity(cm, cav)
         except Exception as exc:
-            self._set_stage_status_not_started(1)
+            self._abandon_stage1()
             self.view.show_error(f"Failed to start Stage 1: {exc}")
             return
         self._pending_stage1 = (cm, cav, operator)
@@ -305,7 +318,7 @@ class FrequencyTuningController(QObject):
         self._pending_stage1 = None
         decision = self._decide_ssa_calibration(last, error, operator)
         if decision is None:
-            self._set_stage_status_not_started(1)
+            self._abandon_stage1()
             self.view.log_message("Stage 1 cancelled")
             return
         kept, skipped_by = decision
@@ -325,9 +338,44 @@ class FrequencyTuningController(QObject):
         except Exception as exc:
             import traceback
 
-            self._set_stage_status_not_started(1)
+            self._abandon_stage1()
             self.view.show_error(f"Failed to start Stage 1: {exc}")
             self.view.log_message(f"Traceback: {traceback.format_exc()}")
+            return
+        if self._stage_running:
+            self._stage1_new_claim = False
+        else:
+            # _start_stage refused (gated phase, prerequisites) and said why.
+            self._abandon_stage1()
+
+    def _abandon_stage1(self) -> None:
+        """A Stage 1 press that will not start: undo what the press did.
+
+        Shows the stage as not started, and frees the cavity if this press
+        is what claimed it. A hold from an earlier stage stays.
+        """
+        self._set_stage_status_not_started(1)
+        if self._stage1_new_claim:
+            self._cavity_hold.release()
+        self._stage1_new_claim = False
+
+    def _claim_for_stage1(self, cm: str, cav: int) -> bool:
+        """Claim the cavity before Stage 1 loads its record.
+
+        start_new_record replaces the session's active record, so a press
+        that another tab's claim refuses must stop before it.
+        """
+        try:
+            cavity = self._get_machine_cavity(cm, cav)
+        except Exception as exc:
+            self.view.show_error(f"Failed to start Stage 1: {exc}")
+            return False
+        newly_claimed = not self._cavity_hold.holds(cavity)
+        if not self._cavity_hold.take(cavity):
+            self.view.show_error(refusal_message(cavity))
+            return False
+        self._stage1_new_claim = newly_claimed
+        return True
 
     def _decide_ssa_calibration(self, last, error: str, operator: str):
         """Return (kept, skipped_by), or None if the operator cancelled.
@@ -372,6 +420,8 @@ class FrequencyTuningController(QObject):
         self._current_stage = 2
         self._steps = list(_STAGE2_STEPS)
         self._finalize_after_run = False
+        if not self._take_cavity():
+            return
         self._set_stage_running_ui(2)
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -401,6 +451,8 @@ class FrequencyTuningController(QObject):
         self._current_stage = 3
         self._steps = list(_STAGE3_STEPS)
         self._finalize_after_run = False
+        if not self._take_cavity():
+            return
         self._set_stage_running_ui(3)
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -424,6 +476,8 @@ class FrequencyTuningController(QObject):
         self._current_stage = 4
         self._steps = list(_STAGE4_STEPS)
         self._finalize_after_run = False
+        if not self._take_cavity():
+            return
         self._set_stage_running_ui(4)
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -437,6 +491,8 @@ class FrequencyTuningController(QObject):
         self._current_stage = 5
         self._steps = list(_STAGE4_FINALIZE_STEPS)
         self._finalize_after_run = True
+        if not self._take_cavity():
+            return
         self._set_stage_running_ui(None)
         QTimer.singleShot(100, self._run_phase_in_background)
 
@@ -488,6 +544,9 @@ class FrequencyTuningController(QObject):
             )
             return None
 
+        if not self._claim_for_stage1(cm, cav):
+            return None
+
         try:
             record, record_id, created = self.session.start_new_record(
                 cryomodule=cryomodule, cavity_number=cavity_number
@@ -519,6 +578,9 @@ class FrequencyTuningController(QObject):
         self.update_pv_addresses(cm, str(cav))
         cavity = self._get_machine_cavity(cm, cav)
         self._cavity = cavity
+        held_before = self._cavity_hold.holds(cavity)
+        if not self._take_cavity():
+            return
 
         record = self.session.get_active_record()
         record_id = self.session.get_active_record_id()
@@ -528,6 +590,8 @@ class FrequencyTuningController(QObject):
             CommissioningPhase.FREQUENCY_TUNING
         )
         if not can_run:
+            if not held_before:
+                self._cavity_hold.release()
             self.view.show_error(f"Cannot run frequency tuning phase: {reason}")
             return
 
@@ -552,6 +616,8 @@ class FrequencyTuningController(QObject):
 
         is_valid, message = self.phase.validate_prerequisites()
         if not is_valid:
+            if not held_before:
+                self._cavity_hold.release()
             self.view.show_error(f"Prerequisites not met: {message}")
             return
 
@@ -613,6 +679,13 @@ class FrequencyTuningController(QObject):
         desc = getattr(self.view, f"stage{stage}_description", None)
         if desc is not None:
             desc.setVisible(visible)
+
+    def _take_cavity(self) -> bool:
+        """Claim the cavity for this tab. False, with an error, if taken."""
+        if self._cavity is None or self._cavity_hold.take(self._cavity):
+            return True
+        self.view.show_error(refusal_message(self._cavity))
+        return False
 
     def _set_stage_running_ui(self, stage: int | None) -> None:
         self._stage_running = True
@@ -1228,6 +1301,7 @@ class FrequencyTuningController(QObject):
     def on_phase_completed(self) -> None:
         self._paused = False
         self._clear_running_ui()
+        self._cavity_hold.release()
         self.view.log_message("Frequency tuning completed and saved")
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("COMPLETED")
@@ -1273,6 +1347,7 @@ class FrequencyTuningController(QObject):
     def on_phase_failed(self, error_msg: str) -> None:
         self._paused = False
         self._clear_running_ui()
+        self._cavity_hold.release()
         self.view.log_message(f"✗ Stage failed — {error_msg}")
         if hasattr(self.view, "local_phase_status"):
             self.view.local_phase_status.setText("FAILED")
