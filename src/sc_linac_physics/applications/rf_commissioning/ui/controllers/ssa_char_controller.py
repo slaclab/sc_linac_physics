@@ -34,6 +34,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.runner_bridge
     RunnerBridge,
 )
 from sc_linac_physics.utils.platform_paths import get_ssa_cal_base_dir
+from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
+    build_commissioning_machine,
+)
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
 
@@ -143,7 +146,7 @@ class SSACharController(QObject):
     def _get_machine_cavity(self, cm: str, cav: int):
         """cm is a Machine.cryomodules key: "01".."35", "H1" or "H2"."""
         if not self.machine:
-            self.machine = Machine()
+            self.machine = build_commissioning_machine()
         return self.machine.cryomodules[cm].cavities[cav]
 
     # ------------------------------------------------------------------
