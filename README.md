@@ -159,7 +159,23 @@ The latest tagged release is automatically deployed to production every Tuesday 
 
 ## Contributing
 
-PRs and issues are welcome. After cloning, install the pre-commit hooks:
+PRs and issues are welcome.
+
+**Open PRs from a branch in `slaclab/sc_linac_physics`, not from a fork.**
+Clone this repo (above), create a branch, and push it here:
+
+```bash
+git switch -c my-change
+git push -u origin my-change
+```
+
+GitHub can only stack a PR on another PR whose branch is in the same repo, and
+an open PR can't be moved off a fork later. If you have an existing fork
+clone, add this repo as a remote (`git remote add upstream
+git@github.com:slaclab/sc_linac_physics.git`) and push branches there. If you
+don't have write access, ask a maintainer for it.
+
+After cloning, install the pre-commit hooks:
 
 ```bash
 pre-commit install
