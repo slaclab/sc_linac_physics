@@ -368,6 +368,29 @@ def test_window_path_is_named_by_its_utc_times(store):
     )
 
 
+def test_window_path_reads_naive_times_as_pacific(store):
+    naive_start = datetime(2024, 1, 10, 5, 0)  # 13:00 UTC in January
+    naive_end = naive_start + timedelta(minutes=20)
+
+    assert store.window_path("A:PV", naive_start, naive_end) == (
+        store.window_path("A:PV", RUN_START, RUN_END)
+    )
+
+
+def test_cache_that_cannot_be_checked_is_a_miss(store):
+    fake, served = _serve({"A:PV": [(RUN_START + timedelta(minutes=1), 1.0)]})
+    denied = PermissionError("Permission denied")
+    with (
+        served,
+        patch.object(archiver_store.Path, "exists", side_effect=denied),
+    ):
+        assert not store.has_window("A:PV", RUN_START, RUN_END)
+        frame = store.read_window("A:PV", RUN_START, RUN_END)
+
+    assert _values(frame) == [1.0]
+    assert len(fake.calls) == 1
+
+
 def test_unwritable_cache_still_returns_the_window(tmp_path):
     blocker = tmp_path / "not_a_dir"
     blocker.write_text("")
