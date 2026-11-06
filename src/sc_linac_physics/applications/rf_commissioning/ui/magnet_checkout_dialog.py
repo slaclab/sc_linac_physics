@@ -161,7 +161,7 @@ class MagnetCheckoutDialog(QDialog):
                 (
                     "Magnet checkout was updated by another user. "
                     f"Expected version {conflict.expected_version}, "
-                    f"database has version {conflict.current_version}."
+                    f"database has version {conflict.actual_version}."
                 ),
             )
             return False

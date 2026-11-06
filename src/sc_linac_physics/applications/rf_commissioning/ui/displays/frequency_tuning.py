@@ -434,6 +434,15 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         self.set_plot_subject(record.cryomodule, record.cavity_number)
         self._controller.restore_from_record(record)
 
+    def is_running_phase(self) -> bool:
+        """True while a stage runs.
+
+        The container refuses to change the active record meanwhile.
+        refresh_from_record would otherwise rebuild the phase context under
+        the running stage, and Abort would no longer reach its stepper.
+        """
+        return self._controller._stage_running
+
     def refresh_from_record(self, record) -> None:
         """Re-apply stage restore whenever the active record changes."""
         super().refresh_from_record(record)

@@ -50,6 +50,7 @@ def display_stub():
         _refresh_magnet_badge=Mock(),
         _refresh_cavity_completion_label=Mock(),
         _reset_sync_status_prompt=Mock(),
+        _refuse_if_phase_running=Mock(return_value=False),
     )
 
 
