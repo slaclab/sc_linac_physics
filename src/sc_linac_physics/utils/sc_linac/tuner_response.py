@@ -61,6 +61,20 @@ class TunerResponse:
             return y[-1] + (real_hz - x[-1]) * (y[-1] - y[-2]) / (x[-1] - x[-2])
         return float(np.interp(real_hz, x, y))
 
+    def detune_at(self, position: float) -> float:
+        """Real detune in Hz at position microsteps from cold landing.
+
+        The inverse of position(), with the same end-slope extension.
+        """
+        x, y = self.detune_hz, self.usteps_from_cold
+        if position < y[0]:
+            return x[0] + (position - y[0]) * (x[1] - x[0]) / (y[1] - y[0])
+        if position > y[-1]:
+            return x[-1] + (position - y[-1]) * (x[-1] - x[-2]) / (
+                y[-1] - y[-2]
+            )
+        return float(np.interp(position, y, x))
+
     def steps_between(self, from_hz: float, to_hz: float) -> float:
         """Signed microsteps to go from from_hz to to_hz. Positive raises
         the detune."""

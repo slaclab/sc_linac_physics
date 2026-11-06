@@ -53,6 +53,14 @@ class TestTunerResponse:
         assert curve.position(-310_000) == pytest.approx(-100_000)
         assert curve.position(10_000) == pytest.approx(5_200_000)
 
+    @pytest.mark.parametrize(
+        "real_hz", [-310_000, -300_000, -250_000, -100_000, 0, 10_000]
+    )
+    def test_detune_at_inverts_position(self, curve, real_hz):
+        assert curve.detune_at(curve.position(real_hz)) == pytest.approx(
+            real_hz
+        )
+
     def test_steps_between_is_signed(self, curve):
         assert curve.steps_between(-300_000, 0) == pytest.approx(5_000_000)
         assert curve.steps_between(0, -300_000) == pytest.approx(-5_000_000)

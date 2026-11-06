@@ -229,6 +229,22 @@ class StepperPVGroup(PVGroup):
         self._abort_requested = True
         return 0
 
+    def _detune_after(self, microsteps: float) -> float:
+        """Real detune after moving microsteps from the current detune.
+
+        Positive microsteps raise the detune; move() applies the direction.
+        With a response curve the move follows the curve across bins, so the
+        endpoint depends only on the microsteps, not on VELO (how many go in
+        each chunk). Without one, the move uses SCALE at the current detune,
+        which is the same everywhere.
+        """
+        detune = self.cavity_group.detune.value
+        if self.response is not None:
+            return self.response.detune_at(
+                self.response.position(detune) + microsteps
+            )
+        return detune + microsteps * self._hz_per_microstep_now()
+
     def _hz_per_microstep_now(self) -> float:
         """Hz of detune per microstep at the current detune.
 
@@ -272,10 +288,7 @@ class StepperPVGroup(PVGroup):
             await self.step_signed.write(self.step_signed.value + step_change)
 
             steps += self.speed.value
-            delta = self.speed.value * self._hz_per_microstep_now()
-            new_detune = self.cavity_group.detune.value + (
-                freq_move_sign * delta
-            )
+            new_detune = self._detune_after(freq_move_sign * self.speed.value)
 
             await self.cavity_group.write_detune(new_detune)
             await sleep(1)
@@ -290,8 +303,7 @@ class StepperPVGroup(PVGroup):
         step_change = move_sign_des * remainder
         await self.step_signed.write(self.step_signed.value + step_change)
 
-        delta = remainder * self._hz_per_microstep_now()
-        new_detune = self.cavity_group.detune.value + (freq_move_sign * delta)
+        new_detune = self._detune_after(freq_move_sign * remainder)
 
         enable_int = _enum_to_int(
             self.piezo_group.enable_stat.value,
