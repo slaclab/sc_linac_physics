@@ -176,7 +176,7 @@ class ArchiverStore:
         """
         path = self.path(pv, month_start)
         try:
-            if path.exists():
+            if _exists(path):
                 return True
             _write_atomically(
                 path, archiver.iter_range_chunks(pv, month_start, month_end)
@@ -233,6 +233,19 @@ def _months(start: datetime, end: datetime) -> List[Tuple[datetime, datetime]]:
         months.append((month, following))
         month = following
     return months
+
+
+def _exists(path: Path) -> bool:
+    """path.exists(), but False when the check itself fails.
+
+    On Python 3.12 and 3.13, Path.exists raises PermissionError under a
+    directory it can't search. A cache we can't look in is a cache miss,
+    so the read falls back to the archiver.
+    """
+    try:
+        return path.exists()
+    except OSError:
+        return False
 
 
 def _join(chunks: Iterator[pd.DataFrame]) -> pd.DataFrame:
