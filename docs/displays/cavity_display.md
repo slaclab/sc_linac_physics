@@ -1,6 +1,6 @@
 # Cavity Display
 
-`displays/cavity_display/` is the primary real-time fault monitoring dashboard for the SC Linac. It shows fault status across all 296 cavities organized in a hierarchical tree, with optional heatmap visualization and audio alerts for unacknowledged alarms.
+`displays/cavity_display/` is the primary real-time fault monitoring dashboard for the SC Linac. It shows fault status across all 480 cavities organized in a hierarchical tree, with optional heatmap visualization and audio alerts for unacknowledged alarms.
 
 ## Architecture overview
 
@@ -90,7 +90,7 @@ Alternative visualization showing all cavities as a 2D color grid:
 
 ## Key design choices
 
-- **Fault PVs read via `caget_many()`** — fault *input* PVs are never stored as `PV` objects. Batch reads minimize connection overhead for 296 cavities × N faults.
+- **Fault PVs read via `caget_many()`** — fault *input* PVs are never stored as `PV` objects. Batch reads minimize connection overhead for 480 cavities × N faults.
 - **Only output PVs are `PV` objects** — needed for `put()` calls (publishing fault summaries); everything else is read-only via batch CA.
 - **Archive-based trend alerts** — historical fault frequency (e.g., "faulted 10 times today") supplements instantaneous severity for context-aware alerting.
 - **`faults.csv` drives fault definitions** — adding a new fault condition requires only a CSV row, no code change. The CSV is packaged in the wheel and verified in CI.

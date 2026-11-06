@@ -1,6 +1,6 @@
 # SC Linac Physics — Documentation
 
-`sc_linac_physics` is the controls, analysis, and display software for the SLAC Superconducting (SC) Linac. It provides operator GUIs, command-line tools, and a Python library for interacting with the 296-cavity RF system via EPICS/Channel Access.
+`sc_linac_physics` is the controls, analysis, and display software for the SLAC Superconducting (SC) Linac. It provides operator GUIs, command-line tools, and a Python library for interacting with the 480-cavity RF system via EPICS/Channel Access.
 
 **New here?** Start with [Getting Started](getting_started.md) — it covers EPICS, PyDM, and Qt through three hands-on exercises before pointing you to the reference docs below.
 
@@ -49,7 +49,7 @@ as a link; opened on its own it also works offline.
 
 | Page | What it covers |
 |------|----------------|
-| [Cavity Display](displays/cavity_display.md) | Fault monitoring dashboard for all 296 cavities with heatmap and audio alerts |
+| [Cavity Display](displays/cavity_display.md) | Fault monitoring dashboard for all 480 cavities with heatmap and audio alerts |
 | [Fault Heatmap](displays/fault_heatmap.md) | Fault counts per cavity over a time window, as a heatmap |
 | [SRF Home](displays/srf_home.md) | Top-level launcher panel and watcher management |
 | [EDM Screens](displays/edm_screens.md) | `sc-edm`: open an SRF EDM screen from the terminal |

@@ -23,36 +23,14 @@ conda activate sclp
 
 3. **Install this package** from source (not published to PyPI):
 
-Optional: set up GitHub SSH first (recommended for contributors):
-
-```bash
-ssh-keygen -t ed25519 -C "your_email@example.com"
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
-cat ~/.ssh/id_ed25519.pub
-```
-
-Add the printed key to GitHub:
-
-- https://github.com/settings/keys
-
-Then verify SSH access:
-
-```bash
-ssh -T git@github.com
-```
-
-Clone with SSH:
-
-```bash
-git clone git@github.com:slaclab/sc_linac_physics.git
-```
-
-Or clone with HTTPS (no SSH key setup required):
-
 ```bash
 git clone https://github.com/slaclab/sc_linac_physics.git
 ```
+
+Contributors pushing branches may prefer SSH
+(`git clone git@github.com:slaclab/sc_linac_physics.git`). See GitHub's guide
+to [connecting with SSH](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
+to set up a key.
 
 Then install:
 
@@ -97,12 +75,14 @@ Run `sc-linac list` to see all available commands. Key entry points:
 | Command | Description |
 |---------|-------------|
 | `sc-srf-home` | Main operator dashboard |
-| `sc-cavity` | Real-time fault monitoring across all 296 cavities |
+| `sc-cavity` | Real-time fault monitoring across all 480 cavities |
 | `sc-setup` | Automated cavity setup GUI |
 
 Setup commands (`sc-setup-all`, `sc-setup-linac`, `sc-setup-cm`, `sc-setup-cav`) automate cavity turn-on across hierarchy levels. Run any with `--help` for usage.
 
 ## Development
+
+PRs and issues are welcome.
 
 ### Branches and pull requests
 
@@ -122,7 +102,7 @@ and shipping".
 
 ### Testing
 
-80% coverage is required and enforced in CI. Tests mock EPICS and do not require the simulator.
+Add tests for new behavior. 80% coverage is required and enforced in CI. Tests mock EPICS and do not require the simulator.
 
 ```bash
 pytest
@@ -131,7 +111,13 @@ pytest tests/test_cli.py -v   # single file
 
 ### Linting and formatting
 
-Pre-commit hooks run `black` and `flake8` automatically on each commit (set up via `pre-commit install`). To run manually:
+After cloning, install the pre-commit hooks. They run `black` and `flake8` on each commit:
+
+```bash
+pre-commit install
+```
+
+To run them by hand:
 
 ```bash
 black .
@@ -168,19 +154,9 @@ The latest tagged release is automatically deployed to production every Tuesday 
 |---------|-----|
 | Displays show no data | Start the simulator with `sc-sim` |
 | Qt errors in headless environments | `export QT_QPA_PLATFORM=offscreen` or `xvfb-run -a ...` |
-| `ImportError` after cloning | Use editable install: `pip install -e .` |
+| `ImportError` after cloning | Use editable install: `pip install -e ".[dev,test]"` |
 | CLI command not found | Run `conda activate sclp` and try again; if still missing, reinstall with `pip install -e .` |
 | `Invalid cryomodule` error | Use bare number (`01`, `H1`), not `CM01` |
-
-## Contributing
-
-PRs and issues are welcome. After cloning, install the pre-commit hooks:
-
-```bash
-pre-commit install
-```
-
-This runs `black` and `flake8` automatically on each commit. Add tests for new behavior and use conventional commit messages to keep the automated changelog accurate.
 
 ## Authors
 

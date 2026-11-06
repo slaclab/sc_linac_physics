@@ -32,7 +32,7 @@ The `state/` subpackage runs as a background watcher service (`sc-watcher start 
 ### `tune_status_poll.py`
 
 Each iteration (~every N seconds):
-1. Batch-reads all 296 cavity `tune_config` and `df_cold` PVs via `PVBatch.get_values()`
+1. Batch-reads `tune_config` and `df_cold` for 280 cavities (L0B, L1B, L2B and L3B; not H1, H2 or L4B) via `PVBatch.get_values()`
 2. Upserts current values into SQLite `cavity_state` table
 3. Appends a versioned snapshot to `df_cold_version` table (append-only, never updated)
 4. Writes a JSON summary to `tune_status.json` in the platform JSON directory (`/home/physics/srf/json` on Linux, `~/json` on macOS) for low-latency GUI consumption
@@ -49,7 +49,7 @@ Shared DB connection setup, table definitions, and batch PV name construction.
 
 ## Non-obvious design choices
 
-- **`PVBatch.get_values()` for bulk reads** — avoids creating 592 PV objects (296 cavities × 2 PVs) just for polling. PV objects have connection overhead; `caget_many()` is faster for one-shot reads.
+- **`PVBatch.get_values()` for bulk reads** — avoids creating 560 PV objects (280 cavities × 2 PVs) just for polling. PV objects have connection overhead; `caget_many()` is faster for one-shot reads.
 - **Versioned `df_cold` table** — every sample is a new row with a timestamp. Enables reconstruction of the full frequency drift history for each cavity without scanning archived PVs.
 - **JSON for GUI reads** — the tuning display reads the JSON file rather than querying SQLite directly, eliminating database lock contention during high-frequency UI refresh.
 
