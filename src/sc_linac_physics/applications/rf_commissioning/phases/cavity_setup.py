@@ -178,10 +178,12 @@ def check_rack_free(cavity, context: PhaseContext) -> PhaseStepResult | None:
     controller supplies one. No controller supplies one yet, so without it this
     reads RFSTATE on the other cavities in the rack and refuses if any reads on.
 
-    # CHECK: does zeroing RFS1/RFS2 DAC_AMPLITUDE disturb another cavity in
-    # the rack that has RF on? Auto setup zeroes them while other cavities in
-    # the rack run SSA cal in parallel (see the lock in RFStation), but that
-    # says nothing about a cavity with RF on.
+    This is stricter than auto setup, which zeroes the DACs whatever the
+    rest of the rack is doing. It is deliberate: commissioning should not make
+    a rack-wide write while someone may be working on another cavity in the
+    rack, whose DACs could be nonzero on purpose. Sebastian Aderhold agreed
+    the refusal is fine for commissioning (Slack DM with Lisa Zacarias,
+    2026-11-06).
     """
     rack = cavity.rack
     rack_check = context.parameters.get("rack_check_callback")
