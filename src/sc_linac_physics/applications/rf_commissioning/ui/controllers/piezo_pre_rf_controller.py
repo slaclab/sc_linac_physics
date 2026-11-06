@@ -310,7 +310,10 @@ class PiezoPreRFController(QObject):
 
         self.view.log_message(f"Starting automated test for {cavity_name}")
         self.view.clear_results()
+        self._start_on_cavity(cm, cav, operator)
 
+    def _start_on_cavity(self, cm: str, cav: int, operator: str) -> None:
+        """Claim the cavity, build the phase context, and start the steps."""
         try:
             self.update_pv_addresses(cm, str(cav))
             cavity = self._get_machine_cavity(cm, cav)

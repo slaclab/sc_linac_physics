@@ -280,3 +280,88 @@ def test_piezo_with_rf_releases(cavity, end):
     end(c)
 
     assert cavity.claimed_by is None
+
+
+# ---------------------------------------------------------------------------
+# Stage 1 claims before it loads the record, and frees what it claimed
+# ---------------------------------------------------------------------------
+
+
+def _stage1_controller(session, monkeypatch):
+    monkeypatch.setattr(
+        "sc_linac_physics.applications.rf_commissioning.ui.controllers."
+        "frequency_tuning_controller.resolve_cavity_selection",
+        lambda view, cm, cav: ("02", "1"),
+    )
+    view = Mock()
+    c = FrequencyTuningController(view, session)
+    c._get_operator = Mock(return_value="op")
+    c._set_stage_status_not_started = Mock()
+    c.update_pv_addresses = Mock()
+    c._decide_ssa_calibration = Mock(return_value=(True, None))
+    return c, view
+
+
+def test_stage_1_refused_before_the_record_is_loaded(
+    cavity, other_tab, monkeypatch
+):
+    session = Mock()
+    c, view = _stage1_controller(session, monkeypatch)
+
+    c.run_stage_1()
+
+    assert _refused(view)
+    session.start_new_record.assert_not_called()
+    c._set_stage_status_not_started.assert_called_once_with(1)
+
+
+def test_stage_1_releases_its_claim_when_the_start_raises(cavity, monkeypatch):
+    session = Mock()
+    session.can_run_phase.side_effect = RuntimeError("db down")
+    c, _ = _stage1_controller(session, monkeypatch)
+    assert c._claim_for_stage1("02", 1)
+    c._pending_stage1 = ("02", 1, "op")
+
+    c._on_last_ssa_cal_read(None, "")
+
+    assert cavity.claimed_by is None
+    c._set_stage_status_not_started.assert_called_once_with(1)
+
+
+def test_stage_1_gated_keeps_a_hold_from_an_earlier_stage(cavity, monkeypatch):
+    session = Mock()
+    session.can_run_phase.return_value = (False, "gated")
+    c, _ = _stage1_controller(session, monkeypatch)
+    c._cavity = cavity
+    assert c._take_cavity()
+    assert c._claim_for_stage1("02", 1)
+    c._pending_stage1 = ("02", 1, "op")
+
+    c._on_last_ssa_cal_read(None, "")
+
+    assert cavity.claimed_by is c._cavity_hold
+
+
+# ---------------------------------------------------------------------------
+# A new claim starts with no abort pending
+# ---------------------------------------------------------------------------
+
+
+def test_new_claim_clears_stale_abort_flags(cavity):
+    cavity.abort_flag = True
+    cavity.stepper_tuner.abort_flag = True
+
+    assert CavityHold("the Test tab").take(cavity)
+
+    assert cavity.abort_flag is False
+    assert cavity.stepper_tuner.abort_flag is False
+
+
+def test_retaking_a_held_cavity_keeps_its_abort_flags(cavity):
+    hold = CavityHold("the Test tab")
+    assert hold.take(cavity)
+    cavity.abort_flag = True
+
+    assert hold.take(cavity)
+
+    assert cavity.abort_flag is True
