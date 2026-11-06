@@ -78,12 +78,18 @@ const $ = (id) => document.getElementById(id);
    first error is raised, so a failed run keeps the PVs that came back.
    fail: {kind: "none"|"outage"|"killed", at: index among missing runs, from 1} */
 function fill(runs, fail) {
-  const out = runs.map((r) => ({ ...r, state: r.state === "failed" ? "partial" : r.state }));
+  // Last open's failure: kept PVs stay, except for a recent run, which kept none.
+  const out = runs.map((r) => ({
+    ...r,
+    state: r.state === "failed" ? (r.recent ? "none" : "partial") : r.state,
+  }));
   const missing = out.map((r, i) => i).filter((i) => out[i].state !== "cached");
   for (let k = 0; k < missing.length; k++) {
     const r = out[missing[k]];
     if (fail.kind !== "none" && k + 1 === fail.at) {
-      if (!r.recent) r.state = fail.kind === "outage" ? "failed" : "partial";
+      // A recent run's window is never written, so nothing of it stays.
+      if (fail.kind === "outage") r.state = "failed";
+      else r.state = r.recent ? "none" : "partial";
       if (fail.kind === "killed" && !r.recent) r.tmp = true;
       return out;
     }
@@ -157,10 +163,14 @@ function update() {
   if (recent) {
     out.push(para("note", [["The newest run is fetched on every open but never written, until it ended a day ago.", null]]));
   }
-  if (kind === "outage" && nMissing) {
+  // The recent run is the last missing one, so it is interrupted only at the end.
+  const hitRecent = stopped && recent && +where.value === nMissing;
+  if (stopped && hitRecent) {
+    out.push(para("note", [["The interrupted run ended under a day ago, so none of its PVs were written. Next open fetches all 28 again.", null]]));
+  } else if (kind === "outage" && nMissing) {
     out.push(para("note", [["PVs of the failed run that came back before the outage stay on disk. Next open fetches only the rest.", null]]));
   }
-  if (kind === "killed" && nMissing) {
+  else if (kind === "killed" && nMissing) {
     out.push(para("note", [["The killed run keeps the PVs already written. The ones mid-write left only temp files, so they are fetched next open. The temp files stay.", null]]));
   }
   $("verdict").replaceChildren(...out);
@@ -200,8 +210,17 @@ update();
     recent.slice(0, N_RUNS - 1).every((r) => r.state === "cached"),
     "recent run stays uncached");
 
+  // An outage on a recent run is still marked, and nothing of it stays.
+  const recentOut = fill(initial(N_RUNS - 1, true), { kind: "outage", at: 1 });
+  expect(recentOut[N_RUNS - 1].state === "failed", "outage on a recent run is marked");
+  expect(fill(recentOut, { kind: "none" })[N_RUNS - 1].state === "none",
+    "next open refetches the recent run from scratch");
+  const recentKill = fill(initial(N_RUNS - 1, true), { kind: "killed", at: 1 });
+  expect(recentKill[N_RUNS - 1].state === "none" && !recentKill[N_RUNS - 1].tmp,
+    "kill on a recent run leaves nothing on disk");
+
   if (fails.length) console.error("SELF-CHECK FAILED\n" + fails.join("\n"));
-  else console.log("SELF-CHECK PASSED (7 cases)");
+  else console.log("SELF-CHECK PASSED (10 cases)");
 })();
 </script>
 </body>
