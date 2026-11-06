@@ -10,9 +10,9 @@ The collection consists of:
 
 - **`field_emission_runs.csv`**: the runs known to git, one row per run, in the "To Add Data" column order below.
 
-- **The run cache**, in `get_field_emission_dir()`: `/home/physics/srf/field_emission/` on Linux, `~/.sc_linac_physics/field_emission/` on macOS.
-  - `runs/cm<CM>_<YYYY-MM-DD_HHMM>.h5`: one file per run, fetched from the archiver the first time the run is needed. Datasets `CAV<n>/average` and `CAV<n>/instant`: first column cavity amplitude, then decarad channels 1–10. Safe to delete; a deleted run is fetched again.
-  - `added_runs.csv`: runs added from the display, same columns as `field_emission_runs.csv`.
+- **`added_runs.csv`**, in the field-emission directory (`get_field_emission_dir()`: `/home/physics/srf/field_emission/` on Linux, `~/.sc_linac_physics/field_emission/` on macOS): runs added from the display, same columns as `field_emission_runs.csv`.
+
+- **The run data cache** is the shared `ArchiverStore` cache (`get_archiver_cache_dir()`: `/home/physics/srf/archiver_cache/` on Linux, `~/.sc_linac_physics/archiver_cache/` on macOS). Each run is one Parquet file per PV at `<pv>/windows/<start>_<end>.parquet`, times in UTC, fetched from the archiver the first time the run is needed. Safe to delete; a deleted run is fetched again. See [archiver.md](../utils/archiver.md).
 
 - **`field_emission_gui.py`**: the display, launched by `sc-linac field-emission`. On open it fetches every listed run not cached yet, one at a time, with progress in the window title; it stops at the first failure. Plotting a run that isn't cached fetches it first (PLOT shows LOADING...).
 
@@ -39,7 +39,7 @@ The collection consists of:
 
 ## To Add Data
 
-Use the "Add New Data" button next to the plot toolbar in `sc-linac field-emission`. Added runs go into `added_runs.csv` in the cache directory, so everyone using that directory sees them, and are fetched right away. Data can be added individually, by cryomodule, or by CSV for multiple entries.  If using CSV, though actual header names can be anything, columns should be written in the following order:
+Use the "Add New Data" button next to the plot toolbar in `sc-linac field-emission`. Added runs go into `added_runs.csv` in the field-emission directory, so everyone using that directory sees them, and are fetched right away. Data can be added individually, by cryomodule, or by CSV for multiple entries.  If using CSV, though actual header names can be anything, columns should be written in the following order:
 
 "Cryomodule, Start Date, Start Time, End Date, End Time, Decarad #, Link to Measurement, Notes, Recharacterization, Multipacting, Commissioning"
 

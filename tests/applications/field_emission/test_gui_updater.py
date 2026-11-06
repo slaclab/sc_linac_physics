@@ -79,6 +79,8 @@ def test_multi_reads_the_csv(tmp_path):
         f"CM05,1/5/24,9:00,,10:00,3,{ELOG},,Y,N,N",  # decarad 3
         "CM05,1/5/24,9:00,,10:00,1,http://example.com,,Y,N,N",  # bad elog
         "CM05,1/5/24,9:00",  # short row
+        f"CM05,1/5/24,9:00,,10:00,1,{ELOG},",  # no filter columns
+        f"CM05,11/3/24,1:15,,1:30,1,{ELOG},,Y,N,N",  # DST repeats 1:15
     ],
 )
 def test_multi_rejects_a_bad_row_before_writing_any(tmp_path, bad_row):
@@ -177,8 +179,14 @@ class TestValidateEmissionData:
             ({"dec": "3"}, "Invalid decarad"),
             ({"elog": "http://example.com"}, "eLog link"),
             ({"m": "maybe"}, "Invalid filter"),
+            ({"ds": "11/3/24", "ts": "1:15", "te": "1:30"}, "ambiguous"),
+            ({"ds": "3/10/24", "ts": "2:15", "te": "2:30"}, "does not exist"),
         ],
     )
     def test_rejects(self, changes, message):
         with pytest.raises(ValueError, match=message):
             gui_updater.validate_emission_data(_with(**changes))
+
+    def test_rejects_a_row_without_the_filter_columns(self):
+        with pytest.raises(ValueError, match="Expected 11 columns"):
+            gui_updater.validate_emission_data(GOOD[:8])
