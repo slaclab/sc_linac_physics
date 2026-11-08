@@ -18,8 +18,8 @@ That matters because /home, and so /home/physics/srf, is NFS v4
 HDF5's file locking is unreliable.
 """
 
-import logging
 import os
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -41,8 +41,6 @@ from sc_linac_physics.utils.platform_paths import get_srf_base_dir
 SETTLE = timedelta(days=1)
 
 STORED_COLUMNS = [c for c in archiver.COLUMNS if c != "valid"]
-
-logger = logging.getLogger(__name__)
 
 
 def get_archiver_cache_dir() -> Path:
@@ -75,8 +73,11 @@ class ArchiverStore:
         end = archiver._aware(end).astimezone(timezone.utc)
         before: Optional[pd.DataFrame] = None
         last = None
+        began, months, from_disk, samples = time.monotonic(), 0, 0, 0
         for month_start, month_end in _months(start, end):
-            frame = self._month(pv, month_start, month_end, start, end)
+            months += 1
+            frame, cached = self._month(pv, month_start, month_end, start, end)
+            from_disk += cached
             # A month can start with the sample before it, which the month
             # before already returned.
             if last is not None:
@@ -93,9 +94,20 @@ class ArchiverStore:
             if before is not None:
                 body = pd.concat([before, body])
                 before = None
+            samples += len(body)
             yield _with_valid(body)
         if before is not None:
+            samples += 1
             yield _with_valid(before)
+        archiver.get_logger().info(
+            "cache: %s %s: %d samples, %d of %d month(s) from disk, %.2f s",
+            pv,
+            archiver._span(start, end),
+            samples,
+            from_disk,
+            months,
+            time.monotonic() - began,
+        )
 
     def read(self, pv: str, start: datetime, end: datetime) -> pd.DataFrame:
         """The PV's samples from start to end as one DataFrame."""
@@ -144,27 +156,35 @@ class ArchiverStore:
         month_end: datetime,
         start: datetime,
         end: datetime,
-    ) -> pd.DataFrame:
+    ) -> Tuple[pd.DataFrame, bool]:
         """One month's samples, from the cache when the month is settled.
 
         A month not yet settled is fetched only where it overlaps start..end,
         and not written. If the cache can't be written or read (no
         permission, disk full), that overlap is fetched without it: the cache
-        only saves time.
+        only saves time. Also returns whether the samples came from a file
+        that was on disk before this call.
         """
+        path = self.path(pv, month_start)
+        was_on_disk = _exists(path)
         if _settled(month_end) and self._cache(pv, month_start, month_end):
-            path = self.path(pv, month_start)
+            log = archiver.get_logger()
             try:
-                return pq.read_table(path).to_pandas()
+                frame = pq.read_table(path).to_pandas()
             except OSError as e:
-                logger.warning(
-                    "archiver cache: cannot read %s (%s); fetching %s without it",
+                log.warning(
+                    "cache: cannot read %s (%s); fetching %s without it",
                     path,
                     e,
                     pv,
                 )
+            else:
+                log.debug(
+                    "cache: %s %s from %s", pv, f"{month_start:%Y-%m}", path
+                )
+                return frame, was_on_disk
         lo, hi = max(month_start, start), min(month_end, end)
-        return _join(archiver.iter_range_chunks(pv, lo, hi))
+        return _join(archiver.iter_range_chunks(pv, lo, hi)), False
 
     def _cache(
         self, pv: str, month_start: datetime, month_end: datetime
@@ -175,6 +195,7 @@ class ArchiverStore:
         Returns False, with a warning, if the cache can't be used.
         """
         path = self.path(pv, month_start)
+        log = archiver.get_logger()
         try:
             if _exists(path):
                 return True
@@ -182,8 +203,15 @@ class ArchiverStore:
                 path, archiver.iter_range_chunks(pv, month_start, month_end)
             )
         except OSError as e:
-            logger.warning("archiver cache: cannot write %s (%s)", path, e)
+            log.warning("cache: cannot write %s (%s)", path, e)
             return False
+        try:
+            size = f", {path.stat().st_size / 1e3:.0f} kB"
+        except OSError:
+            # Shared cache: another user may have removed it already. The
+            # write itself worked, so this is only a log detail.
+            size = ""
+        log.info("cache: wrote %s %s%s", pv, f"{month_start:%Y-%m}", size)
         return True
 
 
