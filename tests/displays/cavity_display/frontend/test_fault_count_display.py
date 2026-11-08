@@ -372,7 +372,7 @@ class TestBackgroundFetch:
         main = threading.get_ident()
         seen = {}
 
-        def get_counts(start, end):
+        def get_counts(start, end, progress=None):
             seen["thread"] = threading.get_ident()
             return _counts("BCS")
 
@@ -421,8 +421,39 @@ class TestBackgroundFetch:
         display.cavity.get_fault_counts = Mock(return_value={})
         with patch.object(display.plot_window, "addItem"):
             display.update_plot()
-        start, end = display.cavity.get_fault_counts.call_args.args
+        start, end, _ = display.cavity.get_fault_counts.call_args.args
         assert (start, end) == display._selected_range()
+
+    def test_progress_shows_on_the_status_label(self, display):
+        display._request_id = 7
+
+        display._on_fetch_progress(7, "May 2026 (2 of 3): from disk")
+
+        text = display.status_label.text()
+        assert text.startswith("Loading fault counts for CM")
+        assert text.endswith(": May 2026 (2 of 3): from disk")
+
+    def test_progress_from_an_old_fetch_is_ignored(self, display):
+        display._request_id = 7
+        display.status_label.setText("current")
+
+        display._on_fetch_progress(6, "May 2026 (2 of 3): from disk")
+
+        assert display.status_label.text() == "current"
+
+    def test_fetch_passes_progress_through_as_a_signal(self, display, qtbot):
+        def get_counts(start, end, progress=None):
+            progress("May 2026 (1 of 1): fetching from the archiver")
+            return {}
+
+        cavity = Mock(get_fault_counts=get_counts)
+        with qtbot.waitSignal(display.fetch_progress) as signal:
+            display._fetch(3, cavity, *display._selected_range())
+
+        assert signal.args == [
+            3,
+            "May 2026 (1 of 1): fetching from the archiver",
+        ]
 
     def test_stale_result_is_dropped(self, display):
         display._request_id = 2

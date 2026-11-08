@@ -216,16 +216,37 @@ class TestGetFaultHistory:
             sevr_pv: _make_frame([(2, start)]),
         }
         with patch(
-            self.READ, autospec=True, side_effect=lambda _, pv, s, e: frames[pv]
+            self.READ,
+            autospec=True,
+            side_effect=lambda _, pv, s, e, progress: frames[pv],
         ) as read:
             counts, events = cavity.get_fault_history(start, end)
 
-        assert [c.args[1:] for c in read.call_args_list] == [
+        assert [c.args[1:4] for c in read.call_args_list] == [
             (status_pv, start, end),
             (sevr_pv, start, end),
         ]
         assert counts["SSA"].alarm_count == 1
         assert events[0].timestamp == start
+
+    def test_progress_says_which_pv(self, cavity):
+        messages = []
+
+        def read(_, pv, start, end, progress):
+            progress("May 2026 (1 of 1): from disk")
+            return _make_frame([])
+
+        with patch(self.READ, autospec=True, side_effect=read):
+            cavity.get_fault_history(
+                datetime(2025, 6, 2, 12, 0),
+                datetime(2025, 6, 2, 13, 0),
+                messages.append,
+            )
+
+        assert messages == [
+            "fault status, May 2026 (1 of 1): from disk",
+            "severity, May 2026 (1 of 1): from disk",
+        ]
 
     def test_archiver_error_returns_empty(self, cavity):
         with patch(self.READ, side_effect=RuntimeError("archiver down")):
