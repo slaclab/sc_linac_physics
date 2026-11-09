@@ -4,11 +4,6 @@
 
 For how the auto-tune loop converges, its guards, and how it fails, see the explainer: [How auto-tune works](../explainers/auto_tune.md).
 
-Related in-source architecture docs:
-- `src/sc_linac_physics/applications/rf_commissioning/ARCHITECTURE.md`
-- `src/sc_linac_physics/applications/rf_commissioning/PHASE_WORKFLOW.md`
-- `src/sc_linac_physics/applications/rf_commissioning/COMPLETE_WORKFLOW_EXAMPLE.md`
-
 ## How to launch
 
 - Direct launcher: `sc-rf-comm`
@@ -76,6 +71,32 @@ if result is not None:
     )
 ```
 
+Use the bare cryomodule ID, like `"02"` or `"H1"`, not `"CM02"`.
+`start_new_record` finds the linac with `get_linac_for_cryomodule`, which
+doesn't know `"CM02"`, so it raises `ValueError`.
+
+## Package layout
+
+| Path | Contents |
+|------|----------|
+| `models/` | Phase enum, record dataclasses, `PHASE_REGISTRY`, SQLite schema and repositories, and commissioning versions of the hardware classes, like `CommissioningPiezo` |
+| `phases/` | Phase logic: a module for each phase that has backend code (such as `piezo_pre_rf.py`), plus `phase_base.py`, `step_runner.py` and `cavity_setup.py` |
+| `services/` | `WorkflowService` |
+| `session_manager.py` | `CommissioningSession` |
+| `ui/controllers/` | Wire each phase tab to its phase code and to the session |
+| `ui/displays/` | One display per phase tab (MP Processing and One Hour Run are placeholders in `standard.py`), plus the Batch Piezo Pre-RF window |
+| `ui/container/` | Helpers for the main window: header, tab state, notes, loading and saving records |
+| `ui/builders/` | Shared widgets and styles the displays are built from |
+| `ui/*.py` | The main window (`multi_phase_screen.py`) and dialogs |
+
+Imports only go downward:
+
+- `phases/` and `services/` import from `models/` (and their own folder)
+- `session_manager.py` imports from `models/` and `services/`
+- `ui/` imports from `models/`, `phases/` and `session_manager.py`, but never from `services/`
+
+Nothing outside `ui/` imports from it.
+
 ## Core components
 
 ### `CommissioningSession` (`session_manager.py`)
@@ -100,10 +121,18 @@ The normalized run/phase-instance tables are the source of truth for progression
 ### `WorkflowService` (`services/workflow_service.py`)
 
 Normalized orchestration layer for discrete phase attempts. Handles:
-- Prerequisite validation from phase-instance state
-- Attempt-numbered phase starts
-- Completion/failure transitions
-- Artifact and workflow-event writes
+- Checking the previous phase's latest attempt before letting a phase start
+- Starting attempts. Each start adds a new `commissioning_phase_instances` row with the next
+  `attempt_number`, and earlier attempts stay. Retrying after a failure is just another start.
+- Completing and failing. Completing an attempt moves `commissioning_runs.current_phase` on to
+  the next phase. Completing `COMPLETE` sets the run's `status` to `complete`. Failing an attempt
+  sets the run's `status` to `failed` and keeps `current_phase` on that phase.
+- Writing artifacts and workflow events (`phase_started`, `phase_completed`, `phase_failed`)
+
+Right now no code in `ui/` or `phases/` starts or completes `COMPLETE`, so no run reaches
+`status = complete` through the app yet.
+
+CHECK: who signs off `COMPLETE`, and from where?
 
 ## Database model (important tables)
 
