@@ -132,8 +132,6 @@ Normalized orchestration layer for discrete phase attempts. Handles:
 Right now no code in `ui/` or `phases/` starts or completes `COMPLETE`, so no run reaches
 `status = complete` through the app yet.
 
-CHECK: who signs off `COMPLETE`, and from where?
-
 ## Database model (important tables)
 
 `CommissioningDatabase` (`models/persistence/database.py`) initializes schema from `models/persistence/database_schema.py`.
