@@ -450,8 +450,9 @@ class BackendCavity(Cavity):
         try:
             return ts.replace(microsecond=round(ts.microsecond / 10000) * 10000)
         except ValueError:
-            # Rounding carried past the end of the second
-            return ts + timedelta(seconds=1)
+            # Rounding carried past the end of the second: .995 s and up
+            # rounds to the start of the next second, not next second + .99x
+            return ts.replace(microsecond=0) + timedelta(seconds=1)
 
     def run_through_faults(self) -> None:
         """Check all faults and update cavity status PVs (optimized batch version).
