@@ -2,6 +2,50 @@
 
 <!-- version list -->
 
+## v9.66.1 (2026-11-09)
+
+### Bug Fixes
+
+- **cavity-display**: Round to start of next second when 10ms rounding carries
+  ([#521](https://github.com/slaclab/sc_linac_physics/pull/521),
+  [`e986a64`](https://github.com/slaclab/sc_linac_physics/commit/e986a64fddb2ff2046f64cc64d7d3f0871b37fdf))
+
+### Continuous Integration
+
+- Run tests on stacked PRs whose stack doesn't start at main
+  ([#523](https://github.com/slaclab/sc_linac_physics/pull/523),
+  [`ae35067`](https://github.com/slaclab/sc_linac_physics/commit/ae3506752fc04359b5156010cd84fb4c9144b466))
+
+- **release**: Push releases with a deploy key, not a personal token
+  ([#524](https://github.com/slaclab/sc_linac_physics/pull/524),
+  [`30b5eb6`](https://github.com/slaclab/sc_linac_physics/commit/30b5eb6cef1ae39c00b53440062add8bc2a47ac6))
+
+### Documentation
+
+- Correct cavity counts and tidy the README
+  ([#527](https://github.com/slaclab/sc_linac_physics/pull/527),
+  [`ca55af7`](https://github.com/slaclab/sc_linac_physics/commit/ca55af7bc3b9b14d830e879325f5e11b5bcc83ce))
+
+- Drop the stale CI badge and correct cavity counts
+  ([#527](https://github.com/slaclab/sc_linac_physics/pull/527),
+  [`ca55af7`](https://github.com/slaclab/sc_linac_physics/commit/ca55af7bc3b9b14d830e879325f5e11b5bcc83ce))
+
+- **readme**: Drop the fork CI-comment claim
+  ([#525](https://github.com/slaclab/sc_linac_physics/pull/525),
+  [`08521f2`](https://github.com/slaclab/sc_linac_physics/commit/08521f2c89faa88d60ea71916197b93460fe3d51))
+
+- **readme**: Drop the stale CI badge ([#527](https://github.com/slaclab/sc_linac_physics/pull/527),
+  [`ca55af7`](https://github.com/slaclab/sc_linac_physics/commit/ca55af7bc3b9b14d830e879325f5e11b5bcc83ce))
+
+- **readme**: Open PRs from branches on slaclab, not forks
+  ([#525](https://github.com/slaclab/sc_linac_physics/pull/525),
+  [`08521f2`](https://github.com/slaclab/sc_linac_physics/commit/08521f2c89faa88d60ea71916197b93460fe3d51))
+
+- **rf-commissioning**: Record why the rack check refuses when auto setup doesn't
+  ([#526](https://github.com/slaclab/sc_linac_physics/pull/526),
+  [`0ab0f17`](https://github.com/slaclab/sc_linac_physics/commit/0ab0f1763e666205a5889c4c4f8a4f2cf067ae79))
+
+
 ## v9.66.0 (2026-11-06)
 
 ### Bug Fixes
