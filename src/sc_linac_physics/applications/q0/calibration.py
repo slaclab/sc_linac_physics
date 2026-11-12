@@ -117,6 +117,19 @@ class Calibration:
 
         return self._slope
 
+    def linregress_line(self) -> Tuple[float, float]:
+        """(slope, intercept) of the calibration line built from each run's
+        dll_dt_linregress instead of dll_dt.
+
+        Only used to show a second Q0 beside the official one; it does not
+        touch dLLdt_dheat or adjustment.
+        """
+        result = linregress(
+            [run.average_heat for run in self.heater_runs],
+            [run.dll_dt_linregress for run in self.heater_runs],
+        )
+        return result.slope, result.intercept
+
     def set_fit_window(
         self,
         run: q0_utils.HeaterRun,
