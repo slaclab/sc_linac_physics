@@ -520,7 +520,7 @@ class TestGetMachineCavity:
                 }
 
         monkeypatch.setattr(
-            ctrl_module, "build_commissioning_machine", _MachineStub
+            ctrl_module, "get_commissioning_machine", _MachineStub
         )
         ctrl = _make_controller()
         result = ctrl._get_machine_cavity(CavitySpec("01", 1))
@@ -539,7 +539,7 @@ class TestGetMachineCavity:
                 }
 
         monkeypatch.setattr(
-            ctrl_module, "build_commissioning_machine", _MachineStub
+            ctrl_module, "get_commissioning_machine", _MachineStub
         )
         ctrl = _make_controller()
         ctrl._get_machine_cavity(CavitySpec("01", 1))
@@ -560,7 +560,7 @@ class TestGetMachineCavity:
                 self.cryomodules = _CMStub()
 
         monkeypatch.setattr(
-            ctrl_module, "build_commissioning_machine", _MachineStub
+            ctrl_module, "get_commissioning_machine", _MachineStub
         )
         ctrl = _make_controller()
         ctrl._get_machine_cavity(CavitySpec("1", 1))
@@ -575,7 +575,7 @@ class TestGetMachineCavity:
                 }
 
         monkeypatch.setattr(
-            ctrl_module, "build_commissioning_machine", _MachineStub
+            ctrl_module, "get_commissioning_machine", _MachineStub
         )
         ctrl = _make_controller()
 
