@@ -46,5 +46,5 @@ def refusal_message(cavity) -> str:
     tab = getattr(holder, "tab_name", "another tab")
     return (
         f"{cavity} is in use in {tab}. Nothing was started. "
-        "Finish or abort it there, or select another cavity in that tab."
+        "Finish the phase there, or select another cavity in that tab."
     )

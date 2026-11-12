@@ -77,6 +77,14 @@ def test_hold_refused_while_another_hold_has_it(cavity, other_tab):
     assert "the Other tab" in refusal_message(cavity)
 
 
+def test_refusal_does_not_point_at_abort(cavity, other_tab):
+    # Frequency tuning holds the cavity between stages, when its Abort
+    # button is disabled, so the message must not send operators there.
+    message = refusal_message(cavity)
+    assert "abort" not in message.lower()
+    assert "Finish the phase there" in message
+
+
 def test_every_tab_gets_the_same_cavity_object():
     ft = FrequencyTuningController(Mock(), Mock())
     cc = CavityCharController(Mock(), Mock())
