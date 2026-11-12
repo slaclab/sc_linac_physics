@@ -95,7 +95,7 @@ Imports only go downward:
 - `session_manager.py` imports from `models/` and `services/`
 - `ui/` imports from `models/`, `phases/` and `session_manager.py`, but never from `services/`
 
-Nothing outside `ui/` imports from it.
+Nothing else in the package imports from `ui/`.
 
 ## Core components
 
@@ -130,7 +130,8 @@ Normalized orchestration layer for discrete phase attempts. Handles:
 - Writing artifacts and workflow events (`phase_started`, `phase_completed`, `phase_failed`)
 
 Right now no code in `ui/` or `phases/` starts or completes `COMPLETE`, so no run reaches
-`status = complete` through the app yet.
+`status = complete` through the app yet. The plan is to complete it after a successful
+1-hour run.
 
 ## Database model (important tables)
 
