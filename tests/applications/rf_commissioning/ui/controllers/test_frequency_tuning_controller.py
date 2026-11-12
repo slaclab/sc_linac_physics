@@ -1,5 +1,6 @@
 """Targeted tests for the Frequency Tuning controller."""
 
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -18,6 +19,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.cold_landing_dialog impor
     ColdLandingChoice,
     SOURCE_ENTERED,
     SOURCE_MEASURED,
+)
+from sc_linac_physics.applications.rf_commissioning.phases import (
+    cavity_setup,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseContext,
@@ -350,7 +354,7 @@ def test_get_machine_cavity_builds_machine(monkeypatch) -> None:
     monkeypatch.setattr(controller_module, "Machine", _MachineStub)
     controller = _make_controller()
 
-    cavity = controller._get_machine_cavity(2, 1)
+    cavity = controller._get_machine_cavity("02", 1)
 
     assert cavity == "cavity-object"
     assert isinstance(controller.machine, _MachineStub)
@@ -398,8 +402,21 @@ def test_resolve_target_success(monkeypatch) -> None:
         lambda *_: ("02", "1"),
     )
 
-    assert controller._resolve_target() == ("CM02_CAV1", 2, 1)
+    assert controller._resolve_target() == ("CM02_CAV1", "02", 1)
     assert any("Created" in m for m in view.logs)
+
+
+def test_resolve_target_keeps_harmonic_linearizer_names(monkeypatch) -> None:
+    session = Mock()
+    session.start_new_record.return_value = (_record(), 5, True)
+    controller = _make_controller(view=_ViewStub(), session=session)
+    monkeypatch.setattr(
+        controller_module,
+        "resolve_cavity_selection",
+        lambda *_: ("H1", "3"),
+    )
+
+    assert controller._resolve_target() == ("CMH1_CAV3", "H1", 3)
 
 
 def test_resolve_target_record_error_shows_error(monkeypatch) -> None:
@@ -459,7 +476,7 @@ def test_run_stage_1_marks_running_before_resolving_target() -> None:
 
     def _resolve():
         status_at_resolve_time["text"] = view.stage1_status_label.text
-        return ("CM02_CAV1", 2, 1)
+        return ("CM02_CAV1", "02", 1)
 
     controller._resolve_target = _resolve
     controller._start_stage = Mock()
@@ -484,7 +501,7 @@ def test_run_stage_1_reverts_status_when_target_unresolved() -> None:
 def test_run_stage_1_reverts_status_when_start_raises() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", "02", 1))
     controller._start_stage = Mock(side_effect=RuntimeError("boom"))
 
     controller.run_stage_1()
@@ -881,7 +898,7 @@ def test_stage_2_awaiting_confirm_is_not_reported_as_idle() -> None:
 def test_run_stage_1_success_calls_start_stage() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", "02", 1))
     controller._start_stage = Mock()
 
     controller.run_stage_1()
@@ -892,7 +909,7 @@ def test_run_stage_1_success_calls_start_stage() -> None:
 def test_run_stage_1_start_stage_exception_logged() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
-    controller._resolve_target = Mock(return_value=("CM02_CAV1", 2, 1))
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", "02", 1))
     controller._start_stage = Mock(side_effect=RuntimeError("boom"))
 
     controller.run_stage_1()
@@ -964,13 +981,6 @@ def test_run_stage_3_success_sets_hz_and_runs() -> None:
     assert controller._current_stage == 3
     assert controller.phase._hz_per_microstep == 2.0
     controller._run_phase_in_background.assert_called_once()
-
-
-def test_on_confirm_and_tune_aliases_stage_3() -> None:
-    controller = _make_controller()
-    controller.run_stage_3 = Mock()
-    controller.on_confirm_and_tune()
-    controller.run_stage_3.assert_called_once()
 
 
 def test_run_stage_4_no_operator_shows_error() -> None:
@@ -1178,6 +1188,7 @@ def test_reset_abort_and_speed() -> None:
 
     assert controller.context.abort_requested is False
     assert cavity.stepper_tuner.abort_flag is False
+    assert cavity.abort_flag is False
     assert controller.phase.limits.move_speed == 2.0
 
 
@@ -1472,26 +1483,6 @@ def test_update_partial_results_calls_view() -> None:
     view._update_local_results.assert_called_once()
     arg = view._update_local_results.call_args[0][0]
     assert isinstance(arg, FrequencyTuningData)
-
-
-def test_on_hz_chunk_update_emits_estimate() -> None:
-    controller = _make_controller()
-    emitted = []
-    controller.hz_per_step_updated.connect(lambda v: emitted.append(v))
-
-    controller._on_hz_chunk_update(10, 20.0)
-
-    assert emitted[-1] == 2.0
-
-
-def test_on_hz_chunk_update_ignores_nonpositive() -> None:
-    controller = _make_controller()
-    emitted = []
-    controller.hz_per_step_updated.connect(lambda v: emitted.append(v))
-
-    controller._on_hz_chunk_update(0, 0.0)
-
-    assert emitted == []
 
 
 # ------------------------------------------------------------------
@@ -1835,6 +1826,7 @@ def test_on_abort_requests_abort() -> None:
     assert controller.context.abort_requested is True
     assert view.abort_button.enabled is False
     assert cavity.stepper_tuner.abort_flag is True
+    assert cavity.abort_flag is True
 
 
 def test_on_abort_without_context_is_noop() -> None:
@@ -2348,19 +2340,6 @@ def test_restore_stage2_sets_hz() -> None:
     controller._enable_stage_btn.assert_called_once_with(3)
 
 
-def test_restore_stage2_seeds_hz_estimator_accumulators() -> None:
-    view = _ViewStub()
-    controller = _make_controller(view=view)
-    controller.phase = Mock()
-    controller.phase.limits.probe_steps = 100
-    controller._enable_stage_btn = Mock()
-
-    controller._restore_stage2({"hz_per_microstep": 2.5}, has_tune=False)
-
-    assert controller._hz_est_total_steps == 100
-    assert controller._hz_est_total_hz == 2.5 * 100
-
-
 def test_restore_stage2_does_not_crash_when_phase_is_none() -> None:
     view = _ViewStub()
     controller = _make_controller(view=view)
@@ -2369,10 +2348,6 @@ def test_restore_stage2_does_not_crash_when_phase_is_none() -> None:
 
     # Should not raise even when phase is None and signed_hz is nonzero
     controller._restore_stage2({"hz_per_microstep": 2.5}, has_tune=False)
-
-    # Accumulators should remain at their default (0.0) since phase is None
-    assert controller._hz_est_total_steps == 0.0
-    assert controller._hz_est_total_hz == 0.0
 
 
 def test_restore_stage3_sets_net_steps() -> None:
@@ -2561,3 +2536,136 @@ def test_run_stage_3_with_probe_proceeds() -> None:
     controller.run_stage_3()
 
     controller._run_phase_in_background.assert_called_once()
+
+
+# ------------------------------------------------------------------
+# Stage 1: keep or rerun the last SSA calibration
+# ------------------------------------------------------------------
+
+
+def _last_cal(good=True, hours_old=0.2):
+    return cavity_setup.LastSetupResult(
+        name="SSA calibration",
+        timestamp=datetime.now() - timedelta(hours=hours_old),
+        good=good,
+    )
+
+
+def _stage1_controller(monkeypatch, last=None, read_error=None):
+    """A controller whose stage 1 reads `last` (or raises read_error)."""
+    view = _ViewStub()
+    view.ask_rerun_ssa_calibration = Mock(return_value="rerun")
+    controller = _make_controller(view=view)
+    controller._resolve_target = Mock(return_value=("CM02_CAV1", "02", 1))
+    controller._get_machine_cavity = Mock()
+    controller._start_stage = Mock()
+
+    def read(_cavity):
+        if read_error is not None:
+            raise read_error
+        return last
+
+    monkeypatch.setattr(cavity_setup, "last_ssa_calibration", read)
+    return controller, view
+
+
+def _stage1_params(controller):
+    return controller._start_stage.call_args.kwargs["extra_parameters"]
+
+
+def test_recent_good_calibration_is_kept_without_asking(monkeypatch) -> None:
+    last = _last_cal()
+    controller, view = _stage1_controller(monkeypatch, last)
+
+    controller.run_stage_1()
+
+    view.ask_rerun_ssa_calibration.assert_not_called()
+    assert _stage1_params(controller) == {
+        "kept_ssa_calibration": last,
+        "ssa_calibration_skipped_by": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "last", [_last_cal(hours_old=2), _last_cal(good=False)]
+)
+def test_old_or_bad_calibration_asks_and_rerun_calibrates(
+    monkeypatch, last
+) -> None:
+    controller, view = _stage1_controller(monkeypatch, last)
+
+    controller.run_stage_1()
+
+    view.ask_rerun_ssa_calibration.assert_called_once()
+    assert _stage1_params(controller)["kept_ssa_calibration"] is None
+
+
+def test_skip_keeps_the_old_calibration_and_records_the_operator(
+    monkeypatch,
+) -> None:
+    last = _last_cal(hours_old=5)
+    controller, view = _stage1_controller(monkeypatch, last)
+    view.ask_rerun_ssa_calibration.return_value = "skip"
+
+    controller.run_stage_1()
+
+    params = _stage1_params(controller)
+    assert params["kept_ssa_calibration"] is last
+    assert params["ssa_calibration_skipped_by"] == "Test Operator"
+
+
+def test_cancel_does_not_start_stage_1(monkeypatch) -> None:
+    controller, view = _stage1_controller(monkeypatch, _last_cal(hours_old=5))
+    view.ask_rerun_ssa_calibration.return_value = "cancel"
+
+    controller.run_stage_1()
+
+    controller._start_stage.assert_not_called()
+    assert "Not started" in view.stage1_status_label.text
+
+
+def test_unreadable_last_calibration_calibrates(monkeypatch) -> None:
+    controller, view = _stage1_controller(
+        monkeypatch, read_error=RuntimeError("CALTS timeout")
+    )
+
+    controller.run_stage_1()
+
+    view.ask_rerun_ssa_calibration.assert_not_called()
+    assert _stage1_params(controller)["kept_ssa_calibration"] is None
+
+
+def test_stage_1_saves_the_record_when_df_cold_is_unchanged() -> None:
+    """The SSA result from stage 1 must reach the database."""
+    view = _ViewStub()
+    session = Mock()
+    record = _record()
+    record.frequency_tuning = FrequencyTuningData(df_cold_hz=9196.0)
+    session.get_active_record.return_value = record
+    session.save_active_record.return_value = True
+    controller = _make_controller(view=view, session=session)
+    controller._save_stage_to_history = Mock(return_value=True)
+    controller._update_partial_results = Mock()
+    controller.confirm_and_save = Mock()
+    controller._df_cold_hz = 9196.0
+
+    controller._on_stage1_done()
+
+    session.save_active_record.assert_called_once()
+
+
+def test_stage_1_fails_when_the_record_save_fails() -> None:
+    view = _ViewStub()
+    view.stage2_run_btn.setEnabled(False)
+    session = Mock()
+    session.get_active_record.return_value = _record()
+    session.save_active_record.side_effect = RuntimeError("version conflict")
+    controller = _make_controller(view=view, session=session)
+    controller._save_stage_to_history = Mock(return_value=True)
+    controller._df_cold_hz = 9196.0
+
+    controller._on_stage1_done()
+
+    assert "Failed" in view.stage1_status_label.text
+    assert view.stage2_run_btn.enabled is False
+    assert any("version conflict" in m for m in view.logs)

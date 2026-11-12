@@ -1,5 +1,6 @@
 """Base display interface for commissioning phases."""
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMessageBox
 from pydm import Display
 
@@ -8,6 +9,10 @@ from sc_linac_physics.applications.rf_commissioning.models.data_models import (
 )
 from sc_linac_physics.applications.rf_commissioning.session_manager import (
     CommissioningSession,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    BG_DEEP,
+    TEXT_PRIMARY,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.step_labels import (
     step_label,
@@ -22,6 +27,36 @@ class PhaseDisplayBase(Display):
     ):
         super().__init__(parent)
         self.session = session
+        self._apply_page_style()
+
+    def _apply_page_style(self) -> None:
+        """Paint the page dark with light text, whatever the desktop theme.
+
+        The builders style their panels for a dark page. Left to the platform
+        palette, a light desktop gives a white page with black labels.
+
+        A stylesheet, not setPalette(): inside the container the tab widget has
+        a stylesheet, and under one Qt drops palettes inherited from a parent.
+        The QDialog rule hands dialogs and message boxes parented to the page
+        back the desktop's text colour, since they keep the desktop's window
+        colour. A widget's own stylesheet still wins over both rules.
+        """
+        # CHECK: what palette do the production Linux consoles use? If it is
+        # already dark, this changes little there beyond the exact shades.
+        self.setProperty("phasePage", True)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet(f"""
+            [phasePage="true"] {{
+                background-color: {BG_DEEP};
+            }}
+            QLabel, QGroupBox, QCheckBox, QRadioButton {{
+                color: {TEXT_PRIMARY};
+            }}
+            QDialog QLabel, QDialog QGroupBox, QDialog QCheckBox,
+            QDialog QRadioButton {{
+                color: palette(window-text);
+            }}
+        """)
 
     def set_session(self, session: CommissioningSession) -> None:
         """Set shared session after construction."""

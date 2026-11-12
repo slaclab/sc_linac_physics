@@ -16,6 +16,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_char_controller import (  # noqa: E501
     CavityCharController,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.ssa_calibration_dialog import (  # noqa: E501
+    ask_rerun_ssa_calibration,
+)
 
 from .base_placeholder import BasePlaceholderDisplay
 
@@ -205,31 +208,8 @@ class CavityCharDisplay(BasePlaceholderDisplay):
         )
 
     def ask_rerun_ssa_calibration(self, last: str) -> str:
-        """Ask whether to recalibrate an SSA: last calibration old or bad.
-
-        Returns "rerun", "skip" or "cancel". Rerun is the default button.
-        The controller records the operator's name when they choose Skip.
-        """
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Warning)
-        box.setWindowTitle("SSA calibration is old")
-        box.setText(
-            f"The last {last}.\n\n"
-            "Rerun calibrates the SSA and pushes the new slope before "
-            "characterizing. Skip keeps the slope the SSA has now, and "
-            "records your name on the result."
-        )
-        rerun = box.addButton("Rerun calibration", QMessageBox.AcceptRole)
-        skip = box.addButton("Skip", QMessageBox.DestructiveRole)
-        box.addButton(QMessageBox.Cancel)
-        box.setDefaultButton(rerun)
-        box.exec_()
-        clicked = box.clickedButton()
-        if clicked is rerun:
-            return "rerun"
-        if clicked is skip:
-            return "skip"
-        return "cancel"
+        """Ask whether to recalibrate an SSA: last calibration old or bad."""
+        return ask_rerun_ssa_calibration(self, last, "characterizing")
 
     @pyqtSlot()
     def on_push_results(self):

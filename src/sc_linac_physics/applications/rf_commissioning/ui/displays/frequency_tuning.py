@@ -23,6 +23,10 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
     TEXT_SECONDARY,
 )
 
+from sc_linac_physics.applications.rf_commissioning.ui.ssa_calibration_dialog import (  # noqa: E501
+    ask_rerun_ssa_calibration,
+)
+
 from .base_placeholder import BasePlaceholderDisplay
 
 
@@ -271,10 +275,6 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
         if pw is not None:
             pw.autoRange()
 
-    def clear_probe_fit(self) -> None:
-        if self._probe_fit_curve is not None:
-            self._probe_fit_curve.setData([], [])
-
     @pyqtSlot(float, float)
     def _on_tuning_data_point(self, signed_steps: float, detune: float) -> None:
         """Receive a (signed_steps, detune) point emitted from the phase callback."""
@@ -408,6 +408,10 @@ class FrequencyTuningDisplay(BasePlaceholderDisplay):
             and self._controller._current_stage >= 3
         ):
             self.set_projection(0.0, abs(signed_hz))
+
+    def ask_rerun_ssa_calibration(self, last: str) -> str:
+        """Ask whether to recalibrate an SSA: last calibration old or bad."""
+        return ask_rerun_ssa_calibration(self, last, "tuning")
 
     def get_current_hz_per_step(self) -> float | None:
         """Return the current signed Hz/step value from the editable spinbox."""

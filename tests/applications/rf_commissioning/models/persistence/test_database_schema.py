@@ -5,6 +5,9 @@ from __future__ import annotations
 import sqlite3
 from contextlib import closing
 
+from sc_linac_physics.applications.rf_commissioning.models.persistence.database import (
+    CommissioningDatabase,
+)
 from sc_linac_physics.applications.rf_commissioning.models.persistence.database_schema import (
     initialize_database_schema,
 )
@@ -142,3 +145,47 @@ def test_initialize_database_schema_sets_expected_on_delete_actions():
         }
         assert workflow_event_fks["run_id"] == "CASCADE"
         assert workflow_event_fks["phase_instance_id"] == "SET NULL"
+
+
+def _columns(cursor, table):
+    cursor.execute(f"PRAGMA table_info({table})")
+    return {row[1] for row in cursor.fetchall()}
+
+
+def test_an_older_file_gains_registry_phase_columns_and_keeps_its_rows(
+    tmp_path,
+):
+    """A phase added to the registry must work on a file made before it."""
+    path = tmp_path / "commissioning.db"
+    phases = list(CommissioningDatabase.PHASE_DATA_MODELS)
+    cm_phases = list(CommissioningDatabase.CRYOMODULE_PHASE_DATA_MODELS)
+    newest, cm_newest = phases[-1], cm_phases[-1]
+
+    old = sqlite3.connect(path)
+    initialize_database_schema(
+        old.cursor(),
+        phase_column_names=phases[:-1],
+        cryomodule_phase_column_names=cm_phases[:-1],
+    )
+    old.execute(
+        "INSERT INTO commissioning_records (linac, cryomodule, cavity_number,"
+        " start_time, created_at, updated_at) VALUES ('1', '02', '1', "
+        "'2026-01-01T00:00:00', 'now', 'now')"
+    )
+    old.commit()
+    assert newest not in _columns(old.cursor(), "commissioning_records")
+    old.close()
+
+    db = CommissioningDatabase(str(path))
+    db.initialize()
+    db.initialize()  # running it again adds nothing and doesn't fail
+
+    with db.connection() as conn:
+        cursor = conn.cursor()
+        assert newest in _columns(cursor, "commissioning_records")
+        assert cm_newest in _columns(cursor, "cryomodule_records")
+
+    record, version = db.get_record_with_version(1)
+    assert getattr(record, newest) is None
+    db.save_record(record, record_id=1, expected_version=version)
+    assert db.get_record(1).cryomodule == "02"

@@ -32,6 +32,7 @@ from sc_linac_physics.applications.rf_commissioning.session_manager import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
     apply_pv_mapping,
+    cryomodule_key,
     resolve_cavity_selection,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
@@ -247,8 +248,7 @@ class CavityCharController(QObject):
         """Machine.cryomodules is keyed "01".."35", "H1", "H2"."""
         if not self.machine:
             self.machine = Machine()
-        key = f"{int(cm):02d}" if str(cm).isdigit() else str(cm)
-        return self.machine.cryomodules[key].cavities[cav]
+        return self.machine.cryomodules[cryomodule_key(cm)].cavities[cav]
 
     # ------------------------------------------------------------------
     # Abort and pause
@@ -426,11 +426,9 @@ class CavityCharController(QObject):
     def _decide_ssa_calibration(self, last, error: str, operator: str):
         """Return (kept, skipped_by), or None if the operator cancelled.
 
-        A good calibration under RECENT_RESULT_SECONDS (1 h) is kept without
-        asking. An older or bad one asks the operator: Rerun calibrates as
-        before; Skip keeps it and records their name. If CALTS or CALSTAT
-        could not be read, it calibrates, since nothing says the last one is
-        usable.
+        The rule is cavity_setup.decide_ssa_calibration: keep a good one
+        under an hour old, ask about an older or bad one, calibrate if CALTS
+        or CALSTAT could not be read.
         """
         if last is None:
             self._report(
@@ -438,15 +436,11 @@ class CavityCharController(QObject):
                 "calibrating",
                 "Calibrating SSA",
             )
-            return (None, None)
-        if last.is_recent():
-            return (last, None)
-        choice = self.view.ask_rerun_ssa_calibration(last.describe())
-        if choice == "skip":
-            return (last, operator)
-        if choice == "rerun":
-            return (None, None)
-        return None
+        return cavity_setup.decide_ssa_calibration(
+            last,
+            operator,
+            lambda text: self.view.ask_rerun_ssa_calibration(text),
+        )
 
     def _end_run(self) -> None:
         self._running = False

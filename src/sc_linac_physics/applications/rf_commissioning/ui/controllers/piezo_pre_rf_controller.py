@@ -21,6 +21,8 @@ from sc_linac_physics.applications.rf_commissioning.phases.piezo_pre_rf import (
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (
     apply_pv_mapping,
     build_pv_mapping,
+    cavity_number_from_short_name,
+    cryomodule_key,
     format_pv_update_message,
     get_piezo_from_selection,
     resolve_cavity_selection,
@@ -74,8 +76,8 @@ class PiezoPreRFController(QObject):
 
     def _get_piezo_from_selection(
         self, cryomodule: str, cavity_number: str
-    ) -> tuple[CommissioningPiezo, int, int]:
-        """Return piezo object and parsed CM/CAV numbers from selection."""
+    ) -> tuple[CommissioningPiezo, str, int]:
+        """Return piezo object, cryomodule key and cavity number."""
         piezo, cm, cav, machine = get_piezo_from_selection(
             self.machine,
             cryomodule,
@@ -161,13 +163,10 @@ class PiezoPreRFController(QObject):
 
     def _parse_cavity_from_record(
         self, cavity_name: str, cryomodule: str
-    ) -> tuple[int, int]:
-        """Parse cavity label and cryomodule into integer CM/CAV values."""
-        parts = cavity_name.split("_")
-        cav_part = parts[2] if len(parts) >= 3 else "CAV1"
-        cav = int(cav_part.replace("CAV", ""))
-        cm = int(cryomodule)
-        return cm, cav
+    ) -> tuple[str, int]:
+        """Return the cryomodule key and cavity number for a record."""
+        cav = cavity_number_from_short_name(cavity_name)
+        return cryomodule_key(cryomodule), cav
 
     def _prepare_phase_context(self, cavity, operator: str) -> bool:
         """Build phase context and validate run prerequisites."""
@@ -245,11 +244,11 @@ class PiezoPreRFController(QObject):
 
         return cavity_name, cm, cav
 
-    def _get_machine_cavity(self, cm: int, cav: int):
-        """Resolve and return machine cavity object."""
+    def _get_machine_cavity(self, cm: str, cav: int):
+        """cm is a Machine.cryomodules key: "01".."35", "H1" or "H2"."""
         if not self.machine:
             self.machine = Machine(piezo_class=CommissioningPiezo)
-        return self.machine.cryomodules[f"{cm:02d}"].cavities[cav]
+        return self.machine.cryomodules[cm].cavities[cav]
 
     def on_run_automated_test(self) -> None:
         """Handle Run Automated Test button click.
@@ -278,7 +277,7 @@ class PiezoPreRFController(QObject):
         self.view.clear_results()
 
         try:
-            self.update_pv_addresses(f"{cm:02d}", str(cav))
+            self.update_pv_addresses(cm, str(cav))
             cavity = self._get_machine_cavity(cm, cav)
 
             if not self._prepare_phase_context(cavity, operator):

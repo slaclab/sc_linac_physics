@@ -3,6 +3,7 @@
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
     CommissioningRecord,
+    PhaseStatus,
 )
 from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseBase,
@@ -63,10 +64,11 @@ def test_retry_result_honors_retry_delay_seconds():
     assert sleep_calls == [1.25]
 
 
-def test_exception_retry_uses_default_backoff_delay():
+def test_exception_fails_without_retry():
     sleep_calls = []
+    context = _new_context()
     phase = _RetryBehaviorPhase(
-        context=_new_context(),
+        context=context,
         outcomes=[
             RuntimeError("transient failure"),
             PhaseStepResult(result=PhaseResult.SUCCESS, message="done"),
@@ -74,5 +76,45 @@ def test_exception_retry_uses_default_backoff_delay():
         sleep_calls=sleep_calls,
     )
 
+    assert phase.run() is False
+    assert sleep_calls == []
+    failed = [
+        c for c in context.record.phase_history if c.step_name == "single_step"
+    ]
+    assert len(failed) == 1
+    assert failed[0].error_message == "transient failure"
+    assert context.record.get_phase_status(phase.phase_type) is (
+        PhaseStatus.FAILED
+    )
+
+
+def test_progress_callback_still_called():
+    progress = []
+    context = _new_context()
+    context.progress_callback = lambda step, pct: progress.append((step, pct))
+    phase = _RetryBehaviorPhase(
+        context=context,
+        outcomes=[PhaseStepResult(result=PhaseResult.SUCCESS, message="ok")],
+        sleep_calls=[],
+    )
+
     assert phase.run() is True
-    assert sleep_calls == [5.0]
+    assert progress == [("single_step", 0)]
+    assert context.record.get_phase_status(phase.phase_type) is (
+        PhaseStatus.COMPLETE
+    )
+
+
+def test_get_phase_steps_error_fails_phase():
+    context = _new_context()
+    phase = _RetryBehaviorPhase(context=context, outcomes=[], sleep_calls=[])
+
+    def broken():
+        raise RuntimeError("bad step list")
+
+    phase.get_phase_steps = broken
+
+    assert phase.run() is False
+    assert context.record.get_phase_status(phase.phase_type) is (
+        PhaseStatus.FAILED
+    )
