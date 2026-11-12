@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v9.67.0 (2026-11-12)
+
+### Bug Fixes
+
+- **rf_commissioning**: Claim before Stage 1 loads its record; clear stale aborts
+  ([#506](https://github.com/slaclab/sc_linac_physics/pull/506),
+  [`18378af`](https://github.com/slaclab/sc_linac_physics/commit/18378af246bde7e9f8f0e84889ccf1cf2e3aecec))
+
+- **rf_commissioning**: Refusal message no longer points at a disabled Abort
+  ([#506](https://github.com/slaclab/sc_linac_physics/pull/506),
+  [`18378af`](https://github.com/slaclab/sc_linac_physics/commit/18378af246bde7e9f8f0e84889ccf1cf2e3aecec))
+
+### Features
+
+- **rf_commissioning**: Hold the cavity across stages and segments
+  ([#506](https://github.com/slaclab/sc_linac_physics/pull/506),
+  [`18378af`](https://github.com/slaclab/sc_linac_physics/commit/18378af246bde7e9f8f0e84889ccf1cf2e3aecec))
+
+- **rf_commissioning**: One shared Machine, and one tab per cavity at a time
+  ([#506](https://github.com/slaclab/sc_linac_physics/pull/506),
+  [`18378af`](https://github.com/slaclab/sc_linac_physics/commit/18378af246bde7e9f8f0e84889ccf1cf2e3aecec))
+
+
 ## v9.66.2 (2026-11-12)
 
 ### Refactoring
