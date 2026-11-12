@@ -25,6 +25,7 @@ dependencies = [
     "pyyaml",
     "pydantic",
     "h5py",
+    "pyarrow>=14.0.1",  # CVE-2023-47248: older versions run code from a crafted file
     "requests",
     "scipy",
     "scikit-learn",
