@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v9.67.1 (2026-11-12)
+
+### Bug Fixes
+
+- **rf-commissioning**: End Cavity Char at 100% and name the cavity in Re-push Slope
+  ([#461](https://github.com/slaclab/sc_linac_physics/pull/461),
+  [`2a3c51f`](https://github.com/slaclab/sc_linac_physics/commit/2a3c51f103009158c32c7eafbe8d4600ea445968))
+
+- **rf-commissioning**: End Cavity Characterization at 100% after a push
+  ([#461](https://github.com/slaclab/sc_linac_physics/pull/461),
+  [`2a3c51f`](https://github.com/slaclab/sc_linac_physics/commit/2a3c51f103009158c32c7eafbe8d4600ea445968))
+
+- **rf-commissioning**: Show which cavity Re-push Slope will push to
+  ([#461](https://github.com/slaclab/sc_linac_physics/pull/461),
+  [`2a3c51f`](https://github.com/slaclab/sc_linac_physics/commit/2a3c51f103009158c32c7eafbe8d4600ea445968))
+
+### Documentation
+
+- **rf-commissioning**: Fix three claims that don't match the code
+  ([#528](https://github.com/slaclab/sc_linac_physics/pull/528),
+  [`7604e33`](https://github.com/slaclab/sc_linac_physics/commit/7604e334dee0f81cded51e467e15e1dfb418fc5a))
+
+### Refactoring
+
+- **rf-commissioning**: Use one string for the phase-complete status
+  ([#461](https://github.com/slaclab/sc_linac_physics/pull/461),
+  [`2a3c51f`](https://github.com/slaclab/sc_linac_physics/commit/2a3c51f103009158c32c7eafbe8d4600ea445968))
+
+
 ## v9.67.0 (2026-11-12)
 
 ### Bug Fixes
