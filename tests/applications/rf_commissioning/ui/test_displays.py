@@ -440,6 +440,27 @@ class TestBasePlaceholderDisplay:
 
 
 # =============================================================================
+# SSACharDisplay
+# =============================================================================
+
+
+class TestSSACharDisplay:
+    def test_repush_confirm_names_the_cavity(self, ssa_display, monkeypatch):
+        """Re-push writes to the machine, so the confirm names the cavity."""
+        cavity = MagicMock()
+        cavity.__str__.return_value = "L2B CM10 Cavity 4"
+        ssa_display.controller._repushable_cavity = cavity
+        shown = []
+        monkeypatch.setattr(
+            ssa_display, "_ask_confirm", lambda text: shown.append(text)
+        )
+
+        ssa_display.on_push_slope()
+
+        assert "Push it again to L2B CM10 Cavity 4" in shown[0]
+
+
+# =============================================================================
 # Display registry
 # =============================================================================
 
