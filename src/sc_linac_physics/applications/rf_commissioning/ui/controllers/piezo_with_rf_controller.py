@@ -32,9 +32,6 @@ import threading
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from sc_linac_physics.applications.rf_commissioning.models.commissioning_piezo import (  # noqa: E501
-    CommissioningPiezo,
-)
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
 )
@@ -57,6 +54,9 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.runner_bridge import (  # noqa: E501
     RunnerBridge,
+)
+from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine import (
+    build_commissioning_machine,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -207,7 +207,7 @@ class PiezoWithRFController(QObject):
     def _get_machine_cavity(self, cm: str, cav: int):
         """The phase needs CommissioningPiezo for the with-RF PVs."""
         if not self.machine:
-            self.machine = Machine(piezo_class=CommissioningPiezo)
+            self.machine = build_commissioning_machine()
         key = f"{int(cm):02d}" if str(cm).isdigit() else str(cm)
         return self.machine.cryomodules[key].cavities[cav]
 
