@@ -74,3 +74,4 @@ nav:
   - Explainers:
       - How auto-tune works: explainers/auto_tune.md
       - How the Q0 app works: explainers/q0.md
+      - How the field emission display works: explainers/field_emission.md
