@@ -414,6 +414,9 @@ class Q0Cryomodule(Cryomodule):
         desired_ll: float = q0_utils.MAX_DS_LL,
         ll_drop: float = q0_utils.TARGET_LL_DIFF,
     ):
+        # save_results refuses to run while a fit window is set. Check now,
+        # before any PV write, rather than after an hour of data taking.
+        self.q0_measurement.require_no_fit_windows()
         self.setup_cryo_for_measurement(desired_ll, turn_cavities_off=False)
 
         for cav_num, des_amp in desiredAmplitudes.items():

@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import List, Dict, TYPE_CHECKING
+from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
 
 import numpy as np
 from scipy.stats import linregress
@@ -63,6 +63,7 @@ class Calibration:
                 print("Loaded new reference parameters")
 
     def save_data(self):
+        q0_utils.require_no_fit_windows(self.heater_runs)
         new_data = {}
         for idx, heater_run in enumerate(self.heater_runs):
             key = heater_run.start_time
@@ -82,6 +83,7 @@ class Calibration:
         )
 
     def save_results(self):
+        q0_utils.require_no_fit_windows(self.heater_runs)
         newData = {
             q0_utils.JSON_START_KEY: self.time_stamp,
             "Calculated Heat vs dll/dt Slope": self.dLLdt_dheat,
@@ -115,5 +117,24 @@ class Calibration:
 
         return self._slope
 
+    def set_fit_window(
+        self,
+        run: q0_utils.HeaterRun,
+        window: Optional[Tuple[float, float]],
+    ) -> None:
+        """Fit run's dLL/dt to the samples in window only (None for all).
+
+        Clears the cached slope and adjustment, and the loaded Q0
+        measurement's results, since those are computed from this curve.
+        """
+        if not any(run is heater_run for heater_run in self.heater_runs):
+            raise ValueError(f"{run} is not one of this calibration's runs")
+        run.fit_window = window
+        self._slope = None
+        if self.cryomodule.q0_measurement is not None:
+            self.cryomodule.q0_measurement.reset_calculated_properties()
+
     def get_heat(self, dll_dt: float):
-        return (dll_dt - self.adjustment) / self.dLLdt_dheat
+        # dLLdt_dheat sets adjustment, so read the slope first.
+        slope = self.dLLdt_dheat
+        return (dll_dt - self.adjustment) / slope

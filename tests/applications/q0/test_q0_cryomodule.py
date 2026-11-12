@@ -604,6 +604,26 @@ class TestQ0CryomoduleMeasurementFast:
             mock_q0_measurement.save_data.assert_called_once()
             mock_q0_measurement.save_results.assert_called_once()
 
+    def test_take_new_q0_measurement_refuses_fit_window_before_pv_writes(
+        self, fast_q0_cryo
+    ):
+        # save_results would refuse after the run and skip restore_cryo, so
+        # takeNewQ0Measurement checks before setup_cryo_for_measurement.
+        from sc_linac_physics.applications.q0 import q0_utils
+        from sc_linac_physics.applications.q0.q0_cryomodule import Q0Cryomodule
+
+        fast_q0_cryo.q0_measurement = Mock()
+        fast_q0_cryo.q0_measurement.require_no_fit_windows.side_effect = (
+            q0_utils.DataError("Clear the fit windows before saving")
+        )
+        fast_q0_cryo.setup_cryo_for_measurement = Mock()
+
+        with pytest.raises(q0_utils.DataError):
+            Q0Cryomodule.takeNewQ0Measurement(
+                fast_q0_cryo, desiredAmplitudes={1: 15.0}
+            )
+        fast_q0_cryo.setup_cryo_for_measurement.assert_not_called()
+
     def test_take_new_q0_measurement_cavity_amplitude_waiting(
         self, fast_q0_cryo, valve_params
     ):
