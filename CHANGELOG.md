@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.66.2 (2026-11-12)
+
+### Refactoring
+
+- **rf_commissioning**: Add CommissioningCavity so phases stop calling _auto_tune
+  ([#505](https://github.com/slaclab/sc_linac_physics/pull/505),
+  [`7d7747e`](https://github.com/slaclab/sc_linac_physics/commit/7d7747e93d5d36ff7d63a464995383c135d06b08))
+
+
 ## v9.66.1 (2026-11-09)
 
 ### Bug Fixes
