@@ -788,10 +788,8 @@ class CavityCharController(QObject):
         # stops at 88% and the status still says "ready to finalize".
         if hasattr(self.view, "local_progress_bar"):
             self.view.local_progress_bar.setValue(100)
-        self._report(
-            "Pushed to the cavity; phase complete",
-            "Pushed to the cavity; phase complete",
-        )
+        msg = "Pushed to the cavity; phase complete"
+        self._report(msg, msg)
         self.phase_completed.emit(self.session.get_active_record())
 
     # ------------------------------------------------------------------
