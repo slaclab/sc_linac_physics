@@ -129,3 +129,15 @@ def test_curves_hold_each_sample_until_the_next(plot):
         (5000.0, 16.6),
         (5000.0, 16.6),
     ]
+
+
+def test_without_axis_titles_ticks_take_the_curve_color(qtbot):
+    widget = ArchiverPlot(
+        CurveSet(curves=[Curve("fake://t", "t", axis="T", color=(10, 20, 30))]),
+        axis_titles=False,
+    )
+    qtbot.addWidget(widget)
+    axis = widget.plot.plotItem.axes["T"]["item"]
+    assert not axis.label.isVisible()
+    assert axis.textPen().color().getRgb()[:3] == (10, 20, 30)
+    widget.clear()

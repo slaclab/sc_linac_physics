@@ -21,10 +21,63 @@ from sc_linac_physics.displays.plot.archiver_plot import ArchiverPlot
 from sc_linac_physics.displays.plot.curve_set import Curve, CurveSet
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
+# Cryomodule attributes plotted for every cryomodule, and their fixed Y ranges.
+SELECTED_PV_ATTRIBUTES = [
+    "jt_valve_readback_pv",
+    "ds_level_pv",
+    "us_level_pv",
+    "aact_mean_sum_pv",
+]
+DEFAULT_AXIS_RANGES = {
+    "aact_mean_sum_pv": (0, 144),
+    "ds_level_pv": (80, 100),
+    "us_level_pv": (60, 80),
+    "jt_valve_readback_pv": (0, 80),
+}
 
-def _axis_label(pv_attr):
+
+def axis_label(pv_attr):
     """'ds_level_pv' -> 'Ds Level', used as both curve label and axis name."""
     return pv_attr.replace("_pv", "").replace("_", " ").title()
+
+
+def grid_dimensions(num_items):
+    """(columns, rows) for a square or near-square grid."""
+    if num_items == 0:
+        return (0, 0)
+    cols = math.ceil(math.sqrt(num_items))
+    return (cols, math.ceil(num_items / cols))
+
+
+def cryomodule_curve_set(cryomodule, y_ranges):
+    """`SELECTED_PV_ATTRIBUTES` of one cryomodule, one axis each.
+
+    `y_ranges` maps attribute name to a fixed (min, max), or None to
+    auto-scale. Attributes missing from it auto-scale too.
+    """
+    curves = []
+    fixed = {}
+    for pv_attr in SELECTED_PV_ATTRIBUTES:
+        pv_name = getattr(cryomodule, pv_attr, None)
+        if not pv_name:
+            continue
+        label = axis_label(pv_attr)
+        curves.append(Curve(pv=pv_name, label=label, axis=label))
+        if y_ranges.get(pv_attr) is not None:
+            fixed[label] = y_ranges[pv_attr]
+    return CurveSet(
+        title=f"CM {cryomodule.name}", curves=curves, y_ranges=fixed
+    )
+
+
+def cryo_signals_curve_sets(linac, y_ranges=None):
+    """One curve set per cryomodule in `linac`, sorted by name."""
+    if y_ranges is None:
+        y_ranges = DEFAULT_AXIS_RANGES
+    return [
+        cryomodule_curve_set(linac.cryomodules[name], y_ranges)
+        for name in sorted(linac.cryomodules)
+    ]
 
 
 class GlobalAxisRangeDialog(QDialog):
@@ -154,21 +207,8 @@ class GlobalAxisRangeDialog(QDialog):
 class LinacGroupedCryomodulePlotDisplay(Display):
     """Display with linac selector showing cryomodules in a dynamic grid."""
 
-    # Define which PV attributes to plot from the Cryomodule class
-    SELECTED_PV_ATTRIBUTES = [
-        "jt_valve_readback_pv",
-        "ds_level_pv",
-        "us_level_pv",
-        "aact_mean_sum_pv",
-    ]
-
-    # Default Y-axis ranges for each PV type
-    DEFAULT_AXIS_RANGES = {
-        "aact_mean_sum_pv": (0, 144),
-        "ds_level_pv": (80, 100),
-        "us_level_pv": (60, 80),
-        "jt_valve_readback_pv": (0, 80),
-    }
+    SELECTED_PV_ATTRIBUTES = SELECTED_PV_ATTRIBUTES
+    DEFAULT_AXIS_RANGES = DEFAULT_AXIS_RANGES
 
     def __init__(self, parent=None, args=None, macros=None):
         super().__init__(parent=parent, args=args, macros=macros)
@@ -277,7 +317,7 @@ class LinacGroupedCryomodulePlotDisplay(Display):
         """Apply global axis settings to a specific plot."""
         for pv_attr, setting in self.global_axis_settings.items():
             plot_display.set_y_range(
-                _axis_label(pv_attr), self._y_range(setting)
+                axis_label(pv_attr), self._y_range(setting)
             )
 
     @staticmethod
@@ -288,22 +328,7 @@ class LinacGroupedCryomodulePlotDisplay(Display):
         return setting["range"]
 
     def _calculate_grid_dimensions(self, num_items):
-        """
-        Calculate grid dimensions aiming for a square or near-square layout.
-
-        Args:
-            num_items: Number of items to arrange in grid
-
-        Returns:
-            tuple: (num_columns, num_rows)
-        """
-        if num_items == 0:
-            return (0, 0)
-
-        cols = math.ceil(math.sqrt(num_items))
-        rows = math.ceil(num_items / cols)
-
-        return (cols, rows)
+        return grid_dimensions(num_items)
 
     def on_linac_changed(self, index):
         """Handle linac selection change."""
@@ -387,20 +412,12 @@ class LinacGroupedCryomodulePlotDisplay(Display):
 
     def _curve_set(self, cryomodule):
         """The `SELECTED_PV_ATTRIBUTES` of one cryomodule, one axis each."""
-        curves = []
-        y_ranges = {}
-        for pv_attr in self.SELECTED_PV_ATTRIBUTES:
-            pv_name = getattr(cryomodule, pv_attr, None)
-            if not pv_name:
-                continue
-            label = _axis_label(pv_attr)
-            curves.append(Curve(pv=pv_name, label=label, axis=label))
-            setting = self.global_axis_settings.get(pv_attr)
-            y_range = self._y_range(setting) if setting else None
-            if y_range is not None:
-                y_ranges[label] = y_range
-        return CurveSet(
-            title=f"CM {cryomodule.name}", curves=curves, y_ranges=y_ranges
+        return cryomodule_curve_set(
+            cryomodule,
+            {
+                attr: self._y_range(setting)
+                for attr, setting in self.global_axis_settings.items()
+            },
         )
 
     def ui_filename(self):

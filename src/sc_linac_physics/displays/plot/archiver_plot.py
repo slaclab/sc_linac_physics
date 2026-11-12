@@ -16,6 +16,7 @@ from pydm.widgets.archiver_time_plot import ArchivePlotCurveItem
 from pydm.widgets.timeplot import updateMode
 
 from sc_linac_physics.displays.plot.curve_set import (
+    RGB,
     Curve,
     CurveSet,
     YRange,
@@ -38,8 +39,12 @@ class ArchiverPlot(QWidget):
         curve_set: Optional[CurveSet] = None,
         time_span: int = DEFAULT_TIME_SPAN_SECONDS,
         parent=None,
+        axis_titles: bool = True,
     ):
+        """`axis_titles=False` drops each Y axis's title and colors its tick
+        numbers like its first curve instead, for small plots."""
         super().__init__(parent)
+        self._axis_titles = axis_titles
         # PyDM's archiver plugin reads PYDM_ARCHIVER_URL on every request and
         # backfills nothing without it. Default it to the archiver that
         # utils/archiver.py uses; a value already in the environment wins.
@@ -97,7 +102,7 @@ class ArchiverPlot(QWidget):
         self._colors_used += 1
 
         if curve.axis not in self.plot.plotItem.axes:
-            self._add_axis(curve.axis)
+            self._add_axis(curve.axis, curve.color)
 
         item = self.plot.addYChannel(
             y_channel=curve.pv,
@@ -148,7 +153,14 @@ class ArchiverPlot(QWidget):
     def set_legend_visible(self, visible: bool) -> None:
         self.plot.showLegend = visible
 
-    def _add_axis(self, axis: str) -> None:
+    def _add_axis(self, axis: str, color: RGB) -> None:
+        self._create_axis(axis)
+        if not self._axis_titles:
+            axis_item = self.plot.plotItem.axes[axis]["item"]
+            axis_item.showLabel(False)
+            axis_item.setTextPen(QColor(*color))
+
+    def _create_axis(self, axis: str) -> None:
         y_range = self._y_ranges.get(axis)
         if y_range is None:
             self.plot.addAxis(None, axis, "left", label=axis)
