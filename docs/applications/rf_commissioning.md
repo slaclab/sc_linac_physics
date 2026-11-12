@@ -92,7 +92,8 @@ Legacy wide-record model containing:
 - Cavity identity (`linac`, `cryomodule`, `cavity_number`)
 - `current_phase` and per-phase `PhaseStatus`
 - Phase payload fields (`ssa_char`, `frequency_tuning`, etc.)
-- Append-only checkpoint history (`phase_history`)
+- Step checkpoints (`phase_history`), kept in memory only. They are never
+  saved: `RecordRepository.row_to_record` sets `phase_history=[]` on every load
 
 The normalized run/phase-instance tables are the source of truth for progression.
 `CommissioningRecord.current_phase` is retained for compatibility and reporting.
@@ -144,7 +145,9 @@ Because measurements are appended in `measurement_history`, concurrent measureme
 
 - `COMPLETE` is administrative, not a technical measurement phase.
 - Normalized phase attempts preserve full rerun history and support artifact/event trails.
-- Import direction is enforced: `models -> phases -> services -> session_manager`.
+- Import direction is a convention, not enforced: `models -> phases -> services -> session_manager`.
+  `test_import_boundaries.py` only checks that modules inside the package don't import the package root.
 - `PIEZO_PRE_RF` is intentionally restartable because it has no high-power RF side effects.
-- UI defaults currently show the `PIEZO_PRE_RF` tab only; placeholder tabs for later
-  phases can be enabled in phase spec configuration.
+- The UI shows a tab for every phase that has a `record_attr` in `PHASE_REGISTRY`, which is every
+  phase except `COMPLETE`. `DEFAULT_BETA_VISIBLE_PHASES` in `ui/container/phase_specs.py` lists all
+  phases; pass `visible_phases` to `build_default_phase_specs` to show fewer.
