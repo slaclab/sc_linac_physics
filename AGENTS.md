@@ -11,6 +11,7 @@
 - Simulation (`utils/simulation/sc_linac_physics_service.py`) reproduces the same hierarchy with caproto PVGroups and launcher groups (`setup/off/cold/park`) for offline development.
 
 ## Developer workflows that matter here
+- Push branches to `slaclab/sc_linac_physics` and open PRs from there, not from a personal fork. GitHub can only stack PRs on branches in the same repo, and an open PR can't move off a fork.
 - Use Python 3.12+; install editable with extras:
   - `pip install -e ".[dev,test]"`
 - Main quality gate is pytest with coverage settings from `pyproject.toml` (`--cov=sc_linac_physics`, html in `htmlcov/`):
