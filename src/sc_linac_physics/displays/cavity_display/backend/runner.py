@@ -264,11 +264,9 @@ class Runner:
                 extra={"extra_data": {"pv_name": self.watcher_pv_name}},
             )
             try:
-                self._watcher_pv_obj = PV(
-                    self.watcher_pv_name,
-                    connection_timeout=10.0,
-                    require_connection=True,
-                )
+                watcher = PV(self.watcher_pv_name, connection_timeout=10.0)
+                watcher.ensure_connected()
+                self._watcher_pv_obj = watcher
                 duration = time() - start
                 cavity_fault_logger.info(
                     "Watcher PV connected successfully",
