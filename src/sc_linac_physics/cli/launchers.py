@@ -220,5 +220,17 @@ def launch_cryo_signals(standalone=True):
     )
 
 
+@display
+def launch_hl_tuner_curves(standalone=True):
+    """Launch the H1/H2 stepper response curve viewer."""
+    from sc_linac_physics.displays.hl_tuner_curves.hl_tuner_curves_display import (
+        HLTunerCurvesDisplay,
+    )
+
+    return launch_python_display(
+        HLTunerCurvesDisplay, *sys.argv[1:], standalone=standalone
+    )
+
+
 if __name__ == "__main__":
     launch_srf_home()
