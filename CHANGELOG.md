@@ -2,6 +2,61 @@
 
 <!-- version list -->
 
+## v9.67.2 (2026-11-18)
+
+### Bug Fixes
+
+- **q0**: Only flag running workers on RF or calibration abort
+  ([#444](https://github.com/slaclab/sc_linac_physics/pull/444),
+  [`8aed815`](https://github.com/slaclab/sc_linac_physics/commit/8aed81599f291eb87c10a522c54781b43b1cd723))
+
+- **q0**: Raise a clear error when valveParams is not set
+  ([#421](https://github.com/slaclab/sc_linac_physics/pull/421),
+  [`ffd01ea`](https://github.com/slaclab/sc_linac_physics/commit/ffd01ea7bb73a757322ebb3ccd72c378252adad9))
+
+### Documentation
+
+- Tell contributors to open PRs from slaclab branches, not forks
+  ([#522](https://github.com/slaclab/sc_linac_physics/pull/522),
+  [`6fe1bf0`](https://github.com/slaclab/sc_linac_physics/commit/6fe1bf0ae6e625fd923e7a1247a4ae742c1ba9cb))
+
+- **q0**: Correct calibration defaults, Q0 formula and file paths
+  ([#420](https://github.com/slaclab/sc_linac_physics/pull/420),
+  [`34b17cc`](https://github.com/slaclab/sc_linac_physics/commit/34b17cc3208626156d02eb2e111668d8370122ab))
+
+- **q0**: Cut q0.md to a short reference that links the explainer
+  ([#420](https://github.com/slaclab/sc_linac_physics/pull/420),
+  [`34b17cc`](https://github.com/slaclab/sc_linac_physics/commit/34b17cc3208626156d02eb2e111668d8370122ab))
+
+- **q0**: Cut q0.md to a short reference; explainer tells the story
+  ([#420](https://github.com/slaclab/sc_linac_physics/pull/420),
+  [`34b17cc`](https://github.com/slaclab/sc_linac_physics/commit/34b17cc3208626156d02eb2e111668d8370122ab))
+
+- **q0**: Name the MANIFEST.in rule that ships the JSON data
+  ([#420](https://github.com/slaclab/sc_linac_physics/pull/420),
+  [`34b17cc`](https://github.com/slaclab/sc_linac_physics/commit/34b17cc3208626156d02eb2e111668d8370122ab))
+
+- **q0**: State the 80 W drift run and wheel contents
+  ([#420](https://github.com/slaclab/sc_linac_physics/pull/420),
+  [`34b17cc`](https://github.com/slaclab/sc_linac_physics/commit/34b17cc3208626156d02eb2e111668d8370122ab))
+
+- **rf-commissioning**: Drop the COMPLETE sign-off CHECK question
+  ([#529](https://github.com/slaclab/sc_linac_physics/pull/529),
+  [`1d6204c`](https://github.com/slaclab/sc_linac_physics/commit/1d6204c2095d8f28608342e08a1938121e625fff))
+
+- **rf-commissioning**: Fold stale package docs into the app page and delete them
+  ([#529](https://github.com/slaclab/sc_linac_physics/pull/529),
+  [`1d6204c`](https://github.com/slaclab/sc_linac_physics/commit/1d6204c2095d8f28608342e08a1938121e625fff))
+
+- **rf-commissioning**: Move stale package docs into the app page
+  ([#529](https://github.com/slaclab/sc_linac_physics/pull/529),
+  [`1d6204c`](https://github.com/slaclab/sc_linac_physics/commit/1d6204c2095d8f28608342e08a1938121e625fff))
+
+- **rf-commissioning**: Scope the ui/ import note and say when COMPLETE is set
+  ([#529](https://github.com/slaclab/sc_linac_physics/pull/529),
+  [`1d6204c`](https://github.com/slaclab/sc_linac_physics/commit/1d6204c2095d8f28608342e08a1938121e625fff))
+
+
 ## v9.67.1 (2026-11-12)
 
 ### Bug Fixes
