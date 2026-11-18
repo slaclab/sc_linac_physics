@@ -73,26 +73,6 @@ class CryoParamSetupWorker(Worker):
             self.error.emit(str(e))
 
 
-class CryoParamWorker(Worker):
-    def __init__(
-        self, cryomodule: Q0Cryomodule, start_time: datetime, end_time: datetime
-    ):
-        super().__init__()
-        self.cryomodule: Q0Cryomodule = cryomodule
-        self.start_time: datetime = start_time
-        self.end_time: datetime = end_time
-
-    def run(self) -> None:
-        try:
-            self.status.emit("Getting new reference cryo parameters")
-            self.cryomodule.getRefValveParams(
-                start_time=self.start_time, end_time=self.end_time
-            )
-            self.finished.emit("New reference cryo params loaded")
-        except (CavityAbortError, q0_utils.Q0AbortError, *PV_ERRORS) as e:
-            self.error.emit(str(e))
-
-
 class RFWorker(Worker):
     def __init__(
         self,
