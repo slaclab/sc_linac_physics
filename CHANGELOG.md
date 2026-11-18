@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v9.67.3 (2026-11-18)
+
+### Documentation
+
+- Say what these comments mean in plain words
+  ([#507](https://github.com/slaclab/sc_linac_physics/pull/507),
+  [`1796534`](https://github.com/slaclab/sc_linac_physics/commit/17965344eeb7adfc1f3940674bbfb029594d93c4))
+
+### Refactoring
+
+- **sc-linac**: Add LazyPV and use it in piezo, rack, decarad, magnet, cryomodule
+  ([#507](https://github.com/slaclab/sc_linac_physics/pull/507),
+  [`1796534`](https://github.com/slaclab/sc_linac_physics/commit/17965344eeb7adfc1f3940674bbfb029594d93c4))
+
+- **sc-linac**: Use LazyPV for all 47 lazy PVs in cavity.py
+  ([#508](https://github.com/slaclab/sc_linac_physics/pull/508),
+  [`cef5594`](https://github.com/slaclab/sc_linac_physics/commit/cef559432e01842451561a2c1fa089ab8d2009f3))
+
+- **sc-linac**: Use LazyPV for the lazy PVs in ssa.py and stepper.py
+  ([#509](https://github.com/slaclab/sc_linac_physics/pull/509),
+  [`6625622`](https://github.com/slaclab/sc_linac_physics/commit/662562259e476a8d5aa309777f15f4d5207f1ec7))
+
+
 ## v9.67.2 (2026-11-18)
 
 ### Bug Fixes
