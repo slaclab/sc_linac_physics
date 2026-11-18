@@ -57,7 +57,7 @@ def test_step_signed_pv_obj_lazy_and_cached(stepper):
     assert stepper._step_signed_pv_obj is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.stepper.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = stepper.step_signed_pv_obj
         second = stepper.step_signed_pv_obj
@@ -70,7 +70,7 @@ def test_steps_cold_landing_pv_obj_lazy_and_cached(stepper):
     assert stepper._steps_cold_landing_pv_obj is None
     mock_pv = make_mock_pv()
     with patch(
-        "sc_linac_physics.utils.sc_linac.stepper.PV", return_value=mock_pv
+        "sc_linac_physics.utils.epics.lazy.PV", return_value=mock_pv
     ) as pv_ctor:
         first = stepper.steps_cold_landing_pv_obj
         second = stepper.steps_cold_landing_pv_obj
