@@ -7,6 +7,9 @@ from PyQt5.QtCore import QEvent
 from PyQt5.QtWidgets import QApplication, QDialog, QMessageBox
 
 from sc_linac_physics.displays.plot import plotter
+from sc_linac_physics.displays.plot.cryo_signals_display import (
+    CryoSignalsDisplay,
+)
 from sc_linac_physics.displays.plot.plotter import (
     PlotterDisplay,
     axis_for,
@@ -223,3 +226,206 @@ def test_time_span_combo(display):
     with patch.object(display.plot, "set_time_span") as set_span:
         display.time_span_combo.setCurrentText("6 hours")
     set_span.assert_called_once_with(6 * 3600)
+
+
+def make_machine():
+    from unittest.mock import Mock
+
+    linacs = []
+    for linac_name, cms in (("L0B", ["01"]), ("L1B", ["02", "03", "H1", "H2"])):
+        linac = Mock()
+        linac.name = linac_name
+        linac.cryomodules = {}
+        for name in cms:
+            cm = Mock()
+            cm.name = name
+            cm.jt_valve_readback_pv = f"fake://CM{name}:JT"
+            cm.ds_level_pv = f"fake://CM{name}:DS"
+            cm.us_level_pv = f"fake://CM{name}:US"
+            cm.aact_mean_sum_pv = f"fake://CM{name}:AACT"
+            linac.cryomodules[name] = cm
+        linacs.append(linac)
+    machine = Mock()
+    machine.linacs = linacs
+    return machine
+
+
+@pytest.fixture
+def cryo_display(qtbot):
+    with (
+        patch.object(plotter, "Machine", return_value=make_machine()),
+        patch.object(
+            plotter, "get_pvs_all_groupings", return_value=make_groups(2)
+        ),
+    ):
+        widget = CryoSignalsDisplay()
+    qtbot.addWidget(widget)
+    yield widget
+    for plot in widget.cryo_plots + [widget.plot]:
+        plot.clear()
+
+
+def test_cryo_view_opens_one_plot_per_cm(cryo_display):
+    assert cryo_display.view_combo.currentText() == plotter.CRYO_VIEW
+    titles = [p.curve_set.title for p in cryo_display.cryo_plots]
+    assert titles == ["CM 01"]
+    assert cryo_display.plots == cryo_display.cryo_plots
+
+
+def test_cryo_view_default_ranges(cryo_display):
+    (plot,) = cryo_display.cryo_plots
+    assert plot.curve_set.y_ranges == {
+        "Jt Valve Readback": (0, 80),
+        "Ds Level": (80, 100),
+        "Us Level": (60, 80),
+        "Aact Mean Sum": (0, 144),
+    }
+
+
+def test_switching_linac_rebuilds_grid(cryo_display):
+    cryo_display.linac_combo.setCurrentIndex(1)
+    titles = [p.curve_set.title for p in cryo_display.cryo_plots]
+    assert titles == ["CM 02", "CM 03", "CM H1", "CM H2"]
+    positions = [
+        cryo_display.cryo_grid.getItemPosition(
+            cryo_display.cryo_grid.indexOf(p)
+        )[:2]
+        for p in cryo_display.cryo_plots
+    ]
+    assert positions == [(0, 0), (0, 1), (1, 0), (1, 1)]
+
+
+def test_cryo_range_change_applies_to_all_and_survives_switch(cryo_display):
+    cryo_display.linac_combo.setCurrentIndex(1)
+    with (
+        patch.object(
+            plotter.AxisRangeDialog, "exec_", return_value=QDialog.Accepted
+        ),
+        patch.object(
+            plotter.AxisRangeDialog,
+            "get_settings",
+            return_value={
+                "Ds Level": {"auto_scale": False, "range": (20.0, 80.0)},
+                "Us Level": {"auto_scale": True, "range": None},
+            },
+        ),
+    ):
+        cryo_display.open_axis_ranges()
+    for plot in cryo_display.cryo_plots:
+        assert plot.curve_set.y_ranges["Ds Level"] == (20.0, 80.0)
+        assert "Us Level" not in plot.curve_set.y_ranges
+
+    cryo_display.linac_combo.setCurrentIndex(0)
+    (plot,) = cryo_display.cryo_plots
+    assert plot.curve_set.y_ranges["Ds Level"] == (20.0, 80.0)
+    assert "Us Level" not in plot.curve_set.y_ranges
+
+
+def test_view_switch_shows_matching_controls(cryo_display):
+    cryo_display.show()
+    assert cryo_display.linac_combo.isVisible()
+    assert not cryo_display.selection_panel.isVisible()
+    cryo_display.view_combo.setCurrentText(plotter.CUSTOM_VIEW)
+    assert not cryo_display.linac_combo.isVisible()
+    assert cryo_display.selection_panel.isVisible()
+    assert cryo_display.plots == [cryo_display.plot]
+
+
+def test_time_span_reaches_every_cryo_plot(cryo_display):
+    cryo_display.linac_combo.setCurrentIndex(1)
+    with patch.object(plotter.ArchiverPlot, "set_time_span") as set_span:
+        cryo_display.time_span_combo.setCurrentText("6 hours")
+    # 4 cryo plots plus the hidden Custom plot.
+    assert set_span.call_count == 5
+
+
+def test_time_span_survives_view_switch(cryo_display):
+    cryo_display.time_span_combo.setCurrentText("6 hours")
+    cryo_display.view_combo.setCurrentText(plotter.CUSTOM_VIEW)
+    assert cryo_display.plot.plot.getTimeSpan() == 6 * 3600
+    cryo_display.time_span_combo.setCurrentText("1 hour")
+    cryo_display.view_combo.setCurrentText(plotter.CRYO_VIEW)
+    (plot,) = cryo_display.cryo_plots
+    assert plot.plot.getTimeSpan() == 3600
+
+
+def test_curve_sets_without_ranges_use_defaults():
+    from sc_linac_physics.displays.plot.cryo_signals import (
+        cryo_signals_curve_sets,
+    )
+
+    (curve_set,) = cryo_signals_curve_sets(make_machine().linacs[0])
+    assert [c.pv for c in curve_set.curves] == [
+        "fake://CM01:JT",
+        "fake://CM01:DS",
+        "fake://CM01:US",
+        "fake://CM01:AACT",
+    ]
+    assert curve_set.y_ranges["Aact Mean Sum"] == (0, 144)
+
+
+def test_cryo_grid_has_one_shared_legend(cryo_display):
+    cryo_display.show()
+    (plot,) = cryo_display.cryo_plots
+    assert not plot.plot.showLegend
+    text = cryo_display.cryo_legend.text()
+    for label in ("Jt Valve Readback", "Ds Level", "Us Level", "Aact Mean Sum"):
+        assert label in text
+    for curve in plot.curve_set.curves:
+        assert f"rgb{curve.color}" in text
+
+    cryo_display.legend_check.setChecked(False)
+    assert not cryo_display.cryo_legend.isVisible()
+
+
+def test_cryo_plots_have_no_axis_titles(cryo_display):
+    (plot,) = cryo_display.cryo_plots
+    axis = plot.plot.plotItem.axes["Ds Level"]["item"]
+    assert not axis.label.isVisible()
+
+
+@pytest.mark.parametrize(
+    "module,expected",
+    [
+        ("sc_linac_physics.displays.plot.plotter", "PlotterDisplay"),
+        (
+            "sc_linac_physics.displays.plot.cryo_signals_display",
+            "CryoSignalsDisplay",
+        ),
+    ],
+)
+def test_each_display_file_has_one_display_class(module, expected):
+    """PyDM opens a display by file and takes the first Display it finds."""
+    import importlib
+    import inspect
+
+    from pydm import Display
+
+    found = [
+        name
+        for name, obj in inspect.getmembers(importlib.import_module(module))
+        if inspect.isclass(obj)
+        and issubclass(obj, Display)
+        and obj is not Display
+    ]
+    assert found == [expected]
+
+
+def test_open_file_limit_is_raised_within_hard_limit(monkeypatch):
+    calls = []
+    monkeypatch.setattr(plotter.resource, "getrlimit", lambda _: (256, 1024))
+    monkeypatch.setattr(
+        plotter.resource, "setrlimit", lambda _, limits: calls.append(limits)
+    )
+    plotter.raise_open_file_limit(4096)
+    assert calls == [(1024, 1024)]
+
+
+def test_open_file_limit_never_lowered(monkeypatch):
+    calls = []
+    monkeypatch.setattr(plotter.resource, "getrlimit", lambda _: (10000, 20000))
+    monkeypatch.setattr(
+        plotter.resource, "setrlimit", lambda _, limits: calls.append(limits)
+    )
+    plotter.raise_open_file_limit(4096)
+    assert calls == []
