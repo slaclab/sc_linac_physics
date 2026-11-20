@@ -190,6 +190,17 @@ def launch_field_emission(standalone=True):
 
 @display
 def launch_plotter(standalone=True):
+    """Plot PVs from the linac hierarchy against time."""
+    from sc_linac_physics.displays.plot.plotter import PlotterDisplay
+
+    return launch_python_display(
+        PlotterDisplay, *sys.argv[1:], standalone=standalone
+    )
+
+
+@display
+def launch_plotter_old(standalone=True):
+    """The previous plotter, kept while the new one settles in."""
     from sc_linac_physics.displays.plot.plot import PVGroupArchiverDisplay
 
     return launch_python_display(
