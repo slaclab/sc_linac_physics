@@ -78,8 +78,11 @@ class FakeCavity:
         # recent, so setup_rf keeps both unless a test makes them stale.
         recent = datetime.now() - timedelta(minutes=10)
         self.ssa = SimpleNamespace(
-            calibration_timestamp=recent, calibration_result_good=True
+            calibration_timestamp=recent,
+            calibration_result_good=True,
+            calibration_running=False,
         )
+        self.stepper_tuner = SimpleNamespace(motor_moving=False)
         self.characterization_timestamp = recent
         self.characterization_status = CALIBRATION_COMPLETE_VALUE
 
@@ -160,6 +163,24 @@ def test_refuses_an_offline_cavity(clock, record):
     result = make_phase(cavity, record).execute_step("verify_initial_state")
     assert result.result is PhaseResult.FAILED
     assert "not online" in result.message
+
+
+@pytest.mark.parametrize(
+    "busy, shown",
+    [
+        (lambda c: setattr(c.ssa, "calibration_running", True), "SSA"),
+        (lambda c: setattr(c.stepper_tuner, "motor_moving", True), "Stepper"),
+    ],
+)
+def test_refuses_a_cavity_that_is_calibrating_or_tuning(
+    clock, record, busy, shown
+):
+    cavity = FakeCavity(clock)
+    busy(cavity)
+    result = make_phase(cavity, record).execute_step("verify_initial_state")
+    assert result.result is PhaseResult.FAILED
+    assert shown in result.message
+    assert record.mp_processing is None  # nothing started
 
 
 def test_setup_rf_keeps_earlier_calibration_and_starts_at_start_amp(

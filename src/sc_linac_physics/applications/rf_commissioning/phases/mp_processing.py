@@ -127,7 +127,10 @@ class MPProcessingPhase(PhaseBase):
     # ------------------------------------------------------------------
 
     def _verify_initial_state(self) -> PhaseStepResult:
-        """Check the cavity is online, and start a fresh result.
+        """Check the cavity is free to set up, and start a fresh result.
+
+        Fails if the cavity is offline, an SSA calibration is running or the
+        stepper is moving.
 
         A rerun replaces the last run's quenches and max amplitude. Reads
         PVs only. A dry run clears nothing.
@@ -142,6 +145,16 @@ class MPProcessingPhase(PhaseBase):
         try:
             if not self.cavity.is_online:
                 return self._failed("Cavity is not online — cannot process")
+            # setup_rf turns RF off and may calibrate or tune, so it must not
+            # start under either. Same checks as PiezoWithRFPhase.
+            if self.cavity.ssa.calibration_running:
+                return self._failed(
+                    "SSA calibration is running — wait for it to finish"
+                )
+            if self.cavity.stepper_tuner.motor_moving:
+                return self._failed(
+                    "Stepper motor is moving — wait for it to stop"
+                )
             ssa_cal = last_ssa_calibration(self.cavity)
             char = last_characterization(self.cavity)
         except Exception as exc:
