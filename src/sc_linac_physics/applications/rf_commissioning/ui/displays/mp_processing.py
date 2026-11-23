@@ -64,6 +64,8 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
 
     def __init__(self, parent=None, session=None):
         self._process_started: datetime | None = None
+        # The MPProcessingData the quench table rows came from.
+        self._table_data: MPProcessingData | None = None
         super().__init__(parent, session=session)
         self.controller = MPProcessingController(self, self.session)
         self.controller.phase_completed.connect(self._notify_phase_advanced)
@@ -95,6 +97,12 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     # ------------------------------------------------------------------
 
     def refresh_from_record(self, record: CommissioningRecord) -> None:
+        context = self.controller.context
+        if context is not None and record is not context.record:
+            # The session holds a different record object now, e.g. the same
+            # cavity reselected from the header, which reloads it. A save
+            # retry would save the new object without this run's results.
+            self.controller.forget_run()
         data = record.mp_processing
         if data is None:
             self._clear_phase_specific_readouts()
@@ -163,6 +171,10 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     def _fill_quench_table(self, data: MPProcessingData) -> None:
         """Add rows for quenches not yet shown. Rows are never rewritten."""
         table = self.quench_table
+        if data is not self._table_data:
+            # A rerun's verify_initial_state starts a new MPProcessingData.
+            table.setRowCount(0)
+            self._table_data = data
         events = data.quench_events
         for row in range(table.rowCount(), len(events)):
             event = events[row]
@@ -185,8 +197,17 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
             table.scrollToBottom()
 
     def clear_run(self) -> None:
+        """Blank this run's readouts and put Start Test back.
+
+        After forget_run, a button still labelled Retry save would start a
+        hardware run, not a database write.
+        """
         self._process_started = None
+        self._table_data = None
         self.quench_table.setRowCount(0)
+        if not self.controller.running:
+            self.ui.update_toolbar_state("idle")
+            self.pause_button.setEnabled(False)
         for name in (
             "step_label",
             "local_phase_status",

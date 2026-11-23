@@ -180,3 +180,35 @@ def test_since_last_quench_never_goes_negative():
     data = MPProcessingData()
     data.add_quench(amplitude=12.0, timestamp=T0 + timedelta(seconds=5))
     assert since_last_quench_text(data, T0, T0) == "0 min 00 s"
+
+
+def test_a_different_record_object_forgets_the_run(display):
+    _with_quenches(display, 0)
+    other = CommissioningRecord(linac=1, cryomodule="02", cavity_number=1)
+    display.refresh_from_record(other)
+    assert display.controller.context is None
+
+
+def test_the_same_record_keeps_the_run(display):
+    _with_quenches(display, 0)
+    display.refresh_from_record(display.controller.context.record)
+    assert display.controller.context is not None
+
+
+def test_clearing_the_run_puts_start_test_back_after_retry_save(display):
+    display.set_retry_save()
+    display.clear_run()
+    assert "Retry save" not in display.run_button.text()
+    assert "Start Test" in display.run_button.text()
+
+
+def test_a_rerun_clears_the_previous_runs_rows(display):
+    _with_quenches(display, 0, 30, 60)
+    display.refresh_progress()
+    # verify_initial_state on a rerun starts a new MPProcessingData.
+    new = MPProcessingData()
+    new.add_quench(amplitude=13.0, timestamp=T0)
+    display.controller.context.record.mp_processing = new
+    display.refresh_progress()
+    assert display.quench_table.rowCount() == 1
+    assert display.quench_table.item(0, 2).text() == "13.00"
