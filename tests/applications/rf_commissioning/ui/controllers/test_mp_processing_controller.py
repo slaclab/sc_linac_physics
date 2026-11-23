@@ -24,6 +24,9 @@ from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
     SegmentOutcome,
     SegmentResult,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.controllers import (
+    mp_processing_controller as module,
+)
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.mp_processing_controller import (  # noqa: E501
     CHECK_STEPS,
     RUN_STEPS,
@@ -44,6 +47,7 @@ SETTINGS = {
 def cavity():
     c = Mock()
     c.claim.return_value = True
+    c.abort_flag = False
     return c
 
 
@@ -296,3 +300,124 @@ def test_changing_cavity_forgets_an_unsaved_run(
     assert controller.stage is None
     assert controller.context is None
     view.clear_run.assert_called()
+
+
+class _RunNow:
+    """Stands in for threading.Thread: runs the target on start()."""
+
+    def __init__(self, target, daemon=None):
+        self.target = target
+
+    def start(self):
+        self.target()
+
+
+def to_run_segment(controller):
+    controller.on_start_test()
+    controller._on_segment_finished(
+        completed(verify_initial_state=check_data())
+    )
+
+
+def test_abort_between_steps_turns_rf_off_before_releasing(
+    controller, cavity, view, session, monkeypatch
+):
+    monkeypatch.setattr(module.threading, "Thread", _RunNow)
+    to_run_segment(controller)
+    cavity.abort_flag = True  # set by the hook; no check_abort ran
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.ABORTED, "Aborted before process")
+    )
+    cavity.turn_off.assert_called_once()
+    assert cavity.abort_flag is False
+    cavity.release.assert_called()
+    message = session.fail_active_phase_instance.call_args.kwargs[
+        "error_message"
+    ]
+    assert message == "Aborted before process. RF is off."
+
+
+def test_abort_inside_a_wait_does_not_turn_rf_off_again(
+    controller, cavity, session
+):
+    to_run_segment(controller)
+    # check_abort already turned RF off and cleared the flag.
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.ABORTED, "Aborted during process")
+    )
+    cavity.turn_off.assert_not_called()
+    session.fail_active_phase_instance.assert_called_once()
+
+
+def test_a_failed_turn_off_is_in_the_failure_message(
+    controller, cavity, session, monkeypatch
+):
+    monkeypatch.setattr(module.threading, "Thread", _RunNow)
+    cavity.turn_off.side_effect = RuntimeError("RF still on")
+    to_run_segment(controller)
+    cavity.abort_flag = True
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.ABORTED, "Aborted before process")
+    )
+    message = session.fail_active_phase_instance.call_args.kwargs[
+        "error_message"
+    ]
+    assert "Turning RF off failed: RF still on" in message
+
+
+def test_while_rf_turns_off_the_tab_counts_as_running(
+    controller, cavity, monkeypatch
+):
+    held = []
+    monkeypatch.setattr(
+        module.threading,
+        "Thread",
+        lambda target, daemon=None: Mock(start=lambda: held.append(target)),
+    )
+    to_run_segment(controller)
+    cavity.abort_flag = True
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.ABORTED, "Aborted before process")
+    )
+    assert controller.running
+    controller.run.request_abort = Mock()
+    controller.on_abort()
+    controller.run.request_abort.assert_not_called()
+    held[0]()  # the worker finishes
+    assert not controller.running
+
+
+def test_a_failed_check_keeps_the_last_run_off_the_new_attempt(
+    controller, session, record
+):
+    old = MPProcessingData()
+    old.add_quench(amplitude=14.0)
+    record.mp_processing = old
+    controller.on_start_test()
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.FAILED, "Cavity is not online")
+    )
+    kwargs = session.fail_active_phase_instance.call_args.kwargs
+    assert kwargs["artifact_payload"] is None
+    assert record.mp_processing is old
+
+
+def test_a_failed_failure_write_is_kept_for_retry(controller, session, view):
+    session.fail_active_phase_instance.return_value = False
+    controller.on_start_test()
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.FAILED, "Interlock reset failed")
+    )
+    assert controller.stage == "unsaved_failure"
+    assert controller._active_phase_instance_id == 42
+    view.set_retry_save.assert_called_once()
+
+    session.fail_active_phase_instance.return_value = True
+    controller.bridge.start_segment.reset_mock()
+    saves = session.save_active_record.call_count
+    controller.on_start_test()  # Retry save
+    controller.bridge.start_segment.assert_not_called()
+    assert session.save_active_record.call_count == saves  # already saved
+    assert session.fail_active_phase_instance.call_count == 2
+    assert controller.stage is None
+    assert controller._active_phase_instance_id is None

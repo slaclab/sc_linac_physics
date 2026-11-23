@@ -17,12 +17,16 @@ each started from the GUI thread:
 The Settings box fills MPProcessingLimits when Start Test is pressed.
 
 Abort goes through step_runner.cavity_abort_hook. The phase's waits call
-cavity.check_abort(), which turns RF off and raises.
+cavity.check_abort(), which turns RF off and raises. An abort between steps
+(a Step Mode hold after setup_rf) reaches no check_abort, so the controller
+turns RF off itself before it releases the cavity (_turn_rf_off).
 
 Pause is not offered. PhaseRun.pause() only holds between steps, and process
 is one step that runs until ADES_MAX is stable, so Pause would do nothing
 until the run ended. Pause and inspect is a later PR.
 """
+
+import threading
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -87,6 +91,8 @@ class MPProcessingController(QObject):
     """Owns MPProcessingPhase execution for the MP Processing display."""
 
     phase_completed = pyqtSignal(object)
+    # From the RF-off worker: the abort's message, then an error or "".
+    _rf_off_finished = pyqtSignal(str, str)
 
     def __init__(self, view, session) -> None:
         super().__init__()
@@ -100,12 +106,21 @@ class MPProcessingController(QObject):
         self.context: PhaseContext | None = None
         self.phase: MPProcessingPhase | None = None
         self.run: PhaseRun | None = None
-        # "check", "run", or "unsaved" (finished, a database write failed).
+        # "check", "run", "rf_off" (turning RF off after an abort),
+        # "unsaved" (finished, a database write failed) or "unsaved_failure"
+        # (failed, and recording the failure did too).
         self.stage: str | None = None
         self._step_mode = False
         self._active_phase_instance_id: int | None = None
-        # Database writes still owed after a finished run (FINISH_WRITES).
+        # Database writes still owed after a finished run (FINISH_WRITES),
+        # or after a failed one ("save", "fail").
         self._unsaved: set[str] = set()
+        # A failed run's message and artifact, kept while its writes are owed.
+        self._failure: tuple[str, dict | None] | None = None
+        # record.mp_processing before this attempt. verify_initial_state
+        # replaces it, so a failure that still holds it ran no processing.
+        self._prior_data = None
+        self._rf_off_finished.connect(self._on_rf_off_finished)
 
         self.bridge = RunnerBridge(self)
         self.bridge.log.connect(self.view.log_message)
@@ -118,7 +133,8 @@ class MPProcessingController(QObject):
 
     @property
     def running(self) -> bool:
-        return self.bridge.running
+        """A segment is running, or RF is being turned off after an abort."""
+        return self.bridge.running or self.stage == "rf_off"
 
     @property
     def mp_data(self):
@@ -183,6 +199,8 @@ class MPProcessingController(QObject):
         self._cavity_hold.release()
         self.stage = None
         self._unsaved = set()
+        self._failure = None
+        self._prior_data = None
         self.phase = self.context = self.run = None
         self._active_phase_instance_id = None
         self.view.clear_run()
@@ -197,6 +215,9 @@ class MPProcessingController(QObject):
         if self.stage == "unsaved":
             # Retries the database writes only; nothing goes to the cavity.
             self._persist_finish()
+            return
+        if self.stage == "unsaved_failure":
+            self._persist_failure()
             return
         operator = self.view.get_current_operator()
         if not operator:
@@ -239,8 +260,10 @@ class MPProcessingController(QObject):
                 )
                 return False
             self._active_phase_instance_id = started.phase_instance_id
+        record = self.session.get_active_record()
+        self._prior_data = record.mp_processing if record else None
         self.context = PhaseContext(
-            record=self.session.get_active_record(),
+            record=record,
             operator=operator,
             parameters={"cavity": self._cavity},
             phase_instance_id=self._active_phase_instance_id,
@@ -281,8 +304,12 @@ class MPProcessingController(QObject):
 
     def _on_segment_finished(self, result: SegmentResult) -> None:
         self.view.set_running(False)
+        message = result.message or "Phase execution failed"
+        if result.outcome is SegmentOutcome.ABORTED and self._rf_may_be_on():
+            self._turn_rf_off(message)
+            return
         if result.outcome is not SegmentOutcome.COMPLETED:
-            self._on_failed(result.message or "Phase execution failed")
+            self._on_failed(message)
             return
         if self.stage == "check":
             data = result.results["verify_initial_state"].data or {}
@@ -340,29 +367,64 @@ class MPProcessingController(QObject):
         self.phase_completed.emit(record)
 
     def _on_failed(self, message: str) -> None:
-        """The runner has marked the phase FAILED; record that and say so."""
+        """The runner has marked the phase FAILED; record that and say so.
+
+        The artifact is this attempt's record.mp_processing. A failure
+        before verify_initial_state replaced it sends none, so the last
+        run's quenches are not attached to an attempt that ran nothing.
+        They stay on the record.
+        """
         self._cavity_hold.release()
-        self.stage = None
         data = self.mp_data
-        snapshot = data.to_dict() if data else None
-        self._save("Partial results saved")
-        if self._active_phase_instance_id is not None:
+        fresh = data is not None and data is not self._prior_data
+        self._failure = (message, data.to_dict() if fresh else None)
+        self._unsaved = {"save", "fail"}
+        self._persist_failure()
+
+    def _persist_failure(self) -> None:
+        """Save the record and fail the instance; keep what fails.
+
+        Whatever fails stays in _unsaved with the instance id, and Retry
+        save repeats only that. It writes nothing to the cavity.
+        """
+        message, snapshot = self._failure
+        if "save" in self._unsaved and self._save("Partial results saved"):
+            self._unsaved.discard("save")
+        if "fail" in self._unsaved:
             try:
-                self.session.fail_active_phase_instance(
-                    phase_instance_id=self._active_phase_instance_id,
-                    phase=PHASE,
-                    error_message=message,
-                    artifact_payload=snapshot,
+                ok = (
+                    self._active_phase_instance_id is None
+                    or self.session.fail_active_phase_instance(
+                        phase_instance_id=self._active_phase_instance_id,
+                        phase=PHASE,
+                        error_message=message,
+                        artifact_payload=snapshot,
+                    )
                 )
             except Exception as exc:
                 self.view.log_message(f"Warning: {exc}")
+                ok = False
+            if ok:
+                self._unsaved.discard("fail")
+        if self._unsaved:
+            self.stage = "unsaved_failure"
+            self.view.on_phase_finished("FAILED")
+            self.view.set_retry_save()
+            self.view.show_error(
+                f"{message}\n\nThe failure was not saved "
+                f"({', '.join(sorted(self._unsaved))} failed). Press Retry "
+                "save to try again. It writes nothing to the cavity."
+            )
+            return
+        self.stage = None
+        self._failure = None
         self._active_phase_instance_id = None
         self.view.on_phase_finished("FAILED")
         self.view.show_error(message)
 
-    def _save(self, success_line: str) -> None:
+    def _save(self, success_line: str) -> bool:
         try:
-            saved = self.session.save_active_record()
+            saved = bool(self.session.save_active_record())
         except Exception as exc:
             saved = False
             self.view.log_message(f"Warning: save failed: {exc}")
@@ -372,6 +434,54 @@ class MPProcessingController(QObject):
         record = self.session.get_active_record()
         if record is not None:
             self.view.refresh_from_record(record)
+        return saved
+
+    # ------------------------------------------------------------------
+    # RF off after an abort between steps
+    # ------------------------------------------------------------------
+
+    def _rf_may_be_on(self) -> bool:
+        """True if an abort in the run segment reached no check_abort.
+
+        Inside setup_rf or process, cavity.check_abort() turns RF off and
+        clears abort_flag. A flag still set after the run segment means the
+        abort came between steps, where nothing checked it, so RF is as the
+        last step left it.
+        """
+        return self.stage == "run" and bool(self._cavity.abort_flag)
+
+    def _turn_rf_off(self, message: str) -> None:
+        """Turn RF off on a daemon thread, then fail the attempt.
+
+        PV write: Cavity.turn_off() (RFCTRL off), which waits for RF to
+        read off. abort_flag is cleared first: turn_off's wait calls
+        check_abort, which would otherwise call turn_off again and raise.
+        The cavity stays held until this finishes.
+        """
+        cavity = self._cavity
+        self.stage = "rf_off"
+        self.view.set_running(True)
+        self.view.log_message("Aborted between steps: turning RF off")
+
+        def work() -> None:
+            error = ""
+            try:
+                cavity.abort_flag = False
+                cavity.turn_off()
+            except Exception as exc:
+                error = str(exc) or type(exc).__name__
+            self._rf_off_finished.emit(message, error)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_rf_off_finished(self, message: str, error: str) -> None:
+        self.stage = None
+        self.view.set_running(False)
+        if error:
+            message = f"{message}. Turning RF off failed: {error}"
+        else:
+            message = f"{message}. RF is off."
+        self._on_failed(message)
 
     # ------------------------------------------------------------------
     # Abort and step mode
@@ -383,6 +493,10 @@ class MPProcessingController(QObject):
         Inside setup_rf or process, cavity.check_abort() turns RF off and
         raises. Between steps the run stops before the next one.
         """
+        if self.stage == "rf_off":
+            # Already turning RF off. Setting abort_flag again would make
+            # turn_off's own wait call turn_off and raise.
+            return
         if self.run is not None and self.running:
             self.run.request_abort()
             # Within poll_interval (1 s) while ADES is held. If
