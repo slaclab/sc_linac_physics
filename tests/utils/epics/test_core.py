@@ -47,9 +47,8 @@ class TestPVInitialization:
         assert pv is not None
         assert pv.connected
 
-    def test_connection_failure_raises_exception(self):
-        """Test PV raises exception if connection fails"""
-        # Temporarily make FakeEPICS_PV disconnected
+    def test_connection_failure_raises_on_first_get(self):
+        """PV() doesn't raise; the first get() does if it can't connect."""
         original_init = FakeEPICS_PV.__init__
 
         def disconnected_init(self, *args, **kwargs):
@@ -58,9 +57,9 @@ class TestPVInitialization:
 
         FakeEPICS_PV.__init__ = disconnected_init
         try:
-            with pytest.raises(PVConnectionError) as exc_info:
-                PV("TEST:DISCONNECTED", connection_timeout=1.0)
-            assert "failed to connect" in str(exc_info.value).lower()
+            pv = PV("TEST:DISCONNECTED", connection_timeout=1.0)
+            with pytest.raises(PVConnectionError, match="failed to connect"):
+                pv.get()
         finally:
             FakeEPICS_PV.__init__ = original_init
 
@@ -76,16 +75,21 @@ class TestPVInitialization:
 
 
 class TestPVInitializationEdgeCases:
-    def test_require_connection_false(self):
-        """Test PV can be created without requiring connection"""
-        original_wait = FakeEPICS_PV.wait_for_connection
-        FakeEPICS_PV.wait_for_connection = lambda self, timeout=None: False
+    def test_construction_does_not_wait_for_connection(self, monkeypatch):
+        waits = []
+        monkeypatch.setattr(
+            FakeEPICS_PV,
+            "wait_for_connection",
+            lambda self, timeout=None: waits.append(timeout) or False,
+        )
 
-        try:
-            pv = PV("TEST:PV", require_connection=False)
-            assert pv is not None
-        finally:
-            FakeEPICS_PV.wait_for_connection = original_wait
+        PV("TEST:PV")
+
+        assert waits == []
+
+    def test_require_connection_is_gone(self):
+        with pytest.raises(TypeError):
+            PV("TEST:PV", require_connection=False)
 
     def test_custom_config(self):
         """Test PV with custom PVConfig"""
@@ -336,9 +340,8 @@ class TestPVConnectionManagement:
         # Should not raise
         connected_pv._ensure_connected()
 
-    def test_ensure_connected_cleans_up_guard(self):
-        """Test _ensure_connected cleans up recursion guard even on failure"""
-        # Create a temporarily disconnected PV
+    def test_ensure_connected_raises_then_succeeds(self):
+        """ensure_connected() raises while down and returns once connected."""
         original_init = FakeEPICS_PV.__init__
 
         def disconnected_init(self, *args, **kwargs):
@@ -347,12 +350,94 @@ class TestPVConnectionManagement:
 
         FakeEPICS_PV.__init__ = disconnected_init
         try:
-            # This will fail during __init__, so we can't test _ensure_connected
-            # Just verify the exception is raised
-            with pytest.raises(PVConnectionError):
-                PV("TEST:PV")
+            pv = PV("TEST:PV")
         finally:
             FakeEPICS_PV.__init__ = original_init
+
+        with pytest.raises(PVConnectionError, match="failed to connect"):
+            pv.ensure_connected()
+        pv._connected = True
+        pv.ensure_connected()
+
+    def test_first_connect_waits_full_connection_timeout(self, monkeypatch):
+        """get()'s 2 s timeout must not cut short the first connection."""
+        pv = PV("TEST:PV", connection_timeout=7.0)
+        pv._connected = False
+        waits = []
+
+        def fake_wait(self, timeout=None):
+            waits.append(timeout)
+            self._connected = True
+            return True
+
+        monkeypatch.setattr(FakeEPICS_PV, "wait_for_connection", fake_wait)
+
+        pv.get(timeout=2.0)
+
+        assert waits == [7.0]
+
+    @staticmethod
+    def _record_waits(monkeypatch):
+        waits = []
+
+        def fake_wait(self, timeout=None):
+            waits.append(timeout)
+            self._connected = True
+            return True
+
+        monkeypatch.setattr(FakeEPICS_PV, "wait_for_connection", fake_wait)
+        return waits
+
+    @pytest.mark.parametrize("operation", ["get", "put"])
+    def test_short_connection_timeout_is_a_limit(self, monkeypatch, operation):
+        """connection_timeout=0.1 must not become get's 2 s or put's 5 s."""
+        pv = PV("TEST:PV", connection_timeout=0.1)
+        pv._connected = False
+        waits = self._record_waits(monkeypatch)
+
+        if operation == "get":
+            pv.get()
+        else:
+            pv.put(1)
+
+        assert waits == [0.1]
+
+    def test_explicit_first_connect_timeout_is_used_as_given(self, monkeypatch):
+        pv = PV("TEST:PV")  # default connection_timeout, 5 s
+        pv._connected = False
+        waits = self._record_waits(monkeypatch)
+
+        pv.ensure_connected(timeout=0.25)
+
+        assert waits == [0.25]
+
+    def test_ensure_connected_default_waits_connection_timeout(
+        self, monkeypatch
+    ):
+        pv = PV("TEST:PV", connection_timeout=7.0)
+        pv._connected = False
+        waits = self._record_waits(monkeypatch)
+
+        pv.ensure_connected()
+
+        assert waits == [7.0]
+
+    def test_reconnect_uses_callers_timeout(self, monkeypatch):
+        pv = PV("TEST:PV", connection_timeout=7.0)
+        pv.get()  # first connection
+        pv._connected = False
+        waits = []
+
+        def fake_wait(self, timeout=None):
+            waits.append(timeout)
+            self._connected = True
+            return True
+
+        monkeypatch.setattr(FakeEPICS_PV, "wait_for_connection", fake_wait)
+
+        pv.ensure_connected(timeout=1.5)
+
+        assert waits == [1.5]
 
 
 # Test Value Validation
@@ -475,7 +560,7 @@ class TestPVValueOrNone:
 
         FakeEPICS_PV.__init__ = disconnected_init
         try:
-            pv = PV("TEST:PV", require_connection=False)
+            pv = PV("TEST:PV")
             assert pv.value_or_none is None
         finally:
             FakeEPICS_PV.__init__ = original_init
@@ -490,148 +575,6 @@ class TestPVValueOrNone:
             FakeEPICS_PV.get = original_get
 
 
-class TestPVBatchOperations:
-    def test_batch_create_success(self):
-        """Test batch_create creates multiple PVs"""
-        pv_names = ["TEST:PV1", "TEST:PV2", "TEST:PV3"]
-        pvs = PV.batch_create(pv_names)
-        assert len(pvs) == 3
-        assert all(pv.connected for pv in pvs)
-
-    def test_batch_create_empty_list(self):
-        """Test batch_create with empty list"""
-        pvs = PV.batch_create([])
-        assert pvs == []
-
-    def test_batch_create_with_failures(self):
-        """Test batch_create handles connection failures"""
-        # Mock some PVs to fail connection
-        original_wait = FakeEPICS_PV.wait_for_connection
-        call_count = [0]
-
-        def selective_connect(self, timeout=None):
-            call_count[0] += 1
-            # Make every other PV fail
-            return call_count[0] % 2 == 1
-
-        FakeEPICS_PV.wait_for_connection = selective_connect
-        try:
-            pv_names = ["PV1", "PV2", "PV3", "PV4"]
-            pvs = PV.batch_create(pv_names, require_connection=False)
-            assert len(pvs) == 4
-        finally:
-            FakeEPICS_PV.wait_for_connection = original_wait
-
-    def test_batch_create_connection_failures_logged(self):
-        """Test batch_create logs failures when require_connection=False"""
-        original_wait = FakeEPICS_PV.wait_for_connection
-        FakeEPICS_PV.wait_for_connection = lambda self, timeout=None: False
-
-        try:
-            # Should not raise when require_connection=False
-            pvs = PV.batch_create(["PV1", "PV2"], require_connection=False)
-            # Should still return PVs (they may be disconnected but wrapped)
-            assert len(pvs) == 2
-        finally:
-            FakeEPICS_PV.wait_for_connection = original_wait
-
-    def test_get_many_success(self):
-        """Test get_many retrieves multiple values"""
-        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
-        results = PV.get_many(pvs)
-        assert len(results) == 3
-        assert all(r == 42.0 for r in results)
-
-    def test_get_many_with_failures(self):
-        """Test get_many handles failures with persistent errors"""
-        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
-        original_get = FakeEPICS_PV.get
-
-        def selective_get(self, *args, **kwargs):
-            # Determine which PV this is based on pvname
-            if "PV1" in self.pvname:
-                # Always fail for PV1 (middle PV)
-                return None
-            return 42.0
-
-        FakeEPICS_PV.get = selective_get
-        try:
-            results = PV.get_many(pvs, raise_on_error=False)
-            assert results[0] == 42.0
-            assert results[1] is None  # PV1 should fail
-            assert results[2] == 42.0
-        finally:
-            FakeEPICS_PV.get = original_get
-
-    def test_get_many_raise_on_error(self):
-        """Test get_many raises on any failure"""
-        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
-        original_get = FakeEPICS_PV.get
-        # Always return None to cause persistent failure
-        FakeEPICS_PV.get = lambda self, *args, **kwargs: None
-
-        try:
-            with pytest.raises(PVGetError):
-                PV.get_many(pvs, raise_on_error=True)
-        finally:
-            FakeEPICS_PV.get = original_get
-
-    def test_put_many_success(self):
-        """Test put_many writes multiple values"""
-        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
-        values = [10.0, 20.0, 30.0]
-        results = PV.put_many(pvs, values)
-        assert all(r is True for r in results)
-
-    def test_put_many_length_mismatch(self):
-        """Test put_many raises on length mismatch"""
-        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
-        values = [10.0, 20.0]  # Wrong length
-
-        with pytest.raises(ValueError) as exc_info:
-            PV.put_many(pvs, values)
-        assert "length mismatch" in str(exc_info.value).lower()
-
-    def test_put_many_with_failures(self):
-        """Test put_many handles failures with persistent errors"""
-        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
-        values = [10.0, 20.0, 30.0]
-
-        original_put = FakeEPICS_PV.put
-
-        def selective_put(self, *args, **kwargs):
-            # Always fail for PV1 (middle PV)
-            if "PV1" in self.pvname:
-                return 0  # Failure
-            return 1  # Success
-
-        FakeEPICS_PV.put = selective_put
-        try:
-            results = PV.put_many(pvs, values, raise_on_error=False)
-            assert results == [True, False, True]
-        finally:
-            FakeEPICS_PV.put = original_put
-
-    def test_put_many_raise_on_error(self):
-        """Test put_many raises on any failure"""
-        pvs = [PV(f"TEST:PV{i}") for i in range(3)]
-        values = [10.0, 20.0, 30.0]
-
-        original_put = FakeEPICS_PV.put
-        # Always return 0 to cause persistent failure
-        FakeEPICS_PV.put = lambda self, *args, **kwargs: 0
-
-        try:
-            with pytest.raises(PVPutError):
-                PV.put_many(pvs, values, raise_on_error=True)
-        finally:
-            FakeEPICS_PV.put = original_put
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
-
-
 class TestSmallFixes:
     def test_callback_registered_when_disconnected_at_creation(self):
         """pyepics registers callbacks regardless of connection; so do we."""
@@ -644,19 +587,10 @@ class TestSmallFixes:
         FakeEPICS_PV.__init__ = disconnected_init
         try:
             cb = lambda **kw: None  # noqa: E731
-            pv = PV("TEST:PV", callback=cb, require_connection=False)
+            pv = PV("TEST:PV", callback=cb)
             assert cb in pv.callbacks.values()
         finally:
             FakeEPICS_PV.__init__ = original_init
-
-    def test_batch_create_require_connection_raises(self, monkeypatch):
-        monkeypatch.setattr(
-            FakeEPICS_PV,
-            "wait_for_connection",
-            lambda self, timeout=None: False,
-        )
-        with pytest.raises(PVConnectionError, match="2 of 2 PVs"):
-            PV.batch_create(["PV1", "PV2"], require_connection=True)
 
     def test_get_timeout_zero_is_not_replaced_by_default(self, monkeypatch):
         pv = PV("TEST:PV")
@@ -680,6 +614,30 @@ class TestSmallFixes:
         with pytest.raises(PVPutError):
             mock.put(1)
         assert mock.put(1) == 1
+
+
+class TestCreatePvSafe:
+    def _disconnected(self, monkeypatch):
+        original_init = FakeEPICS_PV.__init__
+
+        def disconnected_init(self, *args, **kwargs):
+            original_init(self, *args, **kwargs)
+            self._connected = False
+
+        monkeypatch.setattr(FakeEPICS_PV, "__init__", disconnected_init)
+
+    def test_raises_when_pv_does_not_connect(self, monkeypatch):
+        from sc_linac_physics.utils.epics import create_pv_safe
+
+        self._disconnected(monkeypatch)
+        with pytest.raises(PVConnectionError):
+            create_pv_safe("TEST:PV")
+
+    def test_returns_none_when_not_raising(self, monkeypatch):
+        from sc_linac_physics.utils.epics import create_pv_safe
+
+        self._disconnected(monkeypatch)
+        assert create_pv_safe("TEST:PV", raise_on_failure=False) is None
 
 
 class TestSeverity:

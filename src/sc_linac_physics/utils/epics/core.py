@@ -2,7 +2,6 @@ import threading
 from time import sleep
 from typing import List, Any, Optional, Callable, Union
 
-import epics
 import numpy as np
 from epics import PV as EPICS_PV
 
@@ -41,16 +40,22 @@ class PV(EPICS_PV):
         count: Optional[int] = None,
         connection_callback: Optional[Callable] = None,
         access_callback: Optional[Callable] = None,
-        require_connection: bool = True,
         config: Optional[PVConfig] = None,
-        _skip_connection_wait: bool = False,
     ):
         """
-        Initialize PV with enhanced error handling.
+        Create the PV. Does not wait for it to connect.
+
+        The first get()/put() waits up to connection_timeout for the
+        connection and raises PVConnectionError if it doesn't come up. To
+        fail fast at a known point instead, call ensure_connected().
+
+        Creating many PVs before using any of them lets Channel Access
+        search for all of them at once.
 
         Args:
             pvname: Process variable name
-            connection_timeout: Timeout for initial connection
+            connection_timeout: Longest wait for the first connection
+                (default config.connection_timeout)
             callback: User callback for value updates
             form: Data form ('time', 'ctrl', or 'native')
             verbose: Enable verbose output
@@ -58,23 +63,24 @@ class PV(EPICS_PV):
             count: Number of array elements to fetch
             connection_callback: Callback when connection state changes
             access_callback: Callback when access rights change
-            require_connection: Raise error if connection fails
             config: Custom PVConfig (uses default_config if None)
-            _skip_connection_wait: Internal flag for batch creation
         """
-        # Initialize configuration and guards
         self.config = config or self.default_config
         self._connection_lock = threading.RLock()
         self._user_callback = callback
-        self._require_connection = require_connection
+        # First connection gets the full connection_timeout, even when the
+        # get()/put() that triggers it passes a shorter one. Reconnects use
+        # the caller's timeout.
+        self._first_connect_timeout = (
+            self.config.connection_timeout
+            if connection_timeout is None
+            else connection_timeout
+        )
+        self._has_connected = False
 
-        if connection_timeout is None:
-            connection_timeout = self.config.connection_timeout
-
-        # Initialize parent (without user callback initially)
         super().__init__(
             pvname=pvname,
-            connection_timeout=connection_timeout,
+            connection_timeout=self._first_connect_timeout,
             callback=None,
             form=form,
             verbose=verbose,
@@ -88,50 +94,6 @@ class PV(EPICS_PV):
         # does: monitor callbacks start firing once it connects.
         if self._user_callback is not None:
             self.add_callback(self._user_callback)
-
-        # Skip connection wait for batch operations
-        if _skip_connection_wait:
-            return
-
-        # Wait for initial connection
-        self._wait_for_connection_with_retry(connection_timeout)
-
-    def _wait_for_connection_with_retry(self, timeout: float):
-        """Wait for initial connection with retry logic"""
-        # Quick initial check
-        if self.connected:
-            return
-
-        # Give pyepics a moment to process
-        sleep(0.01)
-
-        # First connection attempt
-        if self.wait_for_connection(timeout=timeout):
-            return
-
-        # Retry logic
-        retry_attempts = 2
-        retry_timeout = min(1.0, timeout / 2)
-
-        for attempt in range(retry_attempts):
-            get_logger().debug(
-                f"Retry connection attempt {attempt + 1}/{retry_attempts} for {self.pvname}"
-            )
-            sleep(0.1)
-
-            if self.wait_for_connection(timeout=retry_timeout):
-                get_logger().info(
-                    f"PV {self.pvname} connected on retry attempt {attempt + 1}"
-                )
-                return
-
-        # Connection failed
-        error_msg = f"PV {self.pvname} failed to connect within {timeout}s"
-        if self._require_connection:
-            get_logger().error(error_msg)
-            raise PVConnectionError(error_msg)
-        else:
-            get_logger().warning(error_msg + " (connection not required)")
 
     def __str__(self) -> str:
         return self.pvname
@@ -155,42 +117,79 @@ class PV(EPICS_PV):
         self.disconnect()
         return False
 
-    def _ensure_connected(self, timeout: Optional[float] = None):
+    def ensure_connected(self, timeout: Optional[float] = None):
+        """
+        Wait for the PV to connect, or raise PVConnectionError.
+
+        get() and put() already do this. Call it directly to fail at a
+        known point, e.g. right after creating a PV the caller can't run
+        without.
+
+        Args:
+            timeout: Longest wait, used as given. Default: connection_timeout
+                for the first connection, config.connection_timeout
+                afterwards.
+
+        Raises:
+            PVConnectionError: If the PV doesn't connect within timeout
+        """
+        self._ensure_connected(timeout=timeout, caller_deadline=True)
+
+    def _ensure_connected(
+        self, timeout: Optional[float] = None, caller_deadline: bool = False
+    ):
         """
         Ensure PV is connected, raise exception if not.
         Thread-safe with reentrant lock.
 
         Args:
-            timeout: Connection timeout
+            timeout: How long to wait for a reconnect. get() and put()
+                pass their own read or write timeout here. The first
+                connection ignores it and waits connection_timeout, unless
+                caller_deadline is set.
+            caller_deadline: True when timeout came from ensure_connected().
+                Then the first connection waits timeout too.
 
         Raises:
             PVConnectionError: If connection fails
         """
         # Quick check without lock
         if self.connected:
+            self._has_connected = True
             return
 
         # Use reentrant lock to prevent race conditions
         with self._connection_lock:
             # Double-check after acquiring lock
             if self.connected:
+                self._has_connected = True
                 return
 
-            if timeout is None:
-                timeout = self.config.connection_timeout
-
-            get_logger().warning(
-                f"PV {self.pvname} disconnected, attempting to reconnect"
-            )
+            first = not self._has_connected
+            if first:
+                if not caller_deadline or timeout is None:
+                    timeout = self._first_connect_timeout
+                # Not logged: every PV's first use comes through here, and
+                # the shared pv_operations log would get one line per PV.
+                verb = "connect"
+            else:
+                if timeout is None:
+                    timeout = self.config.connection_timeout
+                verb = "reconnect"
+                get_logger().warning(
+                    f"PV {self.pvname} disconnected, attempting to reconnect"
+                )
 
             if not self.wait_for_connection(timeout=timeout):
                 error_msg = (
-                    f"PV {self.pvname} failed to reconnect within {timeout}s"
+                    f"PV {self.pvname} failed to {verb} within {timeout}s"
                 )
                 get_logger().error(error_msg)
                 raise PVConnectionError(error_msg)
 
-            get_logger().info(f"PV {self.pvname} reconnected successfully")
+            self._has_connected = True
+            if not first:
+                get_logger().info(f"PV {self.pvname} reconnected successfully")
 
     def disconnect(self, deepclean: bool = True):
         """Clean disconnect"""
@@ -562,238 +561,3 @@ class PV(EPICS_PV):
                 raise PVInvalidError(f"PV {self.pvname} has INVALID alarm")
 
         return severity
-
-    @classmethod
-    def batch_create(
-        cls,
-        pv_names: List[str],
-        connection_timeout: float = 0.5,
-        auto_monitor: bool = False,
-        require_connection: bool = False,
-        config: Optional[PVConfig] = None,
-    ) -> List[Optional["PV"]]:
-        """
-        Create multiple PVs with optimized batch connection.
-
-        This method is significantly faster than creating PVs one at a time
-        because it allows EPICS Channel Access to connect to multiple PVs
-        simultaneously in the background.
-
-        Args:
-            pv_names: List of PV names to create
-            connection_timeout: Timeout for each PV connection (seconds)
-            auto_monitor: Whether to enable automatic monitoring
-            require_connection: If True, raise error if any PV fails to connect
-            config: Custom PVConfig to use for all PVs
-
-        Returns:
-            List of PV objects in the same order as pv_names. An entry is
-            None only if constructing that PV raised and
-            require_connection is False.
-
-        Raises:
-            PVConnectionError: If require_connection=True and any PV fails
-
-        Example:
-            >>> pv_names = ["PV:1", "PV:2", "PV:3"]
-            >>> pvs = PV.batch_create(pv_names, connection_timeout=1.0)
-            >>> # Much faster than:
-            >>> # pvs = [PV(name) for name in pv_names]
-        """
-        if not pv_names:
-            return []
-
-        # Phase 1: Create raw EPICS PVs (non-blocking, fast)
-        raw_pvs = cls._create_raw_pvs(
-            pv_names, auto_monitor, connection_timeout
-        )
-
-        # Phase 2: Wait for all connections in batch
-        failed_pvs = cls._wait_for_connections(
-            pv_names, raw_pvs, connection_timeout
-        )
-
-        # Phase 3: Wrap in our PV class
-        return cls._wrap_pvs(
-            pv_names,
-            auto_monitor,
-            require_connection,
-            config,
-            failed_pvs,
-        )
-
-    @staticmethod
-    def _create_raw_pvs(
-        pv_names: List[str],
-        auto_monitor: bool,
-        connection_timeout: float,
-    ) -> List[Optional[epics.PV]]:
-        """Create raw EPICS PV objects without waiting for connection."""
-        raw_pvs = []
-        for pv_name in pv_names:
-            try:
-                raw_pv = epics.PV(
-                    pv_name,
-                    auto_monitor=auto_monitor,
-                    connection_timeout=connection_timeout,
-                )
-                raw_pvs.append(raw_pv)
-            except Exception as e:
-                get_logger().warning(f"Failed to create raw PV {pv_name}: {e}")
-                raw_pvs.append(None)
-        return raw_pvs
-
-    @staticmethod
-    def _wait_for_connections(
-        pv_names: List[str],
-        raw_pvs: List[Optional[epics.PV]],
-        connection_timeout: float,
-    ) -> List[str]:
-        """Wait for raw PVs to connect and return list of failed PV names."""
-        failed_pvs = []
-
-        for pv_name, raw_pv in zip(pv_names, raw_pvs):
-            if raw_pv is None:
-                failed_pvs.append(pv_name)
-                continue
-
-            if not raw_pv.wait_for_connection(timeout=connection_timeout):
-                failed_pvs.append(pv_name)
-
-        if failed_pvs:
-            get_logger().warning(
-                f"Failed to connect to {len(failed_pvs)} PVs: "
-                f"{failed_pvs[:5]}"
-                + (
-                    f" and {len(failed_pvs)-5} more"
-                    if len(failed_pvs) > 5
-                    else ""
-                )
-            )
-
-        return failed_pvs
-
-    @classmethod
-    def _wrap_pvs(
-        cls,
-        pv_names: List[str],
-        auto_monitor: bool,
-        require_connection: bool,
-        config: Optional[PVConfig],
-        failed_pvs: List[str],
-    ) -> List[Optional["PV"]]:
-        """Wrap raw EPICS PVs in our PV class."""
-        if require_connection and failed_pvs:
-            raise PVConnectionError(
-                f"{len(failed_pvs)} of {len(pv_names)} PVs failed to connect "
-                f"in batch: {failed_pvs[:5]}"
-            )
-
-        wrapped_pvs = []
-        for pv_name in pv_names:
-            try:
-                pv = cls(
-                    pv_name,
-                    connection_timeout=0.1,  # Short timeout since already connected
-                    auto_monitor=auto_monitor,
-                    require_connection=require_connection,
-                    config=config,
-                    _skip_connection_wait=True,  # Skip wait, already connected
-                )
-                wrapped_pvs.append(pv)
-            except Exception as e:
-                if require_connection:
-                    raise PVConnectionError(
-                        f"Failed to create PV {pv_name} in batch: {e}"
-                    )
-                else:
-                    get_logger().warning(f"Failed to wrap PV {pv_name}: {e}")
-                    wrapped_pvs.append(None)
-
-        return wrapped_pvs
-
-    @staticmethod
-    def get_many(
-        pvs: List["PV"],
-        timeout: Optional[float] = None,
-        raise_on_error: bool = True,
-    ) -> List[Any]:
-        """
-        Get multiple PV values efficiently.
-
-        Args:
-            pvs: List of PV objects
-            timeout: Timeout for each get
-            raise_on_error: If True, raise exception on any failure.
-                           If False, failed PVs will have None in results.
-
-        Returns:
-            List of values in same order as input PVs
-
-        Raises:
-            PVGetError: If any PV fails to get and raise_on_error=True
-        """
-        results = []
-        errors = []
-
-        for pv in pvs:
-            try:
-                results.append(pv.get(timeout=timeout))
-            except (PVConnectionError, PVGetError) as e:
-                errors.append((pv.pvname, str(e)))
-                results.append(None)
-
-        if errors and raise_on_error:
-            error_msg = f"Failed to get {len(errors)} PVs: {errors}"
-            get_logger().error(error_msg)
-            raise PVGetError(error_msg)
-
-        return results
-
-    @staticmethod
-    def put_many(
-        pvs: List["PV"],
-        values: List[Any],
-        timeout: Optional[float] = None,
-        wait: bool = True,
-        raise_on_error: bool = True,
-    ) -> List[bool]:
-        """
-        Put values to multiple PVs.
-
-        Args:
-            pvs: List of PV objects
-            values: List of values to write (must match length of pvs)
-            timeout: Timeout for each put
-            wait: Wait for completion
-            raise_on_error: If True, raise exception on any failure
-
-        Returns:
-            List of success status (True/False) for each PV
-
-        Raises:
-            ValueError: If pvs and values lengths don't match
-            PVPutError: If any PV fails to put and raise_on_error=True
-        """
-        if len(pvs) != len(values):
-            raise ValueError(
-                f"Length mismatch: {len(pvs)} PVs but {len(values)} values"
-            )
-
-        results = []
-        errors = []
-
-        for pv, value in zip(pvs, values):
-            try:
-                pv.put(value, timeout=timeout, wait=wait)
-                results.append(True)
-            except (PVConnectionError, PVPutError) as e:
-                errors.append((pv.pvname, value, str(e)))
-                results.append(False)
-
-        if errors and raise_on_error:
-            error_msg = f"Failed to put {len(errors)} PVs: {errors}"
-            get_logger().error(error_msg)
-            raise PVPutError(error_msg)
-
-        return results
