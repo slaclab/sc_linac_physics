@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.67.4 (2026-11-23)
+
+### Bug Fixes
+
+- **sim**: Restore amplitude on interlock reset after RFSTATE is written
+  ([#535](https://github.com/slaclab/sc_linac_physics/pull/535),
+  [`4da2144`](https://github.com/slaclab/sc_linac_physics/commit/4da21441fbac1335e208b976a8453c4949b13fdd))
+
+
 ## v9.67.3 (2026-11-18)
 
 ### Documentation
