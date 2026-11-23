@@ -515,3 +515,51 @@ class TestHideFault:
         with patch.object(display.plot_window, "addItem") as add:
             display.hide_fault_combo_box.setCurrentText("BCS")
         add.assert_not_called()
+
+
+class TestRangeEdits:
+    """editingFinished fires on every focus-out, edited or not."""
+
+    def _fetched(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(return_value=_counts("BCS"))
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+
+    def test_focus_out_without_edit_does_not_refetch(self, display):
+        self._fetched(display)
+        display.start_selector.editingFinished.emit()
+        display.end_selector.editingFinished.emit()
+        display.cavity.get_fault_counts.assert_called_once()
+
+    def test_edited_range_refetches(self, display):
+        self._fetched(display)
+        display.start_selector.setDateTime(
+            display.start_selector.dateTime().addSecs(-60)
+        )
+        with patch.object(display.plot_window, "addItem"):
+            display.start_selector.editingFinished.emit()
+        assert display.cavity.get_fault_counts.call_count == 2
+
+    def test_edit_after_failure_retries(self, display):
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(side_effect=RuntimeError("x"))
+        display.update_plot()
+        display.end_selector.editingFinished.emit()
+        assert display.cavity.get_fault_counts.call_count == 2
+
+    def test_edit_after_reopen_refetches(self, display):
+        self._fetched(display)
+        display.close()
+        with patch.object(display.plot_window, "addItem"):
+            display.end_selector.editingFinished.emit()
+        assert display.cavity.get_fault_counts.call_count == 2
+
+    def test_edit_after_empty_result_retries(self, display):
+        """{} may be an archiver failure, which get_fault_counts swallows."""
+        display.cavity = Mock(cryomodule="01", number=1)
+        display.cavity.get_fault_counts = Mock(return_value={})
+        with patch.object(display.plot_window, "addItem"):
+            display.update_plot()
+            display.end_selector.editingFinished.emit()
+        assert display.cavity.get_fault_counts.call_count == 2

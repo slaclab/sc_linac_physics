@@ -4,7 +4,6 @@ Backend cavity fault monitoring and management with batch PV initialization.
 
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
-from time import time
 from typing import DefaultDict, Optional, Dict, Iterable, List, Tuple
 
 import pandas as pd
@@ -86,8 +85,6 @@ class BackendCavity(Cavity):
             cavity_num: Cavity number (1-8 typically)
             rack_object: Parent rack object containing this cavity
         """
-        init_start = time()
-
         super().__init__(cavity_num=cavity_num, rack_object=rack_object)
 
         # PV names for fault reporting
@@ -102,27 +99,12 @@ class BackendCavity(Cavity):
         self.faults: OrderedDict[int, Fault] = OrderedDict()
 
         # Create fault objects (always lazy initially for speed)
-        fault_creation_start = time()
         self.create_faults()
-        fault_creation_duration = time() - fault_creation_start
 
-        # Batch initialize PVs if not lazy mode
+        # Batch initialize PVs if not lazy mode; BackendMachine logs a
+        # one-line summary once every cavity is built
         if not self.rack.cryomodule.linac.machine.lazy_fault_pvs:
             self._batch_pv_init()
-
-        else:
-            total_duration = time() - init_start
-            cavity_fault_logger.debug(
-                "Cavity initialized (lazy mode)",
-                extra={
-                    "extra_data": {
-                        "cavity": self.pv_prefix,
-                        "num_faults": len(self.faults),
-                        "fault_creation_sec": round(fault_creation_duration, 3),
-                        "total_init_sec": round(total_duration, 3),
-                    }
-                },
-            )
 
     def _batch_pv_init(self) -> int:
         """Initialize only status PVs for this cavity using batch creation.
