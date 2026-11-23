@@ -1,0 +1,64 @@
+# Shipped profiles for the mock archiver.
+#
+# Rules match the PV name as a glob, top to bottom; the first match wins.
+# Fields are PVProfile's: kind, base, noise, trend, trend_amplitude,
+# noise_scale, spike_prob, spike_scale, sample_rate_hz.
+#
+# The numbers are illustrative, chosen so plots look plausible. They are not
+# measured machine values.
+# CHECK: typical AACTMEAN, DS/US liquid level and JT valve position at
+# operating conditions, if the mock should look like the real machine.
+
+rules:
+  # Cavity amplitude sum, ramping up over the window
+  - match: "*AACTMEANSUM*"
+    profile: {kind: FLOAT, base: 100.0, noise: 5.0, trend: quadratic, trend_amplitude: 30.0}
+
+  # Cavity amplitude and gradient
+  - match: "*AACTMEAN*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+  - match: "*ADES*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+  - match: "*AACT*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+  - match: "*GDES*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+  - match: "*GACT*"
+    profile: {kind: FLOAT, base: 16.5, noise: 0.1}
+
+  # Phase
+  - match: "*PDES*"
+    profile: {kind: FLOAT, base: 0.0, noise: 0.5}
+  - match: "*PACT*"
+    profile: {kind: FLOAT, base: 0.0, noise: 0.5}
+
+  # Detune
+  - match: "*DF_COLD*"
+    profile: {kind: FLOAT, base: 0.0, noise: 10.0, trend: linear, trend_amplitude: 5.0}
+  - match: "*DFBEST*"
+    profile: {kind: FLOAT, base: 0.0, noise: 10.0, trend: sine, trend_amplitude: 5.0}
+  - match: "*DETUNE*"
+    profile: {kind: FLOAT, base: 0.0, noise: 10.0, trend: sine, trend_amplitude: 5.0}
+  - match: "*DF*"
+    profile: {kind: FLOAT, base: 0.0, noise: 10.0}
+
+  - match: "*SEL_ASET*"
+    profile: {kind: FLOAT, base: 0.0, noise: 0.5}
+
+  # JT valve position
+  - match: "*PVJT*"
+    profile: {kind: FLOAT, base: 40.0, noise: 3.0, trend: sine, trend_amplitude: 8.0}
+  - match: "*ORBV*"
+    profile: {kind: FLOAT, base: 40.0, noise: 3.0, trend: sine, trend_amplitude: 8.0}
+
+  # Liquid levels
+  - match: "*DS:LVL*"
+    profile: {kind: FLOAT, base: 90.0, noise: 2.0, trend: sine, trend_amplitude: 4.0, noise_scale: 0.5}
+  - match: "*US:LVL*"
+    profile: {kind: FLOAT, base: 70.0, noise: 2.0, trend: sine, trend_amplitude: 4.0, noise_scale: 0.5}
+
+# Used when no rule matches, by the kind the PV name suggests
+defaults:
+  FLOAT: {base: 0.0, noise: 0.1, trend: flat}
+  INT: {}
+  ENUM: {}

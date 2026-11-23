@@ -10,6 +10,7 @@ include pyproject.toml
 recursive-include src *.json
 recursive-include src *.mat
 recursive-include src *.csv
+recursive-include src *.yaml
 recursive-include src *.md
 recursive-include src *.hdf5
 
