@@ -9,6 +9,9 @@ from sc_linac_physics.utils.archiver_mock.generator import (
     guess_kind,
     mock_values_over_time_range,
 )
+from sc_linac_physics.utils.archiver_mock.ioc_types import (
+    reset as reset_ioc_types,
+)
 from sc_linac_physics.utils.archiver_mock.profiles import (
     PROFILE_STORE,
     ProfileStore,
@@ -22,4 +25,5 @@ __all__ = [
     "PVProfile",
     "guess_kind",
     "mock_values_over_time_range",
+    "reset_ioc_types",
 ]

@@ -14,6 +14,11 @@ import numpy as np
 import pandas as pd
 
 from sc_linac_physics.utils.archiver import COLUMNS, LOCAL_TZ, _localize
+from sc_linac_physics.utils.archiver_mock.fault_history import (
+    fault_history_frame,
+    is_fault_history_pv,
+)
+from sc_linac_physics.utils.archiver_mock.ioc_types import ioc_kind
 from sc_linac_physics.utils.archiver_mock.profiles import (
     PROFILE_STORE,
     PVProfile,
@@ -28,10 +33,6 @@ MAX_SAMPLES = 10_000
 # status. Neither is ever INVALID, so every sample is valid.
 ALARM_FRACTION = 0.10
 STATUS_FRACTION = 0.05
-
-# Fault history PVs need status and severity that agree in time; the
-# generator for them comes separately. Until then they have no samples.
-FAULT_HISTORY_SUFFIXES = (":CUDSTATUS", ":CUDSEVR")
 
 
 def _flat(t, amplitude):
@@ -84,9 +85,12 @@ def _to_utc(moment: datetime) -> datetime:
 def _frame(
     pv: str, start: datetime, end: datetime, store: ProfileStore
 ) -> pd.DataFrame:
-    if pv.endswith(FAULT_HISTORY_SUFFIXES) or end <= start:
+    if end <= start:
         return pd.DataFrame(columns=COLUMNS)
-    kind = store.rule_kind(pv) or guess_kind(pv)
+    if is_fault_history_pv(pv):
+        return fault_history_frame(pv, start, end)
+    # A rule's kind wins, then the running IOC's, then the name
+    kind = store.rule_kind(pv) or ioc_kind(pv) or guess_kind(pv)
     profile = store.resolve(pv, kind)
     rng = np.random.default_rng(_seed(pv, start, end, profile))
 
