@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+from sc_linac_physics.applications.q0 import q0_utils
 from tests.applications.q0 import pyepics_shim
 
 
@@ -14,3 +15,10 @@ def _q0_pvs_through_pyepics_shim():
         pyepics_shim.FakePV,
     ):
         yield
+
+
+@pytest.fixture(autouse=True)
+def q0_data_dir(tmp_path, monkeypatch):
+    """Point q0_utils.data_dir at a temp folder, so no test writes to ~/."""
+    monkeypatch.setattr(q0_utils, "data_dir", lambda: tmp_path / "q0")
+    return tmp_path / "q0"
