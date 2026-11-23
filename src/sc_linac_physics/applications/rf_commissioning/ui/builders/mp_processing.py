@@ -26,8 +26,36 @@ from sc_linac_physics.applications.rf_commissioning.phases.mp_processing import 
 
 from .base import PhaseUIBase
 from .styles import PV_LABEL_STYLE
+from .theme import (
+    BG_INSET,
+    BG_PANEL,
+    BORDER,
+    MONO_FONT_STACK,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+)
 
 QUENCH_COLUMNS = ("#", "Time", "ADES (MV)", "Since previous (s)")
+
+# No app-wide rule styles tables, so without this Qt falls back to the
+# system palette: white cells in the dark theme.
+QUENCH_TABLE_STYLE = f"""
+    QTableWidget {{
+        background-color: {BG_INSET};
+        alternate-background-color: {BG_PANEL};
+        color: {TEXT_PRIMARY};
+        gridline-color: {BORDER};
+        border: 1px solid {BORDER};
+        font-family: {MONO_FONT_STACK};
+    }}
+    QHeaderView::section {{
+        background-color: {BG_PANEL};
+        color: {TEXT_SECONDARY};
+        border: none;
+        border-bottom: 1px solid {BORDER};
+        padding: 3px;
+    }}
+"""
 
 
 class Setting(NamedTuple):
@@ -175,6 +203,8 @@ class MPProcessingUI(PhaseUIBase):
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         table.verticalHeader().setVisible(False)
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setAlternatingRowColors(True)
+        table.setStyleSheet(QUENCH_TABLE_STYLE)
         table.setMinimumHeight(80)
         layout.addWidget(table)
         group.setLayout(layout)
