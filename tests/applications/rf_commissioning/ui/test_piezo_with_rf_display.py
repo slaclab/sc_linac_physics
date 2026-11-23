@@ -19,7 +19,6 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.displays.piezo_with_rf import (  # noqa: E501
     PiezoWithRFDisplay,
-    age_text,
 )
 
 DISPLAY = (
@@ -169,12 +168,6 @@ def test_stale_prompt_answers(display, button, expected):
             "SSA calibration", "CALTS", datetime(2026, 10, 20, 9, 0), True
         )
     assert answer is expected
-
-
-def test_age_text():
-    now = datetime(2026, 10, 20, 14, 57)
-    assert age_text(datetime(2026, 10, 20, 11, 52), now) == "3 h 05 min"
-    assert age_text(None) == "unknown"
 
 
 def test_finishing_resets_the_panel(display):

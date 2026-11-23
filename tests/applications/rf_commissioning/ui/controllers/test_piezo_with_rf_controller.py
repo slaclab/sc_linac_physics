@@ -22,6 +22,7 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseResult,
     PhaseStepResult,
 )
+from sc_linac_physics.applications.rf_commissioning.phases import step_runner
 from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
     SegmentOutcome,
     SegmentResult,
@@ -169,7 +170,7 @@ def test_abort_sets_the_flag_now_and_writes_the_status_pv_off_thread(
     controller, cavity, monkeypatch
 ):
     _ThreadRecorder.made = []
-    monkeypatch.setattr(module.threading, "Thread", _ThreadRecorder)
+    monkeypatch.setattr(step_runner.threading, "Thread", _ThreadRecorder)
     controller.on_start_test()
     controller.run.clear_abort()  # what RunnerBridge does before a segment
     assert cavity.abort_flag is False

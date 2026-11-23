@@ -21,16 +21,11 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_with_rf_controller import (  # noqa: E501
     PiezoWithRFController,
 )
+from sc_linac_physics.applications.rf_commissioning.ui.stale_result_prompt import (  # noqa: E501
+    ask_rerun,
+)
 
 from .base_placeholder import BasePlaceholderDisplay
-
-
-def age_text(stamp: datetime | None, now: datetime | None = None) -> str:
-    """'3 h 05 min' from a timestamp; 'unknown' without one."""
-    if stamp is None:
-        return "unknown"
-    minutes = int(((now or datetime.now()) - stamp).total_seconds() // 60)
-    return f"{minutes // 60} h {minutes % 60:02d} min"
 
 
 class PiezoWithRFDisplay(BasePlaceholderDisplay):
@@ -197,32 +192,7 @@ class PiezoWithRFDisplay(BasePlaceholderDisplay):
         self, label: str, pv: str, stamp: datetime | None, good: bool | None
     ) -> bool | None:
         """Rerun (True), Skip (False) or closed (None) for one stale result."""
-        why = (
-            f"is {age_text(stamp)} old (over 1 h)"
-            if good
-            else "did not finish Good/Complete"
-        )
-        when = f"{stamp:%Y-%m-%d %H:%M}" if stamp else "unknown"
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Warning)
-        box.setWindowTitle(f"{label[0].upper()}{label[1:]} is stale")
-        box.setText(f"The last {label} {why}.")
-        box.setInformativeText(
-            f"Last run: {when} ({pv}).\n\n"
-            f"Rerun: setup_rf re-runs the {label}.\n"
-            "Skip: keep the values already on the machine; the record "
-            "notes that you skipped it."
-        )
-        rerun = box.addButton("Rerun", QMessageBox.AcceptRole)
-        skip = box.addButton("Skip", QMessageBox.RejectRole)
-        box.addButton(QMessageBox.Cancel)
-        box.exec_()
-        clicked = box.clickedButton()
-        if clicked is rerun:
-            return True
-        if clicked is skip:
-            return False
-        return None
+        return ask_rerun(self, label, pv, stamp, good)
 
     # ------------------------------------------------------------------
     # Push / Don't Push
