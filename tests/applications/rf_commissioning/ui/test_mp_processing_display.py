@@ -212,3 +212,11 @@ def test_a_rerun_clears_the_previous_runs_rows(display):
     display.refresh_progress()
     assert display.quench_table.rowCount() == 1
     assert display.quench_table.item(0, 2).text() == "13.00"
+
+
+def test_amplitudes_show_two_decimals_whatever_the_pv_prec(display):
+    for name in ("pydm_ades", "pydm_aact", "pydm_ades_max"):
+        label = getattr(display, name)
+        assert label.precisionFromPV is False, name
+        assert label.precision == 2, name
+    assert display.pydm_rf_state.precisionFromPV is True

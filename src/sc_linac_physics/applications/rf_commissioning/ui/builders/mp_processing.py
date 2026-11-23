@@ -139,19 +139,25 @@ class MPProcessingUI(PhaseUIBase):
         grid = QGridLayout()
         grid.setSpacing(6)
         grid.setContentsMargins(8, 8, 8, 8)
+        # decimals: None keeps the PV's own PREC. Amplitudes show 2: the sim
+        # serves ADES_MAX with PREC 0, which showed 15.8 as "16".
+        # CHECK: what PREC do ADES, AACTMEAN and ADES_MAX have on production?
         rows = (
-            ("ADES:", "pydm_ades"),
-            ("AACTMEAN:", "pydm_aact"),
-            ("ADES_MAX:", "pydm_ades_max"),
-            ("Quench latch (QUENCH_LTCH):", "pydm_quench_latch"),
-            ("RF mode (RFMODE):", "pydm_rf_mode"),
-            ("RF state (RFSTATE):", "pydm_rf_state"),
+            ("ADES:", "pydm_ades", 2),
+            ("AACTMEAN:", "pydm_aact", 2),
+            ("ADES_MAX:", "pydm_ades_max", 2),
+            ("Quench latch (QUENCH_LTCH):", "pydm_quench_latch", None),
+            ("RF mode (RFMODE):", "pydm_rf_mode", None),
+            ("RF state (RFSTATE):", "pydm_rf_state", None),
         )
-        for row, (caption, name) in enumerate(rows):
+        for row, (caption, name, decimals) in enumerate(rows):
             label = self._register(name, PyDMLabel(parent=self.parent))
             label.setStyleSheet(PV_LABEL_STYLE)
             label.setAlignment(Qt.AlignCenter)
             label.showUnits = True
+            if decimals is not None:
+                label.precisionFromPV = False
+                label.precision = decimals
             grid.addWidget(QLabel(caption), row, 0)
             grid.addWidget(label, row, 1)
         group.setLayout(grid)
