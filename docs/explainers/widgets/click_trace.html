@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Follow one click through RF commissioning — SC Linac</title>
+<link rel="stylesheet" href="widgets.css">
+<style>
+  button {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    padding: .35rem .8rem;
+    font: inherit;
+    font-size: .88rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  .cite { font-family: var(--mono); font-size: .78rem; color: var(--dim); }
+  /* ---- Section 2 click tracer ---- */
+  .lanes { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 1rem; }
+  .lane {
+    flex: 1 1 7rem;
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+    padding: .4rem .5rem;
+    font-size: .8rem;
+    text-align: center;
+    color: var(--dim);
+    background: var(--bg);
+  }
+  .lane.on { border-color: var(--accent); color: var(--ink); background: #1f2a3d; }
+  :root[data-theme="light"] .lane.on { background: #e3ecfb; }
+  .lane.done { color: var(--ink); }
+  .hop-title { font-weight: 600; margin: .25rem 0; }
+  .hop-nav { display: flex; gap: .5rem; align-items: center; margin-top: 1rem; }
+  .hop-nav .count { color: var(--dim); font-size: .85rem; margin-left: auto; }
+</style>
+</head>
+<body>
+<main>
+  <p class="standalone-only note"><a href="https://slaclab.github.io/sc_linac_physics/explainers/rf_commissioning/">Part of: How RF commissioning is built</a></p>
+    <div class="panel" id="tracer">
+      <div class="lanes" id="lanes"></div>
+      <div aria-live="polite" aria-atomic="true">
+        <div class="hop-title" id="hop-title"></div>
+        <p id="hop-body"></p>
+        <p class="cite" id="hop-cite"></p>
+      </div>
+      <div class="hop-nav">
+        <button type="button" id="hop-prev">&larr; Back</button>
+        <button type="button" id="hop-next">Next &rarr;</button>
+        <span class="count" id="hop-count"></span>
+      </div>
+    </div>
+
+</main>
+<script>
+
+  "use strict";
+
+  // Each hop names the layer it lives in (index into LANES) and the code that
+  // does the work. Citations are plain text here; test_citations.py checks
+  // them the same as the ones in the prose above.
+  const LANES = ["Display", "Controller", "Session", "Thread", "Phase", "Machine", "SQLite"];
+
+  const HOPS = [
+    {
+      lane: 0,
+      title: "The display forwards the click",
+      body: "The tab owns no logic. Its slot hands the click to its controller.",
+      cite: "ui/displays/piezo_pre_rf.py::PiezoPreRFDisplay.on_run_automated_test “self.controller.on_run_automated_test()”",
+    },
+    {
+      lane: 2,
+      title: "The session opens an attempt",
+      body: "Before building anything, the controller asks the session for a new attempt. WorkflowService inserts a phase-instance row with the next attempt number for this phase. Reruns never overwrite an earlier attempt.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._prepare_phase_context “phase_start = self.session.start_active_phase_instance(”, services/workflow_service.py::WorkflowService.start_phase_for_record “attempt_number = int(cursor.fetchone()[0]) + 1”",
+    },
+    {
+      lane: 1,
+      title: "The controller builds the phase",
+      body: "With the attempt open, a PhaseContext wraps the active record and cavity, and the controller constructs the phase object from it.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._prepare_phase_context “self.phase = PiezoPreRFPhase(self.context)”",
+    },
+    {
+      lane: 3,
+      title: "Steps run on a background thread",
+      body: "A daemon threading.Thread walks the step list and calls the phase's retry wrapper for each step. The GUI thread stays free.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController._run_phase_in_background “success = self.phase._execute_step_with_retry(step_name)”",
+    },
+    {
+      lane: 4,
+      title: "The phase dispatches each step",
+      body: "execute_step looks up the step by name and returns SUCCESS, RETRY, FAILED or SKIP.",
+      cite: "phases/piezo_pre_rf.py::PiezoPreRFPhase.execute_step",
+    },
+    {
+      lane: 5,
+      title: "The machine is written",
+      body: "The phase's steps put to PVs through the shared hardware classes. For this phase: BIAS, ENABLE, MODECTRL, DAC_SP, then TESTSTRT = 1. Some PVs are also written straight from a controller or a PyDM widget when the operator acts. Section 5 lists both.",
+      cite: "phases/piezo_pre_rf.py::PiezoPreRFPhase._trigger_prerf_test “piezo.prerf_test_start_pv_obj.put(1)”",
+    },
+    {
+      lane: 1,
+      title: "Results come back as a Qt signal",
+      body: "The worker thread emits a signal. Qt delivers it on the GUI thread, which is the only thread that touches widgets.",
+      cite: "ui/controllers/piezo_pre_rf_controller.py::PiezoPreRFController “phase_run_finished = pyqtSignal(bool, str)”",
+    },
+    {
+      lane: 2,
+      title: "The session closes the attempt",
+      body: "The attempt is marked complete. If there is a next phase the run stays in progress.",
+      cite: 'services/workflow_service.py::WorkflowService.complete_phase_instance “run_status = "complete" if next_phase is None else "in_progress"”',
+    },
+    {
+      lane: 6,
+      title: "The record is saved with a version check",
+      body: "The UPDATE only matches if nobody else saved since this window loaded the record. Otherwise the save fails rather than overwriting.",
+      cite: "repositories/records.py::RecordRepository.save_record “WHERE id = ? AND version = ?”",
+    },
+  ];
+
+  const lanesEl = document.getElementById("lanes");
+  const laneEls = LANES.map((name) => {
+    const el = document.createElement("div");
+    el.className = "lane";
+    el.textContent = name;
+    lanesEl.appendChild(el);
+    return el;
+  });
+
+  const titleEl = document.getElementById("hop-title");
+  const bodyEl = document.getElementById("hop-body");
+  const citeEl = document.getElementById("hop-cite");
+  const countEl = document.getElementById("hop-count");
+  const prevBtn = document.getElementById("hop-prev");
+  const nextBtn = document.getElementById("hop-next");
+  let at = 0;
+
+  function render() {
+    const hop = HOPS[at];
+    const visited = new Set(HOPS.slice(0, at).map((h) => h.lane));
+    laneEls.forEach((el, i) => {
+      el.classList.toggle("on", i === hop.lane);
+      el.classList.toggle("done", visited.has(i) && i !== hop.lane);
+    });
+    titleEl.textContent = (at + 1) + ". " + hop.title;
+    bodyEl.textContent = hop.body;
+    citeEl.textContent = hop.cite;
+    countEl.textContent = (at + 1) + " / " + HOPS.length;
+    prevBtn.disabled = at === 0;
+    nextBtn.disabled = at === HOPS.length - 1;
+  }
+
+  prevBtn.addEventListener("click", () => { if (at > 0) { at -= 1; render(); } });
+  nextBtn.addEventListener("click", () => { if (at < HOPS.length - 1) { at += 1; render(); } });
+  render();
+</script>
+</body>
+</html>
