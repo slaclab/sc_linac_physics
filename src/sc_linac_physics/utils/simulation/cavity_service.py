@@ -808,7 +808,11 @@ class CavityPVGroup(PVGroup):
 
     def _determine_quench_type(self) -> str:
         """Determine what type of quench to simulate."""
-        type_setting = self.quench_type.value
+        # caproto holds an enum as the int it was created with until the first
+        # write, then as the label string, so compare through _enum_to_int.
+        type_setting = _enum_to_int(
+            self.quench_type.value, self.quench_type.enum_strings
+        )
 
         if type_setting == 0:  # Real
             return "real"
@@ -1017,7 +1021,13 @@ class CavityPVGroup(PVGroup):
             await self.quench_latch.write(0)
             await self.ssa_latch.write(0)
             # Restore amplitude only if RF is on
-            if self.rf_state_act.value == 1:
+            # RFSTATE reads "On" once power_on() has written it, 1 before.
+            if (
+                _enum_to_int(
+                    self.rf_state_act.value, self.rf_state_act.enum_strings
+                )
+                == 1
+            ):
                 await self.aact.write(self.ades.value)
                 await self.amean.write(self.ades.value)
             await self._update_amplitude_alarm()
