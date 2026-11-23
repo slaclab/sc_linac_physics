@@ -27,18 +27,35 @@ from sc_linac_physics.applications.rf_commissioning.phases.mp_processing import 
 from .base import PhaseUIBase
 from .styles import PV_LABEL_STYLE
 from .theme import (
+    ACCENT_LOCAL,
     BG_INSET,
+    BG_INTERACTIVE,
     BG_PANEL,
     BORDER,
     MONO_FONT_STACK,
+    TEXT_DISABLED,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
 
 QUENCH_COLUMNS = ("#", "Time", "ADES (MV)", "Since previous (s)")
 
-# No app-wide rule styles tables, so without this Qt falls back to the
-# system palette: white cells in the dark theme.
+# No app-wide rule styles tables or spin boxes, so without these Qt falls
+# back to the system palette: white in the dark theme.
+SETTING_SPIN_STYLE = f"""
+    QDoubleSpinBox {{
+        background-color: {BG_INTERACTIVE};
+        color: {TEXT_PRIMARY};
+        border: 1px solid {BORDER};
+        border-radius: 3px;
+        padding: 2px 4px;
+    }}
+    QDoubleSpinBox:focus {{ border: 1px solid {ACCENT_LOCAL}; }}
+    QDoubleSpinBox:disabled {{
+        background-color: {BG_INSET};
+        color: {TEXT_DISABLED};
+    }}
+"""
 QUENCH_TABLE_STYLE = f"""
     QTableWidget {{
         background-color: {BG_INSET};
@@ -155,6 +172,7 @@ class MPProcessingUI(PhaseUIBase):
             spin.setSingleStep(setting.step)
             spin.setDecimals(setting.decimals)
             spin.setSuffix(f" {setting.unit}")
+            spin.setStyleSheet(SETTING_SPIN_STYLE)
             spin.setValue(getattr(defaults, setting.field) / setting.scale)
             layout.addWidget(QLabel(setting.caption), row, 0)
             layout.addWidget(spin, row, 1)
