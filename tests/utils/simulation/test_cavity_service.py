@@ -1112,3 +1112,53 @@ class TestDetuneAlarm:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestEnumReadsAfterAWrite:
+    """caproto holds an enum as its initial int until the first write, then
+    as the label string. These go through caproto's write path, so RFSTATE
+    and SIM:QUENCH_TYPE hold strings, as they do in a running sim."""
+
+    @pytest.mark.asyncio
+    async def test_reset_after_quench_restores_amplitude(self, regular_cavity):
+        await regular_cavity.ades.write(15.8)
+        await regular_cavity.rf_state_des.write("On")
+        assert regular_cavity.rf_state_act.value == "On"
+
+        with patch.object(
+            regular_cavity, "_capture_quench_waveforms", new_callable=AsyncMock
+        ):
+            await regular_cavity.quench_latch.write(1)
+        assert regular_cavity.amean.value == 0
+
+        await regular_cavity.interlock_reset.write(1)
+
+        assert regular_cavity.aact.value == pytest.approx(15.8)
+        assert regular_cavity.amean.value == pytest.approx(15.8)
+
+    @pytest.mark.asyncio
+    async def test_reset_leaves_amplitude_at_zero_with_rf_off(
+        self, regular_cavity
+    ):
+        await regular_cavity.ades.write(15.8)
+        await regular_cavity.rf_state_des.write("Off")
+
+        await regular_cavity.interlock_reset.write(1)
+
+        assert regular_cavity.amean.value == 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "label, expected", [("Real", "real"), ("Spurious", "spurious")]
+    )
+    async def test_quench_type_written_by_label(
+        self, regular_cavity, label, expected
+    ):
+        await regular_cavity.quench_type.write(label)
+
+        # A set type must not fall through to the Random branch.
+        with patch(
+            "sc_linac_physics.utils.simulation.cavity_service.np.random.random",
+            side_effect=AssertionError("Random branch taken"),
+        ):
+            assert regular_cavity._determine_quench_type() == expected
