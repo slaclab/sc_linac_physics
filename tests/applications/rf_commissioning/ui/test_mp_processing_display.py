@@ -1,0 +1,182 @@
+"""Tests for MPProcessingDisplay: registry, Settings, toolbar, quench table."""
+
+from datetime import datetime, timedelta
+from unittest.mock import patch
+
+import pytest
+from pydm.widgets import PyDMLabel
+
+from sc_linac_physics.applications.rf_commissioning.models.data_models import (
+    CommissioningPhase,
+    CommissioningRecord,
+    MPProcessingData,
+)
+from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
+    PhaseContext,
+)
+from sc_linac_physics.applications.rf_commissioning.session_manager import (
+    CommissioningSession,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.builders import (
+    MPProcessingUI,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.displays.mp_processing import (  # noqa: E501
+    MPProcessingDisplay,
+    since_last_quench_text,
+)
+
+T0 = datetime(2026, 11, 23, 9, 0, 0)
+
+
+@pytest.fixture
+def display(qtbot, tmp_path):
+    s = CommissioningSession(db_path=str(tmp_path / "mp.db"))
+    d = MPProcessingDisplay(session=s)
+    qtbot.addWidget(d)
+    return d
+
+
+def _with_quenches(display, *offsets_s):
+    """Give the controller a run whose record has these quenches."""
+    data = MPProcessingData(max_amplitude_reached=14.25)
+    for offset in offsets_s:
+        data.add_quench(
+            amplitude=14.0, timestamp=T0 + timedelta(seconds=offset)
+        )
+    record = CommissioningRecord(
+        linac=1, cryomodule="02", cavity_number=1, mp_processing=data
+    )
+    display.controller.context = PhaseContext(record=record, operator="x")
+    return data
+
+
+def test_registry_and_package_export_name_this_display():
+    from sc_linac_physics.applications.rf_commissioning import ui as ui_pkg
+    from sc_linac_physics.applications.rf_commissioning.ui.displays import (
+        standard,
+    )
+    from sc_linac_physics.applications.rf_commissioning.ui.displays.registry import (  # noqa: E501
+        PHASE_DISPLAY_MAP,
+    )
+
+    assert (
+        PHASE_DISPLAY_MAP[CommissioningPhase.MP_PROCESSING]
+        is MPProcessingDisplay
+    )
+    assert ui_pkg.MPProcessingDisplay is MPProcessingDisplay
+    assert not hasattr(standard, "HighPowerMPProcessingDisplay")
+    assert MPProcessingDisplay.UI_CLASS is MPProcessingUI
+
+
+def test_live_readouts_are_pydm_labels(display):
+    for name in (
+        "pydm_ades",
+        "pydm_aact",
+        "pydm_ades_max",
+        "pydm_quench_latch",
+        "pydm_rf_mode",
+        "pydm_rf_state",
+    ):
+        assert isinstance(getattr(display, name), PyDMLabel), name
+
+
+def test_settings_default_to_the_phase_limits_and_stable_is_in_minutes(
+    display,
+):
+    assert display.stable_minutes_spin.value() == 5.0
+    display.stable_minutes_spin.setValue(10.0)
+    display.start_mv_spin.setValue(7.5)
+    settings = display.read_settings()
+    assert settings["stable_seconds"] == 600.0
+    assert settings["start_amplitude_mv"] == 7.5
+    assert settings["step_mv"] == 0.2
+    assert settings["step_seconds"] == 30.0
+
+
+def test_running_locks_settings_and_never_offers_pause(display):
+    display.set_running(True)
+    assert not display.start_mv_spin.isEnabled()
+    assert not display.pause_button.isEnabled()
+    assert display.abort_button.isEnabled()
+    display.set_running(False)
+    assert display.start_mv_spin.isEnabled()
+    assert not display.pause_button.isEnabled()
+
+
+def test_progress_fills_counts_and_adds_quench_rows_once(display):
+    _with_quenches(display, 0, 95)
+    display.refresh_progress()
+    display.refresh_progress()
+    assert display.quench_count_label.text() == "2"
+    assert display.max_ades_label.text() == "14.25 MV"
+    table = display.quench_table
+    assert table.rowCount() == 2
+    assert [table.item(1, c).text() for c in range(4)] == [
+        "2",
+        "09:01:35",
+        "14.00",
+        "95",
+    ]
+    assert table.item(0, 3).text() == "-"
+
+
+def test_clear_run_empties_the_table(display):
+    _with_quenches(display, 0)
+    display.refresh_progress()
+    display.clear_run()
+    assert display.quench_table.rowCount() == 0
+    assert display.quench_count_label.text() == "-"
+
+
+def test_retry_save_relabels_start(display):
+    display.set_retry_save()
+    assert display.run_button.isEnabled()
+    assert "Retry save" in display.run_button.text()
+
+
+@pytest.mark.parametrize(
+    "button, expected", [("Rerun", True), ("Skip", False), ("Cancel", None)]
+)
+def test_stale_prompt_answers(display, button, expected):
+    from PyQt5.QtWidgets import QMessageBox
+
+    def click(box):
+        next(b for b in box.buttons() if b.text() == button).click()
+
+    with patch.object(QMessageBox, "exec_", click):
+        answer = display.ask_rerun("SSA calibration", "CALTS", T0, True)
+    assert answer is expected
+
+
+def test_process_start_time_is_noted(display):
+    display.on_step_started("setup_rf")
+    assert display._process_started is None
+    display.on_step_started("process")
+    assert display._process_started is not None
+
+
+def test_since_last_quench_counts_from_the_latest_quench():
+    data = MPProcessingData()
+    data.add_quench(amplitude=12.0, timestamp=T0)
+    data.add_quench(amplitude=12.0, timestamp=T0 + timedelta(seconds=60))
+    now = T0 + timedelta(seconds=60 + 252)
+    assert since_last_quench_text(data, T0, now) == "4 min 12 s"
+
+
+def test_since_last_quench_before_any_counts_from_the_process_step():
+    now = T0 + timedelta(seconds=65)
+    assert (
+        since_last_quench_text(MPProcessingData(), T0, now)
+        == "1 min 05 s (no quench yet)"
+    )
+
+
+def test_since_last_quench_before_the_process_step_is_blank():
+    assert since_last_quench_text(None, None, T0) == "-"
+    assert since_last_quench_text(MPProcessingData(), None, T0) == "-"
+
+
+def test_since_last_quench_never_goes_negative():
+    data = MPProcessingData()
+    data.add_quench(amplitude=12.0, timestamp=T0 + timedelta(seconds=5))
+    assert since_last_quench_text(data, T0, T0) == "0 min 00 s"
