@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.68.0 (2026-11-24)
+
+### Bug Fixes
+
+- **cli**: Correct Passive and Average wording in sc-pv-info
+  ([#536](https://github.com/slaclab/sc_linac_physics/pull/536),
+  [`be6966b`](https://github.com/slaclab/sc_linac_physics/commit/be6966b065b736d46703057b2d4abbe220c6b414))
+
+### Features
+
+- **cli**: Show SCAN, and ALG/N for compress records, in sc-pv-info
+  ([#536](https://github.com/slaclab/sc_linac_physics/pull/536),
+  [`be6966b`](https://github.com/slaclab/sc_linac_physics/commit/be6966b065b736d46703057b2d4abbe220c6b414))
+
+
 ## v9.67.4 (2026-11-23)
 
 ### Bug Fixes
