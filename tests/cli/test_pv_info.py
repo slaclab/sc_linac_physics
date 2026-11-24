@@ -363,3 +363,101 @@ def test_main_prints(serve, capsys):
     with patch("sys.argv", ["sc-pv-info", "PUSH_DFGAIN", "--cm", "02"]):
         pv_info.main()
     assert "copies DFGAIN_NEW" in capsys.readouterr().out
+
+
+R = "RADM:SYS0:100:01:"
+
+# GAMMAAVE averaging GAMMAHST, the way the decarad IOC was described in
+# the request for this feature. SCAN, ALG and N values are made up.
+DECARAD = {
+    R + "GAMMAAVE": "0.12",
+    R + "GAMMAAVE.RTYP": "compress",
+    R + "GAMMAAVE.DESC": "Gamma dose rate average",
+    R + "GAMMAAVE.SCAN": "Passive",
+    R + "GAMMAAVE.INP": R + "GAMMAHST CP MS",
+    R + "GAMMAAVE.ALG": "N to 1 Average",
+    R + "GAMMAAVE.N": "10",
+    R + "GAMMAAVE.NSAM": "1",
+    R + "GAMMAAVE.FLNK": "",
+    R + "GAMMAHST": "0.1",
+    R + "GAMMAHST.RTYP": "compress",
+    R + "GAMMAHST.DESC": "Gamma dose rate history",
+    R + "GAMMAHST.SCAN": "1 second",
+}
+
+
+class TestScan:
+    @pytest.mark.parametrize(
+        "scan, words",
+        [
+            ("1 second", "processes every 1 second"),
+            (".1 second", "processes every .1 seconds"),
+            ("10 second", "processes every 10 seconds"),
+            ("Passive", "Passive: processes only when something links to it"),
+            ("I/O Intr", "processes when its device support reports new data"),
+            ("Event", "processes when its EVNT event is posted"),
+            ("Weird", "SCAN = Weird"),
+            (None, "SCAN doesn't answer"),
+        ],
+    )
+    def test_words(self, scan, words):
+        assert words in pv_info._scan_words(scan)
+
+    def test_record_scan_in_header(self, serve):
+        served = dict(PUSH_DFGAIN, **{P + "PUSH_DFGAIN.SCAN": "Passive"})
+        serve(served)
+        out = describe(P + "PUSH_DFGAIN")
+        assert "  Passive: processes only when" in out
+        assert out.index("Passive") < out.index("value:")
+
+    def test_target_scan_under_target(self, serve):
+        serve(DECARAD)
+        out = describe(R + "GAMMAAVE")
+        target = out.index('→ compress "Gamma dose rate history"')
+        assert out.index("processes every 1 second") > target
+
+    def test_scan_read_in_the_same_batch(self, serve):
+        created = serve(DECARAD)
+        describe(R + "GAMMAAVE")
+        batches = pv_info.PV.batch_create.call_args_list
+        head = [b.args[0] for b in batches if R + "GAMMAAVE.RTYP" in b.args[0]]
+        assert R + "GAMMAAVE.SCAN" in head[0]
+        assert [pv.pvname for pv in created].count(R + "GAMMAHST.SCAN") == 1
+
+
+class TestCompress:
+    def test_alg_and_n_in_summary(self, serve):
+        serve(DECARAD)
+        out = describe(R + "GAMMAAVE")
+        assert (
+            "It averages each group of 10 inputs from GAMMAHST into one "
+            "value (ALG N to 1 Average, N 10, NSAM 1)." in out
+        )
+        assert "CP: this record processes whenever GAMMAHST changes" in out
+
+    def test_only_compress_fields_asked_for(self, serve):
+        created = serve(DECARAD)
+        describe(R + "GAMMAAVE")
+        asked = {pv.pvname for pv in created}
+        assert {R + "GAMMAAVE.ALG", R + "GAMMAAVE.N"} <= asked
+        assert R + "GAMMAAVE.DOL" not in asked
+        assert R + "GAMMAHST.ALG" not in asked
+
+    def test_circular_buffer_uses_nsam(self, serve):
+        served = dict(
+            DECARAD,
+            **{
+                R + "GAMMAAVE.ALG": "Circular Buffer",
+                R + "GAMMAAVE.NSAM": "10",
+            },
+        )
+        serve(served)
+        assert "keeps its last 10 inputs from GAMMAHST" in describe(
+            R + "GAMMAAVE"
+        )
+
+    def test_unknown_alg(self, serve):
+        served = dict(DECARAD, **{R + "GAMMAAVE.ALG": "Odd"})
+        serve(served)
+        out = describe(R + "GAMMAAVE")
+        assert "compresses its input from GAMMAHST with ALG = Odd." in out

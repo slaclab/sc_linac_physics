@@ -6,6 +6,7 @@ Read-only: every PV here is read with PV.get, never put. The vocabulary
 
 import argparse
 import logging
+import re
 import time
 from typing import Dict, List, Optional, Sequence
 
@@ -133,7 +134,54 @@ def _fields_for(rtyp: str) -> List[str]:
         return ["CALC", *CALC_INPUTS, "FLNK"]
     if rtyp == "calcout":
         return ["CALC", *CALC_INPUTS, "OUT", "FLNK"]
+    if rtyp == "compress":
+        return ["INP", "ALG", "N", "NSAM", "FLNK"]
     return ["OMSL", "CALC", *LINK_FIELDS]
+
+
+# SCAN menu: EPICS Record Reference, "Fields Common to All Record Types".
+def _scan_words(scan: Optional[str]) -> str:
+    """How often a record processes, from its SCAN field."""
+    if scan is None:
+        return "SCAN doesn't answer"
+    period = re.fullmatch(r"\s*([\d.]+) seconds?", scan)
+    if period:
+        secs = period.group(1)
+        unit = "second" if float(secs) == 1 else "seconds"
+        return f"processes every {secs} {unit}"
+    return {
+        "Passive": "Passive: processes only when something links to it "
+        "(a PP link, a FLNK, a CP input) or writes its PROC",
+        "I/O Intr": "processes when its device support reports new data "
+        "(I/O Intr), so the device sets how often",
+        "Event": "processes when its EVNT event is posted (Event)",
+    }.get(scan, f"SCAN = {scan}")
+
+
+# ALG menu: EPICS Record Reference, compress record. The N to 1
+# algorithms reduce each group of N inputs to one value.
+# CHECK: with a scalar INP, does "N to 1" collect one input per process,
+# so the value changes once every N processes?
+# CHECK: is "Average" a running average of N arrays, or reset every N?
+COMPRESS_WORDS = {
+    "N to 1 Average": "averages each group of {n} inputs{src} into one value",
+    "N to 1 Low Value": "keeps the lowest of each group of {n} inputs{src}",
+    "N to 1 High Value": "keeps the highest of each group of {n} inputs{src}",
+    "N to 1 Median": "keeps the median of each group of {n} inputs{src}",
+    "Average": "averages its last {n} input arrays{src}, element by element",
+    "Circular Buffer": "keeps its last {nsam} inputs{src} in a circular buffer",
+}
+
+
+def _compress_words(fields: Dict[str, Optional[str]], source: str) -> str:
+    """One sentence on how a compress record reduces its input."""
+    alg, n, nsam = (fields.get(f) for f in ("ALG", "N", "NSAM"))
+    src = f" from {source}" if source else ""
+    words = COMPRESS_WORDS.get(alg or "")
+    if words is None:
+        return f"It compresses its input{src} with ALG = {alg}."
+    words = words.format(n=n, nsam=nsam, src=src)
+    return f"It {words} (ALG {alg}, N {n}, NSAM {nsam})."
 
 
 def _link_kind(link: str) -> Optional[str]:
@@ -205,6 +253,9 @@ def _link_lines(field, link, record, targets) -> List[str]:
         rtyp = targets.get(owner + ".RTYP") or "no record fields"
         desc = targets.get(owner + ".DESC") or ""
         lines.append(f'          → {rtyp} "{desc}" = {value}')
+        if targets.get(owner + ".RTYP"):
+            scan = targets.get(owner + ".SCAN")
+            lines.append("            " + _scan_words(scan))
     return lines
 
 
@@ -213,6 +264,9 @@ def _summary(rtyp, fields, record) -> Optional[str]:
         link = fields.get(field) or ""
         return None if not link or _link_kind(link) else link.split()
 
+    if rtyp == "compress":
+        inp = pv_target("INP")
+        return _compress_words(fields, _short(inp[0], record) if inp else "")
     if rtyp in ("calc", "calcout"):
         return (
             f"Its value is CALC = {fields.get('CALC')} over the inputs above."
@@ -245,7 +299,7 @@ def _record_lines(pv: PV) -> List[str]:
     name = pv.pvname
     owner = _record_of(name)
     dbf = "DBF_" + str(pv.type).split("_")[-1].upper()
-    head = _read([name, owner + ".RTYP", owner + ".DESC"])
+    head = _read([name] + [owner + f for f in (".RTYP", ".DESC", ".SCAN")])
     lines = [
         name,
         f"  connected · {pv.host} · {pv.access} · {dbf}",
@@ -255,6 +309,7 @@ def _record_lines(pv: PV) -> List[str]:
         lines.append("  no record fields served (.RTYP doesn't answer)")
     else:
         lines.append(f'  {rtyp} record: "{head[owner + ".DESC"] or ""}"')
+        lines.append("  " + _scan_words(head[owner + ".SCAN"]))
     lines.append(f"  value: {head[name]}")
     if dbf == "DBF_ENUM":
         pv.get_ctrlvars(timeout=CONNECT_TIMEOUT_S, warn=False)
@@ -285,7 +340,11 @@ def _links_section(name: str, rtyp: str) -> List[str]:
     target_names = [v.split()[0] for v in links.values() if not _link_kind(v)]
     targets = _read(
         list(target_names)
-        + [_record_of(t) + f for t in target_names for f in (".RTYP", ".DESC")]
+        + [
+            _record_of(t) + f
+            for t in target_names
+            for f in (".RTYP", ".DESC", ".SCAN")
+        ]
     )
 
     lines = ["", "Links"]
