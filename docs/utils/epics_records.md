@@ -32,8 +32,9 @@ makes it process. It stores nothing; `PUSH_DFGAIN.PROC = 1` means "run
 
 `.SCAN` says what else makes it process: a period such as `1 second`,
 `I/O Intr` (its device support says when new data has arrived), or
-`Passive` (only when another record links to it with `PP`, `FLNK` or `CP`,
-or something writes `.PROC`). `sc-pv-info` prints this for the record and
+`Passive`. A `Passive` record processes only when another record's `PP` or
+`FLNK` link asks it to, when one of its own `CP` inputs changes, or when
+something writes `.PROC` or `.VAL`. `sc-pv-info` prints this for the record and
 for each record it links to.
 
 A `compress` record reduces its input: `.ALG` names how (`N to 1 Average`,

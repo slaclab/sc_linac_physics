@@ -393,7 +393,7 @@ class TestScan:
             ("1 second", "processes every 1 second"),
             (".1 second", "processes every .1 seconds"),
             ("10 second", "processes every 10 seconds"),
-            ("Passive", "Passive: processes only when something links to it"),
+            ("Passive", "Passive: processes only when another record's PP"),
             ("I/O Intr", "processes when its device support reports new data"),
             ("Event", "processes when its EVNT event is posted"),
             ("Weird", "SCAN = Weird"),
@@ -408,6 +408,7 @@ class TestScan:
         serve(served)
         out = describe(P + "PUSH_DFGAIN")
         assert "  Passive: processes only when" in out
+        assert "one of its own CP/CPP inputs changes" in out
         assert out.index("Passive") < out.index("value:")
 
     def test_target_scan_under_target(self, serve):
@@ -454,6 +455,13 @@ class TestCompress:
         serve(served)
         assert "keeps its last 10 inputs from GAMMAHST" in describe(
             R + "GAMMAAVE"
+        )
+
+    def test_average_is_in_groups(self, serve):
+        served = dict(DECARAD, **{R + "GAMMAAVE.ALG": "Average"})
+        serve(served)
+        assert "averages each group of 10 input arrays from GAMMAHST" in (
+            describe(R + "GAMMAAVE")
         )
 
     def test_unknown_alg(self, serve):

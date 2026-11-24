@@ -150,8 +150,9 @@ def _scan_words(scan: Optional[str]) -> str:
         unit = "second" if float(secs) == 1 else "seconds"
         return f"processes every {secs} {unit}"
     return {
-        "Passive": "Passive: processes only when something links to it "
-        "(a PP link, a FLNK, a CP input) or writes its PROC",
+        "Passive": "Passive: processes only when another record's PP or "
+        "FLNK link asks it to, when one of its own CP/CPP inputs changes, or "
+        "when something writes its PROC or VAL",
         "I/O Intr": "processes when its device support reports new data "
         "(I/O Intr), so the device sets how often",
         "Event": "processes when its EVNT event is posted (Event)",
@@ -162,13 +163,15 @@ def _scan_words(scan: Optional[str]) -> str:
 # algorithms reduce each group of N inputs to one value.
 # CHECK: with a scalar INP, does "N to 1" collect one input per process,
 # so the value changes once every N processes?
-# CHECK: is "Average" a running average of N arrays, or reset every N?
+# "Average" also works in groups: N whole arrays in, one element-by-element
+# average out, then a new group starts.
 COMPRESS_WORDS = {
     "N to 1 Average": "averages each group of {n} inputs{src} into one value",
     "N to 1 Low Value": "keeps the lowest of each group of {n} inputs{src}",
     "N to 1 High Value": "keeps the highest of each group of {n} inputs{src}",
     "N to 1 Median": "keeps the median of each group of {n} inputs{src}",
-    "Average": "averages its last {n} input arrays{src}, element by element",
+    "Average": "averages each group of {n} input arrays{src} element by "
+    "element into one array",
     "Circular Buffer": "keeps its last {nsam} inputs{src} in a circular buffer",
 }
 
