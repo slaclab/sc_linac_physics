@@ -30,6 +30,17 @@ input, updating its value, and writing its output. Writing `1` to `.PROC`
 makes it process. It stores nothing; `PUSH_DFGAIN.PROC = 1` means "run
 `PUSH_DFGAIN` once".
 
+`.SCAN` says what else makes it process: a period such as `1 second`,
+`I/O Intr` (its device support says when new data has arrived), or
+`Passive`. A `Passive` record processes only when another record's `PP` or
+`FLNK` link asks it to, when one of its own `CP` inputs changes, or when
+something writes `.PROC` or `.VAL`. `sc-pv-info` prints this for the record and
+for each record it links to.
+
+A `compress` record reduces its input: `.ALG` names how (`N to 1 Average`,
+`Circular Buffer`, …) and `.N` how many inputs it takes per output.
+`sc-pv-info` prints both.
+
 ## Record types you will meet
 
 | Type | Holds |
