@@ -547,11 +547,11 @@ def test_pause_stops_ades_writes_and_resume_goes_on_from_operator_ades(
     # 5.1-5.3 before the pause (seen at the t=4 poll), nothing while
     # paused, then one step_seconds hold at the operator's 4.5 MV.
     assert cavity.ades_writes[:4] == pytest.approx([5.1, 5.2, 5.3, 4.6])
-    assert not phase.pause_requested
+    assert phase.pause_state == "running"
     assert phase.resumed_at is not None
     notes = record.mp_processing.notes
-    assert "at 5.30 MV, resumed" in notes
-    assert "at 4.50 MV" in notes
+    assert "at 5.30 MV" in notes
+    assert "resumed" in notes and "at 4.50 MV" in notes
 
 
 def test_no_reset_or_record_while_paused_and_resume_waits_for_the_latch(
@@ -561,7 +561,7 @@ def test_no_reset_or_record_while_paused_and_resume_waits_for_the_latch(
     cavity.actions = [
         (2.5, phase.request_pause),
         (8, phase.request_resume),  # refused: latched at t=5
-        (9, lambda: refused.append(phase.pause_requested)),
+        (9, lambda: refused.append(phase.pause_state)),
         (12, operator_resets(cavity)),
         (14, phase.request_resume),
     ]
@@ -569,7 +569,7 @@ def test_no_reset_or_record_while_paused_and_resume_waits_for_the_latch(
 
     assert run_steps(phase).result is PhaseResult.SUCCESS
 
-    assert refused == [True]
+    assert refused == ["paused"]
     # The quench at t=5 came while paused: not recorded, not reset by the
     # program. Only the one at t=30 was, flagged as the first after a pause.
     events = record.mp_processing.quench_events
@@ -599,3 +599,57 @@ def test_abort_while_paused_fails_with_rf_off(clock, record):
 
     assert result.result is PhaseResult.FAILED
     assert "RF is off" in result.message
+
+
+def test_resume_before_the_pause_takes_effect_is_ignored(clock, record):
+    cavity, phase = pause_phase(clock, record)
+    states = []
+    cavity.actions = [
+        (3.5, phase.request_pause),
+        # Same poll: the worker hasn't paused yet, so this does nothing.
+        (3.5, phase.request_resume),
+        (3.5, lambda: states.append(phase.pause_state)),
+        (6, lambda: states.append(phase.pause_state)),
+        (10, operator_sets_ades(cavity, 4.5)),
+        (20, phase.request_resume),
+    ]
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    assert states == ["pausing", "paused"]
+    # It still paused, then went on from the operator's 4.5 MV.
+    assert cavity.ades_writes[:4] == pytest.approx([5.1, 5.2, 5.3, 4.6])
+
+
+def test_pause_during_a_reset_wins_over_the_next_quench(clock, record):
+    # Pause pressed during the first reset; another quench is latched
+    # right after it. The pause goes first, so that quench is not recorded.
+    cavity, phase = pause_phase(clock, record, quench_at=[2])
+    original_reset = cavity.reset_interlocks
+
+    def reset_then_pause():
+        original_reset()
+        phase.request_pause()
+        cavity._latched = True  # the next quench, already latched
+        cavity.reset_interlocks = original_reset
+
+    cavity.reset_interlocks = reset_then_pause
+    cavity.actions = [
+        (8, operator_resets(cavity)),
+        (10, phase.request_resume),
+    ]
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    assert record.mp_processing.quench_count == 1
+    assert "paused" in record.mp_processing.notes
+
+
+def test_abort_while_paused_keeps_the_pause_in_notes(clock, record):
+    cavity, phase = pause_phase(clock, record)
+    cavity.actions = [(2.5, phase.request_pause)]
+    cavity.abort_at = 10
+
+    assert run_steps(phase).result is PhaseResult.FAILED
+    assert "paused" in record.mp_processing.notes
+    assert "resumed" not in record.mp_processing.notes

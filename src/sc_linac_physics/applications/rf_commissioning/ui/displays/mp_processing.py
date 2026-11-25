@@ -28,6 +28,13 @@ from .base_placeholder import BasePlaceholderDisplay
 REFRESH_MS = 1000
 PAUSE_TEXT = "⏸ Pause"
 RESUME_TEXT = "▶ Resume"
+# MPProcessingPhase.pause_state -> (button text, button enabled, status).
+PAUSE_STATES = {
+    "running": (PAUSE_TEXT, True, "RUNNING"),
+    "pausing": ("⏸ Pausing…", False, "PAUSING"),
+    "paused": (RESUME_TEXT, True, "PAUSED"),
+    "resuming": ("▶ Resuming…", False, "PAUSED"),
+}
 
 
 def since_last_quench_text(
@@ -72,6 +79,8 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
 
     def __init__(self, parent=None, session=None):
         self._process_started: datetime | None = None
+        # Pause is offered only during the process step.
+        self._pause_allowed = False
         # The MPProcessingData the quench table rows came from.
         self._table_data: MPProcessingData | None = None
         super().__init__(parent, session=session)
@@ -161,20 +170,24 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     def on_step_started(self, step: str) -> None:
         if step == "process":
             self._process_started = datetime.now()
-        self.pause_button.setEnabled(step == "process")
+        self._pause_allowed = step == "process"
+        self.pause_button.setEnabled(self._pause_allowed)
         self.pause_button.setText(PAUSE_TEXT)
 
     def _show_pause_state(self) -> None:
-        """Pause or Resume on the button, from the phase's own state.
+        """The Pause button and status, from the phase's own state.
 
-        The phase sets itself paused again when it refuses a resume (quench
-        latch set), so the button follows the phase, not the last click.
+        Only the worker moves between running and paused, so the tab says
+        Paused, and offers Resume, only once the phase has stopped writing.
+        While a press is pending the button is off.
         """
-        if not self.pause_button.isEnabled():
+        if not self._pause_allowed:
             return
-        paused = self.controller.paused
-        self.pause_button.setText(RESUME_TEXT if paused else PAUSE_TEXT)
-        self.local_phase_status.setText("PAUSED" if paused else "RUNNING")
+        state = self.controller.pause_state
+        text, enabled, status = PAUSE_STATES[state]
+        self.pause_button.setText(text)
+        self.pause_button.setEnabled(enabled)
+        self.local_phase_status.setText(status)
 
     def refresh_progress(self, now: datetime | None = None) -> None:
         """Re-read this run's quenches. Reads no PVs."""
@@ -258,6 +271,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.ui.update_toolbar_state("running" if running else "idle")
         # Pause works only inside the process step; on_step_started turns
         # it on there. See MPProcessingController.on_pause.
+        self._pause_allowed = False
         self.pause_button.setEnabled(False)
         self.pause_button.setText(PAUSE_TEXT)
         self.set_settings_enabled(not running)

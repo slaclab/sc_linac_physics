@@ -245,14 +245,25 @@ def test_pause_button_follows_the_phase_during_process(display):
     assert display.pause_button.isEnabled()
 
     with patch.object(
-        type(display.controller), "paused", new_callable=PropertyMock
-    ) as paused:
-        paused.return_value = True
+        type(display.controller), "pause_state", new_callable=PropertyMock
+    ) as state:
+        state.return_value = "pausing"
         display.refresh_progress()
+        assert not display.pause_button.isEnabled()
+        assert display.local_phase_status.text() == "PAUSING"
+        state.return_value = "paused"
+        display.refresh_progress()
+        assert display.pause_button.isEnabled()
         assert display.pause_button.text() == RESUME_TEXT
         assert display.local_phase_status.text() == "PAUSED"
-        # A refused resume: the phase set itself paused again.
-        paused.return_value = False
+        # A refused resume: the phase is still paused, Resume comes back.
+        state.return_value = "resuming"
+        display.refresh_progress()
+        assert not display.pause_button.isEnabled()
+        state.return_value = "paused"
+        display.refresh_progress()
+        assert display.pause_button.text() == RESUME_TEXT
+        state.return_value = "running"
         display.refresh_progress()
         assert display.pause_button.text() == PAUSE_TEXT
 

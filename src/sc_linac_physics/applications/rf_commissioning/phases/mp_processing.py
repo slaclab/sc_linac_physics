@@ -115,9 +115,12 @@ class MPProcessingPhase(PhaseBase):
         super().__init__(context)
         self.limits = limits or MPProcessingLimits()
         self.cavity = None
-        # Set by the GUI thread (request_pause), read by the worker. The
-        # worker sets it again when it refuses a resume.
+        # Pause and Resume are separate requests from the GUI thread. Only
+        # the worker moves between running and paused (_paused), so the tab
+        # shows Paused only once the phase has stopped writing.
         self._pause_requested = threading.Event()
+        self._resume_requested = threading.Event()
+        self._paused = False
         # The next recorded quench is the first since a resume.
         self._after_pause = False
         # When the last pause ended. The tab counts "since last quench"
@@ -133,13 +136,25 @@ class MPProcessingPhase(PhaseBase):
         self._pause_requested.set()
 
     def request_resume(self) -> None:
-        """Go on from the operator's ADES. Refused while QUENCH_LTCH is set."""
-        self._pause_requested.clear()
+        """Go on from the operator's ADES. Refused while QUENCH_LTCH is set.
+
+        Ignored until the phase is actually paused: a Resume while the
+        pause is still pending would leave the walk on its old ADES.
+        """
+        if self._paused:
+            self._resume_requested.set()
 
     @property
-    def pause_requested(self) -> bool:
-        """True from Pause until a resume the worker accepts."""
-        return self._pause_requested.is_set()
+    def pause_state(self) -> str:
+        """ "running", "pausing", "paused" or "resuming".
+
+        "pausing": Pause pressed, but the phase may still be writing, e.g.
+        while Cavity.reset_interlocks retries. "resuming": Resume pressed,
+        not yet accepted. Only "paused" means the phase writes nothing.
+        """
+        if self._paused:
+            return "resuming" if self._resume_requested.is_set() else "paused"
+        return "pausing" if self._pause_requested.is_set() else "running"
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -402,6 +417,10 @@ class MPProcessingPhase(PhaseBase):
             time.sleep(self.limits.quench_settle_seconds)
             self.cavity.check_abort()
             self.cavity.reset_interlocks()
+            # A Pause pressed during the reset goes first. Watching first
+            # would let back-to-back quenches put it off indefinitely.
+            if self._pause_requested.is_set():
+                return _Seen.PAUSE
             seen = self._watch(hold_seconds)
             if seen is not _Seen.QUENCH:
                 return seen
@@ -417,7 +436,12 @@ class MPProcessingPhase(PhaseBase):
         The 2026-10-27 spec gives the operator the amplitude; it doesn't
         say who resets.
         """
-        paused_at = datetime.now()
+        self._paused = True
+        # Noted now, so an abort while paused still leaves the pause on the
+        # record.
+        self._append_note(
+            f"paused {datetime.now():%H:%M:%S} at {amplitude:.2f} MV"
+        )
         self.cavity.logger.info(
             "MP processing paused at %.2f MV. No ADES writes or interlock "
             "resets until Resume.",
@@ -425,10 +449,10 @@ class MPProcessingPhase(PhaseBase):
         )
         while True:
             self.cavity.check_abort()
-            if not self._pause_requested.is_set():
+            if self._resume_requested.is_set():
+                self._resume_requested.clear()
                 if not self.cavity.is_quenched:
                     break
-                self._pause_requested.set()
                 self.cavity.logger.warning(
                     "Resume refused: the quench latch is set. Reset the "
                     "interlocks, then press Resume."
@@ -439,9 +463,10 @@ class MPProcessingPhase(PhaseBase):
         self._after_pause = True
         self._note_amplitude(resumed)
         self._append_note(
-            f"paused {paused_at:%H:%M:%S} at {amplitude:.2f} MV, resumed "
-            f"{self.resumed_at:%H:%M:%S} at {resumed:.2f} MV"
+            f"resumed {self.resumed_at:%H:%M:%S} at {resumed:.2f} MV"
         )
+        self._pause_requested.clear()
+        self._paused = False
         self.cavity.logger.info(
             "MP processing resumed at %.2f MV (ADES read back).", resumed
         )

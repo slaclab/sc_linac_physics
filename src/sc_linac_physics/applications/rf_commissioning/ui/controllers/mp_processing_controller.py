@@ -139,9 +139,9 @@ class MPProcessingController(QObject):
         return self.bridge.running or self.stage == "rf_off"
 
     @property
-    def paused(self) -> bool:
-        """Pause pressed during process, and no resume accepted yet."""
-        return self.phase is not None and self.phase.pause_requested
+    def pause_state(self) -> str:
+        """MPProcessingPhase.pause_state, or "running" with no phase."""
+        return "running" if self.phase is None else self.phase.pause_state
 
     @property
     def resumed_at(self):
@@ -530,19 +530,23 @@ class MPProcessingController(QObject):
         """
         if self.phase is None or self.stage != "run" or not self.running:
             return
-        if self.phase.pause_requested:
+        state = self.phase.pause_state
+        if state == "paused":
             self.phase.request_resume()
             self.view.log_message(
                 "Resume requested: the walk goes on from the ADES on the "
                 "machine now."
             )
-        else:
+        elif state == "running":
             self.phase.request_pause()
             self.view.log_message(
-                "Pause requested: ADES writes and interlock resets stop "
-                "within a second. RF stays on. Set ADES by hand, then "
-                "Resume. Abort still turns RF off."
+                "Pause requested. The tab shows Paused once ADES writes and "
+                "interlock resets have stopped: within a second, or after "
+                "an interlock reset that is retrying (up to about 48 s). RF "
+                "stays on. Then set ADES by hand and press Resume. Abort "
+                "still turns RF off."
             )
+        # "pausing" / "resuming": the phase hasn't acted on the last press.
 
     def on_toggle_step_mode(self) -> None:
         self._step_mode = not self._step_mode
