@@ -115,11 +115,33 @@ Notable behaviors:
 - New directories and files are created under umask 002, so they're group-writable (775 and 664). Existing permissions are left alone.
 - If the files can't be opened when the logger is created, it logs one warning and writes to the console only for the rest of the process. It doesn't retry.
 
+## Background work (`utils/background.py`)
+
+`BackgroundTask` runs one blocking call off the Qt main thread, on a daemon
+`threading.Thread`. The call gets the task as its first argument, so it can
+call `report_status()` and `report_progress()` and check `cancel_requested`.
+Use those methods rather than `task.status.emit()`. If the owner deletes the
+task mid-run, they do nothing, while `.emit()` would raise inside the call. Signals reach
+main-thread slots in this order: `status`/`progress` as the call emits them,
+then `succeeded(result)` or `failed("ExcType: message")`, then `done()`.
+
+```python
+task = BackgroundTask(fetch, cavity, name="fault-fetch")
+task.succeeded.connect(self.show_counts)
+task.failed.connect(self.show_error)
+task.start()
+```
+
+The thread attaches the pyepics initial CA context before the call and
+detaches after. Cancelling only sets a flag; nothing stops the thread from
+outside. In tests, pass `runner=run_inline` to run the call before `start()`
+returns, with no thread.
+
 ## Qt utilities (`utils/qt.py`)
 
 ### `Worker(QThread)`
 
-All long-running operations (EPICS sequences, data acquisition) run in a `Worker` to avoid blocking the Qt event loop. Signals:
+Older code. New code uses `BackgroundTask` above. Signals:
 
 ```python
 class Worker(QThread):
