@@ -12,7 +12,7 @@ from .displays import (
     SSACharDisplay,
     CavityCharDisplay,
     PiezoWithRFDisplay,
-    HighPowerMPProcessingDisplay,
+    MPProcessingDisplay,
     HighPowerOneHourRunDisplay,
 )
 from .phase_display_base import PhaseDisplayBase
@@ -29,7 +29,7 @@ __all__ = [
     "SSACharDisplay",
     "CavityCharDisplay",
     "PiezoWithRFDisplay",
-    "HighPowerMPProcessingDisplay",
+    "MPProcessingDisplay",
     "HighPowerOneHourRunDisplay",
     "PhaseDisplayBase",
     "MultiPhaseCommissioningDisplay",

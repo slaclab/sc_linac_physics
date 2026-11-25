@@ -9,6 +9,7 @@ from .phase_builders import (
     PiezoPreRFUI,
     SSACharUI,
 )
+from .mp_processing import MPProcessingUI
 from .piezo_with_rf import PiezoWithRFUI
 from .styles import (
     LOCAL_CAP_STYLE,
@@ -28,6 +29,7 @@ __all__ = [
     "CavityCharUI",
     "FrequencyTuningUI",
     "PiezoPreRFUI",
+    "MPProcessingUI",
     "PiezoWithRFUI",
     "SSACharUI",
     "GenericPhaseUI",
