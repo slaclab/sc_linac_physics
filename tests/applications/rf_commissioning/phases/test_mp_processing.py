@@ -278,7 +278,9 @@ def test_unreadable_calibration_time_retries_before_any_write(clock, record):
 
 def test_no_quench_walks_to_ades_max_then_holds(clock, record):
     cavity = FakeCavity(clock, start=5.0, ades_max=6.0)
-    phase = make_phase(cavity, record, step_seconds=30, stable_seconds=300)
+    phase = make_phase(
+        cavity, record, step_mv=0.2, step_seconds=30, stable_seconds=300
+    )
 
     assert run_steps(phase).result is PhaseResult.SUCCESS
 
@@ -296,17 +298,57 @@ def test_quench_is_reset_and_held_until_stable_then_walk_continues(
 ):
     # Quench 10 s into the 5.4 MV step (5.2 at t=30, 5.4 at t=60).
     cavity = FakeCavity(clock, start=5.0, ades_max=5.6, quench_at=[70])
-    phase = make_phase(cavity, record, step_seconds=30, stable_seconds=300)
+    phase = make_phase(
+        cavity,
+        record,
+        step_mv=0.2,
+        step_seconds=30,
+        quench_hold_seconds=30,
+        stable_seconds=300,
+    )
 
     assert run_steps(phase).result is PhaseResult.SUCCESS
 
     assert len(cavity.resets) == 1
-    # It held 5.4 MV for 300 s after the reset before writing 5.6.
+    # It held 5.4 MV for quench_hold_seconds after the reset before writing
+    # 5.6, then held 5.6 (ADES_MAX) for stable_seconds.
     assert cavity.ades_writes == pytest.approx([5.2, 5.4, 5.6])
+    settle = phase.limits.quench_settle_seconds
+    assert clock.now == pytest.approx(70 + settle + 30 + 300)
     data = record.mp_processing
     assert data.quench_count == 1
     assert data.quench_events[0].amplitude == pytest.approx(5.4)
     assert data.max_amplitude_reached == pytest.approx(5.6)
+
+
+def test_defaults_follow_the_2026_11_24_meeting():
+    limits = MPProcessingLimits()
+
+    assert limits.step_mv == pytest.approx(0.1)
+    assert limits.step_seconds == pytest.approx(1.0)
+    assert limits.quench_hold_seconds == pytest.approx(30.0)
+    assert limits.stable_seconds == pytest.approx(300.0)
+
+
+def test_quench_below_ades_max_holds_quench_hold_not_stable_time(clock, record):
+    # The latch is first read set at t=1 (polled every 1 s).
+    cavity = FakeCavity(clock, start=5.0, ades_max=5.1, quench_at=[0.5])
+    phase = make_phase(
+        cavity,
+        record,
+        step_seconds=1,
+        quench_hold_seconds=30,
+        stable_seconds=300,
+    )
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    # Seen at 1 s, settle wait, a 30 s hold at 5.0, write 5.1, then the
+    # 300 s final hold. A 300 s hold after the quench would end at 602 s.
+    settle = phase.limits.quench_settle_seconds
+    assert clock.now == pytest.approx(1 + settle + 30 + 300)
+    assert cavity.ades_writes == pytest.approx([5.1])
+    assert record.mp_processing.quench_count == 1
 
 
 def test_repeated_quenches_at_one_amplitude_are_each_recorded(clock, record):
@@ -361,7 +403,7 @@ def test_float_ades_max_is_reached_and_never_exceeded(clock, record):
     # ADES_MAX as a float PV reads it back: just over 5.6.
     ades_max = 5.600000381469727
     cavity = FakeCavity(clock, start=5.0, ades_max=ades_max)
-    phase = make_phase(cavity, record, stable_seconds=300)
+    phase = make_phase(cavity, record, step_mv=0.2, stable_seconds=300)
 
     assert run_steps(phase).result is PhaseResult.SUCCESS
 

@@ -15,8 +15,9 @@ What it does to the machine, in order:
    ADES_MAX. When the quench latch is set, it records the quench, waits
    quench_settle_seconds, writes the interlock reset (Cavity.
    reset_interlocks) and holds the same ADES. It keeps doing that until
-   stable_seconds pass with no quench, then goes on walking up. Once ADES
-   is at ADES_MAX it needs one stable_seconds hold with no quench to finish.
+   quench_hold_seconds pass with no quench, then goes on walking up. Once
+   ADES is at ADES_MAX it needs one stable_seconds hold with no quench to
+   finish.
 
 It resets every quench, real or not: resetting after a quench is the
 processing. quench_processing's reset_quench() refuses real quenches and is
@@ -59,14 +60,22 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 class MPProcessingLimits:
     """Configurable settings for MP processing. Amplitudes are ADES, in MV."""
 
-    # CHECK: where should the ramp start? 5 MV is quench_processing's
-    # default start_amp; the 2026-10-27 spec doesn't say.
+    # CHECK: start at 5 or 10 MV? 2026-11-24 leaned to 10, pending Ryan's
+    # check that RF checks get enough signal on HE modules and a look at
+    # partner lab FE onsets. 5 MV is quench_processing's start_amp.
     start_amplitude_mv: float = 5.0
-    # 0.2 MV every 30 s, kept from quench_processing (2026-10-27 spec).
-    step_mv: float = 0.2
-    step_seconds: float = 30.0
-    # An amplitude counts as stable after this long with no quench. 5 min
-    # per the 2026-10-27 spec (quench_processing used 30 min).
+    # 0.1 MV every 1 s (2026-11-24 meeting). The 2026-10-27 spec kept
+    # quench_processing's 0.2 MV every 30 s, about 47 min from 5 to 21.8 MV.
+    step_mv: float = 0.1
+    step_seconds: float = 1.0
+    # After a quench below ADES_MAX, hold the same ADES until this long
+    # passes with no quench, then walk on. 30 s per the 2026-11-24 meeting
+    # (was stable_seconds, 5 min).
+    quench_hold_seconds: float = 30.0
+    # At ADES_MAX, finish after this long with no quench. 5 min per the
+    # 2026-10-27 spec (quench_processing used 30 min).
+    # CHECK: does the final hold stay 5 min? 2026-11-24 only shortened the
+    # hold after a quench.
     stable_seconds: float = 300.0
     # Wait between seeing the quench and writing the reset.
     # quench_cavity.wait_for_quench waits 1 s "just in case".
@@ -298,7 +307,14 @@ class MPProcessingPhase(PhaseBase):
                 else self.limits.step_seconds
             )
             if self._quenched_within(hold):
-                self._process_until_stable(amplitude)
+                self._process_until_stable(
+                    amplitude,
+                    hold_seconds=(
+                        self.limits.stable_seconds
+                        if at_end
+                        else self.limits.quench_hold_seconds
+                    ),
+                )
             if at_end:
                 return amplitude
             # Round the step, then cap. Rounding after the cap could land
@@ -309,8 +325,13 @@ class MPProcessingPhase(PhaseBase):
             self.cavity.ades = amplitude
             self._note_amplitude(amplitude)
 
-    def _process_until_stable(self, amplitude: float) -> None:
-        """Record and reset each quench until stable_seconds pass without one.
+    def _process_until_stable(
+        self, amplitude: float, hold_seconds: float
+    ) -> None:
+        """Record and reset each quench until hold_seconds pass without one.
+
+        hold_seconds is quench_hold_seconds below ADES_MAX and
+        stable_seconds at ADES_MAX.
 
         PV write: the interlock reset (Cavity.reset_interlocks, which raises
         CavityFaultError if the cavity stays faulted). ADES is not changed.
@@ -327,7 +348,7 @@ class MPProcessingPhase(PhaseBase):
             time.sleep(self.limits.quench_settle_seconds)
             self.cavity.check_abort()
             self.cavity.reset_interlocks()
-            if not self._quenched_within(self.limits.stable_seconds):
+            if not self._quenched_within(hold_seconds):
                 return
 
     def _quenched_within(self, seconds: float) -> bool:
