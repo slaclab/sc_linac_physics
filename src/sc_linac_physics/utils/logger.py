@@ -5,6 +5,8 @@ import json
 import logging
 import os
 import sys
+import threading
+import time
 import warnings
 import weakref
 from logging.handlers import RotatingFileHandler
@@ -12,6 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from sc_linac_physics.utils.platform_paths import get_log_base_dir
+
+try:
+    import fcntl
+except ImportError:
+    # Windows has no fcntl, so there is no file lock. Log files rotate
+    # without one, as they did before.
+    fcntl = None
 
 BASE_LOG_DIR = get_log_base_dir()
 
@@ -90,6 +99,141 @@ def _add_file_handlers(
     for handler in handlers:
         logger.addHandler(handler)
     return True
+
+
+# How long a write waits for another process's lock before writing unlocked.
+LOG_LOCK_TIMEOUT_S = 1.0
+
+# One thread lock per log file path, shared by every handler in this process
+# that writes it. The file lock (flock) keeps other processes out, but not
+# other threads in this one: over NFS, Linux turns flock into a POSIX lock,
+# which only blocks other processes. So threads in this process wait here.
+_path_locks: dict[str, threading.Lock] = {}
+_path_locks_guard = threading.Lock()
+
+
+def _path_lock(path: str) -> threading.Lock:
+    with _path_locks_guard:
+        return _path_locks.setdefault(path, threading.Lock())
+
+
+class SharedRotatingFileHandler(RotatingFileHandler):
+    """RotatingFileHandler for a file that several processes write.
+
+    Every app that uses PV writes epics/pv_operations.log, and each cavity's
+    cavity_N.log is written by whichever apps touch that cavity. A plain
+    RotatingFileHandler checks the size and rotates in each process on its
+    own. Two processes can rotate at once, so one renames over the other's
+    backup. A process that didn't rotate keeps writing to the renamed file.
+
+    Here each record is written like this:
+    1. Take this file's thread lock, then an flock on <file>.lock.
+    2. If the inode at the path isn't the open file's inode, another
+       process rotated it, so reopen. Otherwise seek to the end, so the size
+       check counts other processes' lines.
+    3. RotatingFileHandler.emit: rotate if over max_bytes, then write.
+    4. Close the lock file, which releases the flock.
+
+    If the lock file can't be opened or the lock isn't free within
+    LOG_LOCK_TIMEOUT_S, the record is written without it, as before.
+    """
+
+    def __init__(self, filename, *args, **kwargs):
+        super().__init__(filename, *args, **kwargs)
+        self.lock_path = self.baseFilename + ".lock"
+        self._path_lock = _path_lock(self.baseFilename)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        with self._path_lock:
+            lock_fd = self._lock_file()
+            try:
+                self._follow_rotation()
+                super().emit(record)
+            finally:
+                if lock_fd is not None:
+                    os.close(lock_fd)
+
+    def _lock_file(self) -> int | None:
+        """Open <file>.lock and flock it. None if that isn't possible."""
+        if fcntl is None:
+            return None
+        fd = self._open_lock_file()
+        if fd is None:
+            return None
+        deadline = time.monotonic() + LOG_LOCK_TIMEOUT_S
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return fd
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.01)
+            except OSError:
+                break
+        os.close(fd)
+        return None
+
+    def _open_lock_file(self) -> int | None:
+        try:
+            fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT | os.O_EXCL)
+        except FileExistsError:
+            try:
+                return os.open(self.lock_path, os.O_RDWR)
+            except OSError:
+                return None
+        except OSError:
+            return None
+        # A lock file we just made: 664, so other group members can open it
+        # read-write, which an exclusive lock needs on NFS.
+        try:
+            os.fchmod(fd, 0o664)
+        except OSError:
+            pass  # the lock still works for this user
+        return fd
+
+    def _follow_rotation(self) -> None:
+        """Reopen if another process rotated the file, else seek to its end."""
+        if self.stream is None:
+            return  # RotatingFileHandler.emit opens it
+        try:
+            on_disk = os.stat(self.baseFilename)
+            same = os.path.samestat(on_disk, os.fstat(self.stream.fileno()))
+        except OSError:
+            same = False
+        if same:
+            self.stream.seek(0, os.SEEK_END)
+        else:
+            # Reopen inside RotatingFileHandler.emit, which opens a None
+            # stream and sends any error to handleError instead of raising.
+            self.stream.close()
+            self.stream = None
+
+    def _open(self):
+        """Open the log file. A file this call creates is set to 664.
+
+        Rollover creates the new file here, after the factory's
+        safe_umask(0o002) has ended. Without the chmod, a 022 umask would
+        make it 644, and other group members could no longer write it.
+        Existing files keep their permissions.
+
+        O_EXCL makes "did this call create it" one step, and refuses a
+        symlink at the path, as in _open_lock_file.
+        """
+        try:
+            fd = os.open(
+                self.baseFilename, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            )
+        except OSError:
+            pass  # exists already, or super()._open() reports the error
+        else:
+            try:
+                os.fchmod(fd, 0o664)
+            except (OSError, AttributeError):  # no os.fchmod on old Windows
+                pass  # the file still works for whoever made it
+            finally:
+                os.close(fd)
+        return super()._open()
 
 
 class ExtraDataMixin:
@@ -203,12 +347,12 @@ def _create_text_file_handler(
     level: int,
     max_bytes: int,
     backup_count: int,
-) -> RotatingFileHandler:
+) -> SharedRotatingFileHandler:
     """Create and configure rotating text file handler."""
     text_file = log_dir_path / f"{log_filename}.log"
 
     with safe_umask(0o002):
-        text_handler = RotatingFileHandler(
+        text_handler = SharedRotatingFileHandler(
             text_file,
             maxBytes=max_bytes,
             backupCount=backup_count,
@@ -230,12 +374,12 @@ def _create_json_file_handler(
     level: int,
     max_bytes: int,
     backup_count: int,
-) -> RotatingFileHandler:
+) -> SharedRotatingFileHandler:
     """Create and configure rotating JSON Lines file handler."""
     jsonl_file = log_dir_path / f"{log_filename}.jsonl"
 
     with safe_umask(0o002):
-        json_handler = RotatingFileHandler(
+        json_handler = SharedRotatingFileHandler(
             jsonl_file,
             maxBytes=max_bytes,
             backupCount=backup_count,
