@@ -89,13 +89,15 @@ def test_settings_default_to_the_phase_limits_and_stable_is_in_minutes(
     settings = display.read_settings()
     assert settings["stable_seconds"] == 600.0
     assert settings["start_amplitude_mv"] == 7.5
-    assert settings["step_mv"] == 0.2
-    assert settings["step_seconds"] == 30.0
+    assert settings["step_mv"] == 0.1
+    assert settings["step_seconds"] == 1.0
+    assert settings["quench_hold_seconds"] == 30.0
 
 
 def test_running_locks_settings_and_never_offers_pause(display):
     display.set_running(True)
     assert not display.start_mv_spin.isEnabled()
+    assert not display.quench_hold_spin.isEnabled()
     assert not display.pause_button.isEnabled()
     assert display.abort_button.isEnabled()
     display.set_running(False)

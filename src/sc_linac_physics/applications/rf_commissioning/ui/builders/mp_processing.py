@@ -78,8 +78,8 @@ QUENCH_TABLE_STYLE = f"""
 class Setting(NamedTuple):
     """One spin box for an MPProcessingLimits field.
 
-    The box shows field / scale: stable time is set in minutes, and
-    MPProcessingLimits keeps seconds.
+    The box shows field / scale: the hold at ADES_MAX is set in minutes,
+    and MPProcessingLimits keeps seconds.
     """
 
     widget: str
@@ -98,9 +98,11 @@ SETTINGS = (
             0.5, 30.0, 0.1, 2),
     Setting("step_mv_spin", "Step:", "step_mv", "MV", 0.01, 2.0, 0.05, 2),
     Setting("step_seconds_spin", "Step every:", "step_seconds", "s",
-            1.0, 600.0, 5.0, 0),
-    Setting("stable_minutes_spin", "Stable after:", "stable_seconds", "min",
-            0.5, 120.0, 0.5, 1, scale=60.0),
+            1.0, 600.0, 1.0, 0),
+    Setting("quench_hold_spin", "Hold after quench:", "quench_hold_seconds",
+            "s", 5.0, 3600.0, 5.0, 0),
+    Setting("stable_minutes_spin", "Hold at ADES_MAX:", "stable_seconds",
+            "min", 0.5, 120.0, 0.5, 1, scale=60.0),
 )  # fmt: skip
 
 
