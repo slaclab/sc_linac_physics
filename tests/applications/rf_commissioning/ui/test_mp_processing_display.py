@@ -256,6 +256,8 @@ def test_pause_button_follows_the_phase_during_process(display):
         assert display.pause_button.isEnabled()
         assert display.pause_button.text() == RESUME_TEXT
         assert display.local_phase_status.text() == "PAUSED"
+        indicator = display.ui.widgets["status_indicator"]
+        assert indicator.text() == "● PAUSED"
         # A refused resume: the phase is still paused, Resume comes back.
         state.return_value = "resuming"
         display.refresh_progress()
@@ -266,6 +268,7 @@ def test_pause_button_follows_the_phase_during_process(display):
         state.return_value = "running"
         display.refresh_progress()
         assert display.pause_button.text() == PAUSE_TEXT
+        assert indicator.text() == "● RUNNING"
 
     display.on_step_started("record_results")
     assert not display.pause_button.isEnabled()

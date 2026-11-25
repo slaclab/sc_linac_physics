@@ -22,6 +22,12 @@ from sc_linac_physics.applications.rf_commissioning.ui.stale_result_prompt impor
     ask_rerun,
 )
 
+from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    COLOR_PRIMARY,
+    COLOR_WARNING,
+    SANS_FONT_STACK,
+)
+
 from .base_placeholder import BasePlaceholderDisplay
 
 # How often the status box and quench table re-read record.mp_processing.
@@ -188,6 +194,17 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.pause_button.setText(text)
         self.pause_button.setEnabled(enabled)
         self.local_phase_status.setText(status)
+        color = COLOR_PRIMARY if state == "running" else COLOR_WARNING
+        self._show_indicator(f"● {status}", color)
+
+    def _show_indicator(self, text: str, color: str) -> None:
+        """The toolbar's status text. Same style as update_toolbar_state."""
+        indicator = self.ui.widgets["status_indicator"]
+        indicator.setText(text)
+        indicator.setStyleSheet(
+            f"QLabel {{ color: {color}; font-weight: bold; "
+            f"font-size: 10pt; font-family: {SANS_FONT_STACK}; }}"
+        )
 
     def refresh_progress(self, now: datetime | None = None) -> None:
         """Re-read this run's quenches. Reads no PVs."""
