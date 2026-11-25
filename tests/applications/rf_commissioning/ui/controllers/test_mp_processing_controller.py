@@ -39,6 +39,7 @@ SETTINGS = {
     "start_amplitude_mv": 6.0,
     "step_mv": 0.1,
     "step_seconds": 20.0,
+    "quench_hold_seconds": 45.0,
     "stable_seconds": 120.0,
 }
 
@@ -142,6 +143,7 @@ def test_start_test_checks_first_with_the_settings_box_limits(controller):
     assert limits.start_amplitude_mv == 6.0
     assert limits.step_mv == 0.1
     assert limits.step_seconds == 20.0
+    assert limits.quench_hold_seconds == 45.0
     assert limits.stable_seconds == 120.0
 
 

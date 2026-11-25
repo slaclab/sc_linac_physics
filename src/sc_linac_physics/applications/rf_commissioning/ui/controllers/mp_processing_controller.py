@@ -278,7 +278,8 @@ class MPProcessingController(QObject):
         self.view.log_message(
             f"MP processing {self._cavity}: start {limits.start_amplitude_mv}"
             f" MV, +{limits.step_mv} MV every {limits.step_seconds:.0f} s, "
-            f"stable after {limits.stable_seconds:.0f} s"
+            f"hold {limits.quench_hold_seconds:.0f} s after a quench, "
+            f"{limits.stable_seconds:.0f} s at ADES_MAX"
         )
         return True
 
