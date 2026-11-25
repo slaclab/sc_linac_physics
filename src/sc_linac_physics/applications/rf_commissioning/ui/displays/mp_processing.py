@@ -26,12 +26,15 @@ from .base_placeholder import BasePlaceholderDisplay
 
 # How often the status box and quench table re-read record.mp_processing.
 REFRESH_MS = 1000
+PAUSE_TEXT = "⏸ Pause"
+RESUME_TEXT = "▶ Resume"
 
 
 def since_last_quench_text(
     data: MPProcessingData | None,
     process_started: datetime | None,
     now: datetime,
+    resumed_at: datetime | None = None,
 ) -> str:
     """The "Since last quench" readout, e.g. "4 min 12 s".
 
@@ -43,6 +46,9 @@ def since_last_quench_text(
     (MPProcessingData.add_quench), before the 1 s settle and the interlock
     reset. The phase's own stable clock starts after the reset, which can
     retry for about 48 s, so this readout can run that far ahead of it.
+
+    resumed_at is when the last pause ended. Time across a pause means
+    nothing, so once it is later than the last quench it counts from there.
     """
     if data is not None and data.quench_events:
         since, suffix = data.quench_events[-1].timestamp, ""
@@ -50,6 +56,8 @@ def since_last_quench_text(
         since, suffix = process_started, " (no quench yet)"
     else:
         return "-"
+    if resumed_at is not None and resumed_at > since:
+        since, suffix = resumed_at, " (since resume)"
     seconds = max(0, int((now - since).total_seconds()))
     return f"{seconds // 60} min {seconds % 60:02d} s{suffix}"
 
@@ -74,7 +82,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     def setup_ui(self):
         callbacks = {
             "on_run_automated_test": self.on_start_test,
-            "on_pause_test": lambda: None,
+            "on_pause_test": self.on_pause,
             "on_abort_test": self.on_abort,
             "on_toggle_step_mode": self.on_toggle_step_mode,
             "on_next_step": self.on_next_step,
@@ -153,9 +161,24 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     def on_step_started(self, step: str) -> None:
         if step == "process":
             self._process_started = datetime.now()
+        self.pause_button.setEnabled(step == "process")
+        self.pause_button.setText(PAUSE_TEXT)
+
+    def _show_pause_state(self) -> None:
+        """Pause or Resume on the button, from the phase's own state.
+
+        The phase sets itself paused again when it refuses a resume (quench
+        latch set), so the button follows the phase, not the last click.
+        """
+        if not self.pause_button.isEnabled():
+            return
+        paused = self.controller.paused
+        self.pause_button.setText(RESUME_TEXT if paused else PAUSE_TEXT)
+        self.local_phase_status.setText("PAUSED" if paused else "RUNNING")
 
     def refresh_progress(self, now: datetime | None = None) -> None:
         """Re-read this run's quenches. Reads no PVs."""
+        self._show_pause_state()
         data = self.controller.mp_data
         now = now or datetime.now()
         if data is None:
@@ -164,7 +187,12 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         top = data.max_amplitude_reached
         self.max_ades_label.setText("-" if top is None else f"{top:.2f} MV")
         self.since_quench_label.setText(
-            since_last_quench_text(data, self._process_started, now)
+            since_last_quench_text(
+                data,
+                self._process_started,
+                now,
+                resumed_at=self.controller.resumed_at,
+            )
         )
         self._fill_quench_table(data)
 
@@ -179,11 +207,13 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         shown = table.rowCount()
         for row in range(shown, len(events)):
             event = events[row]
-            since = (
-                "-"
-                if row == 0
-                else f"{data.quench_intervals_seconds[row - 1]:.0f}"
-            )
+            if row == 0:
+                since = "-"
+            elif event.after_pause:
+                # The interval spans a pause; see MPProcessingPhase.
+                since = "after pause"
+            else:
+                since = f"{data.quench_intervals_seconds[row - 1]:.0f}"
             table.insertRow(row)
             for column, text in enumerate(
                 (
@@ -226,9 +256,10 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
 
     def set_running(self, running: bool) -> None:
         self.ui.update_toolbar_state("running" if running else "idle")
-        # Pause holds only between steps, and process is one long step;
-        # see MPProcessingController.
+        # Pause works only inside the process step; on_step_started turns
+        # it on there. See MPProcessingController.on_pause.
         self.pause_button.setEnabled(False)
+        self.pause_button.setText(PAUSE_TEXT)
         self.set_settings_enabled(not running)
         if running:
             self.local_phase_status.setText("RUNNING")
@@ -270,6 +301,11 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     @pyqtSlot()
     def on_start_test(self):
         self.controller.on_start_test()
+
+    @pyqtSlot()
+    def on_pause(self):
+        self.controller.on_pause()
+        self._show_pause_state()
 
     @pyqtSlot()
     def on_abort(self):

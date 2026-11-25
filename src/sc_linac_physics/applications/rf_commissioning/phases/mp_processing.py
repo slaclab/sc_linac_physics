@@ -21,17 +21,29 @@ What it does to the machine, in order:
 
 It resets every quench, real or not: resetting after a quench is the
 processing. quench_processing's reset_quench() refuses real quenches and is
-not used. No retry cap: the operator aborts. Field emission, hard quench
-and pause-and-inspect are later PRs.
+not used. No retry cap: the operator aborts. Field emission and hard quench
+are later PRs.
+
+Pause and inspect (2026-10-27 spec): request_pause() from the GUI thread
+stops process at its next latch poll (within poll_interval). While paused
+it writes nothing: no ADES and no interlock reset, so the operator has the
+amplitude. Quenches while paused are not recorded. request_resume() goes on
+from the ADES the operator left, read back from the PV, starting a fresh
+step_seconds hold there. Resume is refused while the quench latch is set.
+Each pause goes in notes, and the first quench after a resume is flagged
+after_pause, since the time across a pause means nothing.
 
 The steps that wait call cavity.check_abort(), which on abort turns RF off
 and raises CavityAbortError, as in the piezo with RF phase. The phase leaves
 RF on in SELA at ADES_MAX when it completes.
 """
 
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
     CommissioningPhase,
@@ -86,6 +98,14 @@ class MPProcessingLimits:
     recent_result_seconds: float = RECENT_RESULT_SECONDS
 
 
+class _Seen(Enum):
+    """What a watch of the quench latch ended on."""
+
+    QUIET = "quiet"  # the whole wait passed with no quench
+    QUENCH = "quench"
+    PAUSE = "pause"  # the operator pressed Pause
+
+
 class MPProcessingPhase(PhaseBase):
     """MP processing: walk ADES up to ADES_MAX, resetting every quench."""
 
@@ -95,6 +115,31 @@ class MPProcessingPhase(PhaseBase):
         super().__init__(context)
         self.limits = limits or MPProcessingLimits()
         self.cavity = None
+        # Set by the GUI thread (request_pause), read by the worker. The
+        # worker sets it again when it refuses a resume.
+        self._pause_requested = threading.Event()
+        # The next recorded quench is the first since a resume.
+        self._after_pause = False
+        # When the last pause ended. The tab counts "since last quench"
+        # from here when it is later than the last quench.
+        self.resumed_at: datetime | None = None
+
+    # ------------------------------------------------------------------
+    # Pause and resume, called from the GUI thread
+    # ------------------------------------------------------------------
+
+    def request_pause(self) -> None:
+        """Stop the walk at the next latch poll. Writes no PVs."""
+        self._pause_requested.set()
+
+    def request_resume(self) -> None:
+        """Go on from the operator's ADES. Refused while QUENCH_LTCH is set."""
+        self._pause_requested.clear()
+
+    @property
+    def pause_requested(self) -> bool:
+        """True from Pause until a resume the worker accepts."""
+        return self._pause_requested.is_set()
 
     @property
     def phase_type(self) -> CommissioningPhase:
@@ -306,8 +351,9 @@ class MPProcessingPhase(PhaseBase):
                 if at_end
                 else self.limits.step_seconds
             )
-            if self._quenched_within(hold):
-                self._process_until_stable(
+            seen = self._watch(hold)
+            if seen is _Seen.QUENCH:
+                seen = self._process_until_stable(
                     amplitude,
                     hold_seconds=(
                         self.limits.stable_seconds
@@ -315,6 +361,10 @@ class MPProcessingPhase(PhaseBase):
                         else self.limits.quench_hold_seconds
                     ),
                 )
+            if seen is _Seen.PAUSE:
+                # Start the hold over at the operator's ADES.
+                amplitude = self._hold_while_paused(amplitude)
+                continue
             if at_end:
                 return amplitude
             # Round the step, then cap. Rounding after the cap could land
@@ -327,11 +377,12 @@ class MPProcessingPhase(PhaseBase):
 
     def _process_until_stable(
         self, amplitude: float, hold_seconds: float
-    ) -> None:
+    ) -> _Seen:
         """Record and reset each quench until hold_seconds pass without one.
 
         hold_seconds is quench_hold_seconds below ADES_MAX and
-        stable_seconds at ADES_MAX.
+        stable_seconds at ADES_MAX. Returns QUIET, or PAUSE if the operator
+        paused during the hold.
 
         PV write: the interlock reset (Cavity.reset_interlocks, which raises
         CavityFaultError if the cavity stays faulted). ADES is not changed.
@@ -344,15 +395,64 @@ class MPProcessingPhase(PhaseBase):
         48 s in all, before raising CavityFaultError.
         """
         while True:
-            self.context.record.mp_processing.add_quench(amplitude=amplitude)
+            self.context.record.mp_processing.add_quench(
+                amplitude=amplitude, after_pause=self._after_pause
+            )
+            self._after_pause = False
             time.sleep(self.limits.quench_settle_seconds)
             self.cavity.check_abort()
             self.cavity.reset_interlocks()
-            if not self._quenched_within(hold_seconds):
-                return
+            seen = self._watch(hold_seconds)
+            if seen is not _Seen.QUENCH:
+                return seen
 
-    def _quenched_within(self, seconds: float) -> bool:
-        """Poll the quench latch for up to seconds. True on a quench.
+    def _hold_while_paused(self, amplitude: float) -> float:
+        """Write nothing until the operator resumes. Returns ADES then, in MV.
+
+        Reads the quench latch and ADES only. Abort still works:
+        check_abort turns RF off and raises. A resume while QUENCH_LTCH is
+        set is refused and the phase stays paused, so a quench the operator
+        has not reset is not counted as the first quench after the pause.
+        CHECK: should the program keep resetting quenches while paused?
+        The 2026-10-27 spec gives the operator the amplitude; it doesn't
+        say who resets.
+        """
+        paused_at = datetime.now()
+        self.cavity.logger.info(
+            "MP processing paused at %.2f MV. No ADES writes or interlock "
+            "resets until Resume.",
+            amplitude,
+        )
+        while True:
+            self.cavity.check_abort()
+            if not self._pause_requested.is_set():
+                if not self.cavity.is_quenched:
+                    break
+                self._pause_requested.set()
+                self.cavity.logger.warning(
+                    "Resume refused: the quench latch is set. Reset the "
+                    "interlocks, then press Resume."
+                )
+            time.sleep(self.limits.poll_interval)
+        resumed = float(self.cavity.ades)
+        self.resumed_at = datetime.now()
+        self._after_pause = True
+        self._note_amplitude(resumed)
+        self._append_note(
+            f"paused {paused_at:%H:%M:%S} at {amplitude:.2f} MV, resumed "
+            f"{self.resumed_at:%H:%M:%S} at {resumed:.2f} MV"
+        )
+        self.cavity.logger.info(
+            "MP processing resumed at %.2f MV (ADES read back).", resumed
+        )
+        return resumed
+
+    def _watch(self, seconds: float) -> _Seen:
+        """Poll the quench latch for up to seconds.
+
+        QUENCH if the latch is set, PAUSE if the operator paused, QUIET if
+        neither happened in time. A quench is seen before a pause, so a
+        quench latched as Pause is pressed is still recorded and reset.
 
         Same timing as PiezoWithRFPhase._poll_until: elapsed time on
         time.monotonic(), each sleep capped at what remains.
@@ -361,10 +461,12 @@ class MPProcessingPhase(PhaseBase):
         while True:
             self.cavity.check_abort()
             if self.cavity.is_quenched:
-                return True
+                return _Seen.QUENCH
+            if self._pause_requested.is_set():
+                return _Seen.PAUSE
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                return False
+                return _Seen.QUIET
             time.sleep(min(self.limits.poll_interval, remaining))
 
     def _note_amplitude(self, amplitude: float) -> None:

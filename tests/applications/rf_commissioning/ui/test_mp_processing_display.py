@@ -1,7 +1,7 @@
 """Tests for MPProcessingDisplay: registry, Settings, toolbar, quench table."""
 
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import pytest
 from pydm.widgets import PyDMLabel
@@ -21,6 +21,8 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     MPProcessingUI,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.displays.mp_processing import (  # noqa: E501
+    PAUSE_TEXT,
+    RESUME_TEXT,
     MPProcessingDisplay,
     since_last_quench_text,
 )
@@ -94,7 +96,7 @@ def test_settings_default_to_the_phase_limits_and_stable_is_in_minutes(
     assert settings["quench_hold_seconds"] == 30.0
 
 
-def test_running_locks_settings_and_never_offers_pause(display):
+def test_running_locks_settings_and_offers_pause_only_in_process(display):
     display.set_running(True)
     assert not display.start_mv_spin.isEnabled()
     assert not display.quench_hold_spin.isEnabled()
@@ -233,3 +235,47 @@ def test_amplitudes_show_two_decimals_whatever_the_pv_prec(display):
         assert label.precisionFromPV is False, name
         assert label.precision == 2, name
     assert display.pydm_rf_state.precisionFromPV is True
+
+
+def test_pause_button_follows_the_phase_during_process(display):
+    display.set_running(True)
+    display.on_step_started("setup_rf")
+    assert not display.pause_button.isEnabled()
+    display.on_step_started("process")
+    assert display.pause_button.isEnabled()
+
+    with patch.object(
+        type(display.controller), "paused", new_callable=PropertyMock
+    ) as paused:
+        paused.return_value = True
+        display.refresh_progress()
+        assert display.pause_button.text() == RESUME_TEXT
+        assert display.local_phase_status.text() == "PAUSED"
+        # A refused resume: the phase set itself paused again.
+        paused.return_value = False
+        display.refresh_progress()
+        assert display.pause_button.text() == PAUSE_TEXT
+
+    display.on_step_started("record_results")
+    assert not display.pause_button.isEnabled()
+
+
+def test_first_quench_after_a_pause_shows_no_interval(display):
+    _with_quenches(display, 0, 95)
+    display.controller.mp_data.quench_events[1].after_pause = True
+    display.refresh_progress()
+    assert display.quench_table.item(1, 3).text() == "after pause"
+
+
+def test_since_last_quench_counts_from_a_later_resume():
+    data = MPProcessingData()
+    data.add_quench(amplitude=14.0, timestamp=T0)
+    resumed = T0 + timedelta(seconds=100)
+    now = T0 + timedelta(seconds=130)
+    text = since_last_quench_text(data, T0, now, resumed_at=resumed)
+    assert text == "0 min 30 s (since resume)"
+    # An earlier resume doesn't change the count from the last quench.
+    early = since_last_quench_text(
+        data, T0, now, resumed_at=T0 - timedelta(seconds=5)
+    )
+    assert early == "2 min 10 s"

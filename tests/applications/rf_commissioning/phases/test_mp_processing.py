@@ -5,6 +5,7 @@ assert which ADES values the phase writes, when it resets interlocks, what
 it records and when it stops.
 """
 
+import logging
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -85,6 +86,11 @@ class FakeCavity:
         self.stepper_tuner = SimpleNamespace(motor_moving=False)
         self.characterization_timestamp = recent
         self.characterization_status = CALIBRATION_COMPLETE_VALUE
+        self.logger = logging.getLogger("test_mp_processing")
+        # (clock time, callable) pairs, run from check_abort once due. The
+        # phase calls check_abort at every latch poll, so these stand in for
+        # the operator pressing Pause, Resume, or setting ADES by hand.
+        self.actions = []
 
     @property
     def ades(self):
@@ -115,6 +121,8 @@ class FakeCavity:
         self._ades = min(des_amp, self.ades_max)
 
     def check_abort(self):
+        while self.actions and self.clock.now >= self.actions[0][0]:
+            self.actions.pop(0)[1]()
         if self.abort_at is not None and self.clock.now >= self.abort_at:
             raise CavityAbortError("Abort requested")
 
@@ -488,3 +496,106 @@ def test_full_run_completes_the_phase(clock, record):
         is PhaseStatus.COMPLETE
     )
     assert record.mp_processing.quench_count == 1
+
+
+# ----------------------------------------------------------------------
+# Pause and inspect
+# ----------------------------------------------------------------------
+
+
+def operator_sets_ades(cavity, value):
+    """ADES set by hand on the machine: not one of the phase's writes."""
+
+    def act():
+        cavity._ades = value
+
+    return act
+
+
+def operator_resets(cavity):
+    def act():
+        cavity._latched = False
+
+    return act
+
+
+def pause_phase(clock, record, **kwargs):
+    cavity = FakeCavity(clock, start=5.0, ades_max=6.0, **kwargs)
+    phase = make_phase(
+        cavity,
+        record,
+        step_mv=0.1,
+        step_seconds=1,
+        quench_hold_seconds=5,
+        stable_seconds=10,
+    )
+    return cavity, phase
+
+
+def test_pause_stops_ades_writes_and_resume_goes_on_from_operator_ades(
+    clock, record
+):
+    cavity, phase = pause_phase(clock, record)
+    cavity.actions = [
+        (3.5, phase.request_pause),
+        (10, operator_sets_ades(cavity, 4.5)),
+        (20, phase.request_resume),
+    ]
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    # 5.1-5.3 before the pause (seen at the t=4 poll), nothing while
+    # paused, then one step_seconds hold at the operator's 4.5 MV.
+    assert cavity.ades_writes[:4] == pytest.approx([5.1, 5.2, 5.3, 4.6])
+    assert not phase.pause_requested
+    assert phase.resumed_at is not None
+    notes = record.mp_processing.notes
+    assert "at 5.30 MV, resumed" in notes
+    assert "at 4.50 MV" in notes
+
+
+def test_no_reset_or_record_while_paused_and_resume_waits_for_the_latch(
+    clock, record
+):
+    cavity, phase = pause_phase(clock, record, quench_at=[5, 30])
+    cavity.actions = [
+        (2.5, phase.request_pause),
+        (8, phase.request_resume),  # refused: latched at t=5
+        (9, lambda: refused.append(phase.pause_requested)),
+        (12, operator_resets(cavity)),
+        (14, phase.request_resume),
+    ]
+    refused = []
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    assert refused == [True]
+    # The quench at t=5 came while paused: not recorded, not reset by the
+    # program. Only the one at t=30 was, flagged as the first after a pause.
+    events = record.mp_processing.quench_events
+    assert len(events) == 1
+    assert events[0].after_pause is True
+    assert all(t > 14 for t in cavity.resets)
+
+
+def test_quench_seen_as_pause_is_pressed_is_processed_first(clock, record):
+    cavity, phase = pause_phase(clock, record, quench_at=[3])
+    cavity.actions = [(3, phase.request_pause), (20, phase.request_resume)]
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    events = record.mp_processing.quench_events
+    assert len(events) == 1
+    assert events[0].after_pause is False
+    assert cavity.resets and cavity.resets[0] < 20
+
+
+def test_abort_while_paused_fails_with_rf_off(clock, record):
+    cavity, phase = pause_phase(clock, record)
+    cavity.actions = [(2.5, phase.request_pause)]
+    cavity.abort_at = 10
+
+    result = run_steps(phase)
+
+    assert result.result is PhaseResult.FAILED
+    assert "RF is off" in result.message
