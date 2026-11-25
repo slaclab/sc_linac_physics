@@ -122,6 +122,17 @@ def test_progress_fills_counts_and_adds_quench_rows_once(display):
     assert table.item(0, 3).text() == "-"
 
 
+def test_refresh_scrolls_only_when_a_quench_row_is_added(display):
+    _with_quenches(display, 0, 95)
+    table = display.quench_table
+    with patch.object(table, "scrollToBottom") as scroll:
+        display.refresh_progress()
+        assert scroll.call_count == 1
+        # No new quench: the operator's scroll position is left alone.
+        display.refresh_progress()
+        assert scroll.call_count == 1
+
+
 def test_clear_run_empties_the_table(display):
     _with_quenches(display, 0)
     display.refresh_progress()

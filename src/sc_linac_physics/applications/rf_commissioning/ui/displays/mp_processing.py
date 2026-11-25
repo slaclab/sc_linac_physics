@@ -176,7 +176,8 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
             table.setRowCount(0)
             self._table_data = data
         events = data.quench_events
-        for row in range(table.rowCount(), len(events)):
+        shown = table.rowCount()
+        for row in range(shown, len(events)):
             event = events[row]
             since = (
                 "-"
@@ -193,7 +194,9 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
                 )
             ):
                 table.setItem(row, column, QTableWidgetItem(text))
-        if events:
+        # Scroll only when a row was added, so an operator who scrolled up
+        # to read an earlier quench is not pulled back every second.
+        if len(events) > shown:
             table.scrollToBottom()
 
     def clear_run(self) -> None:
