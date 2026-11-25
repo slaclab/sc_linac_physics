@@ -17,7 +17,7 @@ each started from the GUI thread:
      a justification, then record_results and complete.
      record.piezo_with_rf.detune_gain_pushed stays False.
 
-Abort goes through _cavity_abort_hook: PhaseRun.request_abort() sets
+Abort goes through step_runner.cavity_abort_hook: PhaseRun.request_abort() sets
 context.abort_requested and cavity.abort_flag. The phase's waits call
 cavity.check_abort(), which turns RF off and raises. RunnerBridge clears
 both before each segment.
@@ -26,9 +26,6 @@ In step mode, wait_for_completion follows start_test without a Next hold. The
 wait has to see RFTESTSTS read Running, so a hold after the trigger could let
 the script finish unseen and fail a test that ran.
 """
-
-import logging
-import threading
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -43,10 +40,14 @@ from sc_linac_physics.applications.rf_commissioning.phases.piezo_with_rf import 
 )
 from sc_linac_physics.applications.rf_commissioning.phases.step_runner import (
     HOLD_STEP_MODE,
-    AbortHook,
     PhaseRun,
     SegmentOutcome,
     SegmentResult,
+    cavity_abort_hook,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.controllers.phase_persistence import (  # noqa: E501
+    FINISH_WRITES,
+    persist_finished_phase,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.piezo_pre_rf_pv import (  # noqa: E501
     apply_pv_mapping,
@@ -61,6 +62,9 @@ from sc_linac_physics.applications.rf_commissioning.models.commissioning_machine
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.cavity_hold import (
     CavityHold,
     refusal_message,
+)
+from sc_linac_physics.applications.rf_commissioning.ui.stale_result_prompt import (  # noqa: E501
+    ask_about_stale_results,
 )
 from sc_linac_physics.utils.sc_linac.linac import Machine
 
@@ -80,17 +84,6 @@ CHECK_STEPS = ALL_STEPS[:1]
 MEASURE_STEPS = ALL_STEPS[1:7]
 PUSH_STEPS = ALL_STEPS[7:]
 
-# Stale results setup_rf would re-run: data key prefix, parameter, label, PV.
-STALE_PROMPTS = (
-    ("ssa_calibration", "rerun_ssa_calibration", "SSA calibration", "CALTS"),
-    (
-        "characterization",
-        "rerun_characterization",
-        "characterization",
-        "PROBECALTS",
-    ),
-)
-
 
 def live_pv_addresses(cavity) -> dict[str, str]:
     """Widget name -> PV address for the Live PVs box. Read-only."""
@@ -105,30 +98,6 @@ def live_pv_addresses(cavity) -> dict[str, str]:
         "pydm_dfgain_current": piezo.pv_addr("DFGAIN"),
         "pydm_rf_state": cavity.rf_state_pv,  # RFSTATE
     }
-
-
-def _cavity_abort_hook(cavity) -> AbortHook:
-    """Abort through Cavity.abort_flag, without blocking the GUI thread.
-
-    PhaseRun.request_abort() calls request() on the GUI thread when Abort is
-    pressed. cavity.request_abort() would also put "Abort requested" to the
-    cavity's status message PV and wait for the put, so a slow PV would
-    freeze the window. Here abort_flag is set at once, and the status message
-    is written on a daemon thread. check_abort() reads only abort_flag.
-    """
-
-    def request() -> None:
-        cavity.abort_flag = True
-        threading.Thread(
-            target=cavity.set_status_message,
-            args=("Abort requested", logging.WARNING),
-            daemon=True,
-        ).start()
-
-    def clear() -> None:
-        cavity.abort_flag = False
-
-    return AbortHook(request=request, clear=clear)
 
 
 class PiezoWithRFController(QObject):
@@ -267,7 +236,7 @@ class PiezoWithRFController(QObject):
                 self._cavity_hold.release()
             return
         self.run = PhaseRun(
-            self.phase, abort_hooks=(_cavity_abort_hook(self._cavity),)
+            self.phase, abort_hooks=(cavity_abort_hook(self._cavity),)
         )
         self.run.set_step_mode(self._step_mode)
         self.review_data = None
@@ -336,23 +305,6 @@ class PiezoWithRFController(QObject):
     # Segment 2: setup_rf .. read_results, after the stale prompts
     # ------------------------------------------------------------------
 
-    def _ask_about_stale_results(self, data: dict) -> bool:
-        """One popup per stale result. False if the operator cancelled."""
-        for key, param, label, pv in STALE_PROMPTS:
-            if data.get(f"{key}_recent", True):
-                continue
-            good = data.get(f"{key}_good", data.get(f"{key}_complete"))
-            answer = self.view.ask_rerun(
-                label, pv, data.get(f"{key}_time"), good
-            )
-            if answer is None:
-                return False
-            self.context.parameters[param] = answer
-            self.view.log_message(
-                f"{label}: operator chose {'Rerun' if answer else 'Skip'}"
-            )
-        return True
-
     # ------------------------------------------------------------------
     # Segment 3: Push to IOC, or Don't Push
     # ------------------------------------------------------------------
@@ -420,7 +372,12 @@ class PiezoWithRFController(QObject):
             return
         if self.stage == "check":
             data = result.results["verify_initial_state"].data or {}
-            if not self._ask_about_stale_results(data):
+            if not ask_about_stale_results(
+                self.view.ask_rerun,
+                self.context.parameters,
+                data,
+                self.view.log_message,
+            ):
                 self.run.fail(
                     "Cancelled at the stale-result prompt; nothing written",
                     step="setup_rf",
@@ -444,49 +401,27 @@ class PiezoWithRFController(QObject):
         """Push or Don't Push completed: close the instance and save."""
         self._cavity_hold.release()
         self.review_data = None
-        self._unsaved = {"complete", "save", "history"}
+        self._unsaved = set(FINISH_WRITES)
         self._persist_finish()
 
     def _persist_finish(self) -> None:
         """Complete the instance, save the record and add the history entry.
 
-        Each call's result is checked, as in
-        CavityCharController._persist_push. Whatever fails stays in
-        _unsaved, with the instance id, and the phase is not reported
-        complete. Push or Don't Push then retries only these writes.
+        phase_persistence.persist_finished_phase does the writes and checks
+        each one, as CavityCharController._persist_push does. Whatever fails
+        stays in _unsaved, with the instance id, and the phase is not
+        reported complete. Push or Don't Push then retries only these writes.
         """
         record = self.context.record
-        data = record.piezo_with_rf
-        writes = {
-            "complete": lambda: (
-                self._active_phase_instance_id is None
-                or self.session.complete_active_phase_instance(
-                    phase_instance_id=self._active_phase_instance_id,
-                    phase=PHASE,
-                    artifact_payload=data.to_dict() if data else None,
-                )
-            ),
-            "save": self.session.save_active_record,
-            "history": lambda: (
-                data is None
-                or self.session.add_measurement_to_history(
-                    PHASE,
-                    data,
-                    operator=self.context.operator,
-                    phase_instance_id=self._active_phase_instance_id,
-                )
-            ),
-        }
-        for name in ("complete", "save", "history"):
-            if name not in self._unsaved:
-                continue
-            try:
-                ok = writes[name]()
-            except Exception as exc:
-                self.view.log_message(f"Warning: {name} failed: {exc}")
-                ok = False
-            if ok:
-                self._unsaved.discard(name)
+        self._unsaved = persist_finished_phase(
+            self.session,
+            PHASE,
+            self._active_phase_instance_id,
+            record.piezo_with_rf,
+            self.context.operator,
+            self._unsaved,
+            self.view.log_message,
+        )
 
         current = self.session.get_active_record()
         if current is not None:

@@ -72,17 +72,30 @@ class AbortHook:
 
 
 def cavity_abort_hook(cavity) -> AbortHook:
-    """Abort through Cavity.abort_flag.
+    """Abort through Cavity.abort_flag, without blocking the caller.
 
-    request_abort() sets abort_flag. Cavity.check_abort(), called inside the
-    cavity's waits (e.g. wait_for_characterization), then calls turn_off()
-    and raises CavityAbortError.
+    PhaseRun.request_abort() calls request() on the GUI thread when Abort is
+    pressed. Cavity.check_abort(), called inside the cavity's waits, reads
+    only abort_flag; it then calls turn_off() and raises CavityAbortError.
+
+    cavity.request_abort() would also put "Abort requested" to the cavity's
+    status message PV and wait for the put, so a slow PV would freeze the
+    window. Here abort_flag is set at once and the status message is
+    written on a daemon thread.
     """
+
+    def request() -> None:
+        cavity.abort_flag = True
+        threading.Thread(
+            target=cavity.set_status_message,
+            args=("Abort requested", logging.WARNING),
+            daemon=True,
+        ).start()
 
     def clear() -> None:
         cavity.abort_flag = False
 
-    return AbortHook(request=cavity.request_abort, clear=clear)
+    return AbortHook(request=request, clear=clear)
 
 
 def stepper_abort_hook(stepper_tuner) -> AbortHook:

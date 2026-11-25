@@ -1,5 +1,6 @@
 """Tests for PhaseRun, the step loop every phase runs through."""
 
+import logging
 import threading
 import time
 
@@ -452,17 +453,27 @@ def test_abort_hook_error_is_swallowed():
 
 
 def test_cavity_abort_hook():
+    """request() sets abort_flag at once; the status message follows."""
+    written = threading.Event()
+
     class Cavity:
         abort_flag = False
+        messages = []
+
+        def set_status_message(self, text, level):
+            self.messages.append((text, level))
+            written.set()
 
         def request_abort(self):
-            self.abort_flag = True
+            raise AssertionError("request_abort waits on a PV put")
 
     cavity = Cavity()
     hook = cavity_abort_hook(cavity)
 
     hook.request()
     assert cavity.abort_flag is True
+    assert written.wait(timeout=2)
+    assert cavity.messages == [("Abort requested", logging.WARNING)]
     hook.clear()
     assert cavity.abort_flag is False
 
