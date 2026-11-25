@@ -423,3 +423,34 @@ def test_a_failed_failure_write_is_kept_for_retry(controller, session, view):
     assert session.fail_active_phase_instance.call_count == 2
     assert controller.stage is None
     assert controller._active_phase_instance_id is None
+
+
+def start_the_run_segment(controller):
+    controller.on_start_test()
+    controller._on_segment_finished(
+        completed(verify_initial_state=check_data())
+    )
+    controller.bridge._busy = True
+
+
+def test_pause_and_resume_go_to_the_phase_during_the_run(controller):
+    start_the_run_segment(controller)
+
+    controller.on_pause()
+    assert controller.pause_state == "pausing"
+    # The worker hasn't paused yet: a second press does nothing.
+    controller.on_pause()
+    assert controller.pause_state == "pausing"
+    controller.phase._paused = True  # the worker has stopped writing
+    controller.on_pause()
+    assert controller.pause_state == "resuming"
+
+
+def test_pause_does_nothing_during_the_check_or_with_nothing_running(
+    controller,
+):
+    controller.on_pause()  # no run yet: no error
+    controller.on_start_test()
+    controller.bridge._busy = True
+    controller.on_pause()  # verify_initial_state: not the walk
+    assert controller.pause_state == "running"

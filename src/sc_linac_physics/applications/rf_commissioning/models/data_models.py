@@ -463,6 +463,9 @@ class MPProcessingQuenchEvent:
         format_spec=".3f",
         unit="MV",
     )
+    # First quench after an MP pause: the time since the one before it
+    # spans the pause and means nothing. Older records load as False.
+    after_pause: bool = False
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -534,7 +537,11 @@ class MPProcessingData:
         return self.is_complete
 
     def add_quench(
-        self, *, amplitude: float, timestamp: datetime | None = None
+        self,
+        *,
+        amplitude: float,
+        timestamp: datetime | None = None,
+        after_pause: bool = False,
     ) -> None:
         """Append a quench event to the current session."""
         self.quench_events.append(
@@ -542,6 +549,7 @@ class MPProcessingData:
                 session_id=self.session_id,
                 timestamp=timestamp or datetime.now(),
                 amplitude=amplitude,
+                after_pause=after_pause,
             )
         )
 

@@ -21,9 +21,11 @@ cavity.check_abort(), which turns RF off and raises. An abort between steps
 (a Step Mode hold after setup_rf) reaches no check_abort, so the controller
 turns RF off itself before it releases the cavity (_turn_rf_off).
 
-Pause is not offered. PhaseRun.pause() only holds between steps, and process
-is one step that runs until ADES_MAX is stable, so Pause would do nothing
-until the run ended. Pause and inspect is a later PR.
+Pause goes to the phase, not to PhaseRun. PhaseRun.pause() only holds
+between steps, and process is one step that runs until ADES_MAX is stable.
+MPProcessingPhase.request_pause() stops the walk inside process instead and
+leaves RF on (see phases/mp_processing.py). The tab offers Pause only during
+process.
 """
 
 import threading
@@ -135,6 +137,16 @@ class MPProcessingController(QObject):
     def running(self) -> bool:
         """A segment is running, or RF is being turned off after an abort."""
         return self.bridge.running or self.stage == "rf_off"
+
+    @property
+    def pause_state(self) -> str:
+        """MPProcessingPhase.pause_state, or "running" with no phase."""
+        return "running" if self.phase is None else self.phase.pause_state
+
+    @property
+    def resumed_at(self):
+        """When this run's last pause ended, or None."""
+        return None if self.phase is None else self.phase.resumed_at
 
     @property
     def mp_data(self):
@@ -508,6 +520,33 @@ class MPProcessingController(QObject):
                 "within a second while ADES is held, or up to about 48 s if "
                 "an interlock reset is retrying."
             )
+
+    def on_pause(self) -> None:
+        """Pause or resume the walk inside process. Writes no PVs.
+
+        Paused, the phase writes no ADES and resets no interlocks; the
+        operator has the amplitude. Resume goes on from the ADES read back
+        then. The phase refuses a resume while QUENCH_LTCH is set.
+        """
+        if self.phase is None or self.stage != "run" or not self.running:
+            return
+        state = self.phase.pause_state
+        if state == "paused":
+            self.phase.request_resume()
+            self.view.log_message(
+                "Resume requested: the walk goes on from the ADES on the "
+                "machine now."
+            )
+        elif state == "running":
+            self.phase.request_pause()
+            self.view.log_message(
+                "Pause requested. The tab shows Paused once ADES writes and "
+                "interlock resets have stopped: within a second, or after "
+                "an interlock reset that is retrying (up to about 48 s). RF "
+                "stays on. Then set ADES by hand and press Resume. Abort "
+                "still turns RF off."
+            )
+        # "pausing" / "resuming": the phase hasn't acted on the last press.
 
     def on_toggle_step_mode(self) -> None:
         self._step_mode = not self._step_mode
