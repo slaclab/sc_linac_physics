@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.68.1 (2026-11-25)
+
+### Bug Fixes
+
+- **logger**: Old retry arguments still work by position, and warn before the cache check
+  ([#482](https://github.com/slaclab/sc_linac_physics/pull/482),
+  [`e5c00a1`](https://github.com/slaclab/sc_linac_physics/commit/e5c00a1179516e73facbcef734e56f6358b44bb2))
+
+### Refactoring
+
+- **logger**: Drop the file-handler retry and the chmod calls
+  ([#482](https://github.com/slaclab/sc_linac_physics/pull/482),
+  [`e5c00a1`](https://github.com/slaclab/sc_linac_physics/commit/e5c00a1179516e73facbcef734e56f6358b44bb2))
+
+
 ## v9.68.0 (2026-11-24)
 
 ### Bug Fixes
