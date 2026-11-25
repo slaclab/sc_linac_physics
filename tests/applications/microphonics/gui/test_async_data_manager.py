@@ -4,7 +4,6 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
-from PyQt5.QtCore import QThread
 
 from sc_linac_physics.applications.microphonics.gui.async_data_manager import (
     AsyncDataManager,
@@ -224,18 +223,15 @@ class TestJobManagement:
     def test_stop_all_acquisitions_with_workers(self, async_manager):
         """Test stopping active workers"""
         # Create mock worker and thread
-        mock_thread = Mock(spec=QThread)
-        mock_thread.wait.return_value = True
         mock_worker = Mock()
 
-        async_manager.active_workers["chassis_1"] = (mock_thread, mock_worker)
+        async_manager.active_workers["chassis_1"] = mock_worker
         async_manager.job_running = True
 
         async_manager.stop_all()
 
         # Verify cleanup was called
         mock_worker.stop_acquisition.assert_called_once_with("chassis_1")
-        mock_thread.quit.assert_called_once()
         assert async_manager.job_running is False
         assert "chassis_1" not in async_manager.active_workers
 
@@ -244,42 +240,28 @@ class TestWorkerManagement:
     """Test worker thread management"""
 
     @patch(
-        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
-    )
-    @patch(
         "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
     )
-    def test_start_worker_creates_thread(
-        self, mock_dam_class, mock_qthread_class, async_manager
+    def test_start_worker_creates_worker_without_a_thread(
+        self, mock_dam_class, async_manager
     ):
-        """Test that starting worker creates thread and worker"""
-        mock_thread = Mock(spec=QThread)
+        """QProcess and QTimer don't block, so the worker stays here."""
         mock_worker = Mock()
-        mock_qthread_class.return_value = mock_thread
         mock_dam_class.return_value = mock_worker
 
         config = {"pv_base": "TEST:PV", "cavities": [1, 2, 3], "config": Mock()}
 
         async_manager._start_worker_for_chassis("chassis_1", config)
 
-        # Verify thread and worker were created
-        mock_qthread_class.assert_called_once()
         mock_dam_class.assert_called_once()
-        mock_worker.moveToThread.assert_called_once_with(mock_thread)
+        mock_worker.moveToThread.assert_not_called()
 
-    @patch(
-        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
-    )
     @patch(
         "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
     )
-    def test_start_worker_connects_signals(
-        self, mock_dam_class, mock_qthread_class, async_manager
-    ):
+    def test_start_worker_connects_signals(self, mock_dam_class, async_manager):
         """Test that worker signals are connected"""
-        mock_thread = Mock(spec=QThread)
         mock_worker = Mock()
-        mock_qthread_class.return_value = mock_thread
         mock_dam_class.return_value = mock_worker
 
         config = {"pv_base": "TEST:PV", "cavities": [1, 2, 3], "config": Mock()}
@@ -293,49 +275,58 @@ class TestWorkerManagement:
         assert mock_worker.dataReceived.connect.called
 
     @patch(
-        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
-    )
-    @patch(
         "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
     )
-    def test_start_worker_stores_reference(
-        self, mock_dam_class, mock_qthread_class, async_manager
-    ):
+    def test_start_worker_stores_reference(self, mock_dam_class, async_manager):
         """Test that worker reference is stored"""
-        mock_thread = Mock(spec=QThread)
         mock_worker = Mock()
-        mock_qthread_class.return_value = mock_thread
         mock_dam_class.return_value = mock_worker
 
         config = {"pv_base": "TEST:PV", "cavities": [1, 2, 3], "config": Mock()}
 
         async_manager._start_worker_for_chassis("chassis_1", config)
 
-        assert "chassis_1" in async_manager.active_workers
-        thread, worker = async_manager.active_workers["chassis_1"]
-        assert thread == mock_thread
-        assert worker == mock_worker
+        assert async_manager.active_workers["chassis_1"] is mock_worker
 
-    @patch(
-        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
-    )
     @patch(
         "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
     )
-    def test_start_worker_starts_thread(
-        self, mock_dam_class, mock_qthread_class, async_manager
+    def test_start_worker_starts_acquisition(
+        self, mock_dam_class, async_manager
     ):
-        """Test that thread is started"""
-        mock_thread = Mock(spec=QThread)
+        """Test that the acquisition is started right away"""
         mock_worker = Mock()
-        mock_qthread_class.return_value = mock_thread
         mock_dam_class.return_value = mock_worker
 
         config = {"pv_base": "TEST:PV", "cavities": [1, 2, 3], "config": Mock()}
 
         async_manager._start_worker_for_chassis("chassis_1", config)
 
-        mock_thread.start.assert_called_once()
+        mock_worker.start_acquisition.assert_called_once_with(
+            "chassis_1", config
+        )
+
+
+class TestFailedStart:
+    """A chassis can report an error before _start_worker_for_chassis
+    returns, now that nothing waits for a thread to start."""
+
+    def test_failed_start_does_not_start_remaining_chassis(
+        self, async_manager, multi_chassis_config
+    ):
+        started = []
+
+        def start(chassis_id, config):
+            started.append(chassis_id)
+            async_manager._handle_worker_error(chassis_id, "no such script")
+
+        with patch.object(
+            async_manager, "_start_worker_for_chassis", side_effect=start
+        ):
+            async_manager.initiate_measurement(multi_chassis_config)
+
+        assert started == ["chassis_1"]
+        assert async_manager.job_running is False
 
 
 class TestProgressHandling:
@@ -429,14 +420,12 @@ class TestErrorHandling:
     def test_handle_worker_error_stops_other_workers(self, async_manager):
         """Test that error in one worker stops all workers"""
         # Setup multiple workers
-        mock_thread1 = Mock(spec=QThread)
         mock_worker1 = Mock()
-        mock_thread2 = Mock(spec=QThread)
         mock_worker2 = Mock()
 
         async_manager.active_workers = {
-            "chassis_1": (mock_thread1, mock_worker1),
-            "chassis_2": (mock_thread2, mock_worker2),
+            "chassis_1": mock_worker1,
+            "chassis_2": mock_worker2,
         }
         async_manager.job_running = True
         async_manager.job_chassis_ids = {"chassis_1", "chassis_2"}
@@ -613,36 +602,29 @@ class TestStopWorker:
 
     def test_stop_worker_calls_stop_acquisition(self, async_manager):
         """Test that stopping worker calls stop_acquisition"""
-        mock_thread = Mock(spec=QThread)
-        mock_thread.wait.return_value = True
         mock_worker = Mock()
 
-        async_manager.active_workers["chassis_1"] = (mock_thread, mock_worker)
+        async_manager.active_workers["chassis_1"] = mock_worker
 
         async_manager._stop_worker("chassis_1")
 
         mock_worker.stop_acquisition.assert_called_once_with("chassis_1")
 
-    def test_stop_worker_quits_thread(self, async_manager):
-        """Test that stopping worker quits thread"""
-        mock_thread = Mock(spec=QThread)
-        mock_thread.wait.return_value = True
+    def test_stop_worker_deletes_worker(self, async_manager):
+        """Test that stopping worker schedules it for deletion"""
         mock_worker = Mock()
 
-        async_manager.active_workers["chassis_1"] = (mock_thread, mock_worker)
+        async_manager.active_workers["chassis_1"] = mock_worker
 
         async_manager._stop_worker("chassis_1")
 
-        mock_thread.quit.assert_called_once()
-        mock_thread.wait.assert_called_once()
+        mock_worker.deleteLater.assert_called_once()
 
     def test_stop_worker_removes_from_active(self, async_manager):
         """Test that stopping worker removes it from active workers"""
-        mock_thread = Mock(spec=QThread)
-        mock_thread.wait.return_value = True
         mock_worker = Mock()
 
-        async_manager.active_workers["chassis_1"] = (mock_thread, mock_worker)
+        async_manager.active_workers["chassis_1"] = mock_worker
 
         async_manager._stop_worker("chassis_1")
 
@@ -658,23 +640,17 @@ class TestIntegrationScenarios:
     """Test complete workflows"""
 
     @patch(
-        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
-    )
-    @patch(
         "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
     )
     def test_full_single_chassis_workflow(
         self,
         mock_dam_class,
-        mock_qthread_class,
         async_manager,
         mock_chassis_config,
         qtbot,
     ):
         """Test complete workflow for single chassis"""
-        mock_thread = Mock(spec=QThread)
         mock_worker = Mock()
-        mock_qthread_class.return_value = mock_thread
         mock_dam_class.return_value = mock_worker
 
         # Initiate measurement
@@ -725,13 +701,8 @@ class TestIntegrationScenarios:
             async_manager.initiate_measurement(mock_chassis_config)
 
             # Add mock worker
-            mock_thread = Mock(spec=QThread)
-            mock_thread.wait.return_value = True
             mock_worker = Mock()
-            async_manager.active_workers["chassis_1"] = (
-                mock_thread,
-                mock_worker,
-            )
+            async_manager.active_workers["chassis_1"] = mock_worker
 
             # Stop - use correct method name
             async_manager.stop_all()
@@ -740,23 +711,17 @@ class TestIntegrationScenarios:
             assert len(async_manager.active_workers) == 0
 
     @patch(
-        "sc_linac_physics.applications.microphonics.gui.async_data_manager.QThread"
-    )
-    @patch(
         "sc_linac_physics.applications.microphonics.gui.async_data_manager.DataAcquisitionManager"
     )
     def test_full_multi_chassis_workflow(
         self,
         mock_dam_class,
-        mock_qthread_class,
         async_manager,
         multi_chassis_config,
         qtbot,
     ):
         """Test complete workflow for multiple chassis"""
-        mock_thread = Mock(spec=QThread)
         mock_worker = Mock()
-        mock_qthread_class.return_value = mock_thread
         mock_dam_class.return_value = mock_worker
 
         # Initiate measurement
@@ -887,13 +852,8 @@ class TestMemoryManagement:
         """Test that stopping cleans up all worker references"""
         # Add multiple mock workers
         for i in range(3):
-            mock_thread = Mock(spec=QThread)
-            mock_thread.wait.return_value = True
             mock_worker = Mock()
-            async_manager.active_workers[f"chassis_{i}"] = (
-                mock_thread,
-                mock_worker,
-            )
+            async_manager.active_workers[f"chassis_{i}"] = mock_worker
 
         async_manager.stop_all()
 
