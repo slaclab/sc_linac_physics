@@ -75,6 +75,7 @@ def view():
     v = Mock()
     v.get_current_operator.return_value = "lisa"
     v.read_settings.return_value = dict(SETTINGS)
+    v.read_fe_fields.return_value = {}
     return v
 
 
@@ -454,3 +455,34 @@ def test_pause_does_nothing_during_the_check_or_with_nothing_running(
     controller.bridge._busy = True
     controller.on_pause()  # verify_initial_state: not the walk
     assert controller.pause_state == "running"
+
+
+def test_a_finished_run_saves_the_field_emission_box(controller, view, record):
+    view.read_fe_fields.return_value = {
+        "field_emission_onset": 14.2,
+        "fe_50_mr_h_amplitude": None,
+    }
+    run_to_the_end(controller, record)
+    assert record.mp_processing.field_emission_onset == 14.2
+    assert record.mp_processing.fe_50_mr_h_amplitude is None
+
+
+def test_save_fe_writes_the_box_to_the_last_run(controller, view, session):
+    record = session.get_active_record()
+    record.mp_processing = MPProcessingData(max_amplitude_reached=16.6)
+    view.read_fe_fields.return_value = {"fe_50_mr_h_amplitude": 15.1}
+    controller.save_fe_fields()
+    assert record.mp_processing.fe_50_mr_h_amplitude == 15.1
+    session.save_active_record.assert_called_once()
+
+
+def test_save_fe_needs_a_run_and_nothing_running(controller, view, session):
+    controller.save_fe_fields()  # no MP run on the record
+    view.show_error.assert_called_once()
+    session.save_active_record.assert_not_called()
+
+    session.get_active_record().mp_processing = MPProcessingData()
+    controller.bridge._busy = True
+    controller.save_fe_fields()
+    assert view.show_error.call_count == 2
+    session.save_active_record.assert_not_called()
