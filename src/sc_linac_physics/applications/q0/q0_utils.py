@@ -14,6 +14,10 @@ from scipy.stats import linregress, siegelslopes
 
 USE_SIEGELSLOPES = True
 
+# Q0Measurement.fit_sensitive is True when the linregress Q0 differs from the
+# official Q0 by more than this many q0_sigma.
+FIT_SENSITIVE_SIGMAS = 1
+
 DATETIME_FORMATTER = "%m/%d/%y %H:%M:%S"
 
 # The relationship between the LHE content of a cryomodule and the readback from
@@ -110,6 +114,7 @@ class DataRun:
         self._average_heat = None
         self.reference_heat = reference_heat
         self._fit_window: Optional[Tuple[float, float]] = None
+        self._linregress = None
 
     @property
     def fit_window(self) -> Optional[Tuple[float, float]]:
@@ -134,6 +139,7 @@ class DataRun:
                 )
         self._fit_window = window
         self._dll_dt = None
+        self._linregress = None
 
     @property
     def fit_ll_data(self) -> Dict[float, float]:
@@ -194,6 +200,57 @@ class DataRun:
     @dll_dt.setter
     def dll_dt(self, value: float):
         self._dll_dt = value
+
+    def _linregress_fit(self):
+        if self._linregress is None:
+            self._linregress = linregress(
+                list(self.fit_ll_data.keys()),
+                list(self.fit_ll_data.values()),
+            )
+        return self._linregress
+
+    @property
+    def dll_dt_linregress(self) -> float:
+        """Least-squares dLL/dt over fit_ll_data, shown beside dll_dt."""
+        return self._linregress_fit().slope
+
+    @property
+    def dll_dt_stderr(self) -> float:
+        """How much dll_dt_linregress would vary from noise alone, in LL %
+        per second. Returns nan when the fit has fewer than 3 samples.
+
+        linregress reports a standard error that treats every LL reading as
+        independent noise. In the packaged data they are not: each reading's
+        distance from the fitted line is close to the previous reading's
+        (median correlation 0.97 between neighbours). That makes the plain
+        standard error several times too small.
+
+        This measures that neighbour-to-neighbour correlation, rho, from the
+        residuals in time order, treating a negative value as 0. It then
+        multiplies the standard error by sqrt((1 + rho) / (1 - rho)). That is
+        the usual correction when each residual is mostly the previous one
+        plus some new noise. At rho = 0.97 the factor is about 8.
+        """
+        fit = self._linregress_fit()
+        # Read once: with a fit window set, each read of fit_ll_data filters
+        # a new copy of the whole run.
+        data = self.fit_ll_data
+        times = np.array(sorted(data))
+        if len(times) < 3:
+            # A line through two points has no spread to estimate.
+            return np.nan
+        levels = np.array([data[t] for t in times])
+        resid = levels - (fit.intercept + fit.slope * times)
+        if np.std(resid[:-1]) == 0 or np.std(resid[1:]) == 0:
+            # Every reading sits on the line, so there is no correlation to
+            # measure. The plain standard error is already right.
+            return fit.stderr
+        rho = max(np.corrcoef(resid[:-1], resid[1:])[0, 1], 0.0)
+        if rho >= 1:
+            # Each residual repeats the last exactly, so the readings carry
+            # no independent information and the spread is unbounded.
+            return np.inf
+        return fit.stderr * np.sqrt((1 + rho) / (1 - rho))
 
 
 class HeaterRun(DataRun):
