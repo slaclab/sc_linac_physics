@@ -70,6 +70,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.runner_bridge
 from sc_linac_physics.applications.rf_commissioning.ui.stale_result_prompt import (  # noqa: E501
     ask_about_stale_results,
 )
+from sc_linac_physics.utils.sc_linac.decarad import Decarad
 
 PHASE = CommissioningPhase.MP_PROCESSING
 ALL_STEPS = ("verify_initial_state", "setup_rf", "process", "record_results")
@@ -86,6 +87,17 @@ def live_pv_addresses(cavity) -> dict[str, str]:
         "pydm_quench_latch": cavity.quench_latch_pv,  # QUENCH_LTCH
         "pydm_rf_mode": cavity.rf_mode_pv,  # RFMODE
         "pydm_rf_state": cavity.rf_state_pv,  # RFSTATE
+    }
+
+
+def live_decarad_addresses(number: int) -> dict[str, str]:
+    """Widget name -> GAMMA_DOSE_RATE address, for decarad 1 or 2. Read-only.
+
+    From the Decarad class, so the PV names match the FE pause's reads.
+    """
+    return {
+        f"pydm_decarad_head_{head.number}": head.raw_dose_rate_pv
+        for head in Decarad(number).heads.values()
     }
 
 

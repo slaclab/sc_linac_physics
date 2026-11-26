@@ -14,11 +14,13 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
 )
 from sc_linac_physics.applications.rf_commissioning.ui.builders.mp_processing import (  # noqa: E501
     DECARAD_CHOICES,
+    DECARAD_HEADS,
     FE_DATA_FIELDS,
     SETTINGS,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.mp_processing_controller import (  # noqa: E501
     MPProcessingController,
+    live_decarad_addresses,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.stale_result_prompt import (  # noqa: E501
     ask_rerun,
@@ -120,6 +122,8 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.override_radiation_button.clicked.connect(
             self.on_override_radiation
         )
+        self.decarad_combo.currentIndexChanged.connect(self.show_decarad_pvs)
+        self.show_decarad_pvs()
 
     # ------------------------------------------------------------------
     # Record
@@ -214,6 +218,26 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.fe_save_button.setEnabled(
             data is not None and not self.controller.running
         )
+
+    def show_decarad_pvs(self, *_args) -> None:
+        """Point the decarad row at the decarad chosen in Settings.
+
+        Read-only labels. Off disconnects them and shows "-".
+        """
+        number = DECARAD_CHOICES[self.decarad_combo.currentIndex()][1]
+        labels = [
+            getattr(self, f"pydm_decarad_head_{head}") for head in DECARAD_HEADS
+        ]
+        if number is None:
+            for label in labels:
+                label.channel = ""
+                label.setText("-")
+            self.decarad_group.setTitle("Decarad GAMMA_DOSE_RATE (raw): off")
+            return
+        addresses = live_decarad_addresses(number)
+        for head, label in zip(DECARAD_HEADS, labels):
+            label.channel = f"ca://{addresses[f'pydm_decarad_head_{head}']}"
+        self.decarad_group.setTitle(f"Decarad {number} GAMMA_DOSE_RATE (raw)")
 
     def set_settings_enabled(self, enabled: bool) -> None:
         for setting in SETTINGS:
