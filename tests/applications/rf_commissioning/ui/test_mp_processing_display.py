@@ -355,17 +355,3 @@ def test_stored_notes_show_the_newest_line_and_the_rest_on_hover(display):
     label = display.local_stored_notes
     assert label.text() == "resumed 1 (+2 more; hover for all)"
     assert label.toolTip() == data.notes
-
-
-def test_decarad_row_follows_the_settings_choice(display):
-    head_3 = display.pydm_decarad_head_3
-    assert head_3.text() == "-"
-    assert "off" in display.decarad_group.title()
-
-    display.decarad_combo.setCurrentIndex(1)  # decarad 1
-    assert head_3.channel == "ca://RADM:SYS0:100:03:GAMMA_DOSE_RATE"
-    assert display.decarad_group.title().startswith("Decarad 1")
-
-    display.decarad_combo.setCurrentIndex(0)  # Off
-    assert not head_3.channel
-    assert head_3.text() == "-"

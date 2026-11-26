@@ -31,7 +31,6 @@ from sc_linac_physics.applications.rf_commissioning.ui.controllers.mp_processing
     CHECK_STEPS,
     RUN_STEPS,
     MPProcessingController,
-    live_decarad_addresses,
     live_pv_addresses,
 )
 
@@ -554,14 +553,3 @@ def test_radiation_readout_text(controller):
     assert controller.radiation_text == "-"
     controller.phase.radiation = 3.25
     assert controller.radiation_text == "3.2 over background"
-
-
-def test_live_decarad_addresses_are_the_heads_gamma_dose_rate():
-    addresses = live_decarad_addresses(2)
-    assert len(addresses) == 10
-    assert addresses["pydm_decarad_head_1"] == (
-        "RADM:SYS0:200:01:GAMMA_DOSE_RATE"
-    )
-    assert addresses["pydm_decarad_head_10"] == (
-        "RADM:SYS0:200:10:GAMMA_DOSE_RATE"
-    )

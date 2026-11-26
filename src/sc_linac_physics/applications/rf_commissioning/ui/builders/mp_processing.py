@@ -134,8 +134,6 @@ SETTINGS = (
 )  # fmt: skip
 # Decarad choices on the Settings box -> MPProcessingLimits.decarad.
 DECARAD_CHOICES = (("Off", None), ("1", 1), ("2", 2))
-# Head numbers on a decarad (Decarad.heads).
-DECARAD_HEADS = range(1, 11)
 
 
 # Spin box name -> caption, for the MPProcessingData fields in FE_DATA_FIELDS.
@@ -175,7 +173,6 @@ class MPProcessingUI(PhaseUIBase):
         grid.addWidget(self._build_settings(), 2, 0)
         grid.addWidget(self._build_live_pvs(), 2, 1)
         grid.addWidget(self._build_field_emission(), 3, 0, 1, 2)
-        grid.addWidget(self._build_decarad_pvs(), 4, 0, 1, 2)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
 
@@ -288,33 +285,6 @@ class MPProcessingUI(PhaseUIBase):
         watching.setStyleSheet(save.styleSheet())
         watching.setEnabled(False)
         layout.addWidget(watching)
-        group.setLayout(layout)
-        return group
-
-    def _build_decarad_pvs(self) -> QGroupBox:
-        """GAMMA_DOSE_RATE on the chosen decarad's 10 heads, read-only.
-
-        Raw readings, background included (about 8). The display points
-        the labels at the decarad in the Settings box, so they show it
-        before a run too. Blank while Decarad is Off.
-        """
-        group = self._register(
-            "decarad_group", QGroupBox("Decarad GAMMA_DOSE_RATE (raw)")
-        )
-        layout = QHBoxLayout()
-        layout.setSpacing(4)
-        layout.setContentsMargins(8, 8, 8, 8)
-        for head in DECARAD_HEADS:
-            label = self._register(
-                f"pydm_decarad_head_{head}", PyDMLabel(parent=self.parent)
-            )
-            label.setStyleSheet(PV_LABEL_STYLE)
-            label.setAlignment(Qt.AlignCenter)
-            label.precisionFromPV = False
-            label.precision = 1
-            label.setText("-")
-            layout.addWidget(QLabel(f"{head}:"))
-            layout.addWidget(label, stretch=1)
         group.setLayout(layout)
         return group
 
