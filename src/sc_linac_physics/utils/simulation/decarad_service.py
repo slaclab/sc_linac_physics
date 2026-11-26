@@ -26,3 +26,8 @@ class DecaradHeadPVGroup(PVGroup):
     avg_dose_rate: PvpropertyFloat = pvproperty(
         value=0.0, name="GAMMAAVE", precision=1
     )
+    # The 1 Hz reading the MP processing FE pause reads. Starts at the
+    # background DECARAD_BACKGROUND_READING_RAW (8), not 0.
+    raw_dose_rate: PvpropertyFloat = pvproperty(
+        value=8.0, name="GAMMA_DOSE_RATE", precision=1
+    )

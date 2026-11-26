@@ -530,3 +530,26 @@ def test_retry_save_keeps_the_field_emission_values_of_the_first_try(
     session.add_measurement_to_history.return_value = True
     controller.on_start_test()  # Retry save
     assert record.mp_processing.field_emission_onset == 13.1
+
+
+def test_im_watching_records_the_operator_during_the_run(controller, view):
+    start_the_run_segment(controller)
+    controller.context.record.mp_processing = MPProcessingData()
+    controller.phase.limits.decarad = 1
+    assert controller.radiation_check_on
+
+    controller.on_override_radiation()
+
+    assert controller.phase.radiation_overridden
+    assert not controller.radiation_check_on
+    assert "overridden by lisa" in controller.context.record.mp_processing.notes
+
+
+def test_radiation_readout_text(controller):
+    assert controller.radiation_text == "off"
+    start_the_run_segment(controller)
+    assert controller.radiation_text == "off"  # no decarad chosen
+    controller.phase.limits.decarad = 2
+    assert controller.radiation_text == "-"
+    controller.phase.radiation = 3.25
+    assert controller.radiation_text == "3.2 over background"

@@ -144,6 +144,42 @@ class MPProcessingController(QObject):
         return "running" if self.phase is None else self.phase.pause_state
 
     @property
+    def radiation_text(self) -> str:
+        """The status box's "Decarad max" readout."""
+        phase = self.phase
+        if phase is None or phase.limits.decarad is None:
+            return "off"
+        if phase.radiation_overridden:
+            return "not checked (I'm watching)"
+        if phase.radiation is None:
+            return "-"
+        return f"{phase.radiation:.1f} over background"
+
+    @property
+    def radiation_check_on(self) -> bool:
+        """A decarad is chosen and nobody has pressed I'm watching."""
+        phase = self.phase
+        return (
+            phase is not None
+            and phase.limits.decarad is not None
+            and not phase.radiation_overridden
+        )
+
+    def on_override_radiation(self) -> None:
+        """I'm watching: no radiation pauses for the rest of this run.
+
+        Writes no PVs. Recorded in notes with the current operator.
+        """
+        if self.phase is None or self.stage != "run" or not self.running:
+            return
+        operator = self.view.get_current_operator() or self.context.operator
+        self.phase.override_radiation(operator)
+        self.view.log_message(
+            f"Radiation pauses off for this run ({operator} is watching the "
+            "decarad)."
+        )
+
+    @property
     def resumed_at(self):
         """When this run's last pause ended, or None."""
         return None if self.phase is None else self.phase.resumed_at
