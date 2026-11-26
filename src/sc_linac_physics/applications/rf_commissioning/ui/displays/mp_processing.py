@@ -79,16 +79,21 @@ def since_last_quench_text(
     return f"{seconds // 60} min {seconds % 60:02d} s{suffix}"
 
 
+# plot_top uses the readings' 95th percentile only from this many on.
+PLOT_MIN_READINGS = 20
+
+
 def plot_top(doses: list[float], threshold: float) -> float:
     """Top of the radiation plot's y axis, over background.
 
     The larger of 3 x the FE pause threshold, so the line and the onset
-    below it always show, and 1.2 x the 95th percentile reading, so
-    sustained radiation still fits. A handful of MP quench spikes don't
-    move it.
+    below it always show, and, from PLOT_MIN_READINGS readings on, 1.2 x
+    the 95th percentile reading, so sustained radiation still fits. A
+    handful of MP quench spikes don't move it.
     """
     floor = 3 * max(threshold, 1.0)
-    if not doses:
+    # Too few readings for a percentile: two spikes would be the 95th.
+    if len(doses) < PLOT_MIN_READINGS:
         return floor
     ordered = sorted(doses)
     p95 = ordered[min(len(ordered) - 1, int(0.95 * len(ordered)))]

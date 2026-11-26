@@ -376,6 +376,7 @@ def test_radiation_plot_draws_the_runs_points_and_quenches(display):
 
 def test_plot_top_ignores_a_few_spikes_but_fits_sustained_radiation():
     assert plot_top([], 10.0) == 30.0
+    assert plot_top([0.5, 0.5, 300.0, 290.0], 10.0) == 30.0  # early in a run
     readings = [0.5] * 98 + [400.0, 500.0]  # two MP quench spikes
     assert plot_top(readings, 10.0) == 30.0
     sustained = [0.5] * 50 + [60.0] * 50
