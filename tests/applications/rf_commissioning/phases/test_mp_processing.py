@@ -801,3 +801,87 @@ def test_no_decarad_means_no_radiation_check(clock, record):
 
     assert phase.decarad is None
     assert record.mp_processing.decarad is None
+
+
+class SlowDecarad(FakeDecarad):
+    """Runs ``during_read`` once, from inside the read at ``read_at``."""
+
+    def __init__(self, clock, doses, read_at, during_read):
+        super().__init__(clock, doses)
+        self.read_at = read_at
+        self.during_read = during_read
+
+    @property
+    def max_raw_dose(self):
+        if self.during_read and self.clock.now >= self.read_at:
+            act, self.during_read = self.during_read, None
+            act()
+        return FakeDecarad.max_raw_dose.fget(self)
+
+
+def slow_fe_phase(clock, record, doses, read_at, during_read, quench_at=()):
+    cavity, phase = fe_phase(clock, record, doses, quench_at=quench_at)
+    phase.decarad = SlowDecarad(
+        clock, doses, read_at, lambda: during_read(cavity, phase)
+    )
+    return cavity, phase
+
+
+def test_pause_pressed_during_the_decarad_read_stops_the_next_write(
+    clock, record
+):
+    cavity, phase = slow_fe_phase(
+        clock,
+        record,
+        doses=[(0, 0.0)],
+        read_at=2,
+        during_read=lambda cavity, phase: phase.request_pause(),
+    )
+    writes_at_pause = []
+    cavity.actions = [
+        (2.5, lambda: writes_at_pause.append(len(cavity.ades_writes))),
+        (6, phase.request_resume),
+    ]
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    # 5.1 at t=1. Pause was pressed during the read at t=2, before that
+    # step's write, so 5.2 never went out before the pause.
+    assert writes_at_pause == [1]
+    notes = record.mp_processing.notes
+    assert "paused" in notes and "auto-paused" not in notes
+
+
+def test_im_watching_during_the_read_stops_that_radiation_pause(clock, record):
+    cavity, phase = slow_fe_phase(
+        clock,
+        record,
+        doses=[(0, 25.0)],
+        read_at=0,
+        during_read=lambda cavity, phase: phase.override_radiation("lisa"),
+    )
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+    assert "auto-paused" not in record.mp_processing.notes
+
+
+def test_a_quench_during_the_read_is_processed_not_paused_on(clock, record):
+    def quench(cavity, phase):
+        cavity._latched = True
+
+    # Radiation through the quench and the settle, gone by t=10.
+    cavity, phase = slow_fe_phase(
+        clock,
+        record,
+        doses=[(0, 25.0), (10, 0.0)],
+        read_at=0,
+        during_read=quench,
+    )
+    cavity.actions = [(20, phase.request_resume)]
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+    data = record.mp_processing
+    assert data.quench_count == 1
+    # The quench went first: the radiation pause came after its reset and
+    # settle time, not in place of it.
+    assert cavity.resets and cavity.resets[0] < 5

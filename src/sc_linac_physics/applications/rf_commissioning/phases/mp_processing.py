@@ -555,20 +555,36 @@ class MPProcessingPhase(PhaseBase):
         """
         deadline = time.monotonic() + seconds
         while True:
-            self.cavity.check_abort()
-            if self.cavity.is_quenched:
-                return _Seen.QUENCH
-            if self._pause_requested.is_set():
-                return _Seen.PAUSE
-            reason = self._radiation_pause_reason()
-            if reason is not None:
-                self._auto_pause_reason = reason
-                self._pause_requested.set()
-                return _Seen.PAUSE
+            seen = self._abort_quench_or_pause()
+            if seen is not None:
+                return seen
+            if self.decarad is not None:
+                reason = self._radiation_pause_reason()
+                # Reading 10 heads takes a while. Abort, a quench, Pause
+                # or I'm watching during the read goes before its result.
+                seen = self._abort_quench_or_pause()
+                if seen is not None:
+                    return seen
+                if (
+                    reason is not None
+                    and not self._radiation_overridden.is_set()
+                ):
+                    self._auto_pause_reason = reason
+                    self._pause_requested.set()
+                    return _Seen.PAUSE
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return _Seen.QUIET
             time.sleep(min(self.limits.poll_interval, remaining))
+
+    def _abort_quench_or_pause(self) -> _Seen | None:
+        """check_abort (raises on abort), then QUENCH, PAUSE or None."""
+        self.cavity.check_abort()
+        if self.cavity.is_quenched:
+            return _Seen.QUENCH
+        if self._pause_requested.is_set():
+            return _Seen.PAUSE
+        return None
 
     def _start_radiation_check(self) -> None:
         """Set up the decarad from limits.decarad, and note which one."""
