@@ -2,7 +2,8 @@
 
 from datetime import datetime
 
-from PyQt5.QtCore import QTimer, pyqtSlot
+import pyqtgraph as pg
+from PyQt5.QtCore import Qt, QTimer, pyqtSlot
 from PyQt5.QtWidgets import QTableWidgetItem
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -25,6 +26,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.stale_result_prompt impor
 )
 
 from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    COLOR_ERROR,
     COLOR_PRIMARY,
     COLOR_WARNING,
     SANS_FONT_STACK,
@@ -120,6 +122,8 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.override_radiation_button.clicked.connect(
             self.on_override_radiation
         )
+        self._build_plot_items()
+        self.fe_pause_spin.valueChanged.connect(self._draw_radiation_plot)
 
     # ------------------------------------------------------------------
     # Record
@@ -213,6 +217,56 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
             data is not None and not self.controller.running
         )
 
+    def _build_plot_items(self) -> None:
+        """The radiation plot's three items, filled by _draw_radiation_plot."""
+        plot = self.radiation_plot
+        self._reading_dots = plot.plot(
+            [],
+            [],
+            pen=None,
+            symbol="o",
+            symbolSize=5,
+            symbolPen=None,
+            symbolBrush=pg.mkBrush(COLOR_PRIMARY),
+            name="1 s readings",
+        )
+        self._quench_crosses = plot.plot(
+            [],
+            [],
+            pen=None,
+            symbol="x",
+            symbolSize=14,
+            symbolPen=pg.mkPen(COLOR_ERROR, width=2),
+            symbolBrush=pg.mkBrush(COLOR_ERROR),
+            name="just before a quench",
+        )
+        self._threshold_line = pg.InfiniteLine(
+            angle=0,
+            movable=False,
+            pen=pg.mkPen(COLOR_WARNING, width=1, style=Qt.DashLine),
+            label="FE pause above",
+            labelOpts={
+                "position": 0.97,
+                "anchors": [(1, 1), (1, 1)],
+                "color": COLOR_WARNING,
+            },
+        )
+        plot.addItem(self._threshold_line, ignoreBounds=False)
+
+    def _draw_radiation_plot(self, *_args) -> None:
+        """Redraw from this run's points. Reads no PVs."""
+        controller = getattr(self, "controller", None)
+        points, quenches = (
+            ([], []) if controller is None else (controller.plot_points)
+        )
+        self._reading_dots.setData(
+            [p[0] for p in points], [p[1] for p in points]
+        )
+        self._quench_crosses.setData(
+            [p[0] for p in quenches], [p[1] for p in quenches]
+        )
+        self._threshold_line.setValue(self.fe_pause_spin.value())
+
     def set_settings_enabled(self, enabled: bool) -> None:
         for setting in SETTINGS:
             getattr(self, setting.widget).setEnabled(enabled)
@@ -259,6 +313,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         """Re-read this run's quenches. Reads no PVs."""
         self._show_pause_state()
         self.radiation_label.setText(self.controller.radiation_text)
+        self._draw_radiation_plot()
         self.override_radiation_button.setEnabled(
             self._pause_allowed and self.controller.radiation_check_on
         )

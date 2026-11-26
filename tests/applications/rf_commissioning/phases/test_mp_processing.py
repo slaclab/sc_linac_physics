@@ -98,6 +98,11 @@ class FakeCavity:
     def ades(self):
         return self._ades
 
+    @property
+    def aact(self):
+        # The field follows ADES, and drops to 0 while a quench is latched.
+        return 0.0 if self._latched else self._ades
+
     @ades.setter
     def ades(self, value):
         self._ades = value
@@ -916,3 +921,45 @@ def test_radiation_held_for_fe_pause_seconds_pauses(clock, record):
 
     assert run_steps(phase).result is PhaseResult.SUCCESS
     assert "for 1 s, no quench" in record.mp_processing.notes
+
+
+def test_plot_points_pair_aact_with_radiation_and_mark_quenches(clock, record):
+    # Below the pause threshold throughout; a quench seen at the t=3 poll.
+    cavity, phase = fe_phase(clock, record, doses=[(0, 2.0)], quench_at=[3])
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    assert phase.points[0] == (5.0, 2.0)
+    assert all(dose == 2.0 for _, dose in phase.points)
+    # The quench's point is the reading just before it: t=2, AACT 5.2.
+    assert phase.quench_points == [pytest.approx((5.2, 2.0))]
+
+
+def test_no_plot_points_without_a_decarad(clock, record):
+    cavity = FakeCavity(clock, start=5.0, ades_max=5.3, quench_at=[1.5])
+    phase = make_phase(cavity, record, step_seconds=1, stable_seconds=5)
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+    assert phase.points == [] and phase.quench_points == []
+
+
+def test_plot_points_keep_coming_after_im_watching(clock, record):
+    cavity, phase = fe_phase(clock, record, doses=[(0, 0.0), (3, 25.0)])
+    cavity.actions = [
+        (5, lambda: phase.override_radiation("lisa")),
+        (6, phase.request_resume),
+    ]
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    high = [aact for aact, dose in phase.points if dose == 25.0]
+    # Read after the override too, up to ADES_MAX (6.0 MV).
+    assert max(high) == pytest.approx(6.0)
+    assert phase.radiation == 25.0
+
+
+def test_plot_leaves_out_readings_with_rf_down(clock, record):
+    # AACTMEAN reads 0 while the quench is latched.
+    cavity, phase = fe_phase(clock, record, doses=[(0, 2.0)], quench_at=[3])
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+    assert all(aact >= 1.0 for aact, _ in phase.points)

@@ -18,9 +18,11 @@ from PyQt5.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
+    QTabWidget,
     QTableWidget,
     QVBoxLayout,
 )
+import pyqtgraph as pg
 from pydm.widgets import PyDMLabel
 
 from sc_linac_physics.applications.rf_commissioning.phases.mp_processing import (  # noqa: E501
@@ -177,7 +179,8 @@ class MPProcessingUI(PhaseUIBase):
         grid.setColumnStretch(1, 1)
 
         main_layout.addLayout(grid)
-        main_layout.addWidget(self._build_quench_table(), stretch=1)
+        # The plot needs the height more than the log does.
+        main_layout.addWidget(self._build_quench_tabs(), stretch=2)
         main_layout.addWidget(self._build_history(), stretch=1)
         return main_layout
 
@@ -317,6 +320,37 @@ class MPProcessingUI(PhaseUIBase):
             grid.addWidget(label, row, 1)
         group.setLayout(grid)
         return group
+
+    def _build_quench_tabs(self) -> QTabWidget:
+        """The quench table and the radiation plot share one space."""
+        tabs = self._register("quench_tabs", QTabWidget(parent=self.parent))
+        tabs.addTab(self._build_quench_table(), "Quenches")
+        tabs.addTab(self._build_radiation_plot(), "Radiation vs amplitude")
+        return tabs
+
+    def _build_radiation_plot(self) -> pg.PlotWidget:
+        """Highest decarad head over background against AACTMEAN.
+
+        One point per radiation reading in this run, a red cross at each
+        quench and a dashed line at FE pause above. The display draws them
+        from the phase once a second.
+        """
+        plot = self._register(
+            "radiation_plot", pg.PlotWidget(parent=self.parent)
+        )
+        plot.setBackground(BG_INSET)
+        plot.showGrid(x=True, y=True, alpha=0.2)
+        plot.setLabel("bottom", "AACTMEAN", units="MV")
+        plot.setLabel("left", "Max head − bkg")
+        for side in ("bottom", "left"):
+            axis = plot.getAxis(side)
+            axis.setPen(TEXT_SECONDARY)
+            axis.setTextPen(TEXT_SECONDARY)
+        # Top left: points start at the start ADES, so they rarely reach
+        # there, and the threshold label sits at the right.
+        plot.addLegend(offset=(10, 5), labelTextColor=TEXT_SECONDARY)
+        plot.setMinimumHeight(80)
+        return plot
 
     def _build_quench_table(self) -> QGroupBox:
         """One row per quench this run recorded."""
