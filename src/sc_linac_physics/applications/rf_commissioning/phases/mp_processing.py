@@ -46,6 +46,8 @@ RF on in SELA at ADES_MAX when it completes.
 
 import threading
 import time
+
+import epics
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -78,6 +80,17 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
 
 # The radiation vs amplitude plot leaves out readings below this AACTMEAN.
 PLOT_MIN_AACT_MV = 1.0
+# The plot's AACTMEAN read waits at most this long, once.
+PLOT_AACT_TIMEOUT = 0.2
+
+
+def quick_get(pv, timeout: float):
+    """One read of pv, or None: pyepics' own PV.get, cached monitor value.
+
+    Skips sc_linac_physics' PV wrapper, whose get waits to reconnect and
+    retries, for a value only the plot uses.
+    """
+    return epics.PV.get(pv, timeout=timeout, use_monitor=True)
 
 
 @dataclass
@@ -682,13 +695,19 @@ class MPProcessingPhase(PhaseBase):
     def _add_point(self, dose: float) -> None:
         """One plot point: AACTMEAN (MV, read now) and this dose.
 
-        Reads AACTMEAN only. A failed read skips the point; it never
-        pauses or stops the walk. So does AACTMEAN under
+        Reads AACTMEAN only, once, within PLOT_AACT_TIMEOUT (quick_get),
+        and not at all while it's disconnected: the latch poll this runs in
+        must not wait on a plot value. A failed read skips the point; it
+        never pauses or stops the walk. So does AACTMEAN under
         PLOT_MIN_AACT_MV: RF isn't up (e.g. just after a reset), and the
         point would only stretch the plot's amplitude axis.
         """
+        pv = self.cavity.aact_pv_obj
         try:
-            aact = float(self.cavity.aact)
+            value = quick_get(pv, PLOT_AACT_TIMEOUT) if pv.connected else None
+            if value is None:
+                return
+            aact = float(value)
         except Exception:
             return
         if aact < PLOT_MIN_AACT_MV:

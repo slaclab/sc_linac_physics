@@ -50,11 +50,32 @@ class FakeClock:
         self.now += seconds
 
 
+# Saved before the clock fixture swaps in a stand-in for the fakes.
+REAL_QUICK_GET = mp_processing_module.quick_get
+
+
 @pytest.fixture(autouse=True)
 def clock(monkeypatch):
     fake = FakeClock()
     monkeypatch.setattr(mp_processing_module, "time", fake)
+    # The plot's AACTMEAN read goes straight to pyepics; fakes read here.
+    monkeypatch.setattr(
+        mp_processing_module, "quick_get", lambda pv, timeout: pv.get()
+    )
     return fake
+
+
+class FakeAactPV:
+    """AACTMEAN for quick_get: follows FakeCavity.aact."""
+
+    def __init__(self, cavity):
+        self.cavity = cavity
+        self.connected = True
+        self.gets = 0
+
+    def get(self):
+        self.gets += 1
+        return self.cavity.aact
 
 
 class FakeCavity:
@@ -89,6 +110,7 @@ class FakeCavity:
         self.characterization_timestamp = recent
         self.characterization_status = CALIBRATION_COMPLETE_VALUE
         self.logger = logging.getLogger("test_mp_processing")
+        self.aact_pv_obj = FakeAactPV(self)
         # (clock time, callable) pairs, run from check_abort once due. The
         # phase calls check_abort at every latch poll, so these stand in for
         # the operator pressing Pause, Resume, or setting ADES by hand.
@@ -963,3 +985,33 @@ def test_plot_leaves_out_readings_with_rf_down(clock, record):
     cavity, phase = fe_phase(clock, record, doses=[(0, 2.0)], quench_at=[3])
     assert run_steps(phase).result is PhaseResult.SUCCESS
     assert all(aact >= 1.0 for aact, _ in phase.points)
+
+
+def test_a_disconnected_aact_skips_points_without_reading(clock, record):
+    cavity, phase = fe_phase(clock, record, doses=[(0, 2.0)])
+    cavity.aact_pv_obj.connected = False
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+    assert phase.points == []
+    assert cavity.aact_pv_obj.gets == 0
+
+
+def test_a_timed_out_aact_read_skips_the_point(clock, record, monkeypatch):
+    monkeypatch.setattr(
+        mp_processing_module, "quick_get", lambda pv, timeout: None
+    )
+    cavity, phase = fe_phase(clock, record, doses=[(0, 2.0)])
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+    assert phase.points == []
+
+
+def test_quick_get_is_one_pyepics_read_with_the_plot_timeout(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        mp_processing_module.epics.PV,
+        "get",
+        lambda pv, **kwargs: calls.append(kwargs) or 15.2,
+    )
+    assert REAL_QUICK_GET(object(), 0.2) == 15.2
+    assert calls == [{"timeout": 0.2, "use_monitor": True}]

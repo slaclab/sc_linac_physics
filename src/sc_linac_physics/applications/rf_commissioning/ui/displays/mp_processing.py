@@ -118,6 +118,8 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.controller = MPProcessingController(self, self.session)
         self.controller.phase_completed.connect(self._notify_phase_advanced)
         self.controller.setup_pv_connections()
+        # Empty plot on its default axes until the first refresh.
+        self._draw_radiation_plot()
 
     def setup_ui(self):
         callbacks = {
@@ -145,6 +147,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         )
         self._build_plot_items()
         self.fe_pause_spin.valueChanged.connect(self._draw_radiation_plot)
+        self.full_range_check.toggled.connect(self._draw_radiation_plot)
 
     # ------------------------------------------------------------------
     # Record
@@ -288,15 +291,27 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         """Redraw from this run's points. Reads no PVs.
 
         MP quenches can spike far above FE onset, which would flatten the
-        low readings if the y axis fitted everything. So the axis tops out
-        at plot_top() and higher readings are drawn as triangles on the
-        top edge. Right-click, View All shows the full range.
+        low readings if the y axis fitted everything. So by default the axis
+        tops out at plot_top() and higher readings show as triangles on the
+        top edge. With Full range checked every point is at its real value
+        and the axis fits them all, until it is unchecked.
         """
         controller = getattr(self, "controller", None)
         points, quenches = (
             ([], []) if controller is None else controller.plot_points
         )
         threshold = self.fe_pause_spin.value()
+        self._threshold_line.setValue(threshold)
+        view = self.radiation_plot.getPlotItem()
+        xs = [a for a, _ in points]
+        if self.full_range_check.isChecked():
+            self._reading_dots.setData(xs, [d for _, d in points])
+            self._off_scale.setData([], [])
+            self._quench_crosses.setData(
+                [a for a, _ in quenches], [d for _, d in quenches]
+            )
+            view.enableAutoRange(x=True, y=True)
+            return
         top = plot_top([dose for _, dose in points], threshold)
         on = [(a, d) for a, d in points if d <= top]
         off = [(a, top) for a, d in points if d > top]
@@ -305,8 +320,6 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self._quench_crosses.setData(
             [p[0] for p in quenches], [min(p[1], top) for p in quenches]
         )
-        self._threshold_line.setValue(threshold)
-        view = self.radiation_plot.getPlotItem()
         view.enableAutoRange(x=True, y=False)
         view.setYRange(0, top * 1.05, padding=0)
 
@@ -419,6 +432,9 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self._process_started = None
         self._table_data = None
         self.quench_table.setRowCount(0)
+        # The timer is stopped after a run, so clear the plot here too.
+        for item in (self._reading_dots, self._quench_crosses, self._off_scale):
+            item.setData([], [])
         if not self.controller.running:
             self.ui.update_toolbar_state("idle")
             self.pause_button.setEnabled(False)

@@ -10,6 +10,7 @@ from typing import NamedTuple
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QGridLayout,
@@ -19,6 +20,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QPushButton,
     QTabWidget,
+    QWidget,
     QTableWidget,
     QVBoxLayout,
 )
@@ -354,8 +356,27 @@ class MPProcessingUI(PhaseUIBase):
         tabs.setObjectName("mpQuenchTabs")
         tabs.setStyleSheet(QUENCH_TABS_STYLE)
         tabs.addTab(self._build_quench_table(), "Quenches")
-        tabs.addTab(self._build_radiation_plot(), "Radiation vs amplitude")
+        tabs.addTab(self._build_radiation_tab(), "Radiation vs amplitude")
         return tabs
+
+    def _build_radiation_tab(self) -> QWidget:
+        """The plot, with a Full range box above it."""
+        box = QWidget(parent=self.parent)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(2)
+        full = self._register(
+            "full_range_check", QCheckBox("Full range", parent=self.parent)
+        )
+        full.setToolTip(
+            "Fit every reading, spikes included. Off: the axis stops above "
+            "FE onset and higher readings show as triangles on the top edge."
+        )
+        full.setStyleSheet(f"QCheckBox {{ color: {TEXT_SECONDARY}; }}")
+        layout.addWidget(full, alignment=Qt.AlignRight)
+        layout.addWidget(self._build_radiation_plot(), stretch=1)
+        box.setLayout(layout)
+        return box
 
     def _build_radiation_plot(self) -> pg.PlotWidget:
         """Highest decarad head over background against AACTMEAN.

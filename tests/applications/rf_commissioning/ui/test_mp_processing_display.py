@@ -404,3 +404,40 @@ def test_plot_tabs_have_their_own_dark_style(display):
     tabs = display.quench_tabs
     assert tabs.objectName() == "mpQuenchTabs"
     assert "QTabBar::tab" in tabs.styleSheet()
+
+
+def point_count(item) -> int:
+    """Points on a plot item; pyqtgraph returns None data when empty."""
+    xs = item.getData()[0]
+    return 0 if xs is None else len(xs)
+
+
+def test_full_range_shows_true_values_and_survives_refreshes(display):
+    readings = [(12.0 + i / 100, 1.0) for i in range(50)] + [(12.5, 400.0)]
+    display.full_range_check.setChecked(True)
+    with patch.object(
+        type(display.controller), "plot_points", new_callable=PropertyMock
+    ) as points:
+        points.return_value = (readings, [(12.5, 400.0)])
+        display.refresh_progress()
+        display.refresh_progress()
+    _, ys = display._reading_dots.getData()
+    assert max(ys) == 400.0
+    assert point_count(display._off_scale) == 0
+    _, cross_ys = display._quench_crosses.getData()
+    assert list(cross_ys) == [400.0]
+
+
+def test_clear_run_empties_the_plot(display):
+    with patch.object(
+        type(display.controller), "plot_points", new_callable=PropertyMock
+    ) as points:
+        points.return_value = ([(12.0, 1.0), (12.1, 500.0)], [(12.1, 500.0)])
+        display.refresh_progress()
+    display.clear_run()
+    for item in (
+        display._reading_dots,
+        display._quench_crosses,
+        display._off_scale,
+    ):
+        assert point_count(item) == 0
