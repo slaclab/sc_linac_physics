@@ -102,6 +102,31 @@ QUENCH_TABLE_STYLE = f"""
 """
 
 
+QUENCH_TABS_STYLE = f"""
+    QTabWidget#mpQuenchTabs::pane {{
+        background-color: {BG_INSET};
+        border: 1px solid {BORDER};
+        border-top: none;
+    }}
+    QTabWidget#mpQuenchTabs > QTabBar::tab {{
+        background-color: {BG_PANEL};
+        color: {TEXT_SECONDARY};
+        padding: 4px 12px;
+        border: 1px solid {BORDER};
+        border-bottom: none;
+        font-family: {SANS_FONT_STACK};
+    }}
+    QTabWidget#mpQuenchTabs > QTabBar::tab:selected {{
+        background-color: {BG_INSET};
+        color: {TEXT_PRIMARY};
+        border-bottom: 2px solid {COLOR_PRIMARY};
+    }}
+    QTabWidget#mpQuenchTabs > QTabBar::tab:hover:!selected {{
+        background-color: {BG_INTERACTIVE};
+    }}
+"""
+
+
 class Setting(NamedTuple):
     """One spin box for an MPProcessingLimits field.
 
@@ -324,6 +349,10 @@ class MPProcessingUI(PhaseUIBase):
     def _build_quench_tabs(self) -> QTabWidget:
         """The quench table and the radiation plot share one space."""
         tabs = self._register("quench_tabs", QTabWidget(parent=self.parent))
+        # Dark like the phase tabs (multi_phase_screen.py), scoped by object
+        # name. Without it the tabs take the desktop's light palette.
+        tabs.setObjectName("mpQuenchTabs")
+        tabs.setStyleSheet(QUENCH_TABS_STYLE)
         tabs.addTab(self._build_quench_table(), "Quenches")
         tabs.addTab(self._build_radiation_plot(), "Radiation vs amplitude")
         return tabs

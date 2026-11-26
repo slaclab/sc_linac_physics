@@ -24,6 +24,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.displays.mp_processing im
     PAUSE_TEXT,
     RESUME_TEXT,
     MPProcessingDisplay,
+    plot_top,
     since_last_quench_text,
 )
 
@@ -371,3 +372,34 @@ def test_radiation_plot_draws_the_runs_points_and_quenches(display):
     assert display._threshold_line.value() == 10.0
     display.fe_pause_spin.setValue(4.0)
     assert display._threshold_line.value() == 4.0
+
+
+def test_plot_top_ignores_a_few_spikes_but_fits_sustained_radiation():
+    assert plot_top([], 10.0) == 30.0
+    readings = [0.5] * 98 + [400.0, 500.0]  # two MP quench spikes
+    assert plot_top(readings, 10.0) == 30.0
+    sustained = [0.5] * 50 + [60.0] * 50
+    assert plot_top(sustained, 10.0) == pytest.approx(72.0)
+
+
+def test_a_spike_is_drawn_on_the_top_edge_not_by_rescaling(display):
+    readings = [(12.0 + i / 100, 1.0) for i in range(50)] + [(12.5, 400.0)]
+    with patch.object(
+        type(display.controller), "plot_points", new_callable=PropertyMock
+    ) as points:
+        points.return_value = (readings, [(12.5, 400.0)])
+        display.refresh_progress()
+    _, on_ys = display._reading_dots.getData()
+    assert max(on_ys) == 1.0
+    off_xs, off_ys = display._off_scale.getData()
+    assert list(off_xs) == [12.5] and list(off_ys) == [30.0]
+    _, cross_ys = display._quench_crosses.getData()
+    assert list(cross_ys) == [30.0]
+    low, high = display.radiation_plot.getPlotItem().viewRange()[1]
+    assert high == pytest.approx(31.5)
+
+
+def test_plot_tabs_have_their_own_dark_style(display):
+    tabs = display.quench_tabs
+    assert tabs.objectName() == "mpQuenchTabs"
+    assert "QTabBar::tab" in tabs.styleSheet()

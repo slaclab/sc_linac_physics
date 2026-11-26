@@ -79,6 +79,22 @@ def since_last_quench_text(
     return f"{seconds // 60} min {seconds % 60:02d} s{suffix}"
 
 
+def plot_top(doses: list[float], threshold: float) -> float:
+    """Top of the radiation plot's y axis, over background.
+
+    The larger of 3 x the FE pause threshold, so the line and the onset
+    below it always show, and 1.2 x the 95th percentile reading, so
+    sustained radiation still fits. A handful of MP quench spikes don't
+    move it.
+    """
+    floor = 3 * max(threshold, 1.0)
+    if not doses:
+        return floor
+    ordered = sorted(doses)
+    p95 = ordered[min(len(ordered) - 1, int(0.95 * len(ordered)))]
+    return max(floor, 1.2 * p95)
+
+
 class MPProcessingDisplay(BasePlaceholderDisplay):
     """Display for the MP Processing phase."""
 
@@ -240,6 +256,16 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
             symbolBrush=pg.mkBrush(COLOR_ERROR),
             name="just before a quench",
         )
+        self._off_scale = plot.plot(
+            [],
+            [],
+            pen=None,
+            symbol="t1",
+            symbolSize=9,
+            symbolPen=None,
+            symbolBrush=pg.mkBrush(COLOR_WARNING),
+            name="off scale (spike)",
+        )
         self._threshold_line = pg.InfiniteLine(
             angle=0,
             movable=False,
@@ -254,18 +280,30 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         plot.addItem(self._threshold_line, ignoreBounds=False)
 
     def _draw_radiation_plot(self, *_args) -> None:
-        """Redraw from this run's points. Reads no PVs."""
+        """Redraw from this run's points. Reads no PVs.
+
+        MP quenches can spike far above FE onset, which would flatten the
+        low readings if the y axis fitted everything. So the axis tops out
+        at plot_top() and higher readings are drawn as triangles on the
+        top edge. Right-click, View All shows the full range.
+        """
         controller = getattr(self, "controller", None)
         points, quenches = (
-            ([], []) if controller is None else (controller.plot_points)
+            ([], []) if controller is None else controller.plot_points
         )
-        self._reading_dots.setData(
-            [p[0] for p in points], [p[1] for p in points]
-        )
+        threshold = self.fe_pause_spin.value()
+        top = plot_top([dose for _, dose in points], threshold)
+        on = [(a, d) for a, d in points if d <= top]
+        off = [(a, top) for a, d in points if d > top]
+        self._reading_dots.setData([p[0] for p in on], [p[1] for p in on])
+        self._off_scale.setData([p[0] for p in off], [p[1] for p in off])
         self._quench_crosses.setData(
-            [p[0] for p in quenches], [p[1] for p in quenches]
+            [p[0] for p in quenches], [min(p[1], top) for p in quenches]
         )
-        self._threshold_line.setValue(self.fe_pause_spin.value())
+        self._threshold_line.setValue(threshold)
+        view = self.radiation_plot.getPlotItem()
+        view.enableAutoRange(x=True, y=False)
+        view.setYRange(0, top * 1.05, padding=0)
 
     def set_settings_enabled(self, enabled: bool) -> None:
         for setting in SETTINGS:
