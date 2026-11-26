@@ -13,8 +13,10 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
+    QPushButton,
     QTableWidget,
     QVBoxLayout,
 )
@@ -28,6 +30,11 @@ from .base import PhaseUIBase
 from .styles import PV_LABEL_STYLE
 from .theme import (
     ACCENT_LOCAL,
+    BORDER_EMPHASIS,
+    COLOR_PRIMARY,
+    RADIUS_MD,
+    SANS_FONT_STACK,
+    TEXT_MUTED,
     BG_INSET,
     BG_INTERACTIVE,
     BG_PANEL,
@@ -106,6 +113,18 @@ SETTINGS = (
 )  # fmt: skip
 
 
+# Spin box name -> caption, for the MPProcessingData fields in FE_DATA_FIELDS.
+FE_FIELDS = (
+    ("fe_onset_spin", "FE onset:"),
+    ("fe_50_spin", "50 mR/h sustained at:"),
+)
+# Spin box name -> MPProcessingData field it fills.
+FE_DATA_FIELDS = {
+    "fe_onset_spin": "field_emission_onset",
+    "fe_50_spin": "fe_50_mr_h_amplitude",
+}
+
+
 class MPProcessingUI(PhaseUIBase):
     """Builds the MP Processing display UI."""
 
@@ -130,6 +149,7 @@ class MPProcessingUI(PhaseUIBase):
         )
         grid.addWidget(self._build_settings(), 2, 0)
         grid.addWidget(self._build_live_pvs(), 2, 1)
+        grid.addWidget(self._build_field_emission(), 3, 0, 1, 2)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
 
@@ -178,6 +198,49 @@ class MPProcessingUI(PhaseUIBase):
             spin.setValue(getattr(defaults, setting.field) / setting.scale)
             layout.addWidget(QLabel(setting.caption), row, 0)
             layout.addWidget(spin, row, 1)
+        group.setLayout(layout)
+        return group
+
+    def _build_field_emission(self) -> QGroupBox:
+        """What the operator saw on the decarad, saved with the run.
+
+        Editable at any time, also during a run. At 0 a box reads "not
+        seen" and saves None. Amplitudes are ADES, in MV.
+        """
+        group = QGroupBox("Field Emission (operator)")
+        layout = QHBoxLayout()
+        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
+        for widget, caption in FE_FIELDS:
+            spin = self._register(widget, QDoubleSpinBox(parent=self.parent))
+            spin.setRange(0.0, 30.0)
+            spin.setSingleStep(0.1)
+            spin.setDecimals(2)
+            spin.setSuffix(" MV")
+            spin.setSpecialValueText("not seen")
+            spin.setStyleSheet(SETTING_SPIN_STYLE)
+            layout.addWidget(QLabel(caption))
+            layout.addWidget(spin, stretch=1)
+        save = self._register("fe_save_button", QPushButton("Save FE"))
+        save.setToolTip(
+            "Save these to the record. A run saves them when it finishes."
+        )
+        # Same look as the toolbar's Next button.
+        save.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_PRIMARY};
+                color: white;
+                padding: 4px 12px;
+                border-radius: {RADIUS_MD};
+                font-family: {SANS_FONT_STACK};
+            }}
+            QPushButton:disabled {{
+                background-color: {BORDER_EMPHASIS};
+                color: {TEXT_MUTED};
+            }}
+        """)
+        save.setEnabled(False)
+        layout.addWidget(save)
         group.setLayout(layout)
         return group
 

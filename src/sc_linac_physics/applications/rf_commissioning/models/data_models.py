@@ -498,6 +498,15 @@ class MPProcessingData:
         format_spec=".3f",
         unit="MV",
     )  # MV, if observed
+    # ADES where the operator saw 50 mR/h sustained, entered on the tab
+    # (2026-11-24 meeting). None if not reached or not entered.
+    fe_50_mr_h_amplitude: float | None = phase_display_field(
+        default=None,
+        label="50 mR/h Sustained At",
+        widget_name="hp_mp_fe_50_mr_h_amplitude",
+        format_spec=".3f",
+        unit="MV",
+    )
     max_amplitude_reached: float | None = phase_display_field(
         default=None,
         label="Max Amplitude Reached",

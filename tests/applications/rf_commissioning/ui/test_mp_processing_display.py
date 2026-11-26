@@ -293,3 +293,30 @@ def test_since_last_quench_counts_from_a_later_resume():
         data, T0, now, resumed_at=T0 - timedelta(seconds=5)
     )
     assert early == "2 min 10 s"
+
+
+def test_field_emission_box_reads_none_at_not_seen(display):
+    assert display.fe_onset_spin.text() == "not seen"
+    display.fe_50_spin.setValue(15.25)
+    assert display.read_fe_fields() == {
+        "field_emission_onset": None,
+        "fe_50_mr_h_amplitude": 15.25,
+    }
+
+
+def test_field_emission_box_shows_the_stored_run(display):
+    data = MPProcessingData(field_emission_onset=13.5)
+    display.show_fe_fields(data)
+    assert display.fe_onset_spin.value() == 13.5
+    assert display.fe_50_spin.text() == "not seen"
+    assert display.fe_save_button.isEnabled()
+    display.show_fe_fields(None)
+    assert display.fe_onset_spin.text() == "not seen"
+    assert not display.fe_save_button.isEnabled()
+
+
+def test_field_emission_box_stays_editable_during_a_run(display):
+    display.show_fe_fields(MPProcessingData())
+    display.set_running(True)
+    assert display.fe_onset_spin.isEnabled()
+    assert not display.fe_save_button.isEnabled()

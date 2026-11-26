@@ -75,6 +75,7 @@ def view():
     v = Mock()
     v.get_current_operator.return_value = "lisa"
     v.read_settings.return_value = dict(SETTINGS)
+    v.read_fe_fields.return_value = {}
     return v
 
 
@@ -454,3 +455,78 @@ def test_pause_does_nothing_during_the_check_or_with_nothing_running(
     controller.bridge._busy = True
     controller.on_pause()  # verify_initial_state: not the walk
     assert controller.pause_state == "running"
+
+
+def test_a_finished_run_saves_the_field_emission_box(controller, view, record):
+    view.read_fe_fields.return_value = {
+        "field_emission_onset": 14.2,
+        "fe_50_mr_h_amplitude": None,
+    }
+    run_to_the_end(controller, record)
+    assert record.mp_processing.field_emission_onset == 14.2
+    assert record.mp_processing.fe_50_mr_h_amplitude is None
+
+
+def test_save_fe_writes_the_box_to_the_last_run(controller, view, session):
+    record = session.get_active_record()
+    record.mp_processing = MPProcessingData(max_amplitude_reached=16.6)
+    view.read_fe_fields.return_value = {"fe_50_mr_h_amplitude": 15.1}
+    controller.save_fe_fields()
+    assert record.mp_processing.fe_50_mr_h_amplitude == 15.1
+    session.save_active_record.assert_called_once()
+
+
+def test_save_fe_needs_a_run_and_nothing_running(controller, view, session):
+    controller.save_fe_fields()  # no MP run on the record
+    view.show_error.assert_called_once()
+    session.save_active_record.assert_not_called()
+
+    session.get_active_record().mp_processing = MPProcessingData()
+    controller.bridge._busy = True
+    controller.save_fe_fields()
+    assert view.show_error.call_count == 2
+    session.save_active_record.assert_not_called()
+
+
+def test_a_failed_run_keeps_the_field_emission_box(
+    controller, view, session, record
+):
+    view.read_fe_fields.return_value = {"field_emission_onset": 13.1}
+    controller.on_start_test()
+    controller._on_segment_finished(
+        completed(verify_initial_state=check_data())
+    )
+    record.mp_processing = MPProcessingData()
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.ABORTED, "Aborted — RF is off")
+    )
+    assert record.mp_processing.field_emission_onset == 13.1
+    kwargs = session.fail_active_phase_instance.call_args.kwargs
+    assert kwargs["artifact_payload"]["field_emission_onset"] == 13.1
+
+
+def test_a_failed_check_leaves_the_last_runs_field_emission_alone(
+    controller, view, record
+):
+    old = MPProcessingData(field_emission_onset=12.0)
+    record.mp_processing = old
+    view.read_fe_fields.return_value = {"field_emission_onset": 13.1}
+    controller.on_start_test()
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.FAILED, "Cavity is not online")
+    )
+    assert old.field_emission_onset == 12.0
+
+
+def test_retry_save_keeps_the_field_emission_values_of_the_first_try(
+    controller, view, session, record
+):
+    view.read_fe_fields.return_value = {"field_emission_onset": 13.1}
+    session.add_measurement_to_history.return_value = False
+    run_to_the_end(controller, record)
+    assert controller.stage == "unsaved"
+
+    view.read_fe_fields.return_value = {"field_emission_onset": 99.0}
+    session.add_measurement_to_history.return_value = True
+    controller.on_start_test()  # Retry save
+    assert record.mp_processing.field_emission_onset == 13.1

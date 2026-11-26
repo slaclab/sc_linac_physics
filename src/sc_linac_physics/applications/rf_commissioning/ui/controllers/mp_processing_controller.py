@@ -340,6 +340,11 @@ class MPProcessingController(QObject):
                 return
             self._start("run", RUN_STEPS, offset=1, complete=True)
         elif self.stage == "run":
+            # The Field Emission box, as it reads now. verify_initial_state
+            # starts a fresh MPProcessingData, so values typed before or
+            # during the run are only applied here. Once: Retry save
+            # repeats only the failed writes, with the same run data.
+            self.apply_fe_fields(self.context.record.mp_processing)
             self._unsaved = set(FINISH_WRITES)
             self._persist_finish()
 
@@ -390,6 +395,10 @@ class MPProcessingController(QObject):
         self._cavity_hold.release()
         data = self.mp_data
         fresh = data is not None and data is not self._prior_data
+        if fresh:
+            # An aborted or failed run keeps what the operator saw. A
+            # failure before verify_initial_state leaves the last run alone.
+            self.apply_fe_fields(data)
         self._failure = (message, data.to_dict() if fresh else None)
         self._unsaved = {"save", "fail"}
         self._persist_failure()
@@ -434,6 +443,37 @@ class MPProcessingController(QObject):
         self._active_phase_instance_id = None
         self.view.on_phase_finished("FAILED")
         self.view.show_error(message)
+
+    def apply_fe_fields(self, data) -> None:
+        """Copy the Field Emission box onto data (MPProcessingData).
+
+        field_emission_onset and fe_50_mr_h_amplitude, ADES in MV, or None
+        for "not seen". Operator-entered: nothing reads them from a PV.
+        """
+        for field, value in self.view.read_fe_fields().items():
+            setattr(data, field, value)
+
+    def save_fe_fields(self) -> None:
+        """Save FE: the Field Emission box onto the record's last run.
+
+        Database only. Not during a run, which saves them when it finishes.
+        The finished run's measurement history entry keeps the values it
+        was saved with.
+        """
+        if self.running or self.stage in ("unsaved", "unsaved_failure"):
+            self.view.show_error(
+                "The run saves the field emission values when it finishes"
+            )
+            return
+        record = self.session.get_active_record()
+        if record is None or record.mp_processing is None:
+            self.view.show_error(
+                "No MP processing run on this record to save the field "
+                "emission values to"
+            )
+            return
+        self.apply_fe_fields(record.mp_processing)
+        self._save("Field emission values saved")
 
     def _save(self, success_line: str) -> bool:
         try:

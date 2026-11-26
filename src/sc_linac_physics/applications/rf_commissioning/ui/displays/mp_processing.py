@@ -13,6 +13,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     MPProcessingUI,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.builders.mp_processing import (  # noqa: E501
+    FE_DATA_FIELDS,
     SETTINGS,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.controllers.mp_processing_controller import (  # noqa: E501
@@ -114,6 +115,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self._refresh_timer.timeout.connect(self.refresh_progress)
         self.ui.update_toolbar_state("idle")
         self.pause_button.setEnabled(False)
+        self.fe_save_button.clicked.connect(self.on_save_fe)
 
     # ------------------------------------------------------------------
     # Record
@@ -127,6 +129,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
             # retry would save the new object without this run's results.
             self.controller.forget_run()
         data = record.mp_processing
+        self.show_fe_fields(data)
         if data is None:
             self._clear_phase_specific_readouts()
             return
@@ -164,6 +167,28 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         return {
             s.field: getattr(self, s.widget).value() * s.scale for s in SETTINGS
         }
+
+    def read_fe_fields(self) -> dict[str, float | None]:
+        """MPProcessingData field -> ADES in MV, or None for "not seen"."""
+        values = {}
+        for widget, field in FE_DATA_FIELDS.items():
+            spin = getattr(self, widget)
+            value = spin.value()
+            values[field] = None if value <= spin.minimum() else value
+        return values
+
+    def show_fe_fields(self, data: MPProcessingData | None) -> None:
+        """Fill the Field Emission box from a stored run (0 = not seen).
+
+        Save FE is offered when the record has a run to save them to and
+        none is running.
+        """
+        for widget, field in FE_DATA_FIELDS.items():
+            value = None if data is None else getattr(data, field)
+            getattr(self, widget).setValue(0.0 if value is None else value)
+        self.fe_save_button.setEnabled(
+            data is not None and not self.controller.running
+        )
 
     def set_settings_enabled(self, enabled: bool) -> None:
         for setting in SETTINGS:
@@ -293,6 +318,8 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.pause_button.setText(PAUSE_TEXT)
         self.set_settings_enabled(not running)
         if running:
+            self.fe_save_button.setEnabled(False)
+        if running:
             self.local_phase_status.setText("RUNNING")
             self._refresh_timer.start()
         else:
@@ -332,6 +359,10 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     @pyqtSlot()
     def on_start_test(self):
         self.controller.on_start_test()
+
+    @pyqtSlot()
+    def on_save_fe(self):
+        self.controller.save_fe_fields()
 
     @pyqtSlot()
     def on_pause(self):
